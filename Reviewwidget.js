@@ -1,4 +1,4 @@
-<script>
+
 if (window.location.href.includes("ProductDetail.aspx")) {
   const url = window.location.href;
   const pidMatch = url.match(/pid=([0-9]+)/);
@@ -122,4 +122,3 @@ if (window.location.href.includes("ProductDetail.aspx")) {
 } else {
   console.warn("This script only runs on ProductDetail.aspx pages.");
 }
-</script>
