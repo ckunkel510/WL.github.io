@@ -57,7 +57,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
             // Create a header
             const header = document.createElement('h3');
-            header.textContent = 'Pay By Job';
+            header.textContent = 'Pay By Job *NEW';
             header.style.marginBottom = '0.5em';
             header.style.fontSize = '1.25em';
             header.style.fontWeight = 'bold';
