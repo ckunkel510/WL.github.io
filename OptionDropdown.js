@@ -10,30 +10,34 @@ $(document).ready(function () {
     }
 
     // URL for the Google Sheet data in CSV format
-    const sheetUrl = "https://docs.google.com/spreadsheets/d/1pSBd7HkAFWe1tntmnOaUD3Nnf1ZaJiCdptMO7j_M0V4/edit?usp=sharing";
+    const sheetUrl = "https://docs.google.com/spreadsheets/d/e/YOUR_SHEET_ID/pub?output=csv";
 
     // Fetch data from the Google Sheet
     $.get(sheetUrl, function (data) {
       const rows = data.split("\n").map(row => row.split(","));
       const header = rows.shift(); // Remove the header row
+
+      // Find the row that matches the current productid
       const matchingRow = rows.find(row => row[0].trim() === currentPid);
 
       // Render dropdown only if options are found
       if (matchingRow && matchingRow.length > 1) {
         // Create dropdown menu
         const dropdownDiv = $("<div>").css({ marginBottom: "15px" });
-        const header = $("<h4>").text("Options").css({ marginBottom: "5px" });
+        const dropdownHeader = $("<h4>").text("Options").css({ marginBottom: "5px" });
         const dropdown = $("<select>")
           .css({ padding: "5px", fontSize: "14px" })
           .append('<option value="">Select an option</option>'); // Default placeholder option
 
-        // Add options to the dropdown
+        // Add options to the dropdown (start from the second column)
         matchingRow.slice(1).forEach(option => {
-          const [optionPid, description] = option.split("-");
-          $("<option>")
-            .val(optionPid.trim())
-            .text(description.trim())
-            .appendTo(dropdown);
+          if (option.trim()) {
+            const [optionPid, description] = option.split("-");
+            $("<option>")
+              .val(optionPid.trim())
+              .text(description.trim())
+              .appendTo(dropdown);
+          }
         });
 
         // Add change event to redirect on selection
@@ -45,7 +49,7 @@ $(document).ready(function () {
         });
 
         // Add header and dropdown to the div
-        dropdownDiv.append(header, dropdown);
+        dropdownDiv.append(dropdownHeader, dropdown);
 
         // Insert the dropdown before the product description div
         $("#ctl00_PageBody_productDetail_productDescription").before(dropdownDiv);
