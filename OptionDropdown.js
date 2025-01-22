@@ -10,7 +10,7 @@ $(document).ready(function () {
     }
 
     // URL for the Google Sheet data in CSV format
-    const sheetUrl = "https://docs.google.com/spreadsheets/d/e/1pSBd7HkAFWe1tntmnOaUD3Nnf1ZaJiCdptMO7j_M0V4/pub?output=csv";
+    const sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR5nZGRFSLOS6_0LhN-uXF2oraESccvFP43BdCQQEqn43vned5cHRhHux2d4-BzY6vmGfk-nzNM8G67/pub?output=csv";
 
     // Fetch data from the Google Sheet
     $.get(sheetUrl, function (data) {
