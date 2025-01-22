@@ -1,6 +1,5 @@
-  $(document).ready(function () {
+$(document).ready(function () {
     // Extract the current product ID (pid) from the URL
-    const urlParams = new URLSearchParams(window.location.search);
     const fullQuery = window.location.search;
     const pidMatch = fullQuery.match(/pid=([^&]*)/);
     const currentPid = pidMatch ? pidMatch[1] : null;
@@ -19,11 +18,14 @@
       const header = rows.shift(); // Remove the header row
       const matchingRow = rows.find(row => row[0].trim() === currentPid);
 
-      if (matchingRow) {
+      // Render dropdown only if options are found
+      if (matchingRow && matchingRow.length > 1) {
         // Create dropdown menu
         const dropdownDiv = $("<div>").css({ marginBottom: "15px" });
         const header = $("<h4>").text("Options").css({ marginBottom: "5px" });
-        const dropdown = $("<select>").css({ padding: "5px", fontSize: "14px" });
+        const dropdown = $("<select>")
+          .css({ padding: "5px", fontSize: "14px" })
+          .append('<option value="">Select an option</option>'); // Default placeholder option
 
         // Add options to the dropdown
         matchingRow.slice(1).forEach(option => {
