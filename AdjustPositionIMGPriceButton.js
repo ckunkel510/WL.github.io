@@ -1,4 +1,4 @@
-<script>
+
 if (window.matchMedia("(min-width: 1030px)").matches) {
     if (window.location.href.includes("ProductDetail.aspx")) {
         window.onscroll = function() { adjustDivPosition(); };
@@ -36,4 +36,3 @@ if (window.matchMedia("(min-width: 1030px)").matches) {
 } else {
     console.info("This script only runs on screens with a minimum width of 1030px.");
 }
-</script>
