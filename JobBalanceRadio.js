@@ -40,18 +40,18 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
 
-    // Render radio buttons and attach them to the page
-    async function renderRadioButtons() {
+    // Render checkboxes and attach them to the page
+    async function renderCheckboxes() {
         try {
             const jobBalances = await fetchJobBalances();
             if (jobBalances.length === 0) {
-                console.warn('No JobBalances data found. Skipping radio button rendering.');
+                console.warn('No JobBalances data found. Skipping checkbox rendering.');
                 return;
             }
 
             const targetDiv = document.getElementById('ctl00_PageBody_SearchPanel');
             if (!targetDiv) {
-                console.error('Target div not found. Cannot render radio buttons.');
+                console.error('Target div not found. Cannot render checkboxes.');
                 return;
             }
 
@@ -62,7 +62,7 @@ document.addEventListener('DOMContentLoaded', async function() {
             header.style.fontSize = '1.25em';
             header.style.fontWeight = 'bold';
 
-            // Create a container for the radio buttons
+            // Create a container for the checkboxes
             const container = document.createElement('div');
             container.id = 'job-balance-options';
             container.style.marginBottom = '1em';
@@ -72,14 +72,14 @@ document.addEventListener('DOMContentLoaded', async function() {
                 label.style.display = 'block';
                 label.style.marginBottom = '5px';
 
-                const radio = document.createElement('input');
-                radio.type = 'radio';
-                radio.name = 'jobBalance';
-                radio.value = job.netAmount;
-                radio.dataset.job = job.job;
-                radio.id = `job-${index}`;
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.name = 'jobBalance';
+                checkbox.value = job.netAmount;
+                checkbox.dataset.job = job.job;
+                checkbox.id = `job-${index}`;
 
-                label.appendChild(radio);
+                label.appendChild(checkbox);
                 label.appendChild(document.createTextNode(` ${job.job} - $${job.netAmount.toFixed(2)}`));
                 container.appendChild(label);
             });
@@ -90,7 +90,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 
             // Add event listener to update the total and textarea
             container.addEventListener('change', function(event) {
-                if (event.target && event.target.type === 'radio') {
+                if (event.target && event.target.type === 'checkbox') {
                     const paymentInput = document.getElementById('ctl00_PageBody_PaymentAmountTextBox');
                     const remittanceTextarea = document.getElementById('ctl00_PageBody_RemittanceAdviceTextBox');
 
@@ -121,10 +121,10 @@ document.addEventListener('DOMContentLoaded', async function() {
                 }
             });
         } catch (error) {
-            console.error('Error rendering radio buttons:', error);
+            console.error('Error rendering checkboxes:', error);
         }
     }
 
     // Run the script
-    await renderRadioButtons();
+    await renderCheckboxes();
 });
