@@ -55,6 +55,13 @@ document.addEventListener('DOMContentLoaded', async function() {
                 return;
             }
 
+            // Create a header
+            const header = document.createElement('h3');
+            header.textContent = 'Pay By Job';
+            header.style.marginBottom = '0.5em';
+            header.style.fontSize = '1.25em';
+            header.style.fontWeight = 'bold';
+
             // Create a container for the radio buttons
             const container = document.createElement('div');
             container.id = 'job-balance-options';
@@ -77,7 +84,8 @@ document.addEventListener('DOMContentLoaded', async function() {
                 container.appendChild(label);
             });
 
-            // Insert the container before the target div
+            // Insert the header and container before the target div
+            targetDiv.parentNode.insertBefore(header, targetDiv);
             targetDiv.parentNode.insertBefore(container, targetDiv);
 
             // Add event listener to update the total and textarea
