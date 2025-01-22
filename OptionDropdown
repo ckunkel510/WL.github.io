@@ -1,10 +1,17 @@
   $(document).ready(function () {
-    // Get the current product ID (pid) from the URL
+    // Extract the current product ID (pid) from the URL
     const urlParams = new URLSearchParams(window.location.search);
-    const currentPid = urlParams.get("pid");
+    const fullQuery = window.location.search;
+    const pidMatch = fullQuery.match(/pid=([^&]*)/);
+    const currentPid = pidMatch ? pidMatch[1] : null;
+
+    if (!currentPid) {
+      console.error("No pid found in the URL.");
+      return;
+    }
 
     // URL for the Google Sheet data in CSV format
-    const sheetUrl = "https://docs.google.com/spreadsheets/d/e/YOUR_SHEET_ID/pub?output=csv";
+    const sheetUrl = "https://docs.google.com/spreadsheets/d/1pSBd7HkAFWe1tntmnOaUD3Nnf1ZaJiCdptMO7j_M0V4/edit?usp=sharing";
 
     // Fetch data from the Google Sheet
     $.get(sheetUrl, function (data) {
