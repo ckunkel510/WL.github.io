@@ -125,6 +125,7 @@ document.addEventListener('DOMContentLoaded', async function() {
         }
     }
 
+    
     // Run the script
     await renderCheckboxes();
 });
