@@ -1,4 +1,4 @@
-$(document).ready(function () {
+ $(document).ready(function () {
     // Extract the current product ID (pid) from the URL
     const fullQuery = window.location.search;
     const pidMatch = fullQuery.match(/pid=([^&]*)/);
@@ -22,7 +22,6 @@ $(document).ready(function () {
 
       // Render links/buttons only if options are found
       if (matchingRow && matchingRow.length > 1) {
-        const optionType = matchingRow[1].trim().toLowerCase(); // Get the option type (text or image)
         const containerDiv = $("<div>").css({ marginBottom: "15px" });
 
         // Add the "Options" header
@@ -35,7 +34,10 @@ $(document).ready(function () {
           });
         containerDiv.append(optionsHeader);
 
-        // Loop through options (skip first two columns: productid and optiontype)
+        // Separate text and image options
+        let hasTextOptions = false;
+        let hasImageOptions = false;
+
         for (let i = 2; i < matchingRow.length; i++) {
           const option = matchingRow[i].trim();
           if (!option) continue; // Skip empty options
@@ -43,7 +45,11 @@ $(document).ready(function () {
           const [optionPid, description] = option.split("-");
           const link = `https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=${optionPid.trim()}`;
 
+          // Determine if this is a text or image option
+          const optionType = matchingRow[1].trim().toLowerCase();
           if (optionType === "text") {
+            hasTextOptions = true;
+
             // Create a text button
             $("<a>")
               .text(description.trim())
@@ -68,6 +74,8 @@ $(document).ready(function () {
               )
               .appendTo(containerDiv);
           } else if (optionType === "image") {
+            hasImageOptions = true;
+
             // Get the corresponding image link
             const imgColumnIndex = header.indexOf(`o${i - 1}imglink`);
             const imgUrl = imgColumnIndex >= 0 ? matchingRow[imgColumnIndex]?.trim() : null;
@@ -94,8 +102,10 @@ $(document).ready(function () {
           }
         }
 
-        // Insert the container before the product description div
-        $("#ctl00_PageBody_productDetail_productDescription").before(containerDiv);
+        // Display the container only if options exist
+        if (hasTextOptions || hasImageOptions) {
+          $("#ctl00_PageBody_productDetail_productDescription").before(containerDiv);
+        }
       }
     });
   });
