@@ -34,7 +34,7 @@ $(document).ready(function () {
           });
         containerDiv.append(optionsHeader);
 
-        // Separate text and image options
+        // Separate logic for text and image options
         for (let i = 2; i < matchingRow.length; i++) {
           const option = matchingRow[i].trim();
           if (!option) continue; // Skip empty options
@@ -42,11 +42,12 @@ $(document).ready(function () {
           const [optionPid, description] = option.split("-");
           const link = `https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=${optionPid.trim()}`;
 
-          // Determine if the option matches the current URL
-          const isActive = optionPid.trim() === currentPid;
+          // Check if this is a text option or an image option
+          const optionType = matchingRow[1].trim().toLowerCase(); // Get option type
+          const isActive = optionPid.trim() === currentPid; // Check if the current option is active
 
-          // Render text options
-          if (matchingRow[1].trim().toLowerCase() === "text") {
+          if (optionType.includes("text")) {
+            // Render text option
             $("<a>")
               .text(description.trim())
               .attr("href", link)
@@ -72,12 +73,13 @@ $(document).ready(function () {
               .appendTo(containerDiv);
           }
 
-          // Render image options
-          if (matchingRow[1].trim().toLowerCase() === "image") {
+          if (optionType.includes("image")) {
+            // Get the corresponding image link
             const imgColumnIndex = header.indexOf(`o${i - 1}imglink`);
             const imgUrl = imgColumnIndex >= 0 ? matchingRow[imgColumnIndex]?.trim() : null;
 
             if (imgUrl) {
+              // Render image option
               $("<a>")
                 .attr("href", link)
                 .attr("title", description.trim()) // Tooltip on hover
