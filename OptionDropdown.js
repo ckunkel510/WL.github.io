@@ -1,4 +1,4 @@
- $(document).ready(function () {
+$(document).ready(function () {
     // Extract the current product ID (pid) from the URL
     const fullQuery = window.location.search;
     const pidMatch = fullQuery.match(/pid=([^&]*)/);
@@ -35,9 +35,6 @@
         containerDiv.append(optionsHeader);
 
         // Separate text and image options
-        let hasTextOptions = false;
-        let hasImageOptions = false;
-
         for (let i = 2; i < matchingRow.length; i++) {
           const option = matchingRow[i].trim();
           if (!option) continue; // Skip empty options
@@ -45,12 +42,11 @@
           const [optionPid, description] = option.split("-");
           const link = `https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=${optionPid.trim()}`;
 
-          // Determine if this is a text or image option
-          const optionType = matchingRow[1].trim().toLowerCase();
-          if (optionType === "text") {
-            hasTextOptions = true;
+          // Determine if the option matches the current URL
+          const isActive = optionPid.trim() === currentPid;
 
-            // Create a text button
+          // Render text options
+          if (matchingRow[1].trim().toLowerCase() === "text") {
             $("<a>")
               .text(description.trim())
               .attr("href", link)
@@ -58,30 +54,30 @@
                 display: "inline-block",
                 padding: "5px 10px",
                 margin: "5px",
-                backgroundColor: "#6b0016",
-                color: "#FFF",
+                backgroundColor: isActive ? "#FFF" : "#6b0016",
+                color: isActive ? "#000" : "#FFF",
                 textDecoration: "none",
                 borderRadius: "5px",
                 fontSize: "14px",
+                border: isActive ? "1px solid #6b0016" : "none",
               })
               .hover(
                 function () {
-                  $(this).css("backgroundColor", "#8d8d8d");
+                  if (!isActive) $(this).css("backgroundColor", "#8d8d8d");
                 },
                 function () {
-                  $(this).css("backgroundColor", "#6b0016");
+                  if (!isActive) $(this).css("backgroundColor", "#6b0016");
                 }
               )
               .appendTo(containerDiv);
-          } else if (optionType === "image") {
-            hasImageOptions = true;
+          }
 
-            // Get the corresponding image link
+          // Render image options
+          if (matchingRow[1].trim().toLowerCase() === "image") {
             const imgColumnIndex = header.indexOf(`o${i - 1}imglink`);
             const imgUrl = imgColumnIndex >= 0 ? matchingRow[imgColumnIndex]?.trim() : null;
 
             if (imgUrl) {
-              // Create an image with a link
               $("<a>")
                 .attr("href", link)
                 .attr("title", description.trim()) // Tooltip on hover
@@ -92,7 +88,7 @@
                     .css({
                       width: "50px",
                       height: "50px",
-                      border: "1px solid #ccc",
+                      border: isActive ? "2px solid #6b0016" : "1px solid #ccc",
                       borderRadius: "3px",
                       display: "inline-block",
                     })
@@ -102,10 +98,8 @@
           }
         }
 
-        // Display the container only if options exist
-        if (hasTextOptions || hasImageOptions) {
-          $("#ctl00_PageBody_productDetail_productDescription").before(containerDiv);
-        }
+        // Insert the container before the product description div
+        $("#ctl00_PageBody_productDetail_productDescription").before(containerDiv);
       }
     });
   });
