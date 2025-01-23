@@ -1,4 +1,4 @@
- $(document).ready(function () {
+$(document).ready(function () {
     // Extract the current product ID (pid) from the URL
     const fullQuery = window.location.search;
     const pidMatch = fullQuery.match(/pid=([^&]*)/);
@@ -32,6 +32,10 @@
             marginBottom: "10px",
           });
         containerDiv.append(optionsHeader);
+
+        const textOptionsDiv = $("<div>"); // Container for text options
+        const imageOptionsDiv = $("<div>"); // Container for image options
+        let imageHeaderAdded = false; // Ensure the "Other Options" header is only added once
 
         // Process all matching rows
         matchingRows.forEach(row => {
@@ -69,8 +73,21 @@
                     if (!isActive) $(this).css("backgroundColor", "#6b0016");
                   }
                 )
-                .appendTo(containerDiv);
+                .appendTo(textOptionsDiv);
             } else if (optionType === "image") {
+              // Add "Other Options" header before the first image
+              if (!imageHeaderAdded) {
+                const otherOptionsHeader = $("<h4>")
+                  .text("Other Options")
+                  .css({
+                    fontSize: "18px",
+                    fontWeight: "bold",
+                    margin: "20px 0 10px",
+                  });
+                imageOptionsDiv.append(otherOptionsHeader);
+                imageHeaderAdded = true;
+              }
+
               // Get the corresponding image link
               const imgColumnIndex = header.indexOf(`o${i - 1}imglink`);
               const imgUrl = imgColumnIndex >= 0 ? row[imgColumnIndex]?.trim() : null;
@@ -92,11 +109,15 @@
                         display: "inline-block",
                       })
                   )
-                  .appendTo(containerDiv);
+                  .appendTo(imageOptionsDiv);
               }
             }
           }
         });
+
+        // Append the text and image options to the container
+        containerDiv.append(textOptionsDiv);
+        containerDiv.append(imageOptionsDiv);
 
         // Insert the container before the product description div
         $("#ctl00_PageBody_productDetail_productDescription").before(containerDiv);
