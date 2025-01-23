@@ -1,4 +1,4 @@
-$(document).ready(function () {
+ $(document).ready(function () {
     // Extract the current product ID (pid) from the URL
     const fullQuery = window.location.search;
     const pidMatch = fullQuery.match(/pid=([^&]*)/);
@@ -17,11 +17,10 @@ $(document).ready(function () {
       const rows = data.split("\n").map(row => row.split(","));
       const header = rows.shift(); // Remove the header row
 
-      // Find the row that matches the current productid
-      const matchingRow = rows.find(row => row[0].trim() === currentPid);
+      // Find all rows that match the current productid
+      const matchingRows = rows.filter(row => row[0].trim() === currentPid);
 
-      // Render links/buttons only if options are found
-      if (matchingRow && matchingRow.length > 1) {
+      if (matchingRows.length > 0) {
         const containerDiv = $("<div>").css({ marginBottom: "15px" });
 
         // Add the "Options" header
@@ -34,71 +33,70 @@ $(document).ready(function () {
           });
         containerDiv.append(optionsHeader);
 
-        // Separate logic for text and image options
-        for (let i = 2; i < matchingRow.length; i++) {
-          const option = matchingRow[i].trim();
-          if (!option) continue; // Skip empty options
+        // Process all matching rows
+        matchingRows.forEach(row => {
+          const optionType = row[1].trim().toLowerCase(); // Get the option type (text or image)
 
-          const [optionPid, description] = option.split("-");
-          const link = `https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=${optionPid.trim()}`;
+          for (let i = 2; i < row.length; i++) {
+            const option = row[i].trim();
+            if (!option) continue; // Skip empty options
 
-          // Check if this is a text option or an image option
-          const optionType = matchingRow[1].trim().toLowerCase(); // Get option type
-          const isActive = optionPid.trim() === currentPid; // Check if the current option is active
+            const [optionPid, description] = option.split("-");
+            const link = `https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=${optionPid.trim()}`;
+            const isActive = optionPid.trim() === currentPid; // Check if the current option is active
 
-          if (optionType.includes("text")) {
-            // Render text option
-            $("<a>")
-              .text(description.trim())
-              .attr("href", link)
-              .css({
-                display: "inline-block",
-                padding: "5px 10px",
-                margin: "5px",
-                backgroundColor: isActive ? "#FFF" : "#6b0016",
-                color: isActive ? "#000" : "#FFF",
-                textDecoration: "none",
-                borderRadius: "5px",
-                fontSize: "14px",
-                border: isActive ? "1px solid #6b0016" : "none",
-              })
-              .hover(
-                function () {
-                  if (!isActive) $(this).css("backgroundColor", "#8d8d8d");
-                },
-                function () {
-                  if (!isActive) $(this).css("backgroundColor", "#6b0016");
-                }
-              )
-              .appendTo(containerDiv);
-          }
-
-          if (optionType.includes("image")) {
-            // Get the corresponding image link
-            const imgColumnIndex = header.indexOf(`o${i - 1}imglink`);
-            const imgUrl = imgColumnIndex >= 0 ? matchingRow[imgColumnIndex]?.trim() : null;
-
-            if (imgUrl) {
-              // Render image option
+            if (optionType === "text") {
+              // Render text option
               $("<a>")
+                .text(description.trim())
                 .attr("href", link)
-                .attr("title", description.trim()) // Tooltip on hover
-                .css({ margin: "5px", display: "inline-block" })
-                .append(
-                  $("<img>")
-                    .attr("src", imgUrl)
-                    .css({
-                      width: "50px",
-                      height: "50px",
-                      border: isActive ? "2px solid #6b0016" : "1px solid #ccc",
-                      borderRadius: "3px",
-                      display: "inline-block",
-                    })
+                .css({
+                  display: "inline-block",
+                  padding: "5px 10px",
+                  margin: "5px",
+                  backgroundColor: isActive ? "#FFF" : "#6b0016",
+                  color: isActive ? "#000" : "#FFF",
+                  textDecoration: "none",
+                  borderRadius: "5px",
+                  fontSize: "14px",
+                  border: isActive ? "1px solid #6b0016" : "none",
+                })
+                .hover(
+                  function () {
+                    if (!isActive) $(this).css("backgroundColor", "#8d8d8d");
+                  },
+                  function () {
+                    if (!isActive) $(this).css("backgroundColor", "#6b0016");
+                  }
                 )
                 .appendTo(containerDiv);
+            } else if (optionType === "image") {
+              // Get the corresponding image link
+              const imgColumnIndex = header.indexOf(`o${i - 1}imglink`);
+              const imgUrl = imgColumnIndex >= 0 ? row[imgColumnIndex]?.trim() : null;
+
+              if (imgUrl) {
+                // Render image option
+                $("<a>")
+                  .attr("href", link)
+                  .attr("title", description.trim()) // Tooltip on hover
+                  .css({ margin: "5px", display: "inline-block" })
+                  .append(
+                    $("<img>")
+                      .attr("src", imgUrl)
+                      .css({
+                        width: "50px",
+                        height: "50px",
+                        border: isActive ? "2px solid #6b0016" : "1px solid #ccc",
+                        borderRadius: "3px",
+                        display: "inline-block",
+                      })
+                  )
+                  .appendTo(containerDiv);
+              }
             }
           }
-        }
+        });
 
         // Insert the container before the product description div
         $("#ctl00_PageBody_productDetail_productDescription").before(containerDiv);
