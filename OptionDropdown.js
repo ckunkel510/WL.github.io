@@ -72,8 +72,8 @@ $(document).ready(function () {
                   $("<img>")
                     .attr("src", imgUrl)
                     .css({
-                      width: "25px",
-                      height: "25px",
+                      width: "50px",
+                      height: "50px",
                       border: "1px solid #ccc",
                       borderRadius: "3px",
                       display: "inline-block",
