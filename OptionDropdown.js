@@ -10,7 +10,7 @@ $(document).ready(function () {
     }
 
     // URL for the Google Sheet data in CSV format
-    const sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR5nZGRFSLOS6_0LhN-uXF2oraESccvFP43BdCQQEqn43vned5cHRhHux2d4-BzY6vmGfk-nzNM8G67/pub?output=csv";
+    const sheetUrl = "https://docs.google.com/spreadsheets/d/e/YOUR_SHEET_ID/pub?output=csv";
 
     // Fetch data from the Google Sheet
     $.get(sheetUrl, function (data) {
@@ -20,39 +20,72 @@ $(document).ready(function () {
       // Find the row that matches the current productid
       const matchingRow = rows.find(row => row[0].trim() === currentPid);
 
-      // Render dropdown only if options are found
+      // Render links/buttons only if options are found
       if (matchingRow && matchingRow.length > 1) {
-        // Create dropdown menu
-        const dropdownDiv = $("<div>").css({ marginBottom: "15px" });
-        const dropdownHeader = $("<h4>").text("Options").css({ marginBottom: "5px" });
-        const dropdown = $("<select>")
-          .css({ padding: "5px", fontSize: "14px" })
-          .append('<option value="">Select an option</option>'); // Default placeholder option
+        const optionType = matchingRow[1].trim().toLowerCase(); // Get the option type (text or image)
+        const containerDiv = $("<div>").css({ marginBottom: "15px" });
 
-        // Add options to the dropdown (start from the second column)
-        matchingRow.slice(1).forEach(option => {
-          if (option.trim()) {
-            const [optionPid, description] = option.split("-");
-            $("<option>")
-              .val(optionPid.trim())
+        // Loop through options (skip first two columns: productid and optiontype)
+        for (let i = 2; i < matchingRow.length; i++) {
+          const option = matchingRow[i].trim();
+          if (!option) continue; // Skip empty options
+
+          const [optionPid, description] = option.split("-");
+          const link = `https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=${optionPid.trim()}`;
+
+          if (optionType === "text") {
+            // Create a text button
+            $("<a>")
               .text(description.trim())
-              .appendTo(dropdown);
+              .attr("href", link)
+              .css({
+                display: "inline-block",
+                padding: "5px 10px",
+                margin: "5px",
+                backgroundColor: "#007BFF",
+                color: "#FFF",
+                textDecoration: "none",
+                borderRadius: "5px",
+                fontSize: "14px",
+              })
+              .hover(
+                function () {
+                  $(this).css("backgroundColor", "#0056b3");
+                },
+                function () {
+                  $(this).css("backgroundColor", "#007BFF");
+                }
+              )
+              .appendTo(containerDiv);
+          } else if (optionType === "image") {
+            // Get the corresponding image link
+            const imgColumn = header[i + 1]?.trim(); // Corresponding image column (o1imglink, o2imglink, etc.)
+            const imgUrl = matchingRow[header.indexOf(imgColumn)]?.trim();
+
+            if (imgUrl) {
+              // Create an image with a link
+              $("<a>")
+                .attr("href", link)
+                .attr("title", description.trim()) // Tooltip on hover
+                .css({ margin: "5px", display: "inline-block" })
+                .append(
+                  $("<img>")
+                    .attr("src", imgUrl)
+                    .css({
+                      width: "25px",
+                      height: "25px",
+                      border: "1px solid #ccc",
+                      borderRadius: "3px",
+                      display: "inline-block",
+                    })
+                )
+                .appendTo(containerDiv);
+            }
           }
-        });
+        }
 
-        // Add change event to redirect on selection
-        dropdown.on("change", function () {
-          const selectedPid = $(this).val();
-          if (selectedPid) {
-            window.location.href = `https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=${selectedPid}`;
-          }
-        });
-
-        // Add header and dropdown to the div
-        dropdownDiv.append(dropdownHeader, dropdown);
-
-        // Insert the dropdown before the product description div
-        $("#ctl00_PageBody_productDetail_productDescription").before(dropdownDiv);
+        // Insert the container before the product description div
+        $("#ctl00_PageBody_productDetail_productDescription").before(containerDiv);
       }
     });
   });
