@@ -60,7 +60,7 @@ $(document).ready(function () {
               })
               .hover(
                 function () {
-                  $(this).css("backgroundColor", "#FFFFFF");
+                  $(this).css("backgroundColor", "#8d8d8d");
                 },
                 function () {
                   $(this).css("backgroundColor", "#6b0016");
