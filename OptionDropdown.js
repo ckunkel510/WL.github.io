@@ -25,6 +25,16 @@ $(document).ready(function () {
         const optionType = matchingRow[1].trim().toLowerCase(); // Get the option type (text or image)
         const containerDiv = $("<div>").css({ marginBottom: "15px" });
 
+        // Add the "Options" header
+        const optionsHeader = $("<h4>")
+          .text("Options")
+          .css({
+            fontSize: "18px",
+            fontWeight: "bold",
+            marginBottom: "10px",
+          });
+        containerDiv.append(optionsHeader);
+
         // Loop through options (skip first two columns: productid and optiontype)
         for (let i = 2; i < matchingRow.length; i++) {
           const option = matchingRow[i].trim();
@@ -72,8 +82,8 @@ $(document).ready(function () {
                   $("<img>")
                     .attr("src", imgUrl)
                     .css({
-                      width: "50px",
-                      height: "50px",
+                      width: "25px",
+                      height: "25px",
                       border: "1px solid #ccc",
                       borderRadius: "3px",
                       display: "inline-block",
