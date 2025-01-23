@@ -52,7 +52,7 @@ $(document).ready(function () {
                 display: "inline-block",
                 padding: "5px 10px",
                 margin: "5px",
-                backgroundColor: "#007BFF",
+                backgroundColor: "#6b0016",
                 color: "#FFF",
                 textDecoration: "none",
                 borderRadius: "5px",
@@ -60,7 +60,8 @@ $(document).ready(function () {
               })
               .hover(
                 function () {
-                  $(this).css("backgroundColor", "#0056b3");
+                  $(this).css("backgroundColor", "#FFFFFF");
+                  $(this).css("color", "#6b0016");
                 },
                 function () {
                   $(this).css("backgroundColor", "#007BFF");
