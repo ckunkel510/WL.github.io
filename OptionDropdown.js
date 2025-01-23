@@ -61,7 +61,6 @@ $(document).ready(function () {
               .hover(
                 function () {
                   $(this).css("backgroundColor", "#FFFFFF");
-                  $(this).css("color", "#6b0016");
                 },
                 function () {
                   $(this).css("backgroundColor", "#007BFF");
