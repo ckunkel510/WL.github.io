@@ -23,23 +23,24 @@ $(document).ready(function () {
       if (matchingRows.length > 0) {
         const containerDiv = $("<div>").css({ marginBottom: "15px" });
 
-        // Add the "Options" header
-        const optionsHeader = $("<h4>")
-          .text("Options")
-          .css({
-            fontSize: "18px",
-            fontWeight: "bold",
-            marginBottom: "10px",
-          });
-        containerDiv.append(optionsHeader);
-
-        const textOptionsDiv = $("<div>"); // Container for text options
-        const imageOptionsDiv = $("<div>"); // Container for image options
-        let imageHeaderAdded = false; // Ensure the "Other Options" header is only added once
-
         // Process all matching rows
         matchingRows.forEach(row => {
           const optionType = row[1].trim().toLowerCase(); // Get the option type (text or image)
+          const headerIndex = header.indexOf("Header"); // Find the index of the Header column
+          const dynamicHeader = headerIndex >= 0 && row[headerIndex]?.trim() || "Options"; // Get header value or default to "Options"
+
+          // Add the row-specific header
+          const rowHeader = $("<h4>")
+            .text(dynamicHeader)
+            .css({
+              fontSize: "18px",
+              fontWeight: "bold",
+              marginBottom: "10px",
+            });
+          containerDiv.append(rowHeader);
+
+          // Create a container for this row's options
+          const optionsDiv = $("<div>");
 
           for (let i = 2; i < row.length; i++) {
             const option = row[i].trim();
@@ -73,21 +74,8 @@ $(document).ready(function () {
                     if (!isActive) $(this).css("backgroundColor", "#6b0016");
                   }
                 )
-                .appendTo(textOptionsDiv);
+                .appendTo(optionsDiv);
             } else if (optionType === "image") {
-              // Add "Other Options" header before the first image
-              if (!imageHeaderAdded) {
-                const otherOptionsHeader = $("<h4>")
-                  .text("Other Options")
-                  .css({
-                    fontSize: "18px",
-                    fontWeight: "bold",
-                    margin: "20px 0 10px",
-                  });
-                imageOptionsDiv.append(otherOptionsHeader);
-                imageHeaderAdded = true;
-              }
-
               // Get the corresponding image link
               const imgColumnIndex = header.indexOf(`o${i - 1}imglink`);
               const imgUrl = imgColumnIndex >= 0 ? row[imgColumnIndex]?.trim() : null;
@@ -109,15 +97,14 @@ $(document).ready(function () {
                         display: "inline-block",
                       })
                   )
-                  .appendTo(imageOptionsDiv);
+                  .appendTo(optionsDiv);
               }
             }
           }
-        });
 
-        // Append the text and image options to the container
-        containerDiv.append(textOptionsDiv);
-        containerDiv.append(imageOptionsDiv);
+          // Append the options div to the container
+          containerDiv.append(optionsDiv);
+        });
 
         // Insert the container before the product description div
         $("#ctl00_PageBody_productDetail_productDescription").before(containerDiv);
