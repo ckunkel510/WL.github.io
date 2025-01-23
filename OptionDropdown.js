@@ -59,8 +59,8 @@ $(document).ready(function () {
               .appendTo(containerDiv);
           } else if (optionType === "image") {
             // Get the corresponding image link
-            const imgColumn = header[i + 1]?.trim(); // Corresponding image column (o1imglink, o2imglink, etc.)
-            const imgUrl = matchingRow[header.indexOf(imgColumn)]?.trim();
+            const imgColumnIndex = header.indexOf(`o${i - 1}imglink`);
+            const imgUrl = imgColumnIndex >= 0 ? matchingRow[imgColumnIndex]?.trim() : null;
 
             if (imgUrl) {
               // Create an image with a link
