@@ -63,7 +63,7 @@ $(document).ready(function () {
                   $(this).css("backgroundColor", "#FFFFFF");
                 },
                 function () {
-                  $(this).css("backgroundColor", "#007BFF");
+                  $(this).css("backgroundColor", "#6b0016");
                 }
               )
               .appendTo(containerDiv);
