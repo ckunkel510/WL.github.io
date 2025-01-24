@@ -116,9 +116,9 @@ $(document).ready(function () {
               continue;
             }
 
-            // Render UOM option
+            // Render UOM option from `option1` (or related field)
             $("<a>")
-              .text(description.trim())
+              .text(description.trim()) // Use the description from option1
               .attr("href", "#")
               .css({
                 display: "inline-block",
