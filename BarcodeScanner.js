@@ -13,21 +13,22 @@ if (searchBox && isMobileDevice()) {
   scannerContainer.style.display = "inline-block";
   scannerContainer.innerHTML = `
     <input type="button" id="start-scanner" value="Scan Barcode" />
-    <video id="barcode-scanner" style="display: none; width: 300px; height: 200px;"></video>
-    <button id="stop-scanner" style="display: none;">Stop Scanner</button>
+    <div id="scanner-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 9999;">
+      <video id="barcode-scanner" style="width: 100%; height: 100%; object-fit: cover;"></video>
+      <button id="stop-scanner" style="position: absolute; top: 10px; right: 10px; padding: 10px; font-size: 16px; z-index: 10000;">Stop</button>
+    </div>
   `;
   searchBox.parentNode.insertBefore(scannerContainer, searchBox.nextSibling);
 
   // References to the newly created elements
   const startScannerButton = document.getElementById("start-scanner");
   const stopScannerButton = document.getElementById("stop-scanner");
+  const scannerOverlay = document.getElementById("scanner-overlay");
   const videoElement = document.getElementById("barcode-scanner");
 
   // Function to start the scanner
   startScannerButton.addEventListener("click", () => {
-    videoElement.style.display = "block";
-    stopScannerButton.style.display = "inline-block";
-    startScannerButton.style.display = "none";
+    scannerOverlay.style.display = "block";
 
     // Initialize Quagga
     Quagga.init(
@@ -36,6 +37,9 @@ if (searchBox && isMobileDevice()) {
           name: "Live",
           type: "LiveStream",
           target: videoElement, // Target the video element
+          constraints: {
+            facingMode: "environment", // Use the back camera
+          },
         },
         decoder: {
           readers: ["upc_reader"], // UPC barcode reader
@@ -44,6 +48,7 @@ if (searchBox && isMobileDevice()) {
       function (err) {
         if (err) {
           console.error("Error initializing Quagga:", err);
+          scannerOverlay.style.display = "none"; // Hide overlay if there's an error
           return;
         }
         Quagga.start();
@@ -54,9 +59,7 @@ if (searchBox && isMobileDevice()) {
   // Stop the scanner
   stopScannerButton.addEventListener("click", () => {
     Quagga.stop();
-    videoElement.style.display = "none";
-    stopScannerButton.style.display = "none";
-    startScannerButton.style.display = "inline-block";
+    scannerOverlay.style.display = "none";
   });
 
   // Handle detected barcode
@@ -70,9 +73,7 @@ if (searchBox && isMobileDevice()) {
 
     // Stop the scanner after detecting a barcode
     Quagga.stop();
-    videoElement.style.display = "none";
-    stopScannerButton.style.display = "none";
-    startScannerButton.style.display = "inline-block";
+    scannerOverlay.style.display = "none";
   });
 } else if (!isMobileDevice()) {
   console.log("Barcode scanner functionality is disabled on non-mobile devices.");
