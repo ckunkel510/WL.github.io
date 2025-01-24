@@ -59,10 +59,10 @@ $(document).ready(function () {
 
         // Create a wrapper div for options in this row
         const optionsDiv = $("<div>").css({
-          display: "flex",
-          flexWrap: "wrap",
+          display: "inline-block", // Change from "flex" to "inline-block"
           gap: "10px",
-          alignItems: "center",
+          verticalAlign: "top", // Align the blocks vertically
+          margin: "5px 0",
         });
 
         // Loop through the option columns (option1, option2, ..., option12)
