@@ -31,15 +31,17 @@ if (searchBox && isMobileDevice()) {
   startScannerButton.addEventListener("click", () => {
     scannerOverlay.style.display = "block";
 
-    // Initialize Quagga with improved constraints for mobile devices
+    // Initialize Quagga with minimal constraints
     Quagga.init(
       {
         inputStream: {
           name: "Live",
           type: "LiveStream",
-          target: videoElement, // Target the video element
+          target: videoElement,
           constraints: {
-            facingMode: { ideal: "environment" }, // Use back camera
+            video: {
+              facingMode: "environment", // Use the back camera
+            },
           },
         },
         decoder: {
