@@ -43,7 +43,10 @@ $(document).ready(function () {
         }).then(data => {
             // Extract the selected option's text (branch name)
             const selectedOption = $(data).find('#ctl00_PageBody_ChangeUserDetailsControl_ddBranch option[selected="selected"]');
-            return selectedOption.length ? selectedOption.text().trim() : null;
+            const branch = selectedOption.length ? selectedOption.text().trim() : null;
+
+            console.log(`Selected branch from account settings: ${branch}`);
+            return branch;
         });
     }
 
@@ -80,28 +83,30 @@ $(document).ready(function () {
      * @param {string} branch - The selected branch name.
      */
     function filterAndDisplayStockData(stockData, branch) {
-        // Identify the column index for "Actual Stock" by matching the header
+        // Identify the "Actual" column dynamically
         const actualStockColumnIndex = stockData.find('th').index((_, th) => {
-            return $(th).text().trim().toLowerCase() === 'actual stock';
+            return $(th).text().trim().toLowerCase() === 'actual';
         });
 
         if (actualStockColumnIndex === -1) {
-            console.error('Actual Stock column not found in stock table.');
+            console.error('Actual column not found in stock table.');
             displayWidget(branch, 'Stock information unavailable');
             return;
         }
 
-        // Filter rows matching the selected branch
+        // Filter rows where the first column (Branch) matches the selected branch
         const filteredRow = stockData.find('tr').filter((_, row) => {
-            const branchCell = $(row).find('td[data-title="Location"]').text().trim();
+            const branchCell = $(row).find('td').eq(0).text().trim(); // First column (Branch)
+            console.log(`Checking branch in stock table: ${branchCell}`);
             return branchCell === branch;
         });
 
         if (filteredRow.length) {
-            // Extract the "Actual Stock" quantity for the matching branch
+            // Extract the "Actual" stock quantity for the matching branch
             const actualStock = filteredRow.find(`td:eq(${actualStockColumnIndex})`).text().trim();
             displayWidget(branch, actualStock || 'No stock available');
         } else {
+            console.error(`Branch "${branch}" not found in stock table.`);
             displayWidget(branch, 'No stock available');
         }
     }
