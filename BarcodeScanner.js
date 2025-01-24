@@ -12,7 +12,7 @@ if (searchBox && isMobileDevice()) {
   scannerContainer.id = "barcode-scanner-container";
   scannerContainer.style.display = "inline-block";
   scannerContainer.innerHTML = `
-    <input type="button" id="start-scanner" value="Scan Barcode" />
+    <input type="button" id="start-scanner" style="background: url('https://images-woodsonlumber.sirv.com/Other%20Website%20Images/Scan%20To%20Search.png') no-repeat center center; background-size: contain; width: 50px; height: 50px; border: none; cursor: pointer;" />
     <div id="scanner-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 9999;">
       <video id="manual-video-feed" autoplay playsinline muted style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1;"></video>
       <canvas id="quagga-overlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2;"></canvas>
