@@ -34,7 +34,13 @@ $(document).ready(function () {
     const matchingRows = rows.filter(row => row[productIdIndex]?.trim() === currentPid);
 
     if (matchingRows.length > 0) {
-      const containerDiv = $("<div>").css({ marginBottom: "15px" });
+      const containerDiv = $("<div>").css({
+        marginBottom: "20px",
+        padding: "10px",
+        border: "1px solid #ccc",
+        borderRadius: "8px",
+        backgroundColor: "#f9f9f9",
+      });
 
       // Process all matching rows
       matchingRows.forEach(row => {
@@ -51,7 +57,13 @@ $(document).ready(function () {
           });
         containerDiv.append(rowHeader);
 
-        const optionsDiv = $("<div>");
+        // Create a wrapper div for options in this row
+        const optionsDiv = $("<div>").css({
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "10px",
+          alignItems: "center",
+        });
 
         // Loop through the option columns (option1, option2, ..., option12)
         for (let i = header.indexOf("option1"); i <= header.indexOf("option12"); i++) {
