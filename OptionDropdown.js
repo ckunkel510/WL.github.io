@@ -9,6 +9,9 @@ $(document).ready(function () {
     return;
   }
 
+  // Construct the dynamic input ID
+  const inputId = `ctl00_PageBody_productDetail_ctl00_qty_${currentPid}`;
+
   // URL for the Google Sheet data in CSV format
   const sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR5nZGRFSLOS6_0LhN-uXF2oraESccvFP43BdCQQEqn43vned5cHRhHux2d4-BzY6vmGfk-nzNM8G67/pub?output=csv";
 
@@ -51,39 +54,108 @@ $(document).ready(function () {
 
         const optionsDiv = $("<div>");
 
-        if (optionType === "uom") {
-          // Skip processing if optionuom is empty
-          const uomValue = row[optionUOMIndex]?.trim();
-          if (!uomValue) {
-            console.warn(`Skipping UOM option for row: optionuom is empty.`);
-            return;
+        for (let i = header.indexOf("option1"); i <= header.indexOf("option12"); i++) {
+          const option = row[i]?.trim();
+          if (!option) continue; // Skip empty options
+
+          const [optionPid, description] = option.split("-");
+          const link = `https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=${optionPid.trim()}`;
+          const isActive = optionPid.trim() === currentPid;
+
+          if (optionType === "text") {
+            // Render text option
+            $("<a>")
+              .text(description.trim())
+              .attr("href", link)
+              .css({
+                display: "inline-block",
+                padding: "5px 10px",
+                margin: "5px",
+                backgroundColor: isActive ? "#FFF" : "#6b0016",
+                color: isActive ? "#000" : "#FFF",
+                textDecoration: "none",
+                borderRadius: "5px",
+                fontSize: "14px",
+                border: isActive ? "1px solid #6b0016" : "none",
+              })
+              .hover(
+                function () {
+                  if (!isActive) $(this).css("backgroundColor", "#8d8d8d");
+                },
+                function () {
+                  if (!isActive) $(this).css("backgroundColor", "#6b0016");
+                }
+              )
+              .appendTo(optionsDiv);
+          } else if (optionType === "image") {
+            // Get the corresponding image link
+            const imgColumnIndex = header.indexOf(`o${i - header.indexOf("option1") + 1}imglink`);
+            const imgUrl = imgColumnIndex >= 0 ? row[imgColumnIndex]?.trim() : null;
+
+            if (imgUrl) {
+              // Render image option
+              $("<a>")
+                .attr("href", link)
+                .attr("title", description.trim())
+                .css({ margin: "5px", display: "inline-block" })
+                .append(
+                  $("<img>")
+                    .attr("src", imgUrl)
+                    .css({
+                      width: "50px",
+                      height: "50px",
+                      border: isActive ? "2px solid #6b0016" : "1px solid #ccc",
+                      borderRadius: "3px",
+                      display: "inline-block",
+                    })
+                )
+                .appendTo(optionsDiv);
+            }
+          } else if (optionType === "uom") {
+            // Skip processing if optionuom is empty
+            const uomValue = row[optionUOMIndex]?.trim();
+            if (!uomValue) {
+              console.warn(`Skipping UOM option for row: optionuom is empty.`);
+              continue;
+            }
+
+            // Render UOM option as a clickable button
+            $("<a>")
+              .text(uomValue) // Use the value in optionuom as the button text
+              .attr("href", "#")
+              .css({
+                display: "inline-block",
+                padding: "5px 10px",
+                margin: "5px",
+                backgroundColor: "#6b0016",
+                color: "#FFF",
+                textDecoration: "none",
+                borderRadius: "5px",
+                fontSize: "14px",
+              })
+              .hover(
+                function () {
+                  $(this).css("backgroundColor", "#8d8d8d");
+                },
+                function () {
+                  $(this).css("backgroundColor", "#6b0016");
+                }
+              )
+              .on("click", function (e) {
+                e.preventDefault();
+
+                // Update the input field dynamically
+                const qtyInput = $(`#${inputId}`);
+
+                if (qtyInput.length) {
+                  qtyInput.val(uomValue); // Update the value
+                  qtyInput.text(uomValue); // Update the text (if applicable)
+                } else {
+                  console.error(`Input with ID ${inputId} not found.`);
+                }
+              })
+              .appendTo(optionsDiv);
           }
-
-          // Render UOM option as a clickable button
-          $("<a>")
-            .text(uomValue) // Use the value in optionuom as the button text
-            .attr("href", "#")
-            .css({
-              display: "inline-block",
-              padding: "5px 10px",
-              margin: "5px",
-              backgroundColor: "#007BFF",
-              color: "#FFF",
-              textDecoration: "none",
-              borderRadius: "5px",
-              fontSize: "14px",
-            })
-            .on("click", function (e) {
-              e.preventDefault();
-
-              // Update the input field
-              const qtyInput = $("#ctl00_PageBody_productDetail_ctl00_qty_11003");
-
-              if (qtyInput.length) {
-                qtyInput.val(uomValue); // Update the value
-              }
-            })
-            .appendTo(optionsDiv);
         }
 
         // Append the optionsDiv to the containerDiv
