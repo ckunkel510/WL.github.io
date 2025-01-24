@@ -20,7 +20,7 @@ display: flex;
 #review-widget {
   max-width: 800px;
 width: 800px;
-display: inline-block;
+display: table-cell;
   margin: 20px auto;
   font-family: Arial, sans-serif;
 }
