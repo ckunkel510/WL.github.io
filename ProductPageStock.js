@@ -41,6 +41,7 @@ $(document).ready(function () {
             url: accountSettingsUrl,
             method: 'GET',
         }).then(data => {
+            // Extract the selected option's text (branch name)
             const selectedOption = $(data).find('#ctl00_PageBody_ChangeUserDetailsControl_ddBranch option[selected="selected"]');
             return selectedOption.length ? selectedOption.text().trim() : null;
         });
@@ -112,7 +113,7 @@ $(document).ready(function () {
      */
     function displayWidget(branch, quantity) {
         const widgetHtml = `
-            <div id="stock-widget" style="border: 1px solid #ccc; padding: 10px; margin: 20px 0; background: #f9f9f9;">
+            <div id="stock-widget" style="display: table; border: 1px solid #ccc; padding: 10px; margin: 20px 0; background: #f9f9f9;">
                 <h3>Stock Information</h3>
                 <p><strong>Branch:</strong> ${branch}</p>
                 <p><strong>Available Quantity:</strong> ${quantity}</p>
