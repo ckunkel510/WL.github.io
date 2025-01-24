@@ -51,100 +51,42 @@ $(document).ready(function () {
 
         const optionsDiv = $("<div>");
 
-        for (let i = header.indexOf("option1"); i <= header.indexOf("option12"); i++) {
-          const option = row[i]?.trim();
-          if (!option) continue; // Skip empty options
-
-          const [optionPid, description] = option.split("-");
-          const link = `https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=${optionPid.trim()}`;
-          const isActive = optionPid.trim() === currentPid;
-
-          if (optionType === "text") {
-            // Render text option
-            $("<a>")
-              .text(description.trim())
-              .attr("href", link)
-              .css({
-                display: "inline-block",
-                padding: "5px 10px",
-                margin: "5px",
-                backgroundColor: isActive ? "#FFF" : "#6b0016",
-                color: isActive ? "#000" : "#FFF",
-                textDecoration: "none",
-                borderRadius: "5px",
-                fontSize: "14px",
-                border: isActive ? "1px solid #6b0016" : "none",
-              })
-              .hover(
-                function () {
-                  if (!isActive) $(this).css("backgroundColor", "#8d8d8d");
-                },
-                function () {
-                  if (!isActive) $(this).css("backgroundColor", "#6b0016");
-                }
-              )
-              .appendTo(optionsDiv);
-          } else if (optionType === "image") {
-            // Get the corresponding image link
-            const imgColumnIndex = header.indexOf(`o${i - header.indexOf("option1") + 1}imglink`);
-            const imgUrl = imgColumnIndex >= 0 ? row[imgColumnIndex]?.trim() : null;
-
-            if (imgUrl) {
-              // Render image option
-              $("<a>")
-                .attr("href", link)
-                .attr("title", description.trim())
-                .css({ margin: "5px", display: "inline-block" })
-                .append(
-                  $("<img>")
-                    .attr("src", imgUrl)
-                    .css({
-                      width: "50px",
-                      height: "50px",
-                      border: isActive ? "2px solid #6b0016" : "1px solid #ccc",
-                      borderRadius: "3px",
-                      display: "inline-block",
-                    })
-                )
-                .appendTo(optionsDiv);
-            }
-          } else if (optionType === "uom") {
-            // Skip processing if optionuom is empty
-            const uomValue = row[optionUOMIndex]?.trim();
-            if (!uomValue) {
-              console.warn(`Skipping UOM option for row: optionuom is empty.`);
-              continue;
-            }
-
-            // Render UOM option from `option1` (or related field)
-            $("<a>")
-              .text(description.trim()) // Use the description from option1
-              .attr("href", "#")
-              .css({
-                display: "inline-block",
-                padding: "5px 10px",
-                margin: "5px",
-                backgroundColor: "#007BFF",
-                color: "#FFF",
-                textDecoration: "none",
-                borderRadius: "5px",
-                fontSize: "14px",
-              })
-              .on("click", function (e) {
-                e.preventDefault();
-
-                // Update the input field
-                const qtyInput = $("#ctl00_PageBody_productDetail_ctl00_qty_11003");
-
-                if (qtyInput.length) {
-                  qtyInput.val(uomValue); // Update the value
-                  qtyInput.text(uomValue); // Update the text (if applicable)
-                }
-              })
-              .appendTo(optionsDiv);
+        if (optionType === "uom") {
+          // Skip processing if optionuom is empty
+          const uomValue = row[optionUOMIndex]?.trim();
+          if (!uomValue) {
+            console.warn(`Skipping UOM option for row: optionuom is empty.`);
+            return;
           }
+
+          // Render UOM option as a clickable button
+          $("<a>")
+            .text(uomValue) // Use the value in optionuom as the button text
+            .attr("href", "#")
+            .css({
+              display: "inline-block",
+              padding: "5px 10px",
+              margin: "5px",
+              backgroundColor: "#007BFF",
+              color: "#FFF",
+              textDecoration: "none",
+              borderRadius: "5px",
+              fontSize: "14px",
+            })
+            .on("click", function (e) {
+              e.preventDefault();
+
+              // Update the input field
+              const qtyInput = $("#ctl00_PageBody_productDetail_ctl00_qty_11003");
+
+              if (qtyInput.length) {
+                qtyInput.val(uomValue); // Update the value
+              }
+            })
+            .appendTo(optionsDiv);
         }
 
+        // Append the optionsDiv to the containerDiv
         containerDiv.append(optionsDiv);
       });
 
