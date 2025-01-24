@@ -136,12 +136,15 @@ $(document).ready(function () {
               .on("click", function (e) {
                 e.preventDefault();
 
+                // Extract numeric value from option text
+                const numericValue = option.match(/\d+/)?.[0] || "";
+
                 // Update the input field dynamically
                 const qtyInput = $(`#${inputId}`);
 
                 if (qtyInput.length) {
-                  qtyInput.val(option.trim()); // Update the value
-                  qtyInput.text(option.trim()); // Update the text (if applicable)
+                  qtyInput.val(numericValue); // Update the value with the numeric part
+                  qtyInput.text(numericValue); // Update the text (if applicable)
                 } else {
                   console.error(`Input with ID ${inputId} not found.`);
                 }
