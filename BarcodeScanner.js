@@ -14,7 +14,8 @@ if (searchBox && isMobileDevice()) {
   scannerContainer.innerHTML = `
     <input type="button" id="start-scanner" value="Scan Barcode" />
     <div id="scanner-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 9999;">
-      <video id="barcode-scanner" style="width: 100%; height: 100%; object-fit: cover;"></video>
+      <video id="barcode-scanner" autoplay playsinline style="width: 100%; height: 100%; object-fit: cover; position: absolute; z-index: 1;"></video>
+      <div id="scan-area" style="position: absolute; top: 50%; left: 50%; width: 60%; height: 20%; transform: translate(-50%, -50%); border: 2px solid #00ff00; z-index: 2;"></div>
       <button id="stop-scanner" style="position: absolute; top: 10px; right: 10px; padding: 10px; font-size: 16px; z-index: 10000;">Stop</button>
     </div>
   `;
@@ -25,20 +26,23 @@ if (searchBox && isMobileDevice()) {
   const stopScannerButton = document.getElementById("stop-scanner");
   const scannerOverlay = document.getElementById("scanner-overlay");
   const videoElement = document.getElementById("barcode-scanner");
+  const scanArea = document.getElementById("scan-area");
 
   // Function to start the scanner
   startScannerButton.addEventListener("click", () => {
     scannerOverlay.style.display = "block";
 
-    // Initialize Quagga
+    // Initialize Quagga with improved constraints for mobile devices
     Quagga.init(
       {
         inputStream: {
           name: "Live",
           type: "LiveStream",
-          target: videoElement, // Target the video element
+          target: videoElement,
           constraints: {
-            facingMode: "environment", // Use the back camera
+            facingMode: { ideal: "environment" }, // Use back camera
+            width: { ideal: 1920 },
+            height: { ideal: 1080 },
           },
         },
         decoder: {
