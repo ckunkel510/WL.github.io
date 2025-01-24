@@ -24,10 +24,9 @@ $(document).ready(function () {
     const productIdIndex = header.indexOf("productid");
     const optionTypeIndex = header.indexOf("Optiontype");
     const headerIndex = header.indexOf("Header");
-    const optionUOMIndex = header.indexOf("optionuom");
 
-    if (productIdIndex === -1 || optionTypeIndex === -1 || headerIndex === -1 || optionUOMIndex === -1) {
-      console.error("Missing required columns (productid, Optiontype, Header, or optionuom) in Google Sheet.");
+    if (productIdIndex === -1 || optionTypeIndex === -1 || headerIndex === -1) {
+      console.error("Missing required columns (productid, Optiontype, or Header) in Google Sheet.");
       return;
     }
 
@@ -54,19 +53,19 @@ $(document).ready(function () {
 
         const optionsDiv = $("<div>");
 
+        // Loop through the option columns (option1, option2, ..., option12)
         for (let i = header.indexOf("option1"); i <= header.indexOf("option12"); i++) {
           const option = row[i]?.trim();
           if (!option) continue; // Skip empty options
 
           const [optionPid, description] = option.split("-");
-          const link = `https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=${optionPid.trim()}`;
-          const isActive = optionPid.trim() === currentPid;
+          const isActive = optionPid?.trim() === currentPid;
 
           if (optionType === "text") {
             // Render text option
             $("<a>")
               .text(description.trim())
-              .attr("href", link)
+              .attr("href", `https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=${optionPid.trim()}`)
               .css({
                 display: "inline-block",
                 padding: "5px 10px",
@@ -95,7 +94,7 @@ $(document).ready(function () {
             if (imgUrl) {
               // Render image option
               $("<a>")
-                .attr("href", link)
+                .attr("href", `https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=${optionPid.trim()}`)
                 .attr("title", description.trim())
                 .css({ margin: "5px", display: "inline-block" })
                 .append(
@@ -112,16 +111,9 @@ $(document).ready(function () {
                 .appendTo(optionsDiv);
             }
           } else if (optionType === "uom") {
-            // Skip processing if optionuom is empty
-            const uomValue = row[optionUOMIndex]?.trim();
-            if (!uomValue) {
-              console.warn(`Skipping UOM option for row: optionuom is empty.`);
-              continue;
-            }
-
             // Render UOM option as a clickable button
             $("<a>")
-              .text(uomValue) // Use the value in optionuom as the button text
+              .text(option.trim()) // Use the value in the option column as the button text
               .attr("href", "#")
               .css({
                 display: "inline-block",
@@ -148,8 +140,8 @@ $(document).ready(function () {
                 const qtyInput = $(`#${inputId}`);
 
                 if (qtyInput.length) {
-                  qtyInput.val(uomValue); // Update the value
-                  qtyInput.text(uomValue); // Update the text (if applicable)
+                  qtyInput.val(option.trim()); // Update the value
+                  qtyInput.text(option.trim()); // Update the text (if applicable)
                 } else {
                   console.error(`Input with ID ${inputId} not found.`);
                 }
