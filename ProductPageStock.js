@@ -79,13 +79,13 @@ $(document).ready(function () {
      * @param {string} branch - The selected branch name.
      */
     function filterAndDisplayStockData(stockData, branch) {
-        // Identify the column index for "Actual" by matching the header
-        const actualColumnIndex = stockData.find('th').index((_, th) => {
-            return $(th).text().trim().toLowerCase() === 'actual';
+        // Identify the column index for "Actual Stock" by matching the header
+        const actualStockColumnIndex = stockData.find('th').index((_, th) => {
+            return $(th).text().trim().toLowerCase() === 'actual stock';
         });
 
-        if (actualColumnIndex === -1) {
-            console.error('Actual column not found in stock table.');
+        if (actualStockColumnIndex === -1) {
+            console.error('Actual Stock column not found in stock table.');
             displayWidget(branch, 'Stock information unavailable');
             return;
         }
@@ -97,9 +97,9 @@ $(document).ready(function () {
         });
 
         if (filteredRow.length) {
-            // Extract the "Actual" quantity for the matching branch
-            const actualQuantity = filteredRow.find(`td:eq(${actualColumnIndex})`).text().trim();
-            displayWidget(branch, actualQuantity || 'No stock available');
+            // Extract the "Actual Stock" quantity for the matching branch
+            const actualStock = filteredRow.find(`td:eq(${actualStockColumnIndex})`).text().trim();
+            displayWidget(branch, actualStock || 'No stock available');
         } else {
             displayWidget(branch, 'No stock available');
         }
