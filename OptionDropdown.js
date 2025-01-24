@@ -35,11 +35,13 @@ $(document).ready(function () {
 
     if (matchingRows.length > 0) {
       const containerDiv = $("<div>").css({
+        display: "inline-block", // Outer wrapper div now uses inline-block
         marginBottom: "20px",
         padding: "10px",
         border: "1px solid #ccc",
         borderRadius: "8px",
         backgroundColor: "#f9f9f9",
+        verticalAlign: "top", // Align wrapper with other elements
       });
 
       // Process all matching rows
@@ -59,10 +61,10 @@ $(document).ready(function () {
 
         // Create a wrapper div for options in this row
         const optionsDiv = $("<div>").css({
-          display: "inline-block", // Change from "flex" to "inline-block"
+          display: "flex",
+          flexWrap: "wrap",
           gap: "10px",
-          verticalAlign: "top", // Align the blocks vertically
-          margin: "5px 0",
+          alignItems: "center",
         });
 
         // Loop through the option columns (option1, option2, ..., option12)
