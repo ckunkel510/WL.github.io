@@ -20,7 +20,10 @@ if (searchBox && isMobileDevice()) {
       <button id="stop-scanner" style="position: absolute; top: 10px; right: 10px; padding: 10px; font-size: 16px; z-index: 10000;">Stop</button>
     </div>
   `;
-  searchBox.parentNode.insertBefore(scannerContainer, searchBox.nextSibling);
+  const searchButton = document.querySelector('.rsbButtonSearch');
+  if (searchButton) {
+    searchButton.parentNode.insertBefore(scannerContainer, searchButton);
+  }
 
   // References to the newly created elements
   const startScannerButton = document.getElementById("start-scanner");
