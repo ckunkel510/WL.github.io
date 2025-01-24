@@ -15,6 +15,7 @@ if (searchBox && isMobileDevice()) {
     <input type="button" id="start-scanner" value="Scan Barcode" />
     <div id="scanner-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); z-index: 9999;">
       <video id="barcode-scanner" autoplay playsinline muted style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: 1;"></video>
+      <div id="scan-area" style="position: absolute; top: 50%; left: 50%; width: 60%; height: 20%; transform: translate(-50%, -50%); border: 2px solid #00ff00; z-index: 2;"></div>
       <button id="stop-scanner" style="position: absolute; top: 10px; right: 10px; padding: 10px; font-size: 16px; z-index: 10000;">Stop</button>
     </div>
   `;
@@ -30,15 +31,17 @@ if (searchBox && isMobileDevice()) {
   startScannerButton.addEventListener("click", () => {
     scannerOverlay.style.display = "block";
 
-    // Initialize Quagga with basic constraints
+    // Initialize Quagga with minimal constraints and ensure the video feed works
     Quagga.init(
       {
         inputStream: {
           name: "Live",
           type: "LiveStream",
-          target: videoElement,
+          target: videoElement, // Target the video element
           constraints: {
-            video: true, // Basic constraint
+            video: {
+              facingMode: "environment", // Use back camera
+            },
           },
         },
         decoder: {
@@ -51,7 +54,16 @@ if (searchBox && isMobileDevice()) {
           scannerOverlay.style.display = "none"; // Hide overlay if there's an error
           return;
         }
+
+        // Start Quagga and ensure the video stream is attached
+        console.log("Quagga initialized");
         Quagga.start();
+
+        // Debugging: Check if the video feed is attached
+        if (!videoElement.srcObject) {
+          console.warn("Video stream not attached, manually setting srcObject");
+          videoElement.srcObject = Quagga.CameraAccess.getActiveStream();
+        }
       }
     );
   });
