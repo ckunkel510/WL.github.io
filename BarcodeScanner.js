@@ -28,48 +28,62 @@ if (searchBox && isMobileDevice()) {
   const videoElement = document.getElementById("barcode-scanner");
 
   // Function to start the scanner
-  startScannerButton.addEventListener("click", () => {
+  startScannerButton.addEventListener("click", async () => {
     scannerOverlay.style.display = "block";
 
-    // Initialize Quagga with minimal constraints and ensure the video feed works
-    Quagga.init(
-      {
-        inputStream: {
-          name: "Live",
-          type: "LiveStream",
-          target: videoElement, // Target the video element
-          constraints: {
-            video: {
-              facingMode: "environment", // Use back camera
+    try {
+      // Manually start the camera and attach the stream to the video element
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: "environment", // Use back camera
+        },
+      });
+
+      // Attach the video stream manually
+      videoElement.srcObject = stream;
+
+      // Start Quagga for barcode detection
+      Quagga.init(
+        {
+          inputStream: {
+            name: "Live",
+            type: "LiveStream",
+            target: videoElement,
+            constraints: {
+              video: {
+                facingMode: "environment",
+              },
             },
           },
+          decoder: {
+            readers: ["upc_reader"], // UPC barcode reader
+          },
         },
-        decoder: {
-          readers: ["upc_reader"], // UPC barcode reader
-        },
-      },
-      function (err) {
-        if (err) {
-          console.error("Error initializing Quagga:", err);
-          scannerOverlay.style.display = "none"; // Hide overlay if there's an error
-          return;
+        function (err) {
+          if (err) {
+            console.error("Error initializing Quagga:", err);
+            scannerOverlay.style.display = "none"; // Hide overlay if there's an error
+            return;
+          }
+          Quagga.start();
         }
-
-        // Start Quagga and ensure the video stream is attached
-        console.log("Quagga initialized");
-        Quagga.start();
-
-        // Debugging: Check if the video feed is attached
-        if (!videoElement.srcObject) {
-          console.warn("Video stream not attached, manually setting srcObject");
-          videoElement.srcObject = Quagga.CameraAccess.getActiveStream();
-        }
-      }
-    );
+      );
+    } catch (err) {
+      console.error("Error accessing the camera:", err);
+      scannerOverlay.style.display = "none"; // Hide overlay if camera access fails
+    }
   });
 
   // Stop the scanner
   stopScannerButton.addEventListener("click", () => {
+    // Stop the video stream manually
+    const stream = videoElement.srcObject;
+    if (stream) {
+      const tracks = stream.getTracks();
+      tracks.forEach((track) => track.stop());
+    }
+
+    // Stop Quagga
     Quagga.stop();
     scannerOverlay.style.display = "none";
   });
@@ -84,6 +98,11 @@ if (searchBox && isMobileDevice()) {
     window.location.href = searchUrl;
 
     // Stop the scanner after detecting a barcode
+    const stream = videoElement.srcObject;
+    if (stream) {
+      const tracks = stream.getTracks();
+      tracks.forEach((track) => track.stop());
+    }
     Quagga.stop();
     scannerOverlay.style.display = "none";
   });
