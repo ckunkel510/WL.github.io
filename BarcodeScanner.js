@@ -28,6 +28,10 @@ if (searchBox && isMobileDevice()) {
   const scannerOverlay = document.getElementById("scanner-overlay");
   const videoElement = document.getElementById("manual-video-feed");
 
+  // Validation: Store detected barcodes and only accept repeated ones
+  let detectedBarcodes = {};
+  const minDetectionsRequired = 3; // Number of consistent detections needed to confirm
+
   // Function to start the scanner
   startScannerButton.addEventListener("click", async () => {
     scannerOverlay.style.display = "block";
@@ -59,6 +63,8 @@ if (searchBox && isMobileDevice()) {
           decoder: {
             readers: ["upc_reader"], // UPC barcode reader
           },
+          locate: true, // Improve detection accuracy by locating the barcode first
+          frequency: 5, // Process every 5th frame to reduce noise
         },
         function (err) {
           if (err) {
@@ -91,21 +97,37 @@ if (searchBox && isMobileDevice()) {
 
   // Handle detected barcode
   Quagga.onDetected((result) => {
-    const upcCode = result.codeResult.code;
-    console.log("Detected UPC:", upcCode);
+    const detectedCode = result.codeResult.code;
+    const confidence = result.codeResult.decodedCodes.reduce((sum, code) => sum + code.error, 0);
 
-    // Redirect to the search URL with the detected UPC
-    const searchUrl = `https://webtrack.woodsonlumber.com/Products.aspx?pg=0&searchText=${upcCode}`;
-    window.location.href = searchUrl;
+    console.log("Detected Code:", detectedCode);
+    console.log("Detection Confidence:", confidence);
 
-    // Stop the scanner after detecting a barcode
-    const stream = videoElement.srcObject;
-    if (stream) {
-      const tracks = stream.getTracks();
-      tracks.forEach((track) => track.stop());
+    // Ignore low-confidence detections
+    if (confidence > 0.5) {
+      console.warn("Low-confidence detection ignored:", detectedCode);
+      return;
     }
-    Quagga.stop();
-    scannerOverlay.style.display = "none";
+
+    // Count detections of the same code
+    if (!detectedBarcodes[detectedCode]) {
+      detectedBarcodes[detectedCode] = 1;
+    } else {
+      detectedBarcodes[detectedCode]++;
+    }
+
+    // If the same code is detected consistently, confirm it
+    if (detectedBarcodes[detectedCode] >= minDetectionsRequired) {
+      console.log("Confirmed Code:", detectedCode);
+
+      // Redirect to the search URL
+      const searchUrl = `https://webtrack.woodsonlumber.com/Products.aspx?pg=0&searchText=${detectedCode}`;
+      window.location.href = searchUrl;
+
+      // Reset detections to prevent multiple redirects
+      detectedBarcodes = {};
+      Quagga.stop();
+    }
   });
 } else if (!isMobileDevice()) {
   console.log("Barcode scanner functionality is disabled on non-mobile devices.");
