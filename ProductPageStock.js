@@ -31,7 +31,6 @@ $(document).ready(function () {
         }).then(data => {
             console.log('Account settings HTML:', data);
 
-            // Verify if the dropdown exists
             const dropdown = $(data).find('#ctl00_PageBody_ChangeUserDetailsControl_ddBranch');
             if (!dropdown.length) {
                 console.error('Dropdown not found in account settings.');
@@ -40,14 +39,12 @@ $(document).ready(function () {
 
             console.log('Dropdown found:', dropdown.html());
 
-            // Check selected option
             const selectedOption = dropdown.find('option[selected="selected"]');
             if (!selectedOption.length) {
                 console.warn('No option with selected="selected" found. Trying :selected pseudo-class.');
                 return dropdown.find('option:selected').text().trim() || null;
             }
 
-            // Return the selected option's text
             const branch = selectedOption.text().trim();
             console.log(`Selected branch: "${branch}"`);
             return branch;
@@ -80,12 +77,19 @@ $(document).ready(function () {
     }
 
     function filterAndDisplayStockData(stockData, branch) {
+        // Log all headers to verify their text
+        stockData.find('th').each((index, th) => {
+            console.log(`Header ${index}: "${$(th).text().trim()}"`);
+        });
+
+        // Dynamically find the "Actual" column index
         const actualStockColumnIndex = stockData.find('th').index((_, th) => {
             return $(th).text().trim().toLowerCase() === 'actual';
         });
 
+        // Fallback if the column isn't found
         if (actualStockColumnIndex === -1) {
-            console.error('Actual column not found in stock table.');
+            console.error('Actual column not found in stock table. Please verify the header text.');
             displayWidget(branch, 'Stock information unavailable');
             return;
         }
