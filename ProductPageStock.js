@@ -29,11 +29,31 @@ $(document).ready(function () {
             url: accountSettingsUrl,
             method: 'GET',
         }).then(data => {
-            const selectedOption = $(data).find('#ctl00_PageBody_ChangeUserDetailsControl_ddBranch option[selected="selected"]');
-            const branch = selectedOption.length ? selectedOption.text().trim() : null;
+            console.log('Account settings HTML:', data);
 
-            console.log(`Selected branch from account settings: "${branch}"`);
+            // Verify if the dropdown exists
+            const dropdown = $(data).find('#ctl00_PageBody_ChangeUserDetailsControl_ddBranch');
+            if (!dropdown.length) {
+                console.error('Dropdown not found in account settings.');
+                return null;
+            }
+
+            console.log('Dropdown found:', dropdown.html());
+
+            // Check selected option
+            const selectedOption = dropdown.find('option[selected="selected"]');
+            if (!selectedOption.length) {
+                console.warn('No option with selected="selected" found. Trying :selected pseudo-class.');
+                return dropdown.find('option:selected').text().trim() || null;
+            }
+
+            // Return the selected option's text
+            const branch = selectedOption.text().trim();
+            console.log(`Selected branch: "${branch}"`);
             return branch;
+        }).catch(error => {
+            console.error('Error fetching account settings:', error);
+            return null;
         });
     }
 
