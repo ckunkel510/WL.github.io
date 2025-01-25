@@ -1,13 +1,10 @@
 $(document).ready(function () {
-    // Check if the current URL contains 'ProductDetail.aspx'
     if (window.location.href.includes('ProductDetail.aspx')) {
         const productId = extractProductId(window.location.href);
 
         if (productId) {
-            // First, get the customer's selected branch
             getSelectedBranch().then(selectedBranch => {
                 if (selectedBranch) {
-                    // Then, load stock data for the product and filter by branch
                     loadStockData(productId, selectedBranch);
                 } else {
                     console.error('Selected branch not found.');
@@ -20,20 +17,11 @@ $(document).ready(function () {
         }
     }
 
-    /**
-     * Extracts the product ID from the URL using a regular expression.
-     * @param {string} url - The current page URL.
-     * @returns {string|null} - The extracted product ID or null if not found.
-     */
     function extractProductId(url) {
         const match = url.match(/pid=([0-9]+)/);
         return match ? match[1] : null;
     }
 
-    /**
-     * Fetches the customer's selected branch from the account settings page.
-     * @returns {Promise<string>} - A promise that resolves to the selected branch name.
-     */
     function getSelectedBranch() {
         const accountSettingsUrl = 'https://webtrack.woodsonlumber.com/AccountSettings.aspx?cms=1';
 
@@ -41,20 +29,14 @@ $(document).ready(function () {
             url: accountSettingsUrl,
             method: 'GET',
         }).then(data => {
-            // Extract the selected option's text (branch name)
             const selectedOption = $(data).find('#ctl00_PageBody_ChangeUserDetailsControl_ddBranch option[selected="selected"]');
             const branch = selectedOption.length ? selectedOption.text().trim() : null;
 
-            console.log(`Selected branch from account settings: ${branch}`);
+            console.log(`Selected branch from account settings: "${branch}"`);
             return branch;
         });
     }
 
-    /**
-     * Loads stock data, filters by branch, and displays it in a widget.
-     * @param {string} productId - The product ID to fetch stock data for.
-     * @param {string} branch - The customer's selected branch.
-     */
     function loadStockData(productId, branch) {
         const stockDataUrl = `https://webtrack.woodsonlumber.com/Catalog/ShowStock.aspx?productid=${productId}`;
 
@@ -65,10 +47,10 @@ $(document).ready(function () {
                 const stockData = $(data).find('#StockDataGrid_ctl00');
 
                 if (stockData.length) {
-                    // Filter and display data for the selected branch
+                    console.log('Stock table HTML:', stockData.html());
                     filterAndDisplayStockData(stockData, branch);
                 } else {
-                    console.error('Stock data not found.');
+                    console.error('Stock table not found in AJAX response.');
                 }
             },
             error: function () {
@@ -77,13 +59,7 @@ $(document).ready(function () {
         });
     }
 
-    /**
-     * Filters the stock data table for the selected branch and displays it as a widget.
-     * @param {jQuery} stockData - The stock data element.
-     * @param {string} branch - The selected branch name.
-     */
     function filterAndDisplayStockData(stockData, branch) {
-        // Identify the "Actual" column dynamically
         const actualStockColumnIndex = stockData.find('th').index((_, th) => {
             return $(th).text().trim().toLowerCase() === 'actual';
         });
@@ -94,15 +70,20 @@ $(document).ready(function () {
             return;
         }
 
-        // Filter rows where the first column (Branch) matches the selected branch
+        console.log('Actual Stock column index:', actualStockColumnIndex);
+
+        stockData.find('tr').each((index, row) => {
+            const branchCell = $(row).find('td').eq(0).text().trim();
+            console.log(`Row ${index}, Branch cell: "${branchCell}"`);
+        });
+
         const filteredRow = stockData.find('tr').filter((_, row) => {
-            const branchCell = $(row).find('td').eq(0).text().trim(); // First column (Branch)
-            console.log(`Checking branch in stock table: ${branchCell}`);
-            return branchCell === branch;
+            const branchCell = $(row).find('td').eq(0).text().trim();
+            console.log(`Checking branch in stock table: "${branchCell}"`);
+            return branchCell.toLowerCase().trim() === branch.toLowerCase().trim();
         });
 
         if (filteredRow.length) {
-            // Extract the "Actual" stock quantity for the matching branch
             const actualStock = filteredRow.find(`td:eq(${actualStockColumnIndex})`).text().trim();
             displayWidget(branch, actualStock || 'No stock available');
         } else {
@@ -111,11 +92,6 @@ $(document).ready(function () {
         }
     }
 
-    /**
-     * Displays the stock data as a widget on the page.
-     * @param {string} branch - The branch name.
-     * @param {string} quantity - The stock quantity.
-     */
     function displayWidget(branch, quantity) {
         const widgetHtml = `
             <div id="stock-widget" style="display: table; border: 1px solid #ccc; padding: 10px; margin: 20px 0; background: #f9f9f9;">
@@ -125,7 +101,6 @@ $(document).ready(function () {
             </div>
         `;
 
-        // Add the widget before the product description
         $('#ctl00_PageBody_productDetail_productDescription').before(widgetHtml);
     }
 });
