@@ -77,30 +77,13 @@ $(document).ready(function () {
     }
 
     function filterAndDisplayStockData(stockData, branch) {
-        // Log all headers to verify their text
-        stockData.find('th').each((index, th) => {
-            console.log(`Header ${index}: "${$(th).text().trim()}"`);
-        });
-
-        // Dynamically find the "Actual" column index
-        const actualStockColumnIndex = stockData.find('th').index((_, th) => {
-            return $(th).text().trim() === 'Actual'; // Case-sensitive match for "Actual"
-        });
-
-        // Check if the column was found
-        if (actualStockColumnIndex === -1) {
-            console.error('Actual column not found in stock table. Please verify the header text.');
-            displayWidget(branch, 'Stock information unavailable');
-            return;
-        }
-
-        console.log('Actual Stock column index:', actualStockColumnIndex);
-
+        // Log all rows to debug
         stockData.find('tr').each((index, row) => {
             const branchCell = $(row).find('td').eq(0).text().trim();
             console.log(`Row ${index}, Branch cell: "${branchCell}"`);
         });
 
+        // Filter rows where the first column (Branch) matches the selected branch
         const filteredRow = stockData.find('tr').filter((_, row) => {
             const branchCell = $(row).find('td').eq(0).text().trim();
             console.log(`Checking branch in stock table: "${branchCell}"`);
@@ -108,7 +91,8 @@ $(document).ready(function () {
         });
 
         if (filteredRow.length) {
-            const actualStock = filteredRow.find(`td:eq(${actualStockColumnIndex})`).text().trim();
+            // Directly retrieve the "Actual" column value (column index 4)
+            const actualStock = filteredRow.find('td').eq(4).text().trim();
             displayWidget(branch, actualStock || 'No stock available');
         } else {
             console.error(`Branch "${branch}" not found in stock table.`);
