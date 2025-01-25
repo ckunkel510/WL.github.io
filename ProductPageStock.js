@@ -84,10 +84,10 @@ $(document).ready(function () {
 
         // Dynamically find the "Actual" column index
         const actualStockColumnIndex = stockData.find('th').index((_, th) => {
-            return $(th).text().trim().toLowerCase() === 'actual';
+            return $(th).text().trim() === 'Actual'; // Case-sensitive match for "Actual"
         });
 
-        // Fallback if the column isn't found
+        // Check if the column was found
         if (actualStockColumnIndex === -1) {
             console.error('Actual column not found in stock table. Please verify the header text.');
             displayWidget(branch, 'Stock information unavailable');
