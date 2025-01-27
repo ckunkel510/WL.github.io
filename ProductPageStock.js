@@ -22,7 +22,11 @@ $(document).ready(function () {
                 } else {
                     determineUserLocation().then(userZip => {
                         const nearestStore = findNearestStore(userZip, stores);
-                        loadStockData(productId, nearestStore ? nearestStore.name : DEFAULT_STORE);
+                        if (nearestStore) {
+                            loadStockData(productId, nearestStore.name);
+                        } else {
+                            loadStockData(productId, DEFAULT_STORE);
+                        }
                     }).catch(() => {
                         loadStockData(productId, DEFAULT_STORE);
                         displayWidget(DEFAULT_STORE, 'No stock available', true);
@@ -49,7 +53,9 @@ $(document).ready(function () {
             method: 'GET',
         }).then(data => {
             const dropdown = $(data).find('#ctl00_PageBody_ChangeUserDetailsControl_ddBranch');
-            if (!dropdown.length) return null;
+            if (!dropdown.length) {
+                return null;
+            }
 
             const selectedOption = dropdown.find('option[selected="selected"]');
             return selectedOption.length ? selectedOption.text().trim() : null;
@@ -82,10 +88,12 @@ $(document).ready(function () {
     }
 
     function inspectTable(stockData) {
+        console.log('Inspecting table headers...');
         stockData.find('th').each((index, th) => {
             console.log(`Header ${index}: "${$(th).text().trim()}"`);
         });
 
+        console.log('Inspecting table rows...');
         stockData.find('tr').each((index, row) => {
             const branchCell = $(row).find('td').eq(0).text().trim();
             console.log(`Row ${index}, Branch: "${branchCell}"`);
@@ -93,8 +101,10 @@ $(document).ready(function () {
     }
 
     function filterAndDisplayStockData(stockData, branch) {
-        const columnIndex = 2; // Always use the 3rd column (index 2) for stock quantity
-        console.log(`Using column index: ${columnIndex} for quantity.`);
+        // Always use the 3rd column (index 2) for quantity
+        const quantityColumnIndex = 2;
+
+        console.log(`Using column index: ${quantityColumnIndex} for quantity`);
 
         const filteredRow = stockData.find('tr').filter((_, row) => {
             const branchCell = $(row).find('td').eq(0).text().trim();
@@ -104,8 +114,8 @@ $(document).ready(function () {
 
         if (filteredRow.length) {
             console.log('Matched row for branch:', filteredRow.html());
-            const stockValue = filteredRow.find(`td:eq(${columnIndex})`).text().trim();
-            console.log(`Stock value for "${branch}": "${stockValue}"`);
+            const stockValue = filteredRow.find(`td:eq(${quantityColumnIndex})`).text().trim();
+            console.log(`Stock value for "${branch}" (column ${quantityColumnIndex}): "${stockValue}"`);
             displayWidget(branch, stockValue || 'No stock available', false);
         } else {
             console.error(`Branch "${branch}" not found in stock table.`);
@@ -114,12 +124,18 @@ $(document).ready(function () {
     }
 
     function displayWidget(branch, quantity, showSignInButton) {
+        // Ensure only one widget exists
         $('#stock-widget').remove();
 
-        const buttonHtml = showSignInButton ? `
-            <a href="${SIGN_IN_URL}" style="display: inline-block; padding: 10px 20px; background: #6b0016; color: white; text-decoration: none; border: 1px solid transparent; border-radius: 4px; font-weight: bold; text-align: center; margin-top: 10px;">
-                Check Your Local Store Inventory
-            </a>` : '';
+        let buttonHtml = '';
+
+        if (showSignInButton) {
+            buttonHtml = `
+                <a href="${SIGN_IN_URL}" style="display: inline-block; padding: 10px 20px; background: #6b0016; color: white; text-decoration: none; border: 1px solid transparent; border-radius: 4px; font-weight: bold; text-align: center; margin-top: 10px;">
+                    Check Your Local Store Inventory
+                </a>
+            `;
+        }
 
         const widgetHtml = `
             <div id="stock-widget" style="display: table; border: 1px solid #ccc; padding: 10px; margin: 20px 0; background: #f9f9f9; text-align: center;">
