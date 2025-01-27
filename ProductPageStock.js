@@ -20,24 +20,20 @@ $(document).ready(function () {
                 if (selectedBranch) {
                     loadStockData(productId, selectedBranch);
                 } else {
-                    console.warn('Branch could not be determined. Attempting to find nearest store.');
                     determineUserLocation().then(userZip => {
                         const nearestStore = findNearestStore(userZip, stores);
                         if (nearestStore) {
                             loadStockData(productId, nearestStore.name);
                         } else {
-                            console.warn('No nearby store found. Defaulting to Groesbeck.');
                             loadStockData(productId, DEFAULT_STORE);
                         }
                     }).catch(() => {
-                        console.warn('User location could not be determined. Defaulting to Groesbeck.');
                         loadStockData(productId, DEFAULT_STORE);
-                        addSignInButton();
+                        displayWidget(DEFAULT_STORE, 'No stock available', true);
                     });
                 }
             }).catch(() => {
-                console.error('Failed to fetch account settings. Adding fallback button.');
-                addSignInButton();
+                displayWidget(DEFAULT_STORE, 'No stock available', true);
             });
         } else {
             console.error("Product ID not found in the URL.");
@@ -79,12 +75,12 @@ $(document).ready(function () {
                     filterAndDisplayStockData(stockData, branch);
                 } else {
                     console.error('Stock table not found in AJAX response.');
-                    addSignInButton();
+                    displayWidget(branch, 'No stock available', true);
                 }
             },
             error: function () {
                 console.error('Failed to load the stock data.');
-                addSignInButton();
+                displayWidget(branch, 'No stock available', true);
             }
         });
     }
@@ -99,11 +95,10 @@ $(document).ready(function () {
 
         if (filteredRow.length) {
             const actualStock = filteredRow.find('td').eq(actualStockColumnIndex).text().trim();
-            displayWidget(branch, actualStock || 'No stock available');
+            displayWidget(branch, actualStock || 'No stock available', false);
         } else {
             console.error(`Branch "${branch}" not found in stock table.`);
-            displayWidget(branch, 'No stock available');
-            addSignInButton();
+            displayWidget(branch, 'No stock available', true);
         }
     }
 
@@ -149,27 +144,26 @@ $(document).ready(function () {
         return 50; // Placeholder distance calculation
     }
 
-    function displayWidget(branch, quantity) {
+    function displayWidget(branch, quantity, showSignInButton) {
+        let buttonHtml = '';
+
+        if (showSignInButton) {
+            buttonHtml = `
+                <a href="${SIGN_IN_URL}" style="padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border: none; border-radius: 4px; display: inline-block; margin-top: 10px;">
+                    Check Your Local Store Inventory
+                </a>
+            `;
+        }
+
         const widgetHtml = `
             <div id="stock-widget" style="display: table; border: 1px solid #ccc; padding: 10px; margin: 20px 0; background: #f9f9f9;">
                 <h3>Stock Information</h3>
                 <p><strong>Branch:</strong> ${branch}</p>
                 <p><strong>Available Quantity:</strong> ${quantity}</p>
+                ${buttonHtml}
             </div>
         `;
 
         $('#ctl00_PageBody_productDetail_productDescription').before(widgetHtml);
-    }
-
-    function addSignInButton() {
-        const buttonHtml = `
-            <div id="sign-in-button" style="text-align: center; margin: 20px 0;">
-                <a href="${SIGN_IN_URL}" style="padding: 10px 20px; background: #007bff; color: white; border: none; text-decoration: none; cursor: pointer; border-radius: 4px;">
-                    Check Your Local Store Inventory
-                </a>
-            </div>
-        `;
-
-        $('#ctl00_PageBody_productDetail_productDescription').before(buttonHtml);
     }
 });
