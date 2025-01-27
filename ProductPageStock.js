@@ -27,7 +27,8 @@ $(document).ready(function () {
                         } else {
                             loadStockData(productId, DEFAULT_STORE);
                         }
-                    }).catch(() => {
+                    }).catch(error => {
+                        console.error('Geolocation error:', error);
                         loadStockData(productId, DEFAULT_STORE);
                         displayWidget(DEFAULT_STORE, 'No stock available', true);
                     });
@@ -86,7 +87,7 @@ $(document).ready(function () {
     }
 
     function filterAndDisplayStockData(stockData, branch) {
-        const actualStockColumnIndex = 4;
+        const actualStockColumnIndex = 4; // Confirmed column for "Actual Stock"
 
         const filteredRow = stockData.find('tr').filter((_, row) => {
             const branchCell = $(row).find('td').eq(0).text().trim();
@@ -152,7 +153,7 @@ $(document).ready(function () {
 
         if (showSignInButton) {
             buttonHtml = `
-                <a href="${SIGN_IN_URL}" style="display: inline-block; padding: 10px 20px; background: #6b0016; color: white; text-decoration: none; border: 1px solid transparent; border-radius: 4px; font-weight: bold; text-align: center; margin-top: 10px;">
+                <a href="${SIGN_IN_URL}" style="display: inline-block; padding: 10px 20px; background: #6b0016; color: white; text-decoration: none; border: none; border-radius: 4px; font-weight: bold; text-align: center; margin-top: 10px;">
                     Check Your Local Store Inventory
                 </a>
             `;
