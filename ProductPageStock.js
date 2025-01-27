@@ -91,6 +91,7 @@ $(document).ready(function () {
             const actualStock = filteredRow.find('td').eq(actualStockColumnIndex).text().trim();
             displayWidget(branch, actualStock || 'No stock available');
         } else {
+            console.error(`Branch "${branch}" not found in stock table.`);
             displayWidget(branch, 'No stock available');
         }
     }
@@ -114,14 +115,11 @@ $(document).ready(function () {
     }
 
     function getZipFromCoordinates(lat, lon) {
-        // Use a reverse geocoding API (e.g., Google Maps API or similar)
-        // For simplicity, you can hard-code zip codes for now.
         console.log(`Lat: ${lat}, Lon: ${lon}`);
         return 77833; // Example zip code for Brenham
     }
 
     function findNearestStore(userZip, stores) {
-        // Assume lat/lon for zip codes are already in the `stores` array
         let nearestStore = { name: DEFAULT_STORE, distance: Infinity };
 
         stores.forEach(store => {
@@ -135,9 +133,7 @@ $(document).ready(function () {
     }
 
     function calculateDistance(zip1, zip2) {
-        // Haversine formula or other calculation logic goes here
-        // For now, return a placeholder value:
-        return 50; // Assume 50 miles as an example
+        return 50; // Placeholder distance calculation
     }
 
     function displayWidget(branch, quantity) {
