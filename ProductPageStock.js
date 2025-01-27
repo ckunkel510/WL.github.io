@@ -104,7 +104,7 @@ $(document).ready(function () {
     }
 
     function filterAndDisplayStockData(stockData, branch, useActualColumn) {
-        const columnIndex = useActualColumn ? 4 : 3; // Use column 4 if signed-in, otherwise column 3
+        const columnIndex = useActualColumn ? 4 : 2; // Use column 4 if signed-in, otherwise column 3
         console.log(`Using column index: ${columnIndex} for quantity`);
 
         const filteredRow = stockData.find('tr').filter((_, row) => {
