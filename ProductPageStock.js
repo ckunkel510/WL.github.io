@@ -145,18 +145,21 @@ $(document).ready(function () {
     }
 
     function displayWidget(branch, quantity, showSignInButton) {
+        // Ensure only one widget exists
+        $('#stock-widget').remove();
+
         let buttonHtml = '';
 
         if (showSignInButton) {
             buttonHtml = `
-                <a href="${SIGN_IN_URL}" style="padding: 10px 20px; background: #007bff; color: white; text-decoration: none; border: none; border-radius: 4px; display: inline-block; margin-top: 10px;">
+                <a href="${SIGN_IN_URL}" style="display: inline-block; padding: 10px 20px; background: #6b0016; color: white; text-decoration: none; border: 1px solid transparent; border-radius: 4px; font-weight: bold; text-align: center; margin-top: 10px;">
                     Check Your Local Store Inventory
                 </a>
             `;
         }
 
         const widgetHtml = `
-            <div id="stock-widget" style="display: table; border: 1px solid #ccc; padding: 10px; margin: 20px 0; background: #f9f9f9;">
+            <div id="stock-widget" style="display: table; border: 1px solid #ccc; padding: 10px; margin: 20px 0; background: #f9f9f9; text-align: center;">
                 <h3>Stock Information</h3>
                 <p><strong>Branch:</strong> ${branch}</p>
                 <p><strong>Available Quantity:</strong> ${quantity}</p>
