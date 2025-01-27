@@ -27,8 +27,7 @@ $(document).ready(function () {
                         } else {
                             loadStockData(productId, DEFAULT_STORE);
                         }
-                    }).catch(error => {
-                        console.error('Geolocation error:', error);
+                    }).catch(() => {
                         loadStockData(productId, DEFAULT_STORE);
                         displayWidget(DEFAULT_STORE, 'No stock available', true);
                     });
@@ -87,15 +86,17 @@ $(document).ready(function () {
     }
 
     function filterAndDisplayStockData(stockData, branch) {
-        const actualStockColumnIndex = 4; // Confirmed column for "Actual Stock"
+        const actualStockColumnIndex = 4;
 
         const filteredRow = stockData.find('tr').filter((_, row) => {
             const branchCell = $(row).find('td').eq(0).text().trim();
+            console.log(`Checking branch: "${branchCell}" against "${branch}"`);
             return branchCell.toLowerCase().trim() === branch.toLowerCase().trim();
         });
 
         if (filteredRow.length) {
             const actualStock = filteredRow.find('td').eq(actualStockColumnIndex).text().trim();
+            console.log(`Actual Stock for "${branch}": ${actualStock}`);
             displayWidget(branch, actualStock || 'No stock available', false);
         } else {
             console.error(`Branch "${branch}" not found in stock table.`);
@@ -116,7 +117,10 @@ $(document).ready(function () {
                     const lon = position.coords.longitude;
                     resolve(getZipFromCoordinates(lat, lon));
                 },
-                error => reject(error.message)
+                error => {
+                    console.error('Geolocation error:', error.message);
+                    reject(error.message);
+                }
             );
         });
     }
@@ -153,7 +157,7 @@ $(document).ready(function () {
 
         if (showSignInButton) {
             buttonHtml = `
-                <a href="${SIGN_IN_URL}" style="display: inline-block; padding: 10px 20px; background: #6b0016; color: white; text-decoration: none; border: none; border-radius: 4px; font-weight: bold; text-align: center; margin-top: 10px;">
+                <a href="${SIGN_IN_URL}" style="display: inline-block; padding: 10px 20px; background: #6b0016; color: white; text-decoration: none; border: 1px solid transparent; border-radius: 4px; font-weight: bold; text-align: center; margin-top: 10px;">
                     Check Your Local Store Inventory
                 </a>
             `;
