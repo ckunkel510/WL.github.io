@@ -1,4 +1,16 @@
 $(document).ready(function () {
+    const stores = [
+        { name: 'Brenham', zip: 77833, lat: 30.1669, lon: -96.3977 },
+        { name: 'Bryan', zip: 77803, lat: 30.6744, lon: -96.3743 },
+        { name: 'Caldwell', zip: 77836, lat: 30.5316, lon: -96.6939 },
+        { name: 'Lexington', zip: 78947, lat: 30.4152, lon: -97.0105 },
+        { name: 'Groesbeck', zip: 76642, lat: 31.5249, lon: -96.5336 },
+        { name: 'Mexia', zip: 76667, lat: 31.6791, lon: -96.4822 },
+        { name: 'Buffalo', zip: 75831, lat: 31.4632, lon: -96.0580 }
+    ];
+
+    const DEFAULT_STORE = 'Groesbeck';
+
     if (window.location.href.includes('ProductDetail.aspx')) {
         const productId = extractProductId(window.location.href);
 
@@ -7,10 +19,17 @@ $(document).ready(function () {
                 if (selectedBranch) {
                     loadStockData(productId, selectedBranch);
                 } else {
-                    console.error('Selected branch not found.');
+                    determineUserLocation().then(userZip => {
+                        const nearestStore = findNearestStore(userZip, stores);
+                        loadStockData(productId, nearestStore.name);
+                    }).catch(() => {
+                        console.warn('User location could not be determined. Defaulting to Groesbeck.');
+                        loadStockData(productId, DEFAULT_STORE);
+                    });
                 }
             }).catch(() => {
-                console.error('Failed to fetch account settings.');
+                console.error('Failed to fetch account settings. Adding fallback button.');
+                addSignInButton();
             });
         } else {
             console.error("Product ID not found in the URL.");
@@ -29,28 +48,13 @@ $(document).ready(function () {
             url: accountSettingsUrl,
             method: 'GET',
         }).then(data => {
-            console.log('Account settings HTML:', data);
-
             const dropdown = $(data).find('#ctl00_PageBody_ChangeUserDetailsControl_ddBranch');
             if (!dropdown.length) {
-                console.error('Dropdown not found in account settings.');
                 return null;
             }
 
-            console.log('Dropdown found:', dropdown.html());
-
             const selectedOption = dropdown.find('option[selected="selected"]');
-            if (!selectedOption.length) {
-                console.warn('No option with selected="selected" found. Trying :selected pseudo-class.');
-                return dropdown.find('option:selected').text().trim() || null;
-            }
-
-            const branch = selectedOption.text().trim();
-            console.log(`Selected branch: "${branch}"`);
-            return branch;
-        }).catch(error => {
-            console.error('Error fetching account settings:', error);
-            return null;
+            return selectedOption.length ? selectedOption.text().trim() : null;
         });
     }
 
@@ -64,7 +68,6 @@ $(document).ready(function () {
                 const stockData = $(data).find('#StockDataGrid_ctl00');
 
                 if (stockData.length) {
-                    console.log('Stock table HTML:', stockData.html());
                     filterAndDisplayStockData(stockData, branch);
                 } else {
                     console.error('Stock table not found in AJAX response.');
@@ -77,27 +80,64 @@ $(document).ready(function () {
     }
 
     function filterAndDisplayStockData(stockData, branch) {
-        // Log all rows to debug
-        stockData.find('tr').each((index, row) => {
-            const branchCell = $(row).find('td').eq(0).text().trim();
-            console.log(`Row ${index}, Branch cell: "${branchCell}"`);
-        });
+        const actualStockColumnIndex = 4;
 
-        // Filter rows where the first column (Branch) matches the selected branch
         const filteredRow = stockData.find('tr').filter((_, row) => {
             const branchCell = $(row).find('td').eq(0).text().trim();
-            console.log(`Checking branch in stock table: "${branchCell}"`);
             return branchCell.toLowerCase().trim() === branch.toLowerCase().trim();
         });
 
         if (filteredRow.length) {
-            // Directly retrieve the "Actual" column value (column index 4)
-            const actualStock = filteredRow.find('td').eq(4).text().trim();
+            const actualStock = filteredRow.find('td').eq(actualStockColumnIndex).text().trim();
             displayWidget(branch, actualStock || 'No stock available');
         } else {
-            console.error(`Branch "${branch}" not found in stock table.`);
             displayWidget(branch, 'No stock available');
         }
+    }
+
+    function determineUserLocation() {
+        return new Promise((resolve, reject) => {
+            if (!navigator.geolocation) {
+                reject('Geolocation is not supported by this browser.');
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                position => {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    resolve(getZipFromCoordinates(lat, lon));
+                },
+                error => reject(error.message)
+            );
+        });
+    }
+
+    function getZipFromCoordinates(lat, lon) {
+        // Use a reverse geocoding API (e.g., Google Maps API or similar)
+        // For simplicity, you can hard-code zip codes for now.
+        console.log(`Lat: ${lat}, Lon: ${lon}`);
+        return 77833; // Example zip code for Brenham
+    }
+
+    function findNearestStore(userZip, stores) {
+        // Assume lat/lon for zip codes are already in the `stores` array
+        let nearestStore = { name: DEFAULT_STORE, distance: Infinity };
+
+        stores.forEach(store => {
+            const distance = calculateDistance(userZip, store.zip);
+            if (distance < nearestStore.distance && distance <= 75) {
+                nearestStore = { name: store.name, distance };
+            }
+        });
+
+        return nearestStore;
+    }
+
+    function calculateDistance(zip1, zip2) {
+        // Haversine formula or other calculation logic goes here
+        // For now, return a placeholder value:
+        return 50; // Assume 50 miles as an example
     }
 
     function displayWidget(branch, quantity) {
@@ -110,5 +150,17 @@ $(document).ready(function () {
         `;
 
         $('#ctl00_PageBody_productDetail_productDescription').before(widgetHtml);
+    }
+
+    function addSignInButton() {
+        const buttonHtml = `
+            <div id="sign-in-button" style="text-align: center; margin: 20px 0;">
+                <button style="padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer;">
+                    Check Your Local Store Inventory
+                </button>
+            </div>
+        `;
+
+        $('#ctl00_PageBody_productDetail_productDescription').before(buttonHtml);
     }
 });
