@@ -18,21 +18,22 @@ $(document).ready(function () {
         if (productId) {
             getSelectedBranch().then(selectedBranch => {
                 if (selectedBranch) {
+                    console.log(`Selected branch from account settings: ${selectedBranch}`);
                     loadStockData(productId, selectedBranch);
                 } else {
+                    console.warn('Branch could not be determined. Attempting to find nearest store...');
                     determineUserLocation().then(userZip => {
                         const nearestStore = findNearestStore(userZip, stores);
-                        if (nearestStore) {
-                            loadStockData(productId, nearestStore.name);
-                        } else {
-                            loadStockData(productId, DEFAULT_STORE);
-                        }
+                        console.log(`Nearest store determined: ${nearestStore.name}`);
+                        loadStockData(productId, nearestStore.name);
                     }).catch(() => {
+                        console.warn('User location could not be determined. Defaulting to Groesbeck.');
                         loadStockData(productId, DEFAULT_STORE);
                         displayWidget(DEFAULT_STORE, 'No stock available', true);
                     });
                 }
             }).catch(() => {
+                console.error('Failed to fetch account settings. Adding fallback button.');
                 displayWidget(DEFAULT_STORE, 'No stock available', true);
             });
         } else {
@@ -54,6 +55,7 @@ $(document).ready(function () {
         }).then(data => {
             const dropdown = $(data).find('#ctl00_PageBody_ChangeUserDetailsControl_ddBranch');
             if (!dropdown.length) {
+                console.warn('Branch dropdown not found in account settings.');
                 return null;
             }
 
@@ -64,13 +66,13 @@ $(document).ready(function () {
 
     function loadStockData(productId, branch) {
         const stockDataUrl = `https://webtrack.woodsonlumber.com/Catalog/ShowStock.aspx?productid=${productId}`;
+        console.log(`Fetching stock data from URL: ${stockDataUrl}`);
 
         $.ajax({
             url: stockDataUrl,
             method: 'GET',
             success: function (data) {
                 const stockData = $(data).find('#StockDataGrid_ctl00');
-
                 if (stockData.length) {
                     console.log('Stock data table found. Inspecting headers and rows...');
                     inspectTable(stockData);
@@ -101,10 +103,19 @@ $(document).ready(function () {
     }
 
     function filterAndDisplayStockData(stockData, branch) {
-        // Always use the 3rd column (index 2) for quantity
-        const quantityColumnIndex = 2;
+        const actualStockColumnIndex = stockData.find('th').index((_, th) => {
+            const headerText = $(th).text().trim();
+            console.log(`Checking header: "${headerText}"`);
+            return headerText === 'Actual';
+        });
 
-        console.log(`Using column index: ${quantityColumnIndex} for quantity`);
+        if (actualStockColumnIndex === -1) {
+            console.error('"Actual" column not found in stock table. Please verify the headers.');
+            displayWidget(branch, 'No stock available', true);
+            return;
+        }
+
+        console.log(`"Actual" column index detected as: ${actualStockColumnIndex}`);
 
         const filteredRow = stockData.find('tr').filter((_, row) => {
             const branchCell = $(row).find('td').eq(0).text().trim();
@@ -114,9 +125,9 @@ $(document).ready(function () {
 
         if (filteredRow.length) {
             console.log('Matched row for branch:', filteredRow.html());
-            const stockValue = filteredRow.find(`td:eq(${quantityColumnIndex})`).text().trim();
-            console.log(`Stock value for "${branch}" (column ${quantityColumnIndex}): "${stockValue}"`);
-            displayWidget(branch, stockValue || 'No stock available', false);
+            const actualStock = filteredRow.find(`td:eq(${actualStockColumnIndex})`).text().trim();
+            console.log(`Actual Stock for "${branch}": "${actualStock}"`);
+            displayWidget(branch, actualStock || 'No stock available', false);
         } else {
             console.error(`Branch "${branch}" not found in stock table.`);
             displayWidget(branch, 'No stock available', true);
