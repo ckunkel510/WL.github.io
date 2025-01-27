@@ -10,6 +10,7 @@ $(document).ready(function () {
     ];
 
     const DEFAULT_STORE = 'Groesbeck';
+    const SIGN_IN_URL = 'https://webtrack.woodsonlumber.com/SignIn.aspx';
 
     if (window.location.href.includes('ProductDetail.aspx')) {
         const productId = extractProductId(window.location.href);
@@ -19,12 +20,19 @@ $(document).ready(function () {
                 if (selectedBranch) {
                     loadStockData(productId, selectedBranch);
                 } else {
+                    console.warn('Branch could not be determined. Attempting to find nearest store.');
                     determineUserLocation().then(userZip => {
                         const nearestStore = findNearestStore(userZip, stores);
-                        loadStockData(productId, nearestStore.name);
+                        if (nearestStore) {
+                            loadStockData(productId, nearestStore.name);
+                        } else {
+                            console.warn('No nearby store found. Defaulting to Groesbeck.');
+                            loadStockData(productId, DEFAULT_STORE);
+                        }
                     }).catch(() => {
                         console.warn('User location could not be determined. Defaulting to Groesbeck.');
                         loadStockData(productId, DEFAULT_STORE);
+                        addSignInButton();
                     });
                 }
             }).catch(() => {
@@ -71,10 +79,12 @@ $(document).ready(function () {
                     filterAndDisplayStockData(stockData, branch);
                 } else {
                     console.error('Stock table not found in AJAX response.');
+                    addSignInButton();
                 }
             },
             error: function () {
                 console.error('Failed to load the stock data.');
+                addSignInButton();
             }
         });
     }
@@ -93,6 +103,7 @@ $(document).ready(function () {
         } else {
             console.error(`Branch "${branch}" not found in stock table.`);
             displayWidget(branch, 'No stock available');
+            addSignInButton();
         }
     }
 
@@ -120,16 +131,18 @@ $(document).ready(function () {
     }
 
     function findNearestStore(userZip, stores) {
-        let nearestStore = { name: DEFAULT_STORE, distance: Infinity };
+        let nearestStore = null;
+        let shortestDistance = Infinity;
 
         stores.forEach(store => {
             const distance = calculateDistance(userZip, store.zip);
-            if (distance < nearestStore.distance && distance <= 75) {
-                nearestStore = { name: store.name, distance };
+            if (distance <= 75 && distance < shortestDistance) {
+                nearestStore = store;
+                shortestDistance = distance;
             }
         });
 
-        return nearestStore;
+        return nearestStore || { name: DEFAULT_STORE };
     }
 
     function calculateDistance(zip1, zip2) {
@@ -151,9 +164,9 @@ $(document).ready(function () {
     function addSignInButton() {
         const buttonHtml = `
             <div id="sign-in-button" style="text-align: center; margin: 20px 0;">
-                <button style="padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer;">
+                <a href="${SIGN_IN_URL}" style="padding: 10px 20px; background: #007bff; color: white; border: none; text-decoration: none; cursor: pointer; border-radius: 4px;">
                     Check Your Local Store Inventory
-                </button>
+                </a>
             </div>
         `;
 
