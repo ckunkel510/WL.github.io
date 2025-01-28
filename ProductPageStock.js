@@ -124,6 +124,66 @@ $(document).ready(function () {
         }
     }
 
+    function determineUserLocation() {
+        return new Promise((resolve, reject) => {
+            if (!navigator.geolocation) {
+                console.error('Geolocation is not supported by this browser.');
+                reject('Geolocation is not supported.');
+                return;
+            }
+
+            console.log('Attempting to fetch user location...');
+            navigator.geolocation.getCurrentPosition(
+                position => {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    console.log(`User location retrieved: Latitude ${lat}, Longitude ${lon}`);
+                    resolve(getZipFromCoordinates(lat, lon));
+                },
+                error => {
+                    switch (error.code) {
+                        case error.PERMISSION_DENIED:
+                            console.error('User denied the request for Geolocation.');
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            console.error('Location information is unavailable.');
+                            break;
+                        case error.TIMEOUT:
+                            console.error('The request to get user location timed out.');
+                            break;
+                        default:
+                            console.error('An unknown error occurred while fetching geolocation.');
+                    }
+                    reject(error.message);
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 0
+                }
+            );
+        });
+    }
+
+    function getZipFromCoordinates(lat, lon) {
+        console.log(`Fetching zip code for coordinates: Latitude ${lat}, Longitude ${lon}`);
+        // Use a reverse geocoding API (e.g., Google Maps API or OpenCage API)
+        // For now, returning a mock zip code for testing
+        return new Promise(resolve => {
+            setTimeout(() => {
+                const mockZipCode = 77833; // Example zip for Brenham
+                console.log(`Mock zip code resolved: ${mockZipCode}`);
+                resolve(mockZipCode);
+            }, 1000); // Simulate API call delay
+        });
+    }
+
+    function findNearestStore(userZip, stores) {
+        console.log(`Finding nearest store to user zip: ${userZip}`);
+        // Placeholder: Always return Brenham for simplicity
+        return stores.find(store => store.zip === 77833) || { name: DEFAULT_STORE };
+    }
+
     function displayWidget(branch, quantity, showSignInButton) {
         // Ensure only one widget exists
         $('#stock-widget').remove();
