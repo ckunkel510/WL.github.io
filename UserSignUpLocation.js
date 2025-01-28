@@ -11,7 +11,7 @@ $(document).ready(function () {
 
     const DEFAULT_STORE = 'Groesbeck';
 
-    // Main function to handle logic for both pages
+    // Main logic to detect the current page and apply logic
     function main() {
         if (window.location.href.includes('UserSignup.aspx')) {
             handleUserSignup();
@@ -28,7 +28,7 @@ $(document).ready(function () {
             determineUserLocation()
                 .then(userLocation => {
                     const nearestStore = findNearestStore(userLocation, stores);
-                    sessionStorage.setItem('nearestBranch', nearestStore.name); // Store nearest branch in sessionStorage
+                    sessionStorage.setItem('nearestBranch', nearestStore.name); // Save branch in sessionStorage
 
                     console.log(`Nearest branch determined: ${nearestStore.name}`);
                     // Redirect to AccountSettings.aspx with the branch parameter
