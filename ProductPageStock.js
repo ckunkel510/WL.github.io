@@ -138,7 +138,7 @@ $(document).ready(function () {
                     const lat = position.coords.latitude;
                     const lon = position.coords.longitude;
                     console.log(`User location retrieved: Latitude ${lat}, Longitude ${lon}`);
-                    resolve(getZipFromCoordinates(lat, lon));
+                    resolve({ lat, lon });
                 },
                 error => {
                     switch (error.code) {
@@ -165,23 +165,38 @@ $(document).ready(function () {
         });
     }
 
-    function getZipFromCoordinates(lat, lon) {
-        console.log(`Fetching zip code for coordinates: Latitude ${lat}, Longitude ${lon}`);
-        // Use a reverse geocoding API (e.g., Google Maps API or OpenCage API)
-        // For now, returning a mock zip code for testing
-        return new Promise(resolve => {
-            setTimeout(() => {
-                const mockZipCode = 77833; // Example zip for Brenham
-                console.log(`Mock zip code resolved: ${mockZipCode}`);
-                resolve(mockZipCode);
-            }, 1000); // Simulate API call delay
+    function findNearestStore(userLocation, stores) {
+        console.log(`Finding nearest store to user location: ${JSON.stringify(userLocation)}`);
+        let nearestStore = null;
+        let shortestDistance = Infinity;
+
+        stores.forEach(store => {
+            const distance = calculateDistance(
+                userLocation.lat,
+                userLocation.lon,
+                store.lat,
+                store.lon
+            );
+            console.log(`Distance to ${store.name}: ${distance} miles`);
+            if (distance < shortestDistance) {
+                nearestStore = store;
+                shortestDistance = distance;
+            }
         });
+
+        return nearestStore || { name: DEFAULT_STORE };
     }
 
-    function findNearestStore(userZip, stores) {
-        console.log(`Finding nearest store to user zip: ${userZip}`);
-        // Placeholder: Always return Brenham for simplicity
-        return stores.find(store => store.zip === 77833) || { name: DEFAULT_STORE };
+    function calculateDistance(lat1, lon1, lat2, lon2) {
+        const toRadians = degrees => (degrees * Math.PI) / 180;
+        const R = 3958.8; // Radius of Earth in miles
+        const dLat = toRadians(lat2 - lat1);
+        const dLon = toRadians(lon2 - lon1);
+        const a =
+            Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLon / 2) ** 2;
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return R * c;
     }
 
     function displayWidget(branch, quantity, showSignInButton) {
