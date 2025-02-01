@@ -8,7 +8,7 @@ $(document).ready(function() {
 
     // Create an image element
     var imgElement = $('<img>', {
-        src: 'https://images-woodsonlumber.sirv.com/Other%20Website%20Images/2025.1%20Graphic%20gif.gif', // Replace with the actual image URL
+        src: 'https://images-woodsonlumber.sirv.com/Other%20Website%20Images/25.2.png', // Replace with the actual image URL
         alt: 'Description of the image', // Add a description for accessibility
         width: '50%', // Adjust the width as needed
         height: 'auto'  // Set height as auto to maintain aspect ratio
