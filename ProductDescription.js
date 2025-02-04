@@ -1,3 +1,4 @@
+<script>
 window.onload = async function () {
     console.log("Script loaded. Starting product detail setup...");
 
@@ -20,18 +21,20 @@ window.onload = async function () {
         const sheetData = await fetchSheetData(googleSheetUrl);
         console.log("Parsed Sheet Data:", sheetData);
 
-        const productEntry = sheetData.find(entry => entry['productid']?.toLowerCase() === productId.toLowerCase());
+        const productEntry = getProductEntry(sheetData, productId);
         console.log("Product Entry Found:", productEntry);
 
         if (productEntry) {
+            console.log("Product found in Google Sheet. Creating tabs...");
             createTabs(productEntry);
             hideIframe();
-            console.log("Description from Google Sheet applied with tabs.");
         } else {
-            console.warn("No product description found in Google Sheet for product ID:", productId);
+            console.log("No product entry found in Google Sheet. Falling back to iframe content...");
+            await loadIframeContent();
         }
     } catch (error) {
-        console.error("Error fetching or processing Google Sheet data:", error);
+        console.error("Error fetching or processing Google Sheet data. Falling back to iframe content.", error);
+        await loadIframeContent();
     }
 };
 
@@ -53,7 +56,7 @@ async function fetchSheetData(sheetUrl) {
 }
 
 function parseCsvToJson(csvText) {
-    const lines = csvText.split('\n');
+    const lines = csvText.split('\n').filter(line => line.trim() !== '');
     const headers = lines[0].split(',').map(header => header.trim().toLowerCase());
     return lines.slice(1).map(line => {
         const values = line.split(',').map(value => value.trim());
@@ -62,6 +65,10 @@ function parseCsvToJson(csvText) {
             return obj;
         }, {});
     });
+}
+
+function getProductEntry(sheetData, productId) {
+    return sheetData.find(entry => entry['productid']?.toLowerCase() === productId.toLowerCase());
 }
 
 function createTabs(productEntry) {
@@ -118,7 +125,51 @@ function activateTab(tabId) {
     document.querySelector(`[data-tab-target="${tabId}"]`).classList.add('active');
 }
 
+async function loadIframeContent() {
+    const iframe = document.getElementById('DescriptionIframe');
+    const targetDiv = document.getElementById('ctl00_PageBody_productDetail_ctl01') || 
+                      document.getElementById('ctl00_PageBody_productDetail_ctl02');
+
+    if (!iframe) {
+        console.error("Description iframe not found.");
+        return;
+    }
+
+    if (!targetDiv) {
+        console.error("Target div for embedding content not found.");
+        return;
+    }
+
+    try {
+        const iframeContent = iframe.contentDocument || iframe.contentWindow.document;
+        if (iframeContent && iframeContent.body) {
+            const content = iframeContent.body.innerHTML.trim();
+            if (content) {
+                console.log("Iframe content found. Appending to target div...");
+                appendIframeContent(iframe, content, targetDiv);
+            } else {
+                console.warn("Iframe content is empty or invalid.");
+            }
+        } else {
+            console.error("Iframe content or body is not accessible.");
+        }
+    } catch (e) {
+        console.error("An error occurred while accessing the iframe content.", e);
+    }
+}
+
+function appendIframeContent(iframe, content, targetDiv) {
+    try {
+        targetDiv.insertAdjacentHTML('beforeend', content);
+        iframe.style.display = 'none';
+        console.log("Iframe content successfully appended.");
+    } catch (e) {
+        console.error("An error occurred while appending iframe content.", e);
+    }
+}
+
 function hideIframe() {
     const iframe = document.getElementById('DescriptionIframe');
     if (iframe) iframe.style.display = 'none';
 }
+</script>
