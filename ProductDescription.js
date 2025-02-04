@@ -21,13 +21,18 @@ window.onload = async function () {
     try {
         console.log("Fetching data from Google Sheet...");
         const sheetData = await fetchSheetData(googleSheetUrl);
-        console.log("Parsed Sheet Data:", sheetData);
 
+        console.log("Parsed Sheet Data (full list of entries):", sheetData);
+
+        // Find product entry by matching 'productid' (case insensitive)
         const productEntry = getProductEntry(sheetData, productId);
-        console.log("Product Entry Found:", productEntry);
+        if (productEntry) {
+            console.log("Product Entry Found in Google Sheet:", productEntry);
+        } else {
+            console.warn("No matching product entry found for product ID:", productId);
+        }
 
         if (productEntry) {
-            console.log("Product found in Google Sheet. Creating tabs or mobile-friendly sections...");
             if (isMobileDevice()) {
                 createMobileSections(productEntry);
             } else {
@@ -35,7 +40,7 @@ window.onload = async function () {
             }
             hideIframe();
         } else {
-            console.log("No product entry found in Google Sheet. Falling back to iframe content...");
+            console.log("Falling back to iframe content...");
             await loadIframeContent();
         }
     } catch (error) {
@@ -64,6 +69,7 @@ async function fetchSheetData(sheetUrl) {
 function parseCsvToJson(csvText) {
     const lines = csvText.split('\n').filter(line => line.trim() !== '');
     const headers = lines[0].split(',').map(header => header.trim().toLowerCase());
+
     console.log("CSV Headers Detected:", headers);
 
     return lines.slice(1).map(line => {
