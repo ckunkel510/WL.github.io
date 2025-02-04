@@ -15,9 +15,11 @@ window.onload = async function () {
 
     console.log("Product ID detected:", productId);
 
+    // Update with your Google Sheet CSV URL
     const googleSheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSz4pwwlgmNw8642O1eDV8Jir2GBslQyyTX4ykx_rRlAb6k2EHe_QYy2gwk7R9bq5gV3KZpYOdXA3HW/pub?output=csv';
 
     try {
+        console.log("Fetching Google Sheet data...");
         const sheetData = await fetchSheetData(googleSheetUrl);
         console.log("Parsed Sheet Data:", sheetData);
 
@@ -48,31 +50,53 @@ function getProductIdFromUrl() {
 }
 
 async function fetchSheetData(sheetUrl) {
-    const response = await fetch(sheetUrl);
-    if (!response.ok) {
-        throw new Error(`Failed to fetch Google Sheet data: ${response.statusText}`);
+    try {
+        const response = await fetch(sheetUrl);
+        if (!response.ok) {
+            console.error("Failed to fetch Google Sheet data:", response.statusText);
+            throw new Error(`HTTP error! Status: ${response.status}`);
+        }
+
+        const csvText = await response.text();
+        console.log("CSV Response Text:", csvText);
+
+        return parseCsvToJson(csvText);
+    } catch (error) {
+        console.error("Error during fetch operation:", error);
+        throw error;
     }
-
-    const csvText = await response.text();
-    console.log("CSV Response Text:", csvText);
-
-    return parseCsvToJson(csvText);
 }
 
 function parseCsvToJson(csvText) {
+    if (!csvText) {
+        console.warn("CSV text is empty or undefined.");
+        return [];
+    }
+
+    console.log("Parsing CSV data...");
     const lines = csvText.split('\n').filter(line => line.trim() !== '');
     const headers = lines[0].split(',').map(header => header.trim().toLowerCase());
-    return lines.slice(1).map(line => {
+
+    console.log("CSV Headers:", headers);
+
+    const parsedData = lines.slice(1).map(line => {
         const values = line.split(',').map(value => value.trim());
         return headers.reduce((obj, header, index) => {
             obj[header] = values[index] || '';
             return obj;
         }, {});
     });
+
+    console.log("Parsed Data Array:", parsedData);
+    return parsedData;
 }
 
 function getProductEntry(sheetData, productId) {
-    return sheetData.find(entry => entry['productid']?.toLowerCase() === productId.toLowerCase());
+    const productEntry = sheetData.find(entry => entry['productid']?.toLowerCase() === productId.toLowerCase());
+    if (!productEntry) {
+        console.warn(`No entry found for Product ID: ${productId}`);
+    }
+    return productEntry;
 }
 
 function createTabs(productEntry) {
@@ -195,77 +219,4 @@ function appendIframeContent(iframe, content, targetDiv) {
     try {
         targetDiv.insertAdjacentHTML('beforeend', content);
         iframe.style.display = 'none';
-        console.log("Iframe content successfully appended.");
-    } catch (e) {
-        console.error("An error occurred while appending iframe content.", e);
-    }
-}
-
-function hideIframe() {
-    const iframe = document.getElementById('DescriptionIframe');
-    if (iframe) iframe.style.display = 'none';
-}
-
-function isMobileDevice() {
-    return window.innerWidth <= 768;
-}
-</script>
-
-<style>
-/* Tabs styles */
-.tab-container {
-    margin-top: 20px;
-    border: 1px solid #ccc;
-    border-radius: 8px;
-    overflow: hidden;
-}
-
-.tab-headers {
-    display: flex;
-    background-color: #f1f1f1;
-}
-
-.tab-header {
-    flex: 1;
-    padding: 10px;
-    cursor: pointer;
-    text-align: center;
-    background-color: #ddd;
-    border: none;
-    transition: background-color 0.3s;
-}
-
-.tab-header:hover {
-    background-color: #bbb;
-}
-
-.tab-header.active {
-    background-color: #6b0016;
-    color: white;
-    font-weight: bold;
-}
-
-.tab-content {
-    padding: 15px;
-    background-color: #fff;
-}
-
-.tab-pane {
-    display: none;
-}
-
-/* Mobile section styles */
-.mobile-section {
-    margin: 10px 0;
-}
-
-.mobile-section-header {
-    font-weight: bold;
-    font-size: 1.2em;
-    margin-bottom: 5px;
-}
-
-.mobile-section-content {
-    margin: 0;
-}
-</style>
+        console.log("Iframe content
