@@ -25,8 +25,12 @@ window.onload = async function () {
         console.log("Product Entry Found:", productEntry);
 
         if (productEntry) {
-            console.log("Product found in Google Sheet. Creating tabs...");
-            createTabs(productEntry);
+            console.log("Product found in Google Sheet. Creating tabs or mobile-friendly sections...");
+            if (isMobileDevice()) {
+                createMobileSections(productEntry);
+            } else {
+                createTabs(productEntry);
+            }
             hideIframe();
         } else {
             console.log("No product entry found in Google Sheet. Falling back to iframe content...");
@@ -114,6 +118,35 @@ function createTabs(productEntry) {
     activateTab('tab-0');
 }
 
+function createMobileSections(productEntry) {
+    const targetDiv = document.getElementById('ctl00_PageBody_productDetail_ctl01') || 
+                      document.getElementById('ctl00_PageBody_productDetail_ctl02');
+
+    if (!targetDiv) {
+        console.error("Target div for embedding content not found.");
+        return;
+    }
+
+    Object.entries(productEntry).forEach(([key, value]) => {
+        if (key === 'productid' || !value) return;
+
+        const section = document.createElement('div');
+        section.className = 'mobile-section';
+
+        const header = document.createElement('h3');
+        header.textContent = key;
+        header.className = 'mobile-section-header';
+
+        const content = document.createElement('p');
+        content.textContent = value;
+        content.className = 'mobile-section-content';
+
+        section.appendChild(header);
+        section.appendChild(content);
+        targetDiv.appendChild(section);
+    });
+}
+
 function activateTab(tabId) {
     const allTabs = document.querySelectorAll('.tab-pane');
     const allHeaders = document.querySelectorAll('.tab-header');
@@ -172,4 +205,67 @@ function hideIframe() {
     const iframe = document.getElementById('DescriptionIframe');
     if (iframe) iframe.style.display = 'none';
 }
+
+function isMobileDevice() {
+    return window.innerWidth <= 768;
+}
 </script>
+
+<style>
+/* Tabs styles */
+.tab-container {
+    margin-top: 20px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.tab-headers {
+    display: flex;
+    background-color: #f1f1f1;
+}
+
+.tab-header {
+    flex: 1;
+    padding: 10px;
+    cursor: pointer;
+    text-align: center;
+    background-color: #ddd;
+    border: none;
+    transition: background-color 0.3s;
+}
+
+.tab-header:hover {
+    background-color: #bbb;
+}
+
+.tab-header.active {
+    background-color: #6b0016;
+    color: white;
+    font-weight: bold;
+}
+
+.tab-content {
+    padding: 15px;
+    background-color: #fff;
+}
+
+.tab-pane {
+    display: none;
+}
+
+/* Mobile section styles */
+.mobile-section {
+    margin: 10px 0;
+}
+
+.mobile-section-header {
+    font-weight: bold;
+    font-size: 1.2em;
+    margin-bottom: 5px;
+}
+
+.mobile-section-content {
+    margin: 0;
+}
+</style>
