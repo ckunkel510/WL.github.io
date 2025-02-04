@@ -1,197 +1,60 @@
-<script>
-window.onload = async function () {
-    console.log("Script loaded. Starting data fetching and tab creation...");
+async function loadProductWidget(productId) {
+  const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSz4pwwlgmNw8642O1eDV8Jir2GBslQyyTX4ykx_rRlAb6k2EHe_QYy2gwk7R9bq5gV3KZpYOdXA3HW/pub?output=csv';
+  
+  // Fetch and parse CSV data
+  const response = await fetch(csvUrl);
+  const csvData = await response.text();
+  const rows = csvData.split('\n').map(row => row.split(','));
 
-    const productId = getProductIdFromUrl();
-    if (!productId) {
-        console.error("Product ID not found in URL.");
-        return;
-    }
+  // Extract headers
+  const headers = rows.shift();
+  
+  // Filter rows matching the productId
+  const productRows = rows.filter(row => row[0].trim() === productId);
 
-    console.log("Product ID detected:", productId);
+  if (!productRows.length) {
+    console.error('No data found for this product');
+    return;
+  }
 
-    const googleSheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSz4pwwlgmNw8642O1eDV8Jir2GBslQyyTX4ykx_rRlAb6k2EHe_QYy2gwk7R9bq5gV3KZpYOdXA3HW/pub?output=csv';
+  // Organize data by tabs
+  const tabData = {};
+  headers.forEach((header, index) => {
+    if (index === 0) return; // Skip productId column
+    tabData[header] = productRows.map(row => row[index]).filter(content => content.trim() !== '');
+  });
 
-    try {
-        console.log("Fetching data from Google Sheet...");
-        const response = await fetch(googleSheetUrl);
+  // Generate tabs and content
+  const tabMenu = document.getElementById('tab-menu');
+  const tabContent = document.getElementById('tab-content');
 
-        if (!response.ok) {
-            throw new Error(`Failed to fetch data. Status: ${response.status}`);
-        }
+  Object.keys(tabData).forEach((header, tabIndex) => {
+    if (tabData[header].length === 0) return; // Skip empty tabs
 
-        let csvText = await response.text();
-        console.log("Raw CSV Response Text:", csvText);
+    // Create tab button
+    const tabButton = document.createElement('button');
+    tabButton.textContent = header;
+    tabButton.className = tabIndex === 0 ? 'active' : '';
+    tabButton.addEventListener('click', () => switchTab(header));
+    tabMenu.appendChild(tabButton);
 
-        // Preprocess CSV to fix broken lines inside fields
-        csvText = preprocessCsv(csvText);
+    // Create tab content section
+    const section = document.createElement('div');
+    section.className = `tab-section ${tabIndex === 0 ? 'active' : ''}`;
+    section.innerHTML = tabData[header].join('<br>'); // Combine rows for this tab
+    section.id = `tab-${header}`;
+    tabContent.appendChild(section);
+  });
 
-        // Parse and merge rows by product ID
-        const parsedData = parseCsvToJson(csvText);
-        console.log("Parsed Data (before merging):", parsedData);
+  // Switch tab function
+  function switchTab(header) {
+    document.querySelectorAll('.tab-menu button').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-section').forEach(sec => sec.classList.remove('active'));
 
-        const mergedData = mergeRowsByProductId(parsedData);
-        console.log("Merged Data by Product ID:", mergedData);
-
-        const productEntry = mergedData[productId];
-        if (productEntry) {
-            console.log("Product Entry Found:", productEntry);
-            createTabs(productEntry);
-        } else {
-            console.warn("No matching product entry found for product ID:", productId);
-        }
-    } catch (error) {
-        console.error("An error occurred:", error);
-    }
-};
-
-function getProductIdFromUrl() {
-    const urlParams = new URLSearchParams(window.location.search);
-    return urlParams.get('pid');
+    document.querySelector(`#tab-menu button:contains(${header})`).classList.add('active');
+    document.getElementById(`tab-${header}`).classList.add('active');
+  }
 }
 
-function preprocessCsv(csvText) {
-    // Remove line breaks inside quoted fields
-    return csvText.replace(/"([^"]*)"/gs, match => match.replace(/\r?\n/g, ' '));
-}
-
-function parseCsvToJson(csvText) {
-    const lines = csvText.split(/\r?\n/).filter(line => line.trim() !== '');
-    if (lines.length === 0) {
-        console.warn("No lines found in CSV.");
-        return [];
-    }
-
-    const headers = lines[0].split(',').map(header => header.trim().toLowerCase());
-    console.log("CSV Headers Detected:", headers);
-
-    return lines.slice(1).map(line => {
-        const values = line.split(',').map(value => value.trim());
-        return headers.reduce((obj, header, i) => {
-            obj[header] = values[i] || '';
-            return obj;
-        }, {});
-    });
-}
-
-function mergeRowsByProductId(sheetData) {
-    console.log("Merging rows by product ID...");
-
-    return sheetData.reduce((result, row) => {
-        const productId = row['productid'];
-        if (!productId) return result;
-
-        if (!result[productId]) {
-            result[productId] = { ...row };
-        } else {
-            Object.keys(row).forEach(key => {
-                if (key !== 'productid' && row[key]) {
-                    result[productId][key] += '\n' + row[key];  // Append values with line breaks
-                }
-            });
-        }
-
-        return result;
-    }, {});
-}
-
-function createTabs(productEntry) {
-    console.log("Creating tabs...");
-
-    const container = document.createElement('div');
-    container.className = 'tab-container';
-
-    const tabHeaders = document.createElement('div');
-    tabHeaders.className = 'tab-headers';
-
-    const tabContent = document.createElement('div');
-    tabContent.className = 'tab-content';
-
-    Object.entries(productEntry).forEach(([key, value], index) => {
-        if (key === 'productid' || !value) return;
-
-        // Create tab header
-        const tabHeader = document.createElement('button');
-        tabHeader.className = 'tab-header';
-        tabHeader.textContent = key;
-        tabHeader.dataset.tabTarget = `tab-${index}`;
-        tabHeader.onclick = () => activateTab(`tab-${index}`);
-
-        // Create tab content
-        const tabPane = document.createElement('div');
-        tabPane.id = `tab-${index}`;
-        tabPane.className = 'tab-pane';
-        tabPane.innerHTML = `<pre>${value}</pre>`;  // Use <pre> to preserve line breaks
-
-        tabHeaders.appendChild(tabHeader);
-        tabContent.appendChild(tabPane);
-    });
-
-    container.appendChild(tabHeaders);
-    container.appendChild(tabContent);
-    document.body.appendChild(container);  // Append to body or another target element
-
-    console.log("Tabs created. Activating first tab...");
-    activateTab('tab-0');
-}
-
-function activateTab(tabId) {
-    const allTabs = document.querySelectorAll('.tab-pane');
-    const allHeaders = document.querySelectorAll('.tab-header');
-
-    // Hide all tabs and deactivate all headers
-    allTabs.forEach(tab => tab.style.display = 'none');
-    allHeaders.forEach(header => header.classList.remove('active'));
-
-    // Show the selected tab and activate its header
-    const activeTab = document.getElementById(tabId);
-    if (activeTab) activeTab.style.display = 'block';
-
-    const activeHeader = document.querySelector(`[data-tab-target="${tabId}"]`);
-    if (activeHeader) activeHeader.classList.add('active');
-}
-</script>
-
-<style>
-.tab-container {
-    margin: 20px;
-    font-family: Arial, sans-serif;
-}
-
-.tab-headers {
-    display: flex;
-    background-color: #f1f1f1;
-    border-bottom: 2px solid #ccc;
-}
-
-.tab-header {
-    flex: 1;
-    padding: 10px;
-    text-align: center;
-    cursor: pointer;
-    background-color: #ddd;
-    border: none;
-    outline: none;
-    transition: background-color 0.3s;
-}
-
-.tab-header.active {
-    background-color: #6b0016;
-    color: white;
-    font-weight: bold;
-}
-
-.tab-content {
-    padding: 15px;
-    background-color: #fff;
-    border: 1px solid #ccc;
-}
-
-.tab-pane {
-    display: none;
-}
-
-.tab-pane pre {
-    white-space: pre-wrap;
-}
-</style>
+// Load the widget for a specific productId (example usage)
+loadProductWidget('12345');
