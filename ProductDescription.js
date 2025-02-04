@@ -15,11 +15,11 @@ window.onload = async function () {
 
     console.log("Product ID detected:", productId);
 
-    // Update with your Google Sheet CSV URL
+    // Google Sheet URL with your data
     const googleSheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSz4pwwlgmNw8642O1eDV8Jir2GBslQyyTX4ykx_rRlAb6k2EHe_QYy2gwk7R9bq5gV3KZpYOdXA3HW/pub?output=csv';
 
     try {
-        console.log("Fetching Google Sheet data...");
+        console.log("Fetching data from Google Sheet...");
         const sheetData = await fetchSheetData(googleSheetUrl);
         console.log("Parsed Sheet Data:", sheetData);
 
@@ -50,53 +50,36 @@ function getProductIdFromUrl() {
 }
 
 async function fetchSheetData(sheetUrl) {
-    try {
-        const response = await fetch(sheetUrl);
-        if (!response.ok) {
-            console.error("Failed to fetch Google Sheet data:", response.statusText);
-            throw new Error(`HTTP error! Status: ${response.status}`);
-        }
-
-        const csvText = await response.text();
-        console.log("CSV Response Text:", csvText);
-
-        return parseCsvToJson(csvText);
-    } catch (error) {
-        console.error("Error during fetch operation:", error);
-        throw error;
+    const response = await fetch(sheetUrl);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch Google Sheet data: ${response.statusText}`);
     }
+
+    const csvText = await response.text();
+    console.log("Raw CSV Response Text:", csvText);
+
+    return parseCsvToJson(csvText);
 }
 
 function parseCsvToJson(csvText) {
-    if (!csvText) {
-        console.warn("CSV text is empty or undefined.");
-        return [];
-    }
-
-    console.log("Parsing CSV data...");
     const lines = csvText.split('\n').filter(line => line.trim() !== '');
     const headers = lines[0].split(',').map(header => header.trim().toLowerCase());
+    console.log("CSV Headers Detected:", headers);
 
-    console.log("CSV Headers:", headers);
-
-    const parsedData = lines.slice(1).map(line => {
+    return lines.slice(1).map(line => {
         const values = line.split(',').map(value => value.trim());
-        return headers.reduce((obj, header, index) => {
+        const entry = headers.reduce((obj, header, index) => {
             obj[header] = values[index] || '';
             return obj;
         }, {});
-    });
 
-    console.log("Parsed Data Array:", parsedData);
-    return parsedData;
+        console.log("Parsed Entry:", entry);
+        return entry;
+    });
 }
 
 function getProductEntry(sheetData, productId) {
-    const productEntry = sheetData.find(entry => entry['productid']?.toLowerCase() === productId.toLowerCase());
-    if (!productEntry) {
-        console.warn(`No entry found for Product ID: ${productId}`);
-    }
-    return productEntry;
+    return sheetData.find(entry => entry['productid']?.toLowerCase() === productId.toLowerCase());
 }
 
 function createTabs(productEntry) {
@@ -219,4 +202,18 @@ function appendIframeContent(iframe, content, targetDiv) {
     try {
         targetDiv.insertAdjacentHTML('beforeend', content);
         iframe.style.display = 'none';
-        console.log("Iframe content
+        console.log("Iframe content successfully appended.");
+    } catch (e) {
+        console.error("An error occurred while appending iframe content.", e);
+    }
+}
+
+function hideIframe() {
+    const iframe = document.getElementById('DescriptionIframe');
+    if (iframe) iframe.style.display = 'none';
+}
+
+function isMobileDevice() {
+    return window.innerWidth <= 768;
+}
+</script>
