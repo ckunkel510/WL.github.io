@@ -116,6 +116,10 @@ async function loadProductWidget() {
           justify-content: start;
         }
       }
+
+      #productdescription.hidden {
+        display: none !important;
+      }
     `;
     document.head.appendChild(styleElement);
   }
@@ -273,9 +277,6 @@ async function loadProductWidget() {
     });
 
     if (resources.length > 0) {
-      console.log('Resources detected:', resources);
-
-      // Desktop Resources Tab
       const resourcesTabButton = document.createElement('button');
       resourcesTabButton.textContent = 'Resources';
       resourcesTabButton.setAttribute('data-header', 'Resources');
@@ -312,7 +313,6 @@ async function loadProductWidget() {
 
       tabContent.appendChild(resourcesSection);
 
-      // Mobile Resources Section
       const resourcesMobileSection = document.createElement('div');
       resourcesMobileSection.className = 'mobile-section';
 
@@ -356,6 +356,12 @@ async function loadProductWidget() {
     const targetElement = document.getElementById('ctl00_PageBody_productDetail_RadMultiPage1');
     if (targetElement) {
       targetElement.insertAdjacentElement('afterend', widgetContainer);
+    }
+
+    // Hide the product description div if the script runs successfully
+    const productDescription = document.getElementById('productdescription');
+    if (productDescription) {
+      productDescription.classList.add('hidden');
     }
 
   } catch (error) {
