@@ -49,6 +49,22 @@ document.addEventListener("DOMContentLoaded", function () {
                             thumbnail.addEventListener('click', function () {
                                 mainImageElement.src = thumbnail.src;
                             });
+
+                            // Add hover effect for desktop only
+                            thumbnail.addEventListener('mouseover', function () {
+                                if (window.innerWidth >= 1024) { // Desktop breakpoint
+                                    thumbnail.style.width = '100px';
+                                    thumbnail.style.height = '100px';
+                                }
+                            });
+
+                            thumbnail.addEventListener('mouseout', function () {
+                                if (window.innerWidth >= 1024) {
+                                    thumbnail.style.width = '50px';
+                                    thumbnail.style.height = '50px';
+                                }
+                            });
+
                             thumbnailContainer.appendChild(thumbnail);
                         }
                     });
