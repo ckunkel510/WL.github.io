@@ -63,7 +63,6 @@ async function loadProductWidget() {
         display: block;
       }
 
-      /* Mobile styles */
       @media (max-width: 768px) {
         .tab-menu {
           display: none;
@@ -101,20 +100,62 @@ async function loadProductWidget() {
     document.head.appendChild(styleElement);
   }
 
+  // Function to parse CSV data correctly
+  function parseCSV(csvText) {
+    const rows = [];
+    let currentRow = [];
+    let currentField = '';
+    let insideQuotes = false;
+
+    for (let i = 0; i < csvText.length; i++) {
+      const char = csvText[i];
+
+      if (char === '"') {
+        if (insideQuotes && csvText[i + 1] === '"') {
+          // Escaped double quote within a quoted field
+          currentField += '"';
+          i++;
+        } else {
+          // Toggle insideQuotes
+          insideQuotes = !insideQuotes;
+        }
+      } else if (char === ',' && !insideQuotes) {
+        // End of field
+        currentRow.push(currentField.trim());
+        currentField = '';
+      } else if (char === '\n' && !insideQuotes) {
+        // End of row
+        currentRow.push(currentField.trim());
+        rows.push(currentRow);
+        currentRow = [];
+        currentField = '';
+      } else {
+        // Regular character
+        currentField += char;
+      }
+    }
+
+    // Push the last field and row
+    if (currentField) currentRow.push(currentField.trim());
+    if (currentRow.length > 0) rows.push(currentRow);
+
+    return rows;
+  }
+
   // Function to handle tab switching on desktop
-  function switchTab(header) {
+  function switchTab(header, event) {
+    event.preventDefault();
+
     document.querySelectorAll('.tab-menu button').forEach(btn => btn.classList.remove('active'));
     document.querySelectorAll('.tab-section').forEach(sec => {
       sec.style.display = 'none';
       sec.classList.remove('active');
     });
 
-    // Activate selected tab
-    const tabButton = Array.from(document.querySelectorAll('.tab-menu button'))
-      .find(btn => btn.textContent === header);
-    if (tabButton) tabButton.classList.add('active');
-
+    const tabButton = document.querySelector(`.tab-menu button[data-header="${header}"]`);
     const activeSection = document.getElementById(`tab-${header}`);
+
+    if (tabButton) tabButton.classList.add('active');
     if (activeSection) {
       activeSection.style.display = 'block';
       activeSection.classList.add('active');
@@ -129,11 +170,9 @@ async function loadProductWidget() {
     if (headerElement && sectionElement) {
       const isActive = headerElement.classList.contains('active');
 
-      // Collapse all sections
       document.querySelectorAll('.mobile-header').forEach(hdr => hdr.classList.remove('active'));
       document.querySelectorAll('.mobile-section').forEach(sec => sec.classList.remove('active'));
 
-      // Toggle the clicked section
       if (!isActive) {
         headerElement.classList.add('active');
         sectionElement.classList.add('active');
@@ -152,13 +191,11 @@ async function loadProductWidget() {
   const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSz4pwwlgmNw8642O1eDV8Jir2GBslQyyTX4ykx_rRlAb6k2EHe_QYy2gwk7R9bq5gV3KZpYOdXA3HW/pub?output=csv';
 
   try {
-    // Insert styles
     insertStyles();
 
-    // Fetch and parse CSV data
     const response = await fetch(csvUrl);
     const csvData = await response.text();
-    const rows = csvData.split('\n').map(row => row.split(','));
+    const rows = parseCSV(csvData);
 
     // Extract headers
     const headers = rows.shift();
@@ -178,62 +215,40 @@ async function loadProductWidget() {
       tabData[header] = productRows.map(row => row[index]).filter(content => content.trim() !== '');
     });
 
-    // Dynamically create the entire widget
     const widgetContainer = document.createElement('div');
     widgetContainer.id = 'product-widget';
     widgetContainer.className = 'product-widget-container';
 
-    // Create the tab menu (for desktop)
     const tabMenu = document.createElement('div');
     tabMenu.id = 'tab-menu';
     tabMenu.className = 'tab-menu';
     widgetContainer.appendChild(tabMenu);
 
-    // Create the tab content container (for desktop)
     const tabContent = document.createElement('div');
     tabContent.id = 'tab-content';
     tabContent.className = 'tab-content';
     widgetContainer.appendChild(tabContent);
 
-    // Generate tabs and content
     Object.keys(tabData).forEach((header, tabIndex) => {
-      if (tabData[header].length === 0) return; // Skip empty tabs
+      if (tabData[header].length === 0) return;
 
-      // Desktop: Create tab button and section
       const tabButton = document.createElement('button');
       tabButton.textContent = header;
-      tabButton.className = tabIndex === 0 ? 'active' : '';
-      tabButton.addEventListener('click', () => switchTab(header));
+      tabButton.setAttribute('data-header', header);
+      tabButton.addEventListener('click', (event) => switchTab(header, event));
       tabMenu.appendChild(tabButton);
 
       const section = document.createElement('div');
+      section.id = `tab-${header}`;
       section.className = `tab-section ${tabIndex === 0 ? 'active' : ''}`;
       section.style.display = tabIndex === 0 ? 'block' : 'none';
       section.innerHTML = tabData[header].join('<br>');
-      section.id = `tab-${header}`;
       tabContent.appendChild(section);
-
-      // Mobile: Create collapsible header and section
-      const mobileHeader = document.createElement('div');
-      mobileHeader.className = 'mobile-header';
-      mobileHeader.textContent = header;
-      mobileHeader.setAttribute('data-header', header);
-      mobileHeader.addEventListener('click', () => toggleMobileSection(header));
-      widgetContainer.appendChild(mobileHeader);
-
-      const mobileSection = document.createElement('div');
-      mobileSection.className = 'mobile-section';
-      mobileSection.innerHTML = tabData[header].join('<br>');
-      mobileSection.setAttribute('data-header', header);
-      widgetContainer.appendChild(mobileSection);
     });
 
-    // Append the widget to the specified location
     const targetElement = document.getElementById('ctl00_PageBody_productDetail_RadMultiPage1');
     if (targetElement) {
       targetElement.insertAdjacentElement('afterend', widgetContainer);
-    } else {
-      console.error('Target element not found: ctl00_PageBody_productDetail_RadMultiPage1');
     }
 
   } catch (error) {
@@ -241,5 +256,4 @@ async function loadProductWidget() {
   }
 }
 
-// Automatically load the widget on page load
 loadProductWidget();
