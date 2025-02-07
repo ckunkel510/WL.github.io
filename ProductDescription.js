@@ -60,43 +60,35 @@ async function loadProductWidget() {
       .tab-section.active {
         display: block;
       }
+
+      /* Mobile styles */
+      @media (max-width: 768px) {
+        .tab-menu {
+          display: none;
+        }
+
+        .mobile-section {
+          margin-bottom: 15px;
+        }
+
+        .mobile-header {
+          font-weight: bold;
+          font-size: 1.1rem;
+          margin-bottom: 5px;
+          color: #333;
+          border-bottom: 1px solid #ccc;
+          padding: 10px 0;
+        }
+
+        .mobile-content {
+          font-size: 1rem;
+          line-height: 1.5;
+          padding: 10px 0;
+          color: #555;
+        }
+      }
     `;
     document.head.appendChild(styleElement);
-  }
-
-  function parseCSV(csvText) {
-    const rows = [];
-    let currentRow = [];
-    let currentField = '';
-    let insideQuotes = false;
-
-    for (let i = 0; i < csvText.length; i++) {
-      const char = csvText[i];
-
-      if (char === '"') {
-        if (insideQuotes && csvText[i + 1] === '"') {
-          currentField += '"';
-          i++;
-        } else {
-          insideQuotes = !insideQuotes;
-        }
-      } else if (char === ',' && !insideQuotes) {
-        currentRow.push(currentField.trim());
-        currentField = '';
-      } else if (char === '\n' && !insideQuotes) {
-        currentRow.push(currentField.trim());
-        rows.push(currentRow);
-        currentRow = [];
-        currentField = '';
-      } else {
-        currentField += char;
-      }
-    }
-
-    if (currentField) currentRow.push(currentField.trim());
-    if (currentRow.length > 0) rows.push(currentRow);
-
-    return rows;
   }
 
   function switchTab(header, event) {
@@ -134,10 +126,8 @@ async function loadProductWidget() {
     const csvData = await response.text();
     const rows = parseCSV(csvData);
 
-    // Extract headers
     const headers = rows.shift();
 
-    // Filter rows matching the productId and handle potential undefined values
     const productRows = rows.filter(row => row[0] && row[0].trim() === productId);
 
     if (!productRows.length) {
@@ -145,12 +135,10 @@ async function loadProductWidget() {
       return;
     }
 
-    // Organize data by tabs
     const tabData = {};
     headers.forEach((header, index) => {
-      if (index === 0) return; // Skip productId column
+      if (index === 0) return;
 
-      // Ensure data exists and is not undefined
       tabData[header] = productRows
         .map(row => (row[index] !== undefined ? row[index].trim() : ''))
         .filter(content => content !== '');
@@ -170,6 +158,8 @@ async function loadProductWidget() {
     tabContent.className = 'tab-content';
     widgetContainer.appendChild(tabContent);
 
+    const mobileContainer = document.createElement('div');
+
     Object.keys(tabData).forEach((header, tabIndex) => {
       if (tabData[header].length === 0) return;
 
@@ -185,7 +175,25 @@ async function loadProductWidget() {
       section.style.display = tabIndex === 0 ? 'block' : 'none';
       section.innerHTML = tabData[header].join('<br>');
       tabContent.appendChild(section);
+
+      // Mobile layout: header and content
+      const mobileSection = document.createElement('div');
+      mobileSection.className = 'mobile-section';
+
+      const mobileHeader = document.createElement('div');
+      mobileHeader.className = 'mobile-header';
+      mobileHeader.textContent = header;
+
+      const mobileContent = document.createElement('div');
+      mobileContent.className = 'mobile-content';
+      mobileContent.innerHTML = tabData[header].join('<br>');
+
+      mobileSection.appendChild(mobileHeader);
+      mobileSection.appendChild(mobileContent);
+      mobileContainer.appendChild(mobileSection);
     });
+
+    widgetContainer.appendChild(mobileContainer);
 
     const targetElement = document.getElementById('ctl00_PageBody_productDetail_RadMultiPage1');
     if (targetElement) {
