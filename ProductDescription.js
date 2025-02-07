@@ -65,6 +65,24 @@ async function loadProductWidget() {
         display: none;
       }
 
+      .resource-item {
+        display: inline-block;
+        text-align: center;
+        margin: 10px;
+      }
+
+      .resource-item img {
+        width: 60px;
+        height: 60px;
+        cursor: pointer;
+      }
+
+      .resource-name {
+        margin-top: 5px;
+        font-size: 0.9rem;
+        color: #333;
+      }
+
       /* Mobile-specific styles */
       @media (max-width: 768px) {
         .tab-menu, .tab-content {
@@ -176,12 +194,22 @@ async function loadProductWidget() {
     }
 
     const tabData = {};
+    const resources = [];
+
     headers.forEach((header, index) => {
       if (index === 0) return;
 
-      tabData[header] = productRows
-        .map(row => (row[index] !== undefined ? row[index].trim() : ''))
-        .filter(content => content !== '');
+      if (header === 'Resources') {
+        // Capture resource names and links
+        resources.push(...productRows.map(row => ({
+          name: row[index] || '',
+          link: row[index + 1] || ''
+        })).filter(res => res.name && res.link));
+      } else {
+        tabData[header] = productRows
+          .map(row => (row[index] !== undefined ? row[index].trim() : ''))
+          .filter(content => content !== '');
+      }
     });
 
     const widgetContainer = document.createElement('div');
@@ -198,8 +226,6 @@ async function loadProductWidget() {
     tabContent.className = 'tab-content';
     widgetContainer.appendChild(tabContent);
 
-    const mobileContainer = document.createElement('div');
-
     Object.keys(tabData).forEach((header, tabIndex) => {
       if (tabData[header].length === 0) return;
 
@@ -215,25 +241,46 @@ async function loadProductWidget() {
       section.style.display = tabIndex === 0 ? 'block' : 'none';
       section.innerHTML = tabData[header].join('<br>');
       tabContent.appendChild(section);
-
-      // Mobile layout: header and content
-      const mobileSection = document.createElement('div');
-      mobileSection.className = 'mobile-section';
-
-      const mobileHeader = document.createElement('div');
-      mobileHeader.className = 'mobile-header';
-      mobileHeader.textContent = header;
-
-      const mobileContent = document.createElement('div');
-      mobileContent.className = 'mobile-content';
-      mobileContent.innerHTML = tabData[header].join('<br>');
-
-      mobileSection.appendChild(mobileHeader);
-      mobileSection.appendChild(mobileContent);
-      mobileContainer.appendChild(mobileSection);
     });
 
-    widgetContainer.appendChild(mobileContainer);
+    // Resources tab
+    if (resources.length > 0) {
+      const resourcesTabButton = document.createElement('button');
+      resourcesTabButton.textContent = 'Resources';
+      resourcesTabButton.setAttribute('data-header', 'Resources');
+      resourcesTabButton.addEventListener('click', (event) => switchTab('Resources', event));
+      tabMenu.appendChild(resourcesTabButton);
+
+      const resourcesSection = document.createElement('div');
+      resourcesSection.id = 'tab-Resources';
+      resourcesSection.className = 'tab-section';
+      resourcesSection.style.display = 'none';
+
+      resources.forEach(resource => {
+        const resourceItem = document.createElement('div');
+        resourceItem.className = 'resource-item';
+
+        const resourceLink = document.createElement('a');
+        resourceLink.href = resource.link;
+        resourceLink.target = '_blank';
+
+        const resourceImage = document.createElement('img');
+        resourceImage.src = 'https://images-woodsonlumber.sirv.com/Other%20Website%20Images/Statements.png'; // Replace with your actual icon URL
+        resourceImage.alt = resource.name;
+
+        const resourceName = document.createElement('div');
+        resourceName.className = 'resource-name';
+        resourceName.textContent = resource.name;
+
+        resourceLink.appendChild(resourceImage);
+        resourceItem.appendChild(resourceLink);
+        resourceItem.appendChild(resourceName);
+
+        resourcesSection.appendChild(resourceItem);
+      });
+
+      tabContent.appendChild(resourcesSection);
+    }
 
     const targetElement = document.getElementById('ctl00_PageBody_productDetail_RadMultiPage1');
     if (targetElement) {
