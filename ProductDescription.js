@@ -109,6 +109,12 @@ async function loadProductWidget() {
           padding: 10px 0;
           color: #555;
         }
+
+        .mobile-resources {
+          display: flex;
+          flex-wrap: wrap;
+          justify-content: start;
+        }
       }
     `;
     document.head.appendChild(styleElement);
@@ -196,15 +202,13 @@ async function loadProductWidget() {
     const tabData = {};
     const resources = [];
 
-    // Identify column indexes
     const resourceIndex = headers.indexOf('Resources');
     const resourceLinkIndex = headers.indexOf('Resource Link');
 
     headers.forEach((header, index) => {
-      if (index === 0 || index === resourceLinkIndex) return; // Skip productId and Resource Link columns
+      if (index === 0 || index === resourceLinkIndex) return;
 
       if (index === resourceIndex) {
-        // Capture resources and their links
         productRows.forEach(row => {
           if (row[resourceIndex] && row[resourceLinkIndex]) {
             resources.push({
@@ -252,7 +256,6 @@ async function loadProductWidget() {
       section.innerHTML = tabData[header].join('<br>');
       tabContent.appendChild(section);
 
-      // Mobile layout: header and content
       const mobileSection = document.createElement('div');
       mobileSection.className = 'mobile-section';
 
@@ -269,22 +272,16 @@ async function loadProductWidget() {
       mobileContainer.appendChild(mobileSection);
     });
 
-    widgetContainer.appendChild(mobileContainer);
-
-    // **Ensure Resources tab is created if there are resources**
     if (resources.length > 0) {
-      console.log('Resources detected:', resources);
-
-      const resourcesTabButton = document.createElement('button');
-      resourcesTabButton.textContent = 'Resources';
-      resourcesTabButton.setAttribute('data-header', 'Resources');
-      resourcesTabButton.addEventListener('click', (event) => switchTab('Resources', event));
-      tabMenu.appendChild(resourcesTabButton);
-
       const resourcesSection = document.createElement('div');
-      resourcesSection.id = 'tab-Resources';
-      resourcesSection.className = 'tab-section';
-      resourcesSection.style.display = 'none';
+      resourcesSection.className = 'mobile-section';
+
+      const resourcesHeader = document.createElement('div');
+      resourcesHeader.className = 'mobile-header';
+      resourcesHeader.textContent = 'Resources';
+
+      const resourcesContent = document.createElement('div');
+      resourcesContent.className = 'mobile-resources';
 
       resources.forEach(resource => {
         const resourceItem = document.createElement('div');
@@ -306,11 +303,15 @@ async function loadProductWidget() {
         resourceItem.appendChild(resourceLink);
         resourceItem.appendChild(resourceName);
 
-        resourcesSection.appendChild(resourceItem);
+        resourcesContent.appendChild(resourceItem);
       });
 
-      tabContent.appendChild(resourcesSection);
+      resourcesSection.appendChild(resourcesHeader);
+      resourcesSection.appendChild(resourcesContent);
+      mobileContainer.appendChild(resourcesSection);
     }
+
+    widgetContainer.appendChild(mobileContainer);
 
     const targetElement = document.getElementById('ctl00_PageBody_productDetail_RadMultiPage1');
     if (targetElement) {
