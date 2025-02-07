@@ -6,6 +6,66 @@ async function loadProductWidget() {
     return pidMatch ? decodeURIComponent(pidMatch[1]) : null;
   }
 
+  // Function to dynamically insert styles
+  function insertStyles() {
+    const styleElement = document.createElement('style');
+    styleElement.textContent = `
+      .product-widget-container {
+        margin-top: 20px;
+        padding: 15px;
+        border: 1px solid #ddd;
+        font-family: Arial, sans-serif;
+        background-color: #f9f9f9;
+        border-radius: 8px;
+      }
+
+      .tab-menu {
+        display: flex;
+        justify-content: flex-start;
+        border-bottom: 2px solid #ccc;
+        margin-bottom: 15px;
+      }
+
+      .tab-menu button {
+        padding: 10px 20px;
+        margin-right: 10px;
+        border: none;
+        background-color: #e0e0e0;
+        color: #333;
+        font-weight: bold;
+        cursor: pointer;
+        border-radius: 5px 5px 0 0;
+        transition: background-color 0.3s ease;
+      }
+
+      .tab-menu button.active {
+        background-color: #6b0016;
+        color: #fff;
+      }
+
+      .tab-menu button:hover {
+        background-color: #8d8d8d;
+        color: #fff;
+      }
+
+      .tab-content {
+        padding: 20px;
+        background-color: #fff;
+        border-radius: 0 0 8px 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+
+      .tab-section {
+        display: none;
+      }
+
+      .tab-section.active {
+        display: block;
+      }
+    `;
+    document.head.appendChild(styleElement);
+  }
+
   // Get the current productId from the URL
   const productId = getProductIdFromUrl();
 
@@ -17,6 +77,9 @@ async function loadProductWidget() {
   const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSz4pwwlgmNw8642O1eDV8Jir2GBslQyyTX4ykx_rRlAb6k2EHe_QYy2gwk7R9bq5gV3KZpYOdXA3HW/pub?output=csv';
 
   try {
+    // Insert styles
+    insertStyles();
+
     // Fetch and parse CSV data
     const response = await fetch(csvUrl);
     const csvData = await response.text();
@@ -112,58 +175,3 @@ async function loadProductWidget() {
 
 // Automatically load the widget on page load
 loadProductWidget();
-
-<style>
-.product-widget-container {
-  margin-top: 20px;
-  padding: 15px;
-  border: 1px solid #ddd;
-  font-family: Arial, sans-serif;
-  background-color: #f9f9f9;
-  border-radius: 8px;
-}
-
-.tab-menu {
-  display: flex;
-  justify-content: flex-start;
-  border-bottom: 2px solid #ccc;
-  margin-bottom: 15px;
-}
-
-.tab-menu button {
-  padding: 10px 20px;
-  margin-right: 10px;
-  border: none;
-  background-color: #e0e0e0;
-  color: #333;
-  font-weight: bold;
-  cursor: pointer;
-  border-radius: 5px 5px 0 0;
-  transition: background-color 0.3s ease;
-}
-
-.tab-menu button.active {
-  background-color: #6b0016;
-  color: #fff;
-}
-
-.tab-menu button:hover {
-  background-color: #8d8d8d;
-  color: #fff;
-}
-
-.tab-content {
-  padding: 20px;
-  background-color: #fff;
-  border-radius: 0 0 8px 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.tab-section {
-  display: none;
-}
-
-.tab-section.active {
-  display: block;
-}
-</style>
