@@ -1,12 +1,10 @@
 async function loadProductWidget() {
-  // Function to extract the 'pid' from the URL
   function getProductIdFromUrl() {
     const urlParams = window.location.search;
     const pidMatch = urlParams.match(/pid=([^&]*)/);
     return pidMatch ? decodeURIComponent(pidMatch[1]) : null;
   }
 
-  // Function to dynamically insert styles
   function insertStyles() {
     const styleElement = document.createElement('style');
     styleElement.textContent = `
@@ -62,45 +60,10 @@ async function loadProductWidget() {
       .tab-section.active {
         display: block;
       }
-
-      @media (max-width: 768px) {
-        .tab-menu {
-          display: none;
-        }
-
-        .mobile-header {
-          padding: 15px;
-          background-color: #e0e0e0;
-          font-weight: bold;
-          border: 1px solid #ccc;
-          border-radius: 5px;
-          margin-bottom: 10px;
-          cursor: pointer;
-        }
-
-        .mobile-header.active {
-          background-color: #6b0016;
-          color: #fff;
-        }
-
-        .mobile-section {
-          display: none;
-          padding: 15px;
-          background-color: #fff;
-          border: 1px solid #ddd;
-          border-radius: 5px;
-          margin-bottom: 10px;
-        }
-
-        .mobile-section.active {
-          display: block;
-        }
-      }
     `;
     document.head.appendChild(styleElement);
   }
 
-  // Function to parse CSV data correctly
   function parseCSV(csvText) {
     const rows = [];
     let currentRow = [];
@@ -112,37 +75,30 @@ async function loadProductWidget() {
 
       if (char === '"') {
         if (insideQuotes && csvText[i + 1] === '"') {
-          // Escaped double quote within a quoted field
           currentField += '"';
           i++;
         } else {
-          // Toggle insideQuotes
           insideQuotes = !insideQuotes;
         }
       } else if (char === ',' && !insideQuotes) {
-        // End of field
         currentRow.push(currentField.trim());
         currentField = '';
       } else if (char === '\n' && !insideQuotes) {
-        // End of row
         currentRow.push(currentField.trim());
         rows.push(currentRow);
         currentRow = [];
         currentField = '';
       } else {
-        // Regular character
         currentField += char;
       }
     }
 
-    // Push the last field and row
     if (currentField) currentRow.push(currentField.trim());
     if (currentRow.length > 0) rows.push(currentRow);
 
     return rows;
   }
 
-  // Function to handle tab switching on desktop
   function switchTab(header, event) {
     event.preventDefault();
 
@@ -162,25 +118,6 @@ async function loadProductWidget() {
     }
   }
 
-  // Function to handle mobile header toggling
-  function toggleMobileSection(header) {
-    const headerElement = document.querySelector(`.mobile-header[data-header="${header}"]`);
-    const sectionElement = document.querySelector(`.mobile-section[data-header="${header}"]`);
-
-    if (headerElement && sectionElement) {
-      const isActive = headerElement.classList.contains('active');
-
-      document.querySelectorAll('.mobile-header').forEach(hdr => hdr.classList.remove('active'));
-      document.querySelectorAll('.mobile-section').forEach(sec => sec.classList.remove('active'));
-
-      if (!isActive) {
-        headerElement.classList.add('active');
-        sectionElement.classList.add('active');
-      }
-    }
-  }
-
-  // Get the current productId from the URL
   const productId = getProductIdFromUrl();
 
   if (!productId) {
@@ -200,8 +137,8 @@ async function loadProductWidget() {
     // Extract headers
     const headers = rows.shift();
 
-    // Filter rows matching the productId
-    const productRows = rows.filter(row => row[0].trim() === productId);
+    // Filter rows matching the productId and handle potential undefined values
+    const productRows = rows.filter(row => row[0] && row[0].trim() === productId);
 
     if (!productRows.length) {
       console.warn('No data found for this product:', productId);
@@ -212,7 +149,11 @@ async function loadProductWidget() {
     const tabData = {};
     headers.forEach((header, index) => {
       if (index === 0) return; // Skip productId column
-      tabData[header] = productRows.map(row => row[index]).filter(content => content.trim() !== '');
+
+      // Ensure data exists and is not undefined
+      tabData[header] = productRows
+        .map(row => (row[index] !== undefined ? row[index].trim() : ''))
+        .filter(content => content !== '');
     });
 
     const widgetContainer = document.createElement('div');
