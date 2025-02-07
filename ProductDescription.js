@@ -273,15 +273,19 @@ async function loadProductWidget() {
     });
 
     if (resources.length > 0) {
+      console.log('Resources detected:', resources);
+
+      // Desktop Resources Tab
+      const resourcesTabButton = document.createElement('button');
+      resourcesTabButton.textContent = 'Resources';
+      resourcesTabButton.setAttribute('data-header', 'Resources');
+      resourcesTabButton.addEventListener('click', (event) => switchTab('Resources', event));
+      tabMenu.appendChild(resourcesTabButton);
+
       const resourcesSection = document.createElement('div');
-      resourcesSection.className = 'mobile-section';
-
-      const resourcesHeader = document.createElement('div');
-      resourcesHeader.className = 'mobile-header';
-      resourcesHeader.textContent = 'Resources';
-
-      const resourcesContent = document.createElement('div');
-      resourcesContent.className = 'mobile-resources';
+      resourcesSection.id = 'tab-Resources';
+      resourcesSection.className = 'tab-section';
+      resourcesSection.style.display = 'none';
 
       resources.forEach(resource => {
         const resourceItem = document.createElement('div');
@@ -303,12 +307,48 @@ async function loadProductWidget() {
         resourceItem.appendChild(resourceLink);
         resourceItem.appendChild(resourceName);
 
-        resourcesContent.appendChild(resourceItem);
+        resourcesSection.appendChild(resourceItem);
       });
 
-      resourcesSection.appendChild(resourcesHeader);
-      resourcesSection.appendChild(resourcesContent);
-      mobileContainer.appendChild(resourcesSection);
+      tabContent.appendChild(resourcesSection);
+
+      // Mobile Resources Section
+      const resourcesMobileSection = document.createElement('div');
+      resourcesMobileSection.className = 'mobile-section';
+
+      const resourcesMobileHeader = document.createElement('div');
+      resourcesMobileHeader.className = 'mobile-header';
+      resourcesMobileHeader.textContent = 'Resources';
+
+      const resourcesMobileContent = document.createElement('div');
+      resourcesMobileContent.className = 'mobile-resources';
+
+      resources.forEach(resource => {
+        const resourceItem = document.createElement('div');
+        resourceItem.className = 'resource-item';
+
+        const resourceLink = document.createElement('a');
+        resourceLink.href = resource.link;
+        resourceLink.target = '_blank';
+
+        const resourceImage = document.createElement('img');
+        resourceImage.src = 'https://images-woodsonlumber.sirv.com/Other%20Website%20Images/Statements.png';
+        resourceImage.alt = resource.name;
+
+        const resourceName = document.createElement('div');
+        resourceName.className = 'resource-name';
+        resourceName.textContent = resource.name;
+
+        resourceLink.appendChild(resourceImage);
+        resourceItem.appendChild(resourceLink);
+        resourceItem.appendChild(resourceName);
+
+        resourcesMobileContent.appendChild(resourceItem);
+      });
+
+      resourcesMobileSection.appendChild(resourcesMobileHeader);
+      resourcesMobileSection.appendChild(resourcesMobileContent);
+      mobileContainer.appendChild(resourcesMobileSection);
     }
 
     widgetContainer.appendChild(mobileContainer);
