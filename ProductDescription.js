@@ -40,10 +40,16 @@ async function loadProductWidget() {
       tabData[header] = productRows.map(row => row[index]).filter(content => content.trim() !== '');
     });
 
-    // Generate tabs and content
+    // Check if required elements exist on the page
     const tabMenu = document.getElementById('tab-menu');
     const tabContent = document.getElementById('tab-content');
 
+    if (!tabMenu || !tabContent) {
+      console.error('Tab menu or content container not found on the page.');
+      return;
+    }
+
+    // Generate tabs and content
     Object.keys(tabData).forEach((header, tabIndex) => {
       if (tabData[header].length === 0) return; // Skip empty tabs
 
