@@ -61,7 +61,7 @@ window.addEventListener("load", function () {
                     wrapper.style.display = 'inline-block';
                     wrapper.style.cursor = 'pointer';
                     wrapper.addEventListener('mouseover', () => {
-                        wrapper.style.borderColor = '#007bff';
+                        wrapper.style.borderColor = '#6b0016';
                     });
                     wrapper.addEventListener('mouseout', () => {
                         wrapper.style.borderColor = '#ccc';
