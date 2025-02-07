@@ -51,16 +51,34 @@ window.addEventListener("load", function () {
                 thumbnailContainer.style.gap = '10px';
                 thumbnailContainer.style.marginTop = '10px';
 
+                // Function to style a thumbnail wrapper
+                function createThumbnailWrapper(imageElement) {
+                    const wrapper = document.createElement('div');
+                    wrapper.style.border = '2px solid #ccc';
+                    wrapper.style.padding = '5px';
+                    wrapper.style.borderRadius = '8px';
+                    wrapper.style.transition = 'border-color 0.3s ease';
+                    wrapper.style.display = 'inline-block';
+                    wrapper.style.cursor = 'pointer';
+                    wrapper.addEventListener('mouseover', () => {
+                        wrapper.style.borderColor = '#007bff';
+                    });
+                    wrapper.addEventListener('mouseout', () => {
+                        wrapper.style.borderColor = '#ccc';
+                    });
+                    wrapper.appendChild(imageElement);
+                    return wrapper;
+                }
+
                 // Add the current main image as the first thumbnail
                 const mainThumbnail = document.createElement('img');
                 mainThumbnail.src = mainImageElement.src;
                 mainThumbnail.style.width = '50px';
                 mainThumbnail.style.height = '50px';
-                mainThumbnail.style.cursor = 'pointer';
                 mainThumbnail.addEventListener('click', function () {
                     mainImageElement.src = mainThumbnail.src;
                 });
-                thumbnailContainer.appendChild(mainThumbnail);
+                thumbnailContainer.appendChild(createThumbnailWrapper(mainThumbnail));
 
                 // Add thumbnails from the filtered rows
                 filteredRows.forEach((row, index) => {
@@ -71,11 +89,10 @@ window.addEventListener("load", function () {
                         thumbnail.src = imageUrl;
                         thumbnail.style.width = '50px';
                         thumbnail.style.height = '50px';
-                        thumbnail.style.cursor = 'pointer';
                         thumbnail.addEventListener('click', function () {
                             mainImageElement.src = thumbnail.src;
                         });
-                        thumbnailContainer.appendChild(thumbnail);
+                        thumbnailContainer.appendChild(createThumbnailWrapper(thumbnail));
                     } else {
                         console.warn(`Row ${index + 1} has an empty image URL.`);
                     }
