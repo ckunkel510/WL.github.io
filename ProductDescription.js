@@ -271,10 +271,20 @@ async function loadProductWidget() {
 
     widgetContainer.appendChild(mobileContainer);
 
-    // Resources tab handling
+    // **Ensure Resources tab is created if there are resources**
     if (resources.length > 0) {
+      console.log('Resources detected:', resources);
+
+      const resourcesTabButton = document.createElement('button');
+      resourcesTabButton.textContent = 'Resources';
+      resourcesTabButton.setAttribute('data-header', 'Resources');
+      resourcesTabButton.addEventListener('click', (event) => switchTab('Resources', event));
+      tabMenu.appendChild(resourcesTabButton);
+
       const resourcesSection = document.createElement('div');
+      resourcesSection.id = 'tab-Resources';
       resourcesSection.className = 'tab-section';
+      resourcesSection.style.display = 'none';
 
       resources.forEach(resource => {
         const resourceItem = document.createElement('div');
@@ -285,7 +295,7 @@ async function loadProductWidget() {
         resourceLink.target = '_blank';
 
         const resourceImage = document.createElement('img');
-        resourceImage.src = 'https://images-woodsonlumber.sirv.com/Other%20Website%20Images/Statements.png'; // Replace with your actual icon URL
+        resourceImage.src = 'https://images-woodsonlumber.sirv.com/Other%20Website%20Images/Statements.png';
         resourceImage.alt = resource.name;
 
         const resourceName = document.createElement('div');
