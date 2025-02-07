@@ -196,15 +196,23 @@ async function loadProductWidget() {
     const tabData = {};
     const resources = [];
 
-    headers.forEach((header, index) => {
-      if (index === 0) return;
+    // Identify column indexes
+    const resourceIndex = headers.indexOf('Resources');
+    const resourceLinkIndex = headers.indexOf('Resource Link');
 
-      if (header === 'Resources') {
-        // Capture resource names and links
-        resources.push(...productRows.map(row => ({
-          name: row[index] || '',
-          link: row[index + 1] || ''
-        })).filter(res => res.name && res.link));
+    headers.forEach((header, index) => {
+      if (index === 0 || index === resourceLinkIndex) return; // Skip productId and Resource Link columns
+
+      if (index === resourceIndex) {
+        // Capture resources and their links
+        productRows.forEach(row => {
+          if (row[resourceIndex] && row[resourceLinkIndex]) {
+            resources.push({
+              name: row[resourceIndex],
+              link: row[resourceLinkIndex]
+            });
+          }
+        });
       } else {
         tabData[header] = productRows
           .map(row => (row[index] !== undefined ? row[index].trim() : ''))
@@ -226,6 +234,8 @@ async function loadProductWidget() {
     tabContent.className = 'tab-content';
     widgetContainer.appendChild(tabContent);
 
+    const mobileContainer = document.createElement('div');
+
     Object.keys(tabData).forEach((header, tabIndex) => {
       if (tabData[header].length === 0) return;
 
@@ -241,20 +251,30 @@ async function loadProductWidget() {
       section.style.display = tabIndex === 0 ? 'block' : 'none';
       section.innerHTML = tabData[header].join('<br>');
       tabContent.appendChild(section);
+
+      // Mobile layout: header and content
+      const mobileSection = document.createElement('div');
+      mobileSection.className = 'mobile-section';
+
+      const mobileHeader = document.createElement('div');
+      mobileHeader.className = 'mobile-header';
+      mobileHeader.textContent = header;
+
+      const mobileContent = document.createElement('div');
+      mobileContent.className = 'mobile-content';
+      mobileContent.innerHTML = tabData[header].join('<br>');
+
+      mobileSection.appendChild(mobileHeader);
+      mobileSection.appendChild(mobileContent);
+      mobileContainer.appendChild(mobileSection);
     });
 
-    // Resources tab
-    if (resources.length > 0) {
-      const resourcesTabButton = document.createElement('button');
-      resourcesTabButton.textContent = 'Resources';
-      resourcesTabButton.setAttribute('data-header', 'Resources');
-      resourcesTabButton.addEventListener('click', (event) => switchTab('Resources', event));
-      tabMenu.appendChild(resourcesTabButton);
+    widgetContainer.appendChild(mobileContainer);
 
+    // Resources tab handling
+    if (resources.length > 0) {
       const resourcesSection = document.createElement('div');
-      resourcesSection.id = 'tab-Resources';
       resourcesSection.className = 'tab-section';
-      resourcesSection.style.display = 'none';
 
       resources.forEach(resource => {
         const resourceItem = document.createElement('div');
@@ -265,7 +285,7 @@ async function loadProductWidget() {
         resourceLink.target = '_blank';
 
         const resourceImage = document.createElement('img');
-        resourceImage.src = 'https://images-woodsonlumber.sirv.com/Other%20Website%20Images/Statements.png'; // Replace with your actual icon URL
+        resourceImage.src = 'pdf-icon.png'; // Replace with your actual icon URL
         resourceImage.alt = resource.name;
 
         const resourceName = document.createElement('div');
