@@ -61,12 +61,18 @@ async function loadProductWidget() {
         display: block;
       }
 
+      .mobile-section {
+        display: none;
+      }
+
+      /* Mobile-specific styles */
       @media (max-width: 768px) {
-        .tab-menu {
+        .tab-menu, .tab-content {
           display: none;
         }
 
         .mobile-section {
+          display: block;
           margin-bottom: 15px;
         }
 
@@ -90,7 +96,6 @@ async function loadProductWidget() {
     document.head.appendChild(styleElement);
   }
 
-  // Function to parse CSV data correctly
   function parseCSV(csvText) {
     const rows = [];
     let currentRow = [];
@@ -102,30 +107,24 @@ async function loadProductWidget() {
 
       if (char === '"') {
         if (insideQuotes && csvText[i + 1] === '"') {
-          // Escaped double quote within a quoted field
           currentField += '"';
           i++;
         } else {
-          // Toggle insideQuotes
           insideQuotes = !insideQuotes;
         }
       } else if (char === ',' && !insideQuotes) {
-        // End of field
         currentRow.push(currentField.trim());
         currentField = '';
       } else if (char === '\n' && !insideQuotes) {
-        // End of row
         currentRow.push(currentField.trim());
         rows.push(currentRow);
         currentRow = [];
         currentField = '';
       } else {
-        // Regular character
         currentField += char;
       }
     }
 
-    // Push the last field and row
     if (currentField) currentRow.push(currentField.trim());
     if (currentRow.length > 0) rows.push(currentRow);
 
@@ -167,10 +166,8 @@ async function loadProductWidget() {
     const csvData = await response.text();
     const rows = parseCSV(csvData);
 
-    // Extract headers
     const headers = rows.shift();
 
-    // Filter rows matching the productId and handle potential undefined values
     const productRows = rows.filter(row => row[0] && row[0].trim() === productId);
 
     if (!productRows.length) {
@@ -178,12 +175,10 @@ async function loadProductWidget() {
       return;
     }
 
-    // Organize data by tabs
     const tabData = {};
     headers.forEach((header, index) => {
-      if (index === 0) return; // Skip productId column
+      if (index === 0) return;
 
-      // Ensure data exists and is not undefined
       tabData[header] = productRows
         .map(row => (row[index] !== undefined ? row[index].trim() : ''))
         .filter(content => content !== '');
