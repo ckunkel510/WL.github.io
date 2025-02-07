@@ -40,14 +40,22 @@ async function loadProductWidget() {
       tabData[header] = productRows.map(row => row[index]).filter(content => content.trim() !== '');
     });
 
-    // Check if required elements exist on the page
-    const tabMenu = document.getElementById('tab-menu');
-    const tabContent = document.getElementById('tab-content');
+    // Dynamically create the entire widget
+    const widgetContainer = document.createElement('div');
+    widgetContainer.id = 'product-widget';
+    widgetContainer.className = 'product-widget-container';
 
-    if (!tabMenu || !tabContent) {
-      console.error('Tab menu or content container not found on the page.');
-      return;
-    }
+    // Create the tab menu
+    const tabMenu = document.createElement('div');
+    tabMenu.id = 'tab-menu';
+    tabMenu.className = 'tab-menu';
+    widgetContainer.appendChild(tabMenu);
+
+    // Create the tab content container
+    const tabContent = document.createElement('div');
+    tabContent.id = 'tab-content';
+    tabContent.className = 'tab-content';
+    widgetContainer.appendChild(tabContent);
 
     // Generate tabs and content
     Object.keys(tabData).forEach((header, tabIndex) => {
@@ -68,7 +76,7 @@ async function loadProductWidget() {
       tabContent.appendChild(section);
     });
 
-    // Switch tab function
+    // Function to switch tabs
     function switchTab(header) {
       document.querySelectorAll('.tab-menu button').forEach(btn => btn.classList.remove('active'));
       document.querySelectorAll('.tab-section').forEach(sec => sec.classList.remove('active'));
@@ -79,6 +87,14 @@ async function loadProductWidget() {
       if (tabButton) tabButton.classList.add('active');
 
       document.getElementById(`tab-${header}`).classList.add('active');
+    }
+
+    // Append the widget to the specified location
+    const targetElement = document.getElementById('ctl00_PageBody_productDetail_RadMultiPage1');
+    if (targetElement) {
+      targetElement.insertAdjacentElement('afterend', widgetContainer);
+    } else {
+      console.error('Target element not found: ctl00_PageBody_productDetail_RadMultiPage1');
     }
 
   } catch (error) {
