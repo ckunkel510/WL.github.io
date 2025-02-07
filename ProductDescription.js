@@ -285,7 +285,7 @@ async function loadProductWidget() {
         resourceLink.target = '_blank';
 
         const resourceImage = document.createElement('img');
-        resourceImage.src = 'pdf-icon.png'; // Replace with your actual icon URL
+        resourceImage.src = 'https://images-woodsonlumber.sirv.com/Other%20Website%20Images/Statements.png'; // Replace with your actual icon URL
         resourceImage.alt = resource.name;
 
         const resourceName = document.createElement('div');
