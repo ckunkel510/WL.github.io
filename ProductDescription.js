@@ -68,9 +68,10 @@ async function loadProductWidget() {
       tabButton.addEventListener('click', () => switchTab(header));
       tabMenu.appendChild(tabButton);
 
-      // Create tab content section
+      // Create tab content section (initially hidden except for the first tab)
       const section = document.createElement('div');
       section.className = `tab-section ${tabIndex === 0 ? 'active' : ''}`;
+      section.style.display = tabIndex === 0 ? 'block' : 'none';
       section.innerHTML = tabData[header].join('<br>'); // Combine rows for this tab
       section.id = `tab-${header}`;
       tabContent.appendChild(section);
@@ -79,14 +80,21 @@ async function loadProductWidget() {
     // Function to switch tabs
     function switchTab(header) {
       document.querySelectorAll('.tab-menu button').forEach(btn => btn.classList.remove('active'));
-      document.querySelectorAll('.tab-section').forEach(sec => sec.classList.remove('active'));
+      document.querySelectorAll('.tab-section').forEach(sec => {
+        sec.style.display = 'none';
+        sec.classList.remove('active');
+      });
 
       // Activate selected tab
       const tabButton = Array.from(document.querySelectorAll('.tab-menu button'))
         .find(btn => btn.textContent === header);
       if (tabButton) tabButton.classList.add('active');
 
-      document.getElementById(`tab-${header}`).classList.add('active');
+      const activeSection = document.getElementById(`tab-${header}`);
+      if (activeSection) {
+        activeSection.style.display = 'block';
+        activeSection.classList.add('active');
+      }
     }
 
     // Append the widget to the specified location
@@ -104,3 +112,58 @@ async function loadProductWidget() {
 
 // Automatically load the widget on page load
 loadProductWidget();
+
+<style>
+.product-widget-container {
+  margin-top: 20px;
+  padding: 15px;
+  border: 1px solid #ddd;
+  font-family: Arial, sans-serif;
+  background-color: #f9f9f9;
+  border-radius: 8px;
+}
+
+.tab-menu {
+  display: flex;
+  justify-content: flex-start;
+  border-bottom: 2px solid #ccc;
+  margin-bottom: 15px;
+}
+
+.tab-menu button {
+  padding: 10px 20px;
+  margin-right: 10px;
+  border: none;
+  background-color: #e0e0e0;
+  color: #333;
+  font-weight: bold;
+  cursor: pointer;
+  border-radius: 5px 5px 0 0;
+  transition: background-color 0.3s ease;
+}
+
+.tab-menu button.active {
+  background-color: #6b0016;
+  color: #fff;
+}
+
+.tab-menu button:hover {
+  background-color: #8d8d8d;
+  color: #fff;
+}
+
+.tab-content {
+  padding: 20px;
+  background-color: #fff;
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.tab-section {
+  display: none;
+}
+
+.tab-section.active {
+  display: block;
+}
+</style>
