@@ -22,7 +22,6 @@ document.addEventListener("DOMContentLoaded", function () {
                     // Create a container for image thumbnails
                     const thumbnailContainer = document.createElement('div');
                     thumbnailContainer.style.display = 'flex';
-                    thumbnailContainer.style.flexWrap = 'wrap';
                     thumbnailContainer.style.gap = '10px';
                     thumbnailContainer.style.marginTop = '10px';
 
@@ -38,7 +37,7 @@ document.addEventListener("DOMContentLoaded", function () {
                     thumbnailContainer.appendChild(mainThumbnail);
 
                     // Add thumbnails from the filtered rows
-                    filteredRows.forEach(row => {
+                    filteredRows.forEach((row, index) => {
                         const imageUrl = row[1].trim();
 
                         if (imageUrl) {
@@ -47,38 +46,19 @@ document.addEventListener("DOMContentLoaded", function () {
                             thumbnail.style.width = '50px';
                             thumbnail.style.height = '50px';
                             thumbnail.style.cursor = 'pointer';
-                            thumbnail.style.transition = 'all 0.2s ease';
                             thumbnail.addEventListener('click', function () {
                                 mainImageElement.src = thumbnail.src;
                             });
-
-                            // Add hover effect for desktop only
-                            thumbnail.addEventListener('mouseenter', function () {
-                                if (window.innerWidth >= 1024) { // Desktop breakpoint
-                                    thumbnail.style.transform = 'scale(2)';
-                                }
-                            });
-
-                            thumbnail.addEventListener('mouseleave', function () {
-                                if (window.innerWidth >= 1024) {
-                                    thumbnail.style.transform = 'scale(1)';
-                                }
-                            });
-
                             thumbnailContainer.appendChild(thumbnail);
                         }
                     });
 
                     // Append the thumbnail container after the main image
                     mainImageElement.insertAdjacentElement('afterend', thumbnailContainer);
-                } else {
-                    console.warn('No images found for product ID:', productId);
                 }
             })
             .catch(error => {
                 console.error('Error fetching or processing Google Sheet data:', error);
             });
-    } else {
-        console.warn('Product ID not found or main image element missing.');
     }
 });
