@@ -62,8 +62,83 @@ async function loadProductWidget() {
       .tab-section.active {
         display: block;
       }
+
+      /* Mobile styles */
+      @media (max-width: 768px) {
+        .tab-menu {
+          display: none;
+        }
+
+        .mobile-header {
+          padding: 15px;
+          background-color: #e0e0e0;
+          font-weight: bold;
+          border: 1px solid #ccc;
+          border-radius: 5px;
+          margin-bottom: 10px;
+          cursor: pointer;
+        }
+
+        .mobile-header.active {
+          background-color: #6b0016;
+          color: #fff;
+        }
+
+        .mobile-section {
+          display: none;
+          padding: 15px;
+          background-color: #fff;
+          border: 1px solid #ddd;
+          border-radius: 5px;
+          margin-bottom: 10px;
+        }
+
+        .mobile-section.active {
+          display: block;
+        }
+      }
     `;
     document.head.appendChild(styleElement);
+  }
+
+  // Function to handle tab switching on desktop
+  function switchTab(header) {
+    document.querySelectorAll('.tab-menu button').forEach(btn => btn.classList.remove('active'));
+    document.querySelectorAll('.tab-section').forEach(sec => {
+      sec.style.display = 'none';
+      sec.classList.remove('active');
+    });
+
+    // Activate selected tab
+    const tabButton = Array.from(document.querySelectorAll('.tab-menu button'))
+      .find(btn => btn.textContent === header);
+    if (tabButton) tabButton.classList.add('active');
+
+    const activeSection = document.getElementById(`tab-${header}`);
+    if (activeSection) {
+      activeSection.style.display = 'block';
+      activeSection.classList.add('active');
+    }
+  }
+
+  // Function to handle mobile header toggling
+  function toggleMobileSection(header) {
+    const headerElement = document.querySelector(`.mobile-header[data-header="${header}"]`);
+    const sectionElement = document.querySelector(`.mobile-section[data-header="${header}"]`);
+
+    if (headerElement && sectionElement) {
+      const isActive = headerElement.classList.contains('active');
+
+      // Collapse all sections
+      document.querySelectorAll('.mobile-header').forEach(hdr => hdr.classList.remove('active'));
+      document.querySelectorAll('.mobile-section').forEach(sec => sec.classList.remove('active'));
+
+      // Toggle the clicked section
+      if (!isActive) {
+        headerElement.classList.add('active');
+        sectionElement.classList.add('active');
+      }
+    }
   }
 
   // Get the current productId from the URL
@@ -108,13 +183,13 @@ async function loadProductWidget() {
     widgetContainer.id = 'product-widget';
     widgetContainer.className = 'product-widget-container';
 
-    // Create the tab menu
+    // Create the tab menu (for desktop)
     const tabMenu = document.createElement('div');
     tabMenu.id = 'tab-menu';
     tabMenu.className = 'tab-menu';
     widgetContainer.appendChild(tabMenu);
 
-    // Create the tab content container
+    // Create the tab content container (for desktop)
     const tabContent = document.createElement('div');
     tabContent.id = 'tab-content';
     tabContent.className = 'tab-content';
@@ -124,41 +199,34 @@ async function loadProductWidget() {
     Object.keys(tabData).forEach((header, tabIndex) => {
       if (tabData[header].length === 0) return; // Skip empty tabs
 
-      // Create tab button
+      // Desktop: Create tab button and section
       const tabButton = document.createElement('button');
       tabButton.textContent = header;
       tabButton.className = tabIndex === 0 ? 'active' : '';
       tabButton.addEventListener('click', () => switchTab(header));
       tabMenu.appendChild(tabButton);
 
-      // Create tab content section (initially hidden except for the first tab)
       const section = document.createElement('div');
       section.className = `tab-section ${tabIndex === 0 ? 'active' : ''}`;
       section.style.display = tabIndex === 0 ? 'block' : 'none';
-      section.innerHTML = tabData[header].join('<br>'); // Combine rows for this tab
+      section.innerHTML = tabData[header].join('<br>');
       section.id = `tab-${header}`;
       tabContent.appendChild(section);
+
+      // Mobile: Create collapsible header and section
+      const mobileHeader = document.createElement('div');
+      mobileHeader.className = 'mobile-header';
+      mobileHeader.textContent = header;
+      mobileHeader.setAttribute('data-header', header);
+      mobileHeader.addEventListener('click', () => toggleMobileSection(header));
+      widgetContainer.appendChild(mobileHeader);
+
+      const mobileSection = document.createElement('div');
+      mobileSection.className = 'mobile-section';
+      mobileSection.innerHTML = tabData[header].join('<br>');
+      mobileSection.setAttribute('data-header', header);
+      widgetContainer.appendChild(mobileSection);
     });
-
-    // Function to switch tabs
-    function switchTab(header) {
-      document.querySelectorAll('.tab-menu button').forEach(btn => btn.classList.remove('active'));
-      document.querySelectorAll('.tab-section').forEach(sec => {
-        sec.style.display = 'none';
-        sec.classList.remove('active');
-      });
-
-      // Activate selected tab
-      const tabButton = Array.from(document.querySelectorAll('.tab-menu button'))
-        .find(btn => btn.textContent === header);
-      if (tabButton) tabButton.classList.add('active');
-
-      const activeSection = document.getElementById(`tab-${header}`);
-      if (activeSection) {
-        activeSection.style.display = 'block';
-        activeSection.classList.add('active');
-      }
-    }
 
     // Append the widget to the specified location
     const targetElement = document.getElementById('ctl00_PageBody_productDetail_RadMultiPage1');
