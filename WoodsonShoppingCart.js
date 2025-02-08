@@ -56,7 +56,10 @@
     // Helper function to get product codes from the cart
     function getCartProductCodes() {
         const cartLines = document.querySelectorAll('[id*="ctl00_PageBody_CartLineControl"]');
-        return Array.from(cartLines).map(line => line.getAttribute('title').trim());
+        return Array.from(cartLines).map(line => {
+            const title = line.getAttribute('title');
+            return title ? title.trim() : null;
+        }).filter(title => title); // Filter out any null values
     }
 
     // Check address and shipping rules
