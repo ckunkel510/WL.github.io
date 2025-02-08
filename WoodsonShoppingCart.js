@@ -1,4 +1,4 @@
-// Function to dynamically update the SubtotalWrapper and handle the TransactionType popup
+// Function to dynamically update the SubtotalWrapper and handle the TransactionType section
 (async function updateShippingMessage() {
     // Select the SubtotalWrapper div
     const subtotalWrapper = document.querySelector('.SubtotalWrapper');
@@ -13,6 +13,56 @@
     shippingMessage.style.marginTop = '10px';
     shippingMessage.style.fontSize = '14px';
     shippingMessage.style.color = '#555';
+
+    // Hide original TransactionTypeDiv and contents
+    const transactionTypeDiv = document.getElementById('ctl00_PageBody_TransactionTypeDiv');
+    if (transactionTypeDiv) transactionTypeDiv.style.display = 'none';
+
+    // Append modern transaction type section
+    const container = document.querySelector('.container');
+    const transactionSection = document.createElement('div');
+    transactionSection.classList.add('modern-transaction-section');
+    transactionSection.innerHTML = `
+        <div class="transaction-content">
+            <h3>Select Transaction Type</h3>
+            <label><input type="radio" name="transactionTypeModern" value="order"> Order</label><br>
+            <label><input type="radio" name="transactionTypeModern" value="quote"> Quote</label><br>
+            <button id="confirmTransactionTypeModern">Confirm</button>
+        </div>
+    `;
+    container.appendChild(transactionSection);
+
+    // Handle transaction type confirmation
+    document.getElementById('confirmTransactionTypeModern').addEventListener('click', () => {
+        const selectedType = document.querySelector('input[name="transactionTypeModern"]:checked');
+        if (selectedType) {
+            const resultSection = document.createElement('div');
+            resultSection.classList.add('transaction-result-section');
+            resultSection.innerHTML = `
+                <p>Transaction Type: ${selectedType.value}</p>
+                <button class="edit-transaction">Edit</button>
+            `;
+            container.appendChild(resultSection);
+
+            // Update original radio button selections to maintain functionality
+            const originalOrderRadio = document.getElementById('ctl00_PageBody_TransactionTypeSelector_rdbOrder');
+            const originalQuoteRadio = document.getElementById('ctl00_PageBody_TransactionTypeSelector_rdbQuote');
+            if (selectedType.value === 'order' && originalOrderRadio) {
+                originalOrderRadio.checked = true;
+            } else if (selectedType.value === 'quote' && originalQuoteRadio) {
+                originalQuoteRadio.checked = true;
+            }
+
+            // Remove the modern transaction section
+            transactionSection.remove();
+
+            // Add event listener for editing the selection
+            resultSection.querySelector('.edit-transaction').addEventListener('click', () => {
+                resultSection.remove();
+                container.appendChild(transactionSection);
+            });
+        }
+    });
 
     // Helper function to fetch and parse user address data
     async function getUserAddress() {
@@ -109,56 +159,4 @@
     // Append the message to the SubtotalWrapper without removing the existing subtotal text
     subtotalWrapper.innerHTML = subtotalText;
     subtotalWrapper.appendChild(shippingMessage);
-
-    // Handle the TransactionType popup with a listener
-    function showTransactionTypePopup() {
-        const popup = document.createElement('div');
-        popup.classList.add('transaction-popup');
-        popup.innerHTML = `
-            <div class="popup-content">
-                <h3>Select Transaction Type</h3>
-                <label><input type="radio" name="transactionType" value="order"> Order</label><br>
-                <label><input type="radio" name="transactionType" value="quote"> Quote</label><br>
-                <button id="confirmTransactionType">Confirm</button>
-            </div>
-        `;
-        document.body.appendChild(popup);
-
-        // Confirm button event listener
-        document.getElementById('confirmTransactionType').addEventListener('click', () => {
-            const selectedType = document.querySelector('input[name="transactionType"]:checked');
-            if (selectedType) {
-                const container = document.querySelector('.container');
-                const transactionSection = document.createElement('div');
-                transactionSection.classList.add('transaction-section');
-                transactionSection.innerHTML = `
-                    <p>Transaction Type: ${selectedType.value}</p>
-                    <button class="edit-transaction">Edit</button>
-                `;
-                container.appendChild(transactionSection);
-
-                // Remove the popup after selection
-                popup.remove();
-
-                // Add event listener for editing the selection
-                transactionSection.querySelector('.edit-transaction').addEventListener('click', showTransactionTypePopup);
-            }
-        });
-    }
-
-    // Monitor for the presence of the TransactionTypeDiv
-    const monitorInterval = setInterval(() => {
-        try {
-            const transactionTypeDiv = document.getElementById('ctl00_PageBody_TransactionTypeDiv');
-            if (transactionTypeDiv) {
-                console.log('TransactionTypeDiv found'); // Log success
-                clearInterval(monitorInterval);
-                showTransactionTypePopup();
-            } else {
-                console.log('TransactionTypeDiv not found yet'); // Log retry
-            }
-        } catch (error) {
-            console.error('Error during transaction type monitoring:', error);
-        }
-    }, 500); // Check every 500 milliseconds
 })();
