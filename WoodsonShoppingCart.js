@@ -110,55 +110,68 @@
     subtotalWrapper.innerHTML = subtotalText;
     subtotalWrapper.appendChild(shippingMessage);
 
-    // Handle the TransactionType section if the div is available
-    const transactionTypeDiv = document.getElementById('ctl00_PageBody_TransactionTypeDiv');
-    if (transactionTypeDiv) {
-        transactionTypeDiv.style.display = 'none';
+    // Helper function to handle transaction type section
+    function handleTransactionTypeSection() {
+        const transactionTypeDiv = document.getElementById('ctl00_PageBody_TransactionTypeDiv');
+        if (transactionTypeDiv) {
+            transactionTypeDiv.style.display = 'none';
 
-        // Append modern transaction type section
-        const container = document.querySelector('.container');
-        const transactionSection = document.createElement('div');
-        transactionSection.classList.add('modern-transaction-section');
-        transactionSection.innerHTML = `
-            <div class="transaction-content">
-                <h3>Select Transaction Type</h3>
-                <label><input type="radio" name="transactionTypeModern" value="order"> Order</label><br>
-                <label><input type="radio" name="transactionTypeModern" value="quote"> Quote</label><br>
-                <button id="confirmTransactionTypeModern">Confirm</button>
-            </div>
-        `;
-        container.appendChild(transactionSection);
+            // Append modern transaction type section
+            const container = document.querySelector('.container');
+            const transactionSection = document.createElement('div');
+            transactionSection.classList.add('modern-transaction-section');
+            transactionSection.innerHTML = `
+                <div class="transaction-content">
+                    <h3>Select Transaction Type</h3>
+                    <label><input type="radio" name="transactionTypeModern" value="order"> Order</label><br>
+                    <label><input type="radio" name="transactionTypeModern" value="quote"> Quote</label><br>
+                    <button id="confirmTransactionTypeModern">Confirm</button>
+                </div>
+            `;
+            container.appendChild(transactionSection);
 
-        // Handle transaction type confirmation
-        document.getElementById('confirmTransactionTypeModern').addEventListener('click', () => {
-            const selectedType = document.querySelector('input[name="transactionTypeModern"]:checked');
-            if (selectedType) {
-                const resultSection = document.createElement('div');
-                resultSection.classList.add('transaction-result-section');
-                resultSection.innerHTML = `
-                    <p>Transaction Type: ${selectedType.value}</p>
-                    <button class="edit-transaction">Edit</button>
-                `;
-                container.appendChild(resultSection);
+            // Handle transaction type confirmation
+            document.getElementById('confirmTransactionTypeModern').addEventListener('click', () => {
+                const selectedType = document.querySelector('input[name="transactionTypeModern"]:checked');
+                if (selectedType) {
+                    const resultSection = document.createElement('div');
+                    resultSection.classList.add('transaction-result-section');
+                    resultSection.innerHTML = `
+                        <p>Transaction Type: ${selectedType.value}</p>
+                        <button class="edit-transaction">Edit</button>
+                    `;
+                    container.appendChild(resultSection);
 
-                // Update original radio button selections to maintain functionality
-                const originalOrderRadio = document.getElementById('ctl00_PageBody_TransactionTypeSelector_rdbOrder');
-                const originalQuoteRadio = document.getElementById('ctl00_PageBody_TransactionTypeSelector_rdbQuote');
-                if (selectedType.value === 'order' && originalOrderRadio) {
-                    originalOrderRadio.checked = true;
-                } else if (selectedType.value === 'quote' && originalQuoteRadio) {
-                    originalQuoteRadio.checked = true;
+                    // Update original radio button selections to maintain functionality
+                    const originalOrderRadio = document.getElementById('ctl00_PageBody_TransactionTypeSelector_rdbOrder');
+                    const originalQuoteRadio = document.getElementById('ctl00_PageBody_TransactionTypeSelector_rdbQuote');
+                    if (selectedType.value === 'order' && originalOrderRadio) {
+                        originalOrderRadio.checked = true;
+                    } else if (selectedType.value === 'quote' && originalQuoteRadio) {
+                        originalQuoteRadio.checked = true;
+                    }
+
+                    // Remove the modern transaction section
+                    transactionSection.remove();
+
+                    // Add event listener for editing the selection
+                    resultSection.querySelector('.edit-transaction').addEventListener('click', () => {
+                        resultSection.remove();
+                        container.appendChild(transactionSection);
+                    });
                 }
-
-                // Remove the modern transaction section
-                transactionSection.remove();
-
-                // Add event listener for editing the selection
-                resultSection.querySelector('.edit-transaction').addEventListener('click', () => {
-                    resultSection.remove();
-                    container.appendChild(transactionSection);
-                });
-            }
-        });
+            });
+        }
     }
+
+    // Mutation observer to detect changes in the DOM
+    const observer = new MutationObserver(() => {
+        if (document.getElementById('ctl00_PageBody_TransactionTypeDiv')) {
+            observer.disconnect(); // Stop observing once the div is found
+            handleTransactionTypeSection();
+        }
+    });
+
+    // Start observing the entire body for changes
+    observer.observe(document.body, { childList: true, subtree: true });
 })();
