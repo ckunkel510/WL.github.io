@@ -148,10 +148,17 @@
 
     // Monitor for the presence of the TransactionTypeDiv
     const monitorInterval = setInterval(() => {
-        const transactionTypeDiv = document.getElementById('ctl00_PageBody_TransactionTypeDiv');
-        if (transactionTypeDiv) {
-            clearInterval(monitorInterval);
-            showTransactionTypePopup();
+        try {
+            const transactionTypeDiv = document.getElementById('ctl00_PageBody_TransactionTypeDiv');
+            if (transactionTypeDiv) {
+                console.log('TransactionTypeDiv found'); // Log success
+                clearInterval(monitorInterval);
+                showTransactionTypePopup();
+            } else {
+                console.log('TransactionTypeDiv not found yet'); // Log retry
+            }
+        } catch (error) {
+            console.error('Error during transaction type monitoring:', error);
         }
     }, 500); // Check every 500 milliseconds
 })();
