@@ -1,4 +1,4 @@
-// Function to dynamically update the SubtotalWrapper
+// Function to dynamically update the SubtotalWrapper and handle the TransactionType popup
 (async function updateShippingMessage() {
     // Select the SubtotalWrapper div
     const subtotalWrapper = document.querySelector('.SubtotalWrapper');
@@ -109,4 +109,43 @@
     // Append the message to the SubtotalWrapper without removing the existing subtotal text
     subtotalWrapper.innerHTML = subtotalText;
     subtotalWrapper.appendChild(shippingMessage);
+
+    // Handle the TransactionType popup
+    function showTransactionTypePopup() {
+        const popup = document.createElement('div');
+        popup.classList.add('transaction-popup');
+        popup.innerHTML = `
+            <div class="popup-content">
+                <h3>Select Transaction Type</h3>
+                <label><input type="radio" name="transactionType" value="order"> Order</label><br>
+                <label><input type="radio" name="transactionType" value="quote"> Quote</label><br>
+                <button id="confirmTransactionType">Confirm</button>
+            </div>
+        `;
+        document.body.appendChild(popup);
+
+        // Confirm button event listener
+        document.getElementById('confirmTransactionType').addEventListener('click', () => {
+            const selectedType = document.querySelector('input[name="transactionType"]:checked');
+            if (selectedType) {
+                const container = document.querySelector('.container');
+                const transactionSection = document.createElement('div');
+                transactionSection.classList.add('transaction-section');
+                transactionSection.innerHTML = `
+                    <p>Transaction Type: ${selectedType.value}</p>
+                    <button class="edit-transaction">Edit</button>
+                `;
+                container.appendChild(transactionSection);
+
+                // Remove the popup after selection
+                popup.remove();
+
+                // Add event listener for editing the selection
+                transactionSection.querySelector('.edit-transaction').addEventListener('click', showTransactionTypePopup);
+            }
+        });
+    }
+
+    // Show the popup initially
+    showTransactionTypePopup();
 })();
