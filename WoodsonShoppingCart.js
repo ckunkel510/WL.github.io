@@ -14,56 +14,6 @@
     shippingMessage.style.fontSize = '14px';
     shippingMessage.style.color = '#555';
 
-    // Hide original TransactionTypeDiv and contents
-    const transactionTypeDiv = document.getElementById('ctl00_PageBody_TransactionTypeDiv');
-    if (transactionTypeDiv) transactionTypeDiv.style.display = 'none';
-
-    // Append modern transaction type section
-    const container = document.querySelector('.container');
-    const transactionSection = document.createElement('div');
-    transactionSection.classList.add('modern-transaction-section');
-    transactionSection.innerHTML = `
-        <div class="transaction-content">
-            <h3>Select Transaction Type</h3>
-            <label><input type="radio" name="transactionTypeModern" value="order"> Order</label><br>
-            <label><input type="radio" name="transactionTypeModern" value="quote"> Quote</label><br>
-            <button id="confirmTransactionTypeModern">Confirm</button>
-        </div>
-    `;
-    container.appendChild(transactionSection);
-
-    // Handle transaction type confirmation
-    document.getElementById('confirmTransactionTypeModern').addEventListener('click', () => {
-        const selectedType = document.querySelector('input[name="transactionTypeModern"]:checked');
-        if (selectedType) {
-            const resultSection = document.createElement('div');
-            resultSection.classList.add('transaction-result-section');
-            resultSection.innerHTML = `
-                <p>Transaction Type: ${selectedType.value}</p>
-                <button class="edit-transaction">Edit</button>
-            `;
-            container.appendChild(resultSection);
-
-            // Update original radio button selections to maintain functionality
-            const originalOrderRadio = document.getElementById('ctl00_PageBody_TransactionTypeSelector_rdbOrder');
-            const originalQuoteRadio = document.getElementById('ctl00_PageBody_TransactionTypeSelector_rdbQuote');
-            if (selectedType.value === 'order' && originalOrderRadio) {
-                originalOrderRadio.checked = true;
-            } else if (selectedType.value === 'quote' && originalQuoteRadio) {
-                originalQuoteRadio.checked = true;
-            }
-
-            // Remove the modern transaction section
-            transactionSection.remove();
-
-            // Add event listener for editing the selection
-            resultSection.querySelector('.edit-transaction').addEventListener('click', () => {
-                resultSection.remove();
-                container.appendChild(transactionSection);
-            });
-        }
-    });
-
     // Helper function to fetch and parse user address data
     async function getUserAddress() {
         try {
@@ -159,4 +109,56 @@
     // Append the message to the SubtotalWrapper without removing the existing subtotal text
     subtotalWrapper.innerHTML = subtotalText;
     subtotalWrapper.appendChild(shippingMessage);
+
+    // Handle the TransactionType section if the div is available
+    const transactionTypeDiv = document.getElementById('ctl00_PageBody_TransactionTypeDiv');
+    if (transactionTypeDiv) {
+        transactionTypeDiv.style.display = 'none';
+
+        // Append modern transaction type section
+        const container = document.querySelector('.container');
+        const transactionSection = document.createElement('div');
+        transactionSection.classList.add('modern-transaction-section');
+        transactionSection.innerHTML = `
+            <div class="transaction-content">
+                <h3>Select Transaction Type</h3>
+                <label><input type="radio" name="transactionTypeModern" value="order"> Order</label><br>
+                <label><input type="radio" name="transactionTypeModern" value="quote"> Quote</label><br>
+                <button id="confirmTransactionTypeModern">Confirm</button>
+            </div>
+        `;
+        container.appendChild(transactionSection);
+
+        // Handle transaction type confirmation
+        document.getElementById('confirmTransactionTypeModern').addEventListener('click', () => {
+            const selectedType = document.querySelector('input[name="transactionTypeModern"]:checked');
+            if (selectedType) {
+                const resultSection = document.createElement('div');
+                resultSection.classList.add('transaction-result-section');
+                resultSection.innerHTML = `
+                    <p>Transaction Type: ${selectedType.value}</p>
+                    <button class="edit-transaction">Edit</button>
+                `;
+                container.appendChild(resultSection);
+
+                // Update original radio button selections to maintain functionality
+                const originalOrderRadio = document.getElementById('ctl00_PageBody_TransactionTypeSelector_rdbOrder');
+                const originalQuoteRadio = document.getElementById('ctl00_PageBody_TransactionTypeSelector_rdbQuote');
+                if (selectedType.value === 'order' && originalOrderRadio) {
+                    originalOrderRadio.checked = true;
+                } else if (selectedType.value === 'quote' && originalQuoteRadio) {
+                    originalQuoteRadio.checked = true;
+                }
+
+                // Remove the modern transaction section
+                transactionSection.remove();
+
+                // Add event listener for editing the selection
+                resultSection.querySelector('.edit-transaction').addEventListener('click', () => {
+                    resultSection.remove();
+                    container.appendChild(transactionSection);
+                });
+            }
+        });
+    }
 })();
