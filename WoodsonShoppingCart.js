@@ -110,7 +110,7 @@
     subtotalWrapper.innerHTML = subtotalText;
     subtotalWrapper.appendChild(shippingMessage);
 
-    // Handle the TransactionType popup
+    // Handle the TransactionType popup with a listener
     function showTransactionTypePopup() {
         const popup = document.createElement('div');
         popup.classList.add('transaction-popup');
@@ -146,6 +146,12 @@
         });
     }
 
-    // Show the popup initially
-    showTransactionTypePopup();
+    // Monitor for the presence of the TransactionTypeDiv
+    const monitorInterval = setInterval(() => {
+        const transactionTypeDiv = document.getElementById('ctl00_PageBody_TransactionTypeDiv');
+        if (transactionTypeDiv) {
+            clearInterval(monitorInterval);
+            showTransactionTypePopup();
+        }
+    }, 500); // Check every 500 milliseconds
 })();
