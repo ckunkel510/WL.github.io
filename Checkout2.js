@@ -5,44 +5,46 @@ $(document).ready(function() {
     // Hide the original transaction type input content
     $('#ctl00_PageBody_TransactionTypeInput, .TransactionTypeSelector').hide();
 
-    // Create and append modern transaction type selector
-    const modernTransactionSelector = `
-        <div class="modern-transaction-selector d-flex justify-content-around">
-            <button id="btnOrder" class="btn btn-primary" data-value="rdbOrder">
-                <i class="fas fa-shopping-cart"></i> Order
-            </button>
-            <button id="btnQuote" class="btn btn-secondary" data-value="rdbQuote">
-                <i class="fas fa-file-alt"></i> Request Quote
-            </button>
-        </div>
-    `;
-    $('#ctl00_PageBody_TransactionTypeDiv').append(modernTransactionSelector);
+    // Ensure transaction type div exists before appending
+    if ($('#ctl00_PageBody_TransactionTypeDiv').length) {
+        const modernTransactionSelector = `
+            <div class="modern-transaction-selector d-flex justify-content-around">
+                <button id="btnOrder" class="btn btn-primary" data-value="rdbOrder">
+                    <i class="fas fa-shopping-cart"></i> Order
+                </button>
+                <button id="btnQuote" class="btn btn-secondary" data-value="rdbQuote">
+                    <i class="fas fa-file-alt"></i> Request Quote
+                </button>
+            </div>
+        `;
+        $('#ctl00_PageBody_TransactionTypeDiv').append(modernTransactionSelector);
 
-    // Transaction type button event handling
-    function updateTransactionStyles(selectedValue) {
-        console.log(`Transaction type updated: ${selectedValue}`);
-        if (selectedValue === 'rdbOrder') {
-            $('#ctl00_PageBody_TransactionTypeSelector_rdbOrder').prop('checked', true);
-            $('#btnOrder').removeClass('btn-secondary').addClass('btn-primary');
-            $('#btnQuote').removeClass('btn-primary').addClass('btn-secondary');
-        } else if (selectedValue === 'rdbQuote') {
-            $('#ctl00_PageBody_TransactionTypeSelector_rdbQuote').prop('checked', true);
-            $('#btnQuote').removeClass('btn-secondary').addClass('btn-primary');
-            $('#btnOrder').removeClass('btn-primary').addClass('btn-secondary');
+        function updateTransactionStyles(selectedValue) {
+            console.log(`Transaction type updated: ${selectedValue}`);
+            if (selectedValue === 'rdbOrder') {
+                $('#ctl00_PageBody_TransactionTypeSelector_rdbOrder').prop('checked', true);
+                $('#btnOrder').removeClass('btn-secondary').addClass('btn-primary');
+                $('#btnQuote').removeClass('btn-primary').addClass('btn-secondary');
+            } else if (selectedValue === 'rdbQuote') {
+                $('#ctl00_PageBody_TransactionTypeSelector_rdbQuote').prop('checked', true);
+                $('#btnQuote').removeClass('btn-secondary').addClass('btn-primary');
+                $('#btnOrder').removeClass('btn-primary').addClass('btn-secondary');
+            }
         }
-    }
 
-    // Initial transaction type update
-    if ($('#ctl00_PageBody_TransactionTypeSelector_rdbOrder').is(':checked')) {
-        updateTransactionStyles('rdbOrder');
-    } else if ($('#ctl00_PageBody_TransactionTypeSelector_rdbQuote').is(':checked')) {
-        updateTransactionStyles('rdbQuote');
-    }
+        if ($('#ctl00_PageBody_TransactionTypeSelector_rdbOrder').is(':checked')) {
+            updateTransactionStyles('rdbOrder');
+        } else if ($('#ctl00_PageBody_TransactionTypeSelector_rdbQuote').is(':checked')) {
+            updateTransactionStyles('rdbQuote');
+        }
 
-    $('.modern-transaction-selector button').on('click', function() {
-        const selectedValue = $(this).data('value');
-        updateTransactionStyles(selectedValue);
-    });
+        $('.modern-transaction-selector button').on('click', function() {
+            const selectedValue = $(this).data('value');
+            updateTransactionStyles(selectedValue);
+        });
+    } else {
+        console.warn('Transaction type div not found.');
+    }
 
     // Hide original shipping method input and add modern buttons
     if ($('.SaleTypeSelector').length) {
@@ -96,7 +98,7 @@ $(document).ready(function() {
                 <input type="text" id="modernDateInput" class="form-control" placeholder="Select a date">
             </div>
         `;
-        $('.epi-form-col-single-checkout:has(#ctl00_PageBody_dtRequired_DatePicker_wrapper)').append(modernDateSelector);
+        $('#ctl00_PageBody_dtRequired_DatePicker_wrapper').parent().append(modernDateSelector);
 
         $('#modernDateInput').datepicker({
             dateFormat: 'mm/dd/yy',
