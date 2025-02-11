@@ -116,9 +116,17 @@ $(document).ready(function() {
             const addressParts = selectedAddress.split(',').map(part => part.trim());
             const addressLine1 = addressParts[0] || '';
             const city = addressParts[1] || '';
-            const stateAndZip = addressParts[2] || '';
-            const state = stateAndZip.split(' ')[0] || '';  // Extract state from the last part
-            const zipCode = stateAndZip.split(' ')[1] || ''; // Extract zip code
+            let state = '', zipCode = '';
+
+            if (addressParts.length > 2) {
+                const stateZipParts = addressParts[2].split(/\s+/).filter(Boolean);
+                if (stateZipParts.length >= 2) {
+                    state = stateZipParts[0];  // First element is the state
+                    zipCode = stateZipParts.slice(1).join(' ');  // Remaining part is the zip code
+                } else {
+                    state = stateZipParts[0];
+                }
+            }
 
             console.log(`Parsed Address -> Line 1: ${addressLine1}, City: ${city}, State: ${state}, Zip: ${zipCode}`);
 
