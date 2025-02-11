@@ -1,8 +1,7 @@
 // When the transaction type div is loaded
 $(document).ready(function() {
-    // Hide the original transaction type input content and the entire div structure
-    $('#ctl00_PageBody_TransactionTypeInput').hide();
-    $('#ctl00_PageBody_TransactionTypeDiv > div:not(:first-child)').hide();
+    // Hide the original transaction type input content and all children of the transaction type div except for the label
+    $('#ctl00_PageBody_TransactionTypeInput, .TransactionTypeSelector').hide();
 
     // Create modern buttons to replace the radio buttons visually
     const modernSelector = `
