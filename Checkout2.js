@@ -1,14 +1,15 @@
 $(document).ready(function() {
     console.log('Page loaded, initializing custom checkout experience...');
 
-    // Global variable to hold the selected shipping address text.
-    var shippingAddress = "";
+    // --------------------------
+    // Hide all address input fields by default
+    // --------------------------
+    $('#ctl00_PageBody_DeliveryAddress_AddressLine1, #ctl00_PageBody_DeliveryAddress_City, #ctl00_PageBody_DeliveryAddress_Postcode, #ctl00_PageBody_DeliveryAddress_CountrySelector, #ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox, #ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox, #ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').hide();
+    $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox, #ctl00_PageBody_InvoiceAddress_AddressLine1, #ctl00_PageBody_InvoiceAddress_City, #ctl00_PageBody_InvoiceAddress_CountySelector_CountyList, #ctl00_PageBody_InvoiceAddress_Postcode, #ctl00_PageBody_InvoiceAddress_CountrySelector1').hide();
 
-    // Hide the original transaction type input content
-    $('#ctl00_PageBody_TransactionTypeInput').hide();
-    $('.TransactionTypeSelector').hide();
-
-    // --- Transaction Type Section ---
+    // --------------------------
+    // Transaction Type Section
+    // --------------------------
     if ($('#ctl00_PageBody_TransactionTypeDiv').length) {
         const modernTransactionSelector = `
             <div class="modern-transaction-selector d-flex justify-content-around">
@@ -47,7 +48,9 @@ $(document).ready(function() {
         console.warn('Transaction type div not found.');
     }
 
-    // --- Shipping Method Section ---
+    // --------------------------
+    // Shipping Method Section
+    // --------------------------
     if ($('.SaleTypeSelector').length) {
         $('.SaleTypeSelector').hide();
         const modernShippingSelector = `
@@ -87,7 +90,12 @@ $(document).ready(function() {
         console.warn('Shipping method selector not found.');
     }
 
-    // --- Address Selector Behavior ---
+    // --------------------------
+    // Address Selector Behavior
+    // --------------------------
+    // Global variable to hold the selected shipping address text (for label display)
+    var shippingAddress = "";
+
     if ($('#ctl00_PageBody_CustomerAddressSelector_SelectAddressLinkButton').length) {
         console.log('Initializing address selector behavior...');
 
@@ -96,7 +104,6 @@ $(document).ready(function() {
         if (addressEntries.length > 0) {
             let smallestIdEntry = addressEntries.first();
             let smallestId = parseInt(smallestIdEntry.find('.AddressId').text().trim(), 10);
-
             addressEntries.each(function() {
                 const currentId = parseInt($(this).find('.AddressId').text().trim(), 10);
                 if (currentId < smallestId) {
@@ -105,12 +112,12 @@ $(document).ready(function() {
                 }
             });
 
-            // Get the selected address text and store it for later use
+            // Get the selected address text and store it
             const selectedAddress = smallestIdEntry.find('dd p').first().text().trim();
             shippingAddress = selectedAddress;
             console.log(`Smallest ID address selected: ${selectedAddress}`);
 
-            // Parse address components: Address Line 1, City, State, Zip Code
+            // Parse address components
             const addressParts = selectedAddress.split(',').map(part => part.trim());
             const addressLine1 = addressParts[0] || '';
             const city = addressParts[1] || '';
@@ -133,13 +140,13 @@ $(document).ready(function() {
             $('#ctl00_PageBody_DeliveryAddress_Postcode').val(zipCode);
             $('#ctl00_PageBody_DeliveryAddress_CountrySelector').val('USA');
 
-            // Find the Delivery section (by looking for a container with a "SelectableAddressType" of "Delivery")
+            // Find the Delivery section (based on the text "Delivery" in a .SelectableAddressType)
             const deliverySection = $('.epi-form-col-single-checkout').filter(function() {
                 return $(this).find('.SelectableAddressType').text().trim() === 'Delivery';
             });
 
             if (deliverySection.length) {
-                // Set the dropdown value for state
+                // Set the dropdown value for state if needed
                 const stateDropdown = $('#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList');
                 if (stateDropdown.length) {
                     const matchedOption = stateDropdown.find('option').filter(function() {
@@ -158,19 +165,22 @@ $(document).ready(function() {
                     }
                 }
 
-                // Hide the address input fields
+                // Hide the delivery address input fields (they are already hidden by default)
                 deliverySection.find('.epi-form-group-checkout').hide();
 
-                // Remove any existing display of the delivery address
+                // Remove any existing delivery address label display
                 $('.selected-address-display').remove();
 
-                // Append the shipping label (Delivery Address) after the second-to-last .epi-form-col-single-checkout element
+                // Append the Delivery Address label (shipping label) along with an Edit button
                 var $checkoutDivs = $('.epi-form-col-single-checkout');
                 if ($checkoutDivs.length >= 2) {
                     $checkoutDivs.eq($checkoutDivs.length - 2).after(
-                        `<div class="selected-address-display mt-2"><strong>Delivery Address:</strong><br>${shippingAddress}</div>`
+                        `<div class="selected-address-display mt-2">
+                            <strong>Delivery Address:</strong><br>${shippingAddress}
+                            <button type="button" id="editDeliveryAddressButton" class="edit-button">Edit Delivery Address</button>
+                         </div>`
                     );
-                    // Append the Billing Address section immediately after the Delivery Address block
+                    // Append the Billing Address section (radio button)
                     var billingSectionHtml = `
                         <div class="billing-address-section mt-2">
                             <label>
@@ -180,6 +190,13 @@ $(document).ready(function() {
                         </div>
                     `;
                     $('.selected-address-display').last().after(billingSectionHtml);
+                    // Append the Invoice Address label section (initially empty) with an Edit button
+                    $('.billing-address-section').after(
+                        `<div class="selected-invoice-address-display mt-2">
+                            <strong>Invoice Address:</strong><br>
+                            <button type="button" id="editInvoiceAddressButton" class="edit-button">Edit Invoice Address</button>
+                         </div>`
+                    );
                 } else {
                     console.warn('Not enough .epi-form-col-single-checkout elements found.');
                 }
@@ -188,27 +205,28 @@ $(document).ready(function() {
             }
         }
 
-        // Add a button to allow adding a new address (existing functionality)
+        // Add a button to allow adding a new address
         const addNewAddressButton = `
             <li class="AddressSelectorEntry text-center">
                 <button id="btnAddNewAddress" class="btn btn-secondary">Add New Address</button>
             </li>
         `;
         $('.AddressSelectorList').append(addNewAddressButton);
-        $('#btnAddNewAddress').on('click', function() {
-            console.log('Add New Address button clicked');
-            const deliverySection = $('.epi-form-col-single-checkout').filter(function() {
-                return $(this).find('.SelectableAddressType').text().trim() === 'Delivery';
-            });
-            deliverySection.find('.epi-form-group-checkout').show();
+        $(document).on('click', '#btnAddNewAddress', function() {
+            // Show all delivery and invoice input fields
+            $('#ctl00_PageBody_DeliveryAddress_AddressLine1, #ctl00_PageBody_DeliveryAddress_City, #ctl00_PageBody_DeliveryAddress_Postcode, #ctl00_PageBody_DeliveryAddress_CountrySelector, #ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox, #ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox, #ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').show();
+            $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox, #ctl00_PageBody_InvoiceAddress_AddressLine1, #ctl00_PageBody_InvoiceAddress_City, #ctl00_PageBody_InvoiceAddress_CountySelector_CountyList, #ctl00_PageBody_InvoiceAddress_Postcode, #ctl00_PageBody_InvoiceAddress_CountrySelector1').show();
             $('.AddressSelectorList').hide();
-            $('.selected-address-display').remove();
+            // Optionally remove the labels so the user can enter new information
+            $('.selected-address-display, .billing-address-section, .selected-invoice-address-display').remove();
         });
     } else {
         console.warn('Address selector link button not found.');
     }
 
-    // --- Account Settings Fetch ---
+    // --------------------------
+    // Account Settings Fetch
+    // --------------------------
     $.get("https://webtrack.woodsonlumber.com/AccountSettings.aspx", function(data) {
         var $accountPage = $(data);
         var firstName = $accountPage.find('#ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput').val() || '';
@@ -216,29 +234,33 @@ $(document).ready(function() {
         var emailStr  = $accountPage.find('#ctl00_PageBody_ChangeUserDetailsControl_EmailAddressInput').val() || '';
         var parsedEmail = emailStr.replace(/^\([^)]*\)\s*/, '');
         console.log("Fetched account settings:", firstName, lastName, parsedEmail);
+
         // Update the delivery contact fields and the invoice email field
         $('#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox').val(firstName);
         $('#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox').val(lastName);
         $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox').val(parsedEmail);
 
-        // Also update the shipping label display to include the contact's name
+        // Also update the delivery address label to include the contact's name
         if ($('.selected-address-display').length) {
             $('.selected-address-display').html(
-                `<strong>Delivery Address:</strong><br>${firstName} ${lastName}<br>${shippingAddress}`
+                `<strong>Delivery Address:</strong><br>${firstName} ${lastName}<br>${shippingAddress}
+                 <button type="button" id="editDeliveryAddressButton" class="edit-button">Edit Delivery Address</button>`
             );
         }
     });
 
-    // --- Telephone Fetch ---
+    // --------------------------
+    // Telephone Fetch
+    // --------------------------
     $.get("https://webtrack.woodsonlumber.com/AccountInfo_R.aspx", function(data) {
         var telephone = $(data).find('#ctl00_PageBody_TelephoneLink_TelephoneLink').text().trim();
         console.log("Fetched telephone:", telephone);
         $('#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').val(telephone);
     });
 
-    // --- Billing Address Radio Button Handler ---
-    // When the "Billing address is the same as delivery address" radio button is checked,
-    // copy the corresponding values from the delivery address fields to the invoice address fields.
+    // --------------------------
+    // Billing Address Radio Button Handler
+    // --------------------------
     $(document).on('change', '#billingAddressRadio', function() {
         if ($(this).is(':checked')) {
             $('#ctl00_PageBody_InvoiceAddress_AddressLine1').val($('#ctl00_PageBody_DeliveryAddress_AddressLine1').val());
@@ -246,10 +268,30 @@ $(document).ready(function() {
             $('#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList').val($('#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList').val());
             $('#ctl00_PageBody_InvoiceAddress_Postcode').val($('#ctl00_PageBody_DeliveryAddress_Postcode').val());
             $('#ctl00_PageBody_InvoiceAddress_CountrySelector1').val($('#ctl00_PageBody_DeliveryAddress_CountrySelector').val());
+
+            // Optionally update the invoice address label display if desired:
+            var invoiceDisplay = `<strong>Invoice Address:</strong><br>` +
+                $('#ctl00_PageBody_DeliveryAddress_AddressLine1').val() + `<br>` +
+                $('#ctl00_PageBody_DeliveryAddress_City').val() + `<br>` +
+                $('#ctl00_PageBody_DeliveryAddress_Postcode').val();
+            $('.selected-invoice-address-display').html(invoiceDisplay +
+                `<button type="button" id="editInvoiceAddressButton" class="edit-button">Edit Invoice Address</button>`);
         }
     });
 
-    // --- Date Picker (unchanged) ---
+    // --------------------------
+    // Edit Buttons Handlers
+    // --------------------------
+    $(document).on('click', '#editDeliveryAddressButton', function() {
+        $('#ctl00_PageBody_DeliveryAddress_AddressLine1, #ctl00_PageBody_DeliveryAddress_City, #ctl00_PageBody_DeliveryAddress_Postcode, #ctl00_PageBody_DeliveryAddress_CountrySelector, #ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox, #ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox, #ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').show();
+    });
+    $(document).on('click', '#editInvoiceAddressButton', function() {
+        $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox, #ctl00_PageBody_InvoiceAddress_AddressLine1, #ctl00_PageBody_InvoiceAddress_City, #ctl00_PageBody_InvoiceAddress_CountySelector_CountyList, #ctl00_PageBody_InvoiceAddress_Postcode, #ctl00_PageBody_InvoiceAddress_CountrySelector1').show();
+    });
+
+    // --------------------------
+    // Date Picker (unchanged)
+    // --------------------------
     if ($('#ctl00_PageBody_dtRequired_DatePicker_wrapper').length) {
         console.log('Date selector found, no modifications made to the date field.');
     } else {
