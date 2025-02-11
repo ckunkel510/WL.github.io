@@ -234,4 +234,28 @@ $(document).ready(function() {
                 deliveryCity + `<br>` +
                 deliveryPostcode;
             $('.selected-invoice-address-display').html(invoiceDisplay +
-                `<br><button type="button" id="editInvoiceAddressBut
+                `<br><button type="button" id="editInvoiceAddressButton" class="edit-button">Edit Invoice Address</button>`);
+        }
+    });
+
+    // --------------------------
+    // Edit Buttons Handlers (Using explicit inline-block)
+    // --------------------------
+    $(document).on('click', '#editDeliveryAddressButton', function() {
+        console.log("Edit Delivery Address button clicked.");
+        $('#ctl00_PageBody_DeliveryAddress_AddressLine1, #ctl00_PageBody_DeliveryAddress_City, #ctl00_PageBody_DeliveryAddress_Postcode, #ctl00_PageBody_DeliveryAddress_CountrySelector, #ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox, #ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox, #ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').css('display', 'inline-block');
+    });
+    $(document).on('click', '#editInvoiceAddressButton', function() {
+        console.log("Edit Invoice Address button clicked.");
+        $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox, #ctl00_PageBody_InvoiceAddress_AddressLine1, #ctl00_PageBody_InvoiceAddress_City, #ctl00_PageBody_InvoiceAddress_CountySelector_CountyList, #ctl00_PageBody_InvoiceAddress_Postcode, #ctl00_PageBody_InvoiceAddress_CountrySelector1').css('display', 'inline-block');
+    });
+
+    // --------------------------
+    // Date Picker (unchanged)
+    // --------------------------
+    if ($('#ctl00_PageBody_dtRequired_DatePicker_wrapper').length) {
+        console.log('Date selector found, no modifications made to the date field.');
+    } else {
+        console.warn('Date picker wrapper not found.');
+    }
+});
