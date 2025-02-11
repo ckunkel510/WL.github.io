@@ -2,9 +2,9 @@ $(document).ready(function() {
     console.log('Page loaded, initializing custom checkout experience...');
 
     // ===================================================
-    // 1. Hide all input fields by default via .epi-form-group-checkout
+    // 1. Hide all input fields by default using .hide() on the container class.
     // ===================================================
-    // (This hides all the address input groups so they are not visible initially.)
+    // This will hide every element within any container that has the class "epi-form-group-checkout"
     $('.epi-form-group-checkout').hide();
 
     // ===================================================
@@ -110,7 +110,7 @@ $(document).ready(function() {
             shippingAddress = smallestIdEntry.find('dd p').first().text().trim();
             console.log(`Smallest ID address selected: ${shippingAddress}`);
 
-            // Parse address components.
+            // Parse address components from the selected address.
             const parts = shippingAddress.split(',').map(s => s.trim());
             const addressLine1 = parts[0] || '';
             const city = parts[1] || '';
@@ -136,6 +136,7 @@ $(document).ready(function() {
             // Append read-only display containers to the 6th and 7th .epi-form-col-single-checkout elements if not already present.
             var $checkoutDivs = $('.epi-form-col-single-checkout');
             if ($checkoutDivs.length >= 7) {
+                // Append Delivery Address read-only container if it doesn't already exist.
                 if ($checkoutDivs.eq(5).find('.selected-address-display').length === 0) {
                     $checkoutDivs.eq(5).append(`
                         <div class="selected-address-display">
@@ -144,6 +145,7 @@ $(document).ready(function() {
                         </div>
                     `);
                 }
+                // Append Invoice Address container (with billing radio) if it doesn't already exist.
                 if ($checkoutDivs.eq(6).find('.billing-address-section').length === 0) {
                     $checkoutDivs.eq(6).append(`
                         <div class="billing-address-section">
@@ -162,7 +164,8 @@ $(document).ready(function() {
                 console.warn('Not enough .epi-form-col-single-checkout elements found.');
             }
         }
-        // "Add New Address" button reveals the hidden input fields.
+
+        // "Add New Address" button to reveal the hidden input fields.
         const addNewAddressButton = `
             <li class="AddressSelectorEntry text-center">
                 <button id="btnAddNewAddress" class="btn btn-secondary">Add New Address</button>
@@ -170,7 +173,8 @@ $(document).ready(function() {
         `;
         $('.AddressSelectorList').append(addNewAddressButton);
         $(document).on('click', '#btnAddNewAddress', function() {
-            $('.epi-form-group-checkout').css('display', 'inline-block');
+            // Show all input fields by showing the container with class .epi-form-group-checkout.
+            $('.epi-form-group-checkout').show();
             $('.AddressSelectorList').hide();
         });
     } else {
@@ -178,13 +182,7 @@ $(document).ready(function() {
     }
 
     // ===================================================
-    // 5. (Remove External Edit Buttons)
-    // ===================================================
-    // External edit buttons have been removed per requirements.
-    // Only the internal edit buttons (inside the read-only displays) will be used.
-
-    // ===================================================
-    // 6. Account Settings Fetch
+    // 5. Account Settings Fetch
     // ===================================================
     $.get("https://webtrack.woodsonlumber.com/AccountSettings.aspx", function(data) {
         var $accountPage = $(data);
@@ -208,7 +206,7 @@ $(document).ready(function() {
     });
 
     // ===================================================
-    // 7. Telephone Fetch
+    // 6. Telephone Fetch
     // ===================================================
     $.get("https://webtrack.woodsonlumber.com/AccountInfo_R.aspx", function(data) {
         var telephone = $(data).find('#ctl00_PageBody_TelephoneLink_TelephoneLink').text().trim();
@@ -217,7 +215,7 @@ $(document).ready(function() {
     });
 
     // ===================================================
-    // 8. Billing Address Radio Button Handler
+    // 7. Billing Address Radio Button Handler
     // ===================================================
     $(document).on('change', '#billingAddressRadio', function() {
         if ($(this).is(':checked')) {
@@ -247,19 +245,20 @@ $(document).ready(function() {
     });
 
     // ===================================================
-    // 9. Internal Edit Buttons Handlers (within read-only displays)
+    // 8. Internal Edit Buttons Handlers (within the read-only displays)
     // ===================================================
     $(document).on('click', '#internalEditDeliveryAddressButton', function() {
         console.log("Internal Edit Delivery Address button clicked.");
-        $('.epi-form-group-checkout').css('display', 'inline-block');
+        // Show all input fields (by showing the container with class .epi-form-group-checkout)
+        $('.epi-form-group-checkout').show();
     });
     $(document).on('click', '#internalEditInvoiceAddressButton', function() {
         console.log("Internal Edit Invoice Address button clicked.");
-        $('.epi-form-group-checkout').css('display', 'inline-block');
+        $('.epi-form-group-checkout').show();
     });
 
     // ===================================================
-    // 10. Date Picker (unchanged)
+    // 9. Date Picker (unchanged)
     // ===================================================
     if ($('#ctl00_PageBody_dtRequired_DatePicker_wrapper').length) {
         console.log('Date selector found, no modifications made to the date field.');
