@@ -141,7 +141,7 @@ $(document).ready(function() {
                         );
                     });
                     if (matchedOption.length > 0) {
-                        stateDropdown.val(matchedOption.val());
+                        matchedOption.prop('selected', true);  // Set selected attribute to the matched option
                     }
                 }
 
