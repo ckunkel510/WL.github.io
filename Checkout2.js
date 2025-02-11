@@ -4,11 +4,11 @@ $(document).ready(function() {
     // Global variable to hold the selected shipping address text.
     var shippingAddress = "";
 
-    // Hide the specific original transaction type input content, not the entire div
+    // Hide the original transaction type input content
     $('#ctl00_PageBody_TransactionTypeInput').hide();
     $('.TransactionTypeSelector').hide();
 
-    // Ensure transaction type div exists before appending
+    // --- Transaction Type Section ---
     if ($('#ctl00_PageBody_TransactionTypeDiv').length) {
         const modernTransactionSelector = `
             <div class="modern-transaction-selector d-flex justify-content-around">
@@ -34,13 +34,11 @@ $(document).ready(function() {
                 $('#btnOrder').removeClass('btn-primary').addClass('btn-secondary');
             }
         }
-
         if ($('#ctl00_PageBody_TransactionTypeSelector_rdbOrder').is(':checked')) {
             updateTransactionStyles('rdbOrder');
         } else if ($('#ctl00_PageBody_TransactionTypeSelector_rdbQuote').is(':checked')) {
             updateTransactionStyles('rdbQuote');
         }
-
         $('.modern-transaction-selector button').on('click', function() {
             const selectedValue = $(this).data('value');
             updateTransactionStyles(selectedValue);
@@ -49,7 +47,7 @@ $(document).ready(function() {
         console.warn('Transaction type div not found.');
     }
 
-    // Hide original shipping method input and add modern buttons
+    // --- Shipping Method Section ---
     if ($('.SaleTypeSelector').length) {
         $('.SaleTypeSelector').hide();
         const modernShippingSelector = `
@@ -76,13 +74,11 @@ $(document).ready(function() {
                 $('#btnDelivered').removeClass('btn-primary').addClass('btn-secondary');
             }
         }
-
         if ($('#ctl00_PageBody_SaleTypeSelector_rbDelivered').is(':checked')) {
             updateShippingStyles('rbDelivered');
         } else if ($('#ctl00_PageBody_SaleTypeSelector_rbCollectLater').is(':checked')) {
             updateShippingStyles('rbCollectLater');
         }
-
         $('.modern-shipping-selector button').on('click', function() {
             const selectedValue = $(this).data('value');
             updateShippingStyles(selectedValue);
@@ -91,7 +87,7 @@ $(document).ready(function() {
         console.warn('Shipping method selector not found.');
     }
 
-    // Enhance address selector behavior
+    // --- Address Selector Behavior ---
     if ($('#ctl00_PageBody_CustomerAddressSelector_SelectAddressLinkButton').length) {
         console.log('Initializing address selector behavior...');
 
@@ -109,9 +105,9 @@ $(document).ready(function() {
                 }
             });
 
-            // Select and display the address with the smallest ID
+            // Get the selected address text and store it for later use
             const selectedAddress = smallestIdEntry.find('dd p').first().text().trim();
-            shippingAddress = selectedAddress; // Save for use in the shipping label
+            shippingAddress = selectedAddress;
             console.log(`Smallest ID address selected: ${selectedAddress}`);
 
             // Parse address components: Address Line 1, City, State, Zip Code
@@ -119,7 +115,6 @@ $(document).ready(function() {
             const addressLine1 = addressParts[0] || '';
             const city = addressParts[1] || '';
             let state = '', zipCode = '';
-
             if (addressParts.length >= 4) {
                 state = addressParts[addressParts.length - 2];
                 zipCode = addressParts[addressParts.length - 1];
@@ -130,16 +125,15 @@ $(document).ready(function() {
                     zipCode = stateZipMatch[2] || '';
                 }
             }
-
             console.log(`Parsed Address -> Line 1: ${addressLine1}, City: ${city}, State: ${state}, Zip: ${zipCode}`);
 
-            // Populate the address input fields
+            // Populate the delivery address input fields
             $('#ctl00_PageBody_DeliveryAddress_AddressLine1').val(addressLine1);
             $('#ctl00_PageBody_DeliveryAddress_City').val(city);
             $('#ctl00_PageBody_DeliveryAddress_Postcode').val(zipCode);
             $('#ctl00_PageBody_DeliveryAddress_CountrySelector').val('USA');
 
-            // Find the Delivery section and update only that section
+            // Find the Delivery section (by looking for a container with a "SelectableAddressType" of "Delivery")
             const deliverySection = $('.epi-form-col-single-checkout').filter(function() {
                 return $(this).find('.SelectableAddressType').text().trim() === 'Delivery';
             });
@@ -156,7 +150,6 @@ $(document).ready(function() {
                             (state.length === 2 && optionText.includes(state))
                         );
                     });
-
                     if (matchedOption.length > 0) {
                         matchedOption.prop('selected', true);
                         console.log(`Matched state: ${matchedOption.text()}`);
@@ -165,18 +158,28 @@ $(document).ready(function() {
                     }
                 }
 
-                // Hide address input fields
+                // Hide the address input fields
                 deliverySection.find('.epi-form-group-checkout').hide();
 
                 // Remove any existing display of the delivery address
                 $('.selected-address-display').remove();
 
-                // Append an (initially empty) shipping label block after the second-to-last .epi-form-col-single-checkout element
+                // Append the shipping label (Delivery Address) after the second-to-last .epi-form-col-single-checkout element
                 var $checkoutDivs = $('.epi-form-col-single-checkout');
                 if ($checkoutDivs.length >= 2) {
                     $checkoutDivs.eq($checkoutDivs.length - 2).after(
-                        `<div class="selected-address-display mt-2"></div>`
+                        `<div class="selected-address-display mt-2"><strong>Delivery Address:</strong><br>${shippingAddress}</div>`
                     );
+                    // Append the Billing Address section immediately after the Delivery Address block
+                    var billingSectionHtml = `
+                        <div class="billing-address-section mt-2">
+                            <label>
+                                <input type="radio" id="billingAddressRadio" name="billingAddressOption">
+                                Billing address is the same as delivery address
+                            </label>
+                        </div>
+                    `;
+                    $('.selected-address-display').last().after(billingSectionHtml);
                 } else {
                     console.warn('Not enough .epi-form-col-single-checkout elements found.');
                 }
@@ -185,14 +188,13 @@ $(document).ready(function() {
             }
         }
 
-        // Add a button to allow adding a new address
+        // Add a button to allow adding a new address (existing functionality)
         const addNewAddressButton = `
             <li class="AddressSelectorEntry text-center">
                 <button id="btnAddNewAddress" class="btn btn-secondary">Add New Address</button>
             </li>
         `;
         $('.AddressSelectorList').append(addNewAddressButton);
-
         $('#btnAddNewAddress').on('click', function() {
             console.log('Add New Address button clicked');
             const deliverySection = $('.epi-form-col-single-checkout').filter(function() {
@@ -206,7 +208,7 @@ $(document).ready(function() {
         console.warn('Address selector link button not found.');
     }
 
-    // Fetch account settings data from AccountSettings.aspx and update delivery/invoice fields
+    // --- Account Settings Fetch ---
     $.get("https://webtrack.woodsonlumber.com/AccountSettings.aspx", function(data) {
         var $accountPage = $(data);
         var firstName = $accountPage.find('#ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput').val() || '';
@@ -214,13 +216,12 @@ $(document).ready(function() {
         var emailStr  = $accountPage.find('#ctl00_PageBody_ChangeUserDetailsControl_EmailAddressInput').val() || '';
         var parsedEmail = emailStr.replace(/^\([^)]*\)\s*/, '');
         console.log("Fetched account settings:", firstName, lastName, parsedEmail);
-
-        // Update the delivery/invoice fields with contact info
+        // Update the delivery contact fields and the invoice email field
         $('#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox').val(firstName);
         $('#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox').val(lastName);
         $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox').val(parsedEmail);
 
-        // Update the shipping label display to include the contact name
+        // Also update the shipping label display to include the contact's name
         if ($('.selected-address-display').length) {
             $('.selected-address-display').html(
                 `<strong>Delivery Address:</strong><br>${firstName} ${lastName}<br>${shippingAddress}`
@@ -228,14 +229,27 @@ $(document).ready(function() {
         }
     });
 
-    // Fetch telephone number from AccountInfo_R.aspx and update the contact telephone field
+    // --- Telephone Fetch ---
     $.get("https://webtrack.woodsonlumber.com/AccountInfo_R.aspx", function(data) {
         var telephone = $(data).find('#ctl00_PageBody_TelephoneLink_TelephoneLink').text().trim();
         console.log("Fetched telephone:", telephone);
         $('#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').val(telephone);
     });
 
-    // Restore the original date input setup
+    // --- Billing Address Radio Button Handler ---
+    // When the "Billing address is the same as delivery address" radio button is checked,
+    // copy the corresponding values from the delivery address fields to the invoice address fields.
+    $(document).on('change', '#billingAddressRadio', function() {
+        if ($(this).is(':checked')) {
+            $('#ctl00_PageBody_InvoiceAddress_AddressLine1').val($('#ctl00_PageBody_DeliveryAddress_AddressLine1').val());
+            $('#ctl00_PageBody_InvoiceAddress_City').val($('#ctl00_PageBody_DeliveryAddress_City').val());
+            $('#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList').val($('#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList').val());
+            $('#ctl00_PageBody_InvoiceAddress_Postcode').val($('#ctl00_PageBody_DeliveryAddress_Postcode').val());
+            $('#ctl00_PageBody_InvoiceAddress_CountrySelector1').val($('#ctl00_PageBody_DeliveryAddress_CountrySelector').val());
+        }
+    });
+
+    // --- Date Picker (unchanged) ---
     if ($('#ctl00_PageBody_dtRequired_DatePicker_wrapper').length) {
         console.log('Date selector found, no modifications made to the date field.');
     } else {
