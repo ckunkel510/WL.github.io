@@ -2,23 +2,10 @@ $(document).ready(function() {
     console.log('Page loaded, initializing custom checkout experience...');
 
     // ===================================================
-    // 1. Hide Original Input Fields (but keep them in the DOM)
+    // 1. Hide all input fields by default via .epi-form-group-checkout
     // ===================================================
-    $('#ctl00_PageBody_DeliveryAddress_AddressLine1, ' +
-      '#ctl00_PageBody_DeliveryAddress_City, ' +
-      '#ctl00_PageBody_DeliveryAddress_Postcode, ' +
-      '#ctl00_PageBody_DeliveryAddress_CountrySelector, ' +
-      '#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox, ' +
-      '#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox, ' +
-      '#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').css('display', 'none');
-
-    $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox, ' +
-      '#ctl00_PageBody_InvoiceAddress_AddressLine1, ' +
-      '#ctl00_PageBody_InvoiceAddress_City, ' +
-      '#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList, ' +
-      '#ctl00_PageBody_InvoiceAddress_Postcode, ' +
-      '#ctl00_PageBody_InvoiceAddress_CountrySelector1').css('display', 'none');
-
+    // (These containers hold the input fields for both delivery and invoice addresses.)
+    $('.epi-form-group-checkout').hide();
 
     // ===================================================
     // 2. Transaction Type Section
@@ -60,7 +47,6 @@ $(document).ready(function() {
         console.warn('Transaction type div not found.');
     }
 
-
     // ===================================================
     // 3. Shipping Method Section
     // ===================================================
@@ -88,7 +74,7 @@ $(document).ready(function() {
                 $('#ctl00_PageBody_SaleTypeSelector_rbCollectLater').prop('checked', true);
                 $('#btnPickup').removeClass('btn-secondary').addClass('btn-primary');
                 $('#btnDelivered').removeClass('btn-primary').addClass('btn-secondary');
-                // Automatically check billing radio if Pickup is selected.
+                // Automatically check the billing address radio button when Pickup is selected.
                 $("#billingAddressRadio").prop("checked", true).trigger("change");
             }
         }
@@ -104,9 +90,8 @@ $(document).ready(function() {
         console.warn('Shipping method selector not found.');
     }
 
-
     // ===================================================
-    // 4. Address Selector Behavior & Appending Read-Only Display Containers
+    // 4. Address Selector Behavior & Read-Only Display Containers
     // ===================================================
     var shippingAddress = "";
     if ($('#ctl00_PageBody_CustomerAddressSelector_SelectAddressLinkButton').length) {
@@ -148,11 +133,10 @@ $(document).ready(function() {
             $('#ctl00_PageBody_DeliveryAddress_Postcode').val(zipCode);
             $('#ctl00_PageBody_DeliveryAddress_CountrySelector').val('USA');
 
-            // Append read-only display containers to the 6th and 7th .epi-form-col-single-checkout elements.
+            // Append read-only display containers into the 6th and 7th .epi-form-col-single-checkout elements.
             var $checkoutDivs = $('.epi-form-col-single-checkout');
             if ($checkoutDivs.length >= 7) {
-                // Append the Delivery Address read-only container (visible by default)
-                // Only append once (using a unique class to check if it already exists).
+                // Append the Delivery Address display container if not already present.
                 if ($checkoutDivs.eq(5).find('.selected-address-display').length === 0) {
                     $checkoutDivs.eq(5).append(`
                         <div class="selected-address-display">
@@ -161,7 +145,7 @@ $(document).ready(function() {
                         </div>
                     `);
                 }
-                // Append the Invoice Address container (with billing radio) to the 7th element.
+                // Append the Invoice Address display container (with billing radio) if not already present.
                 if ($checkoutDivs.eq(6).find('.billing-address-section').length === 0) {
                     $checkoutDivs.eq(6).append(`
                         <div class="billing-address-section">
@@ -180,7 +164,8 @@ $(document).ready(function() {
                 console.warn('Not enough .epi-form-col-single-checkout elements found.');
             }
         }
-        // "Add New Address" button to reveal hidden input fields.
+
+        // "Add New Address" button to reveal the hidden input fields.
         const addNewAddressButton = `
             <li class="AddressSelectorEntry text-center">
                 <button id="btnAddNewAddress" class="btn btn-secondary">Add New Address</button>
@@ -188,21 +173,7 @@ $(document).ready(function() {
         `;
         $('.AddressSelectorList').append(addNewAddressButton);
         $(document).on('click', '#btnAddNewAddress', function() {
-            $('#ctl00_PageBody_DeliveryAddress_AddressLine1, ' +
-              '#ctl00_PageBody_DeliveryAddress_City, ' +
-              '#ctl00_PageBody_DeliveryAddress_Postcode, ' +
-              '#ctl00_PageBody_DeliveryAddress_CountrySelector, ' +
-              '#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox, ' +
-              '#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox, ' +
-              '#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox')
-              .css('display', 'inline-block');
-            $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox, ' +
-              '#ctl00_PageBody_InvoiceAddress_AddressLine1, ' +
-              '#ctl00_PageBody_InvoiceAddress_City, ' +
-              '#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList, ' +
-              '#ctl00_PageBody_InvoiceAddress_Postcode, ' +
-              '#ctl00_PageBody_InvoiceAddress_CountrySelector1')
-              .css('display', 'inline-block');
+            $('.epi-form-group-checkout').css('display', 'inline-block');
             $('.AddressSelectorList').hide();
         });
     } else {
@@ -219,26 +190,13 @@ $(document).ready(function() {
             .appendTo('body')
             .on('click', function() {
                 console.log("External Edit Delivery button clicked.");
-                $('#ctl00_PageBody_DeliveryAddress_AddressLine1, ' +
-                  '#ctl00_PageBody_DeliveryAddress_City, ' +
-                  '#ctl00_PageBody_DeliveryAddress_Postcode, ' +
-                  '#ctl00_PageBody_DeliveryAddress_CountrySelector, ' +
-                  '#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox, ' +
-                  '#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox, ' +
-                  '#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox')
-                  .css('display', 'inline-block');
+                $('.epi-form-group-checkout').css('display', 'inline-block');
             });
         $('<button id="showEditInvoiceButton" style="margin:10px;">Edit Invoice Address</button>')
             .appendTo('body')
             .on('click', function() {
                 console.log("External Edit Invoice button clicked.");
-                $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox, ' +
-                  '#ctl00_PageBody_InvoiceAddress_AddressLine1, ' +
-                  '#ctl00_PageBody_InvoiceAddress_City, ' +
-                  '#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList, ' +
-                  '#ctl00_PageBody_InvoiceAddress_Postcode, ' +
-                  '#ctl00_PageBody_InvoiceAddress_CountrySelector1')
-                  .css('display', 'inline-block');
+                $('.epi-form-group-checkout').css('display', 'inline-block');
             });
     }
 
@@ -257,11 +215,12 @@ $(document).ready(function() {
         $('#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox').val(lastName);
         $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox').val(parsedEmail);
 
-        // Optionally update the read-only delivery display (if needed)
+        // Update the Delivery Address read-only display to include the contact's name.
         if ($('.selected-address-display').length) {
-            // Update content without reappending duplicate edit buttons.
-            $('.selected-address-display').find('strong').first().html(`Delivery Address:`);
-            // You might choose to update the displayed name here if desired.
+            $('.selected-address-display').html(
+                `<strong>Delivery Address:</strong><br>${firstName} ${lastName}<br>${shippingAddress}<br>
+                 <button type="button" id="internalEditDeliveryAddressButton" class="edit-button">Edit Delivery Address</button>`
+            );
         }
     });
 
@@ -305,28 +264,15 @@ $(document).ready(function() {
     });
 
     // ===================================================
-    // 9. Internal Edit Buttons Handlers (within read-only displays)
+    // 9. Internal Edit Buttons Handlers (within the read-only displays)
     // ===================================================
     $(document).on('click', '#internalEditDeliveryAddressButton', function() {
         console.log("Internal Edit Delivery Address button clicked.");
-        $('#ctl00_PageBody_DeliveryAddress_AddressLine1, ' +
-          '#ctl00_PageBody_DeliveryAddress_City, ' +
-          '#ctl00_PageBody_DeliveryAddress_Postcode, ' +
-          '#ctl00_PageBody_DeliveryAddress_CountrySelector, ' +
-          '#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox, ' +
-          '#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox, ' +
-          '#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox')
-          .css('display', 'inline-block');
+        $('.epi-form-group-checkout').css('display', 'inline-block');
     });
     $(document).on('click', '#internalEditInvoiceAddressButton', function() {
         console.log("Internal Edit Invoice Address button clicked.");
-        $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox, ' +
-          '#ctl00_PageBody_InvoiceAddress_AddressLine1, ' +
-          '#ctl00_PageBody_InvoiceAddress_City, ' +
-          '#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList, ' +
-          '#ctl00_PageBody_InvoiceAddress_Postcode, ' +
-          '#ctl00_PageBody_InvoiceAddress_CountrySelector1')
-          .css('display', 'inline-block');
+        $('.epi-form-group-checkout').css('display', 'inline-block');
     });
 
     // ===================================================
