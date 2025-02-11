@@ -31,7 +31,8 @@ $(document).ready(function() {
     "#ctl00_PageBody_DeliveryAddress_ContactTelephoneRow, " +
     "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTitleLiteral, " +
     "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox, " +
-    "#autocompleteDelivery"
+    "#autocompleteDelivery, " =
+    ".epi-form-group-checkout"
   ).css("display", "none");
 
   // --- Invoice Address elements to hide:
@@ -130,7 +131,8 @@ $(document).ready(function() {
       "#ctl00_PageBody_DeliveryAddress_ContactTelephoneRow, " +
       "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTitleLiteral, " +
       "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox, " +
-      "#autocompleteDelivery"
+      "#autocompleteDelivery, " +
+      ".epi-form-group-checkout"
     ).css("display", "inline-block");
     // Append Save Delivery Address button if not present.
     if ($("#saveDeliveryAddressButton").length === 0) {
@@ -168,7 +170,8 @@ $(document).ready(function() {
       "#ctl00_PageBody_DeliveryAddress_ContactTelephoneRow, " +
       "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTitleLiteral, " +
       "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox, " +
-      "#autocompleteDelivery"
+      "#autocompleteDelivery, " +
+      ".epi-form-group-checkout"
     ).css("display", "none");
     $("#saveDeliveryAddressButton").remove();
     isEditingDelivery = false;
@@ -199,7 +202,8 @@ $(document).ready(function() {
       "#ctl00_PageBody_InvoiceAddress_CountrySelector1, " +
       "#ctl00_PageBody_InvoiceAddress_EmailAddressRow, " +
       "#ctl00_PageBody_InvoiceAddress_EmailAddressTitleLiteral, " +
-      "#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox"
+      "#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox, " +
+      ".epi-form-group-checkout"
     ).css("display", "inline-block");
     // Append Save Invoice Address button if not present.
     if ($("#saveInvoiceAddressButton").length === 0) {
@@ -232,7 +236,8 @@ $(document).ready(function() {
       "#ctl00_PageBody_InvoiceAddress_CountrySelector1, " +
       "#ctl00_PageBody_InvoiceAddress_EmailAddressRow, " +
       "#ctl00_PageBody_InvoiceAddress_EmailAddressTitleLiteral, " +
-      "#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox"
+      "#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox, " +
+      ".epi-form-group-checkout"
     ).css("display", "none");
     $("#saveInvoiceAddressButton").remove();
     isEditingInvoice = false;
