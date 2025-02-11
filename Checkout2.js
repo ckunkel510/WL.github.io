@@ -19,7 +19,6 @@ $(document).ready(function() {
             </div>
         `;
 
-        // Ensure the transaction type container is visible and append the buttons
         $('#ctl00_PageBody_TransactionTypeDiv').show().append(modernTransactionSelector);
 
         function updateTransactionStyles(selectedValue) {
@@ -119,6 +118,7 @@ $(document).ready(function() {
                 $('#ctl00_PageBody_DeliveryAddress_AddressLine1').val(addressParts[0].trim());
                 $('#ctl00_PageBody_DeliveryAddress_City').val(addressParts[1].trim());
                 $('#ctl00_PageBody_DeliveryAddress_Postcode').val(addressParts[2].trim());
+                $('#ctl00_PageBody_DeliveryAddress_CountrySelector').val('USA');
             }
 
             // Find the Delivery section and update only that section
@@ -127,10 +127,19 @@ $(document).ready(function() {
             });
 
             if (deliverySection.length) {
+                // Set state/county dropdown if applicable
+                const stateDropdown = $('#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList');
+                const stateText = addressParts[1].split(' ')[0].trim(); // Assuming state might be part of the city string
+                if (stateDropdown.length) {
+                    stateDropdown.val(stateDropdown.find('option').filter(function() {
+                        return $(this).text().toLowerCase() === stateText.toLowerCase();
+                    }).val());
+                }
+
                 // Hide address input fields and display the selected address summary within the Delivery section
                 deliverySection.find('.epi-form-group-checkout').hide();
                 deliverySection.find('.selected-address-display').remove();
-                deliverySection.prepend(`<div class="selected-address-display"><strong>Selected Address:</strong> ${selectedAddress}</div>`);
+                deliverySection.find('.SelectableAddressType').parent().after(`<div class="selected-address-display"><strong>Selected Address:</strong> ${selectedAddress}</div>`);
             } else {
                 console.warn('Delivery section not found.');
             }
