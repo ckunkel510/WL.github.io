@@ -121,10 +121,19 @@ $(document).ready(function() {
                 $('#ctl00_PageBody_DeliveryAddress_Postcode').val(addressParts[2].trim());
             }
 
-            // Hide address input fields and display the selected address summary
-            $('#ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral, #ctl00_PageBody_DeliveryAddress_AddressLine1, #ctl00_PageBody_DeliveryAddress_AddressLine2, #ctl00_PageBody_DeliveryAddress_AddressLine3, #ctl00_PageBody_DeliveryAddress_City, #ctl00_PageBody_DeliveryAddress_Postcode, #ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').closest('.epi-form-group-checkout').hide();
-            $('.selected-address-display').remove();
-            $('.epi-form-col-single-checkout').prepend(`<div class="selected-address-display"><strong>Selected Address:</strong> ${selectedAddress}</div>`);
+            // Find the Delivery section and update only that section
+            const deliverySection = $('.epi-form-col-single-checkout').filter(function() {
+                return $(this).find('.SelectableAddressType').text().trim() === 'Delivery';
+            });
+
+            if (deliverySection.length) {
+                // Hide address input fields and display the selected address summary within the Delivery section
+                deliverySection.find('.epi-form-group-checkout').hide();
+                deliverySection.find('.selected-address-display').remove();
+                deliverySection.prepend(`<div class="selected-address-display"><strong>Selected Address:</strong> ${selectedAddress}</div>`);
+            } else {
+                console.warn('Delivery section not found.');
+            }
         }
 
         // Add a button to allow adding a new address
@@ -137,10 +146,13 @@ $(document).ready(function() {
 
         $('#btnAddNewAddress').on('click', function() {
             console.log('Add New Address button clicked');
-            // Show all address input fields
-            $('#ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral, #ctl00_PageBody_DeliveryAddress_AddressLine1, #ctl00_PageBody_DeliveryAddress_AddressLine2, #ctl00_PageBody_DeliveryAddress_AddressLine3, #ctl00_PageBody_DeliveryAddress_City, #ctl00_PageBody_DeliveryAddress_Postcode, #ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').closest('.epi-form-group-checkout').show();
+            // Show all address input fields within the Delivery section
+            const deliverySection = $('.epi-form-col-single-checkout').filter(function() {
+                return $(this).find('.SelectableAddressType').text().trim() === 'Delivery';
+            });
+            deliverySection.find('.epi-form-group-checkout').show();
             $('.AddressSelectorList').hide();
-            $('.selected-address-display').remove();
+            deliverySection.find('.selected-address-display').remove();
         });
     } else {
         console.warn('Address selector link button not found.');
