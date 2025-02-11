@@ -105,7 +105,6 @@ $(document).ready(function() {
     // --------------------------
     // Address Selector Behavior
     // --------------------------
-    // We'll use the 6th and 7th instances of .epi-form-col-single-checkout for the display sections.
     var shippingAddress = "";
     if ($('#ctl00_PageBody_CustomerAddressSelector_SelectAddressLinkButton').length) {
         console.log('Initializing address selector behavior...');
@@ -141,24 +140,24 @@ $(document).ready(function() {
             }
             console.log(`Parsed Address -> Line 1: ${addressLine1}, City: ${city}, State: ${state}, Zip: ${zipCode}`);
 
-            // Populate the (hidden) delivery address input fields with the parsed values
+            // Populate the (hidden) delivery address input fields
             $('#ctl00_PageBody_DeliveryAddress_AddressLine1').val(addressLine1);
             $('#ctl00_PageBody_DeliveryAddress_City').val(city);
             $('#ctl00_PageBody_DeliveryAddress_Postcode').val(zipCode);
             $('#ctl00_PageBody_DeliveryAddress_CountrySelector').val('USA');
 
-            // Instead of replacing the entire content of the container, we append a new display section.
+            // Use the 6th and 7th instances of .epi-form-col-single-checkout for the display sections.
             var $checkoutDivs = $('.epi-form-col-single-checkout');
             if ($checkoutDivs.length >= 7) {
-                // Append the Delivery Address display (read-only label) into the 6th instance (index 5)
-                $checkoutDivs.eq(5).append(`
+                // Append the Delivery Address display (read-only) into the 6th instance (index 5)
+                $checkoutDivs.eq(5).html(`
                     <div class="selected-address-display">
                         <strong>Delivery Address:</strong><br>${shippingAddress}<br>
-                        <button type="button" id="editDeliveryAddressButton" class="edit-button">Edit Delivery Address</button>
+                        <button type="button" id="internalEditDeliveryAddressButton" class="edit-button">(Internal Edit Delivery Address)</button>
                     </div>
                 `);
-                // Append the Invoice Address display (with the billing radio button) into the 7th instance (index 6)
-                $checkoutDivs.eq(6).append(`
+                // Append the Invoice Address display (with billing radio button) into the 7th instance (index 6)
+                $checkoutDivs.eq(6).html(`
                     <div class="billing-address-section">
                         <label>
                             <input type="radio" id="billingAddressRadio" name="billingAddressOption">
@@ -166,16 +165,19 @@ $(document).ready(function() {
                         </label>
                         <div class="selected-invoice-address-display">
                             <strong>Invoice Address:</strong><br>
-                            <button type="button" id="editInvoiceAddressButton" class="edit-button">Edit Invoice Address</button>
+                            <button type="button" id="internalEditInvoiceAddressButton" class="edit-button">(Internal Edit Invoice Address)</button>
                         </div>
                     </div>
                 `);
+                // On load, hide the 6th and 7th containers completely.
+                $checkoutDivs.eq(5).hide();
+                $checkoutDivs.eq(6).hide();
             } else {
                 console.warn('Not enough .epi-form-col-single-checkout elements found.');
             }
         }
 
-        // Add a button to allow adding a new address (which shows the hidden inputs)
+        // Add a button to allow adding a new address (which shows the hidden input fields)
         const addNewAddressButton = `
             <li class="AddressSelectorEntry text-center">
                 <button id="btnAddNewAddress" class="btn btn-secondary">Add New Address</button>
@@ -183,7 +185,6 @@ $(document).ready(function() {
         `;
         $('.AddressSelectorList').append(addNewAddressButton);
         $(document).on('click', '#btnAddNewAddress', function() {
-            // Show all hidden input fields (set their display to inline-block)
             $('#ctl00_PageBody_DeliveryAddress_AddressLine1, ' +
               '#ctl00_PageBody_DeliveryAddress_City, ' +
               '#ctl00_PageBody_DeliveryAddress_Postcode, ' +
@@ -200,11 +201,34 @@ $(document).ready(function() {
               '#ctl00_PageBody_InvoiceAddress_CountrySelector1')
               .css('display', 'inline-block');
             $('.AddressSelectorList').hide();
-            // Clear the display sections so new info can be entered if desired
+            // Optionally, clear any read-only display sections if re-entering new data.
             $('.selected-address-display, .billing-address-section').empty();
         });
     } else {
         console.warn('Address selector link button not found.');
+    }
+
+    // --------------------------
+    // Add external Edit buttons to control the display of the 6th and 7th containers.
+    // These buttons are outside the containers and will show them (set display to inline-block).
+    // --------------------------
+    // (You can style or position these as desired.)
+    var $checkoutDivs = $('.epi-form-col-single-checkout');
+    if ($checkoutDivs.length >= 7) {
+        // Append external edit buttons at the bottom of the page.
+        $('<button id="showEditDeliveryButton" style="margin:10px;">Edit Delivery Address</button>')
+            .appendTo('body');
+        $('<button id="showEditInvoiceButton" style="margin:10px;">Edit Invoice Address</button>')
+            .appendTo('body');
+        
+        $(document).on('click', '#showEditDeliveryButton', function() {
+            console.log("External Edit Delivery button clicked.");
+            $checkoutDivs.eq(5).css('display','inline-block');
+        });
+        $(document).on('click', '#showEditInvoiceButton', function() {
+            console.log("External Edit Invoice button clicked.");
+            $checkoutDivs.eq(6).css('display','inline-block');
+        });
     }
 
     // --------------------------
@@ -223,11 +247,11 @@ $(document).ready(function() {
         $('#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox').val(lastName);
         $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox').val(parsedEmail);
 
-        // Update the Delivery Address display container (if it exists) to include the contact's name
+        // Update the Delivery Address display container to include the contact's name
         if ($('.selected-address-display').length) {
             $('.selected-address-display').html(
                 `<strong>Delivery Address:</strong><br>${firstName} ${lastName}<br>${shippingAddress}<br>
-                 <button type="button" id="editDeliveryAddressButton" class="edit-button">Edit Delivery Address</button>`
+                 <button type="button" id="internalEditDeliveryAddressButton" class="edit-button">(Internal Edit Delivery Address)</button>`
             );
         }
     });
@@ -244,8 +268,6 @@ $(document).ready(function() {
     // --------------------------
     // Billing Address Radio Button Handler
     // --------------------------
-    // When the "Billing address is the same as delivery address" radio button is checked,
-    // copy the delivery field values to the corresponding invoice fields and update the invoice display.
     $(document).on('change', '#billingAddressRadio', function() {
         if ($(this).is(':checked')) {
             console.log("Billing radio button checked.");
@@ -269,15 +291,17 @@ $(document).ready(function() {
                 deliveryCity + `<br>` +
                 deliveryPostcode;
             $('.selected-invoice-address-display').html(invoiceDisplay +
-                `<br><button type="button" id="editInvoiceAddressButton" class="edit-button">Edit Invoice Address</button>`);
+                `<br><button type="button" id="internalEditInvoiceAddressButton" class="edit-button">(Internal Edit Invoice Address)</button>`);
         }
     });
 
     // --------------------------
-    // Edit Buttons Handlers (Using explicit inline-block)
+    // (Optional) Internal Edit Buttons Handlers
+    // These are inside the display containers (if clicked, they could also show the input fields)
     // --------------------------
-    $(document).on('click', '#editDeliveryAddressButton', function() {
-        console.log("Edit Delivery Address button clicked.");
+    $(document).on('click', '#internalEditDeliveryAddressButton', function() {
+        console.log("Internal Edit Delivery Address button clicked.");
+        // Show the hidden delivery input fields
         $('#ctl00_PageBody_DeliveryAddress_AddressLine1, ' +
           '#ctl00_PageBody_DeliveryAddress_City, ' +
           '#ctl00_PageBody_DeliveryAddress_Postcode, ' +
@@ -287,8 +311,9 @@ $(document).ready(function() {
           '#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox')
           .css('display', 'inline-block');
     });
-    $(document).on('click', '#editInvoiceAddressButton', function() {
-        console.log("Edit Invoice Address button clicked.");
+    $(document).on('click', '#internalEditInvoiceAddressButton', function() {
+        console.log("Internal Edit Invoice Address button clicked.");
+        // Show the hidden invoice input fields
         $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox, ' +
           '#ctl00_PageBody_InvoiceAddress_AddressLine1, ' +
           '#ctl00_PageBody_InvoiceAddress_City, ' +
