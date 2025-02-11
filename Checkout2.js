@@ -1,6 +1,8 @@
-// When the transaction type and other checkout divs are loaded
 $(document).ready(function() {
     console.log('Page loaded, initializing custom checkout experience...');
+
+    // Global variable to hold the selected shipping address text.
+    var shippingAddress = "";
 
     // Hide the specific original transaction type input content, not the entire div
     $('#ctl00_PageBody_TransactionTypeInput').hide();
@@ -18,7 +20,6 @@ $(document).ready(function() {
                 </button>
             </div>
         `;
-
         $('#ctl00_PageBody_TransactionTypeDiv').show().append(modernTransactionSelector);
 
         function updateTransactionStyles(selectedValue) {
@@ -110,6 +111,7 @@ $(document).ready(function() {
 
             // Select and display the address with the smallest ID
             const selectedAddress = smallestIdEntry.find('dd p').first().text().trim();
+            shippingAddress = selectedAddress;  // Save for later use in the shipping label
             console.log(`Smallest ID address selected: ${selectedAddress}`);
 
             // Properly parse address components: Address Line 1, City, State, Zip Code
@@ -119,11 +121,9 @@ $(document).ready(function() {
             let state = '', zipCode = '';
 
             if (addressParts.length >= 4) {
-                // When there are 4 or more parts, assume the last two parts are state and zip code.
                 state = addressParts[addressParts.length - 2];
                 zipCode = addressParts[addressParts.length - 1];
             } else if (addressParts.length > 2) {
-                // Otherwise, try to extract state and zip from the third part.
                 const stateZipMatch = addressParts[2].match(/(.+?)\s*(\d{5}(?:-\d{4})?)?$/);
                 if (stateZipMatch) {
                     state = stateZipMatch[1].trim();
@@ -145,7 +145,7 @@ $(document).ready(function() {
             });
 
             if (deliverySection.length) {
-                // Match and set the dropdown value for state
+                // Set the dropdown value for state
                 const stateDropdown = $('#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList');
                 if (stateDropdown.length) {
                     const matchedOption = stateDropdown.find('option').filter(function() {
@@ -158,7 +158,7 @@ $(document).ready(function() {
                     });
 
                     if (matchedOption.length > 0) {
-                        matchedOption.prop('selected', true);  // Set selected attribute
+                        matchedOption.prop('selected', true);
                         console.log(`Matched state: ${matchedOption.text()}`);
                     } else {
                         console.warn(`State '${state}' not found in dropdown options.`);
@@ -171,11 +171,11 @@ $(document).ready(function() {
                 // Remove any existing display of the delivery address
                 $('.selected-address-display').remove();
 
-                // Append the delivery address after the second-to-last .epi-form-col-single-checkout element
+                // Append an (initially empty) shipping label block after the second-to-last .epi-form-col-single-checkout element
                 var $checkoutDivs = $('.epi-form-col-single-checkout');
                 if ($checkoutDivs.length >= 2) {
                     $checkoutDivs.eq($checkoutDivs.length - 2).after(
-                        `<div class="selected-address-display mt-2"><strong>Delivery Address:</strong> ${selectedAddress}</div>`
+                        `<div class="selected-address-display mt-2"></div>`
                     );
                 } else {
                     console.warn('Not enough .epi-form-col-single-checkout elements found.');
@@ -195,7 +195,6 @@ $(document).ready(function() {
 
         $('#btnAddNewAddress').on('click', function() {
             console.log('Add New Address button clicked');
-            // Show all address input fields within the Delivery section
             const deliverySection = $('.epi-form-col-single-checkout').filter(function() {
                 return $(this).find('.SelectableAddressType').text().trim() === 'Delivery';
             });
@@ -209,20 +208,24 @@ $(document).ready(function() {
 
     // Fetch account settings data from the AccountSettings.aspx page and update delivery/invoice fields
     $.get("https://webtrack.woodsonlumber.com/AccountSettings.aspx", function(data) {
-        // Create a jQuery object from the returned HTML
         var $accountPage = $(data);
-        // Get the first name and last name values
         var firstName = $accountPage.find('#ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput').val() || '';
         var lastName  = $accountPage.find('#ctl00_PageBody_ChangeUserDetailsControl_LastNameInput').val() || '';
-        // Get the email value; this may include a user component in parentheses.
         var emailStr  = $accountPage.find('#ctl00_PageBody_ChangeUserDetailsControl_EmailAddressInput').val() || '';
-        // Remove any leading parenthesized user component. For example: "(test) test@woodsonlumber.com" becomes "test@woodsonlumber.com"
         var parsedEmail = emailStr.replace(/^\([^)]*\)\s*/, '');
         console.log("Fetched account settings:", firstName, lastName, parsedEmail);
+
         // Input the values into the delivery and invoice address fields
         $('#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox').val(firstName);
         $('#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox').val(lastName);
         $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox').val(parsedEmail);
+
+        // Now update the shipping label display to include the contact name
+        if ($('.selected-address-display').length) {
+            $('.selected-address-display').html(
+                `<strong>Delivery Address:</strong><br>${firstName} ${lastName}<br>${shippingAddress}`
+            );
+        }
     });
 
     // Restore the original date input setup
