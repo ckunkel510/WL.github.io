@@ -113,11 +113,11 @@ $(document).ready(function() {
             console.log(`Smallest ID address selected: ${selectedAddress}`);
 
             // Populate the address input fields
-            const addressParts = selectedAddress.split(',');
+            const addressParts = selectedAddress.split(',').map(part => part.trim());
             if (addressParts.length >= 3) {
-                $('#ctl00_PageBody_DeliveryAddress_AddressLine1').val(addressParts[0].trim());
-                $('#ctl00_PageBody_DeliveryAddress_City').val(addressParts[1].trim());
-                $('#ctl00_PageBody_DeliveryAddress_Postcode').val(addressParts[2].trim());
+                $('#ctl00_PageBody_DeliveryAddress_AddressLine1').val(addressParts[0]);
+                $('#ctl00_PageBody_DeliveryAddress_City').val(addressParts[1]);
+                $('#ctl00_PageBody_DeliveryAddress_Postcode').val(addressParts[2]);
                 $('#ctl00_PageBody_DeliveryAddress_CountrySelector').val('USA');
             }
 
@@ -127,18 +127,22 @@ $(document).ready(function() {
             });
 
             if (deliverySection.length) {
-                // Extract state from the address and set the dropdown
+                // Extract the state by splitting the city/state line
+                const stateText = addressParts[1].split(' ').slice(-1)[0]; // Extract last word, assuming state
+                console.log(`Extracted state for matching: ${stateText}`);
+
+                // Match and set the dropdown value for state
                 const stateDropdown = $('#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList');
-                const stateText = addressParts[1].trim().split(' ').slice(-1)[0]; // Last part of city/state line
                 if (stateDropdown.length) {
-                    let matchedOption = stateDropdown.find('option').filter(function() {
+                    const matchedOption = stateDropdown.find('option').filter(function() {
                         const optionText = $(this).text().toLowerCase();
                         return (
                             optionText === stateText.toLowerCase() ||
                             optionText.includes(stateText.toLowerCase()) ||
-                            (stateText.length === 2 && optionText.includes(stateText)) // Handle abbreviations
+                            (stateText.length === 2 && optionText.includes(stateText))
                         );
                     });
+
                     if (matchedOption.length > 0) {
                         matchedOption.prop('selected', true);  // Set selected attribute
                         console.log(`Matched state: ${matchedOption.text()}`);
