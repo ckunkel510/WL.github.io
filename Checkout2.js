@@ -123,7 +123,7 @@ $(document).ready(function() {
 
                 if (stateZipMatch) {
                     state = stateZipMatch[1].trim();  // Extract the state name
-                    zipCode = stateZipMatch[2] || '';  // Extract the zip code if available
+                    zipCode = stateZipMatch[2] ? stateZipMatch[2].trim() : '';  // Extract the zip code if available
                 }
             }
 
@@ -134,68 +134,6 @@ $(document).ready(function() {
             $('#ctl00_PageBody_DeliveryAddress_City').val(city);
             $('#ctl00_PageBody_DeliveryAddress_Postcode').val(zipCode);
             $('#ctl00_PageBody_DeliveryAddress_CountrySelector').val('USA');
-
-            // Find the Delivery section and update only that section
-            const deliverySection = $('.epi-form-col-single-checkout').filter(function() {
-                return $(this).find('.SelectableAddressType').text().trim() === 'Delivery';
-            });
-
-            if (deliverySection.length) {
-                // Match and set the dropdown value for state
-                const stateDropdown = $('#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList');
-                if (stateDropdown.length) {
-                    const matchedOption = stateDropdown.find('option').filter(function() {
-                        const optionText = $(this).text().toLowerCase();
-                        return (
-                            optionText === state.toLowerCase() ||
-                            optionText.includes(state.toLowerCase()) ||
-                            (state.length === 2 && optionText.includes(state))
-                        );
-                    });
-
-                    if (matchedOption.length > 0) {
-                        matchedOption.prop('selected', true);  // Set selected attribute
-                        console.log(`Matched state: ${matchedOption.text()}`);
-                    } else {
-                        console.warn(`State '${state}' not found in dropdown options.`);
-                    }
-                }
-
-                // Hide address input fields and display the selected address summary within the Delivery section
-                deliverySection.find('.epi-form-group-checkout').hide();
-                deliverySection.find('.selected-address-display').remove();
-                deliverySection.find('.SelectableAddressType').parent().after(`<div class="selected-address-display"><strong>Selected Address:</strong> ${selectedAddress}</div>`);
-            } else {
-                console.warn('Delivery section not found.');
-            }
         }
-
-        // Add a button to allow adding a new address
-        const addNewAddressButton = `
-            <li class="AddressSelectorEntry text-center">
-                <button id="btnAddNewAddress" class="btn btn-secondary">Add New Address</button>
-            </li>
-        `;
-        $('.AddressSelectorList').append(addNewAddressButton);
-
-        $('#btnAddNewAddress').on('click', function() {
-            console.log('Add New Address button clicked');
-            // Show all address input fields within the Delivery section
-            const deliverySection = $('.epi-form-col-single-checkout').filter(function() {
-                return $(this).find('.SelectableAddressType').text().trim() === 'Delivery';
-            });
-            deliverySection.find('.epi-form-group-checkout').show();
-            $('.AddressSelectorList').hide();
-            deliverySection.find('.selected-address-display').remove();
-        });
-    } else {
-        console.warn('Address selector link button not found.');
-    }
-
-    // Restore the original date input setup
-    if ($('#ctl00_PageBody_dtRequired_DatePicker_wrapper').length) {
-        console.log('Date selector found, no modifications made to the date field.');
-    } else {
-        console.warn('Date picker wrapper not found.');
     }
 });
