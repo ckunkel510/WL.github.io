@@ -1,27 +1,28 @@
 $(document).ready(function() {
     console.log('Page loaded, initializing custom checkout experience...');
 
-    // --------------------------
-    // Hide all address input fields by default (they remain in the DOM)
-    // --------------------------
+    // ===================================================
+    // 1. Hide Original Input Fields (but keep them in the DOM)
+    // ===================================================
     $('#ctl00_PageBody_DeliveryAddress_AddressLine1, ' +
       '#ctl00_PageBody_DeliveryAddress_City, ' +
       '#ctl00_PageBody_DeliveryAddress_Postcode, ' +
       '#ctl00_PageBody_DeliveryAddress_CountrySelector, ' +
       '#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox, ' +
       '#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox, ' +
-      '#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').hide();
+      '#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').css('display', 'none');
 
     $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox, ' +
       '#ctl00_PageBody_InvoiceAddress_AddressLine1, ' +
       '#ctl00_PageBody_InvoiceAddress_City, ' +
       '#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList, ' +
       '#ctl00_PageBody_InvoiceAddress_Postcode, ' +
-      '#ctl00_PageBody_InvoiceAddress_CountrySelector1').hide();
+      '#ctl00_PageBody_InvoiceAddress_CountrySelector1').css('display', 'none');
 
-    // --------------------------
-    // Transaction Type Section
-    // --------------------------
+
+    // ===================================================
+    // 2. Transaction Type Section
+    // ===================================================
     if ($('#ctl00_PageBody_TransactionTypeDiv').length) {
         const modernTransactionSelector = `
             <div class="modern-transaction-selector d-flex justify-content-around">
@@ -33,7 +34,7 @@ $(document).ready(function() {
                 </button>
             </div>
         `;
-        $('#ctl00_PageBody_TransactionTypeDiv').show().append(modernTransactionSelector);
+        $('#ctl00_PageBody_TransactionTypeDiv').append(modernTransactionSelector);
 
         function updateTransactionStyles(selectedValue) {
             console.log(`Transaction type updated: ${selectedValue}`);
@@ -53,16 +54,16 @@ $(document).ready(function() {
             updateTransactionStyles('rdbQuote');
         }
         $('.modern-transaction-selector button').on('click', function() {
-            const selectedValue = $(this).data('value');
-            updateTransactionStyles(selectedValue);
+            updateTransactionStyles($(this).data('value'));
         });
     } else {
         console.warn('Transaction type div not found.');
     }
 
-    // --------------------------
-    // Shipping Method Section
-    // --------------------------
+
+    // ===================================================
+    // 3. Shipping Method Section
+    // ===================================================
     if ($('.SaleTypeSelector').length) {
         $('.SaleTypeSelector').hide();
         const modernShippingSelector = `
@@ -87,7 +88,7 @@ $(document).ready(function() {
                 $('#ctl00_PageBody_SaleTypeSelector_rbCollectLater').prop('checked', true);
                 $('#btnPickup').removeClass('btn-secondary').addClass('btn-primary');
                 $('#btnDelivered').removeClass('btn-primary').addClass('btn-secondary');
-                // Automatically check the billing address radio button when Pickup is selected.
+                // Automatically check billing radio if Pickup is selected.
                 $("#billingAddressRadio").prop("checked", true).trigger("change");
             }
         }
@@ -97,16 +98,16 @@ $(document).ready(function() {
             updateShippingStyles('rbCollectLater');
         }
         $('.modern-shipping-selector button').on('click', function() {
-            const selectedValue = $(this).data('value');
-            updateShippingStyles(selectedValue);
+            updateShippingStyles($(this).data('value'));
         });
     } else {
         console.warn('Shipping method selector not found.');
     }
 
-    // --------------------------
-    // Address Selector Behavior
-    // --------------------------
+
+    // ===================================================
+    // 4. Address Selector Behavior & Appending Read-Only Display Containers
+    // ===================================================
     var shippingAddress = "";
     if ($('#ctl00_PageBody_CustomerAddressSelector_SelectAddressLinkButton').length) {
         console.log('Initializing address selector behavior...');
@@ -121,61 +122,65 @@ $(document).ready(function() {
                     smallestIdEntry = $(this);
                 }
             });
-            const selectedAddress = smallestIdEntry.find('dd p').first().text().trim();
-            shippingAddress = selectedAddress;
-            console.log(`Smallest ID address selected: ${selectedAddress}`);
+            shippingAddress = smallestIdEntry.find('dd p').first().text().trim();
+            console.log(`Smallest ID address selected: ${shippingAddress}`);
 
-            // Parse address components
-            const addressParts = selectedAddress.split(',').map(part => part.trim());
-            const addressLine1 = addressParts[0] || '';
-            const city = addressParts[1] || '';
+            // Parse address components from the selected address.
+            const parts = shippingAddress.split(',').map(s => s.trim());
+            const addressLine1 = parts[0] || '';
+            const city = parts[1] || '';
             let state = '', zipCode = '';
-            if (addressParts.length >= 4) {
-                state = addressParts[addressParts.length - 2];
-                zipCode = addressParts[addressParts.length - 1];
-            } else if (addressParts.length > 2) {
-                const stateZipMatch = addressParts[2].match(/(.+?)\s*(\d{5}(?:-\d{4})?)?$/);
-                if (stateZipMatch) {
-                    state = stateZipMatch[1].trim();
-                    zipCode = stateZipMatch[2] || '';
+            if (parts.length >= 4) {
+                state = parts[parts.length - 2];
+                zipCode = parts[parts.length - 1];
+            } else if (parts.length > 2) {
+                const match = parts[2].match(/(.+?)\s*(\d{5}(?:-\d{4})?)?$/);
+                if (match) {
+                    state = match[1].trim();
+                    zipCode = match[2] || '';
                 }
             }
             console.log(`Parsed Address -> Line 1: ${addressLine1}, City: ${city}, State: ${state}, Zip: ${zipCode}`);
 
-            // Populate the hidden delivery address input fields
+            // Populate the hidden delivery input fields.
             $('#ctl00_PageBody_DeliveryAddress_AddressLine1').val(addressLine1);
             $('#ctl00_PageBody_DeliveryAddress_City').val(city);
             $('#ctl00_PageBody_DeliveryAddress_Postcode').val(zipCode);
             $('#ctl00_PageBody_DeliveryAddress_CountrySelector').val('USA');
 
-            // Append new read-only display containers to the 6th and 7th .epi-form-col-single-checkout elements.
-            // These containers are hidden by default.
+            // Append read-only display containers to the 6th and 7th .epi-form-col-single-checkout elements.
             var $checkoutDivs = $('.epi-form-col-single-checkout');
             if ($checkoutDivs.length >= 7) {
-                $checkoutDivs.eq(5).append(`
-                    <div class="selected-address-display" style="display:none;">
-                        <strong>Delivery Address:</strong><br>${shippingAddress}<br>
-                        <button type="button" id="internalEditDeliveryAddressButton" class="edit-button">Edit Delivery Address</button>
-                    </div>
-                `);
-                $checkoutDivs.eq(6).append(`
-                    <div class="billing-address-section" style="display:none;">
-                        <label>
-                            <input type="radio" id="billingAddressRadio" name="billingAddressOption">
-                            Billing address is the same as delivery address
-                        </label>
-                        <div class="selected-invoice-address-display">
-                            <strong>Invoice Address:</strong><br>
-                            <button type="button" id="internalEditInvoiceAddressButton" class="edit-button">Edit Invoice Address</button>
+                // Append the Delivery Address read-only container (visible by default)
+                // Only append once (using a unique class to check if it already exists).
+                if ($checkoutDivs.eq(5).find('.selected-address-display').length === 0) {
+                    $checkoutDivs.eq(5).append(`
+                        <div class="selected-address-display">
+                            <strong>Delivery Address:</strong><br>${shippingAddress}<br>
+                            <button type="button" id="internalEditDeliveryAddressButton" class="edit-button">Edit Delivery Address</button>
                         </div>
-                    </div>
-                `);
+                    `);
+                }
+                // Append the Invoice Address container (with billing radio) to the 7th element.
+                if ($checkoutDivs.eq(6).find('.billing-address-section').length === 0) {
+                    $checkoutDivs.eq(6).append(`
+                        <div class="billing-address-section">
+                            <label>
+                                <input type="radio" id="billingAddressRadio" name="billingAddressOption">
+                                Billing address is the same as delivery address
+                            </label>
+                            <div class="selected-invoice-address-display">
+                                <strong>Invoice Address:</strong><br>
+                                <button type="button" id="internalEditInvoiceAddressButton" class="edit-button">Edit Invoice Address</button>
+                            </div>
+                        </div>
+                    `);
+                }
             } else {
                 console.warn('Not enough .epi-form-col-single-checkout elements found.');
             }
         }
-
-        // Add a button to allow adding a new address (which shows the hidden input fields)
+        // "Add New Address" button to reveal hidden input fields.
         const addNewAddressButton = `
             <li class="AddressSelectorEntry text-center">
                 <button id="btnAddNewAddress" class="btn btn-secondary">Add New Address</button>
@@ -199,37 +204,47 @@ $(document).ready(function() {
               '#ctl00_PageBody_InvoiceAddress_CountrySelector1')
               .css('display', 'inline-block');
             $('.AddressSelectorList').hide();
-            // Optionally, clear the read-only display containers if new data is to be entered.
-            // $('.selected-address-display, .billing-address-section').empty();
         });
     } else {
         console.warn('Address selector link button not found.');
     }
 
-    // --------------------------
-    // External Edit Buttons
-    // These buttons (appended externally) will reveal the read-only display containers.
-    // --------------------------
+    // ===================================================
+    // 5. External Edit Buttons (Optional)
+    // These buttons (appended externally) reveal the hidden input fields.
+    // ===================================================
     var $checkoutDivs = $('.epi-form-col-single-checkout');
     if ($checkoutDivs.length >= 7) {
-        // Append external edit buttons to the body (adjust positioning as needed)
         $('<button id="showEditDeliveryButton" style="margin:10px;">Edit Delivery Address</button>')
             .appendTo('body')
             .on('click', function() {
                 console.log("External Edit Delivery button clicked.");
-                $checkoutDivs.eq(5).find('.selected-address-display').css('display', 'inline-block');
+                $('#ctl00_PageBody_DeliveryAddress_AddressLine1, ' +
+                  '#ctl00_PageBody_DeliveryAddress_City, ' +
+                  '#ctl00_PageBody_DeliveryAddress_Postcode, ' +
+                  '#ctl00_PageBody_DeliveryAddress_CountrySelector, ' +
+                  '#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox, ' +
+                  '#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox, ' +
+                  '#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox')
+                  .css('display', 'inline-block');
             });
         $('<button id="showEditInvoiceButton" style="margin:10px;">Edit Invoice Address</button>')
             .appendTo('body')
             .on('click', function() {
                 console.log("External Edit Invoice button clicked.");
-                $checkoutDivs.eq(6).find('.billing-address-section').css('display', 'inline-block');
+                $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox, ' +
+                  '#ctl00_PageBody_InvoiceAddress_AddressLine1, ' +
+                  '#ctl00_PageBody_InvoiceAddress_City, ' +
+                  '#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList, ' +
+                  '#ctl00_PageBody_InvoiceAddress_Postcode, ' +
+                  '#ctl00_PageBody_InvoiceAddress_CountrySelector1')
+                  .css('display', 'inline-block');
             });
     }
 
-    // --------------------------
-    // Account Settings Fetch
-    // --------------------------
+    // ===================================================
+    // 6. Account Settings Fetch
+    // ===================================================
     $.get("https://webtrack.woodsonlumber.com/AccountSettings.aspx", function(data) {
         var $accountPage = $(data);
         var firstName = $accountPage.find('#ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput').val() || '';
@@ -242,27 +257,26 @@ $(document).ready(function() {
         $('#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox').val(lastName);
         $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox').val(parsedEmail);
 
-        // Update the Delivery Address read-only display to include the contact's name.
+        // Optionally update the read-only delivery display (if needed)
         if ($('.selected-address-display').length) {
-            $('.selected-address-display').html(
-                `<strong>Delivery Address:</strong><br>${firstName} ${lastName}<br>${shippingAddress}<br>
-                 <button type="button" id="internalEditDeliveryAddressButton" class="edit-button">Edit Delivery Address</button>`
-            );
+            // Update content without reappending duplicate edit buttons.
+            $('.selected-address-display').find('strong').first().html(`Delivery Address:`);
+            // You might choose to update the displayed name here if desired.
         }
     });
 
-    // --------------------------
-    // Telephone Fetch
-    // --------------------------
+    // ===================================================
+    // 7. Telephone Fetch
+    // ===================================================
     $.get("https://webtrack.woodsonlumber.com/AccountInfo_R.aspx", function(data) {
         var telephone = $(data).find('#ctl00_PageBody_TelephoneLink_TelephoneLink').text().trim();
         console.log("Fetched telephone:", telephone);
         $('#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').val(telephone);
     });
 
-    // --------------------------
-    // Billing Address Radio Button Handler
-    // --------------------------
+    // ===================================================
+    // 8. Billing Address Radio Button Handler
+    // ===================================================
     $(document).on('change', '#billingAddressRadio', function() {
         if ($(this).is(':checked')) {
             console.log("Billing radio button checked.");
@@ -290,9 +304,9 @@ $(document).ready(function() {
         }
     });
 
-    // --------------------------
-    // Internal Edit Buttons Handlers (within the read-only displays)
-    // --------------------------
+    // ===================================================
+    // 9. Internal Edit Buttons Handlers (within read-only displays)
+    // ===================================================
     $(document).on('click', '#internalEditDeliveryAddressButton', function() {
         console.log("Internal Edit Delivery Address button clicked.");
         $('#ctl00_PageBody_DeliveryAddress_AddressLine1, ' +
@@ -315,9 +329,9 @@ $(document).ready(function() {
           .css('display', 'inline-block');
     });
 
-    // --------------------------
-    // Date Picker (unchanged)
-    // --------------------------
+    // ===================================================
+    // 10. Date Picker (unchanged)
+    // ===================================================
     if ($('#ctl00_PageBody_dtRequired_DatePicker_wrapper').length) {
         console.log('Date selector found, no modifications made to the date field.');
     } else {
