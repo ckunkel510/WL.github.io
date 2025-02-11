@@ -127,15 +127,17 @@ $(document).ready(function() {
             });
 
             if (deliverySection.length) {
-                // Set state/county dropdown correctly with logic for both abbreviation and full name
+                // Set state/county dropdown correctly with more robust matching logic
                 const stateDropdown = $('#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList');
-                const stateText = addressParts[1].split(' ')[1]?.trim() || ''; // Assuming state might be part of the city/state line
+                const stateText = addressParts[1].split(' ')[1]?.trim() || '';  // Assuming state might be part of the city/state line
                 if (stateDropdown.length) {
                     let matchedOption = stateDropdown.find('option').filter(function() {
+                        const optionText = $(this).text().toLowerCase();
                         return (
-                            $(this).text().toLowerCase() === stateText.toLowerCase() ||
-                            $(this).text().toLowerCase().includes(stateText.toLowerCase()) ||
-                            $(this).text().slice(0, 2).toLowerCase() === stateText.toLowerCase()
+                            optionText === stateText.toLowerCase() ||
+                            optionText.includes(stateText.toLowerCase()) ||
+                            optionText.startsWith(stateText.toLowerCase()) ||
+                            (stateText.length === 2 && optionText.includes(stateText))  // Handle state abbreviations
                         );
                     });
                     if (matchedOption.length > 0) {
