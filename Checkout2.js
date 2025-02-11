@@ -119,11 +119,13 @@ $(document).ready(function() {
             let state = '', zipCode = '';
 
             if (addressParts.length > 2) {
-                const stateZipMatch = addressParts[2].match(/(.+?)\s*(\d{5})?$/);
-
-                if (stateZipMatch) {
-                    state = stateZipMatch[1].trim();  // Extract the state name
-                    zipCode = stateZipMatch[2] || '';  // Extract the zip code if available
+                // Handle state and zip parsing when a comma separates them
+                const stateZipParts = addressParts[2].split(/\s+/);
+                if (stateZipParts.length >= 2) {
+                    state = stateZipParts[0];
+                    zipCode = stateZipParts[1];
+                } else {
+                    console.warn('Unexpected format for state and zip:', addressParts[2]);
                 }
             }
 
