@@ -35,6 +35,10 @@ $(document).ready(function() {
     "#ctl00_PageBody_ContinueButton1"
   ).css("display", "none");
 
+  $(
+    ".row"
+  ).css("display", "block");
+
   // --- Invoice Address elements to hide:
   $(
     "#ctl00_PageBody_InvoiceAddress_GoogleAddressSearchWrapper, " +
