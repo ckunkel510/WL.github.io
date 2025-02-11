@@ -127,21 +127,23 @@ $(document).ready(function() {
             });
 
             if (deliverySection.length) {
-                // Set state/county dropdown correctly with more robust matching logic
+                // Extract state from the address and set the dropdown
                 const stateDropdown = $('#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList');
-                const stateText = addressParts[1].split(' ')[1]?.trim() || '';  // Assuming state might be part of the city/state line
+                const stateText = addressParts[1].trim().split(' ').slice(-1)[0]; // Last part of city/state line
                 if (stateDropdown.length) {
                     let matchedOption = stateDropdown.find('option').filter(function() {
                         const optionText = $(this).text().toLowerCase();
                         return (
                             optionText === stateText.toLowerCase() ||
                             optionText.includes(stateText.toLowerCase()) ||
-                            optionText.startsWith(stateText.toLowerCase()) ||
-                            (stateText.length === 2 && optionText.includes(stateText))  // Handle state abbreviations
+                            (stateText.length === 2 && optionText.includes(stateText)) // Handle abbreviations
                         );
                     });
                     if (matchedOption.length > 0) {
-                        matchedOption.prop('selected', true);  // Set selected attribute to the matched option
+                        matchedOption.prop('selected', true);  // Set selected attribute
+                        console.log(`Matched state: ${matchedOption.text()}`);
+                    } else {
+                        console.warn(`State '${stateText}' not found in dropdown options.`);
                     }
                 }
 
