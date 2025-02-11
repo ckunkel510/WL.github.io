@@ -165,10 +165,20 @@ $(document).ready(function() {
                     }
                 }
 
-                // Hide address input fields and display the selected address summary within the Delivery section
+                // Hide address input fields
                 deliverySection.find('.epi-form-group-checkout').hide();
+
+                // Remove any existing selected address display
                 deliverySection.find('.selected-address-display').remove();
-                deliverySection.find('.SelectableAddressType').parent().after(`<div class="selected-address-display"><strong>Selected Address:</strong> ${selectedAddress}</div>`);
+
+                // Append the selected address information into the target container
+                // which is the div with the class "font-weight-bold mb-3" that contains the "SelectableAddressType" span.
+                const targetContainer = deliverySection.find('.font-weight-bold.mb-3:has(.SelectableAddressType)');
+                if (targetContainer.length) {
+                    targetContainer.append(`<div class="selected-address-display mt-2"><strong>Selected Address:</strong> ${selectedAddress}</div>`);
+                } else {
+                    console.warn('Target container for selected address not found.');
+                }
             } else {
                 console.warn('Delivery section not found.');
             }
