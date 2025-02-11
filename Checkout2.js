@@ -127,13 +127,20 @@ $(document).ready(function() {
             });
 
             if (deliverySection.length) {
-                // Set state/county dropdown correctly
+                // Set state/county dropdown correctly with logic for both abbreviation and full name
                 const stateDropdown = $('#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList');
-                const stateText = addressParts[1].split(' ')[1]?.trim() || '';  // Extracting state from city/state line
+                const stateText = addressParts[1].split(' ')[1]?.trim() || ''; // Assuming state might be part of the city/state line
                 if (stateDropdown.length) {
-                    stateDropdown.val(stateDropdown.find('option').filter(function() {
-                        return $(this).text().toLowerCase() === stateText.toLowerCase();
-                    }).val());
+                    let matchedOption = stateDropdown.find('option').filter(function() {
+                        return (
+                            $(this).text().toLowerCase() === stateText.toLowerCase() ||
+                            $(this).text().toLowerCase().includes(stateText.toLowerCase()) ||
+                            $(this).text().slice(0, 2).toLowerCase() === stateText.toLowerCase()
+                        );
+                    });
+                    if (matchedOption.length > 0) {
+                        stateDropdown.val(matchedOption.val());
+                    }
                 }
 
                 // Hide address input fields and display the selected address summary within the Delivery section
