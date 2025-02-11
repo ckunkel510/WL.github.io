@@ -4,7 +4,7 @@ $(document).ready(function() {
     // ===================================================
     // 1. Hide all input fields by default via .epi-form-group-checkout
     // ===================================================
-    // (These containers hold the input fields for both delivery and invoice addresses.)
+    // (This hides all the address input groups so they are not visible initially.)
     $('.epi-form-group-checkout').hide();
 
     // ===================================================
@@ -110,7 +110,7 @@ $(document).ready(function() {
             shippingAddress = smallestIdEntry.find('dd p').first().text().trim();
             console.log(`Smallest ID address selected: ${shippingAddress}`);
 
-            // Parse address components from the selected address.
+            // Parse address components.
             const parts = shippingAddress.split(',').map(s => s.trim());
             const addressLine1 = parts[0] || '';
             const city = parts[1] || '';
@@ -133,10 +133,9 @@ $(document).ready(function() {
             $('#ctl00_PageBody_DeliveryAddress_Postcode').val(zipCode);
             $('#ctl00_PageBody_DeliveryAddress_CountrySelector').val('USA');
 
-            // Append read-only display containers into the 6th and 7th .epi-form-col-single-checkout elements.
+            // Append read-only display containers to the 6th and 7th .epi-form-col-single-checkout elements if not already present.
             var $checkoutDivs = $('.epi-form-col-single-checkout');
             if ($checkoutDivs.length >= 7) {
-                // Append the Delivery Address display container if not already present.
                 if ($checkoutDivs.eq(5).find('.selected-address-display').length === 0) {
                     $checkoutDivs.eq(5).append(`
                         <div class="selected-address-display">
@@ -145,7 +144,6 @@ $(document).ready(function() {
                         </div>
                     `);
                 }
-                // Append the Invoice Address display container (with billing radio) if not already present.
                 if ($checkoutDivs.eq(6).find('.billing-address-section').length === 0) {
                     $checkoutDivs.eq(6).append(`
                         <div class="billing-address-section">
@@ -164,8 +162,7 @@ $(document).ready(function() {
                 console.warn('Not enough .epi-form-col-single-checkout elements found.');
             }
         }
-
-        // "Add New Address" button to reveal the hidden input fields.
+        // "Add New Address" button reveals the hidden input fields.
         const addNewAddressButton = `
             <li class="AddressSelectorEntry text-center">
                 <button id="btnAddNewAddress" class="btn btn-secondary">Add New Address</button>
@@ -181,24 +178,10 @@ $(document).ready(function() {
     }
 
     // ===================================================
-    // 5. External Edit Buttons (Optional)
-    // These buttons (appended externally) reveal the hidden input fields.
+    // 5. (Remove External Edit Buttons)
     // ===================================================
-    var $checkoutDivs = $('.epi-form-col-single-checkout');
-    if ($checkoutDivs.length >= 7) {
-        $('<button id="showEditDeliveryButton" style="margin:10px;">Edit Delivery Address</button>')
-            .appendTo('body')
-            .on('click', function() {
-                console.log("External Edit Delivery button clicked.");
-                $('.epi-form-group-checkout').css('display', 'inline-block');
-            });
-        $('<button id="showEditInvoiceButton" style="margin:10px;">Edit Invoice Address</button>')
-            .appendTo('body')
-            .on('click', function() {
-                console.log("External Edit Invoice button clicked.");
-                $('.epi-form-group-checkout').css('display', 'inline-block');
-            });
-    }
+    // External edit buttons have been removed per requirements.
+    // Only the internal edit buttons (inside the read-only displays) will be used.
 
     // ===================================================
     // 6. Account Settings Fetch
@@ -264,7 +247,7 @@ $(document).ready(function() {
     });
 
     // ===================================================
-    // 9. Internal Edit Buttons Handlers (within the read-only displays)
+    // 9. Internal Edit Buttons Handlers (within read-only displays)
     // ===================================================
     $(document).on('click', '#internalEditDeliveryAddressButton', function() {
         console.log("Internal Edit Delivery Address button clicked.");
