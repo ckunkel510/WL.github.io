@@ -2,8 +2,8 @@
 $(document).ready(function() {
     console.log('Page loaded, initializing custom checkout experience...');
 
-    // Hide the original transaction type input content
-    $('#ctl00_PageBody_TransactionTypeInput, .TransactionTypeSelector').hide();
+    // Hide the original transaction type input content completely
+    $('#ctl00_PageBody_TransactionTypeDiv').find('> div').hide();
 
     // Ensure transaction type div exists before appending
     if ($('#ctl00_PageBody_TransactionTypeDiv').length) {
@@ -88,9 +88,9 @@ $(document).ready(function() {
         console.warn('Shipping method selector not found.');
     }
 
-    // Hide the original date input and enhance the interface
+    // Replace the original date input field with the modern version
     if ($('#ctl00_PageBody_dtRequired_DatePicker_wrapper').length) {
-        $('#ctl00_PageBody_dtRequired_DatePicker_wrapper').hide();
+        $('#ctl00_PageBody_dtRequired_DatePicker_wrapper').remove(); // Remove the existing date wrapper
 
         const modernDateSelector = `
             <div class="modern-date-selector">
@@ -98,7 +98,7 @@ $(document).ready(function() {
                 <input type="text" id="modernDateInput" class="form-control" placeholder="Select a date">
             </div>
         `;
-        $('#ctl00_PageBody_dtRequired_DatePicker_wrapper').parent().append(modernDateSelector);
+        $('#ctl00_PageBody_dtRequired_DatePicker_dateInput').parent().append(modernDateSelector);
 
         $('#modernDateInput').datepicker({
             dateFormat: 'mm/dd/yy',
