@@ -2,21 +2,14 @@ $(document).ready(function() {
   console.log("Page loaded, initializing custom checkout experience...");
 
   // ===================================================
-  // 0. On Load: Hide specific Delivery Address elements.
+  // 0. On Load: Hide the following Delivery Address elements.
   // ===================================================
-  // These selectors hide the following on load:
-  // - The span with id: ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral
-  // - The labels for first and last name (assumed to have a "for" attribute matching the input IDs)
-  // - The first name and last name inputs
-  // - The div with id: ctl00_PageBody_DeliveryAddress_GoogleAddressSearchWrapper
-  // - The label for search places (for="locationFieldDelivery") and the element with id "locationFieldDelivery"
-  // - The span with id: ctl00_PageBody_DeliveryAddress_AddressLine1TitleLiteral and the input with id ctl00_PageBody_DeliveryAddress_AddressLine1
-  // - The AddressLine2 and AddressLine3 titles and inputs
-  // - The city, state, zip, country labels and inputs/dropdown, and the contact telephone row.
-  $("#ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral, " +
-    "label[for='ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox'], " +
+  // We use a combined jQuery selector for all the elements you listed.
+  $(
+    "#ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral, " +
+    "label:contains('First name:'), " +
+    "label:contains('Last name:'), " +
     "#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox, " +
-    "label[for='ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox'], " +
     "#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox, " +
     "#ctl00_PageBody_DeliveryAddress_GoogleAddressSearchWrapper, " +
     "label[for='locationFieldDelivery'], " +
@@ -37,17 +30,16 @@ $(document).ready(function() {
     "#ctl00_PageBody_DeliveryAddress_CountrySelector, " +
     "#ctl00_PageBody_DeliveryAddress_ContactTelephoneRow, " +
     "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTitleLiteral, " +
-    "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox")
-    .css("display", "none");
+    "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox, " +
+    "#autocompleteDelivery"
+  ).css("display", "none");
 
   // ===================================================
   // (A) Always-Attached Event Handlers & Helper Functions
   // ===================================================
 
-  // Helper function: refreshReadOnlyDisplays() updates the read-only display areas
-  // based on the current values in the input fields.
+  // refreshReadOnlyDisplays() updates the read-only displays based on current input field values.
   function refreshReadOnlyDisplays() {
-    // Delivery Address Display
     var delFirstName = $("#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox").val();
     var delLastName  = $("#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox").val();
     var delAddress   = $("#ctl00_PageBody_DeliveryAddress_AddressLine1").val();
@@ -60,7 +52,6 @@ $(document).ready(function() {
     $(".selected-address-display").html(delDisplay +
       '<br><button type="button" id="internalEditDeliveryAddressButton" class="edit-button">Edit Delivery Address</button>');
 
-    // Invoice Address Display
     var invAddress   = $("#ctl00_PageBody_InvoiceAddress_AddressLine1").val();
     var invCity      = $("#ctl00_PageBody_InvoiceAddress_City").val();
     var invZip       = $("#ctl00_PageBody_InvoiceAddress_Postcode").val();
@@ -71,17 +62,16 @@ $(document).ready(function() {
       '<br><button type="button" id="internalEditInvoiceAddressButton" class="edit-button">Edit Invoice Address</button>');
   }
 
-  // Update the read-only displays when inputs change or lose focus.
+  // When any input in .epi-form-group-checkout changes, update the read-only displays.
   $(".epi-form-group-checkout input").on("change blur", refreshReadOnlyDisplays);
 
-  // Internal Edit button handler for Delivery Address:
-  // When clicked, reveal the hidden Delivery Address elements and add a "Save" button.
+  // Internal Edit button for Delivery Address – show the hidden elements.
   $(document).on("click", "#internalEditDeliveryAddressButton", function() {
     console.log("Internal Edit Delivery Address button clicked.");
     $("#ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral, " +
-      "label[for='ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox'], " +
+      "label:contains('First name:'), " +
+      "label:contains('Last name:'), " +
       "#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox, " +
-      "label[for='ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox'], " +
       "#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox, " +
       "#ctl00_PageBody_DeliveryAddress_GoogleAddressSearchWrapper, " +
       "label[for='locationFieldDelivery'], " +
@@ -102,10 +92,11 @@ $(document).ready(function() {
       "#ctl00_PageBody_DeliveryAddress_CountrySelector, " +
       "#ctl00_PageBody_DeliveryAddress_ContactTelephoneRow, " +
       "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTitleLiteral, " +
-      "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox")
-      .css("display", "inline-block");
-
-    // Append the "Save Delivery Address" button if it doesn't exist.
+      "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox"
+    ).css("display", "inline-block");
+    // Also reveal the autocomplete element if needed.
+    $("#autocompleteDelivery").css("display", "inline-block");
+    // Append a Save button if not already present.
     if ($("#saveDeliveryAddressButton").length === 0) {
       $(".selected-address-display").append(
         '<br><button type="button" id="saveDeliveryAddressButton" class="edit-button">Save Delivery Address</button>'
@@ -113,14 +104,13 @@ $(document).ready(function() {
     }
   });
 
-  // Save button handler for Delivery Address.
+  // Save button handler for Delivery Address – hide the elements again.
   $(document).on("click", "#saveDeliveryAddressButton", function() {
     console.log("Save Delivery Address button clicked.");
-    // Hide the specified Delivery Address elements again.
     $("#ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral, " +
-      "label[for='ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox'], " +
+      "label:contains('First name:'), " +
+      "label:contains('Last name:'), " +
       "#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox, " +
-      "label[for='ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox'], " +
       "#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox, " +
       "#ctl00_PageBody_DeliveryAddress_GoogleAddressSearchWrapper, " +
       "label[for='locationFieldDelivery'], " +
@@ -141,21 +131,20 @@ $(document).ready(function() {
       "#ctl00_PageBody_DeliveryAddress_CountrySelector, " +
       "#ctl00_PageBody_DeliveryAddress_ContactTelephoneRow, " +
       "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTitleLiteral, " +
-      "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox")
-      .css("display", "none");
-    // Remove the Save button.
+      "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox, " +
+      "#autocompleteDelivery"
+    ).css("display", "none");
     $("#saveDeliveryAddressButton").remove();
-    // Refresh the read-only display.
     refreshReadOnlyDisplays();
   });
 
-  // (Optional) Internal Edit button for Invoice Address – show input fields.
+  // (Optional) Internal Edit button for Invoice Address.
   $(document).on("click", "#internalEditInvoiceAddressButton", function() {
     console.log("Internal Edit Invoice Address button clicked.");
     $(".epi-form-group-checkout").show();
   });
 
-  // Billing radio button handler – when checked, copy delivery values to invoice fields.
+  // Billing radio button handler – copy delivery values to invoice fields.
   $(document).on("change", "#billingAddressRadio", function() {
     if ($(this).is(":checked")) {
       console.log("Billing radio button checked.");
@@ -177,7 +166,7 @@ $(document).ready(function() {
   // (B) Modern Buttons for Transaction Type & Shipping Method
   // ===================================================
   if ($("#ctl00_PageBody_TransactionTypeDiv").length) {
-    $(".TransactionTypeSelector").hide();
+    $(".TransactionTypeSelector").hide(); // Hide original radio buttons.
     const modernTransactionSelector = `
       <div class="modern-transaction-selector d-flex justify-content-around">
         <button id="btnOrder" class="btn btn-primary" data-value="rdbOrder">
