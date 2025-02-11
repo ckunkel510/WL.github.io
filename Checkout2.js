@@ -118,12 +118,16 @@ $(document).ready(function() {
             const city = addressParts[1] || '';
             let state = '', zipCode = '';
 
-            if (addressParts.length > 2) {
-                const stateZipMatch = addressParts[2].match(/(.+?)\s*(\d{5})?$/);
-
+            if (addressParts.length >= 4) {
+                // When there are 4 or more parts, assume the last two parts are state and zip code.
+                state = addressParts[addressParts.length - 2];
+                zipCode = addressParts[addressParts.length - 1];
+            } else if (addressParts.length > 2) {
+                // Otherwise, try to extract state and zip from the third part.
+                const stateZipMatch = addressParts[2].match(/(.+?)\s*(\d{5}(?:-\d{4})?)?$/);
                 if (stateZipMatch) {
-                    state = stateZipMatch[1].trim();  // Extract the state name
-                    zipCode = stateZipMatch[2] || '';  // Extract the zip code if available
+                    state = stateZipMatch[1].trim();
+                    zipCode = stateZipMatch[2] || '';
                 }
             }
 
