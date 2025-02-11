@@ -119,12 +119,11 @@ $(document).ready(function() {
             let state = '', zipCode = '';
 
             if (addressParts.length > 2) {
-                const stateZipParts = addressParts[2].split(/\s+/).filter(Boolean);
-                if (stateZipParts.length >= 2) {
-                    state = stateZipParts[0];  // First element is the state
-                    zipCode = stateZipParts.slice(1).join(' ');  // Remaining part is the zip code
-                } else {
-                    state = stateZipParts[0];
+                const stateZipMatch = addressParts[2].match(/(.+?)\s*(\d{5})?$/);
+
+                if (stateZipMatch) {
+                    state = stateZipMatch[1].trim();  // Extract the state name
+                    zipCode = stateZipMatch[2] || '';  // Extract the zip code if available
                 }
             }
 
