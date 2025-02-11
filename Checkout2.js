@@ -4,7 +4,7 @@ $(document).ready(function() {
   // ===================================================
   // 0. On Load: Hide specified Delivery and Invoice Address elements.
   // ===================================================
-  // Delivery Address elements to hide (including the additional CopyDeliveryAddressLinkButton)
+  // --- Delivery Address elements to hide:
   $(
     "#ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral, " +
     "label:contains('First name:'), " +
@@ -34,7 +34,7 @@ $(document).ready(function() {
     "#autocompleteDelivery"
   ).css("display", "none");
 
-  // Invoice Address elements to hide:
+  // --- Invoice Address elements to hide:
   $(
     "#ctl00_PageBody_InvoiceAddress_GoogleAddressSearchWrapper, " +
     "label[for='locationFieldInvoice'], " +
@@ -59,15 +59,19 @@ $(document).ready(function() {
     "#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox"
   ).css("display", "none");
 
+  // Also, change the text of the element with id "ctl00_PageBody_CopyDeliveryAddressLinkButton"
+  // to "Billing address is the same as delivery address"
+  $("#ctl00_PageBody_CopyDeliveryAddressLinkButton").text("Billing address is the same as delivery address");
+
   // ===================================================
   // (A) Always-Attached Event Handlers & Helper Functions
   // ===================================================
   var isEditingDelivery = false;
   var isEditingInvoice = false;
 
-  // refreshReadOnlyDisplays() updates the read-only displays from current input values.
+  // refreshReadOnlyDisplays() updates the read-only display areas from the current input values.
   function refreshReadOnlyDisplays() {
-    // Only update Delivery display if not editing.
+    // Delivery Address Display update (only if not editing).
     if (!isEditingDelivery) {
       var delFirstName = $("#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox").val();
       var delLastName  = $("#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox").val();
@@ -81,7 +85,7 @@ $(document).ready(function() {
       $(".selected-address-display").html(delDisplay +
         '<br><button type="button" id="internalEditDeliveryAddressButton" class="edit-button">Edit Delivery Address</button>');
     }
-    // Always update Invoice display if not editing.
+    // Invoice Address Display update (only if not editing).
     if (!isEditingInvoice) {
       var invAddress   = $("#ctl00_PageBody_InvoiceAddress_AddressLine1").val();
       var invCity      = $("#ctl00_PageBody_InvoiceAddress_City").val();
@@ -94,10 +98,10 @@ $(document).ready(function() {
     }
   }
 
-  // Update read-only displays on input change/blur.
+  // Update read-only displays when any input in .epi-form-group-checkout changes.
   $(".epi-form-group-checkout input").on("change blur", refreshReadOnlyDisplays);
 
-  // Internal Edit Delivery Address: Reveal hidden Delivery Address elements and add Save button.
+  // Internal Edit Delivery Address button handler: Reveal hidden Delivery Address elements and add Save button.
   $(document).on("click", "#internalEditDeliveryAddressButton", function() {
     console.log("Internal Edit Delivery Address button clicked.");
     isEditingDelivery = true;
@@ -128,7 +132,7 @@ $(document).ready(function() {
       "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox, " +
       "#autocompleteDelivery"
     ).css("display", "inline-block");
-    // Append Save button if not present.
+    // Append Save Delivery Address button if not present.
     if ($("#saveDeliveryAddressButton").length === 0) {
       $(".selected-address-display").append(
         '<br><button type="button" id="saveDeliveryAddressButton" class="edit-button">Save Delivery Address</button>'
@@ -136,7 +140,7 @@ $(document).ready(function() {
     }
   });
 
-  // Save Delivery Address: Hide the Delivery Address elements and remove the Save button.
+  // Save Delivery Address button handler: Hide the Delivery Address elements and remove the Save button.
   $(document).on("click", "#saveDeliveryAddressButton", function() {
     console.log("Save Delivery Address button clicked.");
     $("#ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral, " +
@@ -171,7 +175,7 @@ $(document).ready(function() {
     refreshReadOnlyDisplays();
   });
 
-  // Internal Edit Invoice Address: Reveal hidden Invoice Address elements and add Save button.
+  // Internal Edit Invoice Address button handler: Reveal hidden Invoice Address elements and add Save button.
   $(document).on("click", "#internalEditInvoiceAddressButton", function() {
     console.log("Internal Edit Invoice Address button clicked.");
     isEditingInvoice = true;
@@ -197,6 +201,7 @@ $(document).ready(function() {
       "#ctl00_PageBody_InvoiceAddress_EmailAddressTitleLiteral, " +
       "#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox"
     ).css("display", "inline-block");
+    // Append Save Invoice Address button if not present.
     if ($("#saveInvoiceAddressButton").length === 0) {
       $(".selected-invoice-address-display").append(
         '<br><button type="button" id="saveInvoiceAddressButton" class="edit-button">Save Invoice Address</button>'
@@ -204,7 +209,7 @@ $(document).ready(function() {
     }
   });
 
-  // Save Invoice Address: Hide the Invoice Address elements and remove the Save button.
+  // Save Invoice Address button handler: Hide the Invoice Address elements and remove the Save button.
   $(document).on("click", "#saveInvoiceAddressButton", function() {
     console.log("Save Invoice Address button clicked.");
     $("#ctl00_PageBody_InvoiceAddress_GoogleAddressSearchWrapper, " +
@@ -297,7 +302,8 @@ $(document).ready(function() {
         $("#ctl00_PageBody_SaleTypeSelector_rbCollectLater").prop("checked", true);
         $("#btnPickup").removeClass("btn-secondary").addClass("btn-primary");
         $("#btnDelivered").removeClass("btn-primary").addClass("btn-secondary");
-        $("#billingAddressRadio").prop("checked", true).trigger("change");
+        // No billing radio now, so simply trigger a refresh.
+        refreshReadOnlyDisplays();
       }
     }
     if ($("#ctl00_PageBody_SaleTypeSelector_rbDelivered").is(":checked")) {
@@ -403,17 +409,12 @@ $(document).ready(function() {
         </div>
       `);
     }
-    if ($checkoutDivs.eq(6).find(".billing-address-section").length === 0) {
+    // For Invoice, instead of a billing radio we simply append the read-only container.
+    if ($checkoutDivs.eq(6).find(".selected-invoice-address-display").length === 0) {
       $checkoutDivs.eq(6).append(`
-        <div class="billing-address-section">
-          <label>
-            <input type="radio" id="billingAddressRadio" name="billingAddressOption">
-            Billing address is the same as delivery address
-          </label>
-          <div class="selected-invoice-address-display">
-            <strong>Invoice Address:</strong><br>
-            <button type="button" id="internalEditInvoiceAddressButton" class="edit-button">Edit Invoice Address</button>
-          </div>
+        <div class="selected-invoice-address-display">
+          <strong>Invoice Address:</strong><br>
+          <button type="button" id="internalEditInvoiceAddressButton" class="edit-button">Edit Invoice Address</button>
         </div>
       `);
     }
