@@ -32,7 +32,7 @@ $(document).ready(function() {
     "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTitleLiteral, " +
     "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox, " +
     "#autocompleteDelivery, " +
-    ".epi-form-group-checkout"
+    "#ctl00_PageBody_ContinueButton1"
   ).css("display", "none");
 
   // --- Invoice Address elements to hide:
