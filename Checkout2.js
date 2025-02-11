@@ -207,6 +207,24 @@ $(document).ready(function() {
         console.warn('Address selector link button not found.');
     }
 
+    // Fetch account settings data from the AccountSettings.aspx page and update delivery/invoice fields
+    $.get("https://webtrack.woodsonlumber.com/AccountSettings.aspx", function(data) {
+        // Create a jQuery object from the returned HTML
+        var $accountPage = $(data);
+        // Get the first name and last name values
+        var firstName = $accountPage.find('#ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput').val() || '';
+        var lastName  = $accountPage.find('#ctl00_PageBody_ChangeUserDetailsControl_LastNameInput').val() || '';
+        // Get the email value; this may include a user component in parentheses.
+        var emailStr  = $accountPage.find('#ctl00_PageBody_ChangeUserDetailsControl_EmailAddressInput').val() || '';
+        // Remove any leading parenthesized user component. For example: "(test) test@woodsonlumber.com" becomes "test@woodsonlumber.com"
+        var parsedEmail = emailStr.replace(/^\([^)]*\)\s*/, '');
+        console.log("Fetched account settings:", firstName, lastName, parsedEmail);
+        // Input the values into the delivery and invoice address fields
+        $('#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox').val(firstName);
+        $('#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox').val(lastName);
+        $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox').val(parsedEmail);
+    });
+
     // Restore the original date input setup
     if ($('#ctl00_PageBody_dtRequired_DatePicker_wrapper').length) {
         console.log('Date selector found, no modifications made to the date field.');
