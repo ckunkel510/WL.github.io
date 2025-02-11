@@ -95,6 +95,28 @@ $(document).ready(function() {
     if ($('#ctl00_PageBody_CustomerAddressSelector_SelectAddressLinkButton').length) {
         console.log('Initializing address selector behavior...');
 
+        // Automatically select the address with the smallest ID
+        const addressEntries = $('.AddressSelectorEntry');
+        if (addressEntries.length > 0) {
+            let smallestIdEntry = addressEntries.first();
+            let smallestId = parseInt(smallestIdEntry.find('.AddressId').text().trim(), 10);
+
+            addressEntries.each(function() {
+                const currentId = parseInt($(this).find('.AddressId').text().trim(), 10);
+                if (currentId < smallestId) {
+                    smallestId = currentId;
+                    smallestIdEntry = $(this);
+                }
+            });
+
+            // Select and display the address with the smallest ID
+            const selectedAddress = smallestIdEntry.find('dd p').first().text().trim();
+            console.log(`Smallest ID address selected: ${selectedAddress}`);
+
+            $('#ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral, #ctl00_PageBody_DeliveryAddress_AddressLine1, #ctl00_PageBody_DeliveryAddress_AddressLine2, #ctl00_PageBody_DeliveryAddress_AddressLine3, #ctl00_PageBody_DeliveryAddress_City, #ctl00_PageBody_DeliveryAddress_Postcode, #ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').closest('.epi-form-group-checkout').hide();
+            $('.AddressSelectorList').after(`<div class="selected-address-display"><strong>Selected Address:</strong> ${selectedAddress}</div>`);
+        }
+
         // Add a button to allow adding a new address
         const addNewAddressButton = `
             <li class="AddressSelectorEntry text-center">
@@ -108,15 +130,7 @@ $(document).ready(function() {
             // Show all address input fields
             $('#ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral, #ctl00_PageBody_DeliveryAddress_AddressLine1, #ctl00_PageBody_DeliveryAddress_AddressLine2, #ctl00_PageBody_DeliveryAddress_AddressLine3, #ctl00_PageBody_DeliveryAddress_City, #ctl00_PageBody_DeliveryAddress_Postcode, #ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').closest('.epi-form-group-checkout').show();
             $('.AddressSelectorList').hide();
-        });
-
-        $('.AddressSelectorEntry').on('click', function() {
-            const selectedAddress = $(this).find('dd p').first().text().trim();
-            console.log(`Address selected: ${selectedAddress}`);
-
-            // Hide address input fields and display the selected address
-            $('#ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral, #ctl00_PageBody_DeliveryAddress_AddressLine1, #ctl00_PageBody_DeliveryAddress_AddressLine2, #ctl00_PageBody_DeliveryAddress_AddressLine3, #ctl00_PageBody_DeliveryAddress_City, #ctl00_PageBody_DeliveryAddress_Postcode, #ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').closest('.epi-form-group-checkout').hide();
-            $('.AddressSelectorList').after(`<div class="selected-address-display"><strong>Selected Address:</strong> ${selectedAddress}</div>`);
+            $('.selected-address-display').remove();
         });
     } else {
         console.warn('Address selector link button not found.');
