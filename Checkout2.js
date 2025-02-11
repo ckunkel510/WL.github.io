@@ -2,12 +2,12 @@ $(document).ready(function() {
   console.log("Page loaded, initializing custom checkout experience...");
 
   // ===================================================
-  // (A) ALWAYS-ATTACHED EVENT HANDLERS & HELPER FUNCTIONS
+  // (A) Always-Attached Event Handlers & Helper Functions
   // ===================================================
 
   // Helper function to update the read-only displays from the current input values.
   function refreshReadOnlyDisplays() {
-    // Delivery Display
+    // Update Delivery Address display.
     var delFirstName = $("#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox").val();
     var delLastName  = $("#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox").val();
     var delAddress   = $("#ctl00_PageBody_DeliveryAddress_AddressLine1").val();
@@ -20,7 +20,7 @@ $(document).ready(function() {
     $(".selected-address-display").html(delDisplay +
       '<br><button type="button" id="internalEditDeliveryAddressButton" class="edit-button">Edit Delivery Address</button>');
 
-    // Invoice Display
+    // Update Invoice Address display.
     var invAddress   = $("#ctl00_PageBody_InvoiceAddress_AddressLine1").val();
     var invCity      = $("#ctl00_PageBody_InvoiceAddress_City").val();
     var invZip       = $("#ctl00_PageBody_InvoiceAddress_Postcode").val();
@@ -34,7 +34,7 @@ $(document).ready(function() {
   // Attach change/blur handlers to update displays when inputs change.
   $(".epi-form-group-checkout input").on("change blur", refreshReadOnlyDisplays);
 
-  // Internal Edit button handlers – these reveal the input groups.
+  // Internal Edit button handlers – reveal the input fields.
   $(document).on("click", "#internalEditDeliveryAddressButton", function() {
     console.log("Internal Edit Delivery Address button clicked.");
     $(".epi-form-group-checkout").show();
@@ -68,8 +68,11 @@ $(document).ready(function() {
   // (B) ALWAYS RUN: Modern Buttons for Transaction Type & Shipping Method
   // ===================================================
 
-  // Modern Transaction Type Buttons.
+  // --- Modern Transaction Type Buttons ---
   if ($("#ctl00_PageBody_TransactionTypeDiv").length) {
+    // Hide the original radio buttons.
+    $(".TransactionTypeSelector").hide();
+
     const modernTransactionSelector = `
       <div class="modern-transaction-selector d-flex justify-content-around">
         <button id="btnOrder" class="btn btn-primary" data-value="rdbOrder">
@@ -94,7 +97,6 @@ $(document).ready(function() {
         $("#btnOrder").removeClass("btn-primary").addClass("btn-secondary");
       }
     }
-    // Initialize based on the current selection.
     if ($("#ctl00_PageBody_TransactionTypeSelector_rdbOrder").is(":checked")) {
       updateTransactionStyles("rdbOrder");
     } else if ($("#ctl00_PageBody_TransactionTypeSelector_rdbQuote").is(":checked")) {
@@ -107,7 +109,7 @@ $(document).ready(function() {
     console.warn("Transaction type div not found.");
   }
 
-  // Modern Shipping Method Buttons.
+  // --- Modern Shipping Method Buttons ---
   if ($(".SaleTypeSelector").length) {
     $(".SaleTypeSelector").hide();
     const modernShippingSelector = `
@@ -151,8 +153,6 @@ $(document).ready(function() {
   // ===================================================
   // (C) INITIAL PRE-POPULATION LOGIC – Runs only if Delivery Address is empty.
   // ===================================================
-  // We always fetch account settings and telephone data (see below), but the shipping address
-  // pre-population (from the address selector) runs only if #ctl00_PageBody_DeliveryAddress_AddressLine1 is empty.
   if ($("#ctl00_PageBody_DeliveryAddress_AddressLine1").val() === "") {
     console.log("Initial address pre-population running...");
 
@@ -172,7 +172,7 @@ $(document).ready(function() {
         var shippingAddress = smallestIdEntry.find("dd p").first().text().trim();
         console.log("Pre-populated shipping address:", shippingAddress);
 
-        // Parse address components.
+        // Parse the address components.
         var parts = shippingAddress.split(",").map(function(s) { return s.trim(); });
         var addrLine1 = parts[0] || "";
         var city = parts[1] || "";
@@ -196,7 +196,7 @@ $(document).ready(function() {
         $("#ctl00_PageBody_DeliveryAddress_Postcode").val(zip);
         $("#ctl00_PageBody_DeliveryAddress_CountrySelector").val("USA");
 
-        // Set the state dropdown by matching option text.
+        // Set the state dropdown by matching the option text.
         var $stateSelect = $("#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList");
         if ($stateSelect.length) {
           $stateSelect.find("option").each(function() {
@@ -214,7 +214,7 @@ $(document).ready(function() {
     console.log("Address pre-population skipped because Delivery Address field is not empty.");
   }
 
-  // --- Always Run: Account Settings & Telephone Pre-Population ---
+  // --- Always Run: Account Settings & Telephone Fetch ---
   $.get("https://webtrack.woodsonlumber.com/AccountSettings.aspx", function(data) {
     var $acc = $(data);
     var firstName = $acc.find("#ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput").val() || "";
@@ -239,7 +239,6 @@ $(document).ready(function() {
   // ===================================================
   var $checkoutDivs = $(".epi-form-col-single-checkout");
   if ($checkoutDivs.length >= 7) {
-    // Append the Delivery Address display container if it doesn't exist.
     if ($checkoutDivs.eq(5).find(".selected-address-display").length === 0) {
       $checkoutDivs.eq(5).append(`
         <div class="selected-address-display">
@@ -248,7 +247,6 @@ $(document).ready(function() {
         </div>
       `);
     }
-    // Append the Invoice Address display container (with billing radio) if it doesn't exist.
     if ($checkoutDivs.eq(6).find(".billing-address-section").length === 0) {
       $checkoutDivs.eq(6).append(`
         <div class="billing-address-section">
@@ -269,7 +267,7 @@ $(document).ready(function() {
   }
 
   // ===================================================
-  // 5. Date Picker (unchanged)
+  // 7. Date Picker (unchanged)
   // ===================================================
   if ($("#ctl00_PageBody_dtRequired_DatePicker_wrapper").length) {
     console.log("Date selector found, no modifications made to the date field.");
