@@ -127,9 +127,9 @@ $(document).ready(function() {
             });
 
             if (deliverySection.length) {
-                // Set state/county dropdown if applicable
+                // Set state/county dropdown correctly
                 const stateDropdown = $('#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList');
-                const stateText = addressParts[1].split(' ')[0].trim(); // Assuming state might be part of the city string
+                const stateText = addressParts[1].split(' ')[1]?.trim() || '';  // Extracting state from city/state line
                 if (stateDropdown.length) {
                     stateDropdown.val(stateDropdown.find('option').filter(function() {
                         return $(this).text().toLowerCase() === stateText.toLowerCase();
