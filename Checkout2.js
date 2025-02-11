@@ -16,6 +16,7 @@ $(document).ready(function() {
   //   - Country title and the country dropdown,
   //   - id: ctl00_PageBody_DeliveryAddress_ContactTelephoneRow, its title and its input.
   $("#ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral, " +
+    "#ctl00_PageBody_CopyDeliveryAddressLinkButton, " +
     "label:contains('First name:'), " +
     "label:contains('Last name:'), " +
     "#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox, " +
