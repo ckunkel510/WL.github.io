@@ -2,13 +2,13 @@ $(document).ready(function() {
     console.log('Page loaded, initializing custom checkout experience...');
 
     // ===================================================
-    // 1. Hide all input fields by default using .hide() on the container class.
+    // 1. Hide all input groups by default.
     // ===================================================
-    // This will hide every element within any container that has the class "epi-form-group-checkout"
+    // All input groups that are inside .epi-form-group-checkout will be hidden.
     $('.epi-form-group-checkout').hide();
 
     // ===================================================
-    // 2. Transaction Type Section
+    // 2. Transaction Type Section (unchanged)
     // ===================================================
     if ($('#ctl00_PageBody_TransactionTypeDiv').length) {
         const modernTransactionSelector = `
@@ -91,7 +91,7 @@ $(document).ready(function() {
     }
 
     // ===================================================
-    // 4. Address Selector Behavior & Read-Only Display Containers
+    // 4. Address Selector Behavior & Read-Only Displays
     // ===================================================
     var shippingAddress = "";
     if ($('#ctl00_PageBody_CustomerAddressSelector_SelectAddressLinkButton').length) {
@@ -110,7 +110,7 @@ $(document).ready(function() {
             shippingAddress = smallestIdEntry.find('dd p').first().text().trim();
             console.log(`Smallest ID address selected: ${shippingAddress}`);
 
-            // Parse address components from the selected address.
+            // Parse the selected address.
             const parts = shippingAddress.split(',').map(s => s.trim());
             const addressLine1 = parts[0] || '';
             const city = parts[1] || '';
@@ -133,21 +133,40 @@ $(document).ready(function() {
             $('#ctl00_PageBody_DeliveryAddress_Postcode').val(zipCode);
             $('#ctl00_PageBody_DeliveryAddress_CountrySelector').val('USA');
 
-            // Append read-only display containers to the 6th and 7th .epi-form-col-single-checkout elements if not already present.
+            // Set the state dropdown by searching its options.
+            var $stateSelect = $('#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList');
+            if ($stateSelect.length) {
+                $stateSelect.find('option').each(function() {
+                    if ($(this).text().trim().toLowerCase() === state.toLowerCase()) {
+                        $(this).prop('selected', true);
+                        return false; // break out of the loop
+                    }
+                });
+            }
+
+            // Append read-only display containers to the 6th and 7th .epi-form-col-single-checkout elements.
             var $checkoutDivs = $('.epi-form-col-single-checkout');
             if ($checkoutDivs.length >= 7) {
-                // Append Delivery Address read-only container if it doesn't already exist.
-                if ($checkoutDivs.eq(5).find('.selected-address-display').length === 0) {
-                    $checkoutDivs.eq(5).append(`
+                // In order not to disturb the original functionality, we hide all children of these containers except our appended displays.
+                // For the 6th container (Delivery display):
+                var $delContainer = $checkoutDivs.eq(5);
+                $delContainer.children().not('.selected-address-display').hide();
+                if ($delContainer.find('.selected-address-display').length === 0) {
+                    $delContainer.append(`
                         <div class="selected-address-display">
                             <strong>Delivery Address:</strong><br>${shippingAddress}<br>
                             <button type="button" id="internalEditDeliveryAddressButton" class="edit-button">Edit Delivery Address</button>
                         </div>
                     `);
+                } else {
+                    $delContainer.find('.selected-address-display').show();
                 }
-                // Append Invoice Address container (with billing radio) if it doesn't already exist.
-                if ($checkoutDivs.eq(6).find('.billing-address-section').length === 0) {
-                    $checkoutDivs.eq(6).append(`
+
+                // For the 7th container (Invoice display):
+                var $invContainer = $checkoutDivs.eq(6);
+                $invContainer.children().not('.billing-address-section').hide();
+                if ($invContainer.find('.billing-address-section').length === 0) {
+                    $invContainer.append(`
                         <div class="billing-address-section">
                             <label>
                                 <input type="radio" id="billingAddressRadio" name="billingAddressOption">
@@ -159,6 +178,8 @@ $(document).ready(function() {
                             </div>
                         </div>
                     `);
+                } else {
+                    $invContainer.find('.billing-address-section').show();
                 }
             } else {
                 console.warn('Not enough .epi-form-col-single-checkout elements found.');
@@ -173,7 +194,6 @@ $(document).ready(function() {
         `;
         $('.AddressSelectorList').append(addNewAddressButton);
         $(document).on('click', '#btnAddNewAddress', function() {
-            // Show all input fields by showing the container with class .epi-form-group-checkout.
             $('.epi-form-group-checkout').show();
             $('.AddressSelectorList').hide();
         });
@@ -249,7 +269,6 @@ $(document).ready(function() {
     // ===================================================
     $(document).on('click', '#internalEditDeliveryAddressButton', function() {
         console.log("Internal Edit Delivery Address button clicked.");
-        // Show all input fields (by showing the container with class .epi-form-group-checkout)
         $('.epi-form-group-checkout').show();
     });
     $(document).on('click', '#internalEditInvoiceAddressButton', function() {
