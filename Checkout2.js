@@ -31,7 +31,7 @@ $(document).ready(function() {
     "#ctl00_PageBody_DeliveryAddress_ContactTelephoneRow, " +
     "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTitleLiteral, " +
     "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox, " +
-    "#autocompleteDelivery, " =
+    "#autocompleteDelivery, " +
     ".epi-form-group-checkout"
   ).css("display", "none");
 
