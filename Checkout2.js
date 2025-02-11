@@ -171,10 +171,19 @@ $(document).ready(function() {
                 // Remove any existing selected address display
                 deliverySection.find('.selected-address-display').remove();
 
-                // Explicitly add the selected address information immediately after the <span class="SelectableAddressType">
-                deliverySection.find('.SelectableAddressType').after(
-                    `<div class="selected-address-display mt-2"><strong>Selected Address:</strong> ${selectedAddress}</div>`
-                );
+                // Explicitly insert the selected address information after the correct <span>
+                // We target the <div class="font-weight-bold mb-3"> that does NOT contain the copy button.
+                const targetContainer = deliverySection.find('div.font-weight-bold.mb-3').filter(function() {
+                    return $(this).find('#copyDeliveryAddressButton').length === 0;
+                });
+                if (targetContainer.length) {
+                    // Insert after the <span class="SelectableAddressType"> inside this container.
+                    targetContainer.find('span.SelectableAddressType').after(
+                        `<div class="selected-address-display mt-2"><strong>Selected Address:</strong> ${selectedAddress}</div>`
+                    );
+                } else {
+                    console.warn('Target container for selected address not found.');
+                }
             } else {
                 console.warn('Delivery section not found.');
             }
