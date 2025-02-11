@@ -115,9 +115,16 @@
         const transactionTypeDiv = document.getElementById('ctl00_PageBody_TransactionTypeDiv');
         if (transactionTypeDiv) {
             transactionTypeDiv.style.display = 'none';
+            console.log('TransactionTypeDiv found and hidden');
+
+            // Check for the container class
+            const container = document.querySelector('.container');
+            if (!container) {
+                console.error('Container with class ".container" not found. Cannot append modern transaction section.');
+                return;
+            }
 
             // Append modern transaction type section
-            const container = document.querySelector('.container');
             const transactionSection = document.createElement('div');
             transactionSection.classList.add('modern-transaction-section');
             transactionSection.innerHTML = `
@@ -161,6 +168,8 @@
                     });
                 }
             });
+        } else {
+            console.error('TransactionTypeDiv not found in the DOM');
         }
     }
 
