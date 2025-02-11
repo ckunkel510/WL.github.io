@@ -113,8 +113,18 @@ $(document).ready(function() {
             const selectedAddress = smallestIdEntry.find('dd p').first().text().trim();
             console.log(`Smallest ID address selected: ${selectedAddress}`);
 
+            // Populate the address input fields
+            const addressParts = selectedAddress.split(',');
+            if (addressParts.length >= 3) {
+                $('#ctl00_PageBody_DeliveryAddress_AddressLine1').val(addressParts[0].trim());
+                $('#ctl00_PageBody_DeliveryAddress_City').val(addressParts[1].trim());
+                $('#ctl00_PageBody_DeliveryAddress_Postcode').val(addressParts[2].trim());
+            }
+
+            // Hide address input fields and display the selected address summary
             $('#ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral, #ctl00_PageBody_DeliveryAddress_AddressLine1, #ctl00_PageBody_DeliveryAddress_AddressLine2, #ctl00_PageBody_DeliveryAddress_AddressLine3, #ctl00_PageBody_DeliveryAddress_City, #ctl00_PageBody_DeliveryAddress_Postcode, #ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').closest('.epi-form-group-checkout').hide();
-            $('.AddressSelectorList').after(`<div class="selected-address-display"><strong>Selected Address:</strong> ${selectedAddress}</div>`);
+            $('.selected-address-display').remove();
+            $('.epi-form-col-single-checkout').prepend(`<div class="selected-address-display"><strong>Selected Address:</strong> ${selectedAddress}</div>`);
         }
 
         // Add a button to allow adding a new address
