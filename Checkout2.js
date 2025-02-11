@@ -4,8 +4,20 @@ $(document).ready(function() {
     // --------------------------
     // Hide all address input fields by default
     // --------------------------
-    $('#ctl00_PageBody_DeliveryAddress_AddressLine1, #ctl00_PageBody_DeliveryAddress_City, #ctl00_PageBody_DeliveryAddress_Postcode, #ctl00_PageBody_DeliveryAddress_CountrySelector, #ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox, #ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox, #ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').hide();
-    $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox, #ctl00_PageBody_InvoiceAddress_AddressLine1, #ctl00_PageBody_InvoiceAddress_City, #ctl00_PageBody_InvoiceAddress_CountySelector_CountyList, #ctl00_PageBody_InvoiceAddress_Postcode, #ctl00_PageBody_InvoiceAddress_CountrySelector1').hide();
+    $('#ctl00_PageBody_DeliveryAddress_AddressLine1, ' +
+      '#ctl00_PageBody_DeliveryAddress_City, ' +
+      '#ctl00_PageBody_DeliveryAddress_Postcode, ' +
+      '#ctl00_PageBody_DeliveryAddress_CountrySelector, ' +
+      '#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox, ' +
+      '#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox, ' +
+      '#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').hide();
+
+    $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox, ' +
+      '#ctl00_PageBody_InvoiceAddress_AddressLine1, ' +
+      '#ctl00_PageBody_InvoiceAddress_City, ' +
+      '#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList, ' +
+      '#ctl00_PageBody_InvoiceAddress_Postcode, ' +
+      '#ctl00_PageBody_InvoiceAddress_CountrySelector1').hide();
 
     // --------------------------
     // Transaction Type Section
@@ -112,7 +124,7 @@ $(document).ready(function() {
                 }
             });
 
-            // Get the selected address text and store it
+            // Get the selected address text and store it for later use
             const selectedAddress = smallestIdEntry.find('dd p').first().text().trim();
             shippingAddress = selectedAddress;
             console.log(`Smallest ID address selected: ${selectedAddress}`);
@@ -140,68 +152,31 @@ $(document).ready(function() {
             $('#ctl00_PageBody_DeliveryAddress_Postcode').val(zipCode);
             $('#ctl00_PageBody_DeliveryAddress_CountrySelector').val('USA');
 
-            // Find the Delivery section (based on the text "Delivery" in a .SelectableAddressType)
-            const deliverySection = $('.epi-form-col-single-checkout').filter(function() {
-                return $(this).find('.SelectableAddressType').text().trim() === 'Delivery';
-            });
-
-            if (deliverySection.length) {
-                // Set the dropdown value for state if needed
-                const stateDropdown = $('#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList');
-                if (stateDropdown.length) {
-                    const matchedOption = stateDropdown.find('option').filter(function() {
-                        const optionText = $(this).text().toLowerCase();
-                        return (
-                            optionText === state.toLowerCase() ||
-                            optionText.includes(state.toLowerCase()) ||
-                            (state.length === 2 && optionText.includes(state))
-                        );
-                    });
-                    if (matchedOption.length > 0) {
-                        matchedOption.prop('selected', true);
-                        console.log(`Matched state: ${matchedOption.text()}`);
-                    } else {
-                        console.warn(`State '${state}' not found in dropdown options.`);
-                    }
-                }
-
-                // Hide the delivery address input fields (they are already hidden by default)
-                deliverySection.find('.epi-form-group-checkout').hide();
-
-                // Remove any existing delivery address label display
-                $('.selected-address-display').remove();
-
-                // Append the Delivery Address label (shipping label) along with an Edit button
-                var $checkoutDivs = $('.epi-form-col-single-checkout');
-                if ($checkoutDivs.length >= 2) {
-                    $checkoutDivs.eq($checkoutDivs.length - 2).after(
-                        `<div class="selected-address-display mt-2">
-                            <strong>Delivery Address:</strong><br>${shippingAddress}
-                            <button type="button" id="editDeliveryAddressButton" class="edit-button">Edit Delivery Address</button>
-                         </div>`
-                    );
-                    // Append the Billing Address section (radio button)
-                    var billingSectionHtml = `
-                        <div class="billing-address-section mt-2">
-                            <label>
-                                <input type="radio" id="billingAddressRadio" name="billingAddressOption">
-                                Billing address is the same as delivery address
-                            </label>
-                        </div>
-                    `;
-                    $('.selected-address-display').last().after(billingSectionHtml);
-                    // Append the Invoice Address label section (initially empty) with an Edit button
-                    $('.billing-address-section').after(
-                        `<div class="selected-invoice-address-display mt-2">
+            // Instead of appending after the second-to-last element, we now set the content of the 6th and 7th instances.
+            var $checkoutDivs = $('.epi-form-col-single-checkout');
+            if ($checkoutDivs.length >= 7) {
+                // Set Delivery Address display on the 6th instance (index 5)
+                $checkoutDivs.eq(5).html(`
+                    <div class="selected-address-display">
+                        <strong>Delivery Address:</strong><br>${shippingAddress}<br>
+                        <button type="button" id="editDeliveryAddressButton" class="edit-button">Edit Delivery Address</button>
+                    </div>
+                `);
+                // Set Invoice Address (with radio button for "same as delivery") on the 7th instance (index 6)
+                $checkoutDivs.eq(6).html(`
+                    <div class="billing-address-section">
+                        <label>
+                            <input type="radio" id="billingAddressRadio" name="billingAddressOption">
+                            Billing address is the same as delivery address
+                        </label>
+                        <div class="selected-invoice-address-display">
                             <strong>Invoice Address:</strong><br>
                             <button type="button" id="editInvoiceAddressButton" class="edit-button">Edit Invoice Address</button>
-                         </div>`
-                    );
-                } else {
-                    console.warn('Not enough .epi-form-col-single-checkout elements found.');
-                }
+                        </div>
+                    </div>
+                `);
             } else {
-                console.warn('Delivery section not found.');
+                console.warn('Not enough .epi-form-col-single-checkout elements found.');
             }
         }
 
@@ -213,12 +188,23 @@ $(document).ready(function() {
         `;
         $('.AddressSelectorList').append(addNewAddressButton);
         $(document).on('click', '#btnAddNewAddress', function() {
-            // Show all delivery and invoice input fields
-            $('#ctl00_PageBody_DeliveryAddress_AddressLine1, #ctl00_PageBody_DeliveryAddress_City, #ctl00_PageBody_DeliveryAddress_Postcode, #ctl00_PageBody_DeliveryAddress_CountrySelector, #ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox, #ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox, #ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').show();
-            $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox, #ctl00_PageBody_InvoiceAddress_AddressLine1, #ctl00_PageBody_InvoiceAddress_City, #ctl00_PageBody_InvoiceAddress_CountySelector_CountyList, #ctl00_PageBody_InvoiceAddress_Postcode, #ctl00_PageBody_InvoiceAddress_CountrySelector1').show();
+            // Show all delivery and invoice input fields for manual editing
+            $('#ctl00_PageBody_DeliveryAddress_AddressLine1, ' +
+              '#ctl00_PageBody_DeliveryAddress_City, ' +
+              '#ctl00_PageBody_DeliveryAddress_Postcode, ' +
+              '#ctl00_PageBody_DeliveryAddress_CountrySelector, ' +
+              '#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox, ' +
+              '#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox, ' +
+              '#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').show();
+            $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox, ' +
+              '#ctl00_PageBody_InvoiceAddress_AddressLine1, ' +
+              '#ctl00_PageBody_InvoiceAddress_City, ' +
+              '#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList, ' +
+              '#ctl00_PageBody_InvoiceAddress_Postcode, ' +
+              '#ctl00_PageBody_InvoiceAddress_CountrySelector1').show();
             $('.AddressSelectorList').hide();
-            // Optionally remove the labels so the user can enter new information
-            $('.selected-address-display, .billing-address-section, .selected-invoice-address-display').remove();
+            // Remove the display labels so new info can be entered
+            $('.selected-address-display, .billing-address-section').empty();
         });
     } else {
         console.warn('Address selector link button not found.');
@@ -240,10 +226,10 @@ $(document).ready(function() {
         $('#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox').val(lastName);
         $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox').val(parsedEmail);
 
-        // Also update the delivery address label to include the contact's name
+        // Also update the Delivery Address display (in the 6th instance) to include the contact's name
         if ($('.selected-address-display').length) {
             $('.selected-address-display').html(
-                `<strong>Delivery Address:</strong><br>${firstName} ${lastName}<br>${shippingAddress}
+                `<strong>Delivery Address:</strong><br>${firstName} ${lastName}<br>${shippingAddress}<br>
                  <button type="button" id="editDeliveryAddressButton" class="edit-button">Edit Delivery Address</button>`
             );
         }
@@ -261,6 +247,8 @@ $(document).ready(function() {
     // --------------------------
     // Billing Address Radio Button Handler
     // --------------------------
+    // When the "Billing address is the same as delivery address" radio button is checked,
+    // copy the delivery field values to the corresponding invoice fields and update the invoice display.
     $(document).on('change', '#billingAddressRadio', function() {
         if ($(this).is(':checked')) {
             $('#ctl00_PageBody_InvoiceAddress_AddressLine1').val($('#ctl00_PageBody_DeliveryAddress_AddressLine1').val());
@@ -269,24 +257,35 @@ $(document).ready(function() {
             $('#ctl00_PageBody_InvoiceAddress_Postcode').val($('#ctl00_PageBody_DeliveryAddress_Postcode').val());
             $('#ctl00_PageBody_InvoiceAddress_CountrySelector1').val($('#ctl00_PageBody_DeliveryAddress_CountrySelector').val());
 
-            // Optionally update the invoice address label display if desired:
             var invoiceDisplay = `<strong>Invoice Address:</strong><br>` +
                 $('#ctl00_PageBody_DeliveryAddress_AddressLine1').val() + `<br>` +
                 $('#ctl00_PageBody_DeliveryAddress_City').val() + `<br>` +
                 $('#ctl00_PageBody_DeliveryAddress_Postcode').val();
             $('.selected-invoice-address-display').html(invoiceDisplay +
-                `<button type="button" id="editInvoiceAddressButton" class="edit-button">Edit Invoice Address</button>`);
+                `<br><button type="button" id="editInvoiceAddressButton" class="edit-button">Edit Invoice Address</button>`);
         }
     });
 
     // --------------------------
     // Edit Buttons Handlers
     // --------------------------
+    // Show the corresponding input fields when an Edit button is clicked.
     $(document).on('click', '#editDeliveryAddressButton', function() {
-        $('#ctl00_PageBody_DeliveryAddress_AddressLine1, #ctl00_PageBody_DeliveryAddress_City, #ctl00_PageBody_DeliveryAddress_Postcode, #ctl00_PageBody_DeliveryAddress_CountrySelector, #ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox, #ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox, #ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').show();
+        $('#ctl00_PageBody_DeliveryAddress_AddressLine1, ' +
+          '#ctl00_PageBody_DeliveryAddress_City, ' +
+          '#ctl00_PageBody_DeliveryAddress_Postcode, ' +
+          '#ctl00_PageBody_DeliveryAddress_CountrySelector, ' +
+          '#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox, ' +
+          '#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox, ' +
+          '#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').show();
     });
     $(document).on('click', '#editInvoiceAddressButton', function() {
-        $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox, #ctl00_PageBody_InvoiceAddress_AddressLine1, #ctl00_PageBody_InvoiceAddress_City, #ctl00_PageBody_InvoiceAddress_CountySelector_CountyList, #ctl00_PageBody_InvoiceAddress_Postcode, #ctl00_PageBody_InvoiceAddress_CountrySelector1').show();
+        $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox, ' +
+          '#ctl00_PageBody_InvoiceAddress_AddressLine1, ' +
+          '#ctl00_PageBody_InvoiceAddress_City, ' +
+          '#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList, ' +
+          '#ctl00_PageBody_InvoiceAddress_Postcode, ' +
+          '#ctl00_PageBody_InvoiceAddress_CountrySelector1').show();
     });
 
     // --------------------------
