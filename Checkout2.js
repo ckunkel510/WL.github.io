@@ -111,10 +111,10 @@ $(document).ready(function() {
 
             // Select and display the address with the smallest ID
             const selectedAddress = smallestIdEntry.find('dd p').first().text().trim();
-            shippingAddress = selectedAddress;  // Save for later use in the shipping label
+            shippingAddress = selectedAddress; // Save for use in the shipping label
             console.log(`Smallest ID address selected: ${selectedAddress}`);
 
-            // Properly parse address components: Address Line 1, City, State, Zip Code
+            // Parse address components: Address Line 1, City, State, Zip Code
             const addressParts = selectedAddress.split(',').map(part => part.trim());
             const addressLine1 = addressParts[0] || '';
             const city = addressParts[1] || '';
@@ -206,7 +206,7 @@ $(document).ready(function() {
         console.warn('Address selector link button not found.');
     }
 
-    // Fetch account settings data from the AccountSettings.aspx page and update delivery/invoice fields
+    // Fetch account settings data from AccountSettings.aspx and update delivery/invoice fields
     $.get("https://webtrack.woodsonlumber.com/AccountSettings.aspx", function(data) {
         var $accountPage = $(data);
         var firstName = $accountPage.find('#ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput').val() || '';
@@ -215,17 +215,24 @@ $(document).ready(function() {
         var parsedEmail = emailStr.replace(/^\([^)]*\)\s*/, '');
         console.log("Fetched account settings:", firstName, lastName, parsedEmail);
 
-        // Input the values into the delivery and invoice address fields
+        // Update the delivery/invoice fields with contact info
         $('#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox').val(firstName);
         $('#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox').val(lastName);
         $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox').val(parsedEmail);
 
-        // Now update the shipping label display to include the contact name
+        // Update the shipping label display to include the contact name
         if ($('.selected-address-display').length) {
             $('.selected-address-display').html(
                 `<strong>Delivery Address:</strong><br>${firstName} ${lastName}<br>${shippingAddress}`
             );
         }
+    });
+
+    // Fetch telephone number from AccountInfo_R.aspx and update the contact telephone field
+    $.get("https://webtrack.woodsonlumber.com/AccountInfo_R.aspx", function(data) {
+        var telephone = $(data).find('#ctl00_PageBody_TelephoneLink_TelephoneLink').text().trim();
+        console.log("Fetched telephone:", telephone);
+        $('#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').val(telephone);
     });
 
     // Restore the original date input setup
