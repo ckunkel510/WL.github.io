@@ -18,7 +18,9 @@ $(document).ready(function() {
                 </button>
             </div>
         `;
-        $('#ctl00_PageBody_TransactionTypeDiv').append(modernTransactionSelector);
+
+        // Ensure the transaction type container is visible and append the buttons
+        $('#ctl00_PageBody_TransactionTypeDiv').show().append(modernTransactionSelector);
 
         function updateTransactionStyles(selectedValue) {
             console.log(`Transaction type updated: ${selectedValue}`);
@@ -89,26 +91,9 @@ $(document).ready(function() {
         console.warn('Shipping method selector not found.');
     }
 
-    // Hide the original date input wrapper but keep it functional
+    // Restore the original date input setup
     if ($('#ctl00_PageBody_dtRequired_DatePicker_wrapper').length) {
-        $('#ctl00_PageBody_dtRequired_DatePicker_wrapper').hide();
-
-        const modernDateSelector = `
-            <div class="modern-date-selector">
-                <label for="modernDateInput">Date Required:</label>
-                <input type="text" id="modernDateInput" class="form-control" placeholder="Select a date">
-            </div>
-        `;
-        $('#ctl00_PageBody_dtRequired_DatePicker_dateInput').parent().append(modernDateSelector);
-
-        $('#modernDateInput').datepicker({
-            dateFormat: 'mm/dd/yy',
-            minDate: 0,
-            onSelect: function(dateText) {
-                console.log(`Date selected: ${dateText}`);
-                $('#ctl00_PageBody_dtRequired_DatePicker_dateInput').val(dateText);
-            }
-        });
+        console.log('Date selector found, no modifications made to the date field.');
     } else {
         console.warn('Date picker wrapper not found.');
     }
