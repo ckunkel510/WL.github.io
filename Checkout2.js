@@ -2,8 +2,9 @@
 $(document).ready(function() {
     console.log('Page loaded, initializing custom checkout experience...');
 
-    // Hide the original transaction type input content completely
-    $('#ctl00_PageBody_TransactionTypeDiv').find('> div').hide();
+    // Hide the specific original transaction type input content, not the entire div
+    $('#ctl00_PageBody_TransactionTypeInput').hide();
+    $('.TransactionTypeSelector').hide();
 
     // Ensure transaction type div exists before appending
     if ($('#ctl00_PageBody_TransactionTypeDiv').length) {
@@ -88,9 +89,9 @@ $(document).ready(function() {
         console.warn('Shipping method selector not found.');
     }
 
-    // Replace the original date input field with the modern version
+    // Hide the original date input wrapper but keep it functional
     if ($('#ctl00_PageBody_dtRequired_DatePicker_wrapper').length) {
-        $('#ctl00_PageBody_dtRequired_DatePicker_wrapper').remove(); // Remove the existing date wrapper
+        $('#ctl00_PageBody_dtRequired_DatePicker_wrapper').hide();
 
         const modernDateSelector = `
             <div class="modern-date-selector">
