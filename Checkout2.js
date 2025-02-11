@@ -91,6 +91,37 @@ $(document).ready(function() {
         console.warn('Shipping method selector not found.');
     }
 
+    // Enhance address selector behavior
+    if ($('#ctl00_PageBody_CustomerAddressSelector_SelectAddressLinkButton').length) {
+        console.log('Initializing address selector behavior...');
+
+        // Add a button to allow adding a new address
+        const addNewAddressButton = `
+            <li class="AddressSelectorEntry text-center">
+                <button id="btnAddNewAddress" class="btn btn-secondary">Add New Address</button>
+            </li>
+        `;
+        $('.AddressSelectorList').append(addNewAddressButton);
+
+        $('#btnAddNewAddress').on('click', function() {
+            console.log('Add New Address button clicked');
+            // Show all address input fields
+            $('#ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral, #ctl00_PageBody_DeliveryAddress_AddressLine1, #ctl00_PageBody_DeliveryAddress_AddressLine2, #ctl00_PageBody_DeliveryAddress_AddressLine3, #ctl00_PageBody_DeliveryAddress_City, #ctl00_PageBody_DeliveryAddress_Postcode, #ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').closest('.epi-form-group-checkout').show();
+            $('.AddressSelectorList').hide();
+        });
+
+        $('.AddressSelectorEntry').on('click', function() {
+            const selectedAddress = $(this).find('dd p').first().text().trim();
+            console.log(`Address selected: ${selectedAddress}`);
+
+            // Hide address input fields and display the selected address
+            $('#ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral, #ctl00_PageBody_DeliveryAddress_AddressLine1, #ctl00_PageBody_DeliveryAddress_AddressLine2, #ctl00_PageBody_DeliveryAddress_AddressLine3, #ctl00_PageBody_DeliveryAddress_City, #ctl00_PageBody_DeliveryAddress_Postcode, #ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').closest('.epi-form-group-checkout').hide();
+            $('.AddressSelectorList').after(`<div class="selected-address-display"><strong>Selected Address:</strong> ${selectedAddress}</div>`);
+        });
+    } else {
+        console.warn('Address selector link button not found.');
+    }
+
     // Restore the original date input setup
     if ($('#ctl00_PageBody_dtRequired_DatePicker_wrapper').length) {
         console.log('Date selector found, no modifications made to the date field.');
