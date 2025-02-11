@@ -168,22 +168,13 @@ $(document).ready(function() {
                 // Hide address input fields
                 deliverySection.find('.epi-form-group-checkout').hide();
 
-                // Remove any existing selected address display
-                deliverySection.find('.selected-address-display').remove();
+                // Remove any existing display of the delivery address
+                $('.selected-address-display').remove();
 
-                // Explicitly insert the selected address information after the correct <span>
-                // We target the <div class="font-weight-bold mb-3"> that does NOT contain the copy button.
-                const targetContainer = deliverySection.find('div.font-weight-bold.mb-3').filter(function() {
-                    return $(this).find('#copyDeliveryAddressButton').length === 0;
-                });
-                if (targetContainer.length) {
-                    // Insert after the <span class="SelectableAddressType"> inside this container.
-                    targetContainer.find('span.SelectableAddressType').after(
-                        `<div class="selected-address-display mt-2"><strong>Selected Address:</strong> ${selectedAddress}</div>`
-                    );
-                } else {
-                    console.warn('Target container for selected address not found.');
-                }
+                // Append the delivery address after the last .epi-form-col-single-checkout element
+                $('.epi-form-col-single-checkout').last().after(
+                    `<div class="selected-address-display mt-2"><strong>Delivery Address:</strong> ${selectedAddress}</div>`
+                );
             } else {
                 console.warn('Delivery section not found.');
             }
@@ -205,7 +196,7 @@ $(document).ready(function() {
             });
             deliverySection.find('.epi-form-group-checkout').show();
             $('.AddressSelectorList').hide();
-            deliverySection.find('.selected-address-display').remove();
+            $('.selected-address-display').remove();
         });
     } else {
         console.warn('Address selector link button not found.');
