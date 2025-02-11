@@ -123,7 +123,7 @@ $(document).ready(function() {
             shippingAddress = selectedAddress;
             console.log(`Smallest ID address selected: ${selectedAddress}`);
 
-            // Parse address components from the selected address
+            // Parse address components
             const addressParts = selectedAddress.split(',').map(part => part.trim());
             const addressLine1 = addressParts[0] || '';
             const city = addressParts[1] || '';
@@ -149,14 +149,14 @@ $(document).ready(function() {
             // Use the 6th and 7th instances of .epi-form-col-single-checkout for the display sections.
             var $checkoutDivs = $('.epi-form-col-single-checkout');
             if ($checkoutDivs.length >= 7) {
-                // Append the Delivery Address display (read-only) into the 6th instance (index 5)
+                // Append the Delivery Address read-only display into the 6th container (index 5)
                 $checkoutDivs.eq(5).html(`
                     <div class="selected-address-display">
                         <strong>Delivery Address:</strong><br>${shippingAddress}<br>
                         <button type="button" id="internalEditDeliveryAddressButton" class="edit-button">(Internal Edit Delivery Address)</button>
                     </div>
                 `);
-                // Append the Invoice Address display (with billing radio button) into the 7th instance (index 6)
+                // Append the Invoice Address display (with billing radio button) into the 7th container (index 6)
                 $checkoutDivs.eq(6).html(`
                     <div class="billing-address-section">
                         <label>
@@ -169,9 +169,7 @@ $(document).ready(function() {
                         </div>
                     </div>
                 `);
-                // On load, hide the 6th and 7th containers completely.
-                $checkoutDivs.eq(5).hide();
-                $checkoutDivs.eq(6).hide();
+                // **Do not hide these containers on load** so that the appended read-only displays remain visible.
             } else {
                 console.warn('Not enough .epi-form-col-single-checkout elements found.');
             }
@@ -201,7 +199,7 @@ $(document).ready(function() {
               '#ctl00_PageBody_InvoiceAddress_CountrySelector1')
               .css('display', 'inline-block');
             $('.AddressSelectorList').hide();
-            // Optionally, clear any read-only display sections if re-entering new data.
+            // Optionally, clear the read-only display sections so new info can be entered
             $('.selected-address-display, .billing-address-section').empty();
         });
     } else {
@@ -209,13 +207,12 @@ $(document).ready(function() {
     }
 
     // --------------------------
-    // Add external Edit buttons to control the display of the 6th and 7th containers.
-    // These buttons are outside the containers and will show them (set display to inline-block).
+    // External Edit Buttons (optional)
+    // If desired, you can add external buttons that control showing the input fields.
     // --------------------------
-    // (You can style or position these as desired.)
+    // For example, here we append two external buttons at the bottom of the page.
     var $checkoutDivs = $('.epi-form-col-single-checkout');
     if ($checkoutDivs.length >= 7) {
-        // Append external edit buttons at the bottom of the page.
         $('<button id="showEditDeliveryButton" style="margin:10px;">Edit Delivery Address</button>')
             .appendTo('body');
         $('<button id="showEditInvoiceButton" style="margin:10px;">Edit Invoice Address</button>')
@@ -223,11 +220,26 @@ $(document).ready(function() {
         
         $(document).on('click', '#showEditDeliveryButton', function() {
             console.log("External Edit Delivery button clicked.");
-            $checkoutDivs.eq(5).css('display','inline-block');
+            // Show the hidden input fields for delivery address
+            $('#ctl00_PageBody_DeliveryAddress_AddressLine1, ' +
+              '#ctl00_PageBody_DeliveryAddress_City, ' +
+              '#ctl00_PageBody_DeliveryAddress_Postcode, ' +
+              '#ctl00_PageBody_DeliveryAddress_CountrySelector, ' +
+              '#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox, ' +
+              '#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox, ' +
+              '#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox')
+              .css('display', 'inline-block');
         });
         $(document).on('click', '#showEditInvoiceButton', function() {
             console.log("External Edit Invoice button clicked.");
-            $checkoutDivs.eq(6).css('display','inline-block');
+            // Show the hidden input fields for invoice address
+            $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox, ' +
+              '#ctl00_PageBody_InvoiceAddress_AddressLine1, ' +
+              '#ctl00_PageBody_InvoiceAddress_City, ' +
+              '#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList, ' +
+              '#ctl00_PageBody_InvoiceAddress_Postcode, ' +
+              '#ctl00_PageBody_InvoiceAddress_CountrySelector1')
+              .css('display', 'inline-block');
         });
     }
 
@@ -242,12 +254,10 @@ $(document).ready(function() {
         var parsedEmail = emailStr.replace(/^\([^)]*\)\s*/, '');
         console.log("Fetched account settings:", firstName, lastName, parsedEmail);
 
-        // Update the (hidden) delivery contact fields and the invoice email field
         $('#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox').val(firstName);
         $('#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox').val(lastName);
         $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox').val(parsedEmail);
 
-        // Update the Delivery Address display container to include the contact's name
         if ($('.selected-address-display').length) {
             $('.selected-address-display').html(
                 `<strong>Delivery Address:</strong><br>${firstName} ${lastName}<br>${shippingAddress}<br>
@@ -296,12 +306,10 @@ $(document).ready(function() {
     });
 
     // --------------------------
-    // (Optional) Internal Edit Buttons Handlers
-    // These are inside the display containers (if clicked, they could also show the input fields)
+    // Internal Edit Buttons Handlers
     // --------------------------
     $(document).on('click', '#internalEditDeliveryAddressButton', function() {
         console.log("Internal Edit Delivery Address button clicked.");
-        // Show the hidden delivery input fields
         $('#ctl00_PageBody_DeliveryAddress_AddressLine1, ' +
           '#ctl00_PageBody_DeliveryAddress_City, ' +
           '#ctl00_PageBody_DeliveryAddress_Postcode, ' +
@@ -313,7 +321,6 @@ $(document).ready(function() {
     });
     $(document).on('click', '#internalEditInvoiceAddressButton', function() {
         console.log("Internal Edit Invoice Address button clicked.");
-        // Show the hidden invoice input fields
         $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox, ' +
           '#ctl00_PageBody_InvoiceAddress_AddressLine1, ' +
           '#ctl00_PageBody_InvoiceAddress_City, ' +
