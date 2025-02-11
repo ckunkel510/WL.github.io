@@ -2,68 +2,26 @@ $(document).ready(function() {
   console.log("Page loaded, initializing custom checkout experience...");
 
   // ===================================================
-  // 0. On Load: Hide the following Delivery Address elements.
+  // 0. On Load: Hide specific Delivery Address elements.
   // ===================================================
-  // List of elements to hide:
-  // - The span with id: ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral
-  // - The label for first name (assumed to have for="ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox")
-  // - The first name input (id: ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox)
-  // - The label for last name (for="ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox")
-  // - The last name input (id: ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox)
-  // - The div with id: ctl00_PageBody_DeliveryAddress_GoogleAddressSearchWrapper
-  // - The label for search places (for="locationFieldDelivery")
-  // - The element with id: locationFieldDelivery
-  // - The span with id: ctl00_PageBody_DeliveryAddress_AddressLine1TitleLiteral
-  // - The input with id: ctl00_PageBody_DeliveryAddress_AddressLine1
-  // - The span with id: ctl00_PageBody_DeliveryAddress_AddressLine2TitleLiteral
-  // - The input with id: ctl00_PageBody_DeliveryAddress_AddressLine2
-  // - The span with id: ctl00_PageBody_DeliveryAddress_AddressLine3TitleLiteral
-  // - The input with id: ctl00_PageBody_DeliveryAddress_AddressLine3
-  // - The span with id: ctl00_PageBody_DeliveryAddress_AddressCityTitleLiteral
-  // - The input with id: ctl00_PageBody_DeliveryAddress_City
-  // - The span with id: ctl00_PageBody_DeliveryAddress_AddressCountyTitleLiteral
-  // - The select with id: ctl00_PageBody_DeliveryAddress_CountySelector_CountyList
-  // - The span with id: ctl00_PageBody_DeliveryAddress_AddressPostcodeTitleLiteral
-  // - The input with id: ctl00_PageBody_DeliveryAddress_Postcode
-  // - The span with id: ctl00_PageBody_DeliveryAddress_AddressCountryTitleLiteral
-  // - The select with id: ctl00_PageBody_DeliveryAddress_CountrySelector
-  // - The container with id: ctl00_PageBody_DeliveryAddress_ContactTelephoneRow
-  // - The span with id: ctl00_PageBody_DeliveryAddress_ContactTelephoneTitleLiteral
-  // - The input with id: ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox
-  $("#ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral, " +
-    "label[for='ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox'], " +
-    "#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox, " +
+  // Hide these elements so that on initial load they are not visible:
+  // - The label for first name
+  // - The label for last name
+  // - The element with id "autocompleteDelivery"
+  $("label[for='ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox'], " +
     "label[for='ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox'], " +
-    "#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox, " +
-    "#ctl00_PageBody_DeliveryAddress_GoogleAddressSearchWrapper, " +
-    "label[for='locationFieldDelivery'], " +
-    "#locationFieldDelivery, " +
-    "#ctl00_PageBody_DeliveryAddress_AddressLine1TitleLiteral, " +
-    "#ctl00_PageBody_DeliveryAddress_AddressLine1, " +
-    "#ctl00_PageBody_DeliveryAddress_AddressLine2TitleLiteral, " +
-    "#ctl00_PageBody_DeliveryAddress_AddressLine2, " +
-    "#ctl00_PageBody_DeliveryAddress_AddressLine3TitleLiteral, " +
-    "#ctl00_PageBody_DeliveryAddress_AddressLine3, " +
-    "#ctl00_PageBody_DeliveryAddress_AddressCityTitleLiteral, " +
-    "#ctl00_PageBody_DeliveryAddress_City, " +
-    "#ctl00_PageBody_DeliveryAddress_AddressCountyTitleLiteral, " +
-    "#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList, " +
-    "#ctl00_PageBody_DeliveryAddress_AddressPostcodeTitleLiteral, " +
-    "#ctl00_PageBody_DeliveryAddress_Postcode, " +
-    "#ctl00_PageBody_DeliveryAddress_AddressCountryTitleLiteral, " +
-    "#ctl00_PageBody_DeliveryAddress_CountrySelector, " +
-    "#ctl00_PageBody_DeliveryAddress_ContactTelephoneRow, " +
-    "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTitleLiteral, " +
-    "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox")
-    .css("display", "none");
+    "#autocompleteDelivery").hide();
+
+  // Also, hide all input groups (the containers with class .epi-form-group-checkout)
+  $(".epi-form-group-checkout").hide();
 
   // ===================================================
-  // 1. Always-Attached Event Handlers & Helper Functions
+  // (A) Always-Attached Event Handlers & Helper Functions
   // ===================================================
 
-  // Function to update the read-only displays based on current input values.
+  // Helper: Refresh the read-only displays from current input values.
   function refreshReadOnlyDisplays() {
-    // Delivery Display update
+    // Delivery Display update.
     var delFirstName = $("#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox").val();
     var delLastName  = $("#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox").val();
     var delAddress   = $("#ctl00_PageBody_DeliveryAddress_AddressLine1").val();
@@ -76,7 +34,7 @@ $(document).ready(function() {
     $(".selected-address-display").html(delDisplay +
       '<br><button type="button" id="internalEditDeliveryAddressButton" class="edit-button">Edit Delivery Address</button>');
 
-    // Invoice Display update
+    // Invoice Display update.
     var invAddress   = $("#ctl00_PageBody_InvoiceAddress_AddressLine1").val();
     var invCity      = $("#ctl00_PageBody_InvoiceAddress_City").val();
     var invZip       = $("#ctl00_PageBody_InvoiceAddress_Postcode").val();
@@ -87,43 +45,40 @@ $(document).ready(function() {
       '<br><button type="button" id="internalEditInvoiceAddressButton" class="edit-button">Edit Invoice Address</button>');
   }
 
-  // Update read-only displays when any input in .epi-form-group-checkout changes.
+  // Update displays on change/blur.
   $(".epi-form-group-checkout input").on("change blur", refreshReadOnlyDisplays);
 
-  // Internal Edit button handlers – when clicked, show the hidden delivery fields.
+  // Internal Edit button handlers – reveal the input groups.
   $(document).on("click", "#internalEditDeliveryAddressButton", function() {
     console.log("Internal Edit Delivery Address button clicked.");
-    $("#ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral, " +
-      "label[for='ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox'], " +
-      "#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox, " +
-      "label[for='ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox'], " +
-      "#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox, " +
-      "#ctl00_PageBody_DeliveryAddress_GoogleAddressSearchWrapper, " +
-      "label[for='locationFieldDelivery'], " +
-      "#locationFieldDelivery, " +
-      "#ctl00_PageBody_DeliveryAddress_AddressLine1TitleLiteral, " +
-      "#ctl00_PageBody_DeliveryAddress_AddressLine1, " +
-      "#ctl00_PageBody_DeliveryAddress_AddressLine2TitleLiteral, " +
-      "#ctl00_PageBody_DeliveryAddress_AddressLine2, " +
-      "#ctl00_PageBody_DeliveryAddress_AddressLine3TitleLiteral, " +
-      "#ctl00_PageBody_DeliveryAddress_AddressLine3, " +
-      "#ctl00_PageBody_DeliveryAddress_AddressCityTitleLiteral, " +
-      "#ctl00_PageBody_DeliveryAddress_City, " +
-      "#ctl00_PageBody_DeliveryAddress_AddressCountyTitleLiteral, " +
-      "#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList, " +
-      "#ctl00_PageBody_DeliveryAddress_AddressPostcodeTitleLiteral, " +
-      "#ctl00_PageBody_DeliveryAddress_Postcode, " +
-      "#ctl00_PageBody_DeliveryAddress_AddressCountryTitleLiteral, " +
-      "#ctl00_PageBody_DeliveryAddress_CountrySelector, " +
-      "#ctl00_PageBody_DeliveryAddress_ContactTelephoneRow, " +
-      "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTitleLiteral, " +
-      "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox")
-      .css("display", "inline-block");
+    $(".epi-form-group-checkout").show();
+    // Append a Save button if not already present.
+    if ($("#saveDeliveryAddressButton").length === 0) {
+      // Append the Save button into the delivery section container (you can adjust the placement as needed).
+      // Here, we assume the 6th checkout container holds the delivery address display.
+      $(".selected-address-display").append(
+        '<br><button type="button" id="saveDeliveryAddressButton" class="edit-button">Save Delivery Address</button>'
+      );
+    }
+  });
+  $(document).on("click", "#internalEditInvoiceAddressButton", function() {
+    console.log("Internal Edit Invoice Address button clicked.");
+    $(".epi-form-group-checkout").show();
+    // If desired, you can append a similar Save button for invoice address.
   });
 
-  // (If needed, you could add an analogous handler for Invoice fields.)
+  // Save button handler for Delivery Address.
+  $(document).on("click", "#saveDeliveryAddressButton", function() {
+    console.log("Save Delivery Address button clicked.");
+    // Hide the input groups (i.e. re-hide all .epi-form-group-checkout).
+    $(".epi-form-group-checkout").hide();
+    // Remove the Save button.
+    $("#saveDeliveryAddressButton").remove();
+    // Refresh the read-only display with current input values.
+    refreshReadOnlyDisplays();
+  });
 
-  // Billing radio button handler – when checked, copy delivery fields to invoice fields.
+  // Billing radio button handler – when checked, copy delivery values to invoice fields.
   $(document).on("change", "#billingAddressRadio", function() {
     if ($(this).is(":checked")) {
       console.log("Billing radio button checked.");
@@ -131,12 +86,12 @@ $(document).ready(function() {
       var deliveryCity = $("#ctl00_PageBody_DeliveryAddress_City").val();
       var deliveryPostcode = $("#ctl00_PageBody_DeliveryAddress_Postcode").val();
       var deliveryCountry = $("#ctl00_PageBody_DeliveryAddress_CountrySelector").val();
-
+      
       $("#ctl00_PageBody_InvoiceAddress_AddressLine1").val(deliveryAddressLine);
       $("#ctl00_PageBody_InvoiceAddress_City").val(deliveryCity);
       $("#ctl00_PageBody_InvoiceAddress_Postcode").val(deliveryPostcode);
       $("#ctl00_PageBody_InvoiceAddress_CountrySelector1").val(deliveryCountry);
-
+      
       console.log("Copied values to invoice address fields:",
         deliveryAddressLine, deliveryCity, deliveryPostcode);
       refreshReadOnlyDisplays();
@@ -147,7 +102,7 @@ $(document).ready(function() {
   // (B) ALWAYS RUN: Modern Buttons for Transaction & Shipping Methods
   // ===================================================
   if ($("#ctl00_PageBody_TransactionTypeDiv").length) {
-    // Hide the original radio buttons.
+    // Hide the original radio buttons container.
     $(".TransactionTypeSelector").hide();
 
     const modernTransactionSelector = `
@@ -226,7 +181,7 @@ $(document).ready(function() {
   }
 
   // ===================================================
-  // (C) INITIAL PRE-POPULATION LOGIC – Runs only if Delivery Address field is empty.
+  // (C) INITIAL PRE-POPULATION LOGIC – Runs only if Delivery Address is empty.
   // ===================================================
   if ($("#ctl00_PageBody_DeliveryAddress_AddressLine1").val() === "") {
     console.log("Initial address pre-population running...");
@@ -291,8 +246,8 @@ $(document).ready(function() {
   $.get("https://webtrack.woodsonlumber.com/AccountSettings.aspx", function(data) {
     var $acc = $(data);
     var firstName = $acc.find("#ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput").val() || "";
-    var lastName = $acc.find("#ctl00_PageBody_ChangeUserDetailsControl_LastNameInput").val() || "";
-    var emailStr = $acc.find("#ctl00_PageBody_ChangeUserDetailsControl_EmailAddressInput").val() || "";
+    var lastName  = $acc.find("#ctl00_PageBody_ChangeUserDetailsControl_LastNameInput").val() || "";
+    var emailStr  = $acc.find("#ctl00_PageBody_ChangeUserDetailsControl_EmailAddressInput").val() || "";
     var parsedEmail = emailStr.replace(/^\([^)]*\)\s*/, "");
     console.log("Fetched account settings:", firstName, lastName, parsedEmail);
     $("#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox").val(firstName);
@@ -340,7 +295,7 @@ $(document).ready(function() {
   }
 
   // ===================================================
-  // 7. Date Picker (unchanged)
+  // (F) Date Picker (unchanged)
   // ===================================================
   if ($("#ctl00_PageBody_dtRequired_DatePicker_wrapper").length) {
     console.log("Date selector found, no modifications made to the date field.");
