@@ -171,10 +171,15 @@ $(document).ready(function() {
                 // Remove any existing display of the delivery address
                 $('.selected-address-display').remove();
 
-                // Append the delivery address after the last .epi-form-col-single-checkout element
-                $('.epi-form-col-single-checkout').last().after(
-                    `<div class="selected-address-display mt-2"><strong>Delivery Address:</strong> ${selectedAddress}</div>`
-                );
+                // Append the delivery address after the second-to-last .epi-form-col-single-checkout element
+                var $checkoutDivs = $('.epi-form-col-single-checkout');
+                if ($checkoutDivs.length >= 2) {
+                    $checkoutDivs.eq($checkoutDivs.length - 2).after(
+                        `<div class="selected-address-display mt-2"><strong>Delivery Address:</strong> ${selectedAddress}</div>`
+                    );
+                } else {
+                    console.warn('Not enough .epi-form-col-single-checkout elements found.');
+                }
             } else {
                 console.warn('Delivery section not found.');
             }
