@@ -171,14 +171,16 @@ $(document).ready(function() {
                 // Remove any existing selected address display
                 deliverySection.find('.selected-address-display').remove();
 
-                // Append the selected address information into the target container
-                // which is the div with the class "font-weight-bold mb-3" that contains the "SelectableAddressType" span.
-                const targetContainer = deliverySection.find('.font-weight-bold.mb-3:has(.SelectableAddressType)');
-                if (targetContainer.length) {
-                    targetContainer.append(`<div class="selected-address-display mt-2"><strong>Selected Address:</strong> ${selectedAddress}</div>`);
-                } else {
-                    console.warn('Target container for selected address not found.');
-                }
+                // Delay the appending of the selected address information to ensure the target container is available.
+                setTimeout(function(){
+                    // Look for the container with the <div class="font-weight-bold mb-3"> that contains the <span class="SelectableAddressType">Delivery</span>
+                    const targetContainer = deliverySection.find('.font-weight-bold.mb-3:has(.SelectableAddressType)');
+                    if (targetContainer.length) {
+                        targetContainer.append(`<div class="selected-address-display mt-2"><strong>Selected Address:</strong> ${selectedAddress}</div>`);
+                    } else {
+                        console.warn('Target container for selected address not found after delay.');
+                    }
+                }, 500); // Adjust the delay (in milliseconds) as necessary.
             } else {
                 console.warn('Delivery section not found.');
             }
