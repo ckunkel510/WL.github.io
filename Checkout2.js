@@ -112,14 +112,21 @@ $(document).ready(function() {
             const selectedAddress = smallestIdEntry.find('dd p').first().text().trim();
             console.log(`Smallest ID address selected: ${selectedAddress}`);
 
-            // Populate the address input fields
+            // Properly parse address components: Address Line 1, City, State, Zip Code
             const addressParts = selectedAddress.split(',').map(part => part.trim());
-            if (addressParts.length >= 3) {
-                $('#ctl00_PageBody_DeliveryAddress_AddressLine1').val(addressParts[0]);
-                $('#ctl00_PageBody_DeliveryAddress_City').val(addressParts[1]);
-                $('#ctl00_PageBody_DeliveryAddress_Postcode').val(addressParts[2]);
-                $('#ctl00_PageBody_DeliveryAddress_CountrySelector').val('USA');
-            }
+            const addressLine1 = addressParts[0] || '';
+            const city = addressParts[1] || '';
+            const stateAndZip = addressParts[2] || '';
+            const state = stateAndZip.split(' ')[0] || '';  // Extract state from the last part
+            const zipCode = stateAndZip.split(' ')[1] || ''; // Extract zip code
+
+            console.log(`Parsed Address -> Line 1: ${addressLine1}, City: ${city}, State: ${state}, Zip: ${zipCode}`);
+
+            // Populate the address input fields
+            $('#ctl00_PageBody_DeliveryAddress_AddressLine1').val(addressLine1);
+            $('#ctl00_PageBody_DeliveryAddress_City').val(city);
+            $('#ctl00_PageBody_DeliveryAddress_Postcode').val(zipCode);
+            $('#ctl00_PageBody_DeliveryAddress_CountrySelector').val('USA');
 
             // Find the Delivery section and update only that section
             const deliverySection = $('.epi-form-col-single-checkout').filter(function() {
@@ -127,19 +134,15 @@ $(document).ready(function() {
             });
 
             if (deliverySection.length) {
-                // Extract the state by splitting the city/state line
-                const stateText = addressParts[1].split(' ').slice(-1)[0]; // Extract last word, assuming state
-                console.log(`Extracted state for matching: ${stateText}`);
-
                 // Match and set the dropdown value for state
                 const stateDropdown = $('#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList');
                 if (stateDropdown.length) {
                     const matchedOption = stateDropdown.find('option').filter(function() {
                         const optionText = $(this).text().toLowerCase();
                         return (
-                            optionText === stateText.toLowerCase() ||
-                            optionText.includes(stateText.toLowerCase()) ||
-                            (stateText.length === 2 && optionText.includes(stateText))
+                            optionText === state.toLowerCase() ||
+                            optionText.includes(state.toLowerCase()) ||
+                            (state.length === 2 && optionText.includes(state))
                         );
                     });
 
@@ -147,7 +150,7 @@ $(document).ready(function() {
                         matchedOption.prop('selected', true);  // Set selected attribute
                         console.log(`Matched state: ${matchedOption.text()}`);
                     } else {
-                        console.warn(`State '${stateText}' not found in dropdown options.`);
+                        console.warn(`State '${state}' not found in dropdown options.`);
                     }
                 }
 
