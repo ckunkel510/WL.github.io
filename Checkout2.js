@@ -1,7 +1,8 @@
 // When the transaction type div is loaded
 $(document).ready(function() {
-    // Hide the original transaction type input content
+    // Hide the original transaction type input content and the entire div structure
     $('#ctl00_PageBody_TransactionTypeInput').hide();
+    $('#ctl00_PageBody_TransactionTypeDiv > div:not(:first-child)').hide();
 
     // Create modern buttons to replace the radio buttons visually
     const modernSelector = `
@@ -10,7 +11,7 @@ $(document).ready(function() {
                 <i class="fas fa-shopping-cart"></i> Order
             </button>
             <button id="btnQuote" class="btn btn-secondary" data-value="rdbQuote">
-                <i class="fas fa-file-alt"></i> Quote
+                <i class="fas fa-file-alt"></i> Request Quote
             </button>
         </div>
     `;
@@ -19,10 +20,7 @@ $(document).ready(function() {
     $('#ctl00_PageBody_TransactionTypeDiv').append(modernSelector);
 
     // Handle button clicks to update the hidden radio buttons
-    $('.modern-transaction-selector button').on('click', function() {
-        const selectedValue = $(this).data('value');
-
-        // Update the radio buttons based on the button clicked
+    function updateButtonStyles(selectedValue) {
         if (selectedValue === 'rdbOrder') {
             $('#ctl00_PageBody_TransactionTypeSelector_rdbOrder').prop('checked', true);
             $('#btnOrder').removeClass('btn-secondary').addClass('btn-primary');
@@ -32,5 +30,18 @@ $(document).ready(function() {
             $('#btnQuote').removeClass('btn-secondary').addClass('btn-primary');
             $('#btnOrder').removeClass('btn-primary').addClass('btn-secondary');
         }
+    }
+
+    // Initial update to reflect the current state of the radio buttons
+    if ($('#ctl00_PageBody_TransactionTypeSelector_rdbOrder').is(':checked')) {
+        updateButtonStyles('rdbOrder');
+    } else if ($('#ctl00_PageBody_TransactionTypeSelector_rdbQuote').is(':checked')) {
+        updateButtonStyles('rdbQuote');
+    }
+
+    // Update styles when a button is clicked
+    $('.modern-transaction-selector button').on('click', function() {
+        const selectedValue = $(this).data('value');
+        updateButtonStyles(selectedValue);
     });
 });
