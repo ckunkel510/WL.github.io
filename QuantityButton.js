@@ -1,25 +1,25 @@
 window.onload = function() {
-  // Select inputs matching either condition:
-  // 1. ID starts with "ctl00_PageBody_productDetail_ctl00_qty_"
-  // 2. ID ends with "ProductListView_ctrl0_ProductQuantity"
+  // Combined selector:
+  // 1. Inputs whose ID starts with the specified string.
+  // 2. OR inputs whose ID contains both "ProductListView" and "ProductQuantity".
   var inputs = document.querySelectorAll(
-    "input[id^='ctl00_PageBody_productDetail_ctl00_qty_'], input[id$='ProductListView_ctrl0_ProductQuantity']"
+    "input[id^='ctl00_PageBody_productDetail_ctl00_qty_'], input[id*='ProductListView'][id*='ProductQuantity']"
   );
   
   inputs.forEach(function(input) {
     // Set the default value to "1"
     input.value = "1";
     
-    // Create a container (wrapper) for the input and the buttons.
+    // Create a wrapper for the input and buttons.
     var wrapper = document.createElement('div');
     // Inline styling for the wrapper.
     wrapper.style.display = 'inline-flex';
     wrapper.style.alignItems = 'center';
-    wrapper.style.border = '1px solid #6b0016';  // Example border color.
+    wrapper.style.border = '1px solid #007BFF';  // Example border color.
     wrapper.style.borderRadius = '4px';
     wrapper.style.overflow = 'hidden';
     
-    // Insert the wrapper into the DOM and move the input into it.
+    // Insert the wrapper before the input, then move the input into it.
     input.parentNode.insertBefore(wrapper, input);
     wrapper.appendChild(input);
     
@@ -37,7 +37,7 @@ window.onload = function() {
     // Inline styling for the minus button.
     minusBtn.style.width = '30px';
     minusBtn.style.height = '30px';
-    minusBtn.style.backgroundColor = '#6b0016';
+    minusBtn.style.backgroundColor = '#007BFF';
     minusBtn.style.color = '#fff';
     minusBtn.style.border = 'none';
     minusBtn.style.fontSize = '16px';
@@ -54,7 +54,7 @@ window.onload = function() {
     // Inline styling for the plus button.
     plusBtn.style.width = '30px';
     plusBtn.style.height = '30px';
-    plusBtn.style.backgroundColor = '#6b0016';
+    plusBtn.style.backgroundColor = '#007BFF';
     plusBtn.style.color = '#fff';
     plusBtn.style.border = 'none';
     plusBtn.style.fontSize = '16px';
