@@ -1,35 +1,25 @@
 window.onload = function() {
-  // Select inputs matching:
-  // - IDs beginning with "ctl00_PageBody_productDetail_ctl00_qty_"
-  // - OR IDs containing both "ProductListView" and "ProductQuantity"
+  // Select inputs matching either condition:
+  // 1. ID starts with "ctl00_PageBody_productDetail_ctl00_qty_"
+  // 2. ID ends with "ProductListView_ctrl0_ProductQuantity"
   var inputs = document.querySelectorAll(
-    "input[id^='ctl00_PageBody_productDetail_ctl00_qty_'], input[id*='ProductListView'][id*='ProductQuantity']"
+    "input[id^='ctl00_PageBody_productDetail_ctl00_qty_'], input[id$='ProductListView_ctrl0_ProductQuantity']"
   );
   
   inputs.forEach(function(input) {
-    // If the input is already processed or already inside a wrapper, skip it.
-    if (input.dataset.processedQuantityButtons === "true" || 
-        (input.parentNode && input.parentNode.classList.contains('quantity-wrapper'))) {
-      return;
-    }
-    
-    // Mark this input as processed.
-    input.dataset.processedQuantityButtons = "true";
-    
     // Set the default value to "1"
     input.value = "1";
     
-    // Create a wrapper container and add a class for future checks.
+    // Create a container (wrapper) for the input and the buttons.
     var wrapper = document.createElement('div');
-    wrapper.className = 'quantity-wrapper';
     // Inline styling for the wrapper.
     wrapper.style.display = 'inline-flex';
     wrapper.style.alignItems = 'center';
-    wrapper.style.border = '1px solid #007BFF'; // Example border color.
+    wrapper.style.border = '1px solid #6b0016';  // Example border color.
     wrapper.style.borderRadius = '4px';
     wrapper.style.overflow = 'hidden';
     
-    // Insert the wrapper into the DOM before the input, then move the input into it.
+    // Insert the wrapper into the DOM and move the input into it.
     input.parentNode.insertBefore(wrapper, input);
     wrapper.appendChild(input);
     
@@ -47,7 +37,7 @@ window.onload = function() {
     // Inline styling for the minus button.
     minusBtn.style.width = '30px';
     minusBtn.style.height = '30px';
-    minusBtn.style.backgroundColor = '#007BFF';
+    minusBtn.style.backgroundColor = '#6b0016';
     minusBtn.style.color = '#fff';
     minusBtn.style.border = 'none';
     minusBtn.style.fontSize = '16px';
@@ -64,7 +54,7 @@ window.onload = function() {
     // Inline styling for the plus button.
     plusBtn.style.width = '30px';
     plusBtn.style.height = '30px';
-    plusBtn.style.backgroundColor = '#007BFF';
+    plusBtn.style.backgroundColor = '#6b0016';
     plusBtn.style.color = '#fff';
     plusBtn.style.border = 'none';
     plusBtn.style.fontSize = '16px';
@@ -74,7 +64,7 @@ window.onload = function() {
     plusBtn.style.justifyContent = 'center';
     plusBtn.style.marginLeft = '5px';
     
-    // Insert the buttons: minus before the input, plus after.
+    // Insert the minus button before the input and the plus button after.
     wrapper.insertBefore(minusBtn, input);
     wrapper.appendChild(plusBtn);
     
