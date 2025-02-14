@@ -3,6 +3,9 @@ window.onload = function() {
   var inputs = document.querySelectorAll("input[id^='ctl00_PageBody_productDetail_ctl00_qty_']");
   
   inputs.forEach(function(input) {
+    // Set the input value to "1" on load.
+    input.value = "1";
+    
     // Create a container (wrapper) for the input and the buttons.
     var wrapper = document.createElement('div');
     // Inline styling for the wrapper.
