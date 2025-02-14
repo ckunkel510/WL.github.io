@@ -1,9 +1,11 @@
 window.onload = function() {
-  // Select all quantity inputs that have an ID starting with the known prefix.
-  var inputs = document.querySelectorAll("input[id^='ctl00_PageBody_productDetail_ctl00_qty_']");
+  // Select both sets of inputs using a combined selector.
+  var inputs = document.querySelectorAll(
+    "input[id^='ctl00_PageBody_productDetail_ctl00_qty_'], input#ctl00_PageBody_ctl03_ProductListView_ctrl0_ProductQuantity"
+  );
   
   inputs.forEach(function(input) {
-    // Set the input value to "1" on load.
+    // Set the default value to "1"
     input.value = "1";
     
     // Create a container (wrapper) for the input and the buttons.
@@ -33,7 +35,7 @@ window.onload = function() {
     // Inline styling for the minus button.
     minusBtn.style.width = '30px';
     minusBtn.style.height = '30px';
-    minusBtn.style.backgroundColor = '#6b0016';
+    minusBtn.style.backgroundColor = '#007BFF';
     minusBtn.style.color = '#fff';
     minusBtn.style.border = 'none';
     minusBtn.style.fontSize = '16px';
@@ -50,7 +52,7 @@ window.onload = function() {
     // Inline styling for the plus button.
     plusBtn.style.width = '30px';
     plusBtn.style.height = '30px';
-    plusBtn.style.backgroundColor = '#6b0016';
+    plusBtn.style.backgroundColor = '#007BFF';
     plusBtn.style.color = '#fff';
     plusBtn.style.border = 'none';
     plusBtn.style.fontSize = '16px';
