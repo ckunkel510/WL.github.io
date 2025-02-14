@@ -1,7 +1,9 @@
 window.onload = function() {
-  // Select both sets of inputs using a combined selector.
+  // Select inputs matching either condition:
+  // 1. ID starts with "ctl00_PageBody_productDetail_ctl00_qty_"
+  // 2. ID ends with "ProductListView_ctrl0_ProductQuantity"
   var inputs = document.querySelectorAll(
-    "input[id^='ctl00_PageBody_productDetail_ctl00_qty_'], input#ctl00_PageBody_ctl03_ProductListView_ctrl0_ProductQuantity"
+    "input[id^='ctl00_PageBody_productDetail_ctl00_qty_'], input[id$='ProductListView_ctrl0_ProductQuantity']"
   );
   
   inputs.forEach(function(input) {
@@ -17,7 +19,7 @@ window.onload = function() {
     wrapper.style.borderRadius = '4px';
     wrapper.style.overflow = 'hidden';
     
-    // Insert the wrapper into the DOM in place of the input and then append the input into it.
+    // Insert the wrapper into the DOM and move the input into it.
     input.parentNode.insertBefore(wrapper, input);
     wrapper.appendChild(input);
     
