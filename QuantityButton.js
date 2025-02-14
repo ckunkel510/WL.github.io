@@ -30,7 +30,7 @@ window.onload = function() {
     // Inline styling for the minus button.
     minusBtn.style.width = '30px';
     minusBtn.style.height = '30px';
-    minusBtn.style.backgroundColor = '#007BFF';
+    minusBtn.style.backgroundColor = '#6b0016';
     minusBtn.style.color = '#fff';
     minusBtn.style.border = 'none';
     minusBtn.style.fontSize = '16px';
@@ -47,7 +47,7 @@ window.onload = function() {
     // Inline styling for the plus button.
     plusBtn.style.width = '30px';
     plusBtn.style.height = '30px';
-    plusBtn.style.backgroundColor = '#007BFF';
+    plusBtn.style.backgroundColor = '#6b0016';
     plusBtn.style.color = '#fff';
     plusBtn.style.border = 'none';
     plusBtn.style.fontSize = '16px';
