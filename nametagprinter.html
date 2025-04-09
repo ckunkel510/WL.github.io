@@ -1,0 +1,17 @@
+<body onload="printPage()">
+  <div id="label"></div>
+  <script>
+    function getQueryParam(param) {
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get(param) || '';
+    }
+
+    function printPage() {
+      const name = getQueryParam('name');
+      document.getElementById('label').innerText = name;
+      setTimeout(() => {
+        window.print();
+      }, 500);
+    }
+  </script>
+</body>
