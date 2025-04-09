@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Name Tag Printer</title>
+  <style>
+    body {
+      width: 4in;
+      height: 6in;
+      margin: 0;
+      padding: 1in;
+      font-size: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  </style>
+</head>
+<body onload="printPage()">
+  <div id="label"></div>
+  <script>
+    function getQueryParam(param) {
+      const urlParams = new URLSearchParams(window.location.search);
+      return urlParams.get(param) || '';
+    }
+
+    function printPage() {
+      const name = getQueryParam('name');
+      document.getElementById('label').innerText = name;
+      setTimeout(() => {
+        window.print();
+      }, 500);
+    }
+  </script>
+</body>
+</html>
