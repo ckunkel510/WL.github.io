@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Name Tag Check-In</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      text-align: center;
+      margin-top: 100px;
+    }
+    input {
+      font-size: 24px;
+      padding: 10px;
+      width: 300px;
+    }
+    button {
+      font-size: 24px;
+      padding: 10px 20px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Enter Your Name</h1>
+  <input type="text" id="name" placeholder="Your Name" />
+  <br><br>
+  <button onclick="submitName()">Submit</button>
+
+  <script>
+    function submitName() {
+      const name = document.getElementById("name").value.trim();
+      if (!name) {
+        alert("Please enter your name.");
+        return;
+      }
+
+      const scriptURL = "https://script.google.com/macros/s/AKfycbxQ8N128Pdq3bf-sqwziG-xhADjo3c3dOC9QzvUCHn1ebWM9vkVkjhOdyq_dx8Vrl4a/exec"; // Replace this
+      const formData = new FormData();
+      formData.append("name", name);
+
+      fetch(scriptURL, { method: 'POST', body: formData })
+        .then(response => {
+          window.location.href = `https://ckunkel510.github.io/WL.github.io/nametagprinter/index.html?name=${encodeURIComponent(name)}`;
+        })
+        .catch(error => {
+          alert("Error submitting name.");
+          console.error(error);
+        });
+    }
+  </script>
+</body>
+</html>
