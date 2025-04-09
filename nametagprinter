@@ -1,34 +1,50 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Name Tag Printer</title>
+  <title>Name Tag Check-In</title>
   <style>
     body {
-      width: 4in;
-      height: 6in;
-      margin: 0;
-      padding: 1in;
-      font-size: 48px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
+      font-family: sans-serif;
+      text-align: center;
+      margin-top: 100px;
+    }
+    input {
+      font-size: 24px;
+      padding: 10px;
+      width: 300px;
+    }
+    button {
+      font-size: 24px;
+      padding: 10px 20px;
     }
   </style>
 </head>
-<body onload="printPage()">
-  <div id="label"></div>
-  <script>
-    function getQueryParam(param) {
-      const urlParams = new URLSearchParams(window.location.search);
-      return urlParams.get(param) || '';
-    }
+<body>
+  <h1>Enter Your Name</h1>
+  <input type="text" id="name" placeholder="Your Name" />
+  <br><br>
+  <button onclick="submitName()">Submit</button>
 
-    function printPage() {
-      const name = getQueryParam('name');
-      document.getElementById('label').innerText = name;
-      setTimeout(() => {
-        window.print();
-      }, 500);
+  <script>
+    function submitName() {
+      const name = document.getElementById("name").value.trim();
+      if (!name) {
+        alert("Please enter your name.");
+        return;
+      }
+
+      const scriptURL = "YOUR_WEB_APP_URL_HERE"; // Replace this
+      const formData = new FormData();
+      formData.append("name", name);
+
+      fetch(scriptURL, { method: 'POST', body: formData })
+        .then(response => {
+          window.location.href = `https://yourusername.github.io/repo-name/index.html?name=${encodeURIComponent(name)}`;
+        })
+        .catch(error => {
+          alert("Error submitting name.");
+          console.error(error);
+        });
     }
   </script>
 </body>
