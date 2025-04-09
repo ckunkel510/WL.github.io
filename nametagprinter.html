@@ -49,18 +49,26 @@
   <div id="label"></div>
 
   <script>
-    function getQueryParam(param) {
-      const urlParams = new URLSearchParams(window.location.search);
-      return urlParams.get(param) || '';
-    }
+  function getQueryParam(param) {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get(param) || '';
+  }
 
-    function printPage() {
-      const name = getQueryParam('name');
-      document.getElementById('label').innerText = name;
+  function printPage() {
+    const name = getQueryParam('name');
+    document.getElementById('label').innerText = name;
+
+    // Print after a short delay
+    setTimeout(() => {
+      window.print();
+
+      // Redirect back to the form after print (2 seconds later)
       setTimeout(() => {
-        window.print();
-      }, 500);
-    }
-  </script>
+        window.location.href = "https://ckunkel510.github.io/WL.github.io/BuilderNightRegistration.html";
+      }, 2000); // Adjust time if needed
+    }, 500);
+  }
+</script>
+
 </body>
 </html>
