@@ -33,13 +33,13 @@
         return;
       }
 
-      const scriptURL = "YOUR_WEB_APP_URL_HERE"; // Replace this
+      const scriptURL = "https://script.google.com/macros/s/AKfycbxQ8N128Pdq3bf-sqwziG-xhADjo3c3dOC9QzvUCHn1ebWM9vkVkjhOdyq_dx8Vrl4a/exec"; // Replace this
       const formData = new FormData();
       formData.append("name", name);
 
       fetch(scriptURL, { method: 'POST', body: formData })
         .then(response => {
-          window.location.href = `https://yourusername.github.io/repo-name/index.html?name=${encodeURIComponent(name)}`;
+          window.location.href = `https://ckunkel510.github.io/WL.github.io/nametagprinter/index.html?name=${encodeURIComponent(name)}`;
         })
         .catch(error => {
           alert("Error submitting name.");
