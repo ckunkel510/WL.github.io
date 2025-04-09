@@ -37,14 +37,20 @@
       const formData = new FormData();
       formData.append("name", name);
 
-      fetch(scriptURL, { method: 'POST', body: formData })
-        .then(response => {
-          window.location.href = `https://ckunkel510.github.io/WL.github.io/nametagprinter/index.html?name=${encodeURIComponent(name)}`;
-        })
-        .catch(error => {
-          alert("Error submitting name.");
-          console.error(error);
-        });
+      fetch(scriptURL, {
+  method: 'POST',
+  mode: 'no-cors',
+  body: formData
+})
+.then(() => {
+  // Redirect immediately, since we can't wait for a response in no-cors mode
+  window.location.href = `https://ckunkel510.github.io/WL.github.io/nametagprinter/index.html?name=${encodeURIComponent(name)}`;
+})
+.catch(error => {
+  alert("Error submitting name.");
+  console.error("Submission error:", error);
+});
+
     }
   </script>
 </body>
