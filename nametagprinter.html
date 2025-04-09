@@ -1,5 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Name Tag Label</title>
+  <style>
+    @media print {
+      @page {
+        size: 4in 6in landscape; /* forces landscape */
+        margin: 0;
+      }
+      body {
+        margin: 0;
+      }
+    }
+
+    html, body {
+      width: 6in;
+      height: 4in;
+      margin: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      font-family: sans-serif;
+    }
+
+    #label {
+      text-align: center;
+      width: 100%;
+      font-weight: bold;
+      font-size: 100px;
+      line-height: 1;
+      word-wrap: break-word;
+      padding: 0 0.25in;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Responsive scaling for long names */
+    @media screen {
+      #label {
+        font-size: 10vw;
+      }
+    }
+  </style>
+</head>
 <body onload="printPage()">
   <div id="label"></div>
+
   <script>
     function getQueryParam(param) {
       const urlParams = new URLSearchParams(window.location.search);
@@ -15,3 +63,4 @@
     }
   </script>
 </body>
+</html>
