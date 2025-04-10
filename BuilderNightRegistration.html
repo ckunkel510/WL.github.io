@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Name Tag Check-In</title>
+  <title>Builder Night Check-In</title>
   <style>
     body {
       font-family: sans-serif;
@@ -16,41 +16,51 @@
     button {
       font-size: 24px;
       padding: 10px 20px;
+      margin-top: 20px;
     }
   </style>
 </head>
 <body>
-  <h1>Enter Your Name</h1>
+  <h1>Check In</h1>
+
+  <!-- NAME INPUT -->
   <input type="text" id="name" placeholder="Your Name" />
   <br><br>
-  <button onclick="submitName()">Submit</button>
+
+  <!-- BUSINESS INPUT -->
+  <input type="text" id="business" placeholder="Your Business" />
+  <br><br>
+
+  <button onclick="submitForm()">Submit</button>
 
   <script>
-    function submitName() {
+    function submitForm() {
       const name = document.getElementById("name").value.trim();
+      const business = document.getElementById("business").value.trim();
+
       if (!name) {
         alert("Please enter your name.");
         return;
       }
 
-      const scriptURL = "https://script.google.com/macros/s/AKfycbxQ8N128Pdq3bf-sqwziG-xhADjo3c3dOC9QzvUCHn1ebWM9vkVkjhOdyq_dx8Vrl4a/exec"; // Replace this
+      const scriptURL = "https://script.google.com/macros/s/AKfycbxQ8N128Pdq3bf-sqwziG-xhADjo3c3dOC9QzvUCHn1ebWM9vkVkjhOdyq_dx8Vrl4a/exec"; // <-- Replace with your real URL
       const formData = new FormData();
       formData.append("name", name);
+      formData.append("business", business);
 
       fetch(scriptURL, {
-  method: 'POST',
-  mode: 'no-cors',
-  body: formData
-})
-.then(() => {
-  // Redirect immediately, since we can't wait for a response in no-cors mode
-  window.location.href = `https://ckunkel510.github.io/WL.github.io/nametagprinter.html?name=${encodeURIComponent(name)}`;
-})
-.catch(error => {
-  alert("Error submitting name.");
-  console.error("Submission error:", error);
-});
-
+        method: 'POST',
+        mode: 'no-cors',
+        body: formData
+      })
+      .then(() => {
+        // Redirect to the label print page
+        window.location.href = `https://ckunkel510.github.io/WL.github.io/nametagprinter.html?name=${encodeURIComponent(name)}&business=${encodeURIComponent(business)}`;
+      })
+      .catch(error => {
+        alert("Error submitting form.");
+        console.error("Submission error:", error);
+      });
     }
   </script>
 </body>
