@@ -1,0 +1,9 @@
+{
+  "name": "competitor-price-checker",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {},
+  "dependencies": {
+    "puppeteer": "^21.0.0"
+  }
+}
