@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>View Competitor Prices</title>
+  <style>
+    body {
+      margin: 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+      height: 100vh;
+      overflow: hidden;
+    }
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+  </style>
+</head>
+<body>
+  <script>
+    const params = new URLSearchParams(window.location.search);
+    const urls = {
+      hd: params.get('hd'),
+      lowes: params.get('lowes'),
+      amzn: params.get('amzn'),
+      tsc: params.get('tsc'),
+      mc: params.get('mc'),
+      other: params.get('other')
+    };
+
+    Object.values(urls).forEach(url => {
+      if (url) {
+        const iframe = document.createElement('iframe');
+        iframe.src = decodeURIComponent(url);
+        document.body.appendChild(iframe);
+      }
+    });
+  </script>
+</body>
+</html>
