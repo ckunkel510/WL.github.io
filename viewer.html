@@ -4,39 +4,102 @@
   <meta charset="UTF-8">
   <title>View Competitor Prices</title>
   <style>
+    * {
+      box-sizing: border-box;
+    }
+
     body {
       margin: 0;
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
       height: 100vh;
       overflow: hidden;
     }
-    iframe {
-      width: 100%;
+
+    .grid {
+      display: flex;
+      flex-wrap: wrap;
       height: 100%;
+    }
+
+    .panel {
+      flex: 1 1 calc(33.333% - 8px);
+      max-width: calc(33.333% - 8px);
+      display: flex;
+      flex-direction: column;
+      height: 50%;
+      margin: 4px;
+      border: 1px solid #ccc;
+    }
+
+    iframe {
+      flex-grow: 1;
       border: none;
+      width: 100%;
+    }
+
+    .link {
+      padding: 6px;
+      text-align: center;
+      background: #f8f8f8;
+      border-top: 1px solid #ccc;
+    }
+
+    .link a {
+      color: #0066cc;
+      text-decoration: none;
+      font-size: 14px;
+    }
+
+    .link a:hover {
+      text-decoration: underline;
+    }
+
+    @media (max-width: 768px) {
+      .panel {
+        flex: 1 1 100%;
+        max-width: 100%;
+        height: 50%;
+      }
     }
   </style>
 </head>
 <body>
+  <div class="grid" id="container"></div>
+
   <script>
     const params = new URLSearchParams(window.location.search);
-    const urls = {
-      hd: params.get('hd'),
-      lowes: params.get('lowes'),
-      amzn: params.get('amzn'),
-      tsc: params.get('tsc'),
-      mc: params.get('mc'),
-      other: params.get('other')
+    const labels = {
+      hd: "Home Depot",
+      lowes: "Lowe's",
+      amzn: "Amazon",
+      tsc: "Tractor Supply",
+      mc: "McCoy's",
+      other: "Other"
     };
 
-    Object.values(urls).forEach(url => {
-      if (url) {
-        const iframe = document.createElement('iframe');
-        iframe.src = decodeURIComponent(url);
-        document.body.appendChild(iframe);
-      }
-    });
+    const container = document.getElementById('container');
+
+    for (const [key, label] of Object.entries(labels)) {
+      const raw = params.get(key);
+      if (!raw) continue;
+
+      const url = decodeURIComponent(raw);
+      const panel = document.createElement('div');
+      panel.className = 'panel';
+
+      const iframe = document.createElement('iframe');
+      iframe.src = url;
+
+      const link = document.createElement('div');
+      link.className = 'link';
+      link.innerHTML = `<a href="${url}" target="_blank" rel="noopener noreferrer">Open ${label}</a>`;
+
+      panel.appendChild(iframe);
+      panel.appendChild(link);
+      container.appendChild(panel);
+    }
   </script>
 </body>
 </html>
