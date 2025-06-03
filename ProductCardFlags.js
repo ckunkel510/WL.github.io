@@ -37,48 +37,55 @@ $(document).ready(function () {
 
                 const extractedNumber = src.substring(src.lastIndexOf('/') + 1, src.lastIndexOf('.'));
 
+                // Wrap image in relative-positioned container if not already wrapped
+                if (!$(this).parent().hasClass("image-wrapper")) {
+                    $(this).wrap("<div class='image-wrapper' style='position:relative; display:inline-block;'></div>");
+                }
+
+                const $wrapper = $(this).parent();
+
                 if (newItems.includes(extractedNumber)) {
-                    $(this).before('<div class="newitem-tag animated">New Item</div>');
+                    $wrapper.append('<div class="newitem-tag animated">New Item</div>');
                 }
 
                 const clearanceMatch = clearanceItems.find(item => item.productid === extractedNumber);
                 if (clearanceMatch && clearanceMatch.wasprice) {
-                    $(this).before('<div class="Clearance-tag animated">Clearance<br><span>Regular: $' + clearanceMatch.wasprice + '</span></div>');
+                    $wrapper.append('<div class="Clearance-tag animated">Clearance<br><span>Regular: $' + clearanceMatch.wasprice + '</span></div>');
                 }
 
                 const saleMatch = saleItems.find(item => item.productid === extractedNumber);
                 if (saleMatch && saleMatch.wasprice) {
-                    $(this).before('<div class="SaleTag animated">Ready, Set, Save!<br><span>Was: $' + saleMatch.wasprice + '</span></div>');
+                    $wrapper.append('<div class="SaleTag animated">Ready, Set, Save!<br><span>Was: $' + saleMatch.wasprice + '</span></div>');
                 }
             });
         }, 1000);
 
-        // Styles
+        // Tag styles
         $("<style type='text/css'> \
-    .animated { animation: popIn 0.5s ease-out; } \
-    @keyframes popIn { \
-        from { transform: scale(0.7); opacity: 0; } \
-        to { transform: scale(1); opacity: 1; } \
-    } \
-    .newitem-tag { \
-        position: absolute; top: 10px; left: 10px; transform: rotate(-20deg); \
-        background-color: #c20000; color: white; padding: 6px 14px; font-weight: bold; \
-        z-index: 10; border-radius: 6px; font-size: 13px; box-shadow: 0 0 5px rgba(0,0,0,0.3); \
-    } \
-    .Clearance-tag { \
-        display: inline-block; background: black; color: white; padding: 10px; \
-        font-weight: bold; border-radius: 12px; margin-bottom: 10px; font-size: 16px; \
-        box-shadow: 0 0 10px rgba(255,255,255,0.3); \
-    } \
-    .Clearance-tag span { display: block; font-size: 14px; color: #ccc; } \
-    .SaleTag { \
-        display: inline-block; background: #ffd700; color: #000; padding: 10px; \
-        font-weight: bold; border-radius: 12px; margin-bottom: 10px; font-size: 16px; \
-        box-shadow: 0 0 10px rgba(255, 215, 0, 0.5); \
-    } \
-    .SaleTag span { display: block; font-size: 14px; color: #444; } \
-</style>").appendTo("head");
-
+            .animated { animation: popIn 0.5s ease-out; } \
+            @keyframes popIn { \
+                from { transform: scale(0.7); opacity: 0; } \
+                to { transform: scale(1); opacity: 1; } \
+            } \
+            .newitem-tag { \
+                position: absolute; top: 8px; left: 8px; background-color: #c20000; \
+                color: white; padding: 6px 12px; font-weight: bold; border-radius: 4px; \
+                font-size: 13px; box-shadow: 0 2px 5px rgba(0,0,0,0.3); \
+                transform: rotate(-10deg); z-index: 10; \
+            } \
+            .Clearance-tag { \
+                position: absolute; bottom: 8px; left: 8px; background: black; color: white; \
+                padding: 10px; font-weight: bold; border-radius: 12px; font-size: 16px; \
+                box-shadow: 0 0 10px rgba(255,255,255,0.3); \
+            } \
+            .Clearance-tag span { display: block; font-size: 14px; color: #ccc; } \
+            .SaleTag { \
+                position: absolute; bottom: 8px; right: 8px; background: #ffd700; color: #000; \
+                padding: 10px; font-weight: bold; border-radius: 12px; font-size: 16px; \
+                box-shadow: 0 0 10px rgba(255, 215, 0, 0.5); \
+            } \
+            .SaleTag span { display: block; font-size: 14px; color: #444; } \
+        </style>").appendTo("head");
 
     }).catch(error => {
         console.error('Error fetching or processing CSV data:', error);
