@@ -1,4 +1,3 @@
-<script>
 $(document).ready(function () {
     const urls = {
         sale: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS-exMk9OF0fqSsiar-2i0Ui22bZ8t6KWL5x5hkWbd_3NSUuJ6Drz6ycFAj2mmUHVrhT4CDuDFNwaq9/pub?gid=0&single=true&output=csv',
@@ -55,4 +54,3 @@ $(document).ready(function () {
         console.error('Error fetching or processing CSV data:', error);
     });
 });
-</script>
