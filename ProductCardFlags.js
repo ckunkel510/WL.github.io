@@ -28,9 +28,8 @@ $(document).ready(function () {
         const clearanceItems = parseCSV(clearanceCSV);
         const saleItems = parseCSV(saleCSV);
 
-        // Delay tagging logic by 5 seconds
         setTimeout(() => {
-            $(".newitem-tag, .Clearance-tag, .SaleTag").remove(); // clear old tags
+            $(".newitem-tag, .Clearance-tag, .SaleTag").remove();
 
             $("img").each(function () {
                 const src = $(this).attr("src") || '0';
@@ -39,25 +38,46 @@ $(document).ready(function () {
                 const extractedNumber = src.substring(src.lastIndexOf('/') + 1, src.lastIndexOf('.'));
 
                 if (newItems.includes(extractedNumber)) {
-                    $(this).before('<div class="newitem-tag">New Item</div>');
+                    $(this).before('<div class="newitem-tag animated">New Item</div>');
                 }
 
                 const clearanceMatch = clearanceItems.find(item => item.productid === extractedNumber);
                 if (clearanceMatch && clearanceMatch.wasprice) {
-                    $(this).before('<div class="Clearance-tag">Clearance<br>Regular: ' + clearanceMatch.wasprice + '</div>');
+                    $(this).before('<div class="Clearance-tag animated">Clearance<br><span>Regular: $' + clearanceMatch.wasprice + '</span></div>');
                 }
 
                 const saleMatch = saleItems.find(item => item.productid === extractedNumber);
                 if (saleMatch && saleMatch.wasprice) {
-                    $(this).before('<div class="SaleTag">Ready, Set, Save!<br>Was: ' + saleMatch.wasprice + '</div>');
+                    $(this).before('<div class="SaleTag animated">Ready, Set, Save!<br><span>Was: $' + saleMatch.wasprice + '</span></div>');
                 }
             });
-        }, 1000); // <-- delay in milliseconds (5000 = 5 seconds)
+        }, 1000);
 
-        // Tag Styles
-        $("<style type='text/css'> .newitem-tag{ position: absolute; background-color: red; color: white; padding: 10px; font-weight: bold; z-index: 10; border-radius: 20px; max-width: 100px; } </style>").appendTo("head");
-        $("<style type='text/css'> .Clearance-tag{ display: block; margin-bottom:10px; background-color: black; color: white; padding: 10px; font-weight: bold; border-radius: 20px; max-width: 200px; } </style>").appendTo("head");
-        $("<style type='text/css'> .SaleTag{ display: block; margin-bottom:10px; background-color: yellow; color: black; padding: 10px; font-weight: bold; border-radius: 20px; max-width: 200px; } </style>").appendTo("head");
+        // Styles
+        $("<style type='text/css'> \
+            .animated { animation: popIn 0.5s ease-out; } \
+            @keyframes popIn { \
+                from { transform: scale(0.7); opacity: 0; } \
+                to { transform: scale(1); opacity: 1; } \
+            } \
+            .newitem-tag { \
+                position: absolute; top: 10px; left: -30px; transform: rotate(-45deg); \
+                background-color: #c20000; color: white; padding: 5px 20px; font-weight: bold; \
+                z-index: 10; border-radius: 4px; font-size: 14px; box-shadow: 0 0 5px rgba(0,0,0,0.3); \
+            } \
+            .Clearance-tag { \
+                display: inline-block; background: black; color: white; padding: 10px; \
+                font-weight: bold; border-radius: 12px; margin-bottom: 10px; font-size: 16px; \
+                box-shadow: 0 0 10px rgba(255,255,255,0.3); \
+            } \
+            .Clearance-tag span { display: block; font-size: 14px; color: #ccc; } \
+            .SaleTag { \
+                display: inline-block; background: #ffd700; color: #000; padding: 10px; \
+                font-weight: bold; border-radius: 12px; margin-bottom: 10px; font-size: 16px; \
+                box-shadow: 0 0 10px rgba(255, 215, 0, 0.5); \
+            } \
+            .SaleTag span { display: block; font-size: 14px; color: #444; } \
+        </style>").appendTo("head");
 
     }).catch(error => {
         console.error('Error fetching or processing CSV data:', error);
