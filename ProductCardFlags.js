@@ -55,29 +55,30 @@ $(document).ready(function () {
 
         // Styles
         $("<style type='text/css'> \
-            .animated { animation: popIn 0.5s ease-out; } \
-            @keyframes popIn { \
-                from { transform: scale(0.7); opacity: 0; } \
-                to { transform: scale(1); opacity: 1; } \
-            } \
-            .newitem-tag { \
-                position: absolute; top: 10px; left: -30px; transform: rotate(-45deg); \
-                background-color: #c20000; color: white; padding: 5px 20px; font-weight: bold; \
-                z-index: 10; border-radius: 4px; font-size: 14px; box-shadow: 0 0 5px rgba(0,0,0,0.3); \
-            } \
-            .Clearance-tag { \
-                display: inline-block; background: black; color: white; padding: 10px; \
-                font-weight: bold; border-radius: 12px; margin-bottom: 10px; font-size: 16px; \
-                box-shadow: 0 0 10px rgba(255,255,255,0.3); \
-            } \
-            .Clearance-tag span { display: block; font-size: 14px; color: #ccc; } \
-            .SaleTag { \
-                display: inline-block; background: #ffd700; color: #000; padding: 10px; \
-                font-weight: bold; border-radius: 12px; margin-bottom: 10px; font-size: 16px; \
-                box-shadow: 0 0 10px rgba(255, 215, 0, 0.5); \
-            } \
-            .SaleTag span { display: block; font-size: 14px; color: #444; } \
-        </style>").appendTo("head");
+    .animated { animation: popIn 0.5s ease-out; } \
+    @keyframes popIn { \
+        from { transform: scale(0.7); opacity: 0; } \
+        to { transform: scale(1); opacity: 1; } \
+    } \
+    .newitem-tag { \
+        position: absolute; top: 10px; left: 10px; transform: rotate(-20deg); \
+        background-color: #c20000; color: white; padding: 6px 14px; font-weight: bold; \
+        z-index: 10; border-radius: 6px; font-size: 13px; box-shadow: 0 0 5px rgba(0,0,0,0.3); \
+    } \
+    .Clearance-tag { \
+        display: inline-block; background: black; color: white; padding: 10px; \
+        font-weight: bold; border-radius: 12px; margin-bottom: 10px; font-size: 16px; \
+        box-shadow: 0 0 10px rgba(255,255,255,0.3); \
+    } \
+    .Clearance-tag span { display: block; font-size: 14px; color: #ccc; } \
+    .SaleTag { \
+        display: inline-block; background: #ffd700; color: #000; padding: 10px; \
+        font-weight: bold; border-radius: 12px; margin-bottom: 10px; font-size: 16px; \
+        box-shadow: 0 0 10px rgba(255, 215, 0, 0.5); \
+    } \
+    .SaleTag span { display: block; font-size: 14px; color: #444; } \
+</style>").appendTo("head");
+
 
     }).catch(error => {
         console.error('Error fetching or processing CSV data:', error);
