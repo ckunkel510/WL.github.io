@@ -52,7 +52,7 @@ $(document).ready(function () {
                     $(this).before('<div class="SaleTag">Ready, Set, Save!<br>Was: ' + saleMatch.wasprice + '</div>');
                 }
             });
-        }, 5000); // <-- delay in milliseconds (5000 = 5 seconds)
+        }, 1000); // <-- delay in milliseconds (5000 = 5 seconds)
 
         // Tag Styles
         $("<style type='text/css'> .newitem-tag{ position: absolute; background-color: red; color: white; padding: 10px; font-weight: bold; z-index: 10; border-radius: 20px; max-width: 100px; } </style>").appendTo("head");
