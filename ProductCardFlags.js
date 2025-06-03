@@ -11,10 +11,9 @@ $(document).ready(function () {
         fetch(urls.clearance).then(res => res.text()),
         fetch(urls.sale).then(res => res.text())
     ]).then(([newCSV, clearanceCSV, saleCSV]) => {
-        // More reliable CSV parser using headers
         const parseCSV = (csv) => {
             const lines = csv.trim().split('\n');
-            const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+            const headers = lines[0].split(',').map(h => h.trim());
             return lines.slice(1).map(line => {
                 const values = line.split(',').map(v => v.trim());
                 const entry = {};
