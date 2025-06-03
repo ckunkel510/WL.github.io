@@ -1,5 +1,5 @@
 $(document).ready(function () {
-    const now = new Date().getTime(); // for cache-busting
+    const now = new Date().getTime();
     const urls = {
         sale: `https://docs.google.com/spreadsheets/d/e/2PACX-1vS-exMk9OF0fqSsiar-2i0Ui22bZ8t6KWL5x5hkWbd_3NSUuJ6Drz6ycFAj2mmUHVrhT4CDuDFNwaq9/pub?gid=0&single=true&output=csv&t=${now}`,
         newItem: `https://docs.google.com/spreadsheets/d/e/2PACX-1vS-exMk9OF0fqSsiar-2i0Ui22bZ8t6KWL5x5hkWbd_3NSUuJ6Drz6ycFAj2mmUHVrhT4CDuDFNwaq9/pub?gid=1286930330&single=true&output=csv&t=${now}`,
@@ -28,32 +28,31 @@ $(document).ready(function () {
         const clearanceItems = parseCSV(clearanceCSV);
         const saleItems = parseCSV(saleCSV);
 
-        // Remove any existing tags before adding new ones
-        $(".newitem-tag, .Clearance-tag, .SaleTag").remove();
+        // Delay tagging logic by 5 seconds
+        setTimeout(() => {
+            $(".newitem-tag, .Clearance-tag, .SaleTag").remove(); // clear old tags
 
-        $("img").each(function () {
-            const src = $(this).attr("src") || '0';
-            if (src.includes('groups')) return;
+            $("img").each(function () {
+                const src = $(this).attr("src") || '0';
+                if (src.includes('groups')) return;
 
-            const extractedNumber = src.substring(src.lastIndexOf('/') + 1, src.lastIndexOf('.'));
+                const extractedNumber = src.substring(src.lastIndexOf('/') + 1, src.lastIndexOf('.'));
 
-            // New Item
-            if (newItems.includes(extractedNumber)) {
-                $(this).before('<div class="newitem-tag">New Item</div>');
-            }
+                if (newItems.includes(extractedNumber)) {
+                    $(this).before('<div class="newitem-tag">New Item</div>');
+                }
 
-            // Clearance
-            const clearanceMatch = clearanceItems.find(item => item.productid === extractedNumber);
-            if (clearanceMatch && clearanceMatch.wasprice) {
-                $(this).before('<div class="Clearance-tag">Clearance<br>Regular: ' + clearanceMatch.wasprice + '</div>');
-            }
+                const clearanceMatch = clearanceItems.find(item => item.productid === extractedNumber);
+                if (clearanceMatch && clearanceMatch.wasprice) {
+                    $(this).before('<div class="Clearance-tag">Clearance<br>Regular: ' + clearanceMatch.wasprice + '</div>');
+                }
 
-            // Sale
-            const saleMatch = saleItems.find(item => item.productid === extractedNumber);
-            if (saleMatch && saleMatch.wasprice) {
-                $(this).before('<div class="SaleTag">Ready, Set, Save!<br>Was: ' + saleMatch.wasprice + '</div>');
-            }
-        });
+                const saleMatch = saleItems.find(item => item.productid === extractedNumber);
+                if (saleMatch && saleMatch.wasprice) {
+                    $(this).before('<div class="SaleTag">Ready, Set, Save!<br>Was: ' + saleMatch.wasprice + '</div>');
+                }
+            });
+        }, 5000); // <-- delay in milliseconds (5000 = 5 seconds)
 
         // Tag Styles
         $("<style type='text/css'> .newitem-tag{ position: absolute; background-color: red; color: white; padding: 10px; font-weight: bold; z-index: 10; border-radius: 20px; max-width: 100px; } </style>").appendTo("head");
