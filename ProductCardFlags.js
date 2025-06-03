@@ -1,9 +1,9 @@
 <script>
 $(document).ready(function () {
     const urls = {
-        sale: 'https://docs.google.com/spreadsheets/d/e/your_export_link/pub?gid=1234567890&single=true&output=csv',
-        newItem: 'https://docs.google.com/spreadsheets/d/e/your_export_link/pub?gid=2345678901&single=true&output=csv',
-        clearance: 'https://docs.google.com/spreadsheets/d/e/your_export_link/pub?gid=3456789012&single=true&output=csv'
+        sale: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS-exMk9OF0fqSsiar-2i0Ui22bZ8t6KWL5x5hkWbd_3NSUuJ6Drz6ycFAj2mmUHVrhT4CDuDFNwaq9/pub?gid=0&single=true&output=csv',
+        newItem: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS-exMk9OF0fqSsiar-2i0Ui22bZ8t6KWL5x5hkWbd_3NSUuJ6Drz6ycFAj2mmUHVrhT4CDuDFNwaq9/pub?gid=1286930330&single=true&output=csv',
+        clearance: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS-exMk9OF0fqSsiar-2i0Ui22bZ8t6KWL5x5hkWbd_3NSUuJ6Drz6ycFAj2mmUHVrhT4CDuDFNwaq9/pub?gid=1769959350&single=true&output=csv'
     };
 
     Promise.all([
