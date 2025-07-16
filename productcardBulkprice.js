@@ -28,10 +28,14 @@ setTimeout(async () => {
     const rows = csvText.trim().split("\n").map(row => row.split(","));
     const headers = rows[0];
     const dataRows = rows.slice(1);
+// Normalize headers to lowercase, trimmed
+const normalizedHeaders = headers.map(h => h.trim().toLowerCase());
 
-    const pidIndex = headers.indexOf("pid");
-    const qtyIndex = headers.indexOf("qty");
-    const priceIndex = headers.indexOf("price");
+// Get indexes based on normalized headers
+const pidIndex = normalizedHeaders.indexOf("pid");
+const qtyIndex = normalizedHeaders.indexOf("qty");
+const priceIndex = normalizedHeaders.indexOf("price");
+
 
     const matchingRows = dataRows.filter(row => row[pidIndex] === pid);
     console.log(`[BulkPricing] Found ${matchingRows.length} rows for pid ${pid}`);
