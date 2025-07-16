@@ -61,17 +61,18 @@ setTimeout(async () => {
     text-align: center;
     font-weight: bold;
     color: #2c3e70;
-    font-size: 0.95em;
+    font-size: 1.15em;
     padding: 4px 0;
   ">
-    Bulk Pricing: 
+    Bulk Price: 
     ${matchingRows.map(row => {
       const qty = row[qtyIndex];
       const price = row[priceIndex];
-      return price ? `${qty}+ for $${price} ea` : `${qty}+ (price missing)`;
+      return price ? `${qty} or more at $${price} ea` : `${qty} or more (price missing)`;
     }).join(" • ")}
   </div>
 `;
+
 
 
     bulkPriceRow.appendChild(td);
