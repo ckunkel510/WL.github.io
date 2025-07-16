@@ -61,7 +61,7 @@ setTimeout(async () => {
     text-align: center;
     font-weight: bold;
     color: #2c3e70;
-    font-size: 1.15em;
+    font-size: 1.10em;
     padding: 4px 0;
   ">
     Bulk Price: 
