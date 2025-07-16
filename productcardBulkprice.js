@@ -57,15 +57,22 @@ setTimeout(async () => {
     const td = document.createElement("td");
     td.colSpan = 1;
     td.innerHTML = `
-      <div style="text-align:center; font-size: 0.9em; color: #444;">
-        <strong>Bulk Pricing:</strong><br>
-        ${matchingRows.map(row => {
-          const qty = row[qtyIndex];
-          const price = row[priceIndex];
-          return price ? `${qty}+ for $${price} ea` : `${qty}+ (price missing)`;
-        }).join("<br>")}
-      </div>
-    `;
+  <div style="
+    text-align: center;
+    font-weight: bold;
+    color: #2c3e70;
+    font-size: 0.95em;
+    padding: 4px 0;
+  ">
+    Bulk Pricing: 
+    ${matchingRows.map(row => {
+      const qty = row[qtyIndex];
+      const price = row[priceIndex];
+      return price ? `${qty}+ for $${price} ea` : `${qty}+ (price missing)`;
+    }).join(" • ")}
+  </div>
+`;
+
 
     bulkPriceRow.appendChild(td);
 
