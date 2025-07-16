@@ -1,10 +1,7 @@
 console.log("[LocalStock] Script loaded.");
 
-// Delay execution slightly to ensure DOM is fully available
 setTimeout(() => {
   (async function () {
-    console.log("[LocalStock] Running...");
-
     const stores = [
       { name: 'Brenham', zip: 77833, lat: 30.1669, lon: -96.3977 },
       { name: 'Bryan', zip: 77803, lat: 30.6744, lon: -96.3743 },
@@ -16,90 +13,82 @@ setTimeout(() => {
     ];
 
     const DEFAULT_STORE = 'Groesbeck';
+    const useActualColumn = !!(await getSignedInBranch());
+    const finalBranch = (await getSignedInBranch()) || (await getNearestStoreBranch(stores)) || DEFAULT_STORE;
 
-    // Step 1: Get PID from image row link
-    const productImageLink = document.querySelector("#ProductImageRow a")?.href;
-    const pidMatch = productImageLink?.match(/pid=(\d+)/);
-    const productId = pidMatch ? pidMatch[1] : null;
-    console.log("[LocalStock] Parsed PID:", productId);
+    console.log(`[LocalStock] Final branch: ${finalBranch}`);
 
-    if (!productId) return;
+    // Find all product cards
+    const productCards = document.querySelectorAll("table.ProductCard");
+    productCards.forEach(async (card, index) => {
+      const imgLink = card.querySelector("#ProductImageRow a")?.href;
+      const pidMatch = imgLink?.match(/pid=(\d+)/);
+      const pid = pidMatch ? pidMatch[1] : null;
+      if (!pid) return;
 
-    // Step 2: Determine location
-    const userBranch = await getSignedInBranch();
-    const finalBranch = userBranch || await getNearestStoreBranch(stores) || DEFAULT_STORE;
-    const useActualColumn = !!userBranch;
+      console.log(`[LocalStock] Card ${index + 1} PID: ${pid}`);
 
-    console.log(`[LocalStock] Final branch: ${finalBranch} | Use actual column: ${useActualColumn}`);
+      // Fetch stock data for this PID
+      const stockDataUrl = `https://webtrack.woodsonlumber.com/Catalog/ShowStock.aspx?productid=${pid}`;
+      const res = await fetch(stockDataUrl);
+      const text = await res.text();
+      const tempDiv = document.createElement("div");
+      tempDiv.innerHTML = text;
+      const table = tempDiv.querySelector("#StockDataGrid_ctl00");
 
-    // Step 3: Fetch stock table and extract qty
-    const stockDataUrl = `https://webtrack.woodsonlumber.com/Catalog/ShowStock.aspx?productid=${productId}`;
-    const res = await fetch(stockDataUrl);
-    const text = await res.text();
-    const tempDiv = document.createElement("div");
-    tempDiv.innerHTML = text;
-    const table = tempDiv.querySelector("#StockDataGrid_ctl00");
-
-    if (!table) {
-      console.warn("[LocalStock] No stock table found.");
-      return;
-    }
-
-    const rows = table.querySelectorAll("tr");
-    const columnIndex = useActualColumn ? 4 : 2;
-    let quantity = null;
-
-    for (let row of rows) {
-      const branchCell = row.querySelector("td");
-      if (!branchCell) continue;
-
-      const branchName = branchCell.textContent.trim();
-      if (branchName.toLowerCase() === finalBranch.toLowerCase()) {
-        const qtyCell = row.querySelectorAll("td")[columnIndex];
-        quantity = qtyCell?.textContent.trim();
-        console.log(`[LocalStock] Found quantity: ${quantity} at ${branchName}`);
-        break;
+      if (!table) {
+        console.warn(`[LocalStock] No stock table for PID ${pid}`);
+        return;
       }
-    }
 
-    if (!quantity || quantity.toLowerCase().includes("no stock")) {
-      console.log("[LocalStock] No quantity to display.");
-      return;
-    }
+      const rows = table.querySelectorAll("tr");
+      const columnIndex = useActualColumn ? 4 : 2;
+      let quantity = null;
 
-    // Step 4: Insert a new row under Quantity or PriceRow
-    const insertAfter = document.getElementById("QuantityRow");
+      for (let row of rows) {
+        const branchCell = row.querySelector("td");
+        if (!branchCell) continue;
+        const branchName = branchCell.textContent.trim();
+        if (branchName.toLowerCase() === finalBranch.toLowerCase()) {
+          const qtyCell = row.querySelectorAll("td")[columnIndex];
+          quantity = qtyCell?.textContent.trim();
+          break;
+        }
+      }
 
+      if (!quantity || quantity.toLowerCase().includes("no stock")) {
+        console.log(`[LocalStock] No stock to show for PID ${pid}`);
+        return;
+      }
 
-    if (!insertAfter) {
-      console.warn("[LocalStock] No suitable row to insert after.");
-      return;
-    }
+      // Find QuantityRow inside this card
+      const quantityRow = card.querySelector("#QuantityRow");
+      if (!quantityRow) return;
 
-    // Clean up previous row if it exists
-    const oldRow = document.getElementById("LocalStockRow");
-    if (oldRow) oldRow.remove();
+      const existing = card.querySelector("#LocalStockRow");
+      if (existing) existing.remove();
 
-    const localRow = document.createElement("tr");
-    localRow.id = "LocalStockRow";
+      const localRow = document.createElement("tr");
+      localRow.id = "LocalStockRow";
 
-    const td = document.createElement("td");
-    td.colSpan = 1;
-    td.innerHTML = `
-      <div style="
-        text-align: center;
-        font-weight: bold;
-        color: #004080;
-        font-size: 0.95em;
-        padding: 4px 0;
-      ">
-        ${quantity} in stock at ${finalBranch}
-      </div>
-    `;
-    localRow.appendChild(td);
-    insertAfter.parentNode.insertBefore(localRow, insertAfter.nextSibling);
+      const td = document.createElement("td");
+      td.colSpan = 1;
+      td.innerHTML = `
+        <div style="
+          text-align: center;
+          font-weight: bold;
+          color: #004080;
+          font-size: 0.95em;
+          padding: 4px 0;
+        ">
+          ${quantity} in stock at ${finalBranch}
+        </div>
+      `;
 
-    console.log("[LocalStock] Inserted stock row.");
+      localRow.appendChild(td);
+      quantityRow.parentNode.insertBefore(localRow, quantityRow.nextSibling);
+      console.log(`[LocalStock] Inserted for PID ${pid}`);
+    });
 
     // === Helper Functions ===
 
@@ -113,7 +102,6 @@ setTimeout(() => {
         const selected = dropdown?.querySelector("option[selected='selected']");
         return selected?.textContent.trim() || null;
       } catch (err) {
-        console.warn("[LocalStock] Failed to fetch signed-in branch:", err);
         return null;
       }
     }
@@ -141,8 +129,7 @@ setTimeout(() => {
         }
 
         return nearest.name;
-      } catch (err) {
-        console.warn("[LocalStock] Geolocation failed, falling back.");
+      } catch {
         return null;
       }
     }
@@ -159,4 +146,4 @@ setTimeout(() => {
     }
 
   })();
-}, 600); // delay to wait for product HTML to fully load
+}, 600); // wait for DOM + product card render
