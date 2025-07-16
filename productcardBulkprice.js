@@ -1,5 +1,8 @@
-document.addEventListener("DOMContentLoaded", async () => {
-  console.log("[BulkPricing] Script loaded and DOM ready.");
+console.log("[BulkPricing] Script loaded.");
+
+// Force a short delay to ensure DOM is fully parsed before running (especially on slow-rendering sites)
+setTimeout(async () => {
+  console.log("[BulkPricing] Executing after slight delay...");
 
   try {
     // Step 1: Extract PID from the image link
@@ -22,32 +25,20 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     console.log("[BulkPricing] Fetched CSV (first 200 chars):", csvText.slice(0, 200));
 
-    // Step 3: Parse CSV rows
     const rows = csvText.trim().split("\n").map(row => row.split(","));
     const headers = rows[0];
     const dataRows = rows.slice(1);
-    console.log("[BulkPricing] Headers:", headers);
-    console.log("[BulkPricing] Total data rows:", dataRows.length);
 
     const pidIndex = headers.indexOf("pid");
     const qtyIndex = headers.indexOf("qty");
     const priceIndex = headers.indexOf("price");
 
-    if (pidIndex === -1 || qtyIndex === -1 || priceIndex === -1) {
-      console.error("[BulkPricing] Required headers not found (pid, qty, price).");
-      return;
-    }
-
-    // Step 4: Filter for matching PID
     const matchingRows = dataRows.filter(row => row[pidIndex] === pid);
     console.log(`[BulkPricing] Found ${matchingRows.length} rows for pid ${pid}`);
 
-    if (matchingRows.length === 0) {
-      console.log("[BulkPricing] No bulk pricing available for this product.");
-      return;
-    }
+    if (matchingRows.length === 0) return;
 
-    // Step 5: Create and insert new TR after PriceRow
+    // Step 3: Insert new TR
     const bulkPriceRow = document.createElement("tr");
     bulkPriceRow.id = "BulkPricingRow";
 
@@ -71,7 +62,9 @@ document.addEventListener("DOMContentLoaded", async () => {
     } else {
       console.warn("[BulkPricing] Could not find #PriceRow to insert after.");
     }
+
   } catch (err) {
-    console.error("[BulkPricing] Error loading bulk prices:", err);
+    console.error("[BulkPricing] Error in script:", err);
   }
-});
+
+}, 500); // Delay in ms (adjust as needed)
