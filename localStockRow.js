@@ -67,10 +67,9 @@ setTimeout(() => {
       return;
     }
 
-    // Step 4: Insert a new row under BulkPricingRow or PriceRow
-    const bulkRow = document.getElementById("BulkPricingRow");
-    const priceRow = document.getElementById("PriceRow");
-    const insertAfter = bulkRow || priceRow;
+    // Step 4: Insert a new row under Quantity or PriceRow
+    const insertAfter = document.getElementById("QuantityRow");
+
 
     if (!insertAfter) {
       console.warn("[LocalStock] No suitable row to insert after.");
