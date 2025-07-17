@@ -1,20 +1,14 @@
 $(document).ready(function () {
-  // Avoid duplicate layout
+  // Ensure we only inject once
   if ($("#product-page").length) return;
 
-  // Select the new insertion point
   const $insertionPoint = $(".bodyFlexItem.d-flex").first();
+  if (!$insertionPoint.length) {
+    console.error("Insertion point (.bodyFlexItem.d-flex) not found.");
+    return;
+  }
 
-  // Core sections
-  const $entryInput = $("#ctl00_PageBody_productDetail_entryInputDiv");
-  const $description = $("#ctl00_PageBody_productDetail_productDescription");
-  const $reviews = $("#review-widget");
-  const $reviewButton = $("#review-product-button");
-
-  // Sidebar widgets (add more IDs as needed)
-  const widgetSelectors = ["#productoption", "#stock-widget"];
-
-  // Create new layout containers
+  // Create layout containers
   const $pageWrapper = $("<div>", { id: "product-page" }).css({
     display: "flex",
     flexWrap: "wrap",
@@ -36,20 +30,37 @@ $(document).ready(function () {
     boxShadow: "0 0 10px rgba(0,0,0,0.05)",
   });
 
-  // Move core content to #product-main
-  $main.append($entryInput, $description);
+  // Move content to the proper side
+  const $entryInput = $("#ctl00_PageBody_productDetail_entryInputDiv");
+  const $description = $("#ctl00_PageBody_productDetail_productDescription");
+  const $reviews = $("#review-widget");
+  const $reviewButton = $("#review-product-button");
+
+  if ($entryInput.length) $sidebar.append($entryInput);
+  if ($description.length) $main.append($description);
   if ($reviews.length) $main.append($reviews);
   if ($reviewButton.length) $main.append($reviewButton);
 
-  // Move any present widgets into #product-sidebar
-  widgetSelectors.forEach(selector => {
-    const $widget = $(selector);
-    if ($widget.length) $sidebar.append($widget);
-  });
+  // Helper: try to move widget to sidebar if it appears
+  function tryMoveWidget(selector) {
+    const $el = $(selector);
+    if ($el.length && !$sidebar.find(selector).length) {
+      $sidebar.append($el);
+    }
+  }
 
-  // Assemble final layout
+  // Watch for delayed widgets (like stock or options)
+  const intervalId = setInterval(() => {
+    tryMoveWidget("#productoption");
+    tryMoveWidget("#stock-widget");
+
+    // If both are found and moved, stop polling
+    if ($("#productoption").length && $("#stock-widget").length) {
+      clearInterval(intervalId);
+    }
+  }, 250);
+
+  // Assemble and insert layout
   $pageWrapper.append($main, $sidebar);
-
-  // Insert new layout after the correct point
   $insertionPoint.after($pageWrapper);
 });
