@@ -25,11 +25,11 @@ $(document).ready(function () {
     boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
   });
 
-  // ⬅️ Move product image block to main
-  const $productImageTable = $("#ctl00_PageBody_productDetail_ProductImage").closest("table");
-  if ($productImageTable.length) $main.append($productImageTable);
+  // 🖼 Move the image table
+  const $imageTable = $("#ctl00_PageBody_productDetail_ProductImage").closest("table");
+  if ($imageTable.length) $main.append($imageTable);
 
-  // 📄 Add description and reviews
+  // 📄 Description, reviews
   const $description = $("#ctl00_PageBody_productDetail_productDescription");
   const $reviews = $("#review-widget");
   const $reviewButton = $("#review-product-button");
@@ -38,10 +38,13 @@ $(document).ready(function () {
   if ($reviews.length) $main.append($reviews);
   if ($reviewButton.length) $main.append($reviewButton);
 
-  // ✅ Move the full price + qty + button row
-  const $entryRow = $("#ctl00_PageBody_productDetail_ctl00_DetailHeader").closest("table").find("tr").eq(2); // This is the row with price, qty, and buttons
+  // 🎯 DETACH full row that includes Price, Qty, Add button, Quicklist, and Stock
+  const $entryDiv = $("#ctl00_PageBody_productDetail_entryInputDiv");
+  const $priceRow = $entryDiv.find("table").find("tr").filter((i, el) =>
+    $(el).find(".productPriceSegment").length > 0
+  ).first();
 
-  if ($entryRow.length) {
+  if ($priceRow.length) {
     const $buyBox = $("<div>").addClass("buy-box").css({
       padding: "15px",
       backgroundColor: "#fff",
@@ -50,11 +53,14 @@ $(document).ready(function () {
       marginBottom: "20px",
     });
 
-    $buyBox.append($entryRow.detach());
+    $buyBox.append(
+      $("<table>").append($priceRow.detach()) // keep layout integrity
+    );
+
     $sidebar.append($buyBox);
   }
 
-  // 🧩 Utility actions (Quicklist & Stock buttons)
+  // 🔄 Move quicklist and stock buttons if still in DOM
   const $quicklist = $("#ctl00_PageBody_productDetail_ctl00_QuickList_QuickListLink").closest("div").detach();
   const $stockBtn = $("#ctl00_PageBody_productDetail_ctl00_btnShowStock").closest("div").detach();
 
@@ -67,7 +73,7 @@ $(document).ready(function () {
   $utilities.append($quicklist, $stockBtn);
   $sidebar.append($utilities);
 
-  // 🎯 Move optional widgets if present
+  // 📦 Move productoption and stock-widget (if loaded later)
   function tryMoveWidget(selector) {
     const $el = $(selector);
     if ($el.length && !$sidebar.find(selector).length) {
@@ -84,7 +90,6 @@ $(document).ready(function () {
     }
   }, 250);
 
-  // Inject the layout
   $pageWrapper.append($main, $sidebar);
   $insertionPoint.after($pageWrapper);
 });
