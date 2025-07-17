@@ -28,7 +28,6 @@ Display: none;
 }
 
 
-
 .prod-search-wrapper{
 margin: auto;
 width: 95%;
@@ -114,9 +113,6 @@ top:150px;
 border-color: black !important;
 color: white !important;
 background-color: black !important;
-position: absolute;
-top: -110px;
-left: 30px;
 }
 
 #wlcheader a{
