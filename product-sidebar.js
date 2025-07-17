@@ -25,13 +25,11 @@ $(document).ready(function () {
     boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
   });
 
-  // 🖼️ Move the product image container into the top of #product-main
-  const $productImageWrapper = $("#ctl00_PageBody_productDetail_ProductImage").closest("tr").parent().closest("table");
-  if ($productImageWrapper.length) {
-    $main.append($productImageWrapper);
-  }
+  // 🖼️ Move product image block to main section (if needed)
+  const $productImageTable = $("#ctl00_PageBody_productDetail_ProductImage").closest("tr").parent().closest("table");
+  if ($productImageTable.length) $main.append($productImageTable);
 
-  // Main content blocks
+  // 📄 Description and reviews remain in main content
   const $description = $("#ctl00_PageBody_productDetail_productDescription");
   const $reviews = $("#review-widget");
   const $reviewButton = $("#review-product-button");
@@ -40,8 +38,9 @@ $(document).ready(function () {
   if ($reviews.length) $main.append($reviews);
   if ($reviewButton.length) $main.append($reviewButton);
 
-  // Build clean Buy Box from specific components
+  // 🎯 Move specific elements from entryInputDiv to sidebar
   const $entryDiv = $("#ctl00_PageBody_productDetail_entryInputDiv");
+
   if ($entryDiv.length) {
     const $buyBox = $("<div>").addClass("buy-box").css({
       padding: "15px",
@@ -51,34 +50,46 @@ $(document).ready(function () {
       marginBottom: "20px",
     });
 
-    const $price = $entryDiv.find(".productPriceSegment").first().clone();
-    const $unit = $entryDiv.find(".productPerSegment").first().clone();
-    const $qty = $entryDiv.find(".productQtySegment").first().clone();
-    const $unitAfter = $entryDiv.find(".productPerSegment").eq(1).clone();
-    const $addBtn = $entryDiv.find("#ctl00_PageBody_productDetail_ctl00_AddProductButton").first().closest("div").clone();
+    // Move (not clone) the actual elements into sidebar
+    const $price = $entryDiv.find(".productPriceSegment").first().detach();
+    const $unitBefore = $entryDiv.find(".productPerSegment").first().detach();
+    const $qtyInput = $entryDiv.find(".productQtySegment").first().detach();
+    const $unitAfter = $entryDiv.find(".productPerSegment").eq(0).detach(); // now first again
+    const $addBtn = $entryDiv.find("#ctl00_PageBody_productDetail_ctl00_AddProductButton").first().closest("div").detach();
+    const $quicklist = $entryDiv.find("#ctl00_PageBody_productDetail_ctl00_QuickList_QuickListLink").closest("div").detach();
+    const $stockBtn = $entryDiv.find("#ctl00_PageBody_productDetail_ctl00_btnShowStock").closest("div").detach();
 
+    // Assemble buy box layout
     $buyBox.append(
-      $("<div>").css({ fontSize: "22px", fontWeight: "bold", marginBottom: "10px" }).append($price).append(" ").append($unit),
-      $("<div>").css({ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }).append($qty).append($unitAfter),
+      $("<div>").css({
+        fontSize: "22px",
+        fontWeight: "bold",
+        marginBottom: "10px"
+      }).append($price).append(" ").append($unitBefore),
+
+      $("<div>").css({
+        display: "flex",
+        alignItems: "center",
+        gap: "10px",
+        marginBottom: "10px"
+      }).append($qtyInput).append($unitAfter),
+
       $addBtn
     );
 
-    $sidebar.append($buyBox);
-
+    // Utility links below
     const $utilities = $("<div>").addClass("utility-links").css({
       display: "flex",
       flexDirection: "column",
       gap: "10px",
     });
 
-    const $quicklist = $entryDiv.find("#ctl00_PageBody_productDetail_ctl00_QuickList_QuickListLink").closest("div").clone();
-    const $stockBtn = $entryDiv.find("#ctl00_PageBody_productDetail_ctl00_btnShowStock").closest("div").clone();
-
     $utilities.append($quicklist, $stockBtn);
-    $sidebar.append($utilities);
+
+    $sidebar.append($buyBox, $utilities);
   }
 
-  // Move optional widgets like stock-widget and productoption
+  // 🧩 Watch for dynamically loaded widgets
   function tryMoveWidget(selector) {
     const $el = $(selector);
     if ($el.length && !$sidebar.find(selector).length) {
@@ -95,7 +106,7 @@ $(document).ready(function () {
     }
   }, 250);
 
-  // Insert new layout
+  // Insert final structure
   $pageWrapper.append($main, $sidebar);
   $insertionPoint.after($pageWrapper);
 });
