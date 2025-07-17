@@ -37,7 +37,7 @@ margin-left: 10vw;
 #ctl00_PageBody_productDetail_ProductImage{
 width: auto !important;
 height: auto !important;
-max-height: 600px;
+max-height: 450px;
 max-width: 100%;
 }
 #stock-widget{
