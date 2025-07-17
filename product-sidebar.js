@@ -4,7 +4,7 @@ $(document).ready(function () {
   const $insertionPoint = $(".bodyFlexItem.d-flex").first();
   if (!$insertionPoint.length) return;
 
-  // Layout structure
+  // Layout wrappers
   const $pageWrapper = $("<div>", { id: "product-page" }).css({
     display: "flex",
     flexWrap: "wrap",
@@ -26,7 +26,7 @@ $(document).ready(function () {
     boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
   });
 
-  // Buy Box Container
+  // Buy box container
   const $buyBox = $("<div>").addClass("buy-box").css({
     padding: "15px",
     backgroundColor: "#fff",
@@ -38,42 +38,32 @@ $(document).ready(function () {
     gap: "10px",
   });
 
-  // Move the image to main content
-  const $imageTd = $("#ctl00_PageBody_productDetail_ProductImage").closest("td");
-  if ($imageTd.length) {
-    $main.append($imageTd);
-  }
+  // Move product image to main
+  const $imageTd = $("#ctl00_PageBody_productDetail_ProductImage").first().closest("td");
+  if ($imageTd.length) $main.append($imageTd);
 
-  // Move important elements to sidebar
-  const $price = $(".productPriceSegment").detach();
-  const $unit = $(".productPerSegment").first().detach(); // first occurrence of unit
-  const $qtyInput = $(".productQtySegment").detach();
-  const $addBtn = $("#ctl00_PageBody_productDetail_ctl00_AddProductButton").closest("div.mb-1").detach();
-  const $quicklistBtn = $("#ctl00_PageBody_productDetail_ctl00_QuickList_QuickListLink").closest("div.mb-1").detach();
-  const $stockBtn = $("#ctl00_PageBody_productDetail_ctl00_btnShowStock").closest("div").detach();
+  // Move elements into sidebar (first instances only)
+  const $price = $(".productPriceSegment").first().detach();
+  const $unit = $(".productPerSegment").first().detach();
+  const $qtyInput = $(".productQtySegment").first().detach();
+  const $addBtn = $("#ctl00_PageBody_productDetail_ctl00_AddProductButton").first().closest("div.mb-1").detach();
+  const $quicklistBtn = $("#ctl00_PageBody_productDetail_ctl00_QuickList_QuickListLink").first().closest("div.mb-1").detach();
+  const $stockBtn = $("#ctl00_PageBody_productDetail_ctl00_btnShowStock").first().closest("div").detach();
 
-  // Append in order
-  $buyBox.append($price);
-  $buyBox.append($unit);
-  $buyBox.append($qtyInput);
-  $buyBox.append($addBtn);
-  $buyBox.append($quicklistBtn);
-  $buyBox.append($stockBtn);
-
+  // Build buy box
+  $buyBox.append($price, $unit, $qtyInput, $addBtn, $quicklistBtn, $stockBtn);
   $sidebar.append($buyBox);
 
-  // Product description and reviews to main
-  const $description = $("#ctl00_PageBody_productDetail_productDescription");
-  const $reviews = $("#review-widget");
-  const $reviewButton = $("#review-product-button");
+  // Product description and reviews into main
+  const $description = $("#ctl00_PageBody_productDetail_productDescription").first().detach();
+  const $reviews = $("#review-widget").first().detach();
+  const $reviewButton = $("#review-product-button").first().detach();
 
-  if ($description.length) $main.append($description.detach());
-  if ($reviews.length) $main.append($reviews.detach());
-  if ($reviewButton.length) $main.append($reviewButton.detach());
+  $main.append($description, $reviews, $reviewButton);
 
-  // Custom widgets into sidebar
+  // Watch for and pull in widgets
   function tryMoveWidget(selector) {
-    const $el = $(selector);
+    const $el = $(selector).first();
     if ($el.length && !$sidebar.find(selector).length) {
       $sidebar.append($el.detach());
     }
