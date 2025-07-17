@@ -4,6 +4,7 @@ $(document).ready(function () {
   const $insertionPoint = $(".bodyFlexItem.d-flex").first();
   if (!$insertionPoint.length) return;
 
+  // Create layout wrappers
   const $pageWrapper = $("<div>", { id: "product-page" }).css({
     display: "flex",
     flexWrap: "wrap",
@@ -25,11 +26,11 @@ $(document).ready(function () {
     boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
   });
 
-  // 🖼 Move the image table
+  // 🖼 Move product images
   const $imageTable = $("#ctl00_PageBody_productDetail_ProductImage").closest("table");
   if ($imageTable.length) $main.append($imageTable);
 
-  // 📄 Description, reviews
+  // 📄 Description & Reviews
   const $description = $("#ctl00_PageBody_productDetail_productDescription");
   const $reviews = $("#review-widget");
   const $reviewButton = $("#review-product-button");
@@ -38,13 +39,10 @@ $(document).ready(function () {
   if ($reviews.length) $main.append($reviews);
   if ($reviewButton.length) $main.append($reviewButton);
 
-  // 🎯 DETACH full row that includes Price, Qty, Add button, Quicklist, and Stock
-  const $entryDiv = $("#ctl00_PageBody_productDetail_entryInputDiv");
-  const $priceRow = $entryDiv.find("table").find("tr").filter((i, el) =>
-    $(el).find(".productPriceSegment").length > 0
-  ).first();
+  // 🔍 Find the actual <tr> containing all pricing & actions
+  const $targetRow = $("td.productPriceSegment").closest("tr");
 
-  if ($priceRow.length) {
+  if ($targetRow.length) {
     const $buyBox = $("<div>").addClass("buy-box").css({
       padding: "15px",
       backgroundColor: "#fff",
@@ -53,27 +51,15 @@ $(document).ready(function () {
       marginBottom: "20px",
     });
 
-    $buyBox.append(
-      $("<table>").append($priceRow.detach()) // keep layout integrity
-    );
-
+    const $wrappedTable = $("<table>").css({ width: "100%" });
+    $wrappedTable.append($targetRow.detach());
+    $buyBox.append($wrappedTable);
     $sidebar.append($buyBox);
+  } else {
+    console.warn("Buy box row not found.");
   }
 
-  // 🔄 Move quicklist and stock buttons if still in DOM
-  const $quicklist = $("#ctl00_PageBody_productDetail_ctl00_QuickList_QuickListLink").closest("div").detach();
-  const $stockBtn = $("#ctl00_PageBody_productDetail_ctl00_btnShowStock").closest("div").detach();
-
-  const $utilities = $("<div>").addClass("utility-links").css({
-    display: "flex",
-    flexDirection: "column",
-    gap: "10px",
-  });
-
-  $utilities.append($quicklist, $stockBtn);
-  $sidebar.append($utilities);
-
-  // 📦 Move productoption and stock-widget (if loaded later)
+  // 🧩 Move dynamic widgets after load
   function tryMoveWidget(selector) {
     const $el = $(selector);
     if ($el.length && !$sidebar.find(selector).length) {
@@ -90,6 +76,7 @@ $(document).ready(function () {
     }
   }, 250);
 
+  // 🧱 Final layout injection
   $pageWrapper.append($main, $sidebar);
   $insertionPoint.after($pageWrapper);
 });
