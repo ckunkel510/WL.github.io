@@ -49,3 +49,6 @@ max-width: 100%;
 #ctl00_PageBody_productDetail_productDescription{
 width: 100% !important;
 }
+.method-box.selected {
+  background-color: #fef2f2;
+}

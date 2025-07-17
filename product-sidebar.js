@@ -129,6 +129,77 @@ $buyBox.empty().append(
 );
 
   $sidebar.append($buyBox);
+  // === Delivery Option Selector ===
+const selectedMethodKey = "woodson_cart_method";
+
+// Containers
+const $pickupBtn = $("<div>")
+  .addClass("method-box selected")
+  .css({
+    flex: "1",
+    border: "2px solid #6b0016",
+    borderRadius: "8px",
+    padding: "10px",
+    cursor: "pointer",
+    textAlign: "center",
+    backgroundColor: "#fff",
+  })
+  .html(`<strong>Pickup</strong><br><span class="pickup-info">Loading...</span><br><span style="color:green;font-weight:bold;">FREE</span>`);
+
+const $deliveryBtn = $("<div>")
+  .addClass("method-box")
+  .css({
+    flex: "1",
+    border: "1px solid #ccc",
+    borderRadius: "8px",
+    padding: "10px",
+    cursor: "pointer",
+    textAlign: "center",
+    backgroundColor: "#fff",
+  })
+  .html(`<strong>Delivery</strong><br><span class="delivery-info">Loading...</span>`);
+
+const $methodRow = $("<div>").css({
+  display: "flex",
+  gap: "10px",
+  marginBottom: "10px",
+});
+$methodRow.append($pickupBtn, $deliveryBtn);
+
+// === Truck Banner ===
+const $banner = $("<div>")
+  .css({
+    display: "flex",
+    alignItems: "center",
+    gap: "10px",
+    marginTop: "10px",
+    fontSize: "14px",
+  })
+  .html(`🚚 <strong>Schedule delivery in checkout.</strong>`);
+
+// === Handle Selection + Cache ===
+function selectMethod(method) {
+  if (method === "pickup") {
+    $pickupBtn.addClass("selected").css("border", "2px solid #6b0016");
+    $deliveryBtn.removeClass("selected").css("border", "1px solid #ccc");
+  } else {
+    $deliveryBtn.addClass("selected").css("border", "2px solid #6b0016");
+    $pickupBtn.removeClass("selected").css("border", "1px solid #ccc");
+  }
+  localStorage.setItem(selectedMethodKey, method);
+}
+$pickupBtn.on("click", () => selectMethod("pickup"));
+$deliveryBtn.on("click", () => selectMethod("delivery"));
+
+// === Hook into Add to Cart
+$addBtn.on("click", () => {
+  const selected = $(".method-box.selected").text().includes("Pickup") ? "pickup" : "delivery";
+  localStorage.setItem(selectedMethodKey, selected);
+});
+
+// === Inject into UI
+$buyBox.prepend($methodRow, $banner);
+
 
   // Product description and reviews into main
   const $description = $("#ctl00_PageBody_productDetail_productDescription").first().detach();

@@ -224,4 +224,36 @@ $(document).ready(function () {
 
         $('#ctl00_PageBody_productDetail_productDescription').before(widgetHtml);
     }
+
+    function updatePickupDeliveryDisplay() {
+  const $stockTable = $("#StockDataGrid_ctl00");
+  if (!$stockTable.length) return;
+
+  const pickupBranch = $("#stock-widget p strong:contains('Branch:')")
+    .parent()
+    .text()
+    .replace("Branch:", "")
+    .trim();
+
+  const pickupRow = $stockTable.find("tr").filter((_, row) => {
+    return $(row).find("td").eq(0).text().trim().toLowerCase() === pickupBranch.toLowerCase();
+  });
+
+  const pickupQty = pickupRow.find("td").eq(2).text().trim();
+  $(".pickup-info").text(pickupQty ? `${pickupQty} in stock` : "Unavailable");
+
+  let totalDelivery = 0;
+  $stockTable.find("tr").each((_, row) => {
+    const qty = parseInt($(row).find("td").eq(2).text().replace(/,/g, ""), 10);
+    if (!isNaN(qty)) totalDelivery += qty;
+  });
+
+  $(".delivery-info").text(`${totalDelivery.toLocaleString()} available`);
+
+  if (totalDelivery === 0) {
+    $(".delivery-info").text("Unavailable");
+    $(".method-box:contains('Delivery')").css({ opacity: 0.5, pointerEvents: "none" });
+  }
+}
+
 });
