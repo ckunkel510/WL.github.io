@@ -1,5 +1,4 @@
 $(document).ready(function () {
-  // Ensure we only inject once
   if ($("#product-page").length) return;
 
   const $insertionPoint = $(".bodyFlexItem.d-flex").first();
@@ -30,18 +29,33 @@ $(document).ready(function () {
     boxShadow: "0 0 10px rgba(0,0,0,0.05)",
   });
 
-  // Move content to the proper side
-  const $entryInput = $("#ctl00_PageBody_productDetail_entryInputDiv");
+  // Description & reviews stay in main
   const $description = $("#ctl00_PageBody_productDetail_productDescription");
   const $reviews = $("#review-widget");
   const $reviewButton = $("#review-product-button");
 
-  if ($entryInput.length) $sidebar.append($entryInput);
   if ($description.length) $main.append($description);
   if ($reviews.length) $main.append($reviews);
   if ($reviewButton.length) $main.append($reviewButton);
 
-  // Helper: try to move widget to sidebar if it appears
+  // Build sidebar content by cloning specific elements
+  const $entryDiv = $("#ctl00_PageBody_productDetail_entryInputDiv");
+  if ($entryDiv.length) {
+    const $priceQtyBlock = $("<div>").addClass("priceQtyBlock").css({ marginBottom: "15px" });
+
+    // Extract and clone desired parts only
+    $priceQtyBlock.append($entryDiv.find(".productPriceSegment").first().clone());
+    $priceQtyBlock.append($entryDiv.find(".productPerSegment").first().clone());
+    $priceQtyBlock.append($entryDiv.find(".productQtySegment").first().clone());
+    $priceQtyBlock.append($entryDiv.find(".productPerSegment").eq(1).clone());
+    $priceQtyBlock.append($entryDiv.find("#ctl00_PageBody_productDetail_ctl00_AddProductButton").first().closest("div").clone());
+    $priceQtyBlock.append($entryDiv.find("#ctl00_PageBody_productDetail_ctl00_QuickList_QuickListLink").closest("div").clone());
+    $priceQtyBlock.append($entryDiv.find("#ctl00_PageBody_productDetail_ctl00_btnShowStock").closest("div").clone());
+
+    $sidebar.append($priceQtyBlock);
+  }
+
+  // Helper: move dynamic widgets like stock-widget and productoption
   function tryMoveWidget(selector) {
     const $el = $(selector);
     if ($el.length && !$sidebar.find(selector).length) {
@@ -49,18 +63,16 @@ $(document).ready(function () {
     }
   }
 
-  // Watch for delayed widgets (like stock or options)
   const intervalId = setInterval(() => {
     tryMoveWidget("#productoption");
     tryMoveWidget("#stock-widget");
 
-    // If both are found and moved, stop polling
     if ($("#productoption").length && $("#stock-widget").length) {
       clearInterval(intervalId);
     }
   }, 250);
 
-  // Assemble and insert layout
+  // Final assembly
   $pageWrapper.append($main, $sidebar);
   $insertionPoint.after($pageWrapper);
 });
