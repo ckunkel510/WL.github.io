@@ -1,0 +1,17 @@
+.panelAccountInfoSubtitle{
+padding: 5px !important;
+    padding-left: 10px !important;
+    box-shadow: 5px 5px 5px grey;
+    border-radius: 5px;
+    background-color: #EAE5E5;
+    text-align: left;
+color: #6b0005 !important;
+font-size: 15px;
+}
+
+.panelAccountInfoBodyText{
+padding: 10px !important;
+}
+#ctl00_PageBody_accountsTransactionsPanel{
+float: left !important;
+}

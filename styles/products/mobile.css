@@ -1,0 +1,160 @@
+
+#productGroupCard{
+float: left !important;
+width: 130px !important;
+height: 200px !important;
+}
+
+#ProductGroupCardContainer{
+position: relative;
+bottom: 0px;
+height: 200px;
+}
+
+#ProductGroupCardImageRow{
+position: absolute;
+bottom: 0px;
+}
+
+#ProductGroupCardHeader{
+border: 0px;
+border-bottom: 5px;
+border-color: #6b0005;
+border-style: solid;
+width: 115px;
+overflow-wrap: break-word;
+word-break: break-word;
+height: auto;
+float: left;
+display: flex;
+margin-left: 2px;
+text-align: left;
+position: absolute;
+bottom: 130px;
+}
+
+#ProductGroupCardHeader:hover{
+border-color: #ffffff;
+}
+
+#ProductGroupCardHeader a{
+overflow: visible;
+overflow-wrap: break-word;
+width: auto;
+white-space: normal;
+color: black !important;
+}
+
+.productGroupImage{
+width: 115px !important;
+height: 115px !important;
+}
+
+.CardSet{
+width: 100%;
+margin-bottom: 20px;
+}
+
+.ProductCard{
+width: 100% !important;
+height: auto !important;
+}
+
+#ProductImageRow{
+text-align: center;
+float: left;
+width: 45%;
+}
+
+.productImageCell{
+width: auto !important;
+min-width: auto !important;
+height: auto !important;
+min-height: auto !important;
+}
+
+#ProductDescriptionRow{
+float: left;
+width: 45% !important;
+margin-left: 10px;
+}
+
+.productDescriptionRow{
+overflow: visible;
+width: 100% !important;
+text-align: left !important;
+}
+
+.productNameLink{
+color: black !important;
+width: 100% !important;
+max-wdith: 100% !important;
+min-width: 100% !important;
+}
+
+#ProductCodeRow{
+width: 45%;
+float: left;
+margin-left: 10px;
+text-align: left !important;
+}
+
+#ProductCodeRow td{
+text-align: left !important;
+}
+
+#PriceRow{
+width: 45%;
+float: left;
+margin-left: 10px;
+}
+
+.productCardTextRow{
+text-align: left;
+}
+
+.priceRowProductCode{
+font-size: 16px;
+font-weight: bold;
+color: black;
+width: 45%;
+text-align: left !important;
+}
+
+#QuantityRow{
+width: auto;
+float: left;
+margin-left: 10px;
+margin-top: 30px;
+}
+
+.mb-1 a[title="Add to cart"]{
+background-color: white !important;
+color: #6b0005 !important;
+margin: 1px;
+font-weight: bold;
+width: 100% !important;
+padding: 10px;
+}
+
+.mb-1 a[title="Add to cart"]:hover{
+background-color: #6b0005 !important;
+color: #ffffff !important;
+margin: 1px;
+font-weight: bold;
+width: 100% !important;
+}
+
+.mb-1 a{
+float: left;
+margin: 1.45px;
+}
+
+.mb-1 div{
+clear: none !important;
+}
+
+.quicklist-dropdown li a{
+width: 150px !important;
+}
+

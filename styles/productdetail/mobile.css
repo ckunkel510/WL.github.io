@@ -1,3 +1,21 @@
 #ctl00_PageBody_productDetail_ctl00_btnShowStock{
 display: none !important;
 }
+a#ctl00_PageBody_productDetail_ctl00_btnShowStock{
+Display: none;
+}
+
+#ctl00_PageBody_productDetail_entryInputDiv, #ctl00_PageBody_productDetail_entryInputDiv div div div table, #ctl00_PageBody_productDetail_productDescription{
+width: 100% !important;
+}
+
+#ctl00_PageBody_productDetail_ProductImage{
+width: auto !important;
+height: auto !important;
+max-height: 600px;
+max-width: 100%;
+}
+
+.rmpView iframe{
+background-color: #f0f0f0;
+}

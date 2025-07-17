@@ -5,3 +5,292 @@ margin-top:0px !important;
 #wlcheaderpromolinks{
 display: none !important;
 }
+#wlcmainmenu{
+display: none;
+color: white;
+text-align: center;
+font-size: 16px;
+font-family: "Times New Roman", Times, Serif;
+height: auto;
+margin-right:15px;
+width: 75%;
+float: right;
+margin-left: 10px;
+margin-top: 15px;
+}
+
+#wlcheaderquicklinks{
+display: none !important;
+}
+
+#wlcheadersect2, #wlcheadersect3{
+Display: none;
+}
+
+#wlcheader{
+height: 201px !important;
+}
+
+.prod-search-wrapper{
+margin: auto;
+width: 95%;
+}
+
+#mobilelocationimg{
+height: 100px;
+float: right;
+width: 70px;
+margin-top: 5px;
+margin-left: 5px;
+margin-right: 5px;
+}
+
+#mobilelocationimg a{
+height: 100px;
+}
+
+#mobilelocationimg p{
+font-size: 10px;
+text-align: center;
+margin-top: -10px;
+}
+
+#mobilelocationimg img{
+height: 70px;
+}
+
+#pageContent{
+margin-top: 20px;
+}
+
+.mainHeader{
+display: inline;
+}
+
+#wlcmainmenu a{
+display:none;
+color: white;
+font-weight: bold;
+z-index:100000;
+background-color: #6b0005;
+width: 75%;
+border-color: white;
+border-style: solid;
+border-width: 1px;
+margin: auto;
+border-radius: 10px;
+height:40px;
+}
+
+#brandingLogo{
+height: 100px;
+width:100% !important;
+box-shadow: 1px 1px 5px 1px grey;
+float: left;
+margin-bottom: 40px;
+}
+
+#TopNavInputSearch{
+width: 99%;
+position: relative;
+height: 35px;
+margin: auto;
+text-align: center;
+}
+.productRightSegment{
+width: 60% !important;
+padding-right: 0px !important;
+}
+
+div#WTPageTitle{
+display: none;
+}
+
+div#ctl00_PageHeader_searchBarTableRow{
+width: 100%;
+position: absolute;
+top:150px;
+}
+
+.rmRootToggle{
+border-color: black !important;
+color: white !important;
+background-color: black !important;
+position: absolute;
+top: -110px;
+left: 30px;
+}
+
+#wlcheader a{
+background-color: rgba(0,0,0, 0.8);
+position: absolute;
+top: 70px;
+right: 35vw;
+}
+
+#wlcheader a img{
+height: 50px !important;
+width: 153px !important;
+padding: 0px !important;
+object-fit: cover;
+}
+
+div#ctl00_PageHeader_branding{
+height: 90px;
+}
+div#PaymentOptionWrapper{
+float: right;
+z-index: 1000;
+position: absolute;
+top: 27%;
+left: 65%;
+}
+#logo{
+float:left;
+margin-left: 5px;
+}
+
+#logo img{
+height: 100px;
+width: auto;
+}
+
+#Paymybill{
+float: right;
+margin-right: 10px;
+display: none;
+}
+
+#Paymybill img{
+height: 10vh;
+width: auto;
+}
+
+#MobileButton{
+display:inline;
+width: 100%;
+background-color: #6b0005;
+border: none;
+color: white;
+height: 40px;
+}
+
+#wlcmainmenu:hover .Dropdown, #wlcmainmenu:Hover .dropbtn, #wlcmainmenu:Hover a{
+display: block;
+}
+.dropbtn{
+color: white;
+border: none;
+cursor: pointer;
+background-color: #6b0005;
+font-weight: bold;
+font-size: 15px;
+text-align: center;
+margin:auto;
+height: 40px;
+z-index:100000;
+}
+
+.dropbtn:hover{
+background-color: #6b0005;
+color: white;
+text-decoration: underline;
+}
+
+.Dropdown{
+position: relative;
+display:none;
+font-weight: bold;
+z-index:100000;
+background-color: #6b0005;
+width: 75%;
+border-color: white;
+border-style: solid;
+border-width: 1px;
+color: white;
+margin: auto;
+text-align: center;
+margin-left: 12.5%;
+margin-right: 12.5%;
+border-radius: 10px;
+}
+
+.Dropdown-Content{
+display: none;
+position: relative;
+background-color: white !important;
+color: #6b0005 !important;
+border-color: #6b0005 !important;
+border-style: solid !important;
+border-width: 1px !important;
+width:100%;
+margin: auto;
+z-index:100000;
+box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+text-align: center;
+}
+
+.Dropdown-Content a{
+display: block;
+background-color:white !important;
+color: #6b0005 !important;
+padding: 12px 16px;
+text-decoration: none;
+width: 100%;
+border-color: #6b0005 !important;
+border-style: solid !important;
+border-width: 1px !important;
+border-left: none !important;
+border-right: none !important;
+border-top: none !important;
+border-radius: 0px !important;
+z-index:100000;
+}
+
+.Dropdown:hover .Dropdown-Content{
+display: block;
+}
+
+.Dropdown a:hover .Dropdown-Content{
+display: none;
+}
+.bodyFlexItem {
+margin-left: 0px !important;
+margin-right: 0px !important;
+}
+#MainLayoutRow{
+margin-top: 125px;
+}
+
+.bodyFlexItem div{
+width: 100%;
+}
+
+#wlcheader a img{
+padding: 0px !important;
+position: absolute;
+top: 80px;
+left: 35%; 
+}
+
+#wlcheadersect4, #wlcheadersect5{
+padding: 0px !important;
+width: 50% !important;
+}
+#TopNavInputSearch{
+position: absolute;
+top: 160px;
+left: 2.5%;
+height: 50px;
+width: 95%;
+}
+.sticky {
+        position: fixed;
+        bottom: 0; /* Adjust based on your header or desired offset */
+background-color: white;
+z-index:9999;
+    }
+.sticky img{
+max-width: 60px !important;
+float: left !important
+}
