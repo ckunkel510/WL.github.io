@@ -175,3 +175,31 @@ padding: inherit !important;
   border-radius: 8px;
   box-shadow: 0 0 10px rgba(0,0,0,0.05);
 }
+
+#product-sidebar .buy-box {
+  padding: 15px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  margin-bottom: 20px;
+}
+
+#product-sidebar .buy-box input[type="text"] {
+  max-width: 80px;
+  text-align: center;
+}
+
+#product-sidebar .utility-links a {
+  display: block;
+  background-color: #eee;
+  padding: 10px;
+  border-radius: 5px;
+  text-align: center;
+  text-decoration: none;
+  color: #333;
+  font-weight: bold;
+}
+
+#product-sidebar .utility-links a:hover {
+  background-color: #ddd;
+}

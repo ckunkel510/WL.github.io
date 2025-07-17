@@ -2,12 +2,8 @@ $(document).ready(function () {
   if ($("#product-page").length) return;
 
   const $insertionPoint = $(".bodyFlexItem.d-flex").first();
-  if (!$insertionPoint.length) {
-    console.error("Insertion point (.bodyFlexItem.d-flex) not found.");
-    return;
-  }
+  if (!$insertionPoint.length) return;
 
-  // Create layout containers
   const $pageWrapper = $("<div>", { id: "product-page" }).css({
     display: "flex",
     flexWrap: "wrap",
@@ -23,13 +19,13 @@ $(document).ready(function () {
     flex: "1 1 30%",
     minWidth: "250px",
     backgroundColor: "#f6f6f6",
-    padding: "15px",
+    padding: "20px",
     borderLeft: "2px solid #ccc",
     borderRadius: "8px",
-    boxShadow: "0 0 10px rgba(0,0,0,0.05)",
+    boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
   });
 
-  // Description & reviews stay in main
+  // Keep main image/description/reviews in main
   const $description = $("#ctl00_PageBody_productDetail_productDescription");
   const $reviews = $("#review-widget");
   const $reviewButton = $("#review-product-button");
@@ -38,24 +34,45 @@ $(document).ready(function () {
   if ($reviews.length) $main.append($reviews);
   if ($reviewButton.length) $main.append($reviewButton);
 
-  // Build sidebar content by cloning specific elements
   const $entryDiv = $("#ctl00_PageBody_productDetail_entryInputDiv");
   if ($entryDiv.length) {
-    const $priceQtyBlock = $("<div>").addClass("priceQtyBlock").css({ marginBottom: "15px" });
+    const $buyBox = $("<div>").addClass("buy-box").css({
+      padding: "15px",
+      backgroundColor: "#fff",
+      borderRadius: "8px",
+      border: "1px solid #ddd",
+      marginBottom: "20px",
+    });
 
-    // Extract and clone desired parts only
-    $priceQtyBlock.append($entryDiv.find(".productPriceSegment").first().clone());
-    $priceQtyBlock.append($entryDiv.find(".productPerSegment").first().clone());
-    $priceQtyBlock.append($entryDiv.find(".productQtySegment").first().clone());
-    $priceQtyBlock.append($entryDiv.find(".productPerSegment").eq(1).clone());
-    $priceQtyBlock.append($entryDiv.find("#ctl00_PageBody_productDetail_ctl00_AddProductButton").first().closest("div").clone());
-    $priceQtyBlock.append($entryDiv.find("#ctl00_PageBody_productDetail_ctl00_QuickList_QuickListLink").closest("div").clone());
-    $priceQtyBlock.append($entryDiv.find("#ctl00_PageBody_productDetail_ctl00_btnShowStock").closest("div").clone());
+    const $price = $entryDiv.find(".productPriceSegment").first().clone();
+    const $unit = $entryDiv.find(".productPerSegment").first().clone();
+    const $qty = $entryDiv.find(".productQtySegment").first().clone();
+    const $unitAfter = $entryDiv.find(".productPerSegment").eq(1).clone();
+    const $addBtn = $entryDiv.find("#ctl00_PageBody_productDetail_ctl00_AddProductButton").first().closest("div").clone();
 
-    $sidebar.append($priceQtyBlock);
+    $buyBox.append(
+      $("<div>").css({ fontSize: "22px", fontWeight: "bold", marginBottom: "10px" }).append($price).append(" ").append($unit),
+      $("<div>").css({ display: "flex", alignItems: "center", gap: "10px", marginBottom: "10px" }).append($qty).append($unitAfter),
+      $addBtn
+    );
+
+    $sidebar.append($buyBox);
+
+    // Utility buttons
+    const $utilities = $("<div>").addClass("utility-links").css({
+      display: "flex",
+      flexDirection: "column",
+      gap: "10px",
+    });
+
+    const $quicklist = $entryDiv.find("#ctl00_PageBody_productDetail_ctl00_QuickList_QuickListLink").closest("div").clone();
+    const $stockBtn = $entryDiv.find("#ctl00_PageBody_productDetail_ctl00_btnShowStock").closest("div").clone();
+
+    $utilities.append($quicklist, $stockBtn);
+    $sidebar.append($utilities);
   }
 
-  // Helper: move dynamic widgets like stock-widget and productoption
+  // Move other widgets in later if needed
   function tryMoveWidget(selector) {
     const $el = $(selector);
     if ($el.length && !$sidebar.find(selector).length) {
@@ -72,7 +89,6 @@ $(document).ready(function () {
     }
   }, 250);
 
-  // Final assembly
   $pageWrapper.append($main, $sidebar);
   $insertionPoint.after($pageWrapper);
 });
