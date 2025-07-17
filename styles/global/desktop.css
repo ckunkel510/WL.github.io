@@ -425,3 +425,7 @@ display:inline;
 z-index: 9999;
 
     }
+
+#ctl00_PageBody_productDetail_productDescription{
+width: 100% !important;
+}
