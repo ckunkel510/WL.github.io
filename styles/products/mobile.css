@@ -80,7 +80,7 @@ margin-left: 10px;
 }
 
 .productDescriptionRow{
-overflow: visible;
+overflow: visible !important;
 width: 100% !important;
 text-align: left !important;
 }
@@ -143,6 +143,14 @@ color: #ffffff !important;
 margin: 1px;
 font-weight: bold;
 width: 100% !important;
+}
+
+.mb-1 a[title="Show Stock Levels for Product"]{
+display: none;    
+}
+
+.mb-1 a span{
+    display: none;
 }
 
 .mb-1 a{
