@@ -45,3 +45,7 @@ max-width: 100%;
     float: left;
     left: 25px;
 }
+
+#ctl00_PageBody_productDetail_productDescription{
+width: 100% !important;
+}
