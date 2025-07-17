@@ -286,3 +286,11 @@ float: left !important
 div#ctl00_PageHeader_GlobalSearchControl_cmbSearchGroups {
     display: none;
 }
+div#ctl00_PageHeader_GlobalSearchControl_RadSearchBox1{
+    width: 85% !important;
+    padding-top: 7px;
+}
+div#barcode-scanner-container {
+    display: inline-flex !important;
+    float: right;
+}
