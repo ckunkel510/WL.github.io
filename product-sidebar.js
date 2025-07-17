@@ -4,7 +4,7 @@ $(document).ready(function () {
   const $insertionPoint = $(".bodyFlexItem.d-flex").first();
   if (!$insertionPoint.length) return;
 
-  // Create new layout
+  // Layout structure
   const $pageWrapper = $("<div>", { id: "product-page" }).css({
     display: "flex",
     flexWrap: "wrap",
@@ -26,12 +26,8 @@ $(document).ready(function () {
     boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
   });
 
-  // Step 1: Extract the <tr> with product image
-  const $imageTd = $("#ctl00_PageBody_productDetail_ProductImage").closest("td");
-  const $productRow = $imageTd.closest("tr");
-
-  // Step 2: Detach all sibling <td> contents from that row EXCEPT the image
-  const $sidebarContents = $("<div>").addClass("buy-box").css({
+  // Buy Box Container
+  const $buyBox = $("<div>").addClass("buy-box").css({
     padding: "15px",
     backgroundColor: "#fff",
     borderRadius: "8px",
@@ -42,32 +38,44 @@ $(document).ready(function () {
     gap: "10px",
   });
 
-  $productRow.children("td").each(function () {
-    const containsImage = $(this).find("#ctl00_PageBody_productDetail_ProductImage").length > 0;
-    if (!containsImage) {
-      const contents = $(this).contents().detach();
-      $sidebarContents.append(contents);
-    } else {
-      $main.append($(this)); // keep the image td in main
-    }
-  });
+  // Move the image to main content
+  const $imageTd = $("#ctl00_PageBody_productDetail_ProductImage").closest("td");
+  if ($imageTd.length) {
+    $main.append($imageTd);
+  }
 
-  $sidebar.append($sidebarContents);
+  // Move important elements to sidebar
+  const $price = $(".productPriceSegment").detach();
+  const $unit = $(".productPerSegment").first().detach(); // first occurrence of unit
+  const $qtyInput = $(".productQtySegment").detach();
+  const $addBtn = $("#ctl00_PageBody_productDetail_ctl00_AddProductButton").closest("div.mb-1").detach();
+  const $quicklistBtn = $("#ctl00_PageBody_productDetail_ctl00_QuickList_QuickListLink").closest("div.mb-1").detach();
+  const $stockBtn = $("#ctl00_PageBody_productDetail_ctl00_btnShowStock").closest("div").detach();
 
-  // Add product description and reviews to main
+  // Append in order
+  $buyBox.append($price);
+  $buyBox.append($unit);
+  $buyBox.append($qtyInput);
+  $buyBox.append($addBtn);
+  $buyBox.append($quicklistBtn);
+  $buyBox.append($stockBtn);
+
+  $sidebar.append($buyBox);
+
+  // Product description and reviews to main
   const $description = $("#ctl00_PageBody_productDetail_productDescription");
   const $reviews = $("#review-widget");
   const $reviewButton = $("#review-product-button");
 
-  if ($description.length) $main.append($description);
-  if ($reviews.length) $main.append($reviews);
-  if ($reviewButton.length) $main.append($reviewButton);
+  if ($description.length) $main.append($description.detach());
+  if ($reviews.length) $main.append($reviews.detach());
+  if ($reviewButton.length) $main.append($reviewButton.detach());
 
-  // Move custom widgets into sidebar
+  // Custom widgets into sidebar
   function tryMoveWidget(selector) {
     const $el = $(selector);
     if ($el.length && !$sidebar.find(selector).length) {
-      $sidebar.append($el);
+      $sidebar.append($el.detach());
     }
   }
 
@@ -80,7 +88,7 @@ $(document).ready(function () {
     }
   }, 250);
 
-  // Inject new layout after insertion point
+  // Inject layout
   $pageWrapper.append($main, $sidebar);
   $insertionPoint.after($pageWrapper);
 });
