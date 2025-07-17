@@ -1,0 +1,7 @@
+#ctl00_PageBody_productDetail_ctl00_btnShowStock{
+display: none !important;
+}
+#WTRelatedProducts{
+box-shadow: 0px -2px 5px #6b0005;
+margin-top: 20px;
+}

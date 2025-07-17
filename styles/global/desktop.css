@@ -1,0 +1,119 @@
+#ctl00_PageHeader_searchBarTableRow{
+background-color: white;
+margin-top:0px !important;
+}
+#wlcheaderpromolinks{
+display: none !important;
+}
+div#ctl00_PageHeader_GlobalSearchControl_cmbSearchGroups{
+display: none;
+}
+div#ctl00_PageHeader_GlobalSearchControl_RadSearchBox1{
+position: absolute;
+top:-115px;
+left: 30%;
+width: 40% !important;
+}
+.RadSearchBox_MetroTouch .rsbInner{
+border-radius: 5px;
+height: 45px !important;
+}
+.RadMenu_MetroTouch.t-rwd-menu-mobile{
+position: absolute !important;
+top: -35px;
+}
+.d-none.d-sm-block{
+display: none !important;
+}
+.row.justify-content-center{
+display: flex !important;
+}
+#summary .row{
+display: flex !important;
+}
+#wlcmainmenu{
+background-color:white;
+border-radius: 10px;
+text-align: center;
+font-size: 16px;
+font-family: "Arial", Times, Serif;
+height: 5vh;
+float: left;
+width: 980px;
+}
+#mobilelocationimg{
+display: none;
+}
+div#siteHeaderContent{
+height: 130px;
+}
+div#MainLayoutRow{
+margin-top:20px;
+width: auto !important;
+margin-left: 15% !important;
+margin-right: 15% !important;
+}
+div#PageHeaderDiv{
+margin-left: 15% !important;
+margin-right: 15% !important;
+margin-top: 3%;
+}
+.rsmItem:hover .rsmList.rsmLevel1{
+display: grid;
+float: left;
+left: 350px;
+}
+.rsmLink{
+font-size: 1em !important;
+border: none !important;
+padding-left: 15px !important;
+}
+
+rsmLink a:hover{
+color: white !important;
+background-color: #6b0005 !important;
+}
+#TopNavInputSearch{
+position: absolute;
+top: 50px;
+height: 45px;
+width: 40%;
+left: 30%;
+margin: auto;
+border: 1px solid lightgray;
+text-align: center;
+border-radius:5px;
+}
+#TopNavInputSearch{
+position: absolute;
+top: 50px;
+height: 45px;
+width: 40%;
+left: 30%;
+margin: auto;
+border: 1px solid lightgray;
+text-align: center;
+border-radius:5px;
+}
+
+.rmSlide{
+min-height: 650px !important;
+}
+ul.rmVertical.rmGroup.rmLevel2{
+margin-top: 0 !important;
+}
+.Flyout_Featured a img{
+max-height: 250px;
+max-width: 160px;
+width: auto !important;
+}
+.rmToggle{
+width: 100px !important;
+color: #6b0005 !important;
+}
+.RadSiteMap{
+line-height:1 !important;
+}
+.RadSiteMap.RadSiteMap_Windows7{
+display: grid;
+}

@@ -1,0 +1,6 @@
+.row.shopping-cart-item{
+display: flex !important;
+}
+.epi-form-col-both-checkout.epi-form-group-checkout{
+width: 42%;
+}
