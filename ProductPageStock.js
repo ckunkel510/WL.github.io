@@ -255,6 +255,12 @@ $(document).ready(function () {
     $(".method-box:contains('Delivery')").css({ opacity: 0.5, pointerEvents: "none" });
   }
 }
-setTimeout(updatePickupDeliveryDisplay, 800);
+const waitForStockAndRun = setInterval(() => {
+  if ($("#StockDataGrid_ctl00").length && $("#stock-widget").length) {
+    updatePickupDeliveryDisplay();
+    clearInterval(waitForStockAndRun);
+  }
+}, 250);
+
 
 });
