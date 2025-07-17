@@ -4,7 +4,7 @@ $(document).ready(function () {
   const $insertionPoint = $(".bodyFlexItem.d-flex").first();
   if (!$insertionPoint.length) return;
 
-  // Create layout wrappers
+  // Create wrappers
   const $pageWrapper = $("<div>", { id: "product-page" }).css({
     display: "flex",
     flexWrap: "wrap",
@@ -26,11 +26,11 @@ $(document).ready(function () {
     boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
   });
 
-  // 🖼 Move product images
+  // Move image table first
   const $imageTable = $("#ctl00_PageBody_productDetail_ProductImage").closest("table");
   if ($imageTable.length) $main.append($imageTable);
 
-  // 📄 Description & Reviews
+  // Description and other non-action info
   const $description = $("#ctl00_PageBody_productDetail_productDescription");
   const $reviews = $("#review-widget");
   const $reviewButton = $("#review-product-button");
@@ -39,10 +39,14 @@ $(document).ready(function () {
   if ($reviews.length) $main.append($reviews);
   if ($reviewButton.length) $main.append($reviewButton);
 
-  // 🎯 Find the first matching tr inside .bodyFlexItem
+  // 🛒 Build Buy Box from selected <td>s inside the first relevant <tr>
   const $targetRow = $(".bodyFlexItem.d-flex").find("tr:has(td.productPriceSegment)").first();
 
   if ($targetRow.length) {
+    const $price = $targetRow.find("td.productPriceSegment").detach();
+    const $qty = $targetRow.find("td.productQtySegment").detach();
+    const $right = $targetRow.find("td.productRightSegment").detach();
+
     const $buyBox = $("<div>").addClass("buy-box").css({
       padding: "15px",
       backgroundColor: "#fff",
@@ -51,15 +55,33 @@ $(document).ready(function () {
       marginBottom: "20px",
     });
 
-    const $wrappedTable = $("<table>").css({ width: "100%" });
-    $wrappedTable.append($targetRow.detach()); // detach moves it
-    $buyBox.append($wrappedTable);
+    if ($price.length) {
+      $("<div>")
+        .addClass("buy-price")
+        .css({ fontSize: "24px", fontWeight: "bold", marginBottom: "10px" })
+        .append($price.contents())
+        .appendTo($buyBox);
+    }
+
+    if ($qty.length || $right.length) {
+      const $formGroup = $("<div>").css({
+        display: "flex",
+        flexDirection: "column",
+        gap: "10px",
+      });
+
+      if ($qty.length) $formGroup.append($qty.contents());
+      if ($right.length) $formGroup.append($right.contents());
+
+      $buyBox.append($formGroup);
+    }
+
     $sidebar.append($buyBox);
   } else {
     console.warn("Buy box row not found.");
   }
 
-  // 🧩 Move dynamic widgets after load
+  // 🧩 Move other widgets after they load
   function tryMoveWidget(selector) {
     const $el = $(selector);
     if ($el.length && !$sidebar.find(selector).length) {
@@ -76,7 +98,7 @@ $(document).ready(function () {
     }
   }, 250);
 
-  // 🧱 Final layout injection
+  // Inject layout
   $pageWrapper.append($main, $sidebar);
   $insertionPoint.after($pageWrapper);
 });
