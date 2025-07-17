@@ -39,8 +39,8 @@ $(document).ready(function () {
   if ($reviews.length) $main.append($reviews);
   if ($reviewButton.length) $main.append($reviewButton);
 
-  // 🔍 Find the actual <tr> containing all pricing & actions
-  const $targetRow = $("td.productPriceSegment").closest("tr");
+  // 🎯 Find the first matching tr inside .bodyFlexItem
+  const $targetRow = $(".bodyFlexItem.d-flex").find("tr:has(td.productPriceSegment)").first();
 
   if ($targetRow.length) {
     const $buyBox = $("<div>").addClass("buy-box").css({
@@ -52,7 +52,7 @@ $(document).ready(function () {
     });
 
     const $wrappedTable = $("<table>").css({ width: "100%" });
-    $wrappedTable.append($targetRow.detach());
+    $wrappedTable.append($targetRow.detach()); // detach moves it
     $buyBox.append($wrappedTable);
     $sidebar.append($buyBox);
   } else {
