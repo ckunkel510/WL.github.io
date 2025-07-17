@@ -1,0 +1,156 @@
+.CardSet{
+margin-left: 10px;
+margin-bottom: 25px;
+}
+
+.ProductCard{
+width: 300px !important;
+height: 600px !important;
+}
+
+.productImageCell{
+height: 400px !important;
+}
+
+.productImageCell:hover{
+border-color: #6b0005;
+border-width: 5px;
+border-style: solid;
+}
+
+.productDescriptionRow{
+line-height: 2em !important;
+max-width: 100% !important;
+min-width: 100% !important;
+}
+
+.productDescriptionRow{
+height: 3em !important;
+}
+
+.productNameLink{
+line-height: 1.5em !important;
+color: black !important;
+max-width: 100% !important;
+min-width: 100% !important;
+font-size: 14px;
+}
+
+.priceRowProductCode{
+color: black !important;
+font-size: 17px !important;
+font-weight: bold !important;
+}
+
+#ProductCodeRow{
+margin-left: 50px;
+float: left;
+}
+
+.mb-1 a[title="Add to cart"]{
+background-color: white !important;
+color: #6b0005 !important;
+margin: 1px;
+font-weight: bold;
+width: 100% !important;
+padding: 10px;
+}
+.mb-1 a[title="Add to cart"]:hover{
+background-color: #6b0005 !important;
+color: #ffffff !important;
+margin: 1px;
+font-weight: bold;
+width: 100% !important;
+padding: 10px;
+}
+
+.mb-1 a{
+width: 49.003% !important;
+float: left;
+margin: 1.45px;
+}
+
+.mb-1 div{
+clear: none !important;
+}
+
+.quicklist-dropdown li a{
+width: 150px !important;
+}
+
+#ctl00_PageBody_productDetail_ctl00_QuickList_QuickListLink{
+width: 100% !important;
+float: left;
+}
+
+
+#productGroupCard{
+float: left !important;
+width: 250px !important;
+height: auto !important;
+}
+
+#ProductGroupCardContainer{
+position: relative;
+bottom: 0px;
+height: 220px;
+background-color: #fff;
+padding: 20px;
+text-align: center;
+box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+margin: 15px;
+}
+
+#ProductGroupCardImageRow{
+position: absolute;
+bottom: 0px;
+}
+
+#ProductGroupCardHeader{
+border: 0px;
+border-bottom: 5px;
+border-color: #6b0005;
+border-style: solid;
+overflow-wrap: break-word;
+word-break: break-word;
+height: auto;
+display: flex;
+margin: auto;
+}
+#ProductGroupCardHeader:hover{
+border-color: #ffffff;
+}
+
+#ProductGroupCardHeader a{
+overflow: visible;
+overflow-wrap: break-word;
+width: auto;
+white-space: normal;
+color: black !important;
+font-size: 14px;
+}
+
+#ProductGroupCardImageRow{
+padding-top: 10px;
+padding: auto;
+position: inherit; 
+}
+
+.productGroupImage{
+width: 100% !important;
+height: 150px !important;
+max-width: 100%;
+border-radius: 5px;
+box-shadow: 0 2px 4px rgba(0,0,0,0.1)
+}
+
+.productGroupImage:hover{
+border-color: #6b0005;
+border-style: solid;
+border-width: 5px;
+}
+
+.Cards{
+margin-bottom: 20px;
+padding: inherit !important;
+}

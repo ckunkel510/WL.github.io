@@ -5,3 +5,38 @@ display: none !important;
 box-shadow: 0px -2px 5px #6b0005;
 margin-top: 20px;
 }
+#ctl00_PageBody_productDetail_ctl01_RelatedProductSets{
+display: none;
+}
+tr#ctl00_PageBody_productDetail_ctl00_DetailHeader{
+display:none;
+}
+
+tr.productDetailDescriptionHeaderBar{
+display:none;
+}
+
+.productDescriptionOnThisPageFull{
+max-width: 100% !important;
+min-width: 100% !important;
+font-size: 18px;
+font-weight: bold;
+background-color: #f0f0f0;
+color: black;
+padding: 5px;
+}
+
+.RadMultiPage .rmpView>iframe{
+background-color: #f0f0f0;
+}
+
+#ctl00_PageBody_productDetail_entryInputDiv{
+margin-left: 10vw;
+}
+
+#ctl00_PageBody_productDetail_ProductImage{
+width: auto !important;
+height: auto !important;
+max-height: 600px;
+max-width: 100%;
+}
