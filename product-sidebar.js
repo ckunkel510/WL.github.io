@@ -51,7 +51,83 @@ $(document).ready(function () {
   const $stockBtn = $("#ctl00_PageBody_productDetail_ctl00_btnShowStock").first().closest("div").detach();
 
   // Build buy box
-  $buyBox.append($price, $unit, $qtyInput, $addBtn, $quicklistBtn, $stockBtn);
+  // === Build price + uom row ===
+const $priceRow = $("<div>").css({
+  display: "flex",
+  justifyContent: "flex-end",
+  fontSize: "20px",
+  fontWeight: "bold",
+  color: "#333",
+});
+
+if ($price.length && $unit.length) {
+  $priceRow.append(
+    $("<span>").text($price.text().trim()),
+    $("<span>").text(" / " + $unit.text().trim()).css({
+      marginLeft: "5px",
+      fontSize: "16px",
+      color: "#777",
+    })
+  );
+}
+
+// === Quantity + Add to Cart in one row ===
+const $actionRow = $("<div>").css({
+  display: "flex",
+  alignItems: "center",
+  gap: "10px",
+  flexWrap: "wrap",
+});
+
+// Tighten input styling
+$qtyInput.find("input").css({
+  width: "60px",
+  height: "36px",
+  padding: "6px",
+  fontSize: "16px",
+  textAlign: "center",
+  border: "1px solid #ccc",
+  borderRadius: "4px",
+});
+
+// Stylize "Add to Cart" with cart icon
+const $cartIcon = $("<span>").html("🛒").css({
+  marginRight: "6px",
+});
+$addBtn.find("span").html("").append($cartIcon).append("Add to Cart");
+$addBtn.find("a").css({
+  display: "inline-flex",
+  alignItems: "center",
+  justifyContent: "center",
+  padding: "8px 16px",
+  fontSize: "16px",
+  fontWeight: "bold",
+  backgroundColor: "#6b0016",
+  color: "#fff",
+  border: "none",
+  borderRadius: "4px",
+  textDecoration: "none",
+  transition: "background 0.2s",
+}).hover(
+  function () {
+    $(this).css("backgroundColor", "#8d8d8d");
+  },
+  function () {
+    $(this).css("backgroundColor", "#6b0016");
+  }
+);
+
+// Assemble actions
+$actionRow.append($qtyInput, $addBtn);
+
+// === Final assembly ===
+$buyBox.empty().append(
+  $priceRow,
+  $actionRow,
+  $quicklistBtn.css("marginTop", "10px"),
+  $stockBtn
+);
+
   $sidebar.append($buyBox);
 
   // Product description and reviews into main
