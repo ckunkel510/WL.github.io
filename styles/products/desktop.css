@@ -154,3 +154,24 @@ border-width: 5px;
 margin-bottom: 20px;
 padding: inherit !important;
 }
+
+#product-page {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+#product-main {
+  flex: 1 1 65%;
+  min-width: 300px;
+}
+
+#product-sidebar {
+  flex: 1 1 30%;
+  min-width: 250px;
+  background-color: #f6f6f6;
+  padding: 15px;
+  border-left: 2px solid #ccc;
+  border-radius: 8px;
+  box-shadow: 0 0 10px rgba(0,0,0,0.05);
+}

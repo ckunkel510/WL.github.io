@@ -166,3 +166,18 @@ clear: none !important;
 width: 150px !important;
 }
 
+#product-page {
+    flex-direction: column;
+  }
+
+  #product-main,
+  #product-sidebar {
+    flex: 1 1 100%;
+    min-width: auto;
+  }
+
+  #product-sidebar {
+    border-left: none;
+    border-top: 2px solid #ccc;
+    margin-top: 20px;
+  }
