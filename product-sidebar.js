@@ -25,7 +25,13 @@ $(document).ready(function () {
     boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
   });
 
-  // Keep main image/description/reviews in main
+  // 🖼️ Move the product image container into the top of #product-main
+  const $productImageWrapper = $("#ctl00_PageBody_productDetail_ProductImage").closest("tr").parent().closest("table");
+  if ($productImageWrapper.length) {
+    $main.append($productImageWrapper);
+  }
+
+  // Main content blocks
   const $description = $("#ctl00_PageBody_productDetail_productDescription");
   const $reviews = $("#review-widget");
   const $reviewButton = $("#review-product-button");
@@ -34,6 +40,7 @@ $(document).ready(function () {
   if ($reviews.length) $main.append($reviews);
   if ($reviewButton.length) $main.append($reviewButton);
 
+  // Build clean Buy Box from specific components
   const $entryDiv = $("#ctl00_PageBody_productDetail_entryInputDiv");
   if ($entryDiv.length) {
     const $buyBox = $("<div>").addClass("buy-box").css({
@@ -58,7 +65,6 @@ $(document).ready(function () {
 
     $sidebar.append($buyBox);
 
-    // Utility buttons
     const $utilities = $("<div>").addClass("utility-links").css({
       display: "flex",
       flexDirection: "column",
@@ -72,7 +78,7 @@ $(document).ready(function () {
     $sidebar.append($utilities);
   }
 
-  // Move other widgets in later if needed
+  // Move optional widgets like stock-widget and productoption
   function tryMoveWidget(selector) {
     const $el = $(selector);
     if ($el.length && !$sidebar.find(selector).length) {
@@ -89,6 +95,7 @@ $(document).ready(function () {
     }
   }, 250);
 
+  // Insert new layout
   $pageWrapper.append($main, $sidebar);
   $insertionPoint.after($pageWrapper);
 });
