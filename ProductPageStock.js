@@ -255,5 +255,6 @@ $(document).ready(function () {
     $(".method-box:contains('Delivery')").css({ opacity: 0.5, pointerEvents: "none" });
   }
 }
+setTimeout(updatePickupDeliveryDisplay, 800);
 
 });
