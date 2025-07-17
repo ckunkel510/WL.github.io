@@ -4,7 +4,7 @@ $(document).ready(function () {
   const $insertionPoint = $(".bodyFlexItem.d-flex").first();
   if (!$insertionPoint.length) return;
 
-  // Create page layout
+  // Create new layout
   const $pageWrapper = $("<div>", { id: "product-page" }).css({
     display: "flex",
     flexWrap: "wrap",
@@ -26,11 +26,35 @@ $(document).ready(function () {
     boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
   });
 
-  // Move image table first
-  const $imageTable = $("#ctl00_PageBody_productDetail_ProductImage").closest("table");
-  if ($imageTable.length) $main.append($imageTable);
+  // Step 1: Extract the <tr> with product image
+  const $imageTd = $("#ctl00_PageBody_productDetail_ProductImage").closest("td");
+  const $productRow = $imageTd.closest("tr");
 
-  // Description and other non-action info
+  // Step 2: Detach all sibling <td> contents from that row EXCEPT the image
+  const $sidebarContents = $("<div>").addClass("buy-box").css({
+    padding: "15px",
+    backgroundColor: "#fff",
+    borderRadius: "8px",
+    border: "1px solid #ddd",
+    marginBottom: "20px",
+    display: "flex",
+    flexDirection: "column",
+    gap: "10px",
+  });
+
+  $productRow.children("td").each(function () {
+    const containsImage = $(this).find("#ctl00_PageBody_productDetail_ProductImage").length > 0;
+    if (!containsImage) {
+      const contents = $(this).contents().detach();
+      $sidebarContents.append(contents);
+    } else {
+      $main.append($(this)); // keep the image td in main
+    }
+  });
+
+  $sidebar.append($sidebarContents);
+
+  // Add product description and reviews to main
   const $description = $("#ctl00_PageBody_productDetail_productDescription");
   const $reviews = $("#review-widget");
   const $reviewButton = $("#review-product-button");
@@ -39,41 +63,7 @@ $(document).ready(function () {
   if ($reviews.length) $main.append($reviews);
   if ($reviewButton.length) $main.append($reviewButton);
 
-  // 🛒 Directly target and move the relevant td contents
-  const $priceSegment = $("td.productPriceSegment").first().detach();
-  const $qtySegment = $("td.productQtySegment").first().detach();
-  const $rightSegment = $("td.productRightSegment").first().detach();
-
-  // Build sidebar buy box
-  const $buyBox = $("<div>").addClass("buy-box").css({
-    padding: "15px",
-    backgroundColor: "#fff",
-    borderRadius: "8px",
-    border: "1px solid #ddd",
-    marginBottom: "20px",
-  });
-
-  if ($priceSegment.length) {
-    $("<div>")
-      .addClass("buy-price")
-      .css({ fontSize: "24px", fontWeight: "bold", marginBottom: "10px" })
-      .append($priceSegment.contents())
-      .appendTo($buyBox);
-  }
-
-  const $formGroup = $("<div>").css({
-    display: "flex",
-    flexDirection: "column",
-    gap: "10px",
-  });
-
-  if ($qtySegment.length) $formGroup.append($qtySegment.contents());
-  if ($rightSegment.length) $formGroup.append($rightSegment.contents());
-
-  $buyBox.append($formGroup);
-  $sidebar.append($buyBox);
-
-  // 🧩 Move productoption and stock-widget once loaded
+  // Move custom widgets into sidebar
   function tryMoveWidget(selector) {
     const $el = $(selector);
     if ($el.length && !$sidebar.find(selector).length) {
@@ -90,7 +80,7 @@ $(document).ready(function () {
     }
   }, 250);
 
-  // Inject layout
+  // Inject new layout after insertion point
   $pageWrapper.append($main, $sidebar);
   $insertionPoint.after($pageWrapper);
 });
