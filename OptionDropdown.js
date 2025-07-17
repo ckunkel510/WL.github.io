@@ -34,7 +34,9 @@ $(document).ready(function () {
     const matchingRows = rows.filter(row => row[productIdIndex]?.trim() === currentPid);
 
     if (matchingRows.length > 0) {
-      const containerDiv = $("<div>").css({
+      const containerDiv = $("<div>")
+      .attr("id", "productoption")
+      .css({
         display: "inline-block", // Outer wrapper div now uses inline-block
         marginBottom: "20px",
         padding: "10px",
