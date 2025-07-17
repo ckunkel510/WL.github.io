@@ -144,7 +144,7 @@ const $pickupBtn = $("<div>")
     textAlign: "center",
     backgroundColor: "#fff",
   })
-  .html(`<strong>Pickup</strong><br><span class="pickup-info">Loading...</span><br><span style="color:green;font-weight:bold;">FREE</span>`);
+  .html(`<strong>Pickup</strong><br><span class="pickup-info"></span><br><span style="color:green;font-weight:bold;">FREE</span>`);
 
 const $deliveryBtn = $("<div>")
   .addClass("method-box")
@@ -157,7 +157,7 @@ const $deliveryBtn = $("<div>")
     textAlign: "center",
     backgroundColor: "#fff",
   })
-  .html(`<strong>Delivery</strong><br><span class="delivery-info">Loading...</span>`);
+  .html(`<strong>Delivery</strong><br><span class="delivery-info">Shipping Available</span>`);
 
 const $methodRow = $("<div>").css({
   display: "flex",
