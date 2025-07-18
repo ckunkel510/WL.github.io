@@ -61,7 +61,7 @@ width: 100% !important;
   #product-sidebar {
     order: 2;
     margin-left: 20%;
-    min-width:350px;
+    min-width:350px !important;
 
   }
 
