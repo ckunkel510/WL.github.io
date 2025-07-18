@@ -1,30 +1,37 @@
 if (window.location.pathname === "/ShoppingCart.aspx") {
-  console.log("[CartBranch] Script started.");
+  console.log("[CartBranch] Script started (Cart Rows Mode).");
 
   const STORES = [
-    "Brenham", "Bryan", "Caldwell", "Lexington",
-    "Groesbeck", "Mexia", "Buffalo"
+    "Brenham",
+    "Bryan",
+    "Caldwell",
+    "Lexington",
+    "Groesbeck",
+    "Mexia",
+    "Buffalo"
   ];
 
-  let branchScores = {};
-  let cartItems = [];
+  const branchScores = {}; // branchName => number of items it can fulfill
+  const cartItems = [];
 
-  const STORAGE_KEY_BRANCH = "woodson_cart_branch";
-  const STORAGE_KEY_APPLIED = "woodson_cart_branch_applied";
-  const STORAGE_KEY_CART_HASH = "woodson_cart_hash";
+  $(document).ready(() => {
+    const cartRows = $(".shopping-cart-item");
+    if (!cartRows.length) {
+      console.log("[CartBranch] No cart rows found. Skipping branch analysis.");
+      return;
+    }
 
-  function hashCartItems(items) {
-    return items.map(i => `${i.pid}-${i.qty}`).join("|");
-  }
+    console.log("[CartBranch] Found cart rows. Scanning...");
 
-  function parseCartItems() {
-    const newItems = [];
-    $(".shopping-cart-item").each(function (i) {
+    cartRows.each(function (i) {
       const $item = $(this);
+
+      // Find the product URL
       const productLink = $item.find("a[href*='ProductDetail.aspx']").attr("href") || "";
       const pidMatch = productLink.match(/pid=(\d+)/i);
       const pid = pidMatch ? pidMatch[1] : null;
 
+      // Quantity: find any visible or hidden input with 'qty' in its ID and a numeric value
       let qty = null;
       $item.find("input[id*='qty']").each(function () {
         const val = parseFloat($(this).val());
@@ -32,19 +39,22 @@ if (window.location.pathname === "/ShoppingCart.aspx") {
       });
 
       if (pid && qty != null) {
-        newItems.push({ pid, qty });
+        cartItems.push({ pid, qty });
         console.log(`[CartBranch] Found item ${i + 1}: PID=${pid}, Qty=${qty}`);
       } else {
         console.warn(`[CartBranch] Skipped item ${i + 1}: PID=${pid}, Qty=${qty}`);
       }
     });
 
-    return newItems;
-  }
+    console.log("[CartBranch] Total valid cart items:", cartItems.length);
+
+    if (cartItems.length) {
+      getStockForCart();
+    }
+  });
 
   async function getStockForCart() {
     console.log("[CartBranch] Checking stock availability across branches...");
-    branchScores = {};
 
     for (const item of cartItems) {
       try {
@@ -54,26 +64,30 @@ if (window.location.pathname === "/ShoppingCart.aspx") {
         temp.innerHTML = html;
 
         const table = temp.querySelector("#StockDataGrid_ctl00");
-        if (!table) continue;
+        if (!table) {
+          console.warn(`[CartBranch] No stock table found for PID ${item.pid}`);
+          continue;
+        }
 
         const rows = table.querySelectorAll("tr");
         for (const row of rows) {
           const cells = row.querySelectorAll("td");
-          if (cells.length < 3) continue;
+          if (cells.length < 5) continue;
 
           const branchName = cells[0].textContent.trim();
-          const qtyText = cells[2].textContent.trim();
-          const qty = parseFloat(qtyText.replace(/,/g, ""));
+          const qtyText = cells[2].textContent.trim().replace(/,/g, "");
+          const qty = parseFloat(qtyText);
 
           if (STORES.includes(branchName)) {
             console.log(`[CartBranch] Branch ${branchName} has ${qty} for PID ${item.pid} (need ${item.qty})`);
-            if (qty >= item.qty) {
+            if (!isNaN(qty) && qty >= item.qty) {
               branchScores[branchName] = (branchScores[branchName] || 0) + 1;
+              console.log(`[CartBranch] --> ${branchName} can fulfill this item.`);
             }
           }
         }
       } catch (err) {
-        console.error(`[CartBranch] Error fetching stock for PID ${item.pid}:`, err);
+        console.error(`[CartBranch] Failed to fetch stock for PID ${item.pid}:`, err);
       }
     }
 
@@ -84,88 +98,17 @@ if (window.location.pathname === "/ShoppingCart.aspx") {
 
     if (fullMatch) {
       const [branch] = fullMatch;
-      localStorage.setItem(STORAGE_KEY_BRANCH, branch);
-      localStorage.removeItem(STORAGE_KEY_APPLIED);
-      console.log(`[CartBranch] All items available at ${branch}. Saved.`);
+      console.log(`[CartBranch] All items available at ${branch}. Storing in localStorage.`);
+      localStorage.setItem("woodson_cart_branch", branch);
     } else {
       const fallback = Object.entries(branchScores).sort((a, b) => b[1] - a[1])[0];
       if (fallback) {
         const [branch] = fallback;
-        localStorage.setItem(STORAGE_KEY_BRANCH, branch);
-        localStorage.removeItem(STORAGE_KEY_APPLIED);
-        console.log(`[CartBranch] Partial match at ${branch}. Saved.`);
+        console.log(`[CartBranch] Best partial match: ${branch}. Storing in localStorage.`);
+        localStorage.setItem("woodson_cart_branch", branch);
       } else {
         console.warn("[CartBranch] No branch can fulfill any items.");
       }
     }
-
-    applyStoredBranchToDropdown();
   }
-
-  function applyStoredBranchToDropdown() {
-    const savedBranch = localStorage.getItem(STORAGE_KEY_BRANCH);
-    const alreadyApplied = localStorage.getItem(STORAGE_KEY_APPLIED);
-
-    if (!savedBranch || alreadyApplied) return;
-
-    const $dropdown = $("#ctl00_PageBody_BranchDropDownList");
-    if ($dropdown.length && !$dropdown.prop("disabled")) {
-      const selectedText = $dropdown.find("option:selected").text().trim();
-      if (!selectedText.toLowerCase().startsWith(savedBranch.toLowerCase())) {
-        const match = $dropdown.find("option").filter((_, opt) =>
-          $(opt).text().toLowerCase().startsWith(savedBranch.toLowerCase())
-        );
-
-        if (match.length) {
-          console.log(`[CartBranch] Applying stored branch: ${savedBranch}`);
-          match.prop("selected", true);
-          $dropdown.trigger("change");
-          localStorage.setItem(STORAGE_KEY_APPLIED, "true");
-        } else {
-          console.warn(`[CartBranch] Could not match branch in dropdown: ${savedBranch}`);
-        }
-      } else {
-        console.log("[CartBranch] Dropdown already matches stored branch.");
-        localStorage.setItem(STORAGE_KEY_APPLIED, "true");
-      }
-    }
-  }
-
-  function initCartBranchLogic() {
-    console.log("[CartBranch] Document ready. Scanning cart...");
-
-    cartItems = parseCartItems();
-    const newHash = hashCartItems(cartItems);
-    const oldHash = localStorage.getItem(STORAGE_KEY_CART_HASH);
-
-    if (cartItems.length === 0) {
-      console.warn("[CartBranch] No valid items in cart.");
-      return;
-    }
-
-    if (newHash !== oldHash) {
-      console.log("[CartBranch] Cart changed. Recalculating...");
-      localStorage.setItem(STORAGE_KEY_CART_HASH, newHash);
-      localStorage.removeItem(STORAGE_KEY_APPLIED);
-      getStockForCart();
-    } else {
-      console.log("[CartBranch] Cart unchanged. Applying stored selection...");
-      applyStoredBranchToDropdown();
-    }
-  }
-
-  // === Run on load ===
-  $(document).ready(() => {
-    initCartBranchLogic();
-
-    // Watch for cart changes (dynamic add/remove)
-    const observer = new MutationObserver(() => {
-      initCartBranchLogic();
-    });
-
-    observer.observe(document.querySelector("form") || document.body, {
-      childList: true,
-      subtree: true
-    });
-  });
 }
