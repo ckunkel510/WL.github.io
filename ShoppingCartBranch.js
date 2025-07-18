@@ -18,20 +18,28 @@ if (window.location.pathname === "/ShoppingCart.aspx") {
     console.log("[CartBranch] Document ready. Finding cart items...");
 
     $(".shopping-cart-item").each(function (i) {
-      const $item = $(this);
-      const productLink = $item.find("a[href*='ProductDetail.aspx?pid=']").attr("href");
-      const pidMatch = productLink?.match(/pid=(\d+)/);
-      const pid = pidMatch ? pidMatch[1] : null;
+  const $item = $(this);
 
-      const qty = parseFloat($item.find("input[type='text']").val());
+  // Find the product URL
+  const productLink = $item.find("a[href*='ProductDetail.aspx']").attr("href") || "";
+  const pidMatch = productLink.match(/pid=(\d+)/i);
+  const pid = pidMatch ? pidMatch[1] : null;
 
-      if (pid && qty) {
-        cartItems.push({ pid, qty });
-        console.log(`[CartBranch] Found item ${i + 1}: PID=${pid}, Qty=${qty}`);
-      } else {
-        console.warn(`[CartBranch] Skipped item ${i + 1}: No PID or quantity found.`);
-      }
-    });
+  // Quantity: find any visible or hidden input with 'qty' in its ID and a numeric value
+  let qty = null;
+  $item.find("input[id*='qty']").each(function () {
+    const val = parseFloat($(this).val());
+    if (!isNaN(val)) qty = val;
+  });
+
+  if (pid && qty != null) {
+    cartItems.push({ pid, qty });
+    console.log(`[CartBranch] Found item ${i + 1}: PID=${pid}, Qty=${qty}`);
+  } else {
+    console.warn(`[CartBranch] Skipped item ${i + 1}: PID=${pid}, Qty=${qty}`);
+  }
+});
+
 
     console.log("[CartBranch] Total valid cart items:", cartItems.length);
 
