@@ -1,3 +1,29 @@
+document.addEventListener("DOMContentLoaded", function () {
+  const urlParams = new URLSearchParams(window.location.search);
+  const isCCVerify = urlParams.get("utm") === "ccverify";
+
+  if (!isCCVerify) return; // Do nothing unless this is a credit card verification link
+
+  // Hide unnecessary elements
+  const paymentDiv = document.getElementById("ctl00_PageBody_PaymentProviderSelectionDiv");
+  if (paymentDiv) paymentDiv.style.display = "none";
+
+  const billingLabel = document.querySelector('label[for="CreBillingAddress"]');
+  if (billingLabel) billingLabel.style.display = "none";
+
+  const zipLabel = document.querySelector('label[for="CrePostalCode"]');
+  if (zipLabel) zipLabel.style.display = "none";
+
+  const btn = document.querySelector('button[onclick="requestToken()"]');
+  if (btn) btn.disabled = true;
+
+  checkTokenExpiration();
+  insertCustomFields();
+
+  const zipInput = document.getElementById("ctl00_PageBody_CrePostalCode");
+  if (zipInput) zipInput.addEventListener("blur", checkAddressMatch);
+});
+
 (function () {
   const RECAPTCHA_SITE_KEY = "6Lfn5IcrAAAAAMxSoB_0zPc-a41_vBNs5QcAg7RN";
   const IPINFO_TOKEN = "169fa3f70bafa2";
