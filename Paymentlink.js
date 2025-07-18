@@ -74,54 +74,64 @@
   }
 
   async function checkAddressMatch() {
-    const billingStreetRaw = document.getElementById("ctl00_PageBody_CreBillingAddress")?.value || "";
-    const billingZip = document.getElementById("ctl00_PageBody_CrePostalCode")?.value?.trim()?.slice(0, 5);
-    const params = new URLSearchParams(window.location.search);
-    const deliveryZip = params.get("deliveryzip")?.trim()?.slice(0, 5);
-    const deliveryStreetRaw = params.get("deliverystreet") || "";
+  const billingStreetRaw = document.getElementById("ctl00_PageBody_CreBillingAddress")?.value || "";
+  const billingZip = document.getElementById("ctl00_PageBody_CrePostalCode")?.value?.trim()?.slice(0, 5);
+  const params = new URLSearchParams(window.location.search);
+  const deliveryZip = params.get("deliveryzip")?.trim()?.slice(0, 5);
+  const deliveryStreetRaw = params.get("deliverystreet") || "";
 
-    const billingStreet = normalizeAddress(billingStreetRaw);
-    const deliveryStreet = normalizeAddress(deliveryStreetRaw);
+  const billingStreet = normalizeAddress(billingStreetRaw);
+  const deliveryStreet = normalizeAddress(deliveryStreetRaw);
 
-    const msgEl = document.getElementById("SecureWarningMessage");
-    if (msgEl) msgEl.remove();
+  const msgEl = document.getElementById("SecureWarningMessage");
+  if (msgEl) msgEl.remove(); // Clear old message
 
-    if (billingStreet && deliveryStreet && billingStreet === deliveryStreet) {
-      console.log("Street Match: Billing matches delivery street.");
+  // First: Must match BOTH street and ZIP
+  if (
+    billingStreet &&
+    deliveryStreet &&
+    billingStreet === deliveryStreet &&
+    billingZip &&
+    deliveryZip &&
+    billingZip === deliveryZip
+  ) {
+    console.log("Primary match passed: billing matches delivery street AND ZIP");
+    zipMatch = true;
+    validateAllChecks();
+    return;
+  }
+
+  // Fallback: IP ZIP check
+  try {
+    const res = await fetch(`https://ipinfo.io/json?token=${IPINFO_TOKEN}`);
+    const data = await res.json();
+    const ipZip = data.postal?.trim()?.slice(0, 5);
+
+    if (billingZip && ipZip && billingZip === ipZip) {
+      console.log("ZIP fallback passed: billing ZIP matches IP ZIP");
       zipMatch = true;
-      validateAllChecks();
-      return;
-    }
-
-    try {
-      const res = await fetch(`https://ipinfo.io/json?token=${IPINFO_TOKEN}`);
-      const data = await res.json();
-      const ipZip = data.postal?.trim()?.slice(0, 5);
-
-      if (billingZip && ipZip && billingZip === ipZip) {
-        console.log("ZIP fallback passed");
-        zipMatch = true;
-      } else {
-        console.warn("Failed both checks");
-        zipMatch = false;
-      }
-    } catch (err) {
-      console.error("IP ZIP lookup failed", err);
+    } else {
+      console.warn("Failed all match conditions");
       zipMatch = false;
     }
-
-    validateAllChecks();
-
-    if (!zipMatch) {
-      const msg = document.createElement("div");
-      msg.id = "SecureWarningMessage";
-      msg.style = "margin-top: 12px; color: darkred; font-weight: bold;";
-      msg.innerText =
-        "We couldn’t verify your billing details. Please double-check your address and ZIP, or try again from your home or business network. If problems persist, give us a call.";
-      const btn = document.querySelector('button[onclick="requestToken()"]');
-      if (btn) btn.insertAdjacentElement("afterend", msg);
-    }
+  } catch (err) {
+    console.error("IP ZIP lookup failed", err);
+    zipMatch = false;
   }
+
+  validateAllChecks();
+
+  if (!zipMatch) {
+    const msg = document.createElement("div");
+    msg.id = "SecureWarningMessage";
+    msg.style = "margin-top: 12px; color: darkred; font-weight: bold;";
+    msg.innerText =
+      "We couldn’t verify your billing details. Please double-check your address and ZIP, or try again from your home or business network. If problems persist, give us a call.";
+    const btn = document.querySelector('button[onclick="requestToken()"]');
+    if (btn) btn.insertAdjacentElement("afterend", msg);
+  }
+}
+
 
   function validateAllChecks() {
     const btn = document.querySelector('button[onclick="requestToken()"]');
