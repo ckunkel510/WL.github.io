@@ -53,14 +53,23 @@ width: 100% !important;
   background-color: #fef2f2;
 }
 
+ #product-page {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    gap: 20px;
+  }
 
   #product-image-wrapper {
     order: 1;
+    flex: 0 0 auto;
+    margin-right: 10px;
   }
 
   #product-sidebar {
     order: 2;
-    margin-left: 20%;
+    flex: 0 0 300px;
+    margin-left: auto;
     min-width:350px !important;
     max-width:350px !important;
 
@@ -68,4 +77,6 @@ width: 100% !important;
 
   #product-main {
     order: 3;
+    flex: 1 1 auto;
+    margin-top: -20px; /* pulls description up closer to image */
   }
