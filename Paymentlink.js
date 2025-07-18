@@ -21,86 +21,95 @@
   }
 
   function insertCustomFields() {
-    const btn = document.querySelector('button[onclick="requestToken()"]');
-    if (!btn) return;
+  const btn = document.querySelector('button[onclick="requestToken()"]');
+  if (!btn) return;
 
-    const parent = btn.parentNode;
-    const wrapper = document.createElement("div");
-    wrapper.style = "margin-bottom: 12px; padding: 10px; border: 1px solid #aaa; background: #f9f9f9;";
+  const parent = btn.parentNode;
+  const wrapper = document.createElement("div");
+  wrapper.style = `
+    margin-bottom: 12px;
+    padding: 16px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    background: #fdfdfd;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+    font-family: sans-serif;
+  `;
 
-    // 1. Cardholder Name
-    wrapper.appendChild(createLabeledInput("Cardholder Name:", "CardholderName", "Enter name as it appears on the card"));
+  wrapper.appendChild(createLabeledInput("Cardholder Name:", "CardholderName", "Enter name as it appears on the card"));
+  addFieldRef(wrapper, "ctl00_PageBody_CreBillingAddress", "Billing Address:");
+  addFieldRef(wrapper, "ctl00_PageBody_CrePostalCode", "ZIP Code:");
 
-    // 2. Billing Address & ZIP Code already on the page — we just add spacing
-    addFieldRef(wrapper, "ctl00_PageBody_CreBillingAddress", "Billing Address:");
-    addFieldRef(wrapper, "ctl00_PageBody_CrePostalCode", "ZIP Code:");
+  // Upload ID
+  const idLabel = document.createElement("label");
+  idLabel.textContent = "Upload Photo ID:";
+  const idInput = document.createElement("input");
+  idInput.id = "IDUpload";
+  idInput.type = "file";
+  idInput.accept = "image/*";
+  idInput.style = "display:block;margin-bottom:12px;padding:4px;";
+  wrapper.appendChild(idLabel);
+  wrapper.appendChild(idInput);
 
-    // 3. Upload Photo ID
-    const idLabel = document.createElement("label");
-    idLabel.textContent = "Upload Photo ID:";
-    const idInput = document.createElement("input");
-    idInput.id = "IDUpload";
-    idInput.type = "file";
-    idInput.accept = "image/*";
-    idInput.style = "display:block;margin-bottom:8px";
-    wrapper.appendChild(idLabel);
-    wrapper.appendChild(idInput);
+  // Legal disclaimer before signature
+  const legalNote = document.createElement("p");
+  legalNote.style = "font-size: 0.9em; font-style: italic; color: #444; margin-bottom: 8px;";
+  legalNote.textContent =
+    "By signing below, I authorize the use of the above card for this order and confirm that I am an authorized user. I understand that this constitutes a legal signature for payment and approval of the transaction.";
+  wrapper.appendChild(legalNote);
 
-    // 4. Signature Pad
-    const sigLabel = document.createElement("label");
-    sigLabel.textContent = "Digital Signature:";
-    const canvas = document.createElement("canvas");
-    canvas.id = "SignaturePad";
-    canvas.width = 300;
-    canvas.height = 150;
-    canvas.style = "border:1px solid #ccc;display:block;margin-bottom:6px";
+  // Signature Pad
+  const sigLabel = document.createElement("label");
+  sigLabel.textContent = "Digital Signature:";
+  const canvas = document.createElement("canvas");
+  canvas.id = "SignaturePad";
+  canvas.width = 300;
+  canvas.height = 150;
+  canvas.style = "border:1px solid #aaa;display:block;margin-bottom:6px;border-radius:4px;";
+  const clearBtn = document.createElement("button");
+  clearBtn.textContent = "Clear Signature";
+  clearBtn.type = "button";
+  clearBtn.style = "margin-bottom:12px;";
+  clearBtn.onclick = () => signaturePad?.clear();
+  wrapper.appendChild(sigLabel);
+  wrapper.appendChild(canvas);
+  wrapper.appendChild(clearBtn);
 
-    const clearBtn = document.createElement("button");
-    clearBtn.textContent = "Clear Signature";
-    clearBtn.type = "button";
-    clearBtn.style = "margin-bottom:8px";
-    clearBtn.onclick = () => signaturePad?.clear();
+  // Fraud warning
+  const warning = document.createElement("p");
+  warning.style = "color:#a00;font-weight:bold;font-size:0.9em;margin-bottom:10px;";
+  warning.textContent = "WARNING: Providing false or unauthorized payment info may result in account termination and referral for prosecution.";
+  wrapper.appendChild(warning);
 
-    wrapper.appendChild(sigLabel);
-    wrapper.appendChild(canvas);
-    wrapper.appendChild(clearBtn);
+  // reCAPTCHA
+  const recaptcha = document.createElement("div");
+  recaptcha.id = "recaptcha-container";
+  recaptcha.className = "g-recaptcha";
+  recaptcha.setAttribute("data-sitekey", RECAPTCHA_SITE_KEY);
+  recaptcha.setAttribute("data-callback", "onCaptchaSuccess");
+  recaptcha.setAttribute("data-expired-callback", "onCaptchaExpired");
+  recaptcha.setAttribute("data-error-callback", "onCaptchaFailed");
+  wrapper.appendChild(recaptcha);
 
-    // 5. Aggressive Legal Warning
-    const warning = document.createElement("p");
-    warning.style = "color:#a00;font-weight:bold;margin-bottom:10px;";
-    warning.textContent = "WARNING: Submitting false information or unauthorized payment will result in account termination and may be referred for prosecution under federal law.";
-    wrapper.appendChild(warning);
+  parent.insertBefore(wrapper, btn);
 
-    // 6. reCAPTCHA
-    const recaptcha = document.createElement("div");
-    recaptcha.id = "recaptcha-container";
-    recaptcha.className = "g-recaptcha";
-    recaptcha.setAttribute("data-sitekey", RECAPTCHA_SITE_KEY);
-    recaptcha.setAttribute("data-callback", "onCaptchaSuccess");
-    recaptcha.setAttribute("data-expired-callback", "onCaptchaExpired");
-    recaptcha.setAttribute("data-error-callback", "onCaptchaFailed");
-    wrapper.appendChild(recaptcha);
+  const sigScript = document.createElement("script");
+  sigScript.src = "https://cdn.jsdelivr.net/npm/signature_pad@4.1.5/dist/signature_pad.umd.min.js";
+  sigScript.onload = () => {
+    signaturePad = new SignaturePad(canvas, {
+      penColor: "black",
+      backgroundColor: "white"
+    });
+  };
+  document.body.appendChild(sigScript);
 
-    parent.insertBefore(wrapper, btn);
+  const recaptchaScript = document.createElement("script");
+  recaptchaScript.src = "https://www.google.com/recaptcha/api.js";
+  recaptchaScript.async = true;
+  recaptchaScript.defer = true;
+  document.body.appendChild(recaptchaScript);
+}
 
-    // Signature Pad Script
-    const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/signature_pad@4.1.5/dist/signature_pad.umd.min.js";
-    script.onload = () => {
-      signaturePad = new SignaturePad(canvas, {
-        penColor: "black",
-        backgroundColor: "white"
-      });
-    };
-    document.body.appendChild(script);
-
-    // Load reCAPTCHA
-    const recaptchaScript = document.createElement("script");
-    recaptchaScript.src = "https://www.google.com/recaptcha/api.js";
-    recaptchaScript.async = true;
-    recaptchaScript.defer = true;
-    document.body.appendChild(recaptchaScript);
-  }
 
   function createLabeledInput(labelText, id, placeholder = "") {
     const label = document.createElement("label");
@@ -137,26 +146,24 @@
   }
 
   async function checkAddressMatch() {
-    const billingStreetRaw = document.getElementById("ctl00_PageBody_CreBillingAddress")?.value || "";
-    const billingZip = document.getElementById("ctl00_PageBody_CrePostalCode")?.value?.trim()?.slice(0, 5);
-    const params = new URLSearchParams(window.location.search);
-    const deliveryZip = params.get("deliveryzip")?.trim()?.slice(0, 5);
-    const deliveryStreetRaw = params.get("deliverystreet") || "";
+  const billingZip = document.getElementById("ctl00_PageBody_CrePostalCode")?.value?.trim()?.slice(0, 5);
+  const params = new URLSearchParams(window.location.search);
+  const deliveryZip = params.get("deliveryzip")?.trim()?.slice(0, 5);
 
-    const billingStreet = normalizeAddress(billingStreetRaw);
-    const deliveryStreet = normalizeAddress(deliveryStreetRaw);
+  zipMatch = billingZip === deliveryZip;
 
-    zipMatch = billingStreet === deliveryStreet && billingZip === deliveryZip;
-    if (!zipMatch) {
-      try {
-        const res = await fetch(`https://ipinfo.io/json?token=${IPINFO_TOKEN}`);
-        const data = await res.json();
-        const ipZip = data.postal?.trim()?.slice(0, 5);
-        zipMatch = billingZip === ipZip;
-      } catch {}
-    }
-    validateAllChecks();
+  if (!zipMatch) {
+    try {
+      const res = await fetch(`https://ipinfo.io/json?token=${IPINFO_TOKEN}`);
+      const data = await res.json();
+      const ipZip = data.postal?.trim()?.slice(0, 5);
+      zipMatch = billingZip === ipZip;
+    } catch {}
   }
+
+  validateAllChecks();
+}
+
 
   function checkTokenExpiration() {
     const tsParam = new URLSearchParams(window.location.search).get("ts");
