@@ -40,7 +40,14 @@ $(document).ready(function () {
 
   // Move product image to main
   const $imageTd = $("#ctl00_PageBody_productDetail_ProductImage").first().closest("td");
-  if ($imageTd.length) $main.append($imageTd);
+  if ($imageTd.length) {
+  const $imageWrap = $("<div>", { id: "product-image-wrapper" }).css({
+    order: 1,
+  });
+  $imageWrap.append($imageTd);
+  $pageWrapper.append($imageWrap); // <-- insert outside main/sidebar
+}
+
 
   // Move elements into sidebar (first instances only)
   const $price = $(".productPriceSegment").first().detach();
