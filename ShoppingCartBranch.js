@@ -18,28 +18,27 @@ if (window.location.pathname === "/ShoppingCart.aspx") {
     console.log("[CartBranch] Document ready. Finding cart items...");
 
     $(".shopping-cart-item").each(function (i) {
-  const $item = $(this);
+      const $item = $(this);
 
-  // Find the product URL
-  const productLink = $item.find("a[href*='ProductDetail.aspx']").attr("href") || "";
-  const pidMatch = productLink.match(/pid=(\d+)/i);
-  const pid = pidMatch ? pidMatch[1] : null;
+      // Find the product URL
+      const productLink = $item.find("a[href*='ProductDetail.aspx']").attr("href") || "";
+      const pidMatch = productLink.match(/pid=(\d+)/i);
+      const pid = pidMatch ? pidMatch[1] : null;
 
-  // Quantity: find any visible or hidden input with 'qty' in its ID and a numeric value
-  let qty = null;
-  $item.find("input[id*='qty']").each(function () {
-    const val = parseFloat($(this).val());
-    if (!isNaN(val)) qty = val;
-  });
+      // Quantity: find any visible or hidden input with 'qty' in its ID and a numeric value
+      let qty = null;
+      $item.find("input[id*='qty']").each(function () {
+        const val = parseFloat($(this).val());
+        if (!isNaN(val)) qty = val;
+      });
 
-  if (pid && qty != null) {
-    cartItems.push({ pid, qty });
-    console.log(`[CartBranch] Found item ${i + 1}: PID=${pid}, Qty=${qty}`);
-  } else {
-    console.warn(`[CartBranch] Skipped item ${i + 1}: PID=${pid}, Qty=${qty}`);
-  }
-});
-
+      if (pid && qty != null) {
+        cartItems.push({ pid, qty });
+        console.log(`[CartBranch] Found item ${i + 1}: PID=${pid}, Qty=${qty}`);
+      } else {
+        console.warn(`[CartBranch] Skipped item ${i + 1}: PID=${pid}, Qty=${qty}`);
+      }
+    });
 
     console.log("[CartBranch] Total valid cart items:", cartItems.length);
 
@@ -52,6 +51,9 @@ if (window.location.pathname === "/ShoppingCart.aspx") {
 
   async function getStockForCart() {
     console.log("[CartBranch] Checking stock availability across branches...");
+
+    const useActualColumn = await getSignedInBranch() !== null;
+    const columnIndex = useActualColumn ? 4 : 2;
 
     for (const item of cartItems) {
       console.log(`[CartBranch] Fetching stock for PID ${item.pid}...`);
@@ -71,18 +73,22 @@ if (window.location.pathname === "/ShoppingCart.aspx") {
         const rows = table.querySelectorAll("tr");
         for (const row of rows) {
           const cells = row.querySelectorAll("td");
-          if (cells.length < 5) continue;
+          if (cells.length <= columnIndex) continue;
 
           const branchName = cells[0].textContent.trim();
-          const qtyText = cells[2].textContent.trim();
-          const qty = parseFloat(qtyText.replace(/,/g, ""));
+          const rawQty = cells[columnIndex].textContent.trim().replace(/,/g, "");
+          const qty = parseFloat(rawQty);
 
           if (STORES.includes(branchName)) {
-            console.log(`[CartBranch] Branch ${branchName} has ${qty} for PID ${item.pid} (need ${item.qty})`);
+            if (isNaN(qty)) {
+              console.warn(`[CartBranch] Branch ${branchName} has invalid quantity "${rawQty}" for PID ${item.pid} (need ${item.qty})`);
+            } else {
+              console.log(`[CartBranch] Branch ${branchName} has ${qty} for PID ${item.pid} (need ${item.qty})`);
 
-            if (qty >= item.qty) {
-              branchScores[branchName] = (branchScores[branchName] || 0) + 1;
-              console.log(`[CartBranch] --> ${branchName} can fulfill this item.`);
+              if (qty >= item.qty) {
+                branchScores[branchName] = (branchScores[branchName] || 0) + 1;
+                console.log(`[CartBranch] --> ${branchName} can fulfill this item.`);
+              }
             }
           }
         }
@@ -116,6 +122,21 @@ if (window.location.pathname === "/ShoppingCart.aspx") {
     }
   }
 
+  async function getSignedInBranch() {
+    try {
+      const res = await fetch("https://webtrack.woodsonlumber.com/AccountSettings.aspx?cms=1");
+      const text = await res.text();
+      const temp = document.createElement("div");
+      temp.innerHTML = text;
+      const dropdown = temp.querySelector("#ctl00_PageBody_ChangeUserDetailsControl_ddBranch");
+      const selected = dropdown?.querySelector("option[selected='selected']");
+      return selected?.textContent.trim() || null;
+    } catch (err) {
+      console.warn("[CartBranch] Could not retrieve signed-in branch");
+      return null;
+    }
+  }
+
   function updateBranchDropdown(branchName) {
     const $dropdown = $("#ctl00_PageBody_BranchDropDownList");
     const matchOption = $dropdown.find("option").filter((_, opt) =>
@@ -144,4 +165,3 @@ if (window.location.pathname === "/ShoppingCart.aspx") {
     console.log("[CartBranch] User notified:", message);
   }
 }
-
