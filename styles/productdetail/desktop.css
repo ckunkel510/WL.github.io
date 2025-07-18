@@ -53,7 +53,9 @@ width: 100% !important;
   background-color: #fef2f2;
 }
 
-
+#product-page{
+  gap: 175px;
+}
 
   #product-image-wrapper {
     order: 1;
