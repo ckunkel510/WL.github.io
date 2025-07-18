@@ -53,9 +53,7 @@ width: 100% !important;
   background-color: #fef2f2;
 }
 
-#product-page {
-    flex-direction: column;
-  }
+
 
   #product-image-wrapper {
     order: 1;
