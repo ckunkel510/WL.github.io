@@ -5,8 +5,7 @@ if (window.location.pathname === "/ShoppingCart.aspx") {
   const SELECTED_KEY = "woodson_cart_branch";
   const DROPDOWN_ID = "#ctl00_PageBody_BranchDropDownList";
 
-  localStorage.removeItem("woodson_cart_branch");
-console.log("[CartBranchDropdown] Cleared stored branch after applying.");
+  
 
   window.addEventListener("load", () => {
     const storedBranch = localStorage.getItem(SELECTED_KEY);
@@ -43,6 +42,9 @@ console.log("[CartBranchDropdown] Cleared stored branch after applying.");
     } else {
       console.log("[CartBranch] No update needed. Dropdown already matches stored branch.");
     }
+
+    localStorage.removeItem("woodson_cart_branch");
+console.log("[CartBranchDropdown] Cleared stored branch after applying.");
 
     // Listen for user manual changes to prevent future overrides
     $dropdown.on("change", function () {
