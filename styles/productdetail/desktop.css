@@ -53,9 +53,6 @@ width: 100% !important;
   background-color: #fef2f2;
 }
 
-#product-page{
-  gap: 175px !important;
-}
 
   #product-image-wrapper {
     order: 1;
@@ -63,6 +60,9 @@ width: 100% !important;
 
   #product-sidebar {
     order: 2;
+    max-width: 400px;
+    margin-left: 10%;
+
   }
 
   #product-main {
