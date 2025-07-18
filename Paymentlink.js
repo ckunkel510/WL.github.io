@@ -32,46 +32,75 @@
     captchaVerified = true;
     validateAllChecks();
   };
-
   window.onCaptchaExpired = function () {
     captchaVerified = false;
     validateAllChecks();
   };
-
   window.onCaptchaFailed = function () {
     captchaVerified = false;
     validateAllChecks();
   };
 
-  async function checkZipMatch() {
-    const zipInput = document.getElementById("ctl00_PageBody_CrePostalCode");
-    const zip = zipInput?.value?.trim()?.slice(0, 5);
+  function checkTokenExpiration() {
+    const params = new URLSearchParams(window.location.search);
+    const tsParam = params.get("ts");
 
-    try {
-      const res = await fetch(`https://ipinfo.io/json?token=${IPINFO_TOKEN}`);
-      const data = await res.json();
-      const ipZip = data.postal?.trim()?.slice(0, 5);
-      console.log("ZIP Check — Entered:", zip, "IP ZIP:", ipZip);
+    if (!tsParam) {
+      console.warn("Missing ts parameter in URL.");
+      tokenValid = false;
+      validateAllChecks();
+      return;
+    }
 
-      if (zip && ipZip && zip === ipZip) {
-        zipMatch = true;
-      } else {
-        zipMatch = false;
-      }
-    } catch (err) {
-      console.warn("IP check failed:", err);
-      zipMatch = false;
+    const now = new Date();
+    const tsDate = new Date(tsParam);
+
+    console.log("Parsed ts:", tsDate.toDateString(), "| Now:", now.toDateString());
+
+    // Check if the ts date is today or in the future (min 1-day validity)
+    if (tsDate.toString() === "Invalid Date") {
+      tokenValid = false;
+    } else {
+      tokenValid = now <= tsDate;
     }
 
     validateAllChecks();
   }
 
-  function checkTokenTimestamp() {
+  async function checkZipMatch() {
+    const billingZip = document.getElementById("ctl00_PageBody_CrePostalCode")?.value?.trim()?.slice(0, 5);
     const params = new URLSearchParams(window.location.search);
-    const ts = parseInt(params.get("ts"));
-    const now = Date.now();
-    tokenValid = ts && now <= ts;
-    console.log("Token Valid:", tokenValid, "| Now:", now, "| ts:", ts);
+    const deliveryZip = params.get("deliveryzip")?.trim()?.slice(0, 5);
+    let ipZip = "";
+
+    console.log("Billing ZIP:", billingZip, "| Delivery ZIP:", deliveryZip);
+
+    if (billingZip && deliveryZip && billingZip === deliveryZip) {
+      console.log("ZIP Match: Billing matches delivery ZIP");
+      zipMatch = true;
+      validateAllChecks();
+      return;
+    }
+
+    // Fallback: IP ZIP check
+    try {
+      const res = await fetch(`https://ipinfo.io/json?token=${IPINFO_TOKEN}`);
+      const data = await res.json();
+      ipZip = data.postal?.trim()?.slice(0, 5);
+      console.log("IP ZIP:", ipZip);
+
+      if (billingZip && ipZip && billingZip === ipZip) {
+        console.log("ZIP Match: Billing matches IP ZIP");
+        zipMatch = true;
+      } else {
+        console.warn("ZIP Mismatch: Neither delivery nor IP ZIP matched billing");
+        zipMatch = false;
+      }
+    } catch (err) {
+      console.error("IP ZIP lookup failed", err);
+      zipMatch = false;
+    }
+
     validateAllChecks();
   }
 
@@ -85,42 +114,43 @@
   }
 
   async function logPaymentData() {
-  const billingAddress = document.getElementById("ctl00_PageBody_CreBillingAddress")?.value?.trim() || "";
-  const billingZip = document.getElementById("ctl00_PageBody_CrePostalCode")?.value?.trim() || "";
-  const orderText = document.querySelector(".PaymentTotalPanel")?.textContent || "";
-  const pageUrl = window.location.href;
+    const billingAddress = document.getElementById("ctl00_PageBody_CreBillingAddress")?.value?.trim() || "";
+    const billingZip = document.getElementById("ctl00_PageBody_CrePostalCode")?.value?.trim() || "";
+    const orderText = document.querySelector(".PaymentTotalPanel")?.textContent || "";
+    const pageUrl = window.location.href;
+    const deliveryZip = new URLSearchParams(window.location.search).get("deliveryzip") || "";
 
-  let ipZip = "";
-  try {
-    const res = await fetch(`https://ipinfo.io/json?token=${IPINFO_TOKEN}`);
-    const data = await res.json();
-    ipZip = data.postal || "";
-  } catch (err) {
-    console.warn("Failed to fetch IP ZIP for logging.");
+    let ipZip = "";
+    try {
+      const res = await fetch(`https://ipinfo.io/json?token=${IPINFO_TOKEN}`);
+      const data = await res.json();
+      ipZip = data.postal || "";
+    } catch (err) {
+      console.warn("Logging: IP ZIP fetch failed.");
+    }
+
+    await fetch(LOGGING_URL, {
+      method: "POST",
+      body: new URLSearchParams({
+        billingAddress,
+        billingZip,
+        orderMatch: orderText,
+        pageUrl,
+        deliveryZip,
+        ipZip,
+        timestamp: new Date().toISOString()
+      })
+    });
   }
 
-  await fetch(LOGGING_URL, {
-    method: "POST",
-    body: new URLSearchParams({
-      billingAddress,
-      billingZip,
-      orderMatch: orderText,
-      pageUrl,
-      ipZip,
-      timestamp: new Date().toISOString()
-    })
-  });
-}
-
-
-  // Hijack and wrap original requestToken call
+  // Wrap requestToken to log before continuing
   const originalRequestToken = window.requestToken;
   window.requestToken = function () {
     logPaymentData().then(() => {
       if (typeof originalRequestToken === "function") {
         originalRequestToken();
       } else {
-        console.log("requestToken override fallback — original function not found.");
+        console.log("Fallback: No original requestToken found.");
       }
     });
   };
@@ -131,9 +161,11 @@
     if (btn) btn.disabled = true;
 
     insertRecaptcha();
-    checkTokenTimestamp();
+    checkTokenExpiration();
 
     const zipInput = document.getElementById("ctl00_PageBody_CrePostalCode");
-    if (zipInput) zipInput.addEventListener("blur", checkZipMatch);
+    if (zipInput) {
+      zipInput.addEventListener("blur", checkZipMatch);
+    }
   });
 })();
