@@ -6,6 +6,7 @@
   let captchaVerified = false;
   let zipMatch = false;
   let tokenValid = false;
+  let signaturePad;
 
   function normalizeAddress(addr) {
     if (!addr) return "";
@@ -48,98 +49,99 @@
     document.body.appendChild(script);
   }
 
-  window.onCaptchaSuccess = function () {
-    captchaVerified = true;
-    validateAllChecks();
-  };
-  window.onCaptchaExpired = function () {
-    captchaVerified = false;
-    validateAllChecks();
-  };
-  window.onCaptchaFailed = function () {
-    captchaVerified = false;
-    validateAllChecks();
-  };
+  function insertVerificationFields() {
+    const targetBtn = document.querySelector('button[onclick="requestToken()"]');
+    if (!targetBtn) return;
+    const container = targetBtn.parentNode;
 
-  function checkTokenExpiration() {
-    const params = new URLSearchParams(window.location.search);
-    const tsParam = params.get("ts");
-    const now = new Date();
-    const tsDate = new Date(tsParam);
+    // Cardholder name
+    const nameLabel = document.createElement("label");
+    nameLabel.textContent = "Cardholder Name:";
+    const nameInput = document.createElement("input");
+    nameInput.id = "CardholderName";
+    nameInput.placeholder = "Enter name as it appears on the card";
+    nameInput.style = "display:block;width:100%;margin-bottom:6px";
 
-    console.log("Parsed ts:", tsDate.toDateString(), "| Now:", now.toDateString());
+    // ID Upload
+    const idLabel = document.createElement("label");
+    idLabel.textContent = "Upload Photo ID:";
+    const idInput = document.createElement("input");
+    idInput.id = "IDUpload";
+    idInput.type = "file";
+    idInput.accept = "image/*";
+    idInput.style = "display:block;margin-bottom:6px";
 
-    tokenValid = tsDate.toString() !== "Invalid Date" && now <= tsDate;
-    validateAllChecks();
+    // Signature
+    const sigLabel = document.createElement("label");
+    sigLabel.textContent = "Digital Signature:";
+    const canvas = document.createElement("canvas");
+    canvas.id = "SignaturePad";
+    canvas.width = 300;
+    canvas.height = 150;
+    canvas.style = "border:1px solid #ccc;display:block;margin-bottom:6px";
+
+    const clearBtn = document.createElement("button");
+    clearBtn.textContent = "Clear Signature";
+    clearBtn.type = "button";
+    clearBtn.onclick = () => signaturePad?.clear();
+
+    container.appendChild(nameLabel);
+    container.appendChild(nameInput);
+    container.appendChild(idLabel);
+    container.appendChild(idInput);
+    container.appendChild(sigLabel);
+    container.appendChild(canvas);
+    container.appendChild(clearBtn);
+
+    const script = document.createElement("script");
+    script.src = "https://cdn.jsdelivr.net/npm/signature_pad@4.1.5/dist/signature_pad.umd.min.js";
+    script.onload = () => {
+      signaturePad = new SignaturePad(canvas, {
+        penColor: "black",
+        backgroundColor: "white"
+      });
+    };
+    document.body.appendChild(script);
   }
-
-  async function checkAddressMatch() {
-  const billingStreetRaw = document.getElementById("ctl00_PageBody_CreBillingAddress")?.value || "";
-  const billingZip = document.getElementById("ctl00_PageBody_CrePostalCode")?.value?.trim()?.slice(0, 5);
-  const params = new URLSearchParams(window.location.search);
-  const deliveryZip = params.get("deliveryzip")?.trim()?.slice(0, 5);
-  const deliveryStreetRaw = params.get("deliverystreet") || "";
-
-  const billingStreet = normalizeAddress(billingStreetRaw);
-  const deliveryStreet = normalizeAddress(deliveryStreetRaw);
-
-  const msgEl = document.getElementById("SecureWarningMessage");
-  if (msgEl) msgEl.remove(); // Clear old message
-
-  // First: Must match BOTH street and ZIP
-  if (
-    billingStreet &&
-    deliveryStreet &&
-    billingStreet === deliveryStreet &&
-    billingZip &&
-    deliveryZip &&
-    billingZip === deliveryZip
-  ) {
-    console.log("Primary match passed: billing matches delivery street AND ZIP");
-    zipMatch = true;
-    validateAllChecks();
-    return;
-  }
-
-  // Fallback: IP ZIP check
-  try {
-    const res = await fetch(`https://ipinfo.io/json?token=${IPINFO_TOKEN}`);
-    const data = await res.json();
-    const ipZip = data.postal?.trim()?.slice(0, 5);
-
-    if (billingZip && ipZip && billingZip === ipZip) {
-      console.log("ZIP fallback passed: billing ZIP matches IP ZIP");
-      zipMatch = true;
-    } else {
-      console.warn("Failed all match conditions");
-      zipMatch = false;
-    }
-  } catch (err) {
-    console.error("IP ZIP lookup failed", err);
-    zipMatch = false;
-  }
-
-  validateAllChecks();
-
-  if (!zipMatch) {
-    const msg = document.createElement("div");
-    msg.id = "SecureWarningMessage";
-    msg.style = "margin-top: 12px; color: darkred; font-weight: bold;";
-    msg.innerText =
-      "We couldn’t verify your billing details. Please double-check your address and ZIP, or try again from your home or business network. If problems persist, give us a call.";
-    const btn = document.querySelector('button[onclick="requestToken()"]');
-    if (btn) btn.insertAdjacentElement("afterend", msg);
-  }
-}
-
 
   function validateAllChecks() {
     const btn = document.querySelector('button[onclick="requestToken()"]');
-    if (btn) {
-      const ready = captchaVerified && zipMatch && tokenValid;
-      console.log("Validation Status — CAPTCHA:", captchaVerified, "ZIP Match:", zipMatch, "Token OK:", tokenValid);
-      btn.disabled = !ready;
+    const sigOk = signaturePad && !signaturePad.isEmpty();
+    const idUploaded = document.getElementById("IDUpload")?.files?.length > 0;
+    const cardholderFilled = document.getElementById("CardholderName")?.value?.trim()?.length > 2;
+    const ready = captchaVerified && zipMatch && tokenValid && sigOk && idUploaded && cardholderFilled;
+    if (btn) btn.disabled = !ready;
+    console.log("Validation Status — CAPTCHA:", captchaVerified, "ZIP Match:", zipMatch, "Token OK:", tokenValid);
+  }
+
+  async function checkAddressMatch() {
+    const billingStreetRaw = document.getElementById("ctl00_PageBody_CreBillingAddress")?.value || "";
+    const billingZip = document.getElementById("ctl00_PageBody_CrePostalCode")?.value?.trim()?.slice(0, 5);
+    const params = new URLSearchParams(window.location.search);
+    const deliveryZip = params.get("deliveryzip")?.trim()?.slice(0, 5);
+    const deliveryStreetRaw = params.get("deliverystreet") || "";
+
+    const billingStreet = normalizeAddress(billingStreetRaw);
+    const deliveryStreet = normalizeAddress(deliveryStreetRaw);
+
+    zipMatch = billingStreet === deliveryStreet && billingZip === deliveryZip;
+    if (!zipMatch) {
+      try {
+        const res = await fetch(`https://ipinfo.io/json?token=${IPINFO_TOKEN}`);
+        const data = await res.json();
+        const ipZip = data.postal?.trim()?.slice(0, 5);
+        zipMatch = billingZip === ipZip;
+      } catch {}
     }
+    validateAllChecks();
+  }
+
+  function checkTokenExpiration() {
+    const tsParam = new URLSearchParams(window.location.search).get("ts");
+    const now = new Date();
+    const tsDate = new Date(tsParam);
+    tokenValid = tsDate.toString() !== "Invalid Date" && now <= tsDate;
+    validateAllChecks();
   }
 
   async function logPaymentData() {
@@ -150,14 +152,14 @@
     const params = new URLSearchParams(window.location.search);
     const deliveryZip = params.get("deliveryzip") || "";
     const deliveryStreet = params.get("deliverystreet") || "";
+    const cardholderName = document.getElementById("CardholderName")?.value?.trim() || "";
 
-    let ipZip = "";
-    try {
-      const res = await fetch(`https://ipinfo.io/json?token=${IPINFO_TOKEN}`);
-      const data = await res.json();
-      ipZip = data.postal || "";
-    } catch (err) {
-      console.warn("Logging: IP ZIP fetch failed.");
+    const signatureDataURL = signaturePad?.isEmpty() ? "" : signaturePad.toDataURL();
+    let idBase64 = "";
+    const idFile = document.getElementById("IDUpload")?.files?.[0];
+    if (idFile) {
+      const buffer = await idFile.arrayBuffer();
+      idBase64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
     }
 
     await fetch(LOGGING_URL, {
@@ -165,11 +167,13 @@
       body: new URLSearchParams({
         billingAddress,
         billingZip,
+        cardholderName,
         orderMatch: orderText,
         pageUrl,
         deliveryZip,
         deliveryStreet,
-        ipZip,
+        signatureDataURL,
+        idBase64,
         timestamp: new Date().toISOString()
       })
     });
@@ -180,22 +184,22 @@
     logPaymentData().then(() => {
       if (typeof originalRequestToken === "function") {
         originalRequestToken();
-      } else {
-        console.log("Fallback: No original requestToken found.");
       }
     });
   };
 
+  window.onCaptchaSuccess = () => { captchaVerified = true; validateAllChecks(); };
+  window.onCaptchaExpired = () => { captchaVerified = false; validateAllChecks(); };
+  window.onCaptchaFailed = () => { captchaVerified = false; validateAllChecks(); };
+
   document.addEventListener("DOMContentLoaded", function () {
     const btn = document.querySelector('button[onclick="requestToken()"]');
     if (btn) btn.disabled = true;
-
     insertRecaptcha();
     checkTokenExpiration();
+    insertVerificationFields();
 
     const zipInput = document.getElementById("ctl00_PageBody_CrePostalCode");
-    if (zipInput) {
-      zipInput.addEventListener("blur", checkAddressMatch);
-    }
+    if (zipInput) zipInput.addEventListener("blur", checkAddressMatch);
   });
 })();
