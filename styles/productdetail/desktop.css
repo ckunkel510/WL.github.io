@@ -52,3 +52,19 @@ width: 100% !important;
 .method-box.selected {
   background-color: #fef2f2;
 }
+
+#product-page {
+    flex-direction: column;
+  }
+
+  #product-image-wrapper {
+    order: 1;
+  }
+
+  #product-sidebar {
+    order: 2;
+  }
+
+  #product-main {
+    order: 3;
+  }
