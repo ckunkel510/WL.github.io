@@ -63,7 +63,7 @@ width: 100% !important;
   #main-block{
     display: flex;
     flex-direction: column;
-    flex: 1 1 auto;
+    flex: 1 1 65%;
     gap: 20px;
   }
 
