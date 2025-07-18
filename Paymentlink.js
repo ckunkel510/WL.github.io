@@ -29,40 +29,24 @@
       .trim();
   }
 
-  function insertRecaptcha() {
-    const targetBtn = document.querySelector('button[onclick="requestToken()"]');
-    if (!targetBtn) return;
+  function buildFormElements() {
+    const container = document.querySelector("#ctl00_PageBody_CrePostalCode").closest(".container.narrow-panel");
+    if (!container) return;
 
-    const container = document.createElement("div");
-    container.id = "recaptcha-container";
-    container.className = "g-recaptcha";
-    container.setAttribute("data-sitekey", RECAPTCHA_SITE_KEY);
-    container.setAttribute("data-callback", "onCaptchaSuccess");
-    container.setAttribute("data-expired-callback", "onCaptchaExpired");
-    container.setAttribute("data-error-callback", "onCaptchaFailed");
+    // Clear recaptcha container to move to bottom
+    const oldRecaptcha = document.getElementById("recaptcha-container");
+    if (oldRecaptcha) oldRecaptcha.remove();
 
-    targetBtn.parentNode.insertBefore(container, targetBtn);
-    const script = document.createElement("script");
-    script.src = "https://www.google.com/recaptcha/api.js";
-    script.async = true;
-    script.defer = true;
-    document.body.appendChild(script);
-  }
+    const cardholderLabel = document.createElement("label");
+    cardholderLabel.textContent = "Cardholder Name:";
+    const cardholderInput = document.createElement("input");
+    cardholderInput.id = "CardholderName";
+    cardholderInput.placeholder = "Enter name as it appears on the card";
+    cardholderInput.style = "display:block;width:100%;margin-bottom:6px";
 
-  function insertVerificationFields() {
-    const targetBtn = document.querySelector('button[onclick="requestToken()"]');
-    if (!targetBtn) return;
-    const container = targetBtn.parentNode;
+    const billingAddressGroup = document.getElementById("ctl00_PageBody_CreBillingAddress").closest(".form-group");
+    const billingZipGroup = document.getElementById("ctl00_PageBody_CrePostalCode").closest(".form-group");
 
-    // Cardholder name
-    const nameLabel = document.createElement("label");
-    nameLabel.textContent = "Cardholder Name:";
-    const nameInput = document.createElement("input");
-    nameInput.id = "CardholderName";
-    nameInput.placeholder = "Enter name as it appears on the card";
-    nameInput.style = "display:block;width:100%;margin-bottom:6px";
-
-    // ID Upload
     const idLabel = document.createElement("label");
     idLabel.textContent = "Upload Photo ID:";
     const idInput = document.createElement("input");
@@ -71,9 +55,8 @@
     idInput.accept = "image/*";
     idInput.style = "display:block;margin-bottom:6px";
 
-    // Signature
     const sigLabel = document.createElement("label");
-    sigLabel.textContent = "Digital Signature:";
+    sigLabel.textContent = "Digital Signature (By signing, you certify this order is legitimate and subject to legal action if not):";
     const canvas = document.createElement("canvas");
     canvas.id = "SignaturePad";
     canvas.width = 300;
@@ -85,24 +68,50 @@
     clearBtn.type = "button";
     clearBtn.onclick = () => signaturePad?.clear();
 
-    container.appendChild(nameLabel);
-    container.appendChild(nameInput);
+    const recaptchaContainer = document.createElement("div");
+    recaptchaContainer.id = "recaptcha-container";
+    recaptchaContainer.className = "g-recaptcha";
+    recaptchaContainer.setAttribute("data-sitekey", RECAPTCHA_SITE_KEY);
+    recaptchaContainer.setAttribute("data-callback", "onCaptchaSuccess");
+    recaptchaContainer.setAttribute("data-expired-callback", "onCaptchaExpired");
+    recaptchaContainer.setAttribute("data-error-callback", "onCaptchaFailed");
+
+    // Insert all in order
+    container.insertBefore(cardholderLabel, billingAddressGroup);
+    container.insertBefore(cardholderInput, billingAddressGroup);
     container.appendChild(idLabel);
     container.appendChild(idInput);
     container.appendChild(sigLabel);
     container.appendChild(canvas);
     container.appendChild(clearBtn);
+    container.appendChild(recaptchaContainer);
 
     const script = document.createElement("script");
-    script.src = "https://cdn.jsdelivr.net/npm/signature_pad@4.1.5/dist/signature_pad.umd.min.js";
-    script.onload = () => {
+    script.src = "https://www.google.com/recaptcha/api.js";
+    script.async = true;
+    script.defer = true;
+    document.body.appendChild(script);
+
+    const sigScript = document.createElement("script");
+    sigScript.src = "https://cdn.jsdelivr.net/npm/signature_pad@4.1.5/dist/signature_pad.umd.min.js";
+    sigScript.onload = () => {
       signaturePad = new SignaturePad(canvas, {
         penColor: "black",
         backgroundColor: "white"
       });
     };
-    document.body.appendChild(script);
+    document.body.appendChild(sigScript);
   }
+
+  // Leave rest of fraud logic as-is from previous file
+
+  document.addEventListener("DOMContentLoaded", function () {
+    buildFormElements();
+    const btn = document.querySelector('button[onclick="requestToken()"]');
+    if (btn) btn.disabled = true;
+  });
+})();
+
 
   function validateAllChecks() {
     const btn = document.querySelector('button[onclick="requestToken()"]');
