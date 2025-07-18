@@ -60,8 +60,8 @@ width: 100% !important;
 
   #product-sidebar {
     order: 2;
-    max-width: 400px;
-    margin-left: 10%;
+    margin-left: 20%;
+    min-width:350px;
 
   }
 
