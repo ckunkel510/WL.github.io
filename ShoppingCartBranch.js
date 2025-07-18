@@ -69,81 +69,85 @@ if (window.location.pathname === "/ShoppingCart.aspx") {
   }
 
   async function getStockForCart(accountBranch) {
-    console.log("[CartBranch] Checking stock availability across branches...");
+  console.log("[CartBranch] Checking stock availability across branches...");
 
-    for (const item of cartItems) {
-      console.log(`[CartBranch] Fetching stock for PID ${item.pid}...`);
+  const useActualColumn = !!accountBranch;
+  const columnIndex = useActualColumn ? 4 : 2;
 
-      try {
-        const res = await fetch(`https://webtrack.woodsonlumber.com/Catalog/ShowStock.aspx?productid=${item.pid}`);
-        const html = await res.text();
-        const temp = document.createElement("div");
-        temp.innerHTML = html;
+  for (const item of cartItems) {
+    console.log(`[CartBranch] Fetching stock for PID ${item.pid}...`);
 
-        const table = temp.querySelector("#StockDataGrid_ctl00");
-        if (!table) {
-          console.warn(`[CartBranch] No stock table found for PID ${item.pid}`);
-          continue;
-        }
+    try {
+      const res = await fetch(`https://webtrack.woodsonlumber.com/Catalog/ShowStock.aspx?productid=${item.pid}`);
+      const html = await res.text();
+      const temp = document.createElement("div");
+      temp.innerHTML = html;
 
-        const rows = table.querySelectorAll("tr");
-        let accountBranchHasStock = false;
-
-        for (const row of rows) {
-          const cells = row.querySelectorAll("td");
-          if (cells.length < 5) continue;
-
-          const branchName = cells[0].textContent.trim();
-          const qtyText = cells[2].textContent.trim();
-          const qty = parseFloat(qtyText.replace(/,/g, ""));
-
-          if (!STORES.includes(branchName)) continue;
-
-          console.log(`[CartBranch] Branch ${branchName} has ${qty} for PID ${item.pid} (need ${item.qty})`);
-
-          if (branchName === accountBranch && qty >= item.qty) {
-            accountBranchHasStock = true;
-            console.log(`[CartBranch] --> Account branch ${accountBranch} can fulfill PID ${item.pid}`);
-          }
-
-          if (qty >= item.qty) {
-            branchScores[branchName] = (branchScores[branchName] || 0) + 1;
-          }
-        }
-
-        if (accountBranchHasStock === false) {
-          console.log(`[CartBranch] Account branch cannot fulfill PID ${item.pid}`);
-        }
-
-      } catch (err) {
-        console.error(`[CartBranch] Failed to fetch stock for PID ${item.pid}:`, err);
+      const table = temp.querySelector("#StockDataGrid_ctl00");
+      if (!table) {
+        console.warn(`[CartBranch] No stock table found for PID ${item.pid}`);
+        continue;
       }
+
+      const rows = table.querySelectorAll("tr");
+      let accountBranchHasStock = false;
+
+      for (const row of rows) {
+        const cells = row.querySelectorAll("td");
+        if (cells.length < columnIndex + 1) continue;
+
+        const branchName = cells[0].textContent.trim();
+        const qtyText = cells[columnIndex].textContent.trim();
+        const qty = parseFloat(qtyText.replace(/,/g, ""));
+
+        if (!STORES.includes(branchName)) continue;
+
+        console.log(`[CartBranch] Branch ${branchName} has ${qty} for PID ${item.pid} (need ${item.qty})`);
+
+        if (branchName === accountBranch && qty >= item.qty) {
+          accountBranchHasStock = true;
+          console.log(`[CartBranch] --> Account branch ${accountBranch} can fulfill PID ${item.pid}`);
+        }
+
+        if (qty >= item.qty) {
+          branchScores[branchName] = (branchScores[branchName] || 0) + 1;
+        }
+      }
+
+      if (!accountBranchHasStock) {
+        console.log(`[CartBranch] Account branch cannot fulfill PID ${item.pid}`);
+      }
+
+    } catch (err) {
+      console.error(`[CartBranch] Failed to fetch stock for PID ${item.pid}:`, err);
     }
+  }
 
-    console.log("[CartBranch] Final branch scores:", branchScores);
+  console.log("[CartBranch] Final branch scores:", branchScores);
 
-    const itemCount = cartItems.length;
+  const itemCount = cartItems.length;
 
-    if (accountBranch && branchScores[accountBranch] === itemCount) {
-      console.log(`[CartBranch] Account branch ${accountBranch} can fulfill all items. Storing...`);
-      localStorage.setItem("woodson_cart_branch", accountBranch);
+  if (accountBranch && branchScores[accountBranch] === itemCount) {
+    console.log(`[CartBranch] Account branch ${accountBranch} can fulfill all items. Storing...`);
+    localStorage.setItem("woodson_cart_branch", accountBranch);
+  } else {
+    const fullMatch = Object.entries(branchScores).find(([_, count]) => count === itemCount);
+    if (fullMatch) {
+      const [branch] = fullMatch;
+      console.log(`[CartBranch] Alternate branch ${branch} can fulfill all items.`);
+      localStorage.setItem("woodson_cart_branch", branch);
     } else {
-      const fullMatch = Object.entries(branchScores).find(([_, count]) => count === itemCount);
-      if (fullMatch) {
-        const [branch] = fullMatch;
-        console.log(`[CartBranch] Alternate branch ${branch} can fulfill all items.`);
+      const fallback = Object.entries(branchScores).sort((a, b) => b[1] - a[1])[0];
+      if (fallback) {
+        const [branch] = fallback;
+        console.log(`[CartBranch] Partial match: ${branch} can fulfill ${branchScores[branch]} of ${itemCount} items.`);
         localStorage.setItem("woodson_cart_branch", branch);
       } else {
-        const fallback = Object.entries(branchScores).sort((a, b) => b[1] - a[1])[0];
-        if (fallback) {
-          const [branch] = fallback;
-          console.log(`[CartBranch] Partial match: ${branch} can fulfill ${branchScores[branch]} of ${itemCount} items.`);
-          localStorage.setItem("woodson_cart_branch", branch);
-        } else {
-          console.warn("[CartBranch] No matching branch could fulfill any items.");
-        }
+        console.warn("[CartBranch] No matching branch could fulfill any items.");
       }
     }
   }
+}
+
 }
 
