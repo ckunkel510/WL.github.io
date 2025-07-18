@@ -62,6 +62,7 @@ width: 100% !important;
     order: 2;
     margin-left: 20%;
     min-width:350px !important;
+    max-width:350px !important;
 
   }
 
