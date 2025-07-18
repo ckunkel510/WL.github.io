@@ -244,7 +244,7 @@ $buyBox.prepend($methodRow, $banner);
   const $imageWrap = $("<div>", { id: "product-image-wrapper" });
   $imageWrap.append($imageTd);
 
-  if (window.innerWidth > 768) {
+  if (window.innerWidth > 1024) {
     $mainBlock.append($imageWrap, $main);
     $pageWrapper.append($mainBlock, $sidebar);
   } else {
