@@ -25,6 +25,13 @@ $(document).ready(function () {
     borderRadius: "8px",
     boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
   });
+  const $mainBlock = $("<div>", { id: "main-block" }).css({
+  display: "flex",
+  flexDirection: "column",
+  gap: "20px",
+  flex: "1 1 auto",
+});
+
 
   // Buy box container
   const $buyBox = $("<div>").addClass("buy-box").css({
@@ -45,7 +52,7 @@ $(document).ready(function () {
     order: 1,
   });
   $imageWrap.append($imageTd);
-  $pageWrapper.append($imageWrap); // <-- insert outside main/sidebar
+  
 }
 
 
@@ -233,6 +240,18 @@ $buyBox.prepend($methodRow, $banner);
   }, 250);
 
   // Inject layout
-  $pageWrapper.append($main, $sidebar);
+  if ($imageTd.length) {
+  const $imageWrap = $("<div>", { id: "product-image-wrapper" });
+  $imageWrap.append($imageTd);
+
+  if (window.innerWidth > 768) {
+    $mainBlock.append($imageWrap, $main);
+    $pageWrapper.append($mainBlock, $sidebar);
+  } else {
+    // Mobile layout: image first, then sidebar, then description
+    $pageWrapper.append($imageWrap, $sidebar, $main);
+  }
+}
+
   $insertionPoint.after($pageWrapper);
 });
