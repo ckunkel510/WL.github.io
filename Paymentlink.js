@@ -10,53 +10,45 @@
 
   function normalizeAddress(addr) {
     if (!addr) return "";
-    return addr
-      .toLowerCase()
-      .replace(/\./g, "")
-      .replace(/,/g, "")
-      .replace(/-/g, " ")
-      .replace(/\bcr\b/g, "county road")
-      .replace(/\bc\.r\b/g, "county road")
-      .replace(/\bst\b/g, "street")
-      .replace(/\brd\b/g, "road")
-      .replace(/\bdr\b/g, "drive")
-      .replace(/\bln\b/g, "lane")
-      .replace(/\bblvd\b/g, "boulevard")
-      .replace(/\bave\b/g, "avenue")
-      .replace(/\bsuite\b/g, "ste")
-      .replace(/\bapt\b/g, "apartment")
-      .replace(/\s+/g, " ")
-      .trim();
+    return addr.toLowerCase()
+      .replace(/\./g, "").replace(/,/g, "").replace(/-/g, " ")
+      .replace(/\bcr\b/g, "county road").replace(/\bc\.r\b/g, "county road")
+      .replace(/\bst\b/g, "street").replace(/\brd\b/g, "road")
+      .replace(/\bdr\b/g, "drive").replace(/\bln\b/g, "lane")
+      .replace(/\bblvd\b/g, "boulevard").replace(/\bave\b/g, "avenue")
+      .replace(/\bsuite\b/g, "ste").replace(/\bapt\b/g, "apartment")
+      .replace(/\s+/g, " ").trim();
   }
 
-  function buildFormElements() {
-    const container = document.querySelector("#ctl00_PageBody_CrePostalCode").closest(".container.narrow-panel");
-    if (!container) return;
+  function insertCustomFields() {
+    const btn = document.querySelector('button[onclick="requestToken()"]');
+    if (!btn) return;
 
-    // Clear recaptcha container to move to bottom
-    const oldRecaptcha = document.getElementById("recaptcha-container");
-    if (oldRecaptcha) oldRecaptcha.remove();
+    const parent = btn.parentNode;
+    const wrapper = document.createElement("div");
+    wrapper.style = "margin-bottom: 12px; padding: 10px; border: 1px solid #aaa; background: #f9f9f9;";
 
-    const cardholderLabel = document.createElement("label");
-    cardholderLabel.textContent = "Cardholder Name:";
-    const cardholderInput = document.createElement("input");
-    cardholderInput.id = "CardholderName";
-    cardholderInput.placeholder = "Enter name as it appears on the card";
-    cardholderInput.style = "display:block;width:100%;margin-bottom:6px";
+    // 1. Cardholder Name
+    wrapper.appendChild(createLabeledInput("Cardholder Name:", "CardholderName", "Enter name as it appears on the card"));
 
-    const billingAddressGroup = document.getElementById("ctl00_PageBody_CreBillingAddress").closest(".form-group");
-    const billingZipGroup = document.getElementById("ctl00_PageBody_CrePostalCode").closest(".form-group");
+    // 2. Billing Address & ZIP Code already on the page — we just add spacing
+    addFieldRef(wrapper, "ctl00_PageBody_CreBillingAddress", "Billing Address:");
+    addFieldRef(wrapper, "ctl00_PageBody_CrePostalCode", "ZIP Code:");
 
+    // 3. Upload Photo ID
     const idLabel = document.createElement("label");
     idLabel.textContent = "Upload Photo ID:";
     const idInput = document.createElement("input");
     idInput.id = "IDUpload";
     idInput.type = "file";
     idInput.accept = "image/*";
-    idInput.style = "display:block;margin-bottom:6px";
+    idInput.style = "display:block;margin-bottom:8px";
+    wrapper.appendChild(idLabel);
+    wrapper.appendChild(idInput);
 
+    // 4. Signature Pad
     const sigLabel = document.createElement("label");
-    sigLabel.textContent = "Digital Signature (By signing, you certify this order is legitimate and subject to legal action if not):";
+    sigLabel.textContent = "Digital Signature:";
     const canvas = document.createElement("canvas");
     canvas.id = "SignaturePad";
     canvas.width = 300;
@@ -66,52 +58,73 @@
     const clearBtn = document.createElement("button");
     clearBtn.textContent = "Clear Signature";
     clearBtn.type = "button";
+    clearBtn.style = "margin-bottom:8px";
     clearBtn.onclick = () => signaturePad?.clear();
 
-    const recaptchaContainer = document.createElement("div");
-    recaptchaContainer.id = "recaptcha-container";
-    recaptchaContainer.className = "g-recaptcha";
-    recaptchaContainer.setAttribute("data-sitekey", RECAPTCHA_SITE_KEY);
-    recaptchaContainer.setAttribute("data-callback", "onCaptchaSuccess");
-    recaptchaContainer.setAttribute("data-expired-callback", "onCaptchaExpired");
-    recaptchaContainer.setAttribute("data-error-callback", "onCaptchaFailed");
+    wrapper.appendChild(sigLabel);
+    wrapper.appendChild(canvas);
+    wrapper.appendChild(clearBtn);
 
-    // Insert all in order
-    container.insertBefore(cardholderLabel, billingAddressGroup);
-    container.insertBefore(cardholderInput, billingAddressGroup);
-    container.appendChild(idLabel);
-    container.appendChild(idInput);
-    container.appendChild(sigLabel);
-    container.appendChild(canvas);
-    container.appendChild(clearBtn);
-    container.appendChild(recaptchaContainer);
+    // 5. Aggressive Legal Warning
+    const warning = document.createElement("p");
+    warning.style = "color:#a00;font-weight:bold;margin-bottom:10px;";
+    warning.textContent = "WARNING: Submitting false information or unauthorized payment will result in account termination and may be referred for prosecution under federal law.";
+    wrapper.appendChild(warning);
 
+    // 6. reCAPTCHA
+    const recaptcha = document.createElement("div");
+    recaptcha.id = "recaptcha-container";
+    recaptcha.className = "g-recaptcha";
+    recaptcha.setAttribute("data-sitekey", RECAPTCHA_SITE_KEY);
+    recaptcha.setAttribute("data-callback", "onCaptchaSuccess");
+    recaptcha.setAttribute("data-expired-callback", "onCaptchaExpired");
+    recaptcha.setAttribute("data-error-callback", "onCaptchaFailed");
+    wrapper.appendChild(recaptcha);
+
+    parent.insertBefore(wrapper, btn);
+
+    // Signature Pad Script
     const script = document.createElement("script");
-    script.src = "https://www.google.com/recaptcha/api.js";
-    script.async = true;
-    script.defer = true;
-    document.body.appendChild(script);
-
-    const sigScript = document.createElement("script");
-    sigScript.src = "https://cdn.jsdelivr.net/npm/signature_pad@4.1.5/dist/signature_pad.umd.min.js";
-    sigScript.onload = () => {
+    script.src = "https://cdn.jsdelivr.net/npm/signature_pad@4.1.5/dist/signature_pad.umd.min.js";
+    script.onload = () => {
       signaturePad = new SignaturePad(canvas, {
         penColor: "black",
         backgroundColor: "white"
       });
     };
-    document.body.appendChild(sigScript);
+    document.body.appendChild(script);
+
+    // Load reCAPTCHA
+    const recaptchaScript = document.createElement("script");
+    recaptchaScript.src = "https://www.google.com/recaptcha/api.js";
+    recaptchaScript.async = true;
+    recaptchaScript.defer = true;
+    document.body.appendChild(recaptchaScript);
   }
 
-  // Leave rest of fraud logic as-is from previous file
+  function createLabeledInput(labelText, id, placeholder = "") {
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    const input = document.createElement("input");
+    input.id = id;
+    input.placeholder = placeholder;
+    input.style = "display:block;width:100%;margin-bottom:8px";
+    const container = document.createElement("div");
+    container.appendChild(label);
+    container.appendChild(input);
+    return container;
+  }
 
-  document.addEventListener("DOMContentLoaded", function () {
-    buildFormElements();
-    const btn = document.querySelector('button[onclick="requestToken()"]');
-    if (btn) btn.disabled = true;
-  });
-})();
-
+  function addFieldRef(wrapper, existingId, labelText) {
+    const field = document.getElementById(existingId);
+    if (field) {
+      const label = document.createElement("label");
+      label.textContent = labelText;
+      label.style = "margin-top:8px;display:block";
+      wrapper.appendChild(label);
+      wrapper.appendChild(field);
+    }
+  }
 
   function validateAllChecks() {
     const btn = document.querySelector('button[onclick="requestToken()"]');
@@ -120,7 +133,7 @@
     const cardholderFilled = document.getElementById("CardholderName")?.value?.trim()?.length > 2;
     const ready = captchaVerified && zipMatch && tokenValid && sigOk && idUploaded && cardholderFilled;
     if (btn) btn.disabled = !ready;
-    console.log("Validation Status — CAPTCHA:", captchaVerified, "ZIP Match:", zipMatch, "Token OK:", tokenValid);
+    console.log("Validation:", { captchaVerified, zipMatch, tokenValid, sigOk, idUploaded, cardholderFilled });
   }
 
   async function checkAddressMatch() {
@@ -162,7 +175,6 @@
     const deliveryZip = params.get("deliveryzip") || "";
     const deliveryStreet = params.get("deliverystreet") || "";
     const cardholderName = document.getElementById("CardholderName")?.value?.trim() || "";
-
     const signatureDataURL = signaturePad?.isEmpty() ? "" : signaturePad.toDataURL();
     let idBase64 = "";
     const idFile = document.getElementById("IDUpload")?.files?.[0];
@@ -204,9 +216,8 @@
   document.addEventListener("DOMContentLoaded", function () {
     const btn = document.querySelector('button[onclick="requestToken()"]');
     if (btn) btn.disabled = true;
-    insertRecaptcha();
     checkTokenExpiration();
-    insertVerificationFields();
+    insertCustomFields();
 
     const zipInput = document.getElementById("ctl00_PageBody_CrePostalCode");
     if (zipInput) zipInput.addEventListener("blur", checkAddressMatch);
