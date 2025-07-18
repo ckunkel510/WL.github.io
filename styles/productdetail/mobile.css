@@ -19,3 +19,19 @@ max-width: 100%;
 .rmpView iframe{
 background-color: #f0f0f0;
 }
+
+#product-page {
+    flex-direction: column;
+  }
+
+  #product-image-wrapper {
+    order: 1;
+  }
+
+  #product-sidebar {
+    order: 2;
+  }
+
+  #product-main {
+    order: 3;
+  }
