@@ -7,6 +7,27 @@
   let zipMatch = false;
   let tokenValid = false;
 
+  function normalizeAddress(addr) {
+    if (!addr) return "";
+    return addr
+      .toLowerCase()
+      .replace(/\./g, "")
+      .replace(/,/g, "")
+      .replace(/-/g, " ")
+      .replace(/\bcr\b/g, "county road")
+      .replace(/\bc\.r\b/g, "county road")
+      .replace(/\bst\b/g, "street")
+      .replace(/\brd\b/g, "road")
+      .replace(/\bdr\b/g, "drive")
+      .replace(/\bln\b/g, "lane")
+      .replace(/\bblvd\b/g, "boulevard")
+      .replace(/\bave\b/g, "avenue")
+      .replace(/\bsuite\b/g, "ste")
+      .replace(/\bapt\b/g, "apartment")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
   function insertRecaptcha() {
     const targetBtn = document.querySelector('button[onclick="requestToken()"]');
     if (!targetBtn) return;
@@ -27,7 +48,6 @@
     document.body.appendChild(script);
   }
 
-  // Global reCAPTCHA callbacks
   window.onCaptchaSuccess = function () {
     captchaVerified = true;
     validateAllChecks();
@@ -44,56 +64,45 @@
   function checkTokenExpiration() {
     const params = new URLSearchParams(window.location.search);
     const tsParam = params.get("ts");
-
-    if (!tsParam) {
-      console.warn("Missing ts parameter in URL.");
-      tokenValid = false;
-      validateAllChecks();
-      return;
-    }
-
     const now = new Date();
     const tsDate = new Date(tsParam);
 
     console.log("Parsed ts:", tsDate.toDateString(), "| Now:", now.toDateString());
 
-    // Check if the ts date is today or in the future (min 1-day validity)
-    if (tsDate.toString() === "Invalid Date") {
-      tokenValid = false;
-    } else {
-      tokenValid = now <= tsDate;
-    }
-
+    tokenValid = tsDate.toString() !== "Invalid Date" && now <= tsDate;
     validateAllChecks();
   }
 
-  async function checkZipMatch() {
+  async function checkAddressMatch() {
+    const billingStreetRaw = document.getElementById("ctl00_PageBody_CreBillingAddress")?.value || "";
     const billingZip = document.getElementById("ctl00_PageBody_CrePostalCode")?.value?.trim()?.slice(0, 5);
     const params = new URLSearchParams(window.location.search);
     const deliveryZip = params.get("deliveryzip")?.trim()?.slice(0, 5);
-    let ipZip = "";
+    const deliveryStreetRaw = params.get("deliverystreet") || "";
 
-    console.log("Billing ZIP:", billingZip, "| Delivery ZIP:", deliveryZip);
+    const billingStreet = normalizeAddress(billingStreetRaw);
+    const deliveryStreet = normalizeAddress(deliveryStreetRaw);
 
-    if (billingZip && deliveryZip && billingZip === deliveryZip) {
-      console.log("ZIP Match: Billing matches delivery ZIP");
+    const msgEl = document.getElementById("SecureWarningMessage");
+    if (msgEl) msgEl.remove();
+
+    if (billingStreet && deliveryStreet && billingStreet === deliveryStreet) {
+      console.log("Street Match: Billing matches delivery street.");
       zipMatch = true;
       validateAllChecks();
       return;
     }
 
-    // Fallback: IP ZIP check
     try {
       const res = await fetch(`https://ipinfo.io/json?token=${IPINFO_TOKEN}`);
       const data = await res.json();
-      ipZip = data.postal?.trim()?.slice(0, 5);
-      console.log("IP ZIP:", ipZip);
+      const ipZip = data.postal?.trim()?.slice(0, 5);
 
       if (billingZip && ipZip && billingZip === ipZip) {
-        console.log("ZIP Match: Billing matches IP ZIP");
+        console.log("ZIP fallback passed");
         zipMatch = true;
       } else {
-        console.warn("ZIP Mismatch: Neither delivery nor IP ZIP matched billing");
+        console.warn("Failed both checks");
         zipMatch = false;
       }
     } catch (err) {
@@ -102,6 +111,16 @@
     }
 
     validateAllChecks();
+
+    if (!zipMatch) {
+      const msg = document.createElement("div");
+      msg.id = "SecureWarningMessage";
+      msg.style = "margin-top: 12px; color: darkred; font-weight: bold;";
+      msg.innerText =
+        "We couldn’t verify your billing details. Please double-check your address and ZIP, or try again from your home or business network. If problems persist, give us a call.";
+      const btn = document.querySelector('button[onclick="requestToken()"]');
+      if (btn) btn.insertAdjacentElement("afterend", msg);
+    }
   }
 
   function validateAllChecks() {
@@ -118,7 +137,9 @@
     const billingZip = document.getElementById("ctl00_PageBody_CrePostalCode")?.value?.trim() || "";
     const orderText = document.querySelector(".PaymentTotalPanel")?.textContent || "";
     const pageUrl = window.location.href;
-    const deliveryZip = new URLSearchParams(window.location.search).get("deliveryzip") || "";
+    const params = new URLSearchParams(window.location.search);
+    const deliveryZip = params.get("deliveryzip") || "";
+    const deliveryStreet = params.get("deliverystreet") || "";
 
     let ipZip = "";
     try {
@@ -137,13 +158,13 @@
         orderMatch: orderText,
         pageUrl,
         deliveryZip,
+        deliveryStreet,
         ipZip,
         timestamp: new Date().toISOString()
       })
     });
   }
 
-  // Wrap requestToken to log before continuing
   const originalRequestToken = window.requestToken;
   window.requestToken = function () {
     logPaymentData().then(() => {
@@ -155,7 +176,6 @@
     });
   };
 
-  // Init sequence
   document.addEventListener("DOMContentLoaded", function () {
     const btn = document.querySelector('button[onclick="requestToken()"]');
     if (btn) btn.disabled = true;
@@ -165,7 +185,7 @@
 
     const zipInput = document.getElementById("ctl00_PageBody_CrePostalCode");
     if (zipInput) {
-      zipInput.addEventListener("blur", checkZipMatch);
+      zipInput.addEventListener("blur", checkAddressMatch);
     }
   });
 })();
