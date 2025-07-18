@@ -5,6 +5,9 @@ if (window.location.pathname === "/ShoppingCart.aspx") {
   const SELECTED_KEY = "woodson_cart_branch";
   const DROPDOWN_ID = "#ctl00_PageBody_BranchDropDownList";
 
+  localStorage.removeItem("woodson_cart_branch");
+console.log("[CartBranchDropdown] Cleared stored branch after applying.");
+
   window.addEventListener("load", () => {
     const storedBranch = localStorage.getItem(SELECTED_KEY);
     console.log("[CartBranch] Stored branch in localStorage:", storedBranch);
