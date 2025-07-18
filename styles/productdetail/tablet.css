@@ -7,6 +7,7 @@ display: none !important;
 
   #product-image-wrapper {
     order: 1;
+    margin: auto;
   }
 
   #product-sidebar {
@@ -15,4 +16,8 @@ display: none !important;
 
   #product-main {
     order: 3;
+    margin:auto;
+  }
+  #ctl00_PageBody_productDetail_productDescription{
+    width:100% !important;
   }
