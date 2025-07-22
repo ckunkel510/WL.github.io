@@ -1,11 +1,22 @@
 (function () {
-  if (!window.location.pathname.includes("AccountPayment_r.aspx")) return;
+  if (!window.location.pathname.includes("AccountPayment_r.aspx")) {
+    console.log("[ForteVault] Not on AccountPayment_r.aspx — skipping script.");
+    return;
+  }
+
+  console.log("[ForteVault] Script running on AccountPayment_r.aspx");
 
   const userID = getCookie("wl_user_id");
-  if (!userID) return;
+  console.log("[ForteVault] Cookie wl_user_id:", userID);
+
+  if (!userID) {
+    console.warn("[ForteVault] No wl_user_id cookie found.");
+    return;
+  }
 
   let vaultedAccounts = [];
 
+  // 🔄 Fetch saved payment methods
   fetch("https://wlmarketingdashboard.vercel.app/api/getVaultedAccounts", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -13,33 +24,49 @@
   })
     .then(res => res.json())
     .then(data => {
-      if (data?.paymentMethods?.length) {
+      console.log("[ForteVault] Vault fetch response:", data);
+
+      if (data?.paymentMethods?.length > 0) {
         window.vaultedAccounts = data.paymentMethods;
         vaultedAccounts = data.paymentMethods;
-        console.log("[ForteVault] Found vaulted accounts");
+        console.log(`[ForteVault] Found ${vaultedAccounts.length} vaulted accounts.`);
       } else {
-        console.log("[ForteVault] No saved vault accounts");
+        console.log("[ForteVault] No saved payment methods found.");
       }
 
       attachPaymentIntercept();
+    })
+    .catch(err => {
+      console.error("[ForteVault] Error fetching vaulted accounts:", err);
     });
 
   function attachPaymentIntercept() {
     const paymentBtn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
-    if (!paymentBtn) return;
+
+    if (!paymentBtn) {
+      console.warn("[ForteVault] Payment button not found on page.");
+      return;
+    }
+
+    console.log("[ForteVault] Attaching event listener to Make Payment button");
 
     paymentBtn.addEventListener("click", function (e) {
       e.preventDefault();
+      console.log("[ForteVault] Make Payment button clicked.");
 
       if (vaultedAccounts.length > 0) {
+        console.log("[ForteVault] Showing modal with saved methods");
         showVaultModal(vaultedAccounts);
       } else {
+        console.log("[ForteVault] No saved accounts — showing 'Add New' modal");
         showNoAccountModal();
       }
     });
   }
 
   function showVaultModal(accounts) {
+    console.log("[ForteVault] Launching vault selection modal");
+
     const modal = createModal();
 
     const title = document.createElement("h2");
@@ -53,6 +80,7 @@
       btn.textContent = `${pm.label} ••••${pm.last4}`;
       btn.style.cssText = baseBtnStyle();
       btn.onclick = () => {
+        console.log("[ForteVault] User selected token:", pm.token);
         sessionStorage.setItem("selectedPaymethodToken", pm.token);
         cleanupModal();
         document.querySelector("#ctl00_PageBody_ForteMakePayment").click();
@@ -61,6 +89,7 @@
     });
 
     const newBtn = createPrimaryButton("Use a New Account", () => {
+      console.log("[ForteVault] User clicked 'Use a New Account'");
       cleanupModal();
       document.querySelector("#ctl00_PageBody_ForteMakePayment").click();
     });
@@ -69,6 +98,8 @@
   }
 
   function showNoAccountModal() {
+    console.log("[ForteVault] Showing 'No saved accounts' modal");
+
     const modal = createModal();
 
     const title = document.createElement("h2");
@@ -78,6 +109,7 @@
     text.textContent = "You’ll need to add a bank account before you can make a payment.";
 
     const addBtn = createPrimaryButton("Add Payment Method", () => {
+      console.log("[ForteVault] User chose to add new payment method");
       cleanupModal();
       document.querySelector("#ctl00_PageBody_ForteMakePayment").click();
     });
@@ -86,6 +118,8 @@
   }
 
   function createModal() {
+    console.log("[ForteVault] Creating modal overlay");
+
     const modal = document.createElement("div");
     modal.id = "vaultModal";
     modal.style.cssText = `
@@ -123,7 +157,10 @@
 
   function cleanupModal() {
     const modal = document.getElementById("vaultModal");
-    if (modal) modal.remove();
+    if (modal) {
+      console.log("[ForteVault] Cleaning up modal");
+      modal.remove();
+    }
   }
 
   function baseBtnStyle() {
