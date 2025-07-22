@@ -13,7 +13,7 @@ console.log("[ForteVault] Retrieved wl_user_id from localStorage:", userID);
   let vaultedAccounts = [];
 
   // 🔄 Fetch saved payment methods
-  fetch("https://wlmarketingdashboard.vercel.app/api/getVaultedAccounts", {
+  fetch("https://wlmarketingdashboard.vercel.app/api/getVaultedAccounts.js", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ userID })
