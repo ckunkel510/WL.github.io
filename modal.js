@@ -1,11 +1,5 @@
 (function () {
-  if (!window.location.pathname.includes("AccountPayment_r.aspx")) {
-    console.log("[ForteVault] Not on AccountPayment_r.aspx — skipping script.");
-    return;
-  }
-
-  console.log("[ForteVault] Script running on AccountPayment_r.aspx");
-
+  
   const userID = getCookie("wl_user_id");
   console.log("[ForteVault] Cookie wl_user_id:", userID);
 
@@ -172,8 +166,20 @@
   }
 
   function getCookie(name) {
-    const value = `; ${document.cookie}`;
-    const parts = value.split(`; ${name}=`);
-    if (parts.length === 2) return parts.pop().split(';').shift();
+  const cookies = document.cookie;
+  console.log("[ForteVault] Raw document.cookie:", cookies);
+
+  const cookieArray = cookies.split(";").map(c => c.trim());
+  for (let c of cookieArray) {
+    if (c.startsWith(name + "=")) {
+      const value = c.split("=").slice(1).join("=");
+      console.log(`[ForteVault] Matched cookie: ${name} = ${value}`);
+      return value;
+    }
   }
+
+  console.warn(`[ForteVault] Cookie '${name}' not found.`);
+  return null;
+}
+
 })();
