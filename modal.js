@@ -111,11 +111,24 @@
     });
 
     const newBtn = createPrimaryButton("Use a New Account", () => {
-      console.log("[ForteVault] User clicked 'Use a New Account'");
-      cleanupModal();
-      const paymentButton = document.querySelector("#ctl00_PageBody_ForteMakePayment");
-      if (paymentButton) paymentButton.click();
-    });
+  console.log("[ForteVault] User clicked 'Use a New Account'");
+  
+  // ✅ Set flag to skip modal so DEX overlay can launch
+  sessionStorage.setItem("skipVaultModal", "true");
+
+  cleanupModal();
+
+  // Flip payment radio to "Check" if needed
+  const checkRadio = document.querySelector("#ctl00_PageBody_rbPayByCheck");
+  if (checkRadio) {
+    checkRadio.checked = true;
+    checkRadio.click();
+  }
+
+  const paymentButton = document.querySelector("#ctl00_PageBody_ForteMakePayment");
+  if (paymentButton) paymentButton.click();
+});
+
 
     appendToModal(modal, [title, list, newBtn]);
   }
