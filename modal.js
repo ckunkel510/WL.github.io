@@ -1,6 +1,8 @@
 (function () {
   
-  const userID = getCookie("wl_user_id");
+  const userID = localStorage.getItem("wl_user_id");
+console.log("[ForteVault] Retrieved wl_user_id from localStorage:", userID);
+
   console.log("[ForteVault] Cookie wl_user_id:", userID);
 
   if (!userID) {
