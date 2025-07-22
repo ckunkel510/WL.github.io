@@ -228,3 +228,50 @@ body.checkout-page select {
 #ctl00_PageBody_InvoiceAddressPanel {
   width: 100%;
 }
+/* Wrap both address sections in a flex container */
+.address-section-wrapper {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 2rem;
+  margin-top: 1rem;
+}
+
+/* Individual address block */
+.address-section-wrapper > .epi-form-col-single-checkout {
+  flex: 1 1 48%;
+  min-width: 300px;
+  padding: 0;
+}
+
+/* Ensure .selected-address-display and .selected-invoice-address-display are full width inside */
+.selected-address-display,
+.selected-invoice-address-display {
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+/* Fix buttons spacing above address blocks */
+.epi-button:has(#ctl00_PageBody_CopyDeliveryAddressLinkButton),
+.epi-button:has(#ctl00_PageBody_CustomerAddressSelector_SelectAddressLinkButton) {
+  display: inline-block;
+  margin-bottom: 0.75rem;
+}
+
+/* Align labels + inputs better */
+.epi-form-group-checkout {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Consistent field widths */
+input[type="text"].form-control,
+select.form-control,
+textarea.form-control {
+  width: 100%;
+}
+
+/* Fix spacing above “Date required”, etc */
+.epi-form-group-checkout label {
+  margin-bottom: 4px;
+}
