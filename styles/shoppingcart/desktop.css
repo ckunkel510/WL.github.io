@@ -275,3 +275,7 @@ textarea.form-control {
 .epi-form-group-checkout label {
   margin-bottom: 4px;
 }
+
+.form-control{
+    height: 45px !important;
+}
