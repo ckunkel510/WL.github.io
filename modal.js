@@ -34,26 +34,34 @@
     });
 
   function attachPaymentIntercept() {
-    const paymentBtn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
+  const paymentBtn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
 
-    if (!paymentBtn) {
-      console.warn("[ForteVault] Payment button not found on page.");
-      return;
+  if (!paymentBtn) {
+    console.warn("[ForteVault] Payment button not found on page.");
+    return;
+  }
+
+  console.log("[ForteVault] Attaching event listener to Make Payment button");
+
+  paymentBtn.addEventListener("click", function (e) {
+    const skipVault = sessionStorage.getItem("skipVaultModal");
+
+    if (skipVault === "true") {
+      console.log("[ForteVault] Skipping vault modal — proceeding to overlay");
+      sessionStorage.removeItem("skipVaultModal");
+      return; // allow natural flow to DEX
     }
 
-    console.log("[ForteVault] Attaching event listener to Make Payment button");
+    e.preventDefault();
 
-    paymentBtn.addEventListener("click", function (e) {
-      e.preventDefault();
-      console.log("[ForteVault] Make Payment button clicked.");
+    if (vaultedAccounts.length > 0) {
+      showVaultModal(vaultedAccounts);
+    } else {
+      showNoAccountModal();
+    }
+  });
+}
 
-      if (vaultedAccounts.length > 0) {
-        showVaultModal(vaultedAccounts);
-      } else {
-        showNoAccountModal();
-      }
-    });
-  }
 
   function showVaultModal(accounts) {
     console.log("[ForteVault] Launching vault selection modal");
@@ -71,30 +79,34 @@
       btn.textContent = `${pm.label} ••••${pm.last4}`;
       btn.style.cssText = baseBtnStyle();
       btn.onclick = () => {
-        console.log("[ForteVault] User selected token:", pm.token);
-        sessionStorage.setItem("selectedPaymethodToken", pm.token);
+  console.log("[ForteVault] User selected token:", pm.token);
+  sessionStorage.setItem("selectedPaymethodToken", pm.token);
 
-        // Step 1: Close modal
-        cleanupModal();
+  // ✅ Set this flag to skip modal on next click
+  sessionStorage.setItem("skipVaultModal", "true");
 
-        // Step 2: Flip the payment radio to "Check"
-        const checkRadio = document.querySelector("#ctl00_PageBody_rbPayByCheck");
-        if (checkRadio) {
-          checkRadio.checked = true;
-          checkRadio.click();
-        }
+  // Step 1: Close modal
+  cleanupModal();
 
-        // Step 3: Trigger the overlay after short delay
-        setTimeout(() => {
-          const paymentButton = document.querySelector("#ctl00_PageBody_ForteMakePayment");
-          if (paymentButton) {
-            console.log("[ForteVault] Triggering Forte overlay with saved method...");
-            paymentButton.click(); // Triggers DEX overlay
-          } else {
-            console.warn("[ForteVault] Cannot find Forte payment button");
-          }
-        }, 500);
-      };
+  // Step 2: Flip the payment radio to "Check"
+  const checkRadio = document.querySelector("#ctl00_PageBody_rbPayByCheck");
+  if (checkRadio) {
+    checkRadio.checked = true;
+    checkRadio.click();
+  }
+
+  // Step 3: Trigger the overlay after short delay
+  setTimeout(() => {
+    const paymentButton = document.querySelector("#ctl00_PageBody_ForteMakePayment");
+    if (paymentButton) {
+      console.log("[ForteVault] Triggering Forte overlay with saved method...");
+      paymentButton.click(); // Triggers DEX overlay
+    } else {
+      console.warn("[ForteVault] Cannot find Forte payment button");
+    }
+  }, 500);
+};
+
       list.appendChild(btn);
     });
 
