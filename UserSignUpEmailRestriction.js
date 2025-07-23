@@ -1,4 +1,6 @@
 document.addEventListener('DOMContentLoaded', function () {
+  console.log('[WL Script] DOM loaded.');
+
   const input = document.getElementById('ctl00_PageBody_UserNameTextBox');
   const signupBtn = document.getElementById('ctl00_PageBody_SignupButton');
   const validator = document.getElementById('ctl00_PageBody_UserNameValidator');
@@ -6,8 +8,10 @@ document.addEventListener('DOMContentLoaded', function () {
   const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   const signInUrl = 'https://webtrack.woodsonlumber.com/SignIn.aspx?from=signup_redirect';
 
-  // Email validation + error message setup
+  // ========== EMAIL VALIDATION SETUP ==========
   if (input) {
+    console.log('[WL Script] Found username/email input.');
+
     input.setAttribute('type', 'email');
     input.setAttribute('required', 'true');
     input.setAttribute('placeholder', 'Enter your email');
@@ -31,6 +35,7 @@ document.addEventListener('DOMContentLoaded', function () {
       const message = validateEmail(value);
 
       if (message) {
+        console.warn('[WL Script] Email validation failed:', message);
         customError.textContent = message;
         customError.style.display = 'block';
         if (signupBtn) {
@@ -39,6 +44,7 @@ document.addEventListener('DOMContentLoaded', function () {
           signupBtn.style.opacity = '0.5';
         }
       } else {
+        console.log('[WL Script] Email validated successfully.');
         customError.textContent = '';
         customError.style.display = 'none';
         if (signupBtn) {
@@ -49,91 +55,87 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     }
 
+    // Validate on load (in case value is pre-filled)
     updateValidationMessage();
+
+    // Validate live
     input.addEventListener('input', updateValidationMessage);
 
     if (signupBtn) {
       signupBtn.addEventListener('click', function (e) {
         const message = validateEmail(input.value.trim());
         if (message) {
+          console.warn('[WL Script] Blocking sign-up due to invalid email.');
           e.preventDefault();
           updateValidationMessage();
         }
       });
     }
+  } else {
+    console.warn('[WL Script] Username/email input not found.');
   }
 
-  // 👇 Check if the signup failed because user ID already exists
-  if (
-    validator &&
-    errorMsgDiv &&
-    errorMsgDiv.textContent.trim() === 'The requested user ID is already in use.' &&
-    emailPattern.test(input?.value.trim() || '')
-  ) {
-    const redirectMessage = document.createElement('div');
-    redirectMessage.textContent = 'User already exists. Redirecting to sign in...';
-    redirectMessage.style.color = 'orange';
-    redirectMessage.style.fontWeight = 'bold';
-    redirectMessage.style.marginTop = '8px';
-    input?.parentNode.insertBefore(redirectMessage, input.nextSibling);
+  // ========== REDIRECT IF EMAIL ALREADY EXISTS ==========
+  if (validator && errorMsgDiv) {
+    const errorText = errorMsgDiv.textContent.trim();
+    const enteredEmail = input?.value.trim() || '';
+    const isValidEmail = emailPattern.test(enteredEmail);
 
-    console.warn('[RedirectChecker] Redirecting to sign in...');
-    setTimeout(() => {
-      window.location.href = signInUrl;
-    }, 3000);
-  }
+    console.log('[WL Script] Validator message detected:', errorText);
+    if (errorText === 'The requested user ID is already in use.' && isValidEmail) {
+      console.warn('[WL Script] Duplicate email detected — redirecting soon...');
 
-  // 👇 If we're on the SignIn.aspx page with ?from=signup_redirect, hide stuff
-  const urlParams = new URLSearchParams(window.location.search);
-  const fromParam = urlParams.get('from');
-  if (fromParam === 'signup_redirect') {
-    console.log('[SignInOverride] Redirected from signup — customizing page.');
+      const redirectMessage = document.createElement('div');
+      redirectMessage.textContent = 'User already exists. Redirecting to sign in...';
+      redirectMessage.style.color = 'orange';
+      redirectMessage.style.fontWeight = 'bold';
+      redirectMessage.style.marginTop = '8px';
+      input?.parentNode.insertBefore(redirectMessage, input.nextSibling);
 
-    // Example: hide "Create Account" section
-    const createAccountSection = document.querySelector('#createAccountSection');
-    if (createAccountSection) {
-      createAccountSection.style.display = 'none';
+      setTimeout(() => {
+        console.log('[WL Script] Redirecting to:', signInUrl);
+        window.location.href = signInUrl;
+      }, 3000);
     }
-
-    // Optional: Add a helpful banner message
-    const notice = document.createElement('div');
-    notice.textContent = 'We found your account — please sign in below.';
-    notice.style.background = '#f6e6cc';
-    notice.style.color = '#8a4b00';
-    notice.style.padding = '10px';
-    notice.style.marginBottom = '10px';
-    notice.style.border = '1px solid #dca';
-    document.body.prepend(notice);
+  } else {
+    console.log('[WL Script] No matching validator error for user ID reuse.');
   }
-});
 
-
-document.addEventListener('DOMContentLoaded', function () {
+  // ========== SIGN-IN PAGE OVERRIDE ==========
   const urlParams = new URLSearchParams(window.location.search);
   const fromParam = urlParams.get('from');
 
   if (fromParam === 'signup_redirect') {
-    console.log('[SignInOverride] Redirected from signup — hiding signup and access request options.');
+    console.log('[WL Script] Sign-in override triggered by ?from=signup_redirect');
 
-    // Hide entire Sign-Up panel
+    // Hide Sign-Up Panel
     const signUpPanel = document.getElementById('ctl00_PageBody_SignUpPanel');
     if (signUpPanel) {
       signUpPanel.style.display = 'none';
+      console.log('[WL Script] Hid SignUpPanel');
+    } else {
+      console.warn('[WL Script] SignUpPanel not found');
     }
 
-    // Hide "Request Access" text block
+    // Hide Request Access Text
     const requestAccessText = document.getElementById('ctl00_PageBody_RequestAccessText');
     if (requestAccessText) {
       requestAccessText.style.display = 'none';
+      console.log('[WL Script] Hid RequestAccessText');
+    } else {
+      console.warn('[WL Script] RequestAccessText not found');
     }
 
-    // Hide "Request Access" button
+    // Hide Request Access Button
     const requestAccessButton = document.getElementById('ctl00_PageBody_BtnRequestAccess');
     if (requestAccessButton) {
       requestAccessButton.style.display = 'none';
+      console.log('[WL Script] Hid RequestAccessButton');
+    } else {
+      console.warn('[WL Script] RequestAccessButton not found');
     }
 
-    // Optional: Show a notice that we're skipping account creation
+    // Add visual notice
     const notice = document.createElement('div');
     notice.textContent = 'We found your account — please sign in below.';
     notice.style.background = '#f6e6cc';
