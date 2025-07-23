@@ -109,22 +109,26 @@ async function handleGoogleCredentialResponse(response) {
 
   const usernameInput = document.getElementById('ctl00_PageBody_SignInControl_UserNameTextBox');
   const passwordInput = document.getElementById('ctl00_PageBody_SignInControl_PasswordTextBox');
-  const form = document.querySelector('form');
+  const signInButton = document.getElementById('ctl00_PageBody_SignInControl_SignInButton');
 
-  if (usernameInput && passwordInput && form) {
+  if (usernameInput && passwordInput && signInButton) {
     usernameInput.value = email;
     passwordInput.value = token;
-    console.log('[GoogleSignIn] ✅ Credentials set in form fields.');
+    console.log('[GoogleSignIn] ✅ Credentials set in input fields.');
 
-    console.log('[GoogleSignIn] ⏳ Waiting 1 second before submitting form...');
     setTimeout(() => {
-      console.log('[GoogleSignIn] 🧾 Submitting full form');
-      form.submit();
+      console.log('[GoogleSignIn] 🚀 Attempting __doPostBack login...');
+      try {
+        __doPostBack('ctl00$PageBody$SignInControl$SignInButton', '');
+      } catch (err) {
+        console.error('[GoogleSignIn] ❌ __doPostBack failed:', err);
+      }
     }, 1000);
   } else {
-    console.error('[GoogleSignIn] ❌ Could not find required form fields.');
+    console.error('[GoogleSignIn] ❌ Required fields not found.');
   }
 }
+
 
 
 
