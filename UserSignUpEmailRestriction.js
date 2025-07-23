@@ -107,49 +107,50 @@ if (duplicateWarning) {
   console.log('[WL Script] Duplicate user warning element not found.');
 }
 
-
   // ========== SIGN-IN PAGE OVERRIDE ==========
-  const urlParams = new URLSearchParams(window.location.search);
-  const fromParam = urlParams.get('from');
+const urlParams = new URLSearchParams(window.location.search);
+const fromParam = urlParams.get('from');
 
-  if (fromParam === 'signup_redirect') {
-    console.log('[WL Script] Sign-in override triggered by ?from=signup_redirect');
+if (fromParam === 'signup_redirect') {
+  console.log('[WL Script] Sign-in override triggered by ?from=signup_redirect');
 
-    // Hide Sign-Up Panel
+  function tryHideSignupSections(attempt = 1) {
     const signUpPanel = document.getElementById('ctl00_PageBody_SignUpPanel');
-    if (signUpPanel) {
-      signUpPanel.style.display = 'none';
-      console.log('[WL Script] Hid SignUpPanel');
-    } else {
-      console.warn('[WL Script] SignUpPanel not found');
-    }
-
-    // Hide Request Access Text
     const requestAccessText = document.getElementById('ctl00_PageBody_RequestAccessText');
-    if (requestAccessText) {
-      requestAccessText.style.display = 'none';
-      console.log('[WL Script] Hid RequestAccessText');
-    } else {
-      console.warn('[WL Script] RequestAccessText not found');
-    }
-
-    // Hide Request Access Button
     const requestAccessButton = document.getElementById('ctl00_PageBody_BtnRequestAccess');
-    if (requestAccessButton) {
-      requestAccessButton.style.display = 'none';
-      console.log('[WL Script] Hid RequestAccessButton');
-    } else {
-      console.warn('[WL Script] RequestAccessButton not found');
-    }
 
-    // Add visual notice
-    const notice = document.createElement('div');
-    notice.textContent = 'We found your account — please sign in below.';
-    notice.style.background = '#f6e6cc';
-    notice.style.color = '#8a4b00';
-    notice.style.padding = '10px';
-    notice.style.marginBottom = '10px';
-    notice.style.border = '1px solid #dca';
-    document.body.prepend(notice);
+    if (signUpPanel || requestAccessText || requestAccessButton) {
+      if (signUpPanel) {
+        signUpPanel.style.display = 'none';
+        console.log('[WL Script] Hid SignUpPanel');
+      }
+      if (requestAccessText) {
+        requestAccessText.style.display = 'none';
+        console.log('[WL Script] Hid RequestAccessText');
+      }
+      if (requestAccessButton) {
+        requestAccessButton.style.display = 'none';
+        console.log('[WL Script] Hid RequestAccessButton');
+      }
+
+      // Show notice message
+      const notice = document.createElement('div');
+      notice.textContent = 'We found your account — please sign in below.';
+      notice.style.background = '#f6e6cc';
+      notice.style.color = '#8a4b00';
+      notice.style.padding = '10px';
+      notice.style.marginBottom = '10px';
+      notice.style.border = '1px solid #dca';
+      document.body.prepend(notice);
+    } else if (attempt < 30) {
+      // Try again in 100ms (up to 3 seconds)
+      console.log(`[WL Script] Attempt ${attempt}: Signup elements not found yet. Retrying...`);
+      setTimeout(() => tryHideSignupSections(attempt + 1), 100);
+    } else {
+      console.warn('[WL Script] Gave up trying to find signup/access elements.');
+    }
   }
+
+  tryHideSignupSections();
+}
 });
