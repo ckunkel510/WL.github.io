@@ -75,31 +75,38 @@ document.addEventListener('DOMContentLoaded', function () {
     console.warn('[WL Script] Username/email input not found.');
   }
 
-  // ========== REDIRECT IF EMAIL ALREADY EXISTS ==========
-  if (validator && errorMsgDiv) {
-    const errorText = errorMsgDiv.textContent.trim();
-    const enteredEmail = input?.value.trim() || '';
-    const isValidEmail = emailPattern.test(enteredEmail);
+ // ========== REDIRECT IF EMAIL ALREADY EXISTS ==========
+const duplicateWarning = document.getElementById('ctl00_PageBody_DuplicateUserNameWarning');
+const enteredEmail = input?.value.trim() || '';
+const isValidEmail = emailPattern.test(enteredEmail);
 
-    console.log('[WL Script] Validator message detected:', errorText);
-    if (errorText === 'The requested user ID is already in use.' && isValidEmail) {
-      console.warn('[WL Script] Duplicate email detected — redirecting soon...');
+if (duplicateWarning) {
+  const warningText = duplicateWarning.textContent.trim();
+  const isWarningVisible = duplicateWarning.offsetParent !== null;
 
-      const redirectMessage = document.createElement('div');
-      redirectMessage.textContent = 'User already exists. Redirecting to sign in...';
-      redirectMessage.style.color = 'orange';
-      redirectMessage.style.fontWeight = 'bold';
-      redirectMessage.style.marginTop = '8px';
-      input?.parentNode.insertBefore(redirectMessage, input.nextSibling);
+  console.log('[WL Script] Duplicate warning found. Text:', warningText, '| Visible:', isWarningVisible);
 
-      setTimeout(() => {
-        console.log('[WL Script] Redirecting to:', signInUrl);
-        window.location.href = signInUrl;
-      }, 3000);
-    }
+  if (isWarningVisible && isValidEmail && /user id is already in use/i.test(warningText)) {
+    console.warn('[WL Script] Duplicate email detected — redirecting soon...');
+
+    const redirectMessage = document.createElement('div');
+    redirectMessage.textContent = 'User already exists. Redirecting to sign in...';
+    redirectMessage.style.color = 'orange';
+    redirectMessage.style.fontWeight = 'bold';
+    redirectMessage.style.marginTop = '8px';
+    input?.parentNode.insertBefore(redirectMessage, input.nextSibling);
+
+    setTimeout(() => {
+      console.log('[WL Script] Redirecting to:', signInUrl);
+      window.location.href = signInUrl;
+    }, 3000);
   } else {
-    console.log('[WL Script] No matching validator error for user ID reuse.');
+    console.log('[WL Script] No redirect — duplicate warning not visible or email invalid.');
   }
+} else {
+  console.log('[WL Script] Duplicate user warning element not found.');
+}
+
 
   // ========== SIGN-IN PAGE OVERRIDE ==========
   const urlParams = new URLSearchParams(window.location.search);
