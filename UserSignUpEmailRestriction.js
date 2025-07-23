@@ -106,3 +106,41 @@ document.addEventListener('DOMContentLoaded', function () {
     document.body.prepend(notice);
   }
 });
+
+
+document.addEventListener('DOMContentLoaded', function () {
+  const urlParams = new URLSearchParams(window.location.search);
+  const fromParam = urlParams.get('from');
+
+  if (fromParam === 'signup_redirect') {
+    console.log('[SignInOverride] Redirected from signup — hiding signup and access request options.');
+
+    // Hide entire Sign-Up panel
+    const signUpPanel = document.getElementById('ctl00_PageBody_SignUpPanel');
+    if (signUpPanel) {
+      signUpPanel.style.display = 'none';
+    }
+
+    // Hide "Request Access" text block
+    const requestAccessText = document.getElementById('ctl00_PageBody_RequestAccessText');
+    if (requestAccessText) {
+      requestAccessText.style.display = 'none';
+    }
+
+    // Hide "Request Access" button
+    const requestAccessButton = document.getElementById('ctl00_PageBody_BtnRequestAccess');
+    if (requestAccessButton) {
+      requestAccessButton.style.display = 'none';
+    }
+
+    // Optional: Show a notice that we're skipping account creation
+    const notice = document.createElement('div');
+    notice.textContent = 'We found your account — please sign in below.';
+    notice.style.background = '#f6e6cc';
+    notice.style.color = '#8a4b00';
+    notice.style.padding = '10px';
+    notice.style.marginBottom = '10px';
+    notice.style.border = '1px solid #dca';
+    document.body.prepend(notice);
+  }
+});
