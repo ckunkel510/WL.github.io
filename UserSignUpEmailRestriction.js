@@ -145,14 +145,25 @@ if (fromParam === 'signup_redirect') {
       }
 
       // Show notice message if any of the above were hidden
-      const notice = document.createElement('div');
-      notice.textContent = 'We found your account — please sign in below.';
-      notice.style.background = '#f6e6cc';
-      notice.style.color = '#8a4b00';
-      notice.style.padding = '10px';
-      notice.style.marginBottom = '10px';
-      notice.style.border = '1px solid #dca';
-      document.body.prepend(notice);
+      // Show notice message above the username login input section
+const loginGroup = document.querySelector('.epi-form-group-signIn');
+const notice = document.createElement('div');
+notice.textContent = 'We found your account — please sign in below.';
+notice.style.background = '#f6e6cc';
+notice.style.color = '#8a4b00';
+notice.style.padding = '10px';
+notice.style.marginBottom = '10px';
+notice.style.border = '1px solid #dca';
+
+if (loginGroup && loginGroup.parentNode) {
+  loginGroup.parentNode.insertBefore(notice, loginGroup);
+  console.log('[WL Script] Inserted sign-in message above username input.');
+} else {
+  // fallback if loginGroup not found
+  document.body.prepend(notice);
+  console.warn('[WL Script] Username input section not found — inserted notice at top of body.');
+}
+
     } else if (attempt < 30) {
       console.warn('[WL Script] Signup/access elements not found yet. Retrying...');
       setTimeout(() => tryHideSignupSections(attempt + 1), 100);
