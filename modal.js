@@ -1,12 +1,9 @@
 (function () {
-  
   const userID = localStorage.getItem("wl_user_id");
-console.log("[ForteVault] Retrieved wl_user_id from localStorage:", userID);
-
-  console.log("[ForteVault] Cookie wl_user_id:", userID);
+  console.log("[ForteVault] Retrieved wl_user_id from localStorage:", userID);
 
   if (!userID) {
-    console.warn("[ForteVault] No wl_user_id cookie found.");
+    console.warn("[ForteVault] No wl_user_id found.");
     return;
   }
 
@@ -37,28 +34,34 @@ console.log("[ForteVault] Retrieved wl_user_id from localStorage:", userID);
     });
 
   function attachPaymentIntercept() {
-    const paymentBtn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
+  const paymentBtn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
 
-    if (!paymentBtn) {
-      console.warn("[ForteVault] Payment button not found on page.");
-      return;
+  if (!paymentBtn) {
+    console.warn("[ForteVault] Payment button not found on page.");
+    return;
+  }
+
+  console.log("[ForteVault] Attaching event listener to Make Payment button");
+
+  paymentBtn.addEventListener("click", function (e) {
+    const skipVault = sessionStorage.getItem("skipVaultModal");
+
+    if (skipVault === "true") {
+      console.log("[ForteVault] Skipping vault modal — proceeding to overlay");
+      sessionStorage.removeItem("skipVaultModal");
+      return; // allow natural flow to DEX
     }
 
-    console.log("[ForteVault] Attaching event listener to Make Payment button");
+    e.preventDefault();
 
-    paymentBtn.addEventListener("click", function (e) {
-      e.preventDefault();
-      console.log("[ForteVault] Make Payment button clicked.");
+    if (vaultedAccounts.length > 0) {
+      showVaultModal(vaultedAccounts);
+    } else {
+      showNoAccountModal();
+    }
+  });
+}
 
-      if (vaultedAccounts.length > 0) {
-        console.log("[ForteVault] Showing modal with saved methods");
-        showVaultModal(vaultedAccounts);
-      } else {
-        console.log("[ForteVault] No saved accounts — showing 'Add New' modal");
-        showNoAccountModal();
-      }
-    });
-  }
 
   function showVaultModal(accounts) {
     console.log("[ForteVault] Launching vault selection modal");
@@ -76,26 +79,61 @@ console.log("[ForteVault] Retrieved wl_user_id from localStorage:", userID);
       btn.textContent = `${pm.label} ••••${pm.last4}`;
       btn.style.cssText = baseBtnStyle();
       btn.onclick = () => {
-        console.log("[ForteVault] User selected token:", pm.token);
-        sessionStorage.setItem("selectedPaymethodToken", pm.token);
-        cleanupModal();
-        document.querySelector("#ctl00_PageBody_ForteMakePayment").click();
-      };
+  console.log("[ForteVault] User selected token:", pm.token);
+  sessionStorage.setItem("selectedPaymethodToken", pm.token);
+
+  // ✅ Set this flag to skip modal on next click
+  sessionStorage.setItem("skipVaultModal", "true");
+
+  // Step 1: Close modal
+  cleanupModal();
+
+  // Step 2: Flip the payment radio to "Check"
+  const checkRadio = document.querySelector("#ctl00_PageBody_rbPayByCheck");
+  if (checkRadio) {
+    checkRadio.checked = true;
+    checkRadio.click();
+  }
+
+  // Step 3: Trigger the overlay after short delay
+  setTimeout(() => {
+    const paymentButton = document.querySelector("#ctl00_PageBody_ForteMakePayment");
+    if (paymentButton) {
+      console.log("[ForteVault] Triggering Forte overlay with saved method...");
+      paymentButton.click(); // Triggers DEX overlay
+    } else {
+      console.warn("[ForteVault] Cannot find Forte payment button");
+    }
+  }, 500);
+};
+
       list.appendChild(btn);
     });
 
     const newBtn = createPrimaryButton("Use a New Account", () => {
-      console.log("[ForteVault] User clicked 'Use a New Account'");
-      cleanupModal();
-      document.querySelector("#ctl00_PageBody_ForteMakePayment").click();
-    });
+  console.log("[ForteVault] User clicked 'Use a New Account'");
+  
+  // ✅ Set flag to skip modal so DEX overlay can launch
+  sessionStorage.setItem("skipVaultModal", "true");
+
+  cleanupModal();
+
+  // Flip payment radio to "Check" if needed
+  const checkRadio = document.querySelector("#ctl00_PageBody_rbPayByCheck");
+  if (checkRadio) {
+    checkRadio.checked = true;
+    checkRadio.click();
+  }
+
+  const paymentButton = document.querySelector("#ctl00_PageBody_ForteMakePayment");
+  if (paymentButton) paymentButton.click();
+});
+
 
     appendToModal(modal, [title, list, newBtn]);
   }
 
   function showNoAccountModal() {
-    console.log("[ForteVault] Showing 'No saved accounts' modal");
-
     const modal = createModal();
 
     const title = document.createElement("h2");
@@ -105,17 +143,15 @@ console.log("[ForteVault] Retrieved wl_user_id from localStorage:", userID);
     text.textContent = "You’ll need to add a bank account before you can make a payment.";
 
     const addBtn = createPrimaryButton("Add Payment Method", () => {
-      console.log("[ForteVault] User chose to add new payment method");
       cleanupModal();
-      document.querySelector("#ctl00_PageBody_ForteMakePayment").click();
+      const paymentButton = document.querySelector("#ctl00_PageBody_ForteMakePayment");
+      if (paymentButton) paymentButton.click();
     });
 
     appendToModal(modal, [title, text, addBtn]);
   }
 
   function createModal() {
-    console.log("[ForteVault] Creating modal overlay");
-
     const modal = document.createElement("div");
     modal.id = "vaultModal";
     modal.style.cssText = `
@@ -154,7 +190,6 @@ console.log("[ForteVault] Retrieved wl_user_id from localStorage:", userID);
   function cleanupModal() {
     const modal = document.getElementById("vaultModal");
     if (modal) {
-      console.log("[ForteVault] Cleaning up modal");
       modal.remove();
     }
   }
@@ -166,22 +201,4 @@ console.log("[ForteVault] Retrieved wl_user_id from localStorage:", userID);
       cursor: pointer;
     `;
   }
-
-  function getCookie(name) {
-  const cookies = document.cookie;
-  console.log("[ForteVault] Raw document.cookie:", cookies);
-
-  const cookieArray = cookies.split(";").map(c => c.trim());
-  for (let c of cookieArray) {
-    if (c.startsWith(name + "=")) {
-      const value = c.split("=").slice(1).join("=");
-      console.log(`[ForteVault] Matched cookie: ${name} = ${value}`);
-      return value;
-    }
-  }
-
-  console.warn(`[ForteVault] Cookie '${name}' not found.`);
-  return null;
-}
-
 })();
