@@ -1,39 +1,55 @@
+
 document.addEventListener('DOMContentLoaded', function () {
-  console.log('[EmailValidator] DOM fully loaded.');
+  console.log('[EmailValidator] DOM loaded');
 
   const input = document.getElementById('ctl00_PageBody_UserNameTextBox');
-  if (!input) {
-    console.warn('[EmailValidator] Username input field not found.');
+  const validator = document.getElementById('ctl00_PageBody_UserNameValidator');
+  const errorMessageDiv = validator?.querySelector('.errorMessage');
+
+  if (!input || !validator || !errorMessageDiv) {
+    console.warn('[EmailValidator] Missing elements. Input or validator not found.');
     return;
   }
 
-  console.log('[EmailValidator] Found input field:', input);
+  // Save original message so we can restore it
+  const originalMessage = errorMessageDiv.textContent;
 
-  // Change input type to email for browser-level validation
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  function validateEmailLive() {
+    const value = input.value.trim();
+    const isValid = emailPattern.test(value);
+
+    if (!value) {
+      validator.style.display = 'block';
+      errorMessageDiv.textContent = 'Email is required';
+      console.warn('[EmailValidator] Empty field — showing required.');
+    } else if (!isValid) {
+      validator.style.display = 'block';
+      errorMessageDiv.textContent = 'Please enter a valid email address';
+      console.warn('[EmailValidator] Invalid email — showing message.');
+    } else {
+      validator.style.display = 'none';
+      errorMessageDiv.textContent = originalMessage;
+      console.log('[EmailValidator] Email valid — hiding error.');
+    }
+  }
+
+  // Convert to email field for native validation fallback
   input.setAttribute('type', 'email');
   input.setAttribute('required', 'true');
   input.setAttribute('placeholder', 'Enter your email');
-  console.log('[EmailValidator] Set input type to email, required, and placeholder.');
 
-  // Optional fallback in case HTML5 validation is bypassed
-  if (!input.form) {
-    console.warn('[EmailValidator] No form associated with the input field.');
-    return;
-  }
+  // Live validation
+  input.addEventListener('input', validateEmailLive);
 
+  // Re-validate on form submit as a fallback
   input.form.addEventListener('submit', function (e) {
-    console.log('[EmailValidator] Form submission triggered.');
-
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const email = input.value;
-    console.log('[EmailValidator] Email entered:', email);
-
-    if (!emailPattern.test(email)) {
+    if (!emailPattern.test(input.value)) {
       e.preventDefault();
-      console.warn('[EmailValidator] Invalid email address. Blocking submission.');
-      alert('Please enter a valid email address.');
-    } else {
-      console.log('[EmailValidator] Email validated successfully.');
+      validateEmailLive();
     }
   });
+
+  console.log('[EmailValidator] Script initialized.');
 });
