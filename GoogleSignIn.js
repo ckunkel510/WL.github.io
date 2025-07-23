@@ -1,47 +1,78 @@
+// GoogleSignIn.js
 
-// Run after DOM load
-document.addEventListener('DOMContentLoaded', function () {
-  console.log('[3rdPartyLogin] Initializing Google Sign-In placeholder...');
+// Load when window finishes to ensure all elements are in place
+window.addEventListener('load', async function () {
+  console.log('[GoogleSignIn] Initializing...');
 
-  const forgotLink = document.querySelector('a[href="ResetPassword.aspx"]');
-  if (!forgotLink) {
-    console.warn('[3rdPartyLogin] Forgot password link not found.');
-    return;
+  const googleButton = document.getElementById('googleSignInButton');
+  const usernameInput = document.getElementById('ctl00_PageBody_SignInControl_UserNameTextBox');
+  const passwordInput = document.getElementById('ctl00_PageBody_SignInControl_PasswordTextBox');
+  const loginForm = document.querySelector('form');
+
+  // Load env token from remote endpoint (from MarketingDashboard backend)
+  async function fetchToken() {
+    try {
+      const response = await fetch('https://https://wlmarketingdashboard.vercel.app/api/google-login-token');
+      if (!response.ok) throw new Error('Failed to fetch token');
+      const data = await response.json();
+      return data.token;
+    } catch (err) {
+      console.error('[GoogleSignIn] Error fetching token:', err);
+      return null;
+    }
   }
 
-  // Create wrapper container
-  const container = document.createElement('div');
-  container.style.marginTop = '15px';
+  // Decode Google JWT token to extract email
+  function parseJwt(token) {
+    const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+    const json = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(json);
+  }
 
-  // Create disabled Google Sign-In button
-  const googleButton = document.createElement('button');
-  googleButton.textContent = 'Sign in with Google';
-  googleButton.disabled = true;
-  googleButton.style.background = '#ffffff';
-  googleButton.style.color = '#757575';
-  googleButton.style.border = '1px solid #ccc';
-  googleButton.style.padding = '10px 20px';
-  googleButton.style.fontSize = '14px';
-  googleButton.style.borderRadius = '4px';
-  googleButton.style.cursor = 'not-allowed';
-  googleButton.style.opacity = '0.5';
-  googleButton.style.width = '100%';
-  googleButton.style.display = 'block';
+  // Callback after successful Google sign-in
+  async function handleGoogleCredentialResponse(response) {
+    const decoded = parseJwt(response.credential);
+    const email = decoded.email;
+    console.log('[GoogleSignIn] Google Sign-In successful for:', email);
 
-  // Coming Soon label
-  const comingSoon = document.createElement('div');
-  comingSoon.textContent = 'Google Sign-In Coming Soon';
-  comingSoon.style.fontSize = '12px';
-  comingSoon.style.color = '#999';
-  comingSoon.style.textAlign = 'center';
-  comingSoon.style.marginTop = '5px';
+    const token = await fetchToken();
+    if (!token) {
+      alert('Unable to complete sign-in. Please try again later.');
+      return;
+    }
 
-  container.appendChild(googleButton);
-  container.appendChild(comingSoon);
+    if (usernameInput && passwordInput) {
+      usernameInput.value = email;
+      passwordInput.value = token;
 
-  // Insert it after the "Forgot your password?" link
-  forgotLink.parentNode.insertBefore(container, forgotLink.nextSibling);
+      console.log('[GoogleSignIn] Filled username and token. Submitting form...');
+      loginForm?.submit();
+    } else {
+      console.warn('[GoogleSignIn] Username or password field not found.');
+    }
+  }
 
-  console.log('[3rdPartyLogin] Google Sign-In placeholder inserted (disabled).');
+  // Initialize Google Identity
+  if (googleButton) {
+    google.accounts.id.initialize({
+      client_id: '573835232997-amdgg0r4fvsn9hi8vf6ndrcpobker9tq.apps.googleusercontent.com',
+      callback: handleGoogleCredentialResponse
+    });
+
+    googleButton.disabled = false;
+    googleButton.style.cursor = 'pointer';
+    googleButton.style.opacity = '1';
+
+    googleButton.addEventListener('click', () => {
+      console.log('[GoogleSignIn] Prompting Google Sign-In...');
+      google.accounts.id.prompt(); // Optional — opens One Tap
+    });
+  } else {
+    console.warn('[GoogleSignIn] Google sign-in button not found.');
+  }
 });
-
