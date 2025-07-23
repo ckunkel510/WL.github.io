@@ -2,17 +2,19 @@ document.addEventListener('DOMContentLoaded', function () {
   console.log('[EmailValidator] Initializing...');
 
   const input = document.getElementById('ctl00_PageBody_UserNameTextBox');
-  if (!input) {
-    console.warn('[EmailValidator] Input not found.');
+  const signupBtn = document.getElementById('ctl00_PageBody_SignupButton');
+
+  if (!input || !signupBtn) {
+    console.warn('[EmailValidator] Required elements missing.');
     return;
   }
 
-  // Change input to type email for native browser validation
+  // Make input behave like an email field
   input.setAttribute('type', 'email');
   input.setAttribute('required', 'true');
   input.setAttribute('placeholder', 'Enter your email');
 
-  // Create custom error message element
+  // Create a custom error message element
   const customError = document.createElement('div');
   customError.id = 'customEmailError';
   customError.style.color = 'red';
@@ -20,9 +22,10 @@ document.addEventListener('DOMContentLoaded', function () {
   customError.style.marginTop = '5px';
   customError.style.display = 'none';
 
-  // Insert after input
+  // Insert the error message element just after the input
   input.parentNode.insertBefore(customError, input.nextSibling);
 
+  // Email regex pattern
   const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
   function validateEmail(value) {
@@ -38,29 +41,41 @@ document.addEventListener('DOMContentLoaded', function () {
     if (message) {
       customError.textContent = message;
       customError.style.display = 'block';
+      disableSignup();
       console.warn('[EmailValidator] ' + message);
     } else {
       customError.textContent = '';
       customError.style.display = 'none';
-      console.log('[EmailValidator] Email looks good.');
+      enableSignup();
+      console.log('[EmailValidator] Email valid — Sign Up enabled.');
     }
   }
 
-  // Validate immediately on page load in case there's a prefilled value
+  function disableSignup() {
+    signupBtn.classList.add('disabled');
+    signupBtn.style.pointerEvents = 'none';
+    signupBtn.style.opacity = '0.5';
+  }
+
+  function enableSignup() {
+    signupBtn.classList.remove('disabled');
+    signupBtn.style.pointerEvents = 'auto';
+    signupBtn.style.opacity = '1';
+  }
+
+  // Validate on page load (in case of prefilled input)
   updateValidationMessage();
 
-  // Validate on input change
+  // Validate live
   input.addEventListener('input', updateValidationMessage);
 
-  // Also validate on form submission
-  if (input.form) {
-    input.form.addEventListener('submit', function (e) {
-      const value = input.value.trim();
-      const message = validateEmail(value);
-      if (message) {
-        e.preventDefault();
-        updateValidationMessage();
-      }
-    });
-  }
+  // Prevent click if not valid
+  signupBtn.addEventListener('click', function (e) {
+    const message = validateEmail(input.value.trim());
+    if (message) {
+      e.preventDefault();
+      updateValidationMessage();
+      console.warn('[EmailValidator] Blocking Sign Up due to invalid email.');
+    }
+  });
 });
