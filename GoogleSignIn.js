@@ -105,6 +105,7 @@ async function handleGoogleCredentialResponse(response) {
   }
 
   console.log('[GoogleSignIn] 🟢 Token received. Proceeding with login.');
+  console.log('[GoogleSignIn] 🛂 Token being used as password:', token);
 
   const usernameInput = document.getElementById('ctl00_PageBody_SignInControl_UserNameTextBox');
   const passwordInput = document.getElementById('ctl00_PageBody_SignInControl_PasswordTextBox');
@@ -113,13 +114,14 @@ async function handleGoogleCredentialResponse(response) {
   if (usernameInput && passwordInput && signInButton) {
     usernameInput.value = email;
     passwordInput.value = token;
-    console.log('[GoogleSignIn] ✅ Credentials set. Attempting to click the sign-in button...');
+    console.log('[GoogleSignIn] ✅ Credentials set. Clicking sign-in button...');
     signInButton.click();
     console.log('[GoogleSignIn] 🟨 Click triggered on sign-in button.');
   } else {
     console.error('[GoogleSignIn] ❌ Could not find required login fields or button.');
   }
 }
+
 
 
 
