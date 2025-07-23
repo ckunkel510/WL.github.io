@@ -108,17 +108,19 @@ async function handleGoogleCredentialResponse(response) {
 
   const usernameInput = document.getElementById('ctl00_PageBody_SignInControl_UserNameTextBox');
   const passwordInput = document.getElementById('ctl00_PageBody_SignInControl_PasswordTextBox');
-  const loginForm = document.querySelector('form');
+  const signInButton = document.getElementById('ctl00_PageBody_SignInControl_SignInButton');
 
-  if (usernameInput && passwordInput && loginForm) {
+  if (usernameInput && passwordInput && signInButton) {
     usernameInput.value = email;
     passwordInput.value = token;
-    console.log('[GoogleSignIn] ✅ Credentials set. Submitting form.');
-    loginForm.submit();
+    console.log('[GoogleSignIn] ✅ Credentials set. Attempting to click the sign-in button...');
+    signInButton.click();
+    console.log('[GoogleSignIn] 🟨 Click triggered on sign-in button.');
   } else {
-    console.error('[GoogleSignIn] ❌ Could not find form inputs.');
+    console.error('[GoogleSignIn] ❌ Could not find required login fields or button.');
   }
 }
+
 
 
   // Initialize Google SDK once it's loaded
