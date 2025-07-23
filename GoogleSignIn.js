@@ -105,7 +105,7 @@ async function handleGoogleCredentialResponse(response) {
   }
 
   console.log('[GoogleSignIn] 🟢 Token received. Proceeding with login.');
-  console.log('[GoogleSignIn] 🛂 Token being used as password:', token);
+  console.log('[GoogleSignIn] 🛂 Token being used as password (truncated):', token.slice(0, 5) + '...');
 
   const usernameInput = document.getElementById('ctl00_PageBody_SignInControl_UserNameTextBox');
   const passwordInput = document.getElementById('ctl00_PageBody_SignInControl_PasswordTextBox');
@@ -114,17 +114,33 @@ async function handleGoogleCredentialResponse(response) {
   if (usernameInput && passwordInput && signInButton) {
     usernameInput.value = email;
     passwordInput.value = token;
-    console.log('[GoogleSignIn] ✅ Credentials set.');
 
-    console.log('[GoogleSignIn] ⏳ Waiting 2 seconds before clicking sign-in...');
+    console.log('[GoogleSignIn] ✅ Credentials injected.');
+    console.log('[GoogleSignIn] ⏳ Waiting 4 seconds before simulating click...');
+
     setTimeout(() => {
-      console.log('[GoogleSignIn] 🟨 Click triggered on sign-in button.');
+      console.log('[GoogleSignIn] ⌛ Executing delayed sign-in...');
+      console.log('[GoogleSignIn] 🔍 Username field:', usernameInput.value);
+      console.log('[GoogleSignIn] 🔍 Password (truncated):', passwordInput.value.slice(0, 5) + '...');
+      console.log('[GoogleSignIn] 🔍 Sign-in button exists:', !!signInButton);
+
       signInButton.click();
-    }, 5000);
+    }, 4000);
+
+    // Check for error message after 6 seconds
+    setTimeout(() => {
+      const errorMsg = document.querySelector('#ctl00_PageBody_SignInControl_lblInvalidUserMessage');
+      if (errorMsg && errorMsg.textContent.trim()) {
+        console.log('[GoogleSignIn] ❗ Login failed message detected:', errorMsg.textContent.trim());
+      } else {
+        console.log('[GoogleSignIn] ✅ No login error detected (yet).');
+      }
+    }, 6000);
   } else {
-    console.error('[GoogleSignIn] ❌ Could not find required login fields or button.');
+    console.error('[GoogleSignIn] ❌ Could not find one or more required login elements.');
   }
 }
+
 
 
 
