@@ -114,13 +114,18 @@ async function handleGoogleCredentialResponse(response) {
   if (usernameInput && passwordInput && signInButton) {
     usernameInput.value = email;
     passwordInput.value = token;
-    console.log('[GoogleSignIn] ✅ Credentials set. Clicking sign-in button...');
-    signInButton.click();
-    console.log('[GoogleSignIn] 🟨 Click triggered on sign-in button.');
+    console.log('[GoogleSignIn] ✅ Credentials set.');
+
+    console.log('[GoogleSignIn] ⏳ Waiting 2 seconds before clicking sign-in...');
+    setTimeout(() => {
+      console.log('[GoogleSignIn] 🟨 Click triggered on sign-in button.');
+      signInButton.click();
+    }, 5000);
   } else {
     console.error('[GoogleSignIn] ❌ Could not find required login fields or button.');
   }
 }
+
 
 
 
