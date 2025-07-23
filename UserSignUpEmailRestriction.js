@@ -1,55 +1,66 @@
-
 document.addEventListener('DOMContentLoaded', function () {
-  console.log('[EmailValidator] DOM loaded');
+  console.log('[EmailValidator] Initializing...');
 
   const input = document.getElementById('ctl00_PageBody_UserNameTextBox');
-  const validator = document.getElementById('ctl00_PageBody_UserNameValidator');
-  const errorMessageDiv = validator?.querySelector('.errorMessage');
-
-  if (!input || !validator || !errorMessageDiv) {
-    console.warn('[EmailValidator] Missing elements. Input or validator not found.');
+  if (!input) {
+    console.warn('[EmailValidator] Input not found.');
     return;
   }
 
-  // Save original message so we can restore it
-  const originalMessage = errorMessageDiv.textContent;
-
-  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-  function validateEmailLive() {
-    const value = input.value.trim();
-    const isValid = emailPattern.test(value);
-
-    if (!value) {
-      validator.style.display = 'block';
-      errorMessageDiv.textContent = 'Email is required';
-      console.warn('[EmailValidator] Empty field — showing required.');
-    } else if (!isValid) {
-      validator.style.display = 'block';
-      errorMessageDiv.textContent = 'Please enter a valid email address';
-      console.warn('[EmailValidator] Invalid email — showing message.');
-    } else {
-      validator.style.display = 'none';
-      errorMessageDiv.textContent = originalMessage;
-      console.log('[EmailValidator] Email valid — hiding error.');
-    }
-  }
-
-  // Convert to email field for native validation fallback
+  // Change input to type email for native browser validation
   input.setAttribute('type', 'email');
   input.setAttribute('required', 'true');
   input.setAttribute('placeholder', 'Enter your email');
 
-  // Live validation
-  input.addEventListener('input', validateEmailLive);
+  // Create custom error message element
+  const customError = document.createElement('div');
+  customError.id = 'customEmailError';
+  customError.style.color = 'red';
+  customError.style.fontSize = '0.9em';
+  customError.style.marginTop = '5px';
+  customError.style.display = 'none';
 
-  // Re-validate on form submit as a fallback
-  input.form.addEventListener('submit', function (e) {
-    if (!emailPattern.test(input.value)) {
-      e.preventDefault();
-      validateEmailLive();
+  // Insert after input
+  input.parentNode.insertBefore(customError, input.nextSibling);
+
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  function validateEmail(value) {
+    if (!value) return 'Email is required';
+    if (!emailPattern.test(value)) return 'Please enter a valid email address';
+    return '';
+  }
+
+  function updateValidationMessage() {
+    const value = input.value.trim();
+    const message = validateEmail(value);
+
+    if (message) {
+      customError.textContent = message;
+      customError.style.display = 'block';
+      console.warn('[EmailValidator] ' + message);
+    } else {
+      customError.textContent = '';
+      customError.style.display = 'none';
+      console.log('[EmailValidator] Email looks good.');
     }
-  });
+  }
 
-  console.log('[EmailValidator] Script initialized.');
+  // Validate immediately on page load in case there's a prefilled value
+  updateValidationMessage();
+
+  // Validate on input change
+  input.addEventListener('input', updateValidationMessage);
+
+  // Also validate on form submission
+  if (input.form) {
+    input.form.addEventListener('submit', function (e) {
+      const value = input.value.trim();
+      const message = validateEmail(value);
+      if (message) {
+        e.preventDefault();
+        updateValidationMessage();
+      }
+    });
+  }
 });
