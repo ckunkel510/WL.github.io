@@ -8,10 +8,9 @@
   function insertGoogleButton() {
   console.log('[GoogleSignIn] Attempting to insert Google Sign-In button...');
 
-  // Try to insert after the sign-in form instead of relying on the "forgot password" link
-  const form = document.querySelector('form');
-  if (!form) {
-    console.warn('[GoogleSignIn] Form not found — cannot insert button.');
+  const signInBtn = document.getElementById('ctl00_PageBody_SignInControl_SignInButton');
+  if (!signInBtn) {
+    console.warn('[GoogleSignIn] Sign In button not found — cannot insert button.');
     return false;
   }
 
@@ -37,6 +36,7 @@
   googleButton.style.opacity = '0.5';
   googleButton.style.width = '100%';
   googleButton.style.display = 'block';
+  googleButton.style.marginTop = '10px';
 
   const comingSoon = document.createElement('div');
   comingSoon.textContent = 'Google Sign-In Loading...';
@@ -49,10 +49,13 @@
   container.appendChild(googleButton);
   container.appendChild(comingSoon);
 
-  form.appendChild(container); // insert at bottom of form
+  // insert after sign-in button
+  signInBtn.parentNode.insertBefore(container, signInBtn.nextSibling);
+
   console.log('[GoogleSignIn] Google Sign-In button injected.');
   return true;
 }
+
 
 
   // Decode JWT token
@@ -70,23 +73,31 @@
   // Fetch token from backend
   // Fetch token from backend
 async function fetchToken() {
-  console.log('[GoogleSignIn] 🟡 fetchToken() called — attempting to retrieve from:', TOKEN_API_URL);
+  console.log('[GoogleSignIn] Fetching token from:', TOKEN_API_URL);
   try {
-    const res = await fetch(TOKEN_API_URL);
-    console.log('[GoogleSignIn] 🔵 fetch() response status:', res.status);
+    const res = await fetch(TOKEN_API_URL, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
+
+    console.log('[GoogleSignIn] Fetch response received:', res);
+
     if (!res.ok) {
-      const errText = await res.text();
-      console.error('[GoogleSignIn] 🔴 Response body (non-OK):', errText);
-      throw new Error(`Fetch failed with status ${res.status}`);
+      console.error('[GoogleSignIn] Bad response status:', res.status);
+      throw new Error(`Bad status: ${res.status}`);
     }
+
     const data = await res.json();
-    console.log('[GoogleSignIn] ✅ Token JSON received:', data);
+    console.log('[GoogleSignIn] Parsed token response:', data);
     return data.token;
   } catch (err) {
-    console.error('[GoogleSignIn] ❌ fetchToken failed:', err);
+    console.error('[GoogleSignIn] Failed to fetch token:', err);
     return null;
   }
 }
+
 
 
   // Handle Google login
