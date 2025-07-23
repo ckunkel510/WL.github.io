@@ -14,47 +14,21 @@
     return false;
   }
 
-  if (document.getElementById('googleSignInButton')) {
+  if (document.getElementById('googleSignInDiv')) {
     console.log('[GoogleSignIn] Button already exists.');
     return true;
   }
 
   const container = document.createElement('div');
+  container.id = 'googleSignInDiv';
   container.style.marginTop = '15px';
 
-  const googleButton = document.createElement('button');
-  googleButton.id = 'googleSignInButton';
-  googleButton.textContent = 'Sign in with Google';
-  googleButton.disabled = true;
-  googleButton.style.background = '#fff';
-  googleButton.style.color = '#444';
-  googleButton.style.border = '1px solid #ccc';
-  googleButton.style.padding = '10px 20px';
-  googleButton.style.fontSize = '14px';
-  googleButton.style.borderRadius = '4px';
-  googleButton.style.cursor = 'not-allowed';
-  googleButton.style.opacity = '0.5';
-  googleButton.style.width = '100%';
-  googleButton.style.display = 'block';
-  googleButton.style.marginTop = '10px';
-
-  const comingSoon = document.createElement('div');
-  comingSoon.textContent = 'Google Sign-In Loading...';
-  comingSoon.id = 'googleSignInStatus';
-  comingSoon.style.fontSize = '12px';
-  comingSoon.style.color = '#999';
-  comingSoon.style.textAlign = 'center';
-  comingSoon.style.marginTop = '5px';
-
-  container.appendChild(googleButton);
-  container.appendChild(comingSoon);
-
-  // insert after sign-in button
   signInBtn.parentNode.insertBefore(container, signInBtn.nextSibling);
 
   console.log('[GoogleSignIn] Google Sign-In button injected.');
   return true;
 }
+
 
 
 
@@ -149,31 +123,27 @@ async function handleGoogleCredentialResponse(response) {
 
   // Initialize Google SDK once it's loaded
   function initGoogleSignIn() {
-    console.log('[GoogleSignIn] SDK ready — initializing Google login');
+  console.log('[GoogleSignIn] SDK ready — initializing Google login');
 
-    const googleButton = document.getElementById('googleSignInButton');
-    const status = document.getElementById('googleSignInStatus');
+  google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    callback: handleGoogleCredentialResponse
+  });
 
-    if (!googleButton) {
-      console.error('[GoogleSignIn] Button not found at init. Aborting.');
-      return;
+  // Render the official button
+  google.accounts.id.renderButton(
+    document.getElementById('googleSignInDiv'),
+    {
+      theme: 'outline',
+      size: 'large',
+      width: 300,
     }
+  );
 
-    google.accounts.id.initialize({
-      client_id: GOOGLE_CLIENT_ID,
-      callback: handleGoogleCredentialResponse
-    });
+  // Optional: also enable One Tap
+  // google.accounts.id.prompt();
+}
 
-    googleButton.disabled = false;
-    googleButton.style.opacity = '1';
-    googleButton.style.cursor = 'pointer';
-    if (status) status.textContent = 'Google Sign-In Ready';
-
-    googleButton.addEventListener('click', () => {
-      console.log('[GoogleSignIn] Prompting Google sign-in...');
-      google.accounts.id.prompt();
-    });
-  }
 
   // MAIN EXECUTION
   const inserted = insertGoogleButton();
