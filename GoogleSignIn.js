@@ -66,52 +66,73 @@
   }
 
   // Fetch token from backend
-  async function fetchToken() {
-    console.log('[GoogleSignIn] Fetching token from:', TOKEN_API_URL);
-    try {
-      const res = await fetch(TOKEN_API_URL);
-      if (!res.ok) throw new Error(`Bad status: ${res.status}`);
-      const data = await res.json();
-      return data.token;
-    } catch (err) {
-      console.error('[GoogleSignIn] Failed to fetch token:', err);
-      return null;
+  // Fetch token from backend
+async function fetchToken() {
+  console.log('[GoogleSignIn] 🟡 fetchToken() called — attempting to retrieve from:', TOKEN_API_URL);
+  try {
+    const res = await fetch(TOKEN_API_URL);
+    console.log('[GoogleSignIn] 🔵 fetch() response status:', res.status);
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error('[GoogleSignIn] 🔴 Response body (non-OK):', errText);
+      throw new Error(`Fetch failed with status ${res.status}`);
     }
+    const data = await res.json();
+    console.log('[GoogleSignIn] ✅ Token JSON received:', data);
+    return data.token;
+  } catch (err) {
+    console.error('[GoogleSignIn] ❌ fetchToken failed:', err);
+    return null;
   }
+}
+
 
   // Handle Google login
-  async function handleGoogleCredentialResponse(response) {
-    console.log('[GoogleSignIn] Google credential received.');
-    let email;
-    try {
-      const decoded = parseJwt(response.credential);
-      email = decoded.email;
-      console.log('[GoogleSignIn] Parsed email:', email);
-    } catch (err) {
-      console.error('[GoogleSignIn] Failed to parse credential:', err);
-      alert('Invalid login. Please try again.');
-      return;
-    }
+  // Handle Google login
+async function handleGoogleCredentialResponse(response) {
+  console.log('[GoogleSignIn] ⚡ Google credential callback triggered');
 
-    const token = await fetchToken();
-    if (!token) {
-      alert('Could not log in. Please try again later.');
-      return;
-    }
-
-    const usernameInput = document.getElementById('ctl00_PageBody_SignInControl_UserNameTextBox');
-    const passwordInput = document.getElementById('ctl00_PageBody_SignInControl_PasswordTextBox');
-    const loginForm = document.querySelector('form');
-
-    if (usernameInput && passwordInput && loginForm) {
-      usernameInput.value = email;
-      passwordInput.value = token;
-      console.log('[GoogleSignIn] Credentials set. Submitting form.');
-      loginForm.submit();
-    } else {
-      console.error('[GoogleSignIn] Login inputs not found.');
-    }
+  if (!response || !response.credential) {
+    console.error('[GoogleSignIn] ❌ No credential received from Google');
+    return;
   }
+
+  let email;
+  try {
+    const decoded = parseJwt(response.credential);
+    email = decoded.email;
+    console.log('[GoogleSignIn] ✅ Parsed email from credential:', email);
+  } catch (err) {
+    console.error('[GoogleSignIn] ❌ Failed to decode Google JWT:', err);
+    alert('Invalid login. Please try again.');
+    return;
+  }
+
+  console.log('[GoogleSignIn] 📬 Requesting secure token from Vercel API...');
+  const token = await fetchToken();
+
+  if (!token) {
+    console.error('[GoogleSignIn] ❌ Token fetch returned null');
+    alert('Could not log in. Please try again later.');
+    return;
+  }
+
+  console.log('[GoogleSignIn] 🟢 Token received. Proceeding with login.');
+
+  const usernameInput = document.getElementById('ctl00_PageBody_SignInControl_UserNameTextBox');
+  const passwordInput = document.getElementById('ctl00_PageBody_SignInControl_PasswordTextBox');
+  const loginForm = document.querySelector('form');
+
+  if (usernameInput && passwordInput && loginForm) {
+    usernameInput.value = email;
+    passwordInput.value = token;
+    console.log('[GoogleSignIn] ✅ Credentials set. Submitting form.');
+    loginForm.submit();
+  } else {
+    console.error('[GoogleSignIn] ❌ Could not find form inputs.');
+  }
+}
+
 
   // Initialize Google SDK once it's loaded
   function initGoogleSignIn() {
