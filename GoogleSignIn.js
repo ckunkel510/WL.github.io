@@ -6,52 +6,54 @@
 
   // Insert the Google Sign-In button now
   function insertGoogleButton() {
-    console.log('[GoogleSignIn] Attempting to insert Google Sign-In button...');
+  console.log('[GoogleSignIn] Attempting to insert Google Sign-In button...');
 
-    const forgotLink = document.querySelector('a[href="ResetPassword.aspx"]');
-    if (!forgotLink) {
-      console.warn('[GoogleSignIn] Forgot password link not found — cannot insert button.');
-      return false;
-    }
+  // Try to insert after the sign-in form instead of relying on the "forgot password" link
+  const form = document.querySelector('form');
+  if (!form) {
+    console.warn('[GoogleSignIn] Form not found — cannot insert button.');
+    return false;
+  }
 
-    if (document.getElementById('googleSignInButton')) {
-      console.log('[GoogleSignIn] Button already exists.');
-      return true;
-    }
-
-    const container = document.createElement('div');
-    container.style.marginTop = '15px';
-
-    const googleButton = document.createElement('button');
-    googleButton.id = 'googleSignInButton';
-    googleButton.textContent = 'Sign in with Google';
-    googleButton.disabled = true;
-    googleButton.style.background = '#fff';
-    googleButton.style.color = '#444';
-    googleButton.style.border = '1px solid #ccc';
-    googleButton.style.padding = '10px 20px';
-    googleButton.style.fontSize = '14px';
-    googleButton.style.borderRadius = '4px';
-    googleButton.style.cursor = 'not-allowed';
-    googleButton.style.opacity = '0.5';
-    googleButton.style.width = '100%';
-    googleButton.style.display = 'block';
-
-    const comingSoon = document.createElement('div');
-    comingSoon.textContent = 'Google Sign-In Loading...';
-    comingSoon.id = 'googleSignInStatus';
-    comingSoon.style.fontSize = '12px';
-    comingSoon.style.color = '#999';
-    comingSoon.style.textAlign = 'center';
-    comingSoon.style.marginTop = '5px';
-
-    container.appendChild(googleButton);
-    container.appendChild(comingSoon);
-    forgotLink.parentNode.insertBefore(container, forgotLink.nextSibling);
-
-    console.log('[GoogleSignIn] Google Sign-In button injected.');
+  if (document.getElementById('googleSignInButton')) {
+    console.log('[GoogleSignIn] Button already exists.');
     return true;
   }
+
+  const container = document.createElement('div');
+  container.style.marginTop = '15px';
+
+  const googleButton = document.createElement('button');
+  googleButton.id = 'googleSignInButton';
+  googleButton.textContent = 'Sign in with Google';
+  googleButton.disabled = true;
+  googleButton.style.background = '#fff';
+  googleButton.style.color = '#444';
+  googleButton.style.border = '1px solid #ccc';
+  googleButton.style.padding = '10px 20px';
+  googleButton.style.fontSize = '14px';
+  googleButton.style.borderRadius = '4px';
+  googleButton.style.cursor = 'not-allowed';
+  googleButton.style.opacity = '0.5';
+  googleButton.style.width = '100%';
+  googleButton.style.display = 'block';
+
+  const comingSoon = document.createElement('div');
+  comingSoon.textContent = 'Google Sign-In Loading...';
+  comingSoon.id = 'googleSignInStatus';
+  comingSoon.style.fontSize = '12px';
+  comingSoon.style.color = '#999';
+  comingSoon.style.textAlign = 'center';
+  comingSoon.style.marginTop = '5px';
+
+  container.appendChild(googleButton);
+  container.appendChild(comingSoon);
+
+  form.appendChild(container); // insert at bottom of form
+  console.log('[GoogleSignIn] Google Sign-In button injected.');
+  return true;
+}
+
 
   // Decode JWT token
   function parseJwt(token) {
@@ -164,10 +166,13 @@ async function handleGoogleCredentialResponse(response) {
 
   // MAIN EXECUTION
   const inserted = insertGoogleButton();
-  if (!inserted) {
-    // DOM may not be ready yet
-    document.addEventListener('DOMContentLoaded', insertGoogleButton);
-  }
+if (!inserted) {
+  document.addEventListener('DOMContentLoaded', () => {
+    console.log('[GoogleSignIn] Retrying button insertion after DOM ready...');
+    insertGoogleButton();
+  });
+}
+
 
   // Inject the Google SDK and bind the init function to its onload
   const sdk = document.createElement('script');
