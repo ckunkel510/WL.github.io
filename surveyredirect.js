@@ -3,13 +3,13 @@
   const STORE_RADIUS_MILES = 20; // adjust as needed
 
   const stores = [
-    { name: "Brenham", lat: 30.1669, lon: -96.3977, url: "https://example.com/survey-brenham" },
-    { name: "Bryan", lat: 30.6744, lon: -96.3743, url: "https://example.com/survey-bryan" },
-    { name: "Caldwell", lat: 30.5316, lon: -96.6939, url: "https://example.com/survey-caldwell" },
-    { name: "Lexington", lat: 30.4152, lon: -97.0105, url: "https://example.com/survey-lexington" },
-    { name: "Groesbeck", lat: 31.5249, lon: -96.5336, url: "https://example.com/survey-groesbeck" },
-    { name: "Mexia", lat: 31.6791, lon: -96.4822, url: "https://example.com/survey-mexia" },
-    { name: "Buffalo", lat: 31.4632, lon: -96.0580, url: "https://example.com/survey-buffalo" }
+    { name: "Brenham", lat: 30.1669, lon: -96.3977, url: "https://www.woodsonlumber.com/" },
+    { name: "Bryan", lat: 30.6744, lon: -96.3743, url: "https://www.woodsonlumber.com/" },
+    { name: "Caldwell", lat: 30.5316, lon: -96.6939, url: "https://www.woodsonlumber.com/" },
+    { name: "Lexington", lat: 30.4152, lon: -97.0105, url: "https://www.woodsonlumber.com/" },
+    { name: "Groesbeck", lat: 31.5249, lon: -96.5336, url: "https://www.woodsonlumber.com/" },
+    { name: "Mexia", lat: 31.6791, lon: -96.4822, url: "https://www.woodsonlumber.com/" },
+    { name: "Buffalo", lat: 31.4632, lon: -96.0580, url: "https://www.woodsonlumber.com/" }
   ];
 
   function haversine(lat1, lon1, lat2, lon2) {
