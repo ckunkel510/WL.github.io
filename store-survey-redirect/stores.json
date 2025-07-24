@@ -1,0 +1,9 @@
+[
+  { "name": "Brenham", "lat": 30.1669, "lon": -96.3977, "surveyUrl": "https://example.com/survey-brenham" },
+  { "name": "Bryan", "lat": 30.6744, "lon": -96.3743, "surveyUrl": "https://example.com/survey-bryan" },
+  { "name": "Caldwell", "lat": 30.5316, "lon": -96.6939, "surveyUrl": "https://example.com/survey-caldwell" },
+  { "name": "Lexington", "lat": 30.4152, "lon": -97.0105, "surveyUrl": "https://example.com/survey-lexington" },
+  { "name": "Groesbeck", "lat": 31.5249, "lon": -96.5336, "surveyUrl": "https://example.com/survey-groesbeck" },
+  { "name": "Mexia", "lat": 31.6791, "lon": -96.4822, "surveyUrl": "https://example.com/survey-mexia" },
+  { "name": "Buffalo", "lat": 31.4632, "lon": -96.0580, "surveyUrl": "https://example.com/survey-buffalo" }
+]
