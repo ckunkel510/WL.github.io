@@ -66,17 +66,24 @@
           }
         };
 
-        fetch('https://yourserver.com/api/constantcontact', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify(payload)
-        }).then(res => {
-          if (!res.ok) console.warn("[Marketing Opt-In] Failed to send to Constant Contact");
-        }).catch(err => {
-          console.error("[Marketing Opt-In] Error sending to Constant Contact:", err);
-        });
+        fetch("https://script.google.com/macros/s/AKfycbyC0Rxsu2QeGA5wIns8aW-p4Et9SeHZ9IA2VUFyS5g4J-35XhgA0nHezCJjjy0rpk8jcw/exec", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json"
+  },
+  body: JSON.stringify({
+    action: "signup_optin",
+    email_address: email,
+    first_name: firstName,
+    last_name: lastName,
+    phone_number: phone,
+    custom_fields: {
+      email_opt_in: emailOptIn,
+      sms_opt_in: smsOptIn
+    }
+  })
+})
+
       }
     });
   });
