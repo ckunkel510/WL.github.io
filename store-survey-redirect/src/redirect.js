@@ -1,9 +1,11 @@
 (async function () {
+  console.log("[SurveyRedirect] Script running…");
+
   const DEFAULT_SURVEY_URL = "https://woodsonwholesaleinc.formstack.com/forms/customerfeedback";
 
   function haversine(lat1, lon1, lat2, lon2) {
     const toRad = deg => (deg * Math.PI) / 180;
-    const R = 3958.8; // miles
+    const R = 3958.8; // Earth radius in miles
     const dLat = toRad(lat2 - lat1);
     const dLon = toRad(lon2 - lon1);
     const a =
@@ -18,6 +20,7 @@
     let minDist = Infinity;
     for (const store of stores) {
       const dist = haversine(coords.lat, coords.lon, store.lat, store.lon);
+      console.log(`[SurveyRedirect] Distance to ${store.name}: ${dist.toFixed(2)} mi`);
       if (dist < minDist) {
         minDist = dist;
         nearest = store;
@@ -41,14 +44,18 @@
     });
   }
 
-  const stores = await loadStores();
-
   try {
+    const stores = await loadStores();
+    console.log("[SurveyRedirect] Loaded stores:", stores);
+
     const coords = await tryGeolocation();
+    console.log("[SurveyRedirect] Got location:", coords);
+
     const nearest = await getNearestStore(stores, coords);
+    console.log(`[SurveyRedirect] Nearest store: ${nearest.name}, redirecting to: ${nearest.surveyUrl}`);
     window.location.href = nearest.surveyUrl;
   } catch (e) {
-    console.warn("Geolocation failed or denied, redirecting to default survey.");
+    console.warn("[SurveyRedirect] Geolocation or fetch failed:", e);
     window.location.href = DEFAULT_SURVEY_URL;
   }
 })();
