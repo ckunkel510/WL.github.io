@@ -254,4 +254,22 @@ $buyBox.prepend($methodRow, $banner);
 }
 
   $insertionPoint.after($pageWrapper);
+  // === Add Shipping Policy Link ===
+const $shippingLink = $("<div>").css({
+  marginTop: "20px",
+  textAlign: "center",
+}).append(
+  $("<a>", {
+    href: "https://www.woodsonlumber.com/shipping-policy",
+    target: "_blank",
+    text: "View our Shipping Policy",
+  }).css({
+    color: "#6b0016",
+    fontSize: "14px",
+    textDecoration: "underline",
+  })
+);
+
+$sidebar.append($shippingLink);
+
 });
