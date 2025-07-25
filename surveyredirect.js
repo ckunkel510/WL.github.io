@@ -3,13 +3,13 @@
   const STORE_RADIUS_MILES = 20; // adjust as needed
 
   const stores = [
-    { name: "Brenham", lat: 30.1669, lon: -96.3977, url: "https://www.woodsonlumber.com/" },
-    { name: "Bryan", lat: 30.6744, lon: -96.3743, url: "https://www.woodsonlumber.com/" },
-    { name: "Caldwell", lat: 30.5316, lon: -96.6939, url: "https://www.woodsonlumber.com/" },
-    { name: "Lexington", lat: 30.4152, lon: -97.0105, url: "https://www.woodsonlumber.com/" },
-    { name: "Groesbeck", lat: 31.5249, lon: -96.5336, url: "https://www.woodsonlumber.com/" },
-    { name: "Mexia", lat: 31.6791, lon: -96.4822, url: "https://www.woodsonlumber.com/" },
-    { name: "Buffalo", lat: 31.4632, lon: -96.0580, url: "https://www.woodsonlumber.com/" }
+    { name: "Brenham", lat: 30.1669, lon: -96.3977, url: "https://woodsonwholesaleinc.formstack.com/forms/customerfeedback_copy_1" },
+    { name: "Bryan", lat: 30.6744, lon: -96.3743, url: "https://woodsonwholesaleinc.formstack.com/forms/customerfeedback_copy_2" },
+    { name: "Caldwell", lat: 30.5316, lon: -96.6939, url: "https://woodsonwholesaleinc.formstack.com/forms/customerfeedback_copy_3" },
+    { name: "Lexington", lat: 30.4152, lon: -97.0105, url: "https://woodsonwholesaleinc.formstack.com/forms/customerfeedback_copy_4" },
+    { name: "Groesbeck", lat: 31.5249, lon: -96.5336, url: "https://woodsonwholesaleinc.formstack.com/forms/customerfeedback_copy_6" },
+    { name: "Mexia", lat: 31.6791, lon: -96.4822, url: "https://woodsonwholesaleinc.formstack.com/forms/customerfeedback_copy_5" },
+    { name: "Buffalo", lat: 31.4632, lon: -96.0580, url: "https://woodsonwholesaleinc.formstack.com/forms/customerfeedback_copy_7" }
   ];
 
   function haversine(lat1, lon1, lat2, lon2) {
