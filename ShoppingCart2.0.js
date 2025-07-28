@@ -3,7 +3,10 @@ window.addEventListener("load", function () {
   const originalCartPanel = document.getElementById("ctl00_PageBody_ShoppingCartDetailPanel");
   if (!originalCartPanel) return;
 
-  originalCartPanel.style.display = "none";
+  // ✅ Instead of display: none, move offscreen (keeps WebForms happy)
+  originalCartPanel.style.position = "absolute";
+  originalCartPanel.style.left = "-9999px";
+  originalCartPanel.style.top = "0";
 
   const customCart = document.createElement("div");
   customCart.id = "customCart";
@@ -14,7 +17,8 @@ window.addEventListener("load", function () {
 
   let subtotal = 0;
   const cartRows = originalCartPanel.querySelectorAll(".row.shopping-cart-item");
-  cartRows.forEach(row => {
+
+  cartRows.forEach((row, index) => {
     const productImage = row.querySelector("img.ThumbnailImage")?.src || '';
     const productLink = row.querySelector("a.portalGridLink")?.closest('a')?.href || '#';
     const productCode = row.querySelector("a.portalGridLink")?.innerText || '';
@@ -43,6 +47,7 @@ window.addEventListener("load", function () {
 
     const customQtyId = `customQty-${productCode}`;
     const deleteBtnId = deleteBtn.id;
+    const updateBtnId = updateBtn.id;
 
     wrapper.innerHTML = `
       <img src="${productImage}" style="width: 80px; height: auto; border-radius: 4px;">
@@ -64,13 +69,13 @@ window.addEventListener("load", function () {
     `;
     customCart.appendChild(wrapper);
 
-    // ✅ Bind quantity input change to original qty input + trigger update
+    // ✅ Quantity change triggers value mirror + original update click
     setTimeout(() => {
       const customQty = document.getElementById(customQtyId);
       if (customQty) {
         customQty.addEventListener("change", () => {
           qtyInput.value = customQty.value;
-          updateBtn.click();
+          document.getElementById(updateBtnId)?.click();
         });
       }
     }, 100);
@@ -93,7 +98,7 @@ window.addEventListener("load", function () {
       <a class="btn btn-secondary" href="https://webtrack.woodsonlumber.com/ProductDetail.aspx?pg=4553&pid=152">
         Shop for More
       </a>
-      <a class="btn btn-danger" href="#" onclick="event.preventDefault(); eval('WebForm_DoPostBackWithOptions(new WebForm_PostBackOptions(\\'ctl00$PageBody$EmptyCartButton\\', \\'\\', true, \\'\\', \\'\\', false, true))');">
+      <a class="btn btn-danger" href="#" onclick="event.preventDefault(); WebForm_DoPostBackWithOptions(new WebForm_PostBackOptions('ctl00$PageBody$EmptyCartButton', '', true, '', '', false, true));">
         Empty Cart
       </a>
     </div>
@@ -102,7 +107,7 @@ window.addEventListener("load", function () {
 
   originalCartPanel.parentElement.insertBefore(customCart, originalCartPanel);
 
-  // ✅ Bind remove buttons to original delete buttons
+  // ✅ Remove buttons trigger actual delete <a> element
   setTimeout(() => {
     document.querySelectorAll(".custom-delete-btn").forEach(btn => {
       btn.addEventListener("click", function () {
