@@ -60,34 +60,50 @@ document.addEventListener("DOMContentLoaded", function () {
 
   // 🎯 Function to show custom modal
   function showCustomCartModal() {
-    const subtotalEl = document.querySelector(".SubtotalWrapper");
-    const subtotalText = subtotalEl ? subtotalEl.textContent.match(/\$[\d,.]+/)?.[0] : "—";
+  fetch("/ShoppingCart.aspx")
+    .then(res => res.text())
+    .then(html => {
+      const tempDiv = document.createElement("div");
+      tempDiv.innerHTML = html;
 
-    const items = document.querySelectorAll(".shopping-cart-item");
-    const previewContainer = document.getElementById("cartItemsPreview");
-    previewContainer.innerHTML = "";
+      // Get subtotal
+      const subtotalEl = tempDiv.querySelector(".SubtotalWrapper");
+      const subtotalText = subtotalEl ? subtotalEl.textContent.match(/\$[\d,.]+/)?.[0] : "—";
+      document.getElementById("cartSubtotal").innerHTML = `Subtotal: ${subtotalText}`;
 
-    items.forEach((item, i) => {
-      if (i >= 3) return; // limit preview to 3 items
-      const img = item.querySelector("img")?.src;
-      const name = item.querySelector("a span.portalGridLink")?.textContent || "";
-      const desc = item.querySelector("div > div:nth-child(3) > div")?.textContent || "";
-      const price = item.querySelector(".col-6")?.textContent?.trim() || "";
+      // Get cart items
+      const items = tempDiv.querySelectorAll(".shopping-cart-item");
+      const previewContainer = document.getElementById("cartItemsPreview");
+      previewContainer.innerHTML = "";
 
-      const itemHTML = `
-        <div style="display:flex; align-items:center; margin-bottom:10px;">
-          <img src="${img}" alt="" style="width:50px; height:50px; object-fit:cover; margin-right:10px;">
-          <div>
-            <strong>${name}</strong><br>
-            <small>${desc}</small><br>
-            <span>${price}</span>
-          </div>
-        </div>`;
-      previewContainer.innerHTML += itemHTML;
+      items.forEach((item, i) => {
+        if (i >= 3) return; // limit preview to 3 items
+        const img = item.querySelector("img")?.src || "";
+        const name = item.querySelector("a span.portalGridLink")?.textContent || "";
+        const desc = item.querySelector("div > div:nth-child(3) > div")?.textContent || "";
+        const price = item.querySelector(".col-6")?.textContent?.trim() || "";
+
+        const itemHTML = `
+          <div style="display:flex; align-items:center; margin-bottom:10px;">
+            <img src="${img}" alt="" style="width:50px; height:50px; object-fit:cover; margin-right:10px;">
+            <div>
+              <strong>${name}</strong><br>
+              <small>${desc}</small><br>
+              <span>${price}</span>
+            </div>
+          </div>`;
+        previewContainer.innerHTML += itemHTML;
+      });
+
+      // Show the modal after data is ready
+      document.getElementById("customCartModal").style.display = "block";
+    })
+    .catch(err => {
+      console.error("Failed to fetch cart data:", err);
+      document.getElementById("cartSubtotal").innerHTML = "Subtotal: unavailable";
+      document.getElementById("customCartModal").style.display = "block";
     });
+}
 
-    document.getElementById("cartSubtotal").innerHTML = `Subtotal: ${subtotalText}`;
-    document.getElementById("customCartModal").style.display = "block";
-  }
 });
 
