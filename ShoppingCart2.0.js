@@ -21,15 +21,13 @@ window.addEventListener("load", function () {
     const productName = row.querySelector("a.portalGridLink")?.parentElement?.nextElementSibling?.innerText?.trim() || '';
     const stockStatus = row.querySelector(".col-sm-6 div:nth-child(2) div")?.innerText?.trim() || '';
     const price = row.querySelector(".col-6")?.innerText?.trim().split("ea")[0].replace("$", "").trim() || '';
+
     const qtyInput = row.querySelector("input.riTextBox");
-    const deleteBtn = row.querySelector("a i.fas.fa-times");
     const updateBtn = row.querySelector("a.refresh-cart-line-total");
+    const deleteBtn = row.querySelector("a i.fas.fa-times")?.parentElement;
 
-    if (!qtyInput || !updateBtn) return;
+    if (!qtyInput || !updateBtn || !deleteBtn) return;
 
-    const deleteHref = deleteBtn?.parentElement?.getAttribute("href") || '';
-
-    // ✅ NEW FIXED: Extract total price using regex
     const totalMatch = row.querySelector(".col-sm-3")?.textContent?.match(/\$([\d,.]+)/);
     const totalVal = totalMatch ? parseFloat(totalMatch[1].replace(',', '')) : 0;
     subtotal += totalVal;
@@ -43,6 +41,9 @@ window.addEventListener("load", function () {
     wrapper.style.borderBottom = "1px solid #ccc";
     wrapper.style.paddingBottom = "12px";
 
+    const customQtyId = `customQty-${productCode}`;
+    const deleteBtnId = deleteBtn.id;
+
     wrapper.innerHTML = `
       <img src="${productImage}" style="width: 80px; height: auto; border-radius: 4px;">
       <div style="flex: 1;">
@@ -51,23 +52,31 @@ window.addEventListener("load", function () {
         <div style="color: green;">${stockStatus}</div>
         <div style="margin-top: 8px;">
           <strong>$${price}</strong> ea × 
-          <input type="number" value="${qtyInput.value}" style="width: 60px; padding: 4px;" 
-                 data-update-btn="${updateBtn.id}"
-                 oninput="document.getElementById(this.dataset.updateBtn).click()">
+          <input type="number" value="${qtyInput.value}" id="${customQtyId}" style="width: 60px; padding: 4px;" />
           = <strong>$${totalVal.toFixed(2)}</strong>
           <button class="custom-delete-btn" 
-        data-delete-id="${deleteBtn?.parentElement?.id}" 
-        style="color: red; margin-left: 10px; background: none; border: none; cursor: pointer;">
-  ✕ Remove
-</button>
-
+                  data-delete-id="${deleteBtnId}" 
+                  style="color: red; margin-left: 10px; background: none; border: none; cursor: pointer;">
+            ✕ Remove
+          </button>
         </div>
       </div>
     `;
     customCart.appendChild(wrapper);
+
+    // ✅ Bind quantity input change to original qty input + trigger update
+    setTimeout(() => {
+      const customQty = document.getElementById(customQtyId);
+      if (customQty) {
+        customQty.addEventListener("change", () => {
+          qtyInput.value = customQty.value;
+          updateBtn.click();
+        });
+      }
+    }, 100);
   });
 
-  // Subtotal + Button Row
+  // Subtotal + Buttons
   const subtotalSection = document.createElement("div");
   subtotalSection.style.display = "flex";
   subtotalSection.style.justifyContent = "space-between";
@@ -91,16 +100,17 @@ window.addEventListener("load", function () {
   `;
   customCart.appendChild(subtotalSection);
 
-  setTimeout(() => {
-  document.querySelectorAll(".custom-delete-btn").forEach(btn => {
-    btn.addEventListener("click", function () {
-      const targetId = this.getAttribute("data-delete-id");
-      const originalDelete = document.getElementById(targetId);
-      if (originalDelete) originalDelete.click();
-    });
-  });
-}, 100);
-
   originalCartPanel.parentElement.insertBefore(customCart, originalCartPanel);
+
+  // ✅ Bind remove buttons to original delete buttons
+  setTimeout(() => {
+    document.querySelectorAll(".custom-delete-btn").forEach(btn => {
+      btn.addEventListener("click", function () {
+        const targetId = this.getAttribute("data-delete-id");
+        const originalDelete = document.getElementById(targetId);
+        if (originalDelete) originalDelete.click();
+      });
+    });
+  }, 100);
 });
 
