@@ -1,19 +1,22 @@
 
 document.addEventListener("DOMContentLoaded", function () {
-  console.log("[CartModal] DOMContentLoaded");
+  console.log("[CartModal] DOMContentLoaded ✅");
 
-  // 🧠 Step 1: Add click listeners to Add to Cart buttons
-  const addToCartButtons = document.querySelectorAll("a[href*='AddToCart'], input[id*='AddToCart']");
-  console.log(`[CartModal] Found ${addToCartButtons.length} Add to Cart buttons`);
+  // ✅ Step 1: Hook into your exact Add to Cart button
+  const addToCartButton = document.querySelector("#ctl00_PageBody_productDetail_ctl00_AddProductButton");
 
-  addToCartButtons.forEach(btn => {
-    btn.addEventListener("click", () => {
+  if (addToCartButton) {
+    console.log("[CartModal] Add to Cart button found 🎯");
+
+    addToCartButton.addEventListener("click", () => {
       console.log("[CartModal] Add to Cart clicked – setting session flag");
       sessionStorage.setItem("showAddToCartModal", "true");
     });
-  });
+  } else {
+    console.warn("[CartModal] Add to Cart button NOT FOUND ❌");
+  }
 
-  // 🧠 Step 2: On page load, check sessionStorage
+  // ✅ Step 2: Check if we should show modal
   const modalFlag = sessionStorage.getItem("showAddToCartModal");
   console.log("[CartModal] Modal flag is:", modalFlag);
 
@@ -21,11 +24,11 @@ document.addEventListener("DOMContentLoaded", function () {
     sessionStorage.removeItem("showAddToCartModal");
     console.log("[CartModal] Flag detected – triggering modal load");
     setTimeout(() => {
-      showCustomCartModal(); // trigger modal
+      showCustomCartModal();
     }, 500);
   }
 
-  // 🧱 Inject modal
+  // ✅ Step 3: Inject modal structure
   const modal = document.createElement("div");
   modal.id = "customCartModal";
   modal.style.cssText = `
@@ -73,23 +76,24 @@ document.addEventListener("DOMContentLoaded", function () {
     __doPostBack("ctl00$PageBody$PlaceOrderButton", "");
   };
 
-  // 🛒 Load live cart data
+  // ✅ Step 4: Fetch cart data and show modal
   function showCustomCartModal() {
-    console.log("[CartModal] Fetching /ShoppingCart.aspx");
+    console.log("[CartModal] Fetching cart from /ShoppingCart.aspx");
+
     fetch("/ShoppingCart.aspx")
       .then(res => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.text();
       })
       .then(html => {
-        console.log("[CartModal] Cart HTML fetched successfully");
+        console.log("[CartModal] Cart page fetched successfully");
         const tempDiv = document.createElement("div");
         tempDiv.innerHTML = html;
 
         const subtotalEl = tempDiv.querySelector(".SubtotalWrapper");
         const subtotalText = subtotalEl ? subtotalEl.textContent.match(/\$[\d,.]+/)?.[0] : "—";
         document.getElementById("cartSubtotal").innerHTML = `Subtotal: ${subtotalText}`;
-        console.log("[CartModal] Subtotal:", subtotalText);
+        console.log("[CartModal] Subtotal parsed:", subtotalText);
 
         const items = tempDiv.querySelectorAll(".shopping-cart-item");
         const previewContainer = document.getElementById("cartItemsPreview");
@@ -115,7 +119,7 @@ document.addEventListener("DOMContentLoaded", function () {
         });
 
         modal.style.display = "block";
-        console.log("[CartModal] Modal shown");
+        console.log("[CartModal] Modal shown ✅");
       })
       .catch(err => {
         console.error("[CartModal] Failed to fetch cart:", err);
