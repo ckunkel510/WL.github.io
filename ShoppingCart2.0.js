@@ -3,63 +3,84 @@ document.addEventListener("DOMContentLoaded", function () {
   const panel = document.getElementById("ctl00_PageBody_ShoppingCartDetailPanel");
   if (!panel) return;
 
-  // Hide original layout
+  // Hide the original layout
   panel.style.display = "none";
 
-  // Build custom layout container
+  // Create new custom cart container
   const customCart = document.createElement("div");
   customCart.id = "customCartLayout";
-  customCart.style.cssText = "padding: 20px; font-family: sans-serif;";
+  customCart.style.cssText = "padding: 20px; font-family: sans-serif; max-width: 1000px; margin: 0 auto;";
+
+  // Placeholder for store location (can replace with real logic later)
+  const locationName = sessionStorage.getItem("preferredStoreName") || "Caldwell"; // Example fallback
+  const locationNotice = document.createElement("div");
+  locationNotice.innerHTML = `<p style="font-size: 16px; margin-bottom: 20px;">🛒 You are shopping: <strong>${locationName}</strong></p>`;
+  customCart.appendChild(locationNotice);
 
   // Heading
-  customCart.innerHTML = "<h2>Your Cart</h2>";
+  customCart.innerHTML += "<h2>Your Cart</h2>";
 
-  // Loop through existing items
+  // Loop through cart items
   const items = document.querySelectorAll(".shopping-cart-item");
-  items.forEach((item, i) => {
+  items.forEach((item) => {
     const img = item.querySelector("img")?.src || "";
-    const code = item.querySelector(".portalGridLink")?.textContent || "";
+    const productLinkEl = item.querySelector("a.portalGridLink")?.closest("a");
+    const productURL = productLinkEl?.href || "#";
+    const productCode = item.querySelector(".portalGridLink")?.textContent || "";
     const desc = item.querySelectorAll("div")[7]?.textContent?.trim() || "";
-    const location = item.querySelectorAll("div")[13]?.textContent?.trim() || "";
-    const stock = item.querySelectorAll("div")[15]?.textContent?.trim() || "";
     const price = item.querySelectorAll(".col-6")[0]?.textContent?.trim() || "";
     const qtyInput = item.querySelector("input[type='text']");
-    const qty = qtyInput?.value || "";
+    const qtyVal = qtyInput?.value || "";
+    const qtyID = qtyInput?.id || "";
+    const updateID = item.querySelector("a[id*='refQty_']")?.id || "";
     const total = item.querySelectorAll(".col-12.col-sm-3")[0]?.innerText.trim().split("\n")[1] || "";
 
-    const updateLink = item.querySelector("a[id*='refQty_']")?.outerHTML || "";
-    const deleteLink = item.querySelector("a[id*='del_']")?.outerHTML || "";
-
     const row = document.createElement("div");
-    row.style.cssText = "display: flex; align-items: center; justify-content: space-between; padding: 15px 0; border-bottom: 1px solid #ccc; flex-wrap: wrap;";
+    row.style.cssText = `
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      align-items: center;
+      padding: 15px 0;
+      border-bottom: 1px solid #ccc;
+    `;
+
     row.innerHTML = `
-      <div style="display:flex; align-items:center; flex:1; min-width:250px;">
-        <img src="${img}" alt="" style="width:60px; height:60px; object-fit:cover; margin-right:10px;">
+      <div style="display: flex; align-items: center; flex: 1; min-width: 250px;">
+        <a href="${productURL}">
+          <img src="${img}" alt="${desc}" style="width: 60px; height: 60px; object-fit: cover; margin-right: 10px;">
+        </a>
         <div>
-          <strong>${desc}</strong><br>
-          <small>${code} – ${location} (${stock})</small>
+          <a href="${productURL}" style="text-decoration: none; color: #000;">
+            <strong>${desc}</strong><br>
+            <small>${productCode}</small>
+          </a>
         </div>
       </div>
-      <div style="text-align:right; min-width:200px;">
+      <div style="text-align: right; min-width: 220px;">
         <div>Price: ${price}</div>
-        <div>Qty: <input style="width:60px;" value="${qty}" disabled></div>
+        <div>
+          Qty:
+          <input id="${qtyID}" value="${qtyVal}" style="width: 60px;" onchange="document.getElementById('${updateID}').click()">
+        </div>
         <div>Total: <strong>${total}</strong></div>
-        <div style="margin-top:5px;">${updateLink} ${deleteLink}</div>
+        <div style="display: none;">Update link exists but hidden</div>
       </div>
     `;
+
     customCart.appendChild(row);
   });
 
-  // Add subtotal
+  // Subtotal
   const subtotal = document.querySelector(".SubtotalWrapper")?.textContent.match(/\$[\d,.]+/)?.[0] || "—";
   const summary = document.createElement("div");
-  summary.style.cssText = "text-align:right; font-size:18px; margin-top:20px;";
+  summary.style.cssText = "text-align: right; font-size: 18px; margin-top: 20px;";
   summary.innerHTML = `<strong>Subtotal:</strong> ${subtotal}`;
   customCart.appendChild(summary);
 
-  // Add action buttons
+  // Action buttons
   const actions = document.createElement("div");
-  actions.style.cssText = "display:flex; justify-content:flex-end; gap:10px; margin-top:20px;";
+  actions.style.cssText = "display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;";
   actions.innerHTML = `
     <a href="javascript:WebForm_DoPostBackWithOptions(new WebForm_PostBackOptions('ctl00$PageBody$PlaceOrderButton', '', true, '', '', false, true))">
       <button style="background:#007b00; color:white; border:none; padding:10px 20px; border-radius:4px;">Place Order</button>
@@ -70,7 +91,7 @@ document.addEventListener("DOMContentLoaded", function () {
   `;
   customCart.appendChild(actions);
 
-  // Add to page
+  // Inject the new layout after the original one
   panel.parentNode.insertBefore(customCart, panel.nextSibling);
 });
 
