@@ -58,6 +58,7 @@ document.addEventListener('DOMContentLoaded', function () {
     row.style.padding = '15px 0';
     row.style.borderBottom = '1px solid #ccc';
 
+    const qtyBoxId = `qty-${index}`;
     row.innerHTML = `
       <div style="display: flex; align-items: center; flex: 1; min-width: 250px;">
         <a href="${item.url}" style="display:inline-block; margin-right:10px;">
@@ -74,12 +75,23 @@ document.addEventListener('DOMContentLoaded', function () {
         <div>Price: ${item.priceText}</div>
         <div>
           Qty:
-          <input id="qty-${index}" value="${item.qty}" style="width: 60px;" onchange="document.getElementById('${item.updateId}').click()">
+          <input id="${qtyBoxId}" value="${item.qty}" style="width: 60px;">
         </div>
         <div>Total: <strong>${item.totalText}</strong></div>
       </div>
     `;
     cartContainer.appendChild(row);
+
+    setTimeout(() => {
+      const qtyField = document.getElementById(qtyBoxId);
+      if (qtyField) {
+        qtyField.addEventListener('change', () => {
+          console.log(`[Cart] Qty changed for ${item.productCode}, triggering update ID: ${item.updateId}`);
+          const realUpdateBtn = document.getElementById(item.updateId);
+          if (realUpdateBtn) realUpdateBtn.click();
+        });
+      }
+    }, 0);
   });
 
   const originalCart = document.querySelector('.shopping-cart');
