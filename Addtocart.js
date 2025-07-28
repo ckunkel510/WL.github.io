@@ -1,9 +1,13 @@
 
 document.addEventListener("DOMContentLoaded", function () {
-  // 🧠 Track previous display value
-  let lastDisplay = "none";
+  // 🧠 Find the <tr> that wraps .productAddedMessage
+  const messageSpan = document.querySelector(".productAddedMessage");
+  let parentRow = messageSpan?.closest("tr");
+  let lastDisplay = parentRow ? getComputedStyle(parentRow).display : "none";
 
-  // 🧠 Inject modal HTML
+  if (!parentRow) return; // bail if we can't find the container
+
+  // 🧠 Inject Modal
   const modal = document.createElement("div");
   modal.id = "customCartModal";
   modal.style.cssText = `
@@ -41,44 +45,32 @@ document.addEventListener("DOMContentLoaded", function () {
   `;
   document.body.appendChild(modal);
 
-  // 🔁 Hide modal + message when 'Keep Shopping' clicked
+  // Close and hide original row
   document.getElementById("customCartCloseBtn").onclick = () => {
     modal.style.display = "none";
-    const message = document.querySelector(".productAddedMessage");
-    if (message) message.style.display = "none";
+    parentRow.style.display = "none";
   };
 
-  // ✅ Trigger real checkout logic
+  // Trigger postback like real Place Order
   document.getElementById("customCheckoutBtn").onclick = () => {
     __doPostBack("ctl00$PageBody$PlaceOrderButton", "");
   };
 
-  // 🎯 Watch for display style change
-  const message = document.querySelector(".productAddedMessage");
-  if (message) {
-    const observer = new MutationObserver((mutations) => {
-      mutations.forEach((mutation) => {
-        if (
-          mutation.type === "attributes" &&
-          mutation.attributeName === "style"
-        ) {
-          const currentDisplay = getComputedStyle(message).display;
-          if (lastDisplay === "none" && currentDisplay !== "none") {
-            lastDisplay = currentDisplay;
-            message.style.display = "none";
-            showCustomCartModal();
-          } else {
-            lastDisplay = currentDisplay;
-          }
-        }
-      });
-    });
+  // Watch for style change on the <tr>
+  const observer = new MutationObserver(() => {
+    const currentDisplay = getComputedStyle(parentRow).display;
+    if (lastDisplay === "none" && currentDisplay !== "none") {
+      lastDisplay = currentDisplay;
+      parentRow.style.display = "none";
+      showCustomCartModal();
+    } else {
+      lastDisplay = currentDisplay;
+    }
+  });
 
-    // Watch for style attribute changes
-    observer.observe(message, { attributes: true, attributeFilter: ["style"] });
-  }
+  observer.observe(parentRow, { attributes: true, attributeFilter: ["style"] });
 
-  // 📦 Load cart data from ShoppingCart.aspx
+  // Fetch cart data from ShoppingCart.aspx
   function showCustomCartModal() {
     fetch("/ShoppingCart.aspx")
       .then(res => res.text())
@@ -121,4 +113,3 @@ document.addEventListener("DOMContentLoaded", function () {
       });
   }
 });
-
