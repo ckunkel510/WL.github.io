@@ -9,15 +9,18 @@ document.addEventListener("DOMContentLoaded", function () {
   customCart.id = "customCartLayout";
   customCart.style.cssText = "padding: 20px; font-family: sans-serif; max-width: 1000px; margin: 0 auto;";
 
-  const locationName = sessionStorage.getItem("preferredStoreName") || "Caldwell"; // Customize this logic if needed
+  // Location (fake fallback for now)
+  const locationName = sessionStorage.getItem("preferredStoreName") || "Caldwell";
   const locationNotice = document.createElement("div");
   locationNotice.innerHTML = `<p style="font-size: 16px; margin-bottom: 20px;">🛒 You are shopping: <strong>${locationName}</strong></p>`;
   customCart.appendChild(locationNotice);
 
+  // Heading
   const heading = document.createElement("h2");
   heading.textContent = "Your Cart";
   customCart.appendChild(heading);
 
+  // Cart rows
   const items = document.querySelectorAll(".shopping-cart-item");
   items.forEach((item) => {
     const img = item.querySelector("img")?.src || "";
@@ -67,17 +70,19 @@ document.addEventListener("DOMContentLoaded", function () {
     customCart.appendChild(row);
   });
 
+  // Subtotal
   const subtotal = document.querySelector(".SubtotalWrapper")?.textContent.match(/\$[\d,.]+/)?.[0] || "—";
   const summary = document.createElement("div");
   summary.style.cssText = "text-align: right; font-size: 18px; margin-top: 20px;";
   summary.innerHTML = `<strong>Subtotal:</strong> ${subtotal}`;
   customCart.appendChild(summary);
 
+  // Action buttons
   const actions = document.createElement("div");
   actions.style.cssText = "display: flex; justify-content: space-between; margin-top: 20px;";
 
   const shopMore = document.createElement("a");
-  shopMore.href = "/ProductDetail.aspx?pid=6750";
+  shopMore.href = "/ProductDetail.aspx?pid=6750"; // You can swap this with a dynamic best-seller or category
   shopMore.innerHTML = `<button style="background:#6b0016; color:white; border:none; padding:10px 20px; border-radius:4px;">Shop More</button>`;
 
   const placeOrderBtn = document.createElement("button");
@@ -92,6 +97,7 @@ document.addEventListener("DOMContentLoaded", function () {
   actions.appendChild(placeOrderBtn);
   customCart.appendChild(actions);
 
+  // Inject
   panel.parentNode.insertBefore(customCart, panel.nextSibling);
 });
 
