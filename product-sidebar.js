@@ -97,7 +97,7 @@ function logShareEvent(method) {
 }
 
 // Add it above the product image
-$imageWrap.prepend($shareBtn);
+$imageWrap.append($shareBtn);
 
 }
 
