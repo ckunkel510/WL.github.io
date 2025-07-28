@@ -1,9 +1,6 @@
 
 document.addEventListener("DOMContentLoaded", function () {
-  let cartTriggered = false;
-
-  // 🧼 Reset trigger on page load
-  cartTriggered = false;
+  let lastSeenMessage = null;
 
   // 🧠 Inject modal
   const modal = document.createElement("div");
@@ -43,43 +40,36 @@ document.addEventListener("DOMContentLoaded", function () {
   `;
   document.body.appendChild(modal);
 
-  // 🟣 Hook up close button
   document.getElementById("customCartCloseBtn").onclick = () => {
     modal.style.display = "none";
   };
 
-  // ✅ Trigger checkout postback (mimics ShoppingCart.aspx behavior)
   document.getElementById("customCheckoutBtn").onclick = () => {
     __doPostBack("ctl00$PageBody$PlaceOrderButton", "");
   };
 
-  // 🟡 Hook into Add to Cart button(s) — adjust selector if needed
-  const addToCartButtons = document.querySelectorAll("a[href*='AddToCart']");
-  addToCartButtons.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      cartTriggered = true;
-    });
-  });
-
-  // 👁️ Observe DOM mutations and wait for "product added" message only if user clicked Add
+  // 🧠 Observe body mutations and react to new .productAddedMessage
   const observer = new MutationObserver(() => {
     const message = document.querySelector(".productAddedMessage");
-    if (cartTriggered && message && message.offsetParent !== null) {
-      // Prevent duplicate popups
-      cartTriggered = false;
 
-      // Hide native message
+    if (
+      message &&
+      message.offsetParent !== null && // it is visible
+      message !== lastSeenMessage // it's a new one
+    ) {
+      lastSeenMessage = message; // mark it seen
+
       message.style.display = "none";
 
-      // Delay and fetch cart data
       setTimeout(() => {
         showCustomCartModal();
       }, 500);
     }
   });
+
   observer.observe(document.body, { childList: true, subtree: true });
 
-  // 📦 Pull live cart data from ShoppingCart.aspx
+  // 📦 Load cart data from ShoppingCart.aspx
   function showCustomCartModal() {
     fetch("/ShoppingCart.aspx")
       .then(res => res.text())
@@ -122,4 +112,3 @@ document.addEventListener("DOMContentLoaded", function () {
       });
   }
 });
-
