@@ -1,112 +1,109 @@
+// ShoppingCart2.0.js
 
-document.addEventListener("DOMContentLoaded", function () {
-  console.log("[Cart] DOM Ready");
+console.log('[Cart] DOM Ready');
 
-  const panel = document.getElementById("ctl00_PageBody_ShoppingCartDetailPanel");
-  if (!panel) {
-    console.log("[Cart] Panel not found");
-    return;
-  }
+document.addEventListener('DOMContentLoaded', function () {
+  const cartItems = Array.from(document.querySelectorAll('.row.shopping-cart-item'));
+  const cartContainer = document.createElement('div');
+  cartContainer.id = 'custom-cart';
+  cartContainer.style.marginTop = '20px';
 
-  panel.style.display = "none";
+  const headerRow = document.createElement('div');
+  headerRow.style.display = 'flex';
+  headerRow.style.justifyContent = 'space-between';
+  headerRow.style.padding = '10px 0';
+  headerRow.style.borderBottom = '2px solid #ccc';
+  headerRow.innerHTML = `
+    <div style="flex: 1; font-weight: bold;">Product</div>
+    <div style="width: 220px; text-align: right; font-weight: bold;">Details</div>
+  `;
+  cartContainer.appendChild(headerRow);
 
-  const customCart = document.createElement("div");
-  customCart.id = "customCartLayout";
-  customCart.style.cssText = "padding: 20px; font-family: sans-serif; max-width: 1000px; margin: 0 auto;";
+  let itemCount = 0;
+  cartItems.forEach((item, index) => {
+    const urlEl = item.querySelector('a[href*="ProductDetail.aspx"]');
+    const imgEl = item.querySelector('img');
+    const qtyInput = item.querySelector('input[type="text"][id*="_qty_"]');
+    const updateBtn = item.querySelector('a[id*="refQty"]');
+    const priceText = item.querySelector('.col-6').textContent.trim();
+    const totalText = item.querySelector('.col-sm-3 strong')?.textContent?.trim() || priceText;
 
-  const locationName = sessionStorage.getItem("preferredStoreName") || "Caldwell";
-  const locationNotice = document.createElement("div");
-  locationNotice.innerHTML = `<p style="font-size: 16px; margin-bottom: 20px;">🛒 You are shopping: <strong>${locationName}</strong></p>`;
-  customCart.appendChild(locationNotice);
+    if (!urlEl || !imgEl || !qtyInput || !updateBtn) {
+      console.log(`[Cart] Skipping header or malformed row ${index + 1}`);
+      return;
+    }
 
-  const heading = document.createElement("h2");
-  heading.textContent = "Your Cart";
-  customCart.appendChild(heading);
+    const url = urlEl.href;
+    const productCode = urlEl.textContent.trim();
+    const productName = urlEl.closest('div').nextElementSibling?.textContent.trim() || '';
+    const imgSrc = imgEl.src;
+    const qty = qtyInput.value;
+    const updateId = updateBtn.id;
 
-  const items = document.querySelectorAll(".shopping-cart-item");
-  console.log(`[Cart] Found ${items.length} items`);
+    console.log(`[Cart] Item ${++itemCount}: URL=${url}, Qty=${qty}, UpdateID=${updateId}`);
 
-  items.forEach((item, index) => {
-    const img = item.querySelector("img")?.src || "";
-    const productLinkEl = item.querySelector("a.portalGridLink");
-    const productURL = productLinkEl?.getAttribute("href") || "#";
-    const productCode = productLinkEl?.textContent.trim() || "";
-    const desc = item.querySelectorAll("div")[7]?.textContent?.trim() || "";
-    const price = item.querySelectorAll(".col-6")[0]?.textContent?.trim() || "";
-    const qtyInput = item.querySelector("input[type='text']");
-    const qtyVal = qtyInput?.value || "";
-    const qtyID = qtyInput?.id || "";
-    const updateID = item.querySelector("a[id*='refQty_']")?.id || "";
-    const total = item.querySelectorAll(".col-12.col-sm-3")[0]?.innerText.trim().split("\n")[1] || "";
-
-    console.log(`[Cart] Item ${index + 1}: URL=${productURL}, Qty=${qtyVal}, UpdateID=${updateID}`);
-
-    const row = document.createElement("div");
-    row.style.cssText = `
-      display: flex;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      align-items: center;
-      padding: 15px 0;
-      border-bottom: 1px solid #ccc;
-    `;
+    const row = document.createElement('div');
+    row.style.display = 'flex';
+    row.style.justifyContent = 'space-between';
+    row.style.alignItems = 'center';
+    row.style.flexWrap = 'wrap';
+    row.style.padding = '15px 0';
+    row.style.borderBottom = '1px solid #ccc';
 
     row.innerHTML = `
       <div style="display: flex; align-items: center; flex: 1; min-width: 250px;">
-        <a href="${productURL}" style="display:inline-block; margin-right:10px;">
-          <img src="${img}" alt="${desc}" style="width: 60px; height: 60px; object-fit: cover;">
+        <a href="${url}" style="display:inline-block; margin-right:10px;">
+          <div class="image-wrapper" style="position:relative; display:inline-block;"><img src="${imgSrc}" alt="${productName}" style="width: 60px; height: 60px; object-fit: cover;"></div>
         </a>
         <div>
-          <a href="${productURL}" style="text-decoration: none; color: #000;">
-            <strong>${desc}</strong><br>
-            <small>${productCode}</small>
+          <a href="${url}" style="text-decoration: none; color: #000;">
+            <strong>${productCode}</strong><br>
+            <small>${productName}</small>
           </a>
         </div>
       </div>
       <div style="text-align: right; min-width: 220px;">
-        <div>Price: ${price}</div>
+        <div>Price: ${priceText}</div>
         <div>
           Qty:
-          <input id="${qtyID}" value="${qtyVal}" style="width: 60px;" onchange="document.getElementById('${updateID}').click()">
+          <input id="qty-${itemCount}" value="${qty}" style="width: 60px;" onchange="document.getElementById('${updateId}').click()">
         </div>
-        <div>Total: <strong>${total}</strong></div>
+        <div>Total: <strong>${totalText}</strong></div>
       </div>
     `;
 
-    customCart.appendChild(row);
+    cartContainer.appendChild(row);
   });
 
-  const subtotal = document.querySelector(".SubtotalWrapper")?.textContent.match(/\$[\d,.]+/)?.[0] || "—";
+  const originalCart = document.querySelector('.shopping-cart');
+  if (originalCart) originalCart.style.display = 'none';
+
+  const subtotal = document.querySelector('.SubtotalWrapper')?.innerText.trim();
   console.log(`[Cart] Subtotal: ${subtotal}`);
 
-  const summary = document.createElement("div");
-  summary.style.cssText = "text-align: right; font-size: 18px; margin-top: 20px;";
-  summary.innerHTML = `<strong>Subtotal:</strong> ${subtotal}`;
-  customCart.appendChild(summary);
+  const totalRow = document.createElement('div');
+  totalRow.style.display = 'flex';
+  totalRow.style.justifyContent = 'space-between';
+  totalRow.style.marginTop = '20px';
+  totalRow.innerHTML = `
+    <div><a href="/Products.aspx" class="epi-button">🛒 Shop More</a></div>
+    <div>
+      <strong>${subtotal}</strong><br>
+      <a id="customPlaceOrderBtn" class="epi-button" style="margin-top:10px;">Place Order</a>
+    </div>
+  `;
+  cartContainer.appendChild(totalRow);
 
-  const actions = document.createElement("div");
-  actions.style.cssText = "display: flex; justify-content: space-between; margin-top: 20px;";
+  document.querySelector('#ctl00_PageBody_CartLineControl')?.prepend(cartContainer);
 
-  const shopMore = document.createElement("a");
-  shopMore.href = "/ProductDetail.aspx?pid=6750";
-  shopMore.innerHTML = `<button style="background:#6b0016; color:white; border:none; padding:10px 20px; border-radius:4px;">Shop More</button>`;
-
-  const placeOrderBtn = document.createElement("button");
-  placeOrderBtn.textContent = "Place Order";
-  placeOrderBtn.style.cssText = "background:#007b00; color:white; border:none; padding:10px 20px; border-radius:4px;";
-  placeOrderBtn.onclick = function () {
-    const originalBtn = document.getElementById("ctl00_PageBody_PlaceOrderButton");
-    if (originalBtn) {
-      console.log("[Cart] Clicking Place Order button");
-      originalBtn.click();
-    } else {
-      console.warn("[Cart] Place Order button not found");
-    }
-  };
-
-  actions.appendChild(shopMore);
-  actions.appendChild(placeOrderBtn);
-  customCart.appendChild(actions);
-
-  panel.parentNode.insertBefore(customCart, panel.nextSibling);
+  const realPlaceOrder = document.getElementById('ctl00_PageBody_PlaceOrderButton');
+  const customBtn = document.getElementById('customPlaceOrderBtn');
+  if (customBtn && realPlaceOrder) {
+    customBtn.addEventListener('click', () => {
+      console.log('[Cart] Triggering real PlaceOrder button');
+      realPlaceOrder.click();
+    });
+  } else {
+    console.warn('[Cart] PlaceOrder button not found');
+  }
 });
