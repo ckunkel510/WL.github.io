@@ -54,10 +54,8 @@ $(document).ready(function () {
   $imageWrap.append($imageTd);
   
   // === Share Button ===
-const productID =
-  $("#ctl00_PageBody_productDetail_ctl00_AddProductButton").attr("href")?.match(/pid=(\d+)/)?.[1] ||
-  $('[id*="AddProductButton"]').attr("onclick")?.match(/pid=(\d+)/)?.[1] ||
-  null;
+const urlParams = new URLSearchParams(window.location.search);
+const productID = urlParams.get("pid");
 
 console.log("[ShareButton] Detected productID:", productID);
 
