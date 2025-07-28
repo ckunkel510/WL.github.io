@@ -2,7 +2,10 @@
 document.addEventListener("DOMContentLoaded", function () {
   let cartTriggered = false;
 
-  // 🛠️ Inject modal HTML
+  // 🧼 Reset trigger on page load
+  cartTriggered = false;
+
+  // 🧠 Inject modal
   const modal = document.createElement("div");
   modal.id = "customCartModal";
   modal.style.cssText = `
@@ -30,11 +33,9 @@ document.addEventListener("DOMContentLoaded", function () {
           View Cart
         </button>
       </a>
-      <a href="/Checkout.aspx" style="text-decoration: none;">
-        <button style="background:#007b00; color:white; border:none; padding:8px 14px; border-radius:5px; cursor:pointer;">
-          Checkout
-        </button>
-      </a>
+      <button id="customCheckoutBtn" style="background:#007b00; color:white; border:none; padding:8px 14px; border-radius:5px; cursor:pointer;">
+        Checkout
+      </button>
     </div>
     <div style="text-align:center; margin-top:10px;">
       <button id="customCartCloseBtn" style="background:none; border:none; color:#666; text-decoration:underline; cursor:pointer;">Keep Shopping</button>
@@ -42,12 +43,17 @@ document.addEventListener("DOMContentLoaded", function () {
   `;
   document.body.appendChild(modal);
 
-  // 👋 Close modal
+  // 🟣 Hook up close button
   document.getElementById("customCartCloseBtn").onclick = () => {
     modal.style.display = "none";
   };
 
-  // 🔔 Detect Add to Cart button click
+  // ✅ Trigger checkout postback (mimics ShoppingCart.aspx behavior)
+  document.getElementById("customCheckoutBtn").onclick = () => {
+    __doPostBack("ctl00$PageBody$PlaceOrderButton", "");
+  };
+
+  // 🟡 Hook into Add to Cart button(s) — adjust selector if needed
   const addToCartButtons = document.querySelectorAll("a[href*='AddToCart']");
   addToCartButtons.forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -55,15 +61,17 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   });
 
-  // 👀 Watch for productAddedMessage to appear
+  // 👁️ Observe DOM mutations and wait for "product added" message only if user clicked Add
   const observer = new MutationObserver(() => {
-    if (!cartTriggered) return;
-
     const message = document.querySelector(".productAddedMessage");
-    if (message && message.offsetParent !== null) {
-      message.style.display = "none";
+    if (cartTriggered && message && message.offsetParent !== null) {
+      // Prevent duplicate popups
       cartTriggered = false;
 
+      // Hide native message
+      message.style.display = "none";
+
+      // Delay and fetch cart data
       setTimeout(() => {
         showCustomCartModal();
       }, 500);
@@ -71,7 +79,7 @@ document.addEventListener("DOMContentLoaded", function () {
   });
   observer.observe(document.body, { childList: true, subtree: true });
 
-  // 📦 Load cart data and populate modal
+  // 📦 Pull live cart data from ShoppingCart.aspx
   function showCustomCartModal() {
     fetch("/ShoppingCart.aspx")
       .then(res => res.text())
@@ -79,12 +87,10 @@ document.addEventListener("DOMContentLoaded", function () {
         const tempDiv = document.createElement("div");
         tempDiv.innerHTML = html;
 
-        // Get subtotal
         const subtotalEl = tempDiv.querySelector(".SubtotalWrapper");
         const subtotalText = subtotalEl ? subtotalEl.textContent.match(/\$[\d,.]+/)?.[0] : "—";
         document.getElementById("cartSubtotal").innerHTML = `Subtotal: ${subtotalText}`;
 
-        // Get item previews
         const items = tempDiv.querySelectorAll(".shopping-cart-item");
         const previewContainer = document.getElementById("cartItemsPreview");
         previewContainer.innerHTML = "";
@@ -96,7 +102,7 @@ document.addEventListener("DOMContentLoaded", function () {
           const desc = item.querySelector("div > div:nth-child(3) > div")?.textContent || "";
           const price = item.querySelector(".col-6")?.textContent?.trim() || "";
 
-          const itemHTML = `
+          previewContainer.innerHTML += `
             <div style="display:flex; align-items:center; margin-bottom:10px;">
               <img src="${img}" alt="" style="width:50px; height:50px; object-fit:cover; margin-right:10px;">
               <div>
@@ -105,10 +111,8 @@ document.addEventListener("DOMContentLoaded", function () {
                 <span>${price}</span>
               </div>
             </div>`;
-          previewContainer.innerHTML += itemHTML;
         });
 
-        // Show modal
         document.getElementById("customCartModal").style.display = "block";
       })
       .catch(err => {
