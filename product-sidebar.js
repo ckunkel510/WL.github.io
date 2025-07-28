@@ -54,10 +54,9 @@ $(document).ready(function () {
   $imageWrap.append($imageTd);
   
   // === Share Button ===
-const urlParams = new URLSearchParams(window.location.search);
-const productID = urlParams.get("pid");
+const productID = new URLSearchParams(window.location.search).get("pid");
 
-console.log("[ShareButton] Detected productID:", productID);
+console.log("[ShareButton] Extracted productID from URL:", productID);
 
 if (productID) {
   const webtrackURL = `${window.location.origin}/ProductDetail.aspx?pid=${productID}`;
@@ -69,13 +68,14 @@ if (productID) {
   const $shareBtn = $("<button>", { id: "share-product-button" })
     .text("🔗 Share This Product")
     .css({
+      display: "block",
       padding: "8px 12px",
       backgroundColor: "#6b0016",
       color: "white",
       border: "none",
       borderRadius: "4px",
       cursor: "pointer",
-      marginBottom: "10px",
+      margin: "10px auto 0", // center it under image
     })
     .on("click", () => {
       console.log("[ShareButton] Share button clicked");
@@ -117,14 +117,15 @@ if (productID) {
     }
   }
 
-  const $domImageWrap = $("#product-image-wrapper");
-if ($domImageWrap.length) {
-  console.log("[ShareButton] Appending share button to DOM imageWrap");
-  $domImageWrap.prepend($shareBtn);
-} else {
-  console.warn("[ShareButton] #product-image-wrapper not found in DOM");
+  const $img = $("#ctl00_PageBody_productDetail_ProductImage");
+  if ($img.length) {
+    console.log("[ShareButton] Appending share button after product image");
+    $img.after($shareBtn);
+  } else {
+    console.warn("[ShareButton] Product image element not found; share button not appended");
+  }
 }
-}
+
 
   }
 
