@@ -117,13 +117,12 @@ if (productID) {
     }
   }
 
-  const $img = $("#ctl00_PageBody_productDetail_ProductImage");
-  if ($img.length) {
-    console.log("[ShareButton] Appending share button after product image");
-    $img.after($shareBtn);
-  } else {
-    console.warn("[ShareButton] Product image element not found; share button not appended");
-  }
+  if ($imageTd && $imageTd.length) {
+  console.log("[ShareButton] Appending share button to imageTd");
+  $imageTd.append($shareBtn);
+} else {
+  console.warn("[ShareButton] $imageTd not available; share button not appended");
+}
 }
 
 
