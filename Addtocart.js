@@ -1,13 +1,22 @@
 
 document.addEventListener("DOMContentLoaded", function () {
-  // 🧠 Find the <tr> that wraps .productAddedMessage
-  const messageSpan = document.querySelector(".productAddedMessage");
-  let parentRow = messageSpan?.closest("tr");
-  let lastDisplay = parentRow ? getComputedStyle(parentRow).display : "none";
+  // 🧠 Step 1: Add click listeners to Add to Cart buttons
+  const addToCartButtons = document.querySelectorAll("a[href*='AddToCart'], input[id*='AddToCart']");
+  addToCartButtons.forEach(btn => {
+    btn.addEventListener("click", () => {
+      sessionStorage.setItem("showAddToCartModal", "true");
+    });
+  });
 
-  if (!parentRow) return; // bail if we can't find the container
+  // 🧠 Step 2: On page load, check sessionStorage
+  if (sessionStorage.getItem("showAddToCartModal") === "true") {
+    sessionStorage.removeItem("showAddToCartModal"); // clear it immediately
+    setTimeout(() => {
+      showCustomCartModal(); // trigger modal
+    }, 500); // wait a bit to make sure cart is updated
+  }
 
-  // 🧠 Inject Modal
+  // 🧱 Inject modal
   const modal = document.createElement("div");
   modal.id = "customCartModal";
   modal.style.cssText = `
@@ -45,32 +54,15 @@ document.addEventListener("DOMContentLoaded", function () {
   `;
   document.body.appendChild(modal);
 
-  // Close and hide original row
   document.getElementById("customCartCloseBtn").onclick = () => {
     modal.style.display = "none";
-    parentRow.style.display = "none";
   };
 
-  // Trigger postback like real Place Order
   document.getElementById("customCheckoutBtn").onclick = () => {
     __doPostBack("ctl00$PageBody$PlaceOrderButton", "");
   };
 
-  // Watch for style change on the <tr>
-  const observer = new MutationObserver(() => {
-    const currentDisplay = getComputedStyle(parentRow).display;
-    if (lastDisplay === "none" && currentDisplay !== "none") {
-      lastDisplay = currentDisplay;
-      parentRow.style.display = "none";
-      showCustomCartModal();
-    } else {
-      lastDisplay = currentDisplay;
-    }
-  });
-
-  observer.observe(parentRow, { attributes: true, attributeFilter: ["style"] });
-
-  // Fetch cart data from ShoppingCart.aspx
+  // 🛒 Load live cart data
   function showCustomCartModal() {
     fetch("/ShoppingCart.aspx")
       .then(res => res.text())
