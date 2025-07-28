@@ -49,6 +49,18 @@ document.addEventListener('DOMContentLoaded', function () {
     itemData.push({ url, imgSrc, productCode, productName, priceText, totalText, qty, updateId });
   });
 
+  const storeName = document.querySelector('#locationFieldDelivery')?.textContent || document.querySelector('#locationFieldInvoice')?.textContent || '';
+  if (storeName) {
+    const storeNote = document.createElement('div');
+    storeNote.style.margin = '20px 0';
+    storeNote.style.padding = '10px';
+    storeNote.style.backgroundColor = '#f5f5f5';
+    storeNote.style.border = '1px solid #ccc';
+    storeNote.style.borderRadius = '6px';
+    storeNote.innerHTML = `<strong>You're shopping:</strong> ${storeName}. Store-specific info coming soon.`;
+    cartContainer.prepend(storeNote);
+  }
+
   itemData.forEach((item, index) => {
     const row = document.createElement('div');
     row.style.display = 'flex';
@@ -113,27 +125,12 @@ document.addEventListener('DOMContentLoaded', function () {
   const injectPoint = document.querySelector('#ctl00_PageBody_ShoppingCartSummaryTableControl');
   if (injectPoint) {
     console.log('[Cart] Inject point found: ctl00_PageBody_ShoppingCartSummaryTableControl');
+    injectPoint.innerHTML = '';
     injectPoint.prepend(cartContainer);
   } else {
     console.error('[Cart] No valid inject point found.');
     return;
   }
-
-  // Hide old cart containers
-  const fallbackCartContainers = [
-    '#ctl00_PageBody_ShoppingCartSummaryTableControl',
-    '#ctl00_PageBody_CartLineControl',
-    '.row.shopping-cart-item',
-    '.shopping-cart'
-  ];
-
-  fallbackCartContainers.forEach(selector => {
-    const el = document.querySelector(selector);
-    if (el) {
-      el.style.display = 'none';
-      console.log(`[Cart] Hiding original element: ${selector}`);
-    }
-  });
 
   const realPlaceOrder = document.getElementById('ctl00_PageBody_PlaceOrderButton');
   const customBtn = document.getElementById('customPlaceOrderBtn');
@@ -144,17 +141,5 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   } else {
     console.warn('[Cart] PlaceOrder button not found');
-  }
-
-  const storeName = document.querySelector('#locationFieldDelivery')?.textContent || document.querySelector('#locationFieldInvoice')?.textContent || '';
-  if (storeName) {
-    const storeNote = document.createElement('div');
-    storeNote.style.margin = '20px 0';
-    storeNote.style.padding = '10px';
-    storeNote.style.backgroundColor = '#f5f5f5';
-    storeNote.style.border = '1px solid #ccc';
-    storeNote.style.borderRadius = '6px';
-    storeNote.innerHTML = `<strong>You're shopping:</strong> ${storeName}. Store-specific info coming soon.`;
-    cartContainer.prepend(storeNote);
   }
 });
