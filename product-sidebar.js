@@ -54,13 +54,19 @@ $(document).ready(function () {
   $imageWrap.append($imageTd);
   
   // === Share Button ===
-const productID = $("#ctl00_PageBody_productDetail_ctl00_AddProductButton").attr("href")?.match(/pid=(\d+)/)?.[1]
-  || $('[id*="AddProductButton"]').attr("onclick")?.match(/pid=(\d+)/)?.[1]
-  || null;
+const productID =
+  $("#ctl00_PageBody_productDetail_ctl00_AddProductButton").attr("href")?.match(/pid=(\d+)/)?.[1] ||
+  $('[id*="AddProductButton"]').attr("onclick")?.match(/pid=(\d+)/)?.[1] ||
+  null;
+
+console.log("[ShareButton] Detected productID:", productID);
 
 if (productID) {
   const webtrackURL = `${window.location.origin}/ProductDetail.aspx?pid=${productID}`;
   const redirectURL = `https://wlmarketingdashboard.vercel.app/product/${productID}?utm_source=share&utm_medium=button&utm_campaign=product_share`;
+
+  console.log("[ShareButton] WebTrack URL:", webtrackURL);
+  console.log("[ShareButton] Redirect URL:", redirectURL);
 
   const $shareBtn = $("<button>", { id: "share-product-button" })
     .text("🔗 Share This Product")
@@ -74,22 +80,35 @@ if (productID) {
       marginBottom: "10px",
     })
     .on("click", () => {
+      console.log("[ShareButton] Share button clicked");
+
       if (navigator.share) {
-        navigator.share({
-          title: document.title,
-          url: redirectURL,
-        }).then(() => {
-          logShareEvent("native");
-        }).catch(console.error);
+        console.log("[ShareButton] Using native share dialog");
+        navigator
+          .share({
+            title: document.title,
+            url: redirectURL,
+          })
+          .then(() => {
+            console.log("[ShareButton] Native share successful");
+            logShareEvent("native");
+          })
+          .catch((err) => console.error("[ShareButton] Native share error", err));
       } else {
-        navigator.clipboard.writeText(webtrackURL).then(() => {
-          alert("Link copied to clipboard!");
-          logShareEvent("copy");
-        });
+        console.log("[ShareButton] Using fallback copy to clipboard");
+        navigator.clipboard
+          .writeText(webtrackURL)
+          .then(() => {
+            alert("Link copied to clipboard!");
+            console.log("[ShareButton] Clipboard copy successful");
+            logShareEvent("copy");
+          })
+          .catch((err) => console.error("[ShareButton] Clipboard copy error", err));
       }
     });
 
   function logShareEvent(method) {
+    console.log("[ShareButton] Logging GA4 event:", method);
     if (window.dataLayer) {
       dataLayer.push({
         event: "share_product",
@@ -100,8 +119,16 @@ if (productID) {
     }
   }
 
-  $imageWrap.append($shareBtn);
+  if (typeof $imageWrap !== "undefined") {
+    console.log("[ShareButton] Appending share button to imageWrap");
+    $imageWrap.append($shareBtn);
+  } else {
+    console.warn("[ShareButton] $imageWrap not defined; cannot append share button");
+  }
+} else {
+  console.warn("[ShareButton] No productID found; share button will not be added");
 }
+
   }
 
 
