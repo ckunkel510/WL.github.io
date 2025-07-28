@@ -109,15 +109,18 @@ document.addEventListener("DOMContentLoaded", function () {
           const desc = item.querySelector("div > div:nth-child(3) > div")?.textContent || "";
           const price = item.querySelector(".col-6")?.textContent?.trim() || "";
 
-          previewContainer.innerHTML += `
-            <div style="display:flex; align-items:center; margin-bottom:10px;">
-              <img src="${img}" alt="" style="width:50px; height:50px; object-fit:cover; margin-right:10px;">
-              <div>
-                <strong>${name}</strong><br>
-                <small>${desc}</small><br>
-                <span>${price}</span>
-              </div>
-            </div>`;
+          if (img || name || price) {
+  previewContainer.innerHTML += `
+    <div style="display:flex; align-items:center; margin-bottom:10px;">
+      ${img ? `<img src="${img}" alt="" style="width:50px; height:50px; object-fit:cover; margin-right:10px;">` : ''}
+      <div>
+        ${name ? `<strong>${name}</strong><br>` : ''}
+        ${desc ? `<small>${desc}</small><br>` : ''}
+        ${price ? `<span>${price}</span>` : ''}
+      </div>
+    </div>`;
+}
+
         });
 
         modal.style.display = "block";
