@@ -55,9 +55,12 @@ window.addEventListener("load", function () {
                  data-update-btn="${updateBtn.id}"
                  oninput="document.getElementById(this.dataset.updateBtn).click()">
           = <strong>$${totalVal.toFixed(2)}</strong>
-          <a href="${deleteHref}" onclick="event.preventDefault(); eval(this.getAttribute('data-postback'));" 
-             data-postback="${deleteHref.replace('javascript:', '')}" 
-             style="color: red; margin-left: 10px;">✕ Remove</a>
+          <button class="custom-delete-btn" 
+        data-delete-id="${deleteBtn?.parentElement?.id}" 
+        style="color: red; margin-left: 10px; background: none; border: none; cursor: pointer;">
+  ✕ Remove
+</button>
+
         </div>
       </div>
     `;
@@ -87,6 +90,16 @@ window.addEventListener("load", function () {
     </div>
   `;
   customCart.appendChild(subtotalSection);
+
+  setTimeout(() => {
+  document.querySelectorAll(".custom-delete-btn").forEach(btn => {
+    btn.addEventListener("click", function () {
+      const targetId = this.getAttribute("data-delete-id");
+      const originalDelete = document.getElementById(targetId);
+      if (originalDelete) originalDelete.click();
+    });
+  });
+}, 100);
 
   originalCartPanel.parentElement.insertBefore(customCart, originalCartPanel);
 });
