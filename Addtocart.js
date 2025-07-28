@@ -1,8 +1,9 @@
 
 document.addEventListener("DOMContentLoaded", function () {
-  let lastSeenMessage = null;
+  // 🧠 Track previous display value
+  let lastDisplay = "none";
 
-  // 🧠 Inject modal
+  // 🧠 Inject modal HTML
   const modal = document.createElement("div");
   modal.id = "customCartModal";
   modal.style.cssText = `
@@ -40,34 +41,42 @@ document.addEventListener("DOMContentLoaded", function () {
   `;
   document.body.appendChild(modal);
 
+  // 🔁 Hide modal + message when 'Keep Shopping' clicked
   document.getElementById("customCartCloseBtn").onclick = () => {
     modal.style.display = "none";
+    const message = document.querySelector(".productAddedMessage");
+    if (message) message.style.display = "none";
   };
 
+  // ✅ Trigger real checkout logic
   document.getElementById("customCheckoutBtn").onclick = () => {
     __doPostBack("ctl00$PageBody$PlaceOrderButton", "");
   };
 
-  // 🧠 Observe body mutations and react to new .productAddedMessage
-  const observer = new MutationObserver(() => {
-    const message = document.querySelector(".productAddedMessage");
+  // 🎯 Watch for display style change
+  const message = document.querySelector(".productAddedMessage");
+  if (message) {
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (
+          mutation.type === "attributes" &&
+          mutation.attributeName === "style"
+        ) {
+          const currentDisplay = getComputedStyle(message).display;
+          if (lastDisplay === "none" && currentDisplay !== "none") {
+            lastDisplay = currentDisplay;
+            message.style.display = "none";
+            showCustomCartModal();
+          } else {
+            lastDisplay = currentDisplay;
+          }
+        }
+      });
+    });
 
-    if (
-      message &&
-      message.offsetParent !== null && // it is visible
-      message !== lastSeenMessage // it's a new one
-    ) {
-      lastSeenMessage = message; // mark it seen
-
-      message.style.display = "none";
-
-      setTimeout(() => {
-        showCustomCartModal();
-      }, 500);
-    }
-  });
-
-  observer.observe(document.body, { childList: true, subtree: true });
+    // Watch for style attribute changes
+    observer.observe(message, { attributes: true, attributeFilter: ["style"] });
+  }
 
   // 📦 Load cart data from ShoppingCart.aspx
   function showCustomCartModal() {
@@ -112,3 +121,4 @@ document.addEventListener("DOMContentLoaded", function () {
       });
   }
 });
+
