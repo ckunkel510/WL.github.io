@@ -22,6 +22,8 @@ document.addEventListener('DOMContentLoaded', function () {
   cartContainer.appendChild(headerRow);
 
   let itemCount = 0;
+  const itemData = [];
+
   cartItems.forEach((item, index) => {
     const urlEl = item.querySelector('a[href*="ProductDetail.aspx"]');
     const imgEl = item.querySelector('img');
@@ -44,6 +46,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
     console.log(`[Cart] Item ${++itemCount}: URL=${url}, Qty=${qty}, UpdateID=${updateId}`);
 
+    itemData.push({ url, imgSrc, productCode, productName, priceText, totalText, qty, updateId });
+  });
+
+  itemData.forEach((item, index) => {
     const row = document.createElement('div');
     row.style.display = 'flex';
     row.style.justifyContent = 'space-between';
@@ -54,26 +60,25 @@ document.addEventListener('DOMContentLoaded', function () {
 
     row.innerHTML = `
       <div style="display: flex; align-items: center; flex: 1; min-width: 250px;">
-        <a href="${url}" style="display:inline-block; margin-right:10px;">
-          <div class="image-wrapper" style="position:relative; display:inline-block;"><img src="${imgSrc}" alt="${productName}" style="width: 60px; height: 60px; object-fit: cover;"></div>
+        <a href="${item.url}" style="display:inline-block; margin-right:10px;">
+          <div class="image-wrapper" style="position:relative; display:inline-block;"><img src="${item.imgSrc}" alt="${item.productName}" style="width: 60px; height: 60px; object-fit: cover;"></div>
         </a>
         <div>
-          <a href="${url}" style="text-decoration: none; color: #000;">
-            <strong>${productCode}</strong><br>
-            <small>${productName}</small>
+          <a href="${item.url}" style="text-decoration: none; color: #000;">
+            <strong>${item.productCode}</strong><br>
+            <small>${item.productName}</small>
           </a>
         </div>
       </div>
       <div style="text-align: right; min-width: 220px;">
-        <div>Price: ${priceText}</div>
+        <div>Price: ${item.priceText}</div>
         <div>
           Qty:
-          <input id="qty-${itemCount}" value="${qty}" style="width: 60px;" onchange="document.getElementById('${updateId}').click()">
+          <input id="qty-${index}" value="${item.qty}" style="width: 60px;" onchange="document.getElementById('${item.updateId}').click()">
         </div>
-        <div>Total: <strong>${totalText}</strong></div>
+        <div>Total: <strong>${item.totalText}</strong></div>
       </div>
     `;
-
     cartContainer.appendChild(row);
   });
 
@@ -113,5 +118,17 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   } else {
     console.warn('[Cart] PlaceOrder button not found');
+  }
+
+  const storeName = document.querySelector('#locationFieldDelivery')?.textContent || document.querySelector('#locationFieldInvoice')?.textContent || '';
+  if (storeName) {
+    const storeNote = document.createElement('div');
+    storeNote.style.margin = '20px 0';
+    storeNote.style.padding = '10px';
+    storeNote.style.backgroundColor = '#f5f5f5';
+    storeNote.style.border = '1px solid #ccc';
+    storeNote.style.borderRadius = '6px';
+    storeNote.innerHTML = `<strong>You're shopping:</strong> ${storeName}. Store-specific info coming soon.`;
+    cartContainer.prepend(storeNote);
   }
 });
