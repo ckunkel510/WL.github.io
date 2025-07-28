@@ -66,17 +66,24 @@ if (productID) {
   console.log("[ShareButton] Redirect URL:", redirectURL);
 
   const $shareBtn = $("<button>", { id: "share-product-button" })
-    .text("🔗 Share This Product")
+    .html(`
+  <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="white" viewBox="0 0 24 24">
+    <path d="M18 8a3 3 0 0 0-2.24 1.04L8.91 6.7a3.01 3.01 0 0 0-.01-1.38L15.76 3.9A3 3 0 1 0 18 8Zm0 1a2 2 0 1 1 2-2 2 2 0 0 1-2 2ZM6 12a3 3 0 0 0 2.24-1.04l6.85 2.34a3.01 3.01 0 0 0 .01 1.38L8.24 20.1A3 3 0 1 0 6 17Zm0 1a2 2 0 1 1 2-2 2 2 0 0 1-2 2Z"/>
+  </svg>
+`)
     .css({
-      display: "block",
-      padding: "8px 12px",
-      backgroundColor: "#6b0016",
-      color: "white",
-      border: "none",
-      borderRadius: "4px",
-      cursor: "pointer",
-      margin: "10px auto 0", // center it under image
-    })
+  width: "40px",
+  height: "40px",
+  backgroundColor: "#6b0016",
+  color: "white",
+  border: "none",
+  borderRadius: "50%",
+  cursor: "pointer",
+  display: "flex",
+  alignItems: "center",
+  justifyContent: "center",
+  margin: "10px auto 0",
+})
     .on("click", () => {
       console.log("[ShareButton] Share button clicked");
 
