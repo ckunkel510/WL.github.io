@@ -85,6 +85,7 @@ document.addEventListener('DOMContentLoaded', function () {
     setTimeout(() => {
       const qtyField = document.getElementById(qtyBoxId);
       if (qtyField) {
+        qtyField.value = item.qty;
         qtyField.addEventListener('change', () => {
           console.log(`[Cart] Qty changed for ${item.productCode}, triggering update ID: ${item.updateId}`);
           const realUpdateBtn = document.getElementById(item.updateId);
@@ -113,10 +114,10 @@ document.addEventListener('DOMContentLoaded', function () {
   `;
   cartContainer.appendChild(totalRow);
 
-  const injectPoint = document.querySelector('#ctl00_PageBody_CartLineControl');
+  const injectPoint = document.querySelector('#ctl00_PageBody_CartLineControl') || document.querySelector('.shopping-cart');
   if (injectPoint) {
     console.log('[Cart] Injecting new cart container');
-    injectPoint.prepend(cartContainer);
+    injectPoint.parentNode.insertBefore(cartContainer, injectPoint);
   } else {
     console.warn('[Cart] Failed to find inject point');
   }
