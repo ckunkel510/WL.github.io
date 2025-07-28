@@ -25,20 +25,20 @@ document.addEventListener('DOMContentLoaded', function () {
     const imgEl = item.querySelector('img');
     const qtyInput = item.querySelector('input[type="text"][id*="_qty_"]');
     const updateBtn = item.querySelector('a[id*="refQty"]');
-    const priceText = item.querySelector('.col-6').textContent.trim();
+    const priceText = item.querySelector('.col-6')?.textContent.trim() || '';
     const totalText = item.querySelector('.col-sm-3 strong')?.textContent?.trim() || priceText;
 
-    if (!urlEl || !imgEl || !qtyInput || !updateBtn) {
+    const productCode = urlEl?.textContent?.trim() || '[No Product Code]';
+    const productName = urlEl?.closest('div')?.nextElementSibling?.textContent?.trim() || '[No Name]';
+    const imgSrc = imgEl?.src || '';
+    const url = urlEl?.href || '#';
+    const qty = qtyInput?.value || '';
+    const updateId = updateBtn?.id || '';
+
+    if (!urlEl || !imgEl || !qtyInput || !updateBtn || productCode === 'Price\n                                                Quantity') {
       console.log(`[Cart] Skipping header or malformed row ${index + 1}`);
       return;
     }
-
-    const url = urlEl.href;
-    const productCode = urlEl.textContent.trim();
-    const productName = urlEl.closest('div').nextElementSibling?.textContent.trim() || '';
-    const imgSrc = imgEl.src;
-    const qty = qtyInput.value;
-    const updateId = updateBtn.id;
 
     console.log(`[Cart] Item ${++itemCount}: URL=${url}, Qty=${qty}, UpdateID=${updateId}`);
 
@@ -94,7 +94,13 @@ document.addEventListener('DOMContentLoaded', function () {
   `;
   cartContainer.appendChild(totalRow);
 
-  document.querySelector('#ctl00_PageBody_CartLineControl')?.prepend(cartContainer);
+  const injectPoint = document.querySelector('#ctl00_PageBody_CartLineControl');
+  if (injectPoint) {
+    console.log('[Cart] Injecting new cart container');
+    injectPoint.prepend(cartContainer);
+  } else {
+    console.warn('[Cart] Failed to find inject point');
+  }
 
   const realPlaceOrder = document.getElementById('ctl00_PageBody_PlaceOrderButton');
   const customBtn = document.getElementById('customPlaceOrderBtn');
