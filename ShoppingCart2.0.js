@@ -1,11 +1,41 @@
-// ShoppingCart2.0.js
+console.log('[Cart] Waiting for DOM elements to initialize...');
 
-console.log('[Cart] DOM Ready');
+function waitForElement(selector, maxRetries = 20, interval = 250) {
+  return new Promise((resolve, reject) => {
+    let attempts = 0;
+    const check = () => {
+      const el = document.querySelector(selector);
+      if (el) return resolve(el);
+      attempts++;
+      if (attempts >= maxRetries) return reject(`Timeout waiting for ${selector}`);
+      setTimeout(check, interval);
+    };
+    check();
+  });
+}
 
-document.addEventListener('DOMContentLoaded', function () {
+async function initCustomCart() {
   console.log('[Cart] Page loaded, initializing custom checkout experience...');
 
+  let injectPoint;
+  try {
+    injectPoint = await waitForElement('#ctl00_PageBody_CartLineControl').catch(() => null);
+    if (!injectPoint) {
+      injectPoint = document.querySelector('.shopping-cart');
+      if (!injectPoint) throw new Error('[Cart] No valid inject point found.');
+      console.warn('[Cart] Fallback to .shopping-cart as inject point');
+    }
+  } catch (e) {
+    console.error(e);
+    return;
+  }
+
   const cartItems = Array.from(document.querySelectorAll('.row.shopping-cart-item'));
+  if (!cartItems.length) {
+    console.warn('[Cart] No cart items found, aborting.');
+    return;
+  }
+
   const cartContainer = document.createElement('div');
   cartContainer.id = 'custom-cart';
   cartContainer.style.marginTop = '20px';
@@ -39,7 +69,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const qty = qtyInput?.value || '';
     const updateId = updateBtn?.id || '';
 
-    if (!urlEl || !imgEl || !qtyInput || !updateBtn || productCode === 'Price\n                                                Quantity') {
+    if (!urlEl || !imgEl || !qtyInput || !updateBtn || productCode.includes('Price')) {
       console.log(`[Cart] Skipping header or malformed row ${index + 1}`);
       return;
     }
@@ -62,7 +92,7 @@ document.addEventListener('DOMContentLoaded', function () {
     row.innerHTML = `
       <div style="display: flex; align-items: center; flex: 1; min-width: 250px;">
         <a href="${item.url}" style="display:inline-block; margin-right:10px;">
-          <div class="image-wrapper" style="position:relative; display:inline-block;"><img src="${item.imgSrc}" alt="${item.productName}" style="width: 60px; height: 60px; object-fit: cover;"></div>
+          <img src="${item.imgSrc}" alt="${item.productName}" style="width: 60px; height: 60px; object-fit: cover;">
         </a>
         <div>
           <a href="${item.url}" style="text-decoration: none; color: #000;">
@@ -85,7 +115,6 @@ document.addEventListener('DOMContentLoaded', function () {
     setTimeout(() => {
       const qtyField = document.getElementById(qtyBoxId);
       if (qtyField) {
-        qtyField.value = item.qty;
         qtyField.addEventListener('change', () => {
           console.log(`[Cart] Qty changed for ${item.productCode}, triggering update ID: ${item.updateId}`);
           const realUpdateBtn = document.getElementById(item.updateId);
@@ -95,10 +124,7 @@ document.addEventListener('DOMContentLoaded', function () {
     }, 0);
   });
 
-  const originalCart = document.querySelector('.shopping-cart');
-  if (originalCart) originalCart.style.display = 'none';
-
-  const subtotal = document.querySelector('.SubtotalWrapper')?.innerText.trim();
+  const subtotal = document.querySelector('.SubtotalWrapper')?.innerText.trim() || '[No Subtotal]';
   console.log(`[Cart] Subtotal: ${subtotal}`);
 
   const totalRow = document.createElement('div');
@@ -114,25 +140,7 @@ document.addEventListener('DOMContentLoaded', function () {
   `;
   cartContainer.appendChild(totalRow);
 
-  const injectPoint = document.querySelector('#ctl00_PageBody_CartLineControl') || document.querySelector('.shopping-cart');
-  if (injectPoint) {
-    console.log('[Cart] Injecting new cart container');
-    injectPoint.parentNode.insertBefore(cartContainer, injectPoint);
-  } else {
-    console.warn('[Cart] Failed to find inject point');
-  }
-
-  const realPlaceOrder = document.getElementById('ctl00_PageBody_PlaceOrderButton');
-  const customBtn = document.getElementById('customPlaceOrderBtn');
-  if (customBtn && realPlaceOrder) {
-    customBtn.addEventListener('click', () => {
-      console.log('[Cart] Triggering real PlaceOrder button');
-      realPlaceOrder.click();
-    });
-  } else {
-    console.warn('[Cart] PlaceOrder button not found');
-  }
-
+  // Add location indicator
   const storeName = document.querySelector('#locationFieldDelivery')?.textContent || document.querySelector('#locationFieldInvoice')?.textContent || '';
   if (storeName) {
     const storeNote = document.createElement('div');
@@ -144,4 +152,28 @@ document.addEventListener('DOMContentLoaded', function () {
     storeNote.innerHTML = `<strong>You're shopping:</strong> ${storeName}. Store-specific info coming soon.`;
     cartContainer.prepend(storeNote);
   }
-});
+
+  // Hide old cart
+  const originalCart = document.querySelector('.shopping-cart');
+  if (originalCart) originalCart.style.display = 'none';
+
+  injectPoint.prepend(cartContainer);
+  console.log('[Cart] Injected custom cart into page.');
+
+  // Attach Place Order functionality
+  try {
+    const realPlaceOrder = await waitForElement('#ctl00_PageBody_PlaceOrderButton');
+    const customBtn = document.getElementById('customPlaceOrderBtn');
+    if (customBtn) {
+      customBtn.addEventListener('click', () => {
+        console.log('[Cart] Triggering real PlaceOrder button...');
+        realPlaceOrder.click();
+      });
+    }
+  } catch (e) {
+    console.warn('[Cart] Could not bind to real PlaceOrder button');
+  }
+}
+
+// Run the script once DOM is ready
+document.addEventListener('DOMContentLoaded', initCustomCart);
