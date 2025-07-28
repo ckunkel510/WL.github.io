@@ -279,3 +279,137 @@ textarea.form-control {
 .form-control{
     height: 45px !important;
 }
+
+
+/* ========== GENERAL CART LAYOUT ========== */
+.ShoppingCartDetailPanel {
+  padding: 2rem;
+  background-color: #f8f8f8;
+  font-family: sans-serif;
+}
+
+.shopping-cart-item {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: space-between;
+  border-bottom: 1px solid #ccc;
+  padding: 16px 0;
+  align-items: center;
+}
+
+.shopping-cart-item img.ThumbnailImage {
+  width: 80px !important;
+  height: auto;
+  border-radius: 4px;
+  margin-right: 16px;
+}
+
+/* ========== PRODUCT COLUMN ========== */
+.shopping-cart-item .col-sm-6:first-child {
+  display: flex;
+  align-items: center;
+  flex: 1 1 60%;
+}
+
+.shopping-cart-item .col-sm-6:first-child .row {
+  flex-direction: column;
+}
+
+.shopping-cart-item .portalGridLink {
+  font-weight: bold;
+  color: #004080;
+  text-decoration: none;
+  display: block;
+  margin-bottom: 4px;
+  font-size: 1rem;
+}
+
+.shopping-cart-item .portalGridLink:hover {
+  text-decoration: underline;
+}
+
+.shopping-cart-item .col-sm-6:first-child div > div {
+  margin-bottom: 4px;
+  font-size: 0.95rem;
+}
+
+/* ========== PRICE + QTY + TOTAL ========== */
+.shopping-cart-item .col-sm-6:last-child {
+  display: flex;
+  flex: 1 1 40%;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.shopping-cart-item .col-sm-6:last-child .row {
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.shopping-cart-item .col-sm-9,
+.shopping-cart-item .col-sm-3 {
+  padding: 0 !important;
+}
+
+.shopping-cart-item input.riTextBox {
+  width: 60px !important;
+  padding: 4px !important;
+  font-size: 1rem !important;
+  text-align: center;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+}
+
+.shopping-cart-item .fa-sync {
+  margin-left: 8px;
+  color: #007bff;
+  cursor: pointer;
+}
+
+.shopping-cart-item .fa-times {
+  font-size: 1.2rem;
+  color: #cc0000 !important;
+  cursor: pointer;
+}
+
+/* ========== SUBTOTAL SECTION ========== */
+.SubtotalWrapper {
+  margin-top: 2rem;
+  font-size: 1.25rem !important;
+  font-weight: bold;
+  text-align: right;
+}
+
+/* ========== BOTTOM ACTION BUTTONS ========== */
+.ShoppingCartDetailPanel > div:last-child table {
+  width: 100%;
+  margin-top: 1rem;
+}
+
+.ShoppingCartDetailPanel > div:last-child td {
+  padding: 0.5rem;
+}
+
+.ShoppingCartDetailPanel a.btn,
+.ShoppingCartDetailPanel a.epi-button {
+  background-color: #0066cc !important;
+  color: white !important;
+  padding: 10px 20px !important;
+  border-radius: 6px;
+  text-decoration: none;
+  display: inline-block;
+  font-weight: bold;
+  font-size: 1rem;
+  transition: background 0.2s;
+}
+
+.ShoppingCartDetailPanel a.btn:hover,
+.ShoppingCartDetailPanel a.epi-button:hover {
+  background-color: #004b99 !important;
+}
+
+/* ========== HIDE UNUSED HEADERS IF NEEDED ========== */
+.ShoppingCartDetailPanel h5 {
+  display: none !important;
+}
