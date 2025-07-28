@@ -54,52 +54,55 @@ $(document).ready(function () {
   $imageWrap.append($imageTd);
   
   // === Share Button ===
-const productID = new URLSearchParams(window.location.search).get("pid");
-const webtrackURL = `${window.location.origin}${window.location.pathname}?pid=${productID}`;
-const redirectURL = `https://wlmarketingdashboard.vercel.app/product/${productID}?utm_source=share&utm_medium=button&utm_campaign=product_share`;
+const productID = $("#ctl00_PageBody_productDetail_ctl00_AddProductButton").attr("href")?.match(/pid=(\d+)/)?.[1]
+  || $('[id*="AddProductButton"]').attr("onclick")?.match(/pid=(\d+)/)?.[1]
+  || null;
 
-const $shareBtn = $("<button>", { id: "share-product-button" })
-  .text("🔗 Share This Product")
-  .css({
-    padding: "8px 12px",
-    backgroundColor: "#6b0016",
-    color: "white",
-    border: "none",
-    borderRadius: "4px",
-    cursor: "pointer",
-    marginBottom: "10px",
-  })
-  .on("click", () => {
-    if (navigator.share) {
-      navigator.share({
-        title: document.title,
-        url: redirectURL,
-      }).then(() => {
-        logShareEvent("native");
-      }).catch(console.error);
-    } else {
-      navigator.clipboard.writeText(webtrackURL).then(() => {
-        alert("Link copied to clipboard!");
-        logShareEvent("copy");
+if (productID) {
+  const webtrackURL = `${window.location.origin}/ProductDetail.aspx?pid=${productID}`;
+  const redirectURL = `https://wlmarketingdashboard.vercel.app/product/${productID}?utm_source=share&utm_medium=button&utm_campaign=product_share`;
+
+  const $shareBtn = $("<button>", { id: "share-product-button" })
+    .text("🔗 Share This Product")
+    .css({
+      padding: "8px 12px",
+      backgroundColor: "#6b0016",
+      color: "white",
+      border: "none",
+      borderRadius: "4px",
+      cursor: "pointer",
+      marginBottom: "10px",
+    })
+    .on("click", () => {
+      if (navigator.share) {
+        navigator.share({
+          title: document.title,
+          url: redirectURL,
+        }).then(() => {
+          logShareEvent("native");
+        }).catch(console.error);
+      } else {
+        navigator.clipboard.writeText(webtrackURL).then(() => {
+          alert("Link copied to clipboard!");
+          logShareEvent("copy");
+        });
+      }
+    });
+
+  function logShareEvent(method) {
+    if (window.dataLayer) {
+      dataLayer.push({
+        event: "share_product",
+        method,
+        product_id: productID,
+        share_url: redirectURL,
       });
     }
-  });
-
-function logShareEvent(method) {
-  if (window.dataLayer) {
-    dataLayer.push({
-      event: "share_product",
-      method,
-      product_id: productID,
-      share_url: redirectURL,
-    });
   }
-}
 
-// Add it above the product image
-$imageWrap.append($shareBtn);
-
+  $imageWrap.append($shareBtn);
 }
+  }
 
 
   // Move elements into sidebar (first instances only)
