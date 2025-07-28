@@ -1,5 +1,8 @@
+
 document.addEventListener("DOMContentLoaded", function () {
-  // 🔧 Create and inject modal
+  let cartTriggered = false;
+
+  // 🛠️ Inject modal HTML
   const modal = document.createElement("div");
   modal.id = "customCartModal";
   modal.style.cssText = `
@@ -18,92 +21,101 @@ document.addEventListener("DOMContentLoaded", function () {
     font-family: sans-serif;
   `;
   modal.innerHTML = `
-  <h3 style="margin-top: 0;">🛒 Added to Cart!</h3>
-  <div id="cartSubtotal" style="font-weight:bold; margin-bottom:10px;"></div>
-  <div id="cartItemsPreview" style="margin-bottom:15px;"></div>
-  <div style="display: flex; justify-content: flex-end; gap: 10px;">
-    <a href="/ShoppingCart.aspx" style="text-decoration: none;">
-      <button style="background:#6b0016; color:white; border:none; padding:8px 14px; border-radius:5px; cursor:pointer;">
-        View Cart
-      </button>
-    </a>
-    <a href="/Checkout.aspx" style="text-decoration: none;">
-      <button style="background:#007b00; color:white; border:none; padding:8px 14px; border-radius:5px; cursor:pointer;">
-        Checkout
-      </button>
-    </a>
-  </div>
-  <div style="text-align:center; margin-top:10px;">
-    <button id="customCartCloseBtn" style="background:none; border:none; color:#666; text-decoration:underline; cursor:pointer;">Keep Shopping</button>
-  </div>
-`;
-
+    <h3 style="margin-top: 0;">🛒 Added to Cart!</h3>
+    <div id="cartSubtotal" style="font-weight:bold; margin-bottom:10px;"></div>
+    <div id="cartItemsPreview" style="margin-bottom:15px;"></div>
+    <div style="display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap;">
+      <a href="/ShoppingCart.aspx" style="text-decoration: none;">
+        <button style="background:#6b0016; color:white; border:none; padding:8px 14px; border-radius:5px; cursor:pointer;">
+          View Cart
+        </button>
+      </a>
+      <a href="/Checkout.aspx" style="text-decoration: none;">
+        <button style="background:#007b00; color:white; border:none; padding:8px 14px; border-radius:5px; cursor:pointer;">
+          Checkout
+        </button>
+      </a>
+    </div>
+    <div style="text-align:center; margin-top:10px;">
+      <button id="customCartCloseBtn" style="background:none; border:none; color:#666; text-decoration:underline; cursor:pointer;">Keep Shopping</button>
+    </div>
+  `;
   document.body.appendChild(modal);
 
+  // 👋 Close modal
   document.getElementById("customCartCloseBtn").onclick = () => {
     modal.style.display = "none";
   };
 
-  // 🔍 Watch for the productAddedMessage to appear
+  // 🔔 Detect Add to Cart button click
+  const addToCartButtons = document.querySelectorAll("a[href*='AddToCart']");
+  addToCartButtons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      cartTriggered = true;
+    });
+  });
+
+  // 👀 Watch for productAddedMessage to appear
   const observer = new MutationObserver(() => {
+    if (!cartTriggered) return;
+
     const message = document.querySelector(".productAddedMessage");
     if (message && message.offsetParent !== null) {
       message.style.display = "none";
+      cartTriggered = false;
 
       setTimeout(() => {
         showCustomCartModal();
-      }, 500); // Give the cart time to update
+      }, 500);
     }
   });
-
   observer.observe(document.body, { childList: true, subtree: true });
 
-  // 🎯 Function to show custom modal
+  // 📦 Load cart data and populate modal
   function showCustomCartModal() {
-  fetch("/ShoppingCart.aspx")
-    .then(res => res.text())
-    .then(html => {
-      const tempDiv = document.createElement("div");
-      tempDiv.innerHTML = html;
+    fetch("/ShoppingCart.aspx")
+      .then(res => res.text())
+      .then(html => {
+        const tempDiv = document.createElement("div");
+        tempDiv.innerHTML = html;
 
-      // Get subtotal
-      const subtotalEl = tempDiv.querySelector(".SubtotalWrapper");
-      const subtotalText = subtotalEl ? subtotalEl.textContent.match(/\$[\d,.]+/)?.[0] : "—";
-      document.getElementById("cartSubtotal").innerHTML = `Subtotal: ${subtotalText}`;
+        // Get subtotal
+        const subtotalEl = tempDiv.querySelector(".SubtotalWrapper");
+        const subtotalText = subtotalEl ? subtotalEl.textContent.match(/\$[\d,.]+/)?.[0] : "—";
+        document.getElementById("cartSubtotal").innerHTML = `Subtotal: ${subtotalText}`;
 
-      // Get cart items
-      const items = tempDiv.querySelectorAll(".shopping-cart-item");
-      const previewContainer = document.getElementById("cartItemsPreview");
-      previewContainer.innerHTML = "";
+        // Get item previews
+        const items = tempDiv.querySelectorAll(".shopping-cart-item");
+        const previewContainer = document.getElementById("cartItemsPreview");
+        previewContainer.innerHTML = "";
 
-      items.forEach((item, i) => {
-        if (i >= 3) return; // limit preview to 3 items
-        const img = item.querySelector("img")?.src || "";
-        const name = item.querySelector("a span.portalGridLink")?.textContent || "";
-        const desc = item.querySelector("div > div:nth-child(3) > div")?.textContent || "";
-        const price = item.querySelector(".col-6")?.textContent?.trim() || "";
+        items.forEach((item, i) => {
+          if (i >= 3) return;
+          const img = item.querySelector("img")?.src || "";
+          const name = item.querySelector("a span.portalGridLink")?.textContent || "";
+          const desc = item.querySelector("div > div:nth-child(3) > div")?.textContent || "";
+          const price = item.querySelector(".col-6")?.textContent?.trim() || "";
 
-        const itemHTML = `
-          <div style="display:flex; align-items:center; margin-bottom:10px;">
-            <img src="${img}" alt="" style="width:50px; height:50px; object-fit:cover; margin-right:10px;">
-            <div>
-              <strong>${name}</strong><br>
-              <small>${desc}</small><br>
-              <span>${price}</span>
-            </div>
-          </div>`;
-        previewContainer.innerHTML += itemHTML;
+          const itemHTML = `
+            <div style="display:flex; align-items:center; margin-bottom:10px;">
+              <img src="${img}" alt="" style="width:50px; height:50px; object-fit:cover; margin-right:10px;">
+              <div>
+                <strong>${name}</strong><br>
+                <small>${desc}</small><br>
+                <span>${price}</span>
+              </div>
+            </div>`;
+          previewContainer.innerHTML += itemHTML;
+        });
+
+        // Show modal
+        document.getElementById("customCartModal").style.display = "block";
+      })
+      .catch(err => {
+        console.error("Failed to fetch cart:", err);
+        document.getElementById("cartSubtotal").innerHTML = "Subtotal: unavailable";
+        document.getElementById("customCartModal").style.display = "block";
       });
-
-      // Show the modal after data is ready
-      document.getElementById("customCartModal").style.display = "block";
-    })
-    .catch(err => {
-      console.error("Failed to fetch cart data:", err);
-      document.getElementById("cartSubtotal").innerHTML = "Subtotal: unavailable";
-      document.getElementById("customCartModal").style.display = "block";
-    });
-}
-
+  }
 });
 
