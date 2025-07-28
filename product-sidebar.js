@@ -117,14 +117,13 @@ if (productID) {
     }
   }
 
-  if (typeof $imageWrap !== "undefined") {
-    console.log("[ShareButton] Appending share button to imageWrap");
-    $imageWrap.append($shareBtn);
-  } else {
-    console.warn("[ShareButton] $imageWrap not defined; cannot append share button");
-  }
+  const $domImageWrap = $("#product-image-wrapper");
+if ($domImageWrap.length) {
+  console.log("[ShareButton] Appending share button to DOM imageWrap");
+  $domImageWrap.prepend($shareBtn);
 } else {
-  console.warn("[ShareButton] No productID found; share button will not be added");
+  console.warn("[ShareButton] #product-image-wrapper not found in DOM");
+}
 }
 
   }
