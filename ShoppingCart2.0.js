@@ -3,6 +3,8 @@
 console.log('[Cart] DOM Ready');
 
 document.addEventListener('DOMContentLoaded', function () {
+  console.log('[Cart] Page loaded, initializing custom checkout experience...');
+
   const cartItems = Array.from(document.querySelectorAll('.row.shopping-cart-item'));
   const cartContainer = document.createElement('div');
   cartContainer.id = 'custom-cart';
