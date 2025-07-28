@@ -72,9 +72,11 @@ document.addEventListener("DOMContentLoaded", function () {
   };
 
   document.getElementById("customCheckoutBtn").onclick = () => {
-    console.log("[CartModal] Checkout clicked – triggering __doPostBack");
-    __doPostBack("ctl00$PageBody$PlaceOrderButton", "");
-  };
+  console.log("[CartModal] Checkout clicked – setting flag & redirecting");
+  sessionStorage.setItem("triggerPlaceOrder", "true");
+  window.location.href = "/ShoppingCart.aspx";
+};
+
 
   // ✅ Step 4: Fetch cart data and show modal
   function showCustomCartModal() {
@@ -126,6 +128,26 @@ document.addEventListener("DOMContentLoaded", function () {
         document.getElementById("cartSubtotal").innerHTML = "Subtotal: unavailable";
         modal.style.display = "block";
       });
+  }
+});
+
+
+document.addEventListener("DOMContentLoaded", function () {
+  const shouldTrigger = sessionStorage.getItem("triggerPlaceOrder");
+  if (shouldTrigger === "true") {
+    sessionStorage.removeItem("triggerPlaceOrder");
+    console.log("[CartModal] Triggering Place Order button automatically");
+
+    // Wait for DOM and WebForms JS to initialize
+    setTimeout(() => {
+      const placeOrderButton = document.querySelector("#ctl00_PageBody_PlaceOrderButton");
+      if (placeOrderButton) {
+        placeOrderButton.click();
+        console.log("[CartModal] Place Order button clicked ✅");
+      } else {
+        console.warn("[CartModal] Place Order button not found ❌");
+      }
+    }, 500);
   }
 });
 
