@@ -22,14 +22,16 @@ window.addEventListener("load", function () {
     const stockStatus = row.querySelector(".col-sm-6 div:nth-child(2) div")?.innerText?.trim() || '';
     const price = row.querySelector(".col-6")?.innerText?.trim().split("ea")[0].replace("$", "").trim() || '';
     const qtyInput = row.querySelector("input.riTextBox");
-    const totalText = row.querySelector(".col-sm-3")?.innerText?.trim() || '';
     const deleteBtn = row.querySelector("a i.fas.fa-times");
     const updateBtn = row.querySelector("a.refresh-cart-line-total");
 
     if (!qtyInput || !updateBtn) return;
 
     const deleteHref = deleteBtn?.parentElement?.getAttribute("href") || '';
-    const totalVal = parseFloat(totalText.replace('$', '').replace(',', '')) || 0;
+
+    // ✅ NEW FIXED: Extract total price using regex
+    const totalMatch = row.querySelector(".col-sm-3")?.textContent?.match(/\$([\d,.]+)/);
+    const totalVal = totalMatch ? parseFloat(totalMatch[1].replace(',', '')) : 0;
     subtotal += totalVal;
 
     const wrapper = document.createElement("div");
