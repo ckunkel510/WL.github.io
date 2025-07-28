@@ -16,6 +16,14 @@ document.addEventListener("DOMContentLoaded", function () {
     console.warn("[CartModal] Add to Cart button NOT FOUND ❌");
   }
 
+  document.querySelectorAll("a[id$='AddProductButton']").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    console.log("[CartModal] Product card Add to Cart clicked 🎯");
+    sessionStorage.setItem("showAddToCartModal", "true");
+  });
+});
+
+
   // ✅ Step 2: Check if we should show modal
   const modalFlag = sessionStorage.getItem("showAddToCartModal");
   console.log("[CartModal] Modal flag is:", modalFlag);
