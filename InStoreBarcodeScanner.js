@@ -28,7 +28,7 @@
     document.body.appendChild(overlay);
   }
 
-  // Button injection for Store Mode
+  // Button injection
   if (!document.getElementById("in-store-barcode-launch")) {
     const container = document.createElement("div");
     container.style.cssText = "margin-top: 20px;";
@@ -45,7 +45,7 @@
   const closeBtn = document.getElementById("close-barcode-scanner");
 
   let detectedBarcodes = {};
-  const minDetections = 3;
+  const minDetections = 1; // Less strict
 
   startBtn?.addEventListener("click", async () => {
     overlay.style.display = "block";
@@ -68,7 +68,7 @@
           readers: ["upc_reader"]
         },
         locate: true,
-        frequency: 5
+        frequency: 3 // Faster processing
       },
       function (err) {
         if (err) {
@@ -84,13 +84,19 @@
       const code = result.codeResult.code;
       const errorScore = result.codeResult.decodedCodes.reduce((sum, x) => sum + (x.error || 0), 0);
 
-      if (errorScore > 0.5) return;
+      // Allow faster/looser scans (errorScore was > 0.5 before)
+      if (errorScore > 1.5) return;
 
       detectedBarcodes[code] = (detectedBarcodes[code] || 0) + 1;
 
       if (detectedBarcodes[code] >= minDetections) {
         Quagga.stop();
         stream.getTracks().forEach(track => track.stop());
+
+        // ✅ Turn off store mode
+        sessionStorage.removeItem("inStoreMode");
+
+        // ✅ Redirect to search
         window.location.href = `https://webtrack.woodsonlumber.com/Products.aspx?pg=0&searchText=${code}`;
       }
     });
