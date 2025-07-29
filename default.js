@@ -7,6 +7,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   if (isStoreMode) {
     renderStoreMode(layout);
+    injectBarcodeDependencies(); // ✅ Make scanner work
   } else {
     injectReturnToStoreBanner();
   }
@@ -14,7 +15,6 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderStoreMode(layout) {
     console.log("[StoreMode] Rendering store overlay");
 
-    // Clear layout content but maintain structure
     layout.innerHTML = "";
 
     const container = document.createElement("div");
@@ -27,9 +27,8 @@ document.addEventListener("DOMContentLoaded", () => {
       display: flex;
       flex-direction: column;
       align-items: center;
-      overflow-x: hidden;
-      max-width: 100%;
       box-sizing: border-box;
+      overflow-x: hidden;
     `;
 
     const title = document.createElement("h1");
@@ -56,15 +55,15 @@ document.addEventListener("DOMContentLoaded", () => {
         text: "🔍 Look Up Item",
         action: () => {
           sessionStorage.setItem("storeMode", "off");
-          window.location.href = "/Products.aspx";
+          window.location.href = "/products.aspx";
         }
       },
       {
         text: "📷 Scan Barcode",
         action: () => {
-          const script = document.createElement("script");
-          script.src = "https://ckunkel510.github.io/WL.github.io/BarcodeScanner.js";
-          document.body.appendChild(script);
+          // Scanner is already loaded via script injection
+          const scannerUI = document.getElementById("barcode-scan-modal");
+          if (scannerUI) scannerUI.style.display = "block";
         }
       },
       {
@@ -83,14 +82,19 @@ document.addEventListener("DOMContentLoaded", () => {
       {
         text: "💬 Need Help?",
         action: () => {
-          Tawk_API?.maximize();
+          const waitForTawk = setInterval(() => {
+            if (typeof Tawk_API !== "undefined" && Tawk_API.maximize) {
+              Tawk_API.maximize();
+              clearInterval(waitForTawk);
+            }
+          }, 300);
         }
       },
       {
         text: "🔁 Return to Full Site",
         action: () => {
           sessionStorage.setItem("storeMode", "off");
-          window.location.href = "/products.aspx";
+          window.location.href = "/Products.aspx";
         }
       }
     ];
@@ -101,16 +105,20 @@ document.addEventListener("DOMContentLoaded", () => {
       btn.style.cssText = `
         background-color: white;
         color: #6b0016;
-        padding: 18px;
+        padding: 0;
         border-radius: 8px;
         border: none;
         font-size: 1rem;
         font-weight: bold;
         cursor: pointer;
         width: 100%;
-        max-width: 100%;
+        aspect-ratio: 1 / 1;
         box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-        transition: background-color 0.2s, transform 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        transition: background-color 0.2s;
       `;
       btn.addEventListener("mouseenter", () => btn.style.backgroundColor = "#f0f0f0");
       btn.addEventListener("mouseleave", () => btn.style.backgroundColor = "white");
@@ -156,7 +164,21 @@ document.addEventListener("DOMContentLoaded", () => {
         window.location.href = "/Products.aspx";
       });
 
-      console.log("[StoreMode] Banner added without covering nav");
+      console.log("[StoreMode] Return banner injected");
     }
+  }
+
+  function injectBarcodeDependencies() {
+    if (document.getElementById("quagga-loaded")) return;
+
+    const quagga = document.createElement("script");
+    quagga.src = "https://unpkg.com/quagga@0.12.1/dist/quagga.min.js";
+    quagga.id = "quagga-loaded";
+    document.head.appendChild(quagga);
+
+    const scanner = document.createElement("script");
+    scanner.src = "https://ckunkel510.github.io/WL.github.io/BarcodeScanner.js";
+    scanner.defer = true;
+    document.head.appendChild(scanner);
   }
 });
