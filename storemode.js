@@ -48,7 +48,7 @@ document.addEventListener("DOMContentLoaded", () => {
           sessionStorage.setItem("storeProximity", "true");
 sessionStorage.setItem("storeMode", "on"); // first-time default
 
-          window.location.href = "https://webtrack.woodsonlumber.com/Default.aspx";
+          window.location.href = "https://webtrack.woodsonlumber.com/Products.aspx";
         } else {
           console.log("[StoreMode] No store within range. No redirect.");
         }
