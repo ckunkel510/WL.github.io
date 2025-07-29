@@ -179,6 +179,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 
+
   function injectBarcodeDependencies() {
   if (!document.getElementById("quagga-loaded")) {
     const quagga = document.createElement("script");
