@@ -89,22 +89,19 @@ document.addEventListener("DOMContentLoaded", () => {
     }));
 
     grid.appendChild(createButton("📷 Scan Barcode", () => {
-  const scriptId = "instore-barcode-loader";
-  if (!document.getElementById(scriptId)) {
+  // Check if Quagga is already loaded
+  if (typeof Quagga === "undefined") {
     const quagga = document.createElement("script");
     quagga.src = "https://unpkg.com/quagga@0.12.1/dist/quagga.min.js";
+    quagga.onload = () => {
+      loadInStoreScanner(); // Once Quagga is ready
+    };
     document.head.appendChild(quagga);
-
-    const scanner = document.createElement("script");
-    scanner.src = "https://ckunkel510.github.io/WL.github.io/InStoreBarcodeScanner.js";
-    scanner.id = scriptId;
-    scanner.defer = true;
-    document.head.appendChild(scanner);
   } else {
-    // If already loaded, simulate button click
-    document.getElementById("in-store-barcode-launch")?.click();
+    loadInStoreScanner();
   }
 }));
+
 
 
     grid.appendChild(createButton("🔥 Specials", () => {
@@ -216,3 +213,88 @@ document.addEventListener("DOMContentLoaded", () => {
 }
 
 });
+
+function loadInStoreScanner() {
+  if (document.getElementById("barcode-scan-overlay")) {
+    // If overlay already exists, just open it
+    document.getElementById("barcode-scan-overlay").style.display = "block";
+    startQuagga();
+    return;
+  }
+
+  // Create overlay
+  const overlay = document.createElement("div");
+  overlay.id = "barcode-scan-overlay";
+  overlay.style.cssText = `
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 9999;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+  `;
+  overlay.innerHTML = `
+    <video id="barcode-video" autoplay playsinline muted style="width: 100%; height: 100%; object-fit: cover;"></video>
+    <canvas id="barcode-canvas" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2;"></canvas>
+    <div style="position: absolute; top: 50%; left: 50%; width: 60%; height: 20%; transform: translate(-50%, -50%); border: 2px solid #00ff00; z-index: 3;"></div>
+    <button id="close-barcode-scanner" style="position: absolute; top: 10px; right: 10px; padding: 10px 15px; font-size: 16px; z-index: 10000;">Close</button>
+  `;
+  document.body.appendChild(overlay);
+
+  document.getElementById("close-barcode-scanner").onclick = stopQuagga;
+  startQuagga();
+}
+
+function startQuagga() {
+  const video = document.getElementById("barcode-video");
+  const detected = {};
+  const minDetections = 3;
+
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(stream => {
+    video.srcObject = stream;
+
+    Quagga.init({
+      inputStream: {
+        type: "LiveStream",
+        target: document.getElementById("barcode-canvas"),
+        constraints: { facingMode: "environment" }
+      },
+      decoder: { readers: ["upc_reader"] },
+      locate: true
+    }, err => {
+      if (err) {
+        console.error("Quagga error:", err);
+        stopQuagga();
+        return;
+      }
+      Quagga.start();
+    });
+
+    Quagga.onDetected(result => {
+      const code = result.codeResult.code;
+      detected[code] = (detected[code] || 0) + 1;
+
+      if (detected[code] >= minDetections) {
+        Quagga.stop();
+        stream.getTracks().forEach(t => t.stop());
+        window.location.href = `https://webtrack.woodsonlumber.com/Products.aspx?pg=0&searchText=${code}`;
+      }
+    });
+  });
+}
+
+function stopQuagga() {
+  const overlay = document.getElementById("barcode-scan-overlay");
+  if (overlay) overlay.style.display = "none";
+
+  const video = document.getElementById("barcode-video");
+  if (video && video.srcObject) {
+    video.srcObject.getTracks().forEach(track => track.stop());
+  }
+
+  try {
+    Quagga?.stop();
+  } catch (e) {}
+}
