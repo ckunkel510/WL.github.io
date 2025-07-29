@@ -131,8 +131,8 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function injectReturnToStoreBanner() {
   if (location.pathname.toLowerCase().includes("products.aspx")) {
-    const searchBarRow = document.getElementById("ctl00_PageHeader_searchBarTableRow");
-    if (!searchBarRow) return;
+    const header = document.getElementById("wlcheader");
+    if (!header) return;
 
     const existingBanner = document.getElementById("storeModeBanner");
     if (existingBanner) return;
@@ -154,10 +154,7 @@ document.addEventListener("DOMContentLoaded", () => {
       <a href="#" style="color: white; text-decoration: underline; margin-left: 6px;" id="returnToStoreModeBtn">Switch to Store Mode</a>
     `;
 
-    // ✅ Insert AFTER the search bar row
-    if (searchBarRow.parentNode) {
-      searchBarRow.parentNode.insertBefore(banner, searchBarRow.nextSibling);
-    }
+    header.appendChild(banner);
 
     document.getElementById("returnToStoreModeBtn").addEventListener("click", (e) => {
       e.preventDefault();
@@ -165,9 +162,10 @@ document.addEventListener("DOMContentLoaded", () => {
       window.location.href = "/Default.aspx";
     });
 
-    console.log("[StoreMode] Return banner injected");
+    console.log("[StoreMode] Return banner injected into wlcheader");
   }
 }
+
 
 
   function injectBarcodeDependencies() {
