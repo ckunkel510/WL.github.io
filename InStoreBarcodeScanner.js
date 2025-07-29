@@ -101,7 +101,7 @@
   stream.getTracks().forEach(track => track.stop());
 
   // ✅ Clear in-store mode BEFORE redirect
-  sessionStorage.removeItem("inStoreMode");
+  sessionStorage.setItem("storeMode", "off");
 
   // ✅ Small delay to ensure sessionStorage is cleared before navigation
   setTimeout(() => {
