@@ -1,39 +1,56 @@
 document.addEventListener("DOMContentLoaded", function () {
   const cameFromCart = sessionStorage.getItem("CartErrorRedirect") === "true";
 
-  if (!cameFromCart) return;
+  if (!cameFromCart) {
+    console.log("[Cart Recovery] No redirect flag found. Nothing to do.");
+    return;
+  }
 
-  console.log("[Cart Recovery] Detected cart-related error. Attempting forced cart clear.");
+  console.log("[Cart Recovery] Cart redirect flag detected. Attempting cart clear via postback.");
 
+  // Clear the flag to avoid looping
   sessionStorage.removeItem("CartErrorRedirect");
 
-  // Step 1: Create a hidden form that mimics the empty cart postback
-  const form = document.createElement("form");
-  form.method = "POST";
-  form.action = "/ShoppingCart.aspx";
+  try {
+    // Step 1: Create the form
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = "/ShoppingCart.aspx";
+    form.style.display = "none";
 
-  const eventTarget = document.createElement("input");
-  eventTarget.type = "hidden";
-  eventTarget.name = "__EVENTTARGET";
-  eventTarget.value = "ctl00$PageBody$EmptyCartButtonTop";
-  form.appendChild(eventTarget);
+    // Step 2: Add __EVENTTARGET to simulate the Empty Cart button
+    const eventTarget = document.createElement("input");
+    eventTarget.type = "hidden";
+    eventTarget.name = "__EVENTTARGET";
+    eventTarget.value = "ctl00$PageBody$EmptyCartButtonTop";
+    form.appendChild(eventTarget);
+    console.log("[Cart Recovery] Added __EVENTTARGET input.");
 
-  // Add __EVENTARGUMENT (usually empty)
-  const eventArgument = document.createElement("input");
-  eventArgument.type = "hidden";
-  eventArgument.name = "__EVENTARGUMENT";
-  eventArgument.value = "";
-  form.appendChild(eventArgument);
+    // Step 3: Add __EVENTARGUMENT (usually empty for this button)
+    const eventArgument = document.createElement("input");
+    eventArgument.type = "hidden";
+    eventArgument.name = "__EVENTARGUMENT";
+    eventArgument.value = "";
+    form.appendChild(eventArgument);
+    console.log("[Cart Recovery] Added __EVENTARGUMENT input.");
 
-  // Optional: Include __VIEWSTATE and __EVENTVALIDATION if required,
-  // but many .NET implementations will process this without them for simple postbacks
+    // Optional: Log current cookies/session for debugging purposes
+    console.log("[Cart Recovery] Current cookies:", document.cookie);
 
-  document.body.appendChild(form);
-  form.submit(); // Triggers empty cart logic
+    // Step 4: Add the form to the page and submit it
+    document.body.appendChild(form);
+    console.log("[Cart Recovery] Submitting form to trigger server-side cart clear...");
 
-  setTimeout(() => {
-  window.location.href = "/ShoppingCart.aspx";
-}, 1500);
+    form.submit();
 
+    // Optional: Set a timeout to redirect user back to cart
+    setTimeout(() => {
+      console.log("[Cart Recovery] Redirecting back to ShoppingCart.aspx after postback.");
+      window.location.href = "/ShoppingCart.aspx";
+    }, 2000);
+
+  } catch (err) {
+    console.error("[Cart Recovery] Failed to submit cart clear form:", err);
+  }
 });
 
