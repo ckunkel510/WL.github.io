@@ -22,7 +22,7 @@ document.addEventListener("DOMContentLoaded", () => {
       { name: 'Groesbeck', lat: 31.5249, lon: -96.5336 },
       { name: 'Mexia', lat: 31.6791, lon: -96.4822 },
       { name: 'Buffalo', lat: 31.4632, lon: -96.0580 },
-      { name: 'Woodson Office', lat: 30.543497526885822, lon: -96.68760572699072 } // test location
+      { name: 'Woodson Lumber Corporate', lat: 30.543497526885822, lon: -96.68760572699072 } // test location
     ];
 
     navigator.geolocation.getCurrentPosition(
