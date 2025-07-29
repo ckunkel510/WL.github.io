@@ -56,7 +56,7 @@ document.addEventListener("DOMContentLoaded", function () {
     setTimeout(() => {
       console.log("[Cart Recovery] ⏱ Redirecting back to cart in 2 seconds (failsafe)...");
       window.location.href = "/ShoppingCart.aspx";
-    }, 2000);
+    }, 10000);
 
   } catch (err) {
     console.error("[Cart Recovery] ❌ Error during postback simulation:", err);
