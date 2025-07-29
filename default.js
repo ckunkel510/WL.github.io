@@ -1,6 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
   // Only override if we're on the Default.aspx page
-  if (!location.pathname.toLowerCase().includes("default.aspx")) return;
+  if (!location.pathname.toLowerCase().includes("product.aspx")) return;
 
   console.log("[StoreModeUI] Overriding Default.aspx with Store Mode layout ✅");
 
