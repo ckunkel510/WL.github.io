@@ -1,27 +1,27 @@
-document.addEventListener("DOMContentLoaded", function () {
-  const shoppingCartUrl = "/ShoppingCart.aspx";
 
-  // Step 1: Detect if we came from ShoppingCart.aspx
-  const cameFromCart = document.referrer.includes("ShoppingCart.aspx") || sessionStorage.getItem("CartErrorRedirect") === "true";
+document.addEventListener("DOMContentLoaded", function () {
+  const cameFromCart = sessionStorage.getItem("CartErrorRedirect") === "true";
 
   if (cameFromCart) {
-    console.log("[Cart Recovery] Detected redirect from ShoppingCart.aspx with error.");
+    console.log("[Cart Recovery] Redirected to Error.aspx after cart access");
 
-    // Step 2: Clear the flag so it doesn’t loop
+    // Clear flag to avoid infinite loop
     sessionStorage.removeItem("CartErrorRedirect");
 
-    // Step 3: Simulate clicking the Empty Cart button
+    // Attempt to empty cart by simulating click
     const emptyCartBtn = document.querySelector("#ctl00_PageBody_EmptyCartButtonTop");
+
     if (emptyCartBtn) {
-      console.log("[Cart Recovery] Empty Cart button found. Triggering click.");
+      console.log("[Cart Recovery] Found Empty Cart button – clicking to clear cart");
       emptyCartBtn.click();
     } else {
-      console.warn("[Cart Recovery] Empty Cart button not found. Redirecting anyway.");
+      console.warn("[Cart Recovery] Empty Cart button not found – proceeding anyway");
     }
 
-    // Step 4: Wait briefly, then go back to cart
+    // Delay then return to cart
     setTimeout(() => {
-      window.location.href = shoppingCartUrl;
-    }, 1500); // Wait a moment for postback (can adjust this)
+      window.location.href = "/ShoppingCart.aspx";
+    }, 1500);
   }
 });
+
