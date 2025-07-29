@@ -45,6 +45,9 @@ document.addEventListener("DOMContentLoaded", () => {
         if (nearestStore) {
           console.log(`[StoreMode] Near ${nearestStore.name}. Redirecting to /Default.aspx`);
           sessionStorage.setItem("storeModeRedirected", "true");
+          sessionStorage.setItem("storeProximity", "true");
+sessionStorage.setItem("storeMode", "on"); // first-time default
+
           window.location.href = "https://webtrack.woodsonlumber.com/Default.aspx";
         } else {
           console.log("[StoreMode] No store within range. No redirect.");
