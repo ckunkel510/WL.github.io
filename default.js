@@ -130,42 +130,45 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function injectReturnToStoreBanner() {
-    if (location.pathname.toLowerCase().includes("products.aspx")) {
-      const layoutParent = document.querySelector("#MainLayoutRow")?.parentNode;
-      if (!layoutParent) return;
+  if (location.pathname.toLowerCase().includes("products.aspx")) {
+    const searchBarRow = document.getElementById("ctl00_PageHeader_searchBarTableRow");
+    if (!searchBarRow) return;
 
-      const existingBanner = document.getElementById("storeModeBanner");
-      if (existingBanner) return;
+    const existingBanner = document.getElementById("storeModeBanner");
+    if (existingBanner) return;
 
-      const banner = document.createElement("div");
-      banner.id = "storeModeBanner";
-      banner.style.cssText = `
-        background-color: #6b0016;
-        color: white;
-        padding: 12px 16px;
-        font-weight: bold;
-        font-size: 0.95rem;
-        text-align: center;
-        width: 100%;
-        box-sizing: border-box;
-        margin-bottom: 10px;
-      `;
-      banner.innerHTML = `
-        Looks like you're at a Woodson Lumber store.
-        <a href="#" style="color: white; text-decoration: underline; margin-left: 6px;" id="returnToStoreModeBtn">Switch to Store Mode</a>
-      `;
+    const banner = document.createElement("div");
+    banner.id = "storeModeBanner";
+    banner.style.cssText = `
+      background-color: #6b0016;
+      color: white;
+      padding: 12px 16px;
+      font-weight: bold;
+      font-size: 0.95rem;
+      text-align: center;
+      width: 100%;
+      box-sizing: border-box;
+    `;
+    banner.innerHTML = `
+      Looks like you're at a Woodson Lumber store.
+      <a href="#" style="color: white; text-decoration: underline; margin-left: 6px;" id="returnToStoreModeBtn">Switch to Store Mode</a>
+    `;
 
-      layoutParent.insertBefore(banner, document.querySelector("#MainLayoutRow"));
-
-      document.getElementById("returnToStoreModeBtn").addEventListener("click", (e) => {
-        e.preventDefault();
-        sessionStorage.setItem("storeMode", "on");
-        window.location.href = "/Default.aspx";
-      });
-
-      console.log("[StoreMode] Return banner injected");
+    // ✅ Insert AFTER the search bar row
+    if (searchBarRow.parentNode) {
+      searchBarRow.parentNode.insertBefore(banner, searchBarRow.nextSibling);
     }
+
+    document.getElementById("returnToStoreModeBtn").addEventListener("click", (e) => {
+      e.preventDefault();
+      sessionStorage.setItem("storeMode", "on");
+      window.location.href = "/Default.aspx";
+    });
+
+    console.log("[StoreMode] Return banner injected");
   }
+}
+
 
   function injectBarcodeDependencies() {
   if (!document.getElementById("quagga-loaded")) {
