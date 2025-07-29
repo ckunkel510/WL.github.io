@@ -15,7 +15,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   const iframe = document.createElement("iframe");
   iframe.style.display = "none";
-  iframe.src = "/Products.aspx"; // 👈 update if needed
+  iframe.src = "/Products.aspx"; // Update if needed
   document.body.appendChild(iframe);
 
   console.log("[Cart Recovery] 🧭 Injected iframe to load Products.aspx");
@@ -23,14 +23,14 @@ document.addEventListener("DOMContentLoaded", function () {
   iframe.onload = function () {
     try {
       const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-      console.log("[Cart Recovery] ✅ iframe loaded. Extracting state tokens...");
+      console.log("[Cart Recovery] ✅ iframe loaded. Extracting hidden tokens...");
 
       const viewState = iframeDoc.querySelector('input[name="__VIEWSTATE"]');
       const eventValidation = iframeDoc.querySelector('input[name="__EVENTVALIDATION"]');
       const viewStateGen = iframeDoc.querySelector('input[name="__VIEWSTATEGENERATOR"]');
 
       if (!viewState || !eventValidation) {
-        console.warn("[Cart Recovery] ⚠️ Failed to extract required tokens.");
+        console.warn("[Cart Recovery] ⚠️ Required tokens not found. Abort.");
         return;
       }
 
@@ -49,34 +49,42 @@ document.addEventListener("DOMContentLoaded", function () {
       form.action = "/ShoppingCart.aspx";
       form.style.display = "none";
 
-      const inputs = [
+      const payload = [
         ["__EVENTTARGET", "ctl00$PageBody$EmptyCartButtonTop"],
         ["__EVENTARGUMENT", ""],
         ["__VIEWSTATE", vsVal],
-        ["__EVENTVALIDATION", evVal]
+        ["__EVENTVALIDATION", evVal],
       ];
 
-      if (vsgVal) inputs.push(["__VIEWSTATEGENERATOR", vsgVal]);
+      if (vsgVal) payload.push(["__VIEWSTATEGENERATOR", vsgVal]);
 
-      for (const [name, value] of inputs) {
+      payload.forEach(([name, value]) => {
         const input = document.createElement("input");
         input.name = name;
         input.value = value;
         form.appendChild(input);
-      }
+      });
+
+      // Log the actual post values in table format
+      console.log("[Cart Recovery] 📦 Payload being submitted:");
+      console.table(Object.fromEntries(payload));
 
       document.body.appendChild(form);
-      console.log("[Cart Recovery] 🧾 Form built with extracted values.");
-      console.log("[Cart Recovery] ⏳ Submitting in 4 seconds...");
+      console.log("[Cart Recovery] 🧾 Form ready. Submitting in 3 seconds...");
 
       setTimeout(() => {
-        console.log("[Cart Recovery] 🚀 Submitting form to clear cart...");
+        console.log("[Cart Recovery] 🚀 Submitting form NOW to empty cart...");
         form.submit();
-      }, 4000);
+      }, 3000); // short delay to see logs
+
+      // Slow down the redirect: Set a separate delay AFTER submit (for manual tracking)
+      setTimeout(() => {
+        console.log("[Cart Recovery] ⏳ Redirecting manually to /ShoppingCart.aspx after inspection...");
+        window.location.href = "/ShoppingCart.aspx";
+      }, 8000); // more time to inspect Network tab
 
     } catch (err) {
-      console.error("[Cart Recovery] ❌ Error during extraction/post:", err);
+      console.error("[Cart Recovery] ❌ Exception during token extraction or form submission:", err);
     }
   };
 });
-
