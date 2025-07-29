@@ -183,31 +183,7 @@ document.addEventListener("DOMContentLoaded", () => {
     document.head.appendChild(scanner);
   }
 
-  if (!document.getElementById("barcode-scan-modal")) {
-    const modal = document.createElement("div");
-    modal.id = "barcode-scan-modal";
-    modal.style.cssText = `
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      z-index: 9999;
-      width: 100vw;
-      height: 100vh;
-      background: rgba(0, 0, 0, 0.85);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-direction: column;
-      color: white;
-    `;
-    modal.innerHTML = `
-      <div style="margin-bottom: 16px; font-size: 1.2rem;">Scan a Product Barcode</div>
-      <div id="barcode-scanner" style="width: 100%; max-width: 400px; height: 300px; background: black;"></div>
-      <button style="margin-top: 20px; padding: 10px 20px; background: white; color: #6b0016; border: none; border-radius: 6px; font-weight: bold;" onclick="document.getElementById('barcode-scan-modal').style.display='none';">Close</button>
-    `;
-    document.body.appendChild(modal);
-  }
+  
 }
 
 });
