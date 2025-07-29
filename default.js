@@ -2,17 +2,18 @@ document.addEventListener("DOMContentLoaded", () => {
   const layout = document.querySelector("#MainLayoutRow");
   const isStoreMode = sessionStorage.getItem("storeMode") === "on";
   const stillAtStore = sessionStorage.getItem("storeProximity") === "true";
+  const storeName = sessionStorage.getItem("storeName") || "Woodson Lumber";
 
   if (!layout || !stillAtStore) return;
 
   if (isStoreMode) {
-    renderStoreMode(layout);
-    injectBarcodeDependencies(); // ✅ Make scanner work
+    renderStoreMode(layout, storeName);
+    injectBarcodeDependencies();
   } else {
     injectReturnToStoreBanner();
   }
 
-  function renderStoreMode(layout) {
+  function renderStoreMode(layout, storeName) {
     console.log("[StoreMode] Rendering store overlay");
 
     layout.innerHTML = "";
@@ -32,12 +33,13 @@ document.addEventListener("DOMContentLoaded", () => {
     `;
 
     const title = document.createElement("h1");
-    title.textContent = "Welcome to Woodson Lumber (Store Mode)";
+    title.textContent = `Welcome to ${storeName}`;
     title.style.cssText = `
-      font-size: 1.5rem;
+      font-size: 1.6rem;
       margin-bottom: 24px;
       text-align: center;
-      width: 100%;
+      font-family: 'Georgia', 'Times New Roman', serif;
+      font-style: italic;
     `;
     container.appendChild(title);
 
@@ -50,56 +52,7 @@ document.addEventListener("DOMContentLoaded", () => {
       max-width: 500px;
     `;
 
-    const buttons = [
-      {
-        text: "🔍 Look Up Item",
-        action: () => {
-          sessionStorage.setItem("storeMode", "off");
-          window.location.href = "/products.aspx";
-        }
-      },
-      {
-        text: "📷 Scan Barcode",
-        action: () => {
-          // Scanner is already loaded via script injection
-          const scannerUI = document.getElementById("barcode-scan-modal");
-          if (scannerUI) scannerUI.style.display = "block";
-        }
-      },
-      {
-        text: "🔥 Specials",
-        action: () => {
-          sessionStorage.setItem("storeMode", "off");
-          window.location.href = "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4546&pg=4546";
-        }
-      },
-      {
-        text: "👤 My Account",
-        action: () => {
-          window.location.href = "/Signin.aspx";
-        }
-      },
-      {
-        text: "💬 Need Help?",
-        action: () => {
-          const waitForTawk = setInterval(() => {
-            if (typeof Tawk_API !== "undefined" && Tawk_API.maximize) {
-              Tawk_API.maximize();
-              clearInterval(waitForTawk);
-            }
-          }, 300);
-        }
-      },
-      {
-        text: "🔁 Return to Full Site",
-        action: () => {
-          sessionStorage.setItem("storeMode", "off");
-          window.location.href = "/Products.aspx";
-        }
-      }
-    ];
-
-    buttons.forEach(({ text, action }) => {
+    const createButton = (text, onClick) => {
       const btn = document.createElement("button");
       btn.textContent = text;
       btn.style.cssText = `
@@ -122,9 +75,53 @@ document.addEventListener("DOMContentLoaded", () => {
       `;
       btn.addEventListener("mouseenter", () => btn.style.backgroundColor = "#f0f0f0");
       btn.addEventListener("mouseleave", () => btn.style.backgroundColor = "white");
-      btn.addEventListener("click", action);
-      grid.appendChild(btn);
-    });
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        onClick();
+      });
+      return btn;
+    };
+
+    // Add buttons to grid
+    grid.appendChild(createButton("🔍 Look Up Item", () => {
+      sessionStorage.setItem("storeMode", "off");
+      window.location.href = "/products.aspx";
+    }));
+
+    grid.appendChild(createButton("📷 Scan Barcode", () => {
+      const tryScanner = () => {
+        const scannerModal = document.getElementById("barcode-scan-modal");
+        if (scannerModal) {
+          scannerModal.style.display = "block";
+        } else {
+          console.warn("[StoreMode] Scanner modal not found yet");
+        }
+      };
+      setTimeout(tryScanner, 500); // small delay to let script load
+    }));
+
+    grid.appendChild(createButton("🔥 Specials", () => {
+      sessionStorage.setItem("storeMode", "off");
+      window.location.href = "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4546&pg=4546";
+    }));
+
+    grid.appendChild(createButton("👤 My Account", () => {
+      window.location.href = "/Signin.aspx";
+    }));
+
+    grid.appendChild(createButton("💬 Need Help?", () => {
+      const waitForTawk = setInterval(() => {
+        if (typeof Tawk_API !== "undefined" && Tawk_API.maximize) {
+          Tawk_API.maximize();
+          clearInterval(waitForTawk);
+        }
+      }, 300);
+    }));
+
+    grid.appendChild(createButton("🔁 Return to Full Site", () => {
+      sessionStorage.setItem("storeMode", "off");
+      window.location.href = "/products.aspx";
+    }));
 
     container.appendChild(grid);
     layout.appendChild(container);
@@ -161,7 +158,7 @@ document.addEventListener("DOMContentLoaded", () => {
       document.getElementById("returnToStoreModeBtn").addEventListener("click", (e) => {
         e.preventDefault();
         sessionStorage.setItem("storeMode", "on");
-        window.location.href = "/Products.aspx";
+        window.location.href = "/Default.aspx";
       });
 
       console.log("[StoreMode] Return banner injected");
