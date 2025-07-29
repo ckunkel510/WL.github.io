@@ -134,6 +134,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const header = document.getElementById("wlcheader");
     if (!header) return;
 
+    const imageWrapper = header.querySelector(".image-wrapper");
+    if (!imageWrapper) return;
+
     const existingBanner = document.getElementById("storeModeBanner");
     if (existingBanner) return;
 
@@ -142,19 +145,21 @@ document.addEventListener("DOMContentLoaded", () => {
     banner.style.cssText = `
       background-color: #6b0016;
       color: white;
-      padding: 12px 16px;
+      padding: 8px 12px;
       font-weight: bold;
-      font-size: 0.95rem;
+      font-size: 0.9rem;
       text-align: center;
       width: 100%;
       box-sizing: border-box;
+      margin-top: 4px;
     `;
     banner.innerHTML = `
-      Looks like you're at a Woodson Lumber store.
+      You're near a Woodson Lumber store.
       <a href="#" style="color: white; text-decoration: underline; margin-left: 6px;" id="returnToStoreModeBtn">Switch to Store Mode</a>
     `;
 
-    header.appendChild(banner);
+    // Insert right after the image wrapper
+    imageWrapper.parentNode.insertBefore(banner, imageWrapper.nextSibling);
 
     document.getElementById("returnToStoreModeBtn").addEventListener("click", (e) => {
       e.preventDefault();
@@ -162,9 +167,10 @@ document.addEventListener("DOMContentLoaded", () => {
       window.location.href = "/Default.aspx";
     });
 
-    console.log("[StoreMode] Return banner injected into wlcheader");
+    console.log("[StoreMode] Return banner injected after logo");
   }
 }
+
 
 
 
