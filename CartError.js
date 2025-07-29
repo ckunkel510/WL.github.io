@@ -3,63 +3,76 @@ document.addEventListener("DOMContentLoaded", function () {
   console.log("[Cart Recovery] 🔍 Script loaded on Error.aspx");
 
   const cameFromCart = sessionStorage.getItem("CartErrorRedirect") === "true";
-
   if (!cameFromCart) {
     console.log("[Cart Recovery] ❌ No redirect flag found. Not a cart-related error.");
     return;
   }
 
-  console.log("[Cart Recovery] ✅ Detected redirect from ShoppingCart.aspx");
+  console.log("[Cart Recovery] ✅ Redirected from ShoppingCart.aspx");
 
-  // Clear flags before attempting post
   sessionStorage.removeItem("CartErrorRedirect");
   sessionStorage.removeItem("CartNeedsEmpty");
   sessionStorage.removeItem("CartRecoveryAttemptCount");
-  console.log("[Cart Recovery] 🧹 Cleared session flags");
 
-  try {
-    // Step 1: Create a hidden form to mimic the postback
-    const form = document.createElement("form");
-    form.method = "POST";
-    form.action = "/ShoppingCart.aspx";
-    form.style.display = "none";
-    console.log("[Cart Recovery] 📝 Created hidden form with POST to /ShoppingCart.aspx");
+  // Step 1: Create hidden iframe to load ShoppingCart.aspx
+  const iframe = document.createElement("iframe");
+  iframe.style.display = "none";
+  iframe.src = "/ShoppingCart.aspx";
+  document.body.appendChild(iframe);
 
-    // Step 2: Add __EVENTTARGET to simulate modal confirmation of Empty Cart
-    const targetInput = document.createElement("input");
-    targetInput.type = "hidden";
-    targetInput.name = "__EVENTTARGET";
-    targetInput.value = "ctl00$PageBody$EmptyCartButtonTop";
-    form.appendChild(targetInput);
-    console.log("[Cart Recovery] ➕ Added __EVENTTARGET input: ctl00$PageBody$EmptyCartButtonTop");
+  console.log("[Cart Recovery] 🧭 Injected iframe to load ShoppingCart.aspx");
 
-    // Step 3: Add __EVENTARGUMENT (usually empty)
-    const argumentInput = document.createElement("input");
-    argumentInput.type = "hidden";
-    argumentInput.name = "__EVENTARGUMENT";
-    argumentInput.value = "";
-    form.appendChild(argumentInput);
-    console.log("[Cart Recovery] ➕ Added __EVENTARGUMENT input: (empty)");
+  iframe.onload = function () {
+    try {
+      const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+      console.log("[Cart Recovery] ✅ iframe loaded. Attempting to extract __VIEWSTATE and __EVENTVALIDATION...");
 
-    // Step 4: (Optional) Log cookies — sometimes important for session-based forms
-    console.log("[Cart Recovery] 🍪 Current cookies:", document.cookie);
+      const viewState = iframeDoc.querySelector('input[name="__VIEWSTATE"]');
+      const eventValidation = iframeDoc.querySelector('input[name="__EVENTVALIDATION"]');
 
-    // Step 5: Append form to body
-    document.body.appendChild(form);
-    console.log("[Cart Recovery] 📥 Appended form to DOM");
+      if (!viewState || !eventValidation) {
+        console.warn("[Cart Recovery] ⚠️ Required hidden fields not found in iframe.");
+        return;
+      }
 
-    // Step 6: Submit the form
-    console.log("[Cart Recovery] 🚀 Submitting form to trigger empty cart server-side...");
-    form.submit();
+      const viewStateValue = viewState.value;
+      const eventValidationValue = eventValidation.value;
 
-    // Failsafe: set a delayed redirect if submit fails silently
-    setTimeout(() => {
-      console.log("[Cart Recovery] ⏱ Redirecting back to cart in 2 seconds (failsafe)...");
-      window.location.href = "/ShoppingCart.aspx";
-    }, 10000);
+      console.log("[Cart Recovery] 🧬 Extracted __VIEWSTATE length:", viewStateValue.length);
+      console.log("[Cart Recovery] 🧬 Extracted __EVENTVALIDATION length:", eventValidationValue.length);
 
-  } catch (err) {
-    console.error("[Cart Recovery] ❌ Error during postback simulation:", err);
-  }
+      // Step 2: Build and submit synthetic postback with real validation tokens
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = "/ShoppingCart.aspx";
+      form.style.display = "none";
+
+      const targetInput = document.createElement("input");
+      targetInput.name = "__EVENTTARGET";
+      targetInput.value = "ctl00$PageBody$EmptyCartButtonTop";
+      form.appendChild(targetInput);
+
+      const argumentInput = document.createElement("input");
+      argumentInput.name = "__EVENTARGUMENT";
+      argumentInput.value = "";
+      form.appendChild(argumentInput);
+
+      const viewStateInput = document.createElement("input");
+      viewStateInput.name = "__VIEWSTATE";
+      viewStateInput.value = viewStateValue;
+      form.appendChild(viewStateInput);
+
+      const eventValidationInput = document.createElement("input");
+      eventValidationInput.name = "__EVENTVALIDATION";
+      eventValidationInput.value = eventValidationValue;
+      form.appendChild(eventValidationInput);
+
+      document.body.appendChild(form);
+      console.log("[Cart Recovery] 🚀 Submitting postback with real tokens...");
+      form.submit();
+    } catch (err) {
+      console.error("[Cart Recovery] ❌ Error accessing iframe content or submitting form:", err);
+    }
+  };
 });
 
