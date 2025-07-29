@@ -89,18 +89,16 @@ document.addEventListener("DOMContentLoaded", () => {
     }));
 
     grid.appendChild(createButton("📷 Scan Barcode", () => {
-  // Check if Quagga is already loaded
   if (typeof Quagga === "undefined") {
     const quagga = document.createElement("script");
     quagga.src = "https://unpkg.com/quagga@0.12.1/dist/quagga.min.js";
-    quagga.onload = () => {
-      loadInStoreScanner(); // Once Quagga is ready
-    };
+    quagga.onload = () => loadInStoreScanner();
     document.head.appendChild(quagga);
   } else {
     loadInStoreScanner();
   }
 }));
+
 
 
 
