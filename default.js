@@ -89,16 +89,23 @@ document.addEventListener("DOMContentLoaded", () => {
     }));
 
     grid.appendChild(createButton("📷 Scan Barcode", () => {
-      const tryScanner = () => {
-        const scannerModal = document.getElementById("barcode-scan-modal");
-        if (scannerModal) {
-          scannerModal.style.display = "block";
-        } else {
-          console.warn("[StoreMode] Scanner modal not found yet");
-        }
-      };
-      setTimeout(tryScanner, 500); // small delay to let script load
-    }));
+  const scriptId = "instore-barcode-loader";
+  if (!document.getElementById(scriptId)) {
+    const quagga = document.createElement("script");
+    quagga.src = "https://unpkg.com/quagga@0.12.1/dist/quagga.min.js";
+    document.head.appendChild(quagga);
+
+    const scanner = document.createElement("script");
+    scanner.src = "https://ckunkel510.github.io/WL.github.io/InStoreBarcodeScanner.js";
+    scanner.id = scriptId;
+    scanner.defer = true;
+    document.head.appendChild(scanner);
+  } else {
+    // If already loaded, simulate button click
+    document.getElementById("in-store-barcode-launch")?.click();
+  }
+}));
+
 
     grid.appendChild(createButton("🔥 Specials", () => {
       sessionStorage.setItem("storeMode", "off");
