@@ -131,39 +131,31 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function injectReturnToStoreBanner() {
   if (location.pathname.toLowerCase().includes("products.aspx")) {
-    const header = document.getElementById("wlcheader");
-    if (!header) return;
-
-    const imageWrapper = header.querySelector(".image-wrapper");
-    if (!imageWrapper) return;
+    const stickyHeader = document.querySelector(".sticky-header");
+    if (!stickyHeader) return;
 
     const existingBanner = document.getElementById("storeModeBanner");
     if (existingBanner) return;
-
-    // Ensure image-wrapper behaves like a vertical stack
-    imageWrapper.style.display = "flex";
-    imageWrapper.style.flexDirection = "column";
-    imageWrapper.style.alignItems = "flex-start";
 
     const banner = document.createElement("div");
     banner.id = "storeModeBanner";
     banner.style.cssText = `
       background-color: #6b0016;
       color: white;
-      padding: 8px 12px;
+      padding: 10px 16px;
       font-weight: bold;
-      font-size: 0.9rem;
+      font-size: 1rem;
       text-align: center;
       width: 100%;
       box-sizing: border-box;
-      margin-top: 4px;
+      z-index: 9999;
     `;
     banner.innerHTML = `
       You're near a Woodson Lumber store.
       <a href="#" style="color: white; text-decoration: underline; margin-left: 6px;" id="returnToStoreModeBtn">Switch to Store Mode</a>
     `;
 
-    imageWrapper.appendChild(banner);
+    stickyHeader.parentNode.insertBefore(banner, stickyHeader);
 
     document.getElementById("returnToStoreModeBtn").addEventListener("click", (e) => {
       e.preventDefault();
@@ -171,9 +163,10 @@ document.addEventListener("DOMContentLoaded", () => {
       window.location.href = "/Default.aspx";
     });
 
-    console.log("[StoreMode] Return banner injected visibly under logo");
+    console.log("[StoreMode] Return banner injected before sticky-header");
   }
 }
+
 
 
 
