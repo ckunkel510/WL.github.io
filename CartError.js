@@ -1,24 +1,43 @@
 document.addEventListener("DOMContentLoaded", function () {
   const cameFromCart = sessionStorage.getItem("CartErrorRedirect") === "true";
 
-  if (!cameFromCart) return;
-
-  console.log("[Cart Recovery] Cart error redirect detected. Preparing retry...");
-
-  sessionStorage.removeItem("CartErrorRedirect");
-
-  // Increment a retry counter to avoid infinite loop
-  let retryCount = parseInt(sessionStorage.getItem("CartRecoveryAttemptCount") || "0", 10);
-  retryCount++;
-  sessionStorage.setItem("CartRecoveryAttemptCount", retryCount);
-
-  if (retryCount > 2) {
-    console.warn("[Cart Recovery] Too many attempts. Not retrying again.");
-    sessionStorage.removeItem("CartRecoveryAttemptCount");
+  if (!cameFromCart) {
+    console.log("[Cart Recovery] No redirect flag found.");
     return;
   }
 
-  sessionStorage.setItem("CartNeedsEmpty", "true");
-  window.location.href = "/ShoppingCart.aspx";
+  console.log("[Cart Recovery] Redirected from ShoppingCart.aspx. Attempting direct postback to clear cart.");
+
+  // Clear flags
+  sessionStorage.removeItem("CartErrorRedirect");
+  sessionStorage.removeItem("CartNeedsEmpty");
+  sessionStorage.removeItem("CartRecoveryAttemptCount");
+
+  try {
+    // Step 1: Build a synthetic postback form
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = "/ShoppingCart.aspx";
+    form.style.display = "none";
+
+    // __EVENTTARGET: triggers empty cart postback
+    const targetInput = document.createElement("input");
+    targetInput.name = "__EVENTTARGET";
+    targetInput.value = "ctl00$PageBody$EmptyCartButtonTop";
+    form.appendChild(targetInput);
+
+    // __EVENTARGUMENT: usually empty
+    const argumentInput = document.createElement("input");
+    argumentInput.name = "__EVENTARGUMENT";
+    argumentInput.value = "";
+    form.appendChild(argumentInput);
+
+    // Append and submit the form
+    document.body.appendChild(form);
+    console.log("[Cart Recovery] Submitting postback form to trigger empty cart...");
+    form.submit();
+  } catch (err) {
+    console.error("[Cart Recovery] Failed to submit postback:", err);
+  }
 });
 
