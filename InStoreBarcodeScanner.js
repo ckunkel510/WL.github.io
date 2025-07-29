@@ -97,11 +97,18 @@
         }
 
         if (detectedBarcodes[code] >= minDetections) {
-          Quagga.stop();
-          stream.getTracks().forEach(track => track.stop());
-          sessionStorage.removeItem("inStoreMode"); // Exit store mode
-          window.location.href = `https://webtrack.woodsonlumber.com/Products.aspx?pg=0&searchText=${code}`;
-        }
+  Quagga.stop();
+  stream.getTracks().forEach(track => track.stop());
+
+  // ✅ Clear in-store mode BEFORE redirect
+  sessionStorage.removeItem("inStoreMode");
+
+  // ✅ Small delay to ensure sessionStorage is cleared before navigation
+  setTimeout(() => {
+    window.location.href = `https://webtrack.woodsonlumber.com/Products.aspx?pg=0&searchText=${code}`;
+  }, 100); // 100ms delay should be sufficient
+}
+
       });
 
     } catch (err) {
