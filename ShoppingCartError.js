@@ -1,4 +1,4 @@
-<script>
+
 document.addEventListener("DOMContentLoaded", function () {
   const needsEmpty = sessionStorage.getItem("CartNeedsEmpty") === "true";
   const retryCount = sessionStorage.getItem("CartRecoveryAttemptCount") || "0";
@@ -19,4 +19,4 @@ document.addEventListener("DOMContentLoaded", function () {
     window.location.href = "/Error.aspx";
   }
 });
-</script>
+
