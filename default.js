@@ -140,6 +140,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const existingBanner = document.getElementById("storeModeBanner");
     if (existingBanner) return;
 
+    // Ensure image-wrapper behaves like a vertical stack
+    imageWrapper.style.display = "flex";
+    imageWrapper.style.flexDirection = "column";
+    imageWrapper.style.alignItems = "flex-start";
+
     const banner = document.createElement("div");
     banner.id = "storeModeBanner";
     banner.style.cssText = `
@@ -158,8 +163,7 @@ document.addEventListener("DOMContentLoaded", () => {
       <a href="#" style="color: white; text-decoration: underline; margin-left: 6px;" id="returnToStoreModeBtn">Switch to Store Mode</a>
     `;
 
-    // Insert right after the image wrapper
-    imageWrapper.parentNode.insertBefore(banner, imageWrapper.nextSibling);
+    imageWrapper.appendChild(banner);
 
     document.getElementById("returnToStoreModeBtn").addEventListener("click", (e) => {
       e.preventDefault();
@@ -167,9 +171,10 @@ document.addEventListener("DOMContentLoaded", () => {
       window.location.href = "/Default.aspx";
     });
 
-    console.log("[StoreMode] Return banner injected after logo");
+    console.log("[StoreMode] Return banner injected visibly under logo");
   }
 }
+
 
 
 
