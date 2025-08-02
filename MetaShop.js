@@ -83,7 +83,7 @@ function showMetaCartModal() {
   modal.innerHTML = `
     <div style="background: white; border-radius: 8px; padding: 2rem; max-width: 500px; width: 90%; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-family: sans-serif;">
       <h2 style="color: #6b0016; margin-bottom: 1rem;">Building Your Cart</h2>
-      <p style="font-size: 1rem; color: #333;">We’re adding your selected items from Facebook into your cart.</p>
+      <p style="font-size: 1rem; color: #333;">We’re adding your selected items into your cart.</p>
       <p style="font-size: 0.9rem; color: #666; margin-top: 1rem;">Please allow us just a few moments. Your cart will be ready shortly!</p>
       <div style="margin-top: 1.5rem;">
         <div class="loader" style="margin: 0 auto; width: 36px; height: 36px; border: 4px solid #eee; border-top: 4px solid #6b0016; border-radius: 50%; animation: spin 1s linear infinite;"></div>
