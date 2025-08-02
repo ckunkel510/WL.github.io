@@ -12,6 +12,19 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log(`[StoreMode] Mobile detected: ${isMobile}`);
     console.log(`[StoreMode] Already redirected this session: ${alreadyRedirected}`);
 
+    // ✅ Extract cartOrigin from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const cartOrigin = urlParams.get("cart_origin");
+    const acceptedOrigins = ["meta_shops", "facebook", "instagram", "whatsapp"];
+
+    console.log(`[StoreMode] Cart Origin: ${cartOrigin}`);
+
+    // ✅ Exit early if cartOrigin is a known Meta source
+    if (acceptedOrigins.includes(cartOrigin)) {
+      console.log("[StoreMode] Skipping redirect due to cart origin.");
+      return;
+    }
+
     if (!isMobile || alreadyRedirected === "true") return;
 
     const stores = [
@@ -22,7 +35,7 @@ document.addEventListener("DOMContentLoaded", () => {
       { name: 'Groesbeck', lat: 31.5249, lon: -96.5336 },
       { name: 'Mexia', lat: 31.6791, lon: -96.4822 },
       { name: 'Buffalo', lat: 31.4632, lon: -96.0580 },
-      { name: 'Woodson Lumber Corporate', lat: 30.543497526885822, lon: -96.68760572699072 } // test location
+      { name: 'Woodson Lumber Corporate', lat: 30.543497526885822, lon: -96.68760572699072 }
     ];
 
     navigator.geolocation.getCurrentPosition(
@@ -43,13 +56,11 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         if (nearestStore) {
-          console.log(`[StoreMode] Near ${nearestStore.name}. Redirecting to /Default.aspx`);
+          console.log(`[StoreMode] Near ${nearestStore.name}. Redirecting to /Products.aspx`);
           sessionStorage.setItem("storeModeRedirected", "true");
           sessionStorage.setItem("storeProximity", "true");
-sessionStorage.setItem("storeMode", "on"); // first-time default
-sessionStorage.setItem("storeName", nearestStore.name);
-
-
+          sessionStorage.setItem("storeMode", "on");
+          sessionStorage.setItem("storeName", nearestStore.name);
           window.location.href = "https://webtrack.woodsonlumber.com/Products.aspx";
         } else {
           console.log("[StoreMode] No store within range. No redirect.");
@@ -67,7 +78,7 @@ sessionStorage.setItem("storeName", nearestStore.name);
 
     function haversine(lat1, lon1, lat2, lon2) {
       const toRad = deg => (deg * Math.PI) / 180;
-      const R = 3958.8; // miles
+      const R = 3958.8;
       const dLat = toRad(lat2 - lat1);
       const dLon = toRad(lon2 - lon1);
       const a = Math.sin(dLat / 2) ** 2 +
@@ -75,5 +86,5 @@ sessionStorage.setItem("storeName", nearestStore.name);
                 Math.sin(dLon / 2) ** 2;
       return R * 2 * Math.asin(Math.sqrt(a));
     }
-  }, 2500); // Delay in ms
+  }, 2500);
 });
