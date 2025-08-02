@@ -62,10 +62,16 @@ function addToCartViaIframe(productId, quantity) {
         const qtyInput = doc.getElementById(qtyInputId);
 
         if (qtyInput) {
-          qtyInput.value = quantity;
-          qtyInput.dispatchEvent(new Event('input', { bubbles: true }));
-          console.log(`[MetaShops] Set quantity ${quantity} on input ${qtyInputId}`);
-        } else {
+  qtyInput.value = quantity;
+
+  // Dispatch events to simulate a real user interaction
+  qtyInput.dispatchEvent(new Event('input', { bubbles: true }));
+  qtyInput.dispatchEvent(new Event('change', { bubbles: true }));
+  qtyInput.dispatchEvent(new Event('blur'));
+
+  console.log(`[MetaShops] Set quantity ${quantity} on input ${qtyInputId} and dispatched events`);
+}
+ else {
           console.warn(`[MetaShops] Quantity input NOT FOUND for ${productId} (expected id: ${qtyInputId})`);
         }
 
