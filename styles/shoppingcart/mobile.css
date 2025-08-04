@@ -114,7 +114,7 @@
   }
    .wl-sticky-bar {
     position: sticky; /* stays with viewport bottom */
-    bottom: 0;
+    bottom: 100px;
     left: 0;
     right: 0;
     background: #ffffff;
