@@ -178,6 +178,8 @@ const specialInstr = getValueByLabel(/Special\s+Instructions:?/i);
 
   main.insertBefore(shell, main.firstChild);
   updateSummaryHeader();
+hideLegacyButtons();
+
 
 
   // After: main.insertBefore(shell, main.firstChild);
@@ -233,6 +235,16 @@ const specialInstr = getValueByLabel(/Special\s+Instructions:?/i);
 
   // -------- helpers --------
   function safe(s) { return (s || '').replace(/\s+$/, ''); }
+
+  function hideLegacyButtons() {
+  const backBtn = document.getElementById("ctl00_PageBody_BackToCartButton5");
+  const completeBtn = document.getElementById("ctl00_PageBody_CompleteCheckoutButton");
+  if (backBtn) backBtn.style.setProperty("display", "none", "important");
+  if (completeBtn) completeBtn.style.setProperty("display", "none", "important");
+}
+
+// Call this after inserting shell
+
 
   function collectAddress(prefixHuman) {
   const prefix = /invoice/i.test(prefixHuman) ? 'Invoice' : 'Delivery';
