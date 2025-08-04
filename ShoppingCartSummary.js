@@ -180,6 +180,39 @@ const specialInstr = getValueByLabel(/Special\s+Instructions:?/i);
   updateSummaryHeader();
 hideLegacyButtons();
 
+(function addStickyBarMobile(){
+  const sticky = document.createElement('div');
+  sticky.className = 'wl-sticky-bar';
+  sticky.innerHTML = `
+    <div class="wl-sticky-legal">
+      By tapping <strong>Complete Order</strong>, you agree to our
+      <a href="TermsAndConditions.aspx" target="_blank">Terms & Conditions</a>.
+    </div>
+    <button class="wl-sticky-btn" type="button" id="wl-sticky-complete">Complete Order</button>
+  `;
+  // Append at the very end of our modern summary (so it stays visible)
+  shell.appendChild(sticky);
+
+  // Wire up
+  document.getElementById('wl-sticky-complete')?.addEventListener('click', () => {
+    if (platformTnC && !platformTnC.checked) platformTnC.checked = true;
+    completeBtn?.click();
+  });
+})();
+
+(function moveBackBeforeHeader(){
+  const headerEl = document.getElementById("ctl00_PageBody_SummaryHeading_HeaderText");
+  if (!headerEl) return;
+  const backBtn = document.createElement('button');
+  backBtn.type = 'button';
+  backBtn.className = 'wl-btn secondary';
+  backBtn.style.margin = '10px 0';
+  backBtn.textContent = 'Back';
+  backBtn.addEventListener('click', () => {
+    document.getElementById("ctl00_PageBody_BackToCartButton5")?.click();
+  });
+  headerEl.parentElement?.insertBefore(backBtn, headerEl);
+})();
 
 
   // After: main.insertBefore(shell, main.firstChild);
@@ -221,7 +254,87 @@ hideLegacyButtons();
   if (totalsDiv) totalsDiv.remove();
 })();
 
+(function cacheCartImages(){
+  try {
+    const map = {}; // { productCode: imageUrl }
+    document.querySelectorAll('[data-title="Product Code"], td[data-title="Product Code"]').forEach(td => {
+      const code = (td.textContent || '').trim();
+      // Find the row image (adjust selector to your cart row image)
+      const row = td.closest('tr');
+      const img = row?.querySelector('img');
+      const src = img?.getAttribute('src');
+      if (code && src) map[code] = src;
+    });
+    if (Object.keys(map).length) {
+      sessionStorage.setItem('wlCartImages', JSON.stringify(map));
+    }
+  } catch(e) { /* no-op */ }
+})();
 
+
+(async function addThumbnailsToLines(){
+  const table = shell.querySelector('.wl-table');
+  if (!table) return;
+
+  // 1) Build an image map from session first
+  let imgMap = {};
+  try { imgMap = JSON.parse(sessionStorage.getItem('wlCartImages') || '{}'); } catch(e){}
+
+  // 2) If map is empty or missing items, optionally merge the CSV fallback
+  const needFallback = table.querySelectorAll('tbody tr').length && !Object.keys(imgMap).length;
+  if (needFallback) {
+    try {
+      const sheetMap = await fetchImageMapFromCSV();
+      imgMap = { ...sheetMap, ...imgMap }; // session wins
+    } catch(e) { /* ignore */ }
+  }
+
+  // 3) Insert a new thumbnail column as first column
+  const theadRow = table.querySelector('thead tr');
+  const th = document.createElement('th');
+  th.textContent = 'Item';
+  theadRow.insertBefore(th, theadRow.firstChild);
+
+  table.querySelectorAll('tbody tr').forEach(tr => {
+    const codeCell = tr.children[0]; // old first col (Product Code)
+    const code = (codeCell?.textContent || '').trim();
+    const thumbUrl = imgMap[code];
+
+    const td = document.createElement('td');
+    if (thumbUrl) {
+      td.innerHTML = `<img src="${thumbUrl}" alt="${code}" loading="lazy" style="width:48px;height:48px;object-fit:cover;border-radius:6px;">`;
+    } else {
+      td.innerHTML = `<div style="width:48px;height:48px;border-radius:6px;background:#f0f0f3;"></div>`;
+    }
+    tr.insertBefore(td, tr.firstChild);
+  });
+
+  // 4) Rebalance desktop widths so Description still has space
+  const css = document.createElement('style');
+  css.textContent = `
+    @media (min-width: 992px) {
+      .wl-lines .wl-table th:nth-child(1),
+      .wl-lines .wl-table td:nth-child(1) { width: 64px; } /* thumbnail */
+      .wl-lines .wl-table th:nth-child(2),
+      .wl-lines .wl-table td:nth-child(2) { width: 110px; } /* Product Code */
+      .wl-lines .wl-table th:nth-child(3),
+      .wl-lines .wl-table td:nth-child(3) { width: auto; } /* Description (widest) */
+      .wl-lines .wl-table th:nth-child(4),
+      .wl-lines .wl-table td:nth-child(4) { width: 70px; text-align:right; } /* Qty */
+      .wl-lines .wl-table th:nth-child(5),
+      .wl-lines .wl-table td:nth-child(5) { width: 60px; } /* UOM */
+      .wl-lines .wl-table th:nth-child(6),
+      .wl-lines .wl-table td:nth-child(6) { width: 110px; text-align:right; } /* Price */
+      .wl-lines .wl-table th:nth-child(7),
+      .wl-lines .wl-table td:nth-child(7) { width: 120px; text-align:right; } /* Total */
+    }
+    @media (max-width: 599px) {
+      .wl-lines .wl-table th:nth-child(1),
+      .wl-lines .wl-table td:nth-child(1) { width: 48px; }
+    }
+  `;
+  document.head.appendChild(css);
+})();
 
   // --- Wire up buttons
   document.getElementById('wl-back')?.addEventListener('click', () => {
