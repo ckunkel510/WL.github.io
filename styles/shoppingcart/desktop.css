@@ -411,3 +411,7 @@ textarea.form-control {
   }
   .wl-btn.secondary { background:#e6e6e9; color:#111; font-weight:600; }
   .wl-btn:hover { filter: brightness(.96); }
+
+  .wl-sticky-bar{
+    display:none;
+  }
