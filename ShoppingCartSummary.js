@@ -100,46 +100,61 @@
 
     <div class="wl-sections">
   <div class="wl-left-stack">
-    <div class="wl-card"> ...Contact & Notes... </div>
+    <div class="wl-card">
+      <h4>Contact & Notes</h4>
+      <div class="wl-grid-2">
+        <div class="wl-kv">
+          <div class="k">Name</div><div class="v">${safe(delivery.contact)}</div>
+          <div class="k">Phone</div><div class="v">${safe(delivery.phone)}</div>
+          <div class="k">Email</div><div class="v">${safe(invoice.email)}</div>
+        </div>
+        <div class="wl-kv">
+          <div class="k">PO / Your Ref</div><div class="v">${safe(poRef) || '-'}</div>
+          <div class="k">Special Instructions</div><div class="v">${safe(specialInstr) || '-'}</div>
+        </div>
+      </div>
+    </div>
+
     <div class="wl-card">
       <h4>Addresses</h4>
       <div class="wl-address-wrap">
         <div>
           <div class="section-label">Sales Address</div>
-          <p class="wl-address">...</p>
+          <p class="wl-address">${formatMultiline(delivery.addrLines)}</p>
         </div>
         <div>
           <div class="section-label">Invoice Address</div>
-          <p class="wl-address">...</p>
+          <p class="wl-address">${formatMultiline(invoice.addrLines)}</p>
         </div>
       </div>
     </div>
   </div>
 
-    <div class="wl-card wl-lines">
-      <h4>Order</h4>
-      <div class="wl-table-wrap">
-        <table class="wl-table">
-          <thead>
-            <tr>
-              <th>Product Code</th>
-              <th>Description</th>
-              <th style="text-align:right;">Qty</th>
-              <th>UOM</th>
-              <th style="text-align:right;">Price</th>
-              <th style="text-align:right;">Total</th>
-            </tr>
-          </thead>
-          <tbody>${linesHTML}</tbody>
-        </table>
-      </div>
-      <div class="wl-totals">
-  <div class="row"><div>Subtotal</div><div>${totals.subtotal}</div></div>
-  ${totals.tax ? `<div class="row"><div>Tax</div><div>${totals.tax}</div></div>` : ''}
-  <div class="row total"><div>Total</div><div>${totals.total}</div></div>
+  <div class="wl-card wl-lines">
+    <h4>Order</h4>
+    <div class="wl-table-wrap">
+      <table class="wl-table">
+        <thead>
+          <tr>
+            <th>Product Code</th>
+            <th>Description</th>
+            <th style="text-align:right;">Qty</th>
+            <th>UOM</th>
+            <th style="text-align:right;">Price</th>
+            <th style="text-align:right;">Total</th>
+          </tr>
+        </thead>
+        <tbody>${linesHTML}</tbody>
+      </table>
+    </div>
+    <div class="wl-totals">
+      <div class="row"><div>Subtotal</div><div>${totals.subtotal}</div></div>
+      ${totals.tax ? `<div class="row"><div>Tax</div><div>${totals.tax}</div></div>` : ''}
+      <div class="row total"><div>Total</div><div>${totals.total}</div></div>
+    </div>
+  </div>
 </div>
 
-    </div>
 
     <div class="wl-legal">
       By clicking <strong>Complete Order</strong>, you agree to our
