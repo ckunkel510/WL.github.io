@@ -34,11 +34,13 @@
   const city = branchFull.split(' - ')[0].trim();
   const street = (branchFull.split(' - ')[1] || '').split(',')[0]?.trim() || '';
 
-  const requiredDate = (function() {
-    const row = Array.from(legacySummary.querySelectorAll('.row'))
-      .find(r => /Date Required:/i.test(r.textContent));
-    return row?.querySelector('.col')?.textContent.trim() || '';
-  })();
+  const requiredDate = (() => {
+  // find the bold label that says "Date Required:" then read its sibling .col
+  const label = Array.from(legacySummary.querySelectorAll('.row .font-weight-bold'))
+    .find(el => /Date Required:/i.test(el.textContent || ''));
+  return label ? label.parentElement.querySelector(':scope > .col')?.textContent.trim() || '' : '';
+})();
+
 
   const poRef = (function() {
     const row = Array.from(legacySummary.querySelectorAll('.row'))
@@ -71,7 +73,7 @@
     // "Mexia": "https://www.woodsonlumber.com/mexia",
   };
   const storeImages = {
-    "Buffalo": "https://images-woodsonlumber.sirv.com/Store-Images/buffalo.jpg",
+    "Buffalo": "https://images-woodsonlumber.sirv.com/Store-Images/store-buffalo.avif",
     // "Brenham": "https://images-woodsonlumber.sirv.com/Store-Images/brenham.jpg",
     // ...
   };
@@ -145,11 +147,11 @@
         </table>
       </div>
       <div class="wl-totals">
-        <div class="row"><div>Subtotal <span style="color:#666;">(without Tax)</span></div><div>${totals.subtotal}</div></div>
-        ${totals.discountRow}
-        ${totals.taxRow}
-        <div class="row total"><div>Total inc Tax</div><div>${totals.total}</div></div>
-      </div>
+  <div class="row"><div>Subtotal</div><div>${totals.subtotal}</div></div>
+  ${totals.tax ? `<div class="row"><div>Tax</div><div>${totals.tax}</div></div>` : ''}
+  <div class="row total"><div>Total</div><div>${totals.total}</div></div>
+</div>
+
     </div>
 
     <div class="wl-legal">
@@ -183,67 +185,68 @@
   function safe(s) { return (s || '').replace(/\s+$/, ''); }
 
   function collectAddress(prefixHuman) {
-    const prefix = /invoice/i.test(prefixHuman) ? 'Invoice' : 'Delivery';
-    const contact = document.querySelector('#ctl00_PageBody_ShoppingCartSummaryTableControl_DeliveryContactName')?.textContent?.trim() || '';
-    const phone   = document.querySelector('#ctl00_PageBody_ShoppingCartSummaryTableControl_DeliveryTelephone')?.textContent?.trim() || '';
-    const email   = document.querySelector('#ctl00_PageBody_ShoppingCartSummaryTableControl_InvoiceEmailAddress')?.textContent?.trim() || '';
-    const line1   = document.querySelector(`#ctl00_PageBody_ShoppingCartSummaryTableControl_${prefix}AddressLines`)?.textContent?.trim() || '';
-    const city    = document.querySelector(`#ctl00_PageBody_ShoppingCartSummaryTableControl_${prefix}City`)?.textContent?.trim() || '';
-    const state   = document.querySelector(`#ctl00_PageBody_ShoppingCartSummaryTableControl_${prefix}State`)?.textContent?.trim() || '';
-    const zip     = document.querySelector(`#ctl00_PageBody_ShoppingCartSummaryTableControl_${prefix}${prefix==='Invoice'?'ZipCode':'PostalCode'}`)?.textContent?.trim() || '';
-    const country = document.querySelector(`#ctl00_PageBody_ShoppingCartSummaryTableControl_${prefix}Country`)?.textContent?.trim() || '';
-    const addrLines = [line1, [city, state].filter(Boolean).join(', '), zip, country].filter(Boolean);
-    return { contact, phone, email, addrLines };
-  }
+  const prefix = /invoice/i.test(prefixHuman) ? 'Invoice' : 'Delivery';
+  // scope to legacySummary to avoid any duplicate IDs elsewhere
+  const q = sel => legacySummary.querySelector(sel)?.textContent?.trim() || '';
+
+  const contact = q('#ctl00_PageBody_ShoppingCartSummaryTableControl_DeliveryContactName');
+  const phone   = q('#ctl00_PageBody_ShoppingCartSummaryTableControl_DeliveryTelephone');
+  const email   = q('#ctl00_PageBody_ShoppingCartSummaryTableControl_InvoiceEmailAddress');
+
+  const line1   = q(`#ctl00_PageBody_ShoppingCartSummaryTableControl_${prefix}AddressLines`);
+  const city    = q(`#ctl00_PageBody_ShoppingCartSummaryTableControl_${prefix}City`);
+  const state   = q(`#ctl00_PageBody_ShoppingCartSummaryTableControl_${prefix}State`);
+  const zip     = q(`#ctl00_PageBody_ShoppingCartSummaryTableControl_${prefix}${prefix==='Invoice' ? 'ZipCode' : 'PostalCode'}`);
+  const country = q(`#ctl00_PageBody_ShoppingCartSummaryTableControl_${prefix}Country`);
+
+  const addrLines = [line1, [city, state].filter(Boolean).join(', '), zip, country].filter(Boolean);
+  return { contact, phone, email, addrLines };
+}
+
 
   function formatMultiline(lines) {
     return (lines || []).filter(Boolean).join('\n');
   }
 
   function collectLinesHTML() {
-    const grid = document.querySelector("#ctl00_PageBody_ShoppingCartSummaryTableControl_BasketLinesGrid_ctl00");
-    if (!grid) return "";
-    const rows = grid.querySelectorAll("tr.rgRow, tr.rgAltRow");
-    return Array.from(rows).map(r => {
-      const tds = r.querySelectorAll("td");
-      const code = tds[0]?.textContent?.trim() || "";
-      const desc = tds[1]?.textContent?.trim() || "";
-      const qty  = tds[3]?.textContent?.trim() || "";
-      const uom  = tds[4]?.textContent?.trim() || "";
-      const price= tds[5]?.textContent?.trim() || "";
-      const total= tds[7]?.textContent?.trim() || "";
-      return `<tr>
-        <td>${escapeHTML(code)}</td>
-        <td>${escapeHTML(desc)}</td>
-        <td style="text-align:right;">${escapeHTML(qty)}</td>
-        <td>${escapeHTML(uom)}</td>
-        <td style="text-align:right;">${escapeHTML(price)}</td>
-        <td style="text-align:right;">${escapeHTML(total)}</td>
-      </tr>`;
-    }).join("");
-  }
+  const table =
+    document.querySelector("#ctl00_PageBody_ShoppingCartSummaryTableControl_BasketLinesGrid_ctl00")
+    || document.querySelector("#ctl00_PageBody_ShoppingCartSummaryTableControl_BasketLinesGrid .rgMasterTable");
+  if (!table) return "";
+  const rows = table.querySelectorAll("tr.rgRow, tr.rgAltRow");
+  return Array.from(rows).map(r => {
+    const tds = r.querySelectorAll("td");
+    const code  = tds[0]?.textContent?.trim() || "";
+    const desc  = tds[1]?.textContent?.trim() || "";
+    const qty   = tds[3]?.textContent?.trim() || "";
+    const uom   = tds[4]?.textContent?.trim() || "";
+    const price = tds[5]?.textContent?.trim() || "";
+    const total = tds[7]?.textContent?.trim() || "";
+    return `<tr>
+      <td>${escapeHTML(code)}</td>
+      <td>${escapeHTML(desc)}</td>
+      <td style="text-align:right;">${escapeHTML(qty)}</td>
+      <td>${escapeHTML(uom)}</td>
+      <td style="text-align:right;">${escapeHTML(price)}</td>
+      <td style="text-align:right;">${escapeHTML(total)}</td>
+    </tr>`;
+  }).join("");
+}
+
 
   function collectTotals() {
-    const subtotalCell = Array.from(legacySummary.querySelectorAll('table tbody tr td.numeric'))
-      .find(td => td.previousElementSibling?.textContent?.match(/Subtotal/i));
-    const discountRow = document.getElementById('ctl00_PageBody_ShoppingCartSummaryTableControl_DiscountSummaryRow');
-    const taxRow = document.getElementById('ctl00_PageBody_ShoppingCartSummaryTableControl_VatSummaryRow');
-    const totalCell = legacySummary.querySelector('.totalRow');
-
-    const subtotal = subtotalCell?.textContent?.trim() || '';
-    const discountVal = discountRow?.querySelector('td.numeric')?.textContent?.trim();
-    const taxVal = taxRow?.querySelector('td.numeric')?.textContent?.trim();
-    const total = totalCell?.textContent?.trim() || '';
-
-    return {
-      subtotal,
-      total,
-      discountRow: (typeof discountVal === 'string')
-        ? `<div class="row"><div>Total discount</div><div>${discountVal}</div></div>` : '',
-      taxRow: (typeof taxVal === 'string')
-        ? `<div class="row"><div>Tax</div><div>${taxVal}</div></div>` : '',
-    };
+  const rows = Array.from(legacySummary.querySelectorAll('table tbody tr'));
+  let subtotal = '', tax = '', total = '';
+  for (const tr of rows) {
+    const label = tr.children[0]?.textContent?.replace(/\s+/g,' ')?.trim() || '';
+    const val   = tr.querySelector('td.numeric')?.textContent?.trim() || '';
+    if (/^Subtotal/i.test(label)) subtotal = val;
+    else if (/^Tax$/i.test(label)) tax = val;
+    else if (/^Total(\s*inc\s*Tax)?$/i.test(label)) total = tr.querySelector('td.numeric.totalRow, td.numeric')?.textContent?.trim() || val;
   }
+  return { subtotal, tax, total };
+}
+
 
   function escapeHTML(s) {
     return (s || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
