@@ -420,9 +420,9 @@ textarea.form-control {
 display: none;
   }
   
-  #mainHeader h2{
-padding-bottom: 1px !important;
-padding-top: 1px !important;
-margin-bottom: 1px !important;
+  .mainHeader h2{
+padding-bottom: 0px !important;
+padding-top: 0px !important;
+margin-bottom: 0px !important;
 
   }
