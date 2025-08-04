@@ -8,6 +8,11 @@
   const backBtn = document.getElementById('ctl00_PageBody_BackToCartButton5');
   const printLink = Array.from(main.querySelectorAll('a.epi-button')).find(a => a.textContent.trim().match(/^Print Cart/i));
   const completeBtn = document.getElementById('ctl00_PageBody_CompleteCheckoutButton');
+  const oldActionRow = main.querySelector(".row.justify-content-center");
+if (oldActionRow) {
+  oldActionRow.style.display = "none";
+}
+
 
   // Precheck the platform T&C box (to satisfy server validation) & hide legacy row
   const platformTnC = document.getElementById('ctl00_PageBody_AgreeToTermsAndConditionsCheckBox');
