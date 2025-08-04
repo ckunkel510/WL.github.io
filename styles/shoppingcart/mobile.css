@@ -1,6 +1,8 @@
-
-  .wl-modern-summary {
+.wl-modern-summary {
     padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
   }
 
   .wl-topbar {
@@ -12,22 +14,25 @@
 
   .wl-store-img {
     width: 100%;
+    max-width: 100%;
     height: auto;
-    max-width: 320px;
     border-radius: 10px;
   }
 
   .wl-store-name {
     font-size: 1.1rem;
+    margin: 0;
   }
 
-  .wl-store-street {
-    font-size: 0.9rem;
+  .wl-store-street,
+  .wl-date,
+  .wl-method {
+    font-size: 0.95rem;
   }
 
   .wl-pill {
-    font-size: 0.8rem;
-    padding: 3px 8px;
+    font-size: 0.85rem;
+    padding: 4px 8px;
   }
 
   .wl-sections {
@@ -36,34 +41,58 @@
     gap: 16px;
   }
 
+  .wl-card {
+    padding: 12px 14px;
+    background: #fff;
+    border-radius: 12px;
+  }
+
   .wl-kv {
+    display: grid;
     grid-template-columns: 100px 1fr;
-    font-size: 0.88rem;
+    gap: 4px 8px;
+    font-size: 0.9rem;
+  }
+
+  .wl-address-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
   }
 
   .wl-address {
+    white-space: pre-line;
+    font-size: 0.9rem;
+  }
+
+  .wl-table {
+    width: 100%;
     font-size: 0.88rem;
+    table-layout: auto;
+    border-collapse: collapse;
   }
 
   .wl-table th,
   .wl-table td {
-    font-size: 0.85rem;
-    padding: 6px 5px;
+    padding: 8px 6px;
+    border-bottom: 1px solid #e0e0e0;
+    word-wrap: break-word;
   }
 
-  .wl-totals .row {
-    grid-template-columns: 1fr auto;
-    font-size: 0.9rem;
-  }
+  .wl-lines .wl-table th:nth-child(1),
+  .wl-lines .wl-table td:nth-child(1) { width: 90px; }
+  .wl-lines .wl-table td:nth-child(2) { white-space: normal; }
 
   .wl-actions {
-    grid-template-columns: 1fr;
-    gap: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
   }
 
   .wl-btn {
-    font-size: 1rem;
     padding: 12px;
+    font-size: 1rem;
+    border-radius: 10px;
   }
 
   .wl-legal {
@@ -72,4 +101,5 @@
 
   .wl-legal .sub {
     font-size: 0.8rem;
+    margin-top: 6px;
   }
