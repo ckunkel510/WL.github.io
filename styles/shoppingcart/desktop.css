@@ -334,12 +334,13 @@ textarea.form-control {
 
   .wl-kv { 
     display: grid; 
-    grid-template-columns: 100px 1fr; /* more compact label column */
+    grid-template-columns: 110px 1fr; /* more compact label column */
     gap: 6px 10px; 
     font-size: .95rem; 
   }
+  .wl-kv-wide { grid-template-columns: 140px 1fr; }
   .wl-kv .k { color:#555; }
-  .wl-kv .v { color:#111; }
+  .wl-kv .v { color:#111; word-break: break-word; }
 
   /* Addresses: compact, two-up, fewer lines = less white space */
   .wl-address {

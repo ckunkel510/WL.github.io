@@ -42,17 +42,9 @@
 })();
 
 
-  const poRef = (function() {
-    const row = Array.from(legacySummary.querySelectorAll('.row'))
-      .find(r => /PO#|Your Ref/i.test(r.textContent));
-    return row?.querySelector('.col')?.textContent.trim() || '';
-  })();
+  const poRef = getValueByLabel(/PO\s*#?\s*\/\s*Your\s+Ref:?/i);
+const specialInstr = getValueByLabel(/Special\s+Instructions:?/i);
 
-  const specialInstr = (function() {
-    const row = Array.from(legacySummary.querySelectorAll('.row'))
-      .find(r => /Special Instructions/i.test(r.textContent));
-    return row?.querySelector('.col')?.textContent.trim() || '';
-  })();
 
   const delivery = collectAddress("Delivery");  // Sales Address
   const invoice  = collectAddress("Invoice");
@@ -101,18 +93,20 @@
     <div class="wl-sections">
   <div class="wl-left-stack">
     <div class="wl-card">
-      <h4>Contact & Notes</h4>
-      <div class="wl-grid-2">
-        <div class="wl-kv">
-          <div class="k">Name</div><div class="v">${safe(delivery.contact)}</div>
-          <div class="k">Phone</div><div class="v">${safe(delivery.phone)}</div>
-          <div class="k">Email</div><div class="v">${safe(invoice.email)}</div>
-        </div>
-        <div class="wl-kv">
-          <div class="k">PO / Your Ref</div><div class="v">${safe(poRef) || '-'}</div>
-          <div class="k">Special Instructions</div><div class="v">${safe(specialInstr) || '-'}</div>
-        </div>
-      </div>
+  <h4>Contact</h4>
+  <div class="wl-kv">
+    <div class="k">Name</div><div class="v">${safe(delivery.contact)}</div>
+    <div class="k">Phone</div><div class="v">${safe(delivery.phone)}</div>
+    <div class="k">Email</div><div class="v">${safe(invoice.email)}</div>
+  </div>
+  <div class="wl-kv wl-kv-wide">
+    <div class="k">PO / Your Ref</div><div class="v">${safe(poRef) || '-'}</div>
+  </div>
+  <div class="wl-kv wl-kv-wide">
+    <div class="k">Special Instructions</div><div class="v">${safe(specialInstr) || '-'}</div>
+  </div>
+</div>
+
     </div>
 
     <div class="wl-card">
@@ -180,11 +174,18 @@
   if (!table) return;
 
   const tf = document.createElement('tfoot');
+  const shipping = getShipping();
+
   tf.innerHTML = `
     <tr>
       <td colspan="4"></td>
       <td>Subtotal</td>
       <td class="wl-right">${escapeHTML(totals.subtotal)}</td>
+    </tr>
+    <tr>
+      <td colspan="4"></td>
+      <td>${escapeHTML(shipping.label)}</td>
+      <td class="wl-right">${escapeHTML(shipping.amount)}</td>
     </tr>
     ${totals.tax ? `
       <tr>
@@ -201,10 +202,10 @@
   `;
   table.appendChild(tf);
 
-  // Remove the separate totals block so the footer is the single source of truth
   const totalsDiv = shell.querySelector('.wl-totals');
   if (totalsDiv) totalsDiv.remove();
 })();
+
 
 
   // --- Wire up buttons
@@ -267,6 +268,22 @@
       <td style="text-align:right;">${escapeHTML(total)}</td>
     </tr>`;
   }).join("");
+}
+
+function getValueByLabel(labelRe) {
+  const el = Array.from(legacySummary.querySelectorAll('.row .font-weight-bold'))
+    .find(n => labelRe.test((n.textContent || '').replace(/\s+/g, ' ')));
+  return el ? el.parentElement.querySelector('.col')?.textContent.trim() || '' : '';
+}
+
+function getShipping() {
+  // If platform renders a delivery row, use it
+  const deliveryRow = document.getElementById('ctl00_PageBody_ShoppingCartSummaryTableControl_DeliverySummaryRow');
+  const deliveryAmt = deliveryRow?.querySelector('td.numeric')?.textContent?.trim();
+  if (deliveryAmt) return { label: 'Delivery', amount: deliveryAmt };
+
+  // Otherwise treat as Pickup
+  return { label: 'Pickup', amount: 'Free' };
 }
 
 
