@@ -56,15 +56,22 @@
 
   .wl-address-wrap {
     display: flex;
-    flex-direction: column;
-    gap: 12px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 8px;
     margin: 0;
     line-height: 1.35;
+    justify-content: space-between;
   }
 
   .wl-address {
     white-space: pre-line;
     font-size: 0.9rem;
+    flex: 1 1 48%;
+    min-width: 140px;
+    background: #f8f8f8;
+    padding: 10px;
+    border-radius: 6px;
   }
 
   .wl-table {
