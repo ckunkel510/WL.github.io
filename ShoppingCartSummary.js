@@ -475,6 +475,194 @@ function updateSummaryHeader(newText = "Review & Complete Your Order") {
   function escapeHTML(s) {
     return (s || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
   }
+
+  (function bootstrapSummaryEnhancements() {
+  // ---- 0) re-run after WebForms async postbacks or DOM swaps ----
+  function onReady(fn){ document.readyState !== 'loading' ? fn() : document.addEventListener('DOMContentLoaded', fn); }
+
+  function attachPageRequestManagerHook() {
+    try {
+      if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
+        var prm = Sys.WebForms.PageRequestManager.getInstance();
+        if (!prm._wlHooked) {
+          prm.add_endRequest(function(){ safeInit(); });
+          prm._wlHooked = true;
+        }
+      }
+    } catch(e){}
+  }
+
+  function attachMutationObserver() {
+    try {
+      var target = document.querySelector('.mainContents') || document.body;
+      if (!target) return;
+      if (target._wlObserver) return;
+      var mo = new MutationObserver(function(muts){
+        // If the summary or basket lines table changes, re-init
+        if (document.querySelector('#summary') &&
+            document.querySelector('#ctl00_PageBody_ShoppingCartSummaryTableControl_BasketLinesGrid')) {
+          safeInit();
+        }
+      });
+      mo.observe(target, { childList: true, subtree: true });
+      target._wlObserver = mo;
+    } catch(e){}
+  }
+
+  // ---- 1) cache cart images on any step where cart rows exist ----
+  function ensureCartImageCache(){
+    try {
+      const items = document.querySelectorAll('.row.shopping-cart-item');
+      if (!items.length) return;
+      const map = JSON.parse(sessionStorage.getItem('wlCartImages') || '{}');
+      let updated = false;
+
+      items.forEach(item => {
+        const img = item.querySelector('.ThumbnailImage') || item.querySelector('.image-wrapper img');
+        const code = (item.querySelector('a[title] .portalGridLink')?.textContent || '').trim().toUpperCase();
+        let src = img?.getAttribute('src') || '';
+        if (!code || !src) return;
+        if (src.startsWith('/')) src = location.origin + src;
+        if (!map[code]) { map[code] = src; updated = true; }
+      });
+
+      if (updated) {
+        sessionStorage.setItem('wlCartImages', JSON.stringify(map));
+      }
+    } catch(e){}
+  }
+
+  // ---- 2) add thumbnails to summary lines safely (idempotent) ----
+  function addThumbnailsToLinesSafe() {
+    const table = document.querySelector('.wl-table');
+    if (!table || table._wlThumbsApplied) return;
+
+    // image map
+    let imgMap = {};
+    try { imgMap = JSON.parse(sessionStorage.getItem('wlCartImages') || '{}'); } catch(e){}
+
+    const theadRow = table.querySelector('thead tr');
+    const bodyRows = table.querySelectorAll('tbody tr');
+    if (!theadRow || !bodyRows.length) return;
+
+    // get codes via data-title="Product Code"
+    const codes = Array.from(bodyRows).map(tr => {
+      const codeCell = tr.querySelector('td[data-title="Product Code"]') || tr.children[0];
+      return (codeCell?.textContent || '').trim().toUpperCase();
+    });
+    const hasAnyImage = codes.some(c => imgMap[c]);
+    if (!hasAnyImage) return; // don't alter layout if nothing matches
+
+    // Insert TH (Item) at start if not already
+    if (!theadRow._wlThumbHeader) {
+      const th = document.createElement('th');
+      th.textContent = 'Item';
+      theadRow.insertBefore(th, theadRow.firstChild);
+      theadRow._wlThumbHeader = true;
+    }
+
+    // Insert TD thumbnails
+    bodyRows.forEach((tr, idx) => {
+      if (tr._wlThumbAdded) return;
+      const codeCell = tr.querySelector('td[data-title="Product Code"]') || tr.children[0];
+      const code = (codeCell?.textContent || '').trim().toUpperCase();
+      const imgUrl = imgMap[code];
+
+      const td = document.createElement('td');
+      td.innerHTML = imgUrl
+        ? `<img src="${imgUrl}" alt="${code}" loading="lazy" style="width:48px;height:48px;object-fit:cover;border-radius:6px;">`
+        : `<div style="width:48px;height:48px;border-radius:6px;background:#f0f0f3;"></div>`;
+      tr.insertBefore(td, tr.firstChild);
+      tr._wlThumbAdded = true;
+    });
+
+    // Fix tfoot colspans (align label/value to last 2 columns)
+    const tfoot = table.querySelector('tfoot');
+    if (tfoot) {
+      const colCount = theadRow.children.length; // includes new thumb
+      const labelSpan = Math.max(colCount - 2, 1);
+      tfoot.querySelectorAll('tr').forEach(tr => {
+        const tds = tr.querySelectorAll('td');
+        // normalize to [pad colspan][label][amount]
+        const label = tds[tds.length-2]?.textContent || '';
+        const amt   = tds[tds.length-1]?.textContent || '';
+        tr.innerHTML = `
+          <td colspan="${labelSpan}"></td>
+          <td>${label}</td>
+          <td class="wl-right">${amt}</td>
+        `;
+      });
+    }
+
+    // Desktop widths with thumbnail
+    if (!document.getElementById('wl-thumb-cols')) {
+      const style = document.createElement('style');
+      style.id = 'wl-thumb-cols';
+      style.textContent = `
+        @media (min-width: 992px) {
+          .wl-lines .wl-table { table-layout: fixed; }
+          .wl-lines .wl-table th:nth-child(1),
+          .wl-lines .wl-table td:nth-child(1) { width: 64px; }                 /* thumbnail */
+          .wl-lines .wl-table th:nth-child(2),
+          .wl-lines .wl-table td:nth-child(2) { width: 110px; }                /* product code */
+          .wl-lines .wl-table th:nth-child(3),
+          .wl-lines .wl-table td:nth-child(3) { width: auto; }                 /* description */
+          .wl-lines .wl-table th:nth-child(4),
+          .wl-lines .wl-table td:nth-child(4) { width: 70px; text-align:right; } /* qty */
+          .wl-lines .wl-table th:nth-child(5),
+          .wl-lines .wl-table td:nth-child(5) { width: 60px; }                 /* uom */
+          .wl-lines .wl-table th:nth-child(6),
+          .wl-lines .wl-table td:nth-child(6) { width: 110px; text-align:right; } /* price */
+          .wl-lines .wl-table th:nth-child(7),
+          .wl-lines .wl-table td:nth-child(7) { width: 120px; text-align:right; } /* total */
+          .wl-lines .wl-table td:nth-child(3) { white-space: normal; overflow-wrap: break-word; hyphens: auto; }
+        }
+      `;
+      document.head.appendChild(style);
+    }
+
+    table._wlThumbsApplied = true;
+  }
+
+  // ---- 3) init orchestrator with guard so we don't double-build UI ----
+  function safeInit(){
+    ensureCartImageCache(); // always try to cache from cart rows if present
+    const root = document.querySelector('.wl-modern-summary');
+    const summary = document.querySelector('#summary');
+    if (!summary) return;
+
+    // If we've already built our modern summary once, just try thumbnails again
+    if (root) {
+      addThumbnailsToLinesSafe();
+      return;
+    }
+
+    // If not built yet, call your existing build function here:
+    try {
+      // Your existing IIFE already builds shell/UI on load.
+      // We simulate that by calling a function if you expose one.
+      // If not exposed, fall back to reloading to trigger your IIFE on newly updated DOM.
+      // But better: wrap your big build in a named function (e.g., buildModernSummary()) and call it here.
+      // buildModernSummary(); // <-- If you expose it
+    } catch(e){}
+    // If your main builder is only the top-level IIFE and not callable,
+    // you can force re-run by dispatching DOMContentLoaded for scripts listening to it:
+    document.dispatchEvent(new Event('DOMContentLoaded'));
+
+    // Then try thumbnails after shell appears
+    setTimeout(addThumbnailsToLinesSafe, 0);
+  }
+
+  // boot
+  onReady(function(){
+    ensureCartImageCache();
+    attachPageRequestManagerHook();
+    attachMutationObserver();
+    // run once now (in case we're already on the Summary section)
+    setTimeout(safeInit, 0);
+  });
+})();
+
 })();
 
 (function cacheCartImages(){
