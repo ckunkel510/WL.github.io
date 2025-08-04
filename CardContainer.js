@@ -7,7 +7,7 @@
     radioStored: 'ctl00_PageBody_rbStoredCard',
     selectStored: 'ctl00_PageBody_ddlCardsOnFile',
     cardsHost: 'ctl00_PageBody_CardsOnFileContainer',
-    continueBtnId: null, // e.g. 'ctl00_PageBody_ContinueButton' if you know it; else leave null
+    continueBtnId: 'ctl00_PageBody_btnContinue_CardOnFileView', // e.g. 'ctl00_PageBody_ContinueButton' if you know it; else leave null
   };
 
   // ---------- utils ----------
@@ -23,11 +23,25 @@
   });
 
   function getContinueButton() {
-    if (IDS.continueBtnId && byId(IDS.continueBtnId)) return byId(IDS.continueBtnId);
-    // fallback: look for a visible button/link with "Continue"
-    const main = $(IDS.main) || document;
-    return $('button, a', main) && $$('button, a', main).find(el => /continue/i.test(el.textContent || ''));
-  }
+  const btn = document.getElementById(IDS.continueBtnId);
+  return btn || null;
+}
+
+function hideContinueButton() {
+  const btn = getContinueButton();
+  if (btn) btn.style.setProperty('display', 'none', 'important');
+}
+
+// a more “real” click for Telerik RadButton
+function clickContinue() {
+  const btn = getContinueButton();
+  if (!btn) return;
+  // fire a genuine click sequence
+  ['pointerdown','mousedown','mouseup','click'].forEach(type => {
+    btn.dispatchEvent(new MouseEvent(type, {bubbles:true, cancelable:true, view:window}));
+  });
+}
+
 
   // Parse "8464 Apple" => { last4: "8464", name: "Apple" }
   function parseCardOptionText(txt) {
@@ -114,8 +128,7 @@
         rStored.checked = true;
         ddl.value = opt.value;
         ddl.dispatchEvent(new Event('change', {bubbles:true}));
-        const c = getContinueButton();
-        if (c) c.click();
+        clickContinue();
       });
       tile.addEventListener('keydown', (e)=>{ if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tile.click(); }});
       list.appendChild(tile);
@@ -126,13 +139,13 @@
       clearSelected(list); selectTile(newTile);
       rNew.checked = true;
       rNew.dispatchEvent(new Event('change', {bubbles:true}));
-      const c = getContinueButton();
-      if (c) c.click();
+      clickContinue();
     });
     newTile.addEventListener('keydown', (e)=>{ if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); newTile.click(); }});
 
     picker.appendChild(list);
     host.appendChild(picker);
+    hideContinueButton();
 
     // Minimal style (scoped)
     injectStyles();
