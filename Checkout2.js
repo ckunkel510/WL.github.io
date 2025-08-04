@@ -3,19 +3,16 @@
   // CONFIG & FEATURE FLAGS
   // ===========================
   const CONFIG = {
-    // Enable silent auto-continue if we detect "buy now" intent AND all required fields are valid.
     BUY_NOW_PARAM: "buy_now",
     BUY_NOW_STORAGE_KEY: "wl_buy_now_intent",
-    AUTO_CONTINUE_ENABLED: true,              // master switch
-    AUTO_CONTINUE_GRACE_MS: 600,              // small delay to let UI render
-    PREFILL_TIMEOUT_MS: 6000,                 // max time to wait for async prefill
-    // Hidden "Continue" buttons that WebForms renders (update if needed)
+    AUTO_CONTINUE_ENABLED: true,
+    AUTO_CONTINUE_GRACE_MS: 600,     // let UI render
+    PREFILL_TIMEOUT_MS: 6000,        // fail-safe
     CONTINUE_SELECTORS: [
       "#ctl00_PageBody_ContinueButton1",
       "#ctl00_PageBody_ContinueButton2",
       "button[id*='ContinueButton']"
     ],
-    // Minimal required fields we need before allowing auto-continue
     REQUIRED_FIELDS: {
       delivery: [
         "#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox",
@@ -23,7 +20,7 @@
         "#ctl00_PageBody_DeliveryAddress_AddressLine1",
         "#ctl00_PageBody_DeliveryAddress_City",
         "#ctl00_PageBody_DeliveryAddress_Postcode",
-        "#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList" // state
+        "#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList"
       ],
       invoice: [
         "#ctl00_PageBody_InvoiceAddress_AddressLine1",
@@ -54,46 +51,8 @@
   };
 
   // ===========================
-  // UTILS
+  // FIELD MAPS
   // ===========================
-  const qs = new URLSearchParams(location.search);
-  const hasBuyNowParam = qs.get(CONFIG.BUY_NOW_PARAM) === "1";
-  const hasBuyNowStorage = localStorage.getItem(CONFIG.BUY_NOW_STORAGE_KEY) === "1";
-
-  function setBuyNowIntent(on) {
-    if (on) localStorage.setItem(CONFIG.BUY_NOW_STORAGE_KEY, "1");
-    else    localStorage.removeItem(CONFIG.BUY_NOW_STORAGE_KEY);
-  }
-
-  function firstExisting(selArr) {
-    for (const s of selArr) { const $el = $(s); if ($el.length) return $el; }
-    return $();
-  }
-
-  function safeText(v){ return (v||"").toString().trim(); }
-
-  function validateRequired(group){
-    const list = CONFIG.REQUIRED_FIELDS[group] || [];
-    for (const sel of list) {
-      const $el = $(sel);
-      if (!$el.length) return false;
-      if (!safeText($el.val())) return false;
-    }
-    return true;
-  }
-
-  function wait(ms){ return new Promise(res=>setTimeout(res,ms)); }
-
-  function tryClickContinue(){
-    const $btn = firstExisting(CONFIG.CONTINUE_SELECTORS);
-    if (!$btn.length) return false;
-    // Defensive: ensure it's visible/enabled
-    if ($btn.is(":disabled") || $btn.css("display")==="none") return false;
-    $btn.trigger("click");
-    return true;
-  }
-
-  // Centralized field map (hidden WebForms inputs) <-> state
   const Fields = {
     delivery: {
       firstName: "#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox",
@@ -119,6 +78,37 @@
     }
   };
 
+  // ===========================
+  // UTILS
+  // ===========================
+  const qs = new URLSearchParams(location.search);
+  const hasBuyNowParam = qs.get(CONFIG.BUY_NOW_PARAM) === "1";
+  const hasBuyNowStorage = localStorage.getItem(CONFIG.BUY_NOW_STORAGE_KEY) === "1";
+
+  function setBuyNowIntent(on) {
+    if (on) localStorage.setItem(CONFIG.BUY_NOW_STORAGE_KEY, "1");
+    else    localStorage.removeItem(CONFIG.BUY_NOW_STORAGE_KEY);
+  }
+  function firstExisting(selArr) { for (const s of selArr){ const $el=$(s); if($el.length) return $el; } return $(); }
+  function safeText(v){ return (v||"").toString().trim(); }
+  function wait(ms){ return new Promise(res=>setTimeout(res,ms)); }
+  function validateRequired(group){
+    const list = CONFIG.REQUIRED_FIELDS[group] || [];
+    for (const sel of list) {
+      const $el = $(sel);
+      if (!$el.length) return false;
+      if (!safeText($el.val())) return false;
+    }
+    return true;
+  }
+  function tryClickContinue(){
+    const $btn = firstExisting(CONFIG.CONTINUE_SELECTORS);
+    if (!$btn.length) return false;
+    if ($btn.is(":disabled") || $btn.css("display")==="none") return false;
+    $btn.trigger("click");
+    return true;
+  }
+
   function pullFromDOM(){
     // Delivery
     const d = CheckoutState.data.delivery;
@@ -127,7 +117,6 @@
       if (!$el.length) continue;
       d[k] = $el.is("select") ? ($el.find("option:selected").text().trim() || $el.val() || "") : $el.val();
     }
-    // State: prefer selected option text
     const $stateSelD = $(Fields.delivery.state);
     if ($stateSelD.length) d.state = $stateSelD.find("option:selected").text().trim() || $stateSelD.val() || "";
 
@@ -141,7 +130,6 @@
     const $stateSelI = $(Fields.invoice.state);
     if ($stateSelI.length) i.state = $stateSelI.find("option:selected").text().trim() || $stateSelI.val() || "";
 
-    // radios
     CheckoutState.data.transactionType =
       $("#ctl00_PageBody_TransactionTypeSelector_rdbOrder").is(":checked") ? "rdbOrder" :
       $("#ctl00_PageBody_TransactionTypeSelector_rdbQuote").is(":checked") ? "rdbQuote" : null;
@@ -161,14 +149,14 @@
       if (isSelect) {
         let matched = false;
         $el.find("option").each(function(){
-          if ($(this).text().trim().toLowerCase() === (val||"").toLowerCase() ||
-              $(this).val().trim().toLowerCase() === (val||"").toLowerCase()){
-            $(this).prop("selected", true);
-            matched = true;
-            return false;
+          if (
+            ($(this).text().trim().toLowerCase() === (val||"").toLowerCase()) ||
+            (($(this).val()||"").trim().toLowerCase() === (val||"").toLowerCase())
+          ){
+            $(this).prop("selected", true); matched=true; return false;
           }
         });
-        if (!matched && val) $el.val(val); // fallback
+        if (!matched && val) $el.val(val);
       } else {
         $el.val(val || "");
       }
@@ -184,7 +172,7 @@
     setVal(Fields.delivery.line3,     d.line3);
     setVal(Fields.delivery.city,      d.city);
     setVal(Fields.delivery.zip,       d.zip);
-    setVal(Fields.delivery.country,   d.country);
+    setVal(Fields.delivery.country,   d.country, true);
     setVal(Fields.delivery.state,     d.state, true);
 
     // Invoice
@@ -193,18 +181,49 @@
     setVal(Fields.invoice.line3,   i.line3);
     setVal(Fields.invoice.city,    i.city);
     setVal(Fields.invoice.zip,     i.zip);
-    setVal(Fields.invoice.country, i.country);
+    setVal(Fields.invoice.country, i.country, true);
     setVal(Fields.invoice.state,   i.state, true);
     setVal(Fields.invoice.email,   i.email);
+  }
+
+  // --- Helpers for Invoice copy ---
+  function setSelectMatch($sel, value){
+    if (!$sel.length) return;
+    let matched = false;
+    $sel.find("option").each(function(){
+      const txt=$(this).text().trim().toLowerCase();
+      const val=$(this).val()?.trim().toLowerCase();
+      const want=(value||"").toLowerCase();
+      if (txt===want || val===want){ $(this).prop("selected",true); matched=true; return false; }
+    });
+    if (!matched && value) $sel.val(value);
+    $sel.trigger("change");
+  }
+
+  function copyDeliveryToInvoice(opts={force:false}){
+    const d = Fields.delivery, i = Fields.invoice;
+    const invoiceHasAddr = !!safeText($(i.line1).val());
+    if (!opts.force && invoiceHasAddr) return false;
+
+    $(i.line1).val($(d.line1).val());
+    $(i.line2).val($(d.line2).val());
+    $(i.line3).val($(d.line3).val());
+    $(i.city).val($(d.city).val());
+    $(i.zip).val($(d.zip).val());
+
+    setSelectMatch($(i.country), $(d.country).find("option:selected").val() || $(d.country).val());
+    setSelectMatch($(i.state),   $(d.state).find("option:selected").val()   || $(d.state).val());
+
+    $(i.line1+","+i.line2+","+i.line3+","+i.city+","+i.zip).trigger("change");
+    return true;
   }
 
   // ===========================
   // UI BUILDERS
   // ===========================
   function hideNativeBlocks(){
-    // Use visibility instead of display:none for smoother layout measurement (then summary will show)
     const hideList = [
-      // Delivery
+      // Delivery native
       "#ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral",
       "label:contains('First name:')",
       "label:contains('Last name:')",
@@ -233,7 +252,7 @@
       "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTitleLiteral",
       Fields.delivery.phone,
 
-      // Invoice
+      // Invoice native
       "#ctl00_PageBody_InvoiceAddress_GoogleAddressSearchWrapper",
       "label[for='locationFieldInvoice']",
       "#locationFieldInvoice",
@@ -261,8 +280,9 @@
 
   function buildSummaries(){
     const $cols = $(".epi-form-col-single-checkout");
-    // Delivery summary container
-    if ($cols.eq(5).find(".selected-address-display").length === 0) {
+    if ($cols.length < 7) { console.warn("Not enough .epi-form-col-single-checkout columns"); return; }
+
+    if ($cols.eq(5).find("#wlDeliverySummary").length === 0) {
       $cols.eq(5).append(`
         <div class="wl-summary-card" id="wlDeliverySummary">
           <div class="wl-summary-header">
@@ -272,14 +292,11 @@
             </div>
             <button type="button" class="wl-btn-link" id="wlEditDelivery">Edit</button>
           </div>
-          <div class="wl-summary-body">
-            <div id="wlDeliverySummaryBody"></div>
-          </div>
+          <div class="wl-summary-body"><div id="wlDeliverySummaryBody"></div></div>
         </div>
       `);
     }
-    // Invoice summary container
-    if ($cols.eq(6).find(".selected-invoice-address-display").length === 0) {
+    if ($cols.eq(6).find("#wlInvoiceSummary").length === 0) {
       $cols.eq(6).append(`
         <div class="wl-summary-card" id="wlInvoiceSummary">
           <div class="wl-summary-header">
@@ -289,17 +306,14 @@
             </div>
             <button type="button" class="wl-btn-link" id="wlEditInvoice">Edit</button>
           </div>
-          <div class="wl-summary-body">
-            <div id="wlInvoiceSummaryBody"></div>
-          </div>
+          <div class="wl-summary-body"><div id="wlInvoiceSummaryBody"></div></div>
         </div>
       `);
     }
   }
 
   function renderSummaries(){
-    pullFromDOM(); // ensure state is up to date
-
+    pullFromDOM(); // sync state
     const d = CheckoutState.data.delivery;
     const i = CheckoutState.data.invoice;
 
@@ -321,7 +335,6 @@
     $("#wlDeliverySummaryBody").html(deliveryHtml);
     $("#wlInvoiceSummaryBody").html(invoiceHtml);
 
-    // One-liners for header subtext
     $("#wlDeliveryLine").text([
       safeText(d.line1),
       [safeText(d.city), safeText(d.state)].filter(Boolean).join(", "),
@@ -364,19 +377,14 @@
         {label:"Email",      key:"email",    sel:map.email}
       ];
 
-    // Build fields by cloning existing inputs (keeps native validators/masks)
     schema.forEach(row=>{
       const $orig = $(row.sel).first();
       if (!$orig.length) return;
       let $clone = $orig.clone(true,true);
-      // Normalize attributes to avoid duplicate IDs in DOM
       $clone.attr("id", $orig.attr("id")+"_shadow").removeAttr("name");
-      if (!row.isSelect) $clone.val($orig.val());
-      else               $clone.val($orig.val());
+      $clone.val($orig.val());
       const req = row.required ? `<span class="wl-required">*</span>` : "";
-      $panel.append(`
-        <label class="wl-field-label">${row.label} ${req}</label>
-      `).append($clone);
+      $panel.append(`<label class="wl-field-label">${row.label} ${req}</label>`).append($clone);
     });
 
     const $actions = $(`
@@ -407,36 +415,22 @@
     const $panel = $host.find(".wl-editor");
     if (!$panel.length) return;
 
-    // Simple validation for required fields
     const missing = [];
     function valOf(sel){ return $panel.find(sel+"_shadow").val(); }
+    if (!safeText(valOf(map.line1))) missing.push("Address line 1");
+    if (!safeText(valOf(map.city)))  missing.push("City");
+    if (!safeText(valOf(map.zip)))   missing.push("ZIP");
+    if (which==="delivery" && !safeText(valOf(map.state))) missing.push("State");
+    if (missing.length){ alert("Please complete: " + missing.join(", ")); return; }
 
-    if (which==="delivery"){
-      if (!safeText(valOf(map.line1))) missing.push("Address line 1");
-      if (!safeText(valOf(map.city)))  missing.push("City");
-      if (!safeText(valOf(map.zip)))   missing.push("ZIP");
-      if (!safeText(valOf(map.state))) missing.push("State");
-    } else {
-      if (!safeText(valOf(map.line1))) missing.push("Address line 1");
-      if (!safeText(valOf(map.city)))  missing.push("City");
-      if (!safeText(valOf(map.zip)))   missing.push("ZIP");
-    }
-    if (missing.length){
-      alert("Please complete: " + missing.join(", "));
-      return;
-    }
-
-    // Push edited values back into the REAL WebForms inputs
+    // Write back to REAL WebForms inputs
     $panel.find("input, select, textarea").each(function(){
       const shadowId = $(this).attr("id") || "";
       const realId = shadowId.replace("_shadow","");
       const $real = $("#"+realId);
-      if ($real.length){
-        $real.val($(this).val()).trigger("change");
-      }
+      if ($real.length){ $real.val($(this).val()).trigger("change"); }
     });
 
-    // Refresh state & summaries
     pullFromDOM();
     renderSummaries();
     closeEditor(which);
@@ -446,7 +440,6 @@
   // ASYNC PREFILL / FETCHERS
   // ===========================
   function prefillFromAddressBook(){
-    // same pattern you had, but wrapped to promise
     return new Promise(resolve=>{
       try{
         if (!$("#ctl00_PageBody_CustomerAddressSelector_SelectAddressLinkButton").length){
@@ -492,7 +485,7 @@
 
   function fetchAccountSettings(){
     return new Promise(resolve=>{
-      $.get("/AccountSettings.aspx", function(html){
+      $.get("https://webtrack.woodsonlumber.com/AccountSettings.aspx", function(html){
         const $acc = $(html);
         CheckoutState.data.delivery.firstName =
           $acc.find("#ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput").val() || "";
@@ -510,7 +503,7 @@
 
   function fetchTelephone(){
     return new Promise(resolve=>{
-      $.get("/AccountInfo_R.aspx", function(html){
+      $.get("https://webtrack.woodsonlumber.com/AccountInfo_R.aspx", function(html){
         const tel = $(html).find("#ctl00_PageBody_TelephoneLink_TelephoneLink").text().trim();
         CheckoutState.data.delivery.phone = tel || "";
         CheckoutState.loaded.telephone = true;
@@ -521,8 +514,8 @@
   }
 
   async function runPrefill(){
-    // Only prefill delivery if blank line1 (same as your original guard)
     const deliveryEmpty = !safeText($(Fields.delivery.line1).val());
+
     if (deliveryEmpty) {
       await Promise.race([
         (async()=>{
@@ -532,14 +525,27 @@
         })(),
         wait(CONFIG.PREFILL_TIMEOUT_MS)
       ]);
+
+      // >>>>>>> INVOICE FIX: copy when invoice blank <<<<<<<
+      const deliveryHasAddr = !!safeText($(Fields.delivery.line1).val());
+      const invoiceHasAddr  = !!safeText($(Fields.invoice.line1).val());
+      if (deliveryHasAddr && !invoiceHasAddr) { copyDeliveryToInvoice({force:true}); }
+
       renderSummaries();
       return;
     }
-    // Already filled, just fetch contact details to polish
+
+    // Delivery already had data, still fetch contact details
     await Promise.race([
       (async()=>{ await fetchAccountSettings(); await fetchTelephone(); })(),
       wait(CONFIG.PREFILL_TIMEOUT_MS)
     ]);
+
+    // >>>>>>> INVOICE FIX: copy when invoice blank <<<<<<<
+    const deliveryHasAddr = !!safeText($(Fields.delivery.line1).val());
+    const invoiceHasAddr  = !!safeText($(Fields.invoice.line1).val());
+    if (deliveryHasAddr && !invoiceHasAddr) { copyDeliveryToInvoice({force:true}); }
+
     renderSummaries();
   }
 
@@ -547,7 +553,7 @@
   // RADIO UI (transaction & shipping)
   // ===========================
   function buildModernToggles(){
-    // Transaction type
+    // Transaction
     if ($("#ctl00_PageBody_TransactionTypeDiv").length){
       $(".TransactionTypeSelector").hide();
       const html = `
@@ -570,7 +576,7 @@
       $(document).on("click", "#wlTxnOrder,#wlTxnQuote", function(){ setTxn($(this).data("value")); });
     }
 
-    // Shipping method
+    // Shipping
     if ($(".SaleTypeSelector").length){
       $(".SaleTypeSelector").hide();
       const html = `
@@ -588,7 +594,6 @@
           $("#ctl00_PageBody_SaleTypeSelector_rbCollectLater").prop("checked", true);
           $("#wlShipPickup").addClass("wl-chip--active"); $("#wlShipDeliver").removeClass("wl-chip--active");
         }
-        // Re-render in case visibility rules depend on method
         renderSummaries();
       }
       setShip($("#ctl00_PageBody_SaleTypeSelector_rbDelivered").is(":checked") ? "rbDelivered" : "rbCollectLater");
@@ -604,43 +609,57 @@
     const intent = hasBuyNowParam || hasBuyNowStorage;
     if (!intent) return;
 
-    // Allow small grace period for async to fill
     await wait(CONFIG.AUTO_CONTINUE_GRACE_MS);
     pullFromDOM();
 
     const deliveryOk = validateRequired("delivery");
-    const invoiceOk  = validateRequired("invoice"); // loosen if not required for pickup
+    const invoiceOk  = validateRequired("invoice"); // adjust if invoice not required for pickup
     if (deliveryOk && invoiceOk){
       const clicked = tryClickContinue();
-      if (!clicked){
-        // Fallback: highlight the continue button area
-        firstExisting(CONFIG.CONTINUE_SELECTORS).addClass("wl-pulse");
-      }
+      if (!clicked){ firstExisting(CONFIG.CONTINUE_SELECTORS).addClass("wl-pulse"); }
     } else {
-      // Keep the intent for next step/page but do not force
       console.info("Buy-now intent detected, but required fields missing—auto-continue skipped.");
     }
   }
 
   // ===========================
-  // REBIND AFTER POSTBACKS
+  // REBIND / EVENTS
   // ===========================
   function bindGlobalHandlers(){
-    // open editors
+    // Edit flows
     $(document).off("click", "#wlEditDelivery").on("click", "#wlEditDelivery", ()=>openEditor("delivery"));
     $(document).off("click", "#wlEditInvoice").on("click", "#wlEditInvoice", ()=>openEditor("invoice"));
-    // save/cancel
     $(document).off("click", "#wlSave_delivery").on("click", "#wlSave_delivery", ()=>saveEditor("delivery"));
     $(document).off("click", "#wlCancel_delivery").on("click", "#wlCancel_delivery", ()=>closeEditor("delivery"));
     $(document).off("click", "#wlSave_invoice").on("click", "#wlSave_invoice", ()=>saveEditor("invoice"));
     $(document).off("click", "#wlCancel_invoice").on("click", "#wlCancel_invoice", ()=>closeEditor("invoice"));
 
-    // Any native field change should re-render summaries quickly (debounced)
+    // Re-render summaries on input change (debounced)
     let t=null;
     $(document).off("input change blur", ".epi-form-group-checkout input, .epi-form-group-checkout select")
       .on("input change blur", ".epi-form-group-checkout input, .epi-form-group-checkout select", function(){
         clearTimeout(t); t=setTimeout(()=>renderSummaries(), 120);
       });
+
+    // Intercept built-in "copy delivery to invoice" to avoid postback
+    $(document).off("click", "#ctl00_PageBody_CopyDeliveryAddressLinkButton")
+      .on("click", "#ctl00_PageBody_CopyDeliveryAddressLinkButton", function(e){
+        e.preventDefault();
+        copyDeliveryToInvoice({force:true});
+        renderSummaries();
+      });
+
+    // While invoice is still blank, keep it synced with delivery edits
+    const deliveryWatch = [
+      Fields.delivery.line1, Fields.delivery.line2, Fields.delivery.line3,
+      Fields.delivery.city, Fields.delivery.state, Fields.delivery.zip, Fields.delivery.country
+    ].join(",");
+    $(document).off("change", deliveryWatch).on("change", deliveryWatch, function(){
+      if (!safeText($(Fields.invoice.line1).val())) {
+        copyDeliveryToInvoice();
+        renderSummaries();
+      }
+    });
   }
 
   function initOrReinit(){
@@ -651,14 +670,12 @@
     renderSummaries();
   }
 
-  // Support Microsoft AJAX (UpdatePanel) postbacks, otherwise use MutationObserver
   function attachPostbackHooks(){
     if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
       const prm = Sys.WebForms.PageRequestManager.getInstance();
       prm.add_endRequest(function(){ initOrReinit(); });
     } else {
       const mo = new MutationObserver((muts)=>{
-        // If WebForms re-rendered portions, re-init our UI
         const changed = muts.some(m => (m.addedNodes && m.addedNodes.length));
         if (changed) initOrReinit();
       });
@@ -671,23 +688,21 @@
   // ===========================
   $(document).ready(async function(){
     console.log("WL modern checkout initializing...");
-    // Respect container display for non-item rows
     $('.container .row').not('.shopping-cart-item').css('display', 'block');
 
-    // Copy-delivery text tweak
-    $("#ctl00_PageBody_CopyDeliveryAddressLinkButton").text("Billing address is the same as delivery address");
+    // Clarify link text
+    $("#ctl00_PageBody_CopyDeliveryAddressLinkButton")
+      .text("Billing address is the same as delivery address");
 
     initOrReinit();
     attachPostbackHooks();
 
-    // Async prefill
     await runPrefill();
 
-    // Record buy-now intent if present in URL
     if (hasBuyNowParam) setBuyNowIntent(true);
 
-    // Try auto-continue if fully satisfied
     await maybeAutoContinue();
   });
 
 })(jQuery);
+
