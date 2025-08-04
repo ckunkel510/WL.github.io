@@ -171,6 +171,40 @@
 
   main.insertBefore(shell, main.firstChild);
 
+  // After: main.insertBefore(shell, main.firstChild);
+
+(function moveTotalsIntoTable(){
+  const table = shell.querySelector('.wl-table');
+  if (!table) return;
+
+  const tf = document.createElement('tfoot');
+  tf.innerHTML = `
+    <tr>
+      <td colspan="4"></td>
+      <td>Subtotal</td>
+      <td class="wl-right">${escapeHTML(totals.subtotal)}</td>
+    </tr>
+    ${totals.tax ? `
+      <tr>
+        <td colspan="4"></td>
+        <td>Tax</td>
+        <td class="wl-right">${escapeHTML(totals.tax)}</td>
+      </tr>
+    ` : ''}
+    <tr>
+      <td colspan="4"></td>
+      <td>Total</td>
+      <td class="wl-right">${escapeHTML(totals.total)}</td>
+    </tr>
+  `;
+  table.appendChild(tf);
+
+  // Remove the separate totals block so the footer is the single source of truth
+  const totalsDiv = shell.querySelector('.wl-totals');
+  if (totalsDiv) totalsDiv.remove();
+})();
+
+
   // --- Wire up buttons
   document.getElementById('wl-back')?.addEventListener('click', () => {
     backBtn?.click();
