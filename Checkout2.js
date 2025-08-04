@@ -34,6 +34,16 @@
   // ===========================
   // STATE
   // ===========================
+
+  const US_STATES = {
+  "AL":"Alabama","AK":"Alaska","AZ":"Arizona","AR":"Arkansas","CA":"California","CO":"Colorado","CT":"Connecticut","DE":"Delaware",
+  "FL":"Florida","GA":"Georgia","HI":"Hawaii","ID":"Idaho","IL":"Illinois","IN":"Indiana","IA":"Iowa","KS":"Kansas","KY":"Kentucky",
+  "LA":"Louisiana","ME":"Maine","MD":"Maryland","MA":"Massachusetts","MI":"Michigan","MN":"Minnesota","MS":"Mississippi","MO":"Missouri",
+  "MT":"Montana","NE":"Nebraska","NV":"Nevada","NH":"New Hampshire","NJ":"New Jersey","NM":"New Mexico","NY":"New York","NC":"North Carolina",
+  "ND":"North Dakota","OH":"Ohio","OK":"Oklahoma","OR":"Oregon","PA":"Pennsylvania","RI":"Rhode Island","SC":"South Carolina","SD":"South Dakota",
+  "TN":"Tennessee","TX":"Texas","UT":"Utah","VT":"Vermont","VA":"Virginia","WA":"Washington","WV":"West Virginia","WI":"Wisconsin","WY":"Wyoming",
+  "DC":"District of Columbia"
+};
   const CheckoutState = {
     editing: { delivery:false, billing:false },
     loaded:  { account:false, telephone:false, addressbook:false },
@@ -164,16 +174,52 @@
       $(Fields.radios.shipPickup).is(":checked") ? "rbCollectLater" : null;
   }
 
-  function setSelectMatch($sel, value){
-    if(!$sel.length) return;
-    let matched=false, want=(value||"").toLowerCase();
-    $sel.find("option").each(function(){
-      const txt=$(this).text().trim().toLowerCase();
-      const val=($(this).val()||"").trim().toLowerCase();
-      if (txt===want || val===want){ $(this).prop("selected",true); matched=true; return false; }
-    });
-    if(!matched && value) $sel.val(value);
+  // Replace setSelectMatch() with this:
+function setSelectMatch($sel, rawValue){
+  if (!$sel.length) return;
+  const wantRaw = (rawValue || "").trim();
+  if (!wantRaw) return;
+  const want = wantRaw.toLowerCase();
+
+  // Expand common synonyms for country
+  const countrySyn = {
+    "usa": ["usa","u.s.a.","united states","united states of america","us","u.s."],
+    "united states": ["united states","united states of america","usa","us","u.s.","u.s.a."]
+  };
+
+  const candidates = new Set([wantRaw, want]);
+  // If looks like a 2-letter state code, add full name candidate
+  if (wantRaw.length === 2 && US_STATES[wantRaw.toUpperCase()]) {
+    candidates.add(US_STATES[wantRaw.toUpperCase()].toLowerCase());
+    candidates.add(US_STATES[wantRaw.toUpperCase()]);
   }
+  // Country synonyms
+  if (countrySyn[want]) countrySyn[want].forEach(v=>candidates.add(v.toLowerCase()));
+
+  // 1) exact text/value
+  let matchedOption = null;
+  $sel.find("option").each(function(){
+    const txt = $(this).text().trim().toLowerCase();
+    const val = (($(this).val())||"").trim().toLowerCase();
+    if (candidates.has(txt) || candidates.has(val)) { matchedOption = $(this); return false; }
+  });
+
+  // 2) startsWith
+  if (!matchedOption){
+    $sel.find("option").each(function(){
+      const txt = $(this).text().trim().toLowerCase();
+      if (txt.startsWith(want)) { matchedOption = $(this); return false; }
+    });
+  }
+  // 3) includes
+  if (!matchedOption){
+    $sel.find("option").each(function(){
+      const txt = $(this).text().trim().toLowerCase();
+      if (txt.includes(want)) { matchedOption = $(this); return false; }
+    });
+  }
+  if (matchedOption){ matchedOption.prop("selected", true); }
+}
 
   function pushToDOM(){
     withNoPostback(()=>{
@@ -275,39 +321,46 @@
     $(hideList.join(",")).css({display:"none"});
   }
 
-  function buildSummaries(){
-    const $cols = $(".epi-form-col-single-checkout");
-    if ($cols.length < 7) { console.warn("Not enough .epi-form-col-single-checkout columns"); return; }
+  // Replace buildSummaries() with this:
+function buildSummaries(){
+  // Find dependable mount points near native controls
+  const $deliveryMount = $(Fields.delivery.firstName).closest(".epi-form-col-single-checkout").first();
+  const $billingMount  = $(Fields.billing.line1).closest(".epi-form-col-single-checkout").first();
 
-    if ($cols.eq(5).find("#wlDeliverySummary").length === 0) {
-      $cols.eq(5).append(`
-        <div class="wl-summary-card" id="wlDeliverySummary">
-          <div class="wl-summary-header">
-            <div>
-              <strong>Delivery Address</strong>
-              <div class="wl-summary-sub" id="wlDeliveryLine"></div>
-            </div>
-            <button type="button" class="wl-btn-link" id="wlEditDelivery">Edit</button>
+  // If not found, fallback to nearest .epi-form-group-checkout container
+  const $delHost = $deliveryMount.length ? $deliveryMount : $(Fields.delivery.firstName).closest(".epi-form-group-checkout");
+  const $bilHost = $billingMount.length  ? $billingMount  : $(Fields.billing.line1).closest(".epi-form-group-checkout");
+
+  if ($delHost.find("#wlDeliverySummary").length === 0) {
+    $delHost.append(`
+      <div class="wl-summary-card" id="wlDeliverySummary">
+        <div class="wl-summary-header">
+          <div>
+            <strong>Delivery Address</strong>
+            <div class="wl-summary-sub" id="wlDeliveryLine"></div>
           </div>
-          <div class="wl-summary-body"><div id="wlDeliverySummaryBody"></div></div>
+          <button type="button" class="wl-btn-link" id="wlEditDelivery">Edit</button>
         </div>
-      `);
-    }
-    if ($cols.eq(6).find("#wlBillingSummary").length === 0) {
-      $cols.eq(6).append(`
-        <div class="wl-summary-card" id="wlBillingSummary">
-          <div class="wl-summary-header">
-            <div>
-              <strong>Billing Address</strong>
-              <div class="wl-summary-sub" id="wlBillingLine"></div>
-            </div>
-            <button type="button" class="wl-btn-link" id="wlEditBilling">Edit</button>
-          </div>
-          <div class="wl-summary-body"><div id="wlBillingSummaryBody"></div></div>
-        </div>
-      `);
-    }
+        <div class="wl-summary-body"><div id="wlDeliverySummaryBody"></div></div>
+      </div>
+    `);
   }
+  if ($bilHost.find("#wlBillingSummary").length === 0) {
+    $bilHost.append(`
+      <div class="wl-summary-card" id="wlBillingSummary">
+        <div class="wl-summary-header">
+          <div>
+            <strong>Billing Address</strong>
+            <div class="wl-summary-sub" id="wlBillingLine"></div>
+          </div>
+          <button type="button" class="wl-btn-link" id="wlEditBilling">Edit</button>
+        </div>
+        <div class="wl-summary-body"><div id="wlBillingSummaryBody"></div></div>
+      </div>
+    `);
+  }
+}
+
 
   function renderSummaries(){
     pullFromDOM();
@@ -424,36 +477,69 @@
   // ASYNC PREFILL
   // ===========================
   function prefillFromAddressBook(){
-    return new Promise(resolve=>{
-      try{
-        if (!$("#ctl00_PageBody_CustomerAddressSelector_SelectAddressLinkButton").length) return resolve(false);
-        const $entries=$(".AddressSelectorEntry"); if(!$entries.length) return resolve(false);
+  return new Promise(resolve=>{
+    try{
+      if (!$("#ctl00_PageBody_CustomerAddressSelector_SelectAddressLinkButton").length) return resolve(false);
+      const $entries=$(".AddressSelectorEntry"); if(!$entries.length) return resolve(false);
 
-        let chosen=$entries.first(), smallest=parseInt(chosen.find(".AddressId").text().trim(),10);
-        $entries.each(function(){
-          const id=parseInt($(this).find(".AddressId").text().trim(),10);
-          if (id<smallest){ smallest=id; chosen=$(this); }
-        });
+      let chosen=$entries.first(), smallest=parseInt(chosen.find(".AddressId").text().trim(),10);
+      $entries.each(function(){
+        const id=parseInt($(this).find(".AddressId").text().trim(),10);
+        if (id<smallest){ smallest=id; chosen=$(this); }
+      });
 
-        const s=chosen.find("dd p").first().text().trim();
-        const parts=s.split(",").map(x=>x.trim());
-        const line1=parts[0]||"", city=parts[1]||"";
-        let state="", zip="";
-        if (parts.length>=4){ state=parts[parts.length-2]||""; zip=parts[parts.length-1]||""; }
-        else if (parts.length>2){
-          const m=parts[2].match(/(.+?)\s*(\d{5}(?:-\d{4})?)?$/); if(m){ state=(m[1]||"").trim(); zip=m[2]||""; }
+      const s = chosen.find("dd p").first().text().trim();
+      // Common patterns:
+      // "123 Main St, City, ST, 77833"
+      // "123 Main St, City ST 77833"
+      // "123 Main St, City, StateName, 77833"
+      let line1="", city="", state="", zip="";
+
+      // Try comma-split first
+      const parts = s.split(",").map(x=>x.trim()).filter(Boolean);
+      if (parts.length >= 3){
+        line1 = parts[0];
+        city  = parts[1];
+
+        // Last token should contain state/zip or just zip
+        const tail = parts.slice(2).join(", ");
+        // Try "ST 77833" or "StateName 77833"
+        const m1 = tail.match(/([A-Za-z\. ]+?)\s+(\d{5}(?:-\d{4})?)$/);
+        if (m1){
+          state = m1[1].trim();
+          zip   = m1[2].trim();
+        } else {
+          // If there's a trailing pure zip token, pop it
+          const z = tail.match(/(\d{5}(?:-\d{4})?)$/);
+          if (z){ zip = z[1]; state = tail.replace(z[1],"").trim(); }
+          else { state = tail.trim(); }
         }
+      } else {
+        // Fallback: "City ST 77833" after first comma
+        const m2 = s.match(/^(.*?)\,\s*(.+?)\s+([A-Za-z]{2})\s+(\d{5}(?:-\d{4})?)$/);
+        if (m2){ line1=m2[1]; city=m2[2]; state=m2[3]; zip=m2[4]; }
+      }
 
-        CheckoutState.data.delivery = {
-          ...CheckoutState.data.delivery,
-          line1, city, state, zip, country: CONFIG.DEFAULT_COUNTRY_TEXT
-        };
-        pushToDOM();
-        CheckoutState.loaded.addressbook = true;
-        resolve(true);
-      }catch(e){ console.warn("prefillFromAddressBook error",e); resolve(false); }
-    });
-  }
+      // Normalize state (expand 2-letter codes)
+      if (state && state.length===2 && US_STATES[state.toUpperCase()]) {
+        state = US_STATES[state.toUpperCase()];
+      }
+
+      CheckoutState.data.delivery = {
+        ...CheckoutState.data.delivery,
+        line1: line1 || CheckoutState.data.delivery.line1,
+        city:  city  || CheckoutState.data.delivery.city,
+        state: state || CheckoutState.data.delivery.state,
+        zip:   zip   || CheckoutState.data.delivery.zip,
+        country: CONFIG.DEFAULT_COUNTRY_TEXT
+      };
+      pushToDOM();
+      CheckoutState.loaded.addressbook = true;
+      resolve(true);
+    }catch(e){ console.warn("prefillFromAddressBook error", e); resolve(false); }
+  });
+}
+
 
   function fetchAccountSettings(){
     return new Promise(resolve=>{
@@ -510,6 +596,19 @@
     const deliveryHasAddr = !!safeText($(Fields.delivery.line1).val());
     const billingHasAddr  = !!safeText($(Fields.billing.line1).val());
     if (deliveryHasAddr && !billingHasAddr) { copyDeliveryToBilling({force:true}); }
+
+
+    // Ensure default country applied if missing (both address blocks)
+withNoPostback(()=>{
+  const dCountryNow = $(Fields.delivery.country).find("option:selected").text().trim() || $(Fields.delivery.country).val();
+  if (!safeText(dCountryNow)) setSelectMatch($(Fields.delivery.country), CONFIG.DEFAULT_COUNTRY_TEXT);
+
+  const bCountryNow = $(Fields.billing.country).find("option:selected").text().trim() || $(Fields.billing.country).val();
+  if (!safeText(bCountryNow)) setSelectMatch($(Fields.billing.country), CONFIG.DEFAULT_COUNTRY_TEXT);
+
+  // Trigger local UI updates only
+  $(Fields.delivery.country+","+Fields.billing.country).trigger("input");
+});
 
     renderSummaries();
   }
