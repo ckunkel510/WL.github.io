@@ -315,7 +315,7 @@ textarea.form-control {
   /* Content sections row: left column (Contact/Addresses) | right column (Order card) */
   .wl-sections {
     display: grid;
-    grid-template-columns: 1fr 1.2fr; /* order gets more room */
+    grid-template-columns: 0.8fr 1.4fr; /* order gets more room */
     gap: 20px;
   }
 
@@ -323,7 +323,7 @@ textarea.form-control {
   .wl-card {
     background: #fff;
     border-radius: 12px;
-    padding: 14px 16px;
+    padding: 12px 14px;
     box-shadow: 0 1px 0 rgba(0,0,0,.04);
   }
   .wl-card h4 { margin: 0 0 10px; font-size: 1rem; font-weight: 700; }
@@ -334,7 +334,7 @@ textarea.form-control {
 
   .wl-kv { 
     display: grid; 
-    grid-template-columns: 110px 1fr; /* more compact label column */
+    grid-template-columns: 100px 1fr; /* more compact label column */
     gap: 6px 10px; 
     font-size: .95rem; 
   }
@@ -348,7 +348,7 @@ textarea.form-control {
     white-space: pre-line;
     font-size: .95rem;
   }
-  .wl-address-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+  .wl-address-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; }
   .wl-address-wrap .section-label { color:#666; font-size:.9rem; margin-bottom:4px; }
 
   /* RIGHT column: Order table with tfoot-aligned totals */
@@ -367,17 +367,24 @@ textarea.form-control {
   }
   /* Column widths for consistent alignment */
   .wl-lines .wl-table th:nth-child(1),
-  .wl-lines .wl-table td:nth-child(1) { width: 140px; }           /* Product Code */
+  .wl-lines .wl-table td:nth-child(1) { width: 110px; }           /* Product Code */
   .wl-lines .wl-table th:nth-child(2),
   .wl-lines .wl-table td:nth-child(2) { width: auto; }            /* Description */
   .wl-lines .wl-table th:nth-child(3),
-  .wl-lines .wl-table td:nth-child(3) { width: 80px; text-align:right; } /* Qty */
+  .wl-lines .wl-table td:nth-child(3) { width: 70px; text-align:right; } /* Qty */
   .wl-lines .wl-table th:nth-child(4),
-  .wl-lines .wl-table td:nth-child(4) { width: 70px; }            /* UOM */
+  .wl-lines .wl-table td:nth-child(4) { width: 60px; }            /* UOM */
   .wl-lines .wl-table th:nth-child(5),
-  .wl-lines .wl-table td:nth-child(5) { width: 120px; text-align:right; } /* Price */
+  .wl-lines .wl-table td:nth-child(5) { width: 110px; text-align:right; } /* Price */
   .wl-lines .wl-table th:nth-child(6),
   .wl-lines .wl-table td:nth-child(6) { width: 120px; text-align:right; } /* Total */
+
+ /* Description wrapping: prefer normal wrapping, only break long tokens if needed */
+  .wl-lines .wl-table td:nth-child(2) {
+    white-space: normal;
+    overflow-wrap: break-word;      /* use "anywhere" if you have exceptionally long words */
+    hyphens: auto;                  /* optional: nicer breaks on long words */
+  }
 
   /* Tfoot totals lined up with price/total columns */
   .wl-lines .wl-table tfoot td {
