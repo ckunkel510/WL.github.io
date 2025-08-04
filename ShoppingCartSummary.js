@@ -99,35 +99,22 @@
     </div>
 
     <div class="wl-sections">
-      <div class="wl-card">
-        <h4>Contact & Notes</h4>
-        <div class="wl-grid-2">
-          <div class="wl-kv">
-            <div class="k">Name</div><div class="v">${safe(delivery.contact)}</div>
-            <div class="k">Phone</div><div class="v">${safe(delivery.phone)}</div>
-            <div class="k">Email</div><div class="v">${safe(invoice.email)}</div>
-          </div>
-          <div class="wl-kv">
-            <div class="k">PO / Your Ref</div><div class="v">${safe(poRef) || '-'}</div>
-            <div class="k">Special Instructions</div><div class="v">${safe(specialInstr) || '-'}</div>
-          </div>
+  <div class="wl-left-stack">
+    <div class="wl-card"> ...Contact & Notes... </div>
+    <div class="wl-card">
+      <h4>Addresses</h4>
+      <div class="wl-address-wrap">
+        <div>
+          <div class="section-label">Sales Address</div>
+          <p class="wl-address">...</p>
         </div>
-      </div>
-
-      <div class="wl-card">
-        <h4>Addresses</h4>
-        <div class="wl-grid-2">
-          <div>
-            <div class="k" style="color:#555;margin-bottom:4px;">Sales Address</div>
-            <p class="wl-address">${formatMultiline(delivery.addrLines)}</p>
-          </div>
-          <div>
-            <div class="k" style="color:#555;margin-bottom:4px;">Invoice Address</div>
-            <p class="wl-address">${formatMultiline(invoice.addrLines)}</p>
-          </div>
+        <div>
+          <div class="section-label">Invoice Address</div>
+          <p class="wl-address">...</p>
         </div>
       </div>
     </div>
+  </div>
 
     <div class="wl-card wl-lines">
       <h4>Order</h4>

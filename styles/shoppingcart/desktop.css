@@ -283,86 +283,123 @@ textarea.form-control {
 
 
 
-/* Desktop layout only */
 
-  /* Create room for top-left/back and top-right/complete + legal */
+  /* Page shell */
   .wl-modern-summary {
-    position: relative;
-    padding-top: 96px; /* space for the absolute buttons + legal */
-  }
-
-  /* Top controls: Back (left), Complete (right) */
-  .wl-actions {
-    position: absolute;
-    top: 16px;
-    left: 16px;
-    right: 16px;
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    margin: 0; /* remove any flow spacing */
-  }
-  .wl-actions .wl-btn.secondary { justify-self: start; }
-  .wl-actions .wl-btn:not(.secondary) { justify-self: end; }
-
-  /* Legal under the Complete button (top-right) */
-  .wl-legal {
-    position: absolute;
-    top: 68px; /* sits below the Complete button */
-    right: 16px;
-    max-width: 420px;
-    margin: 0;
+    grid-template-rows: auto auto auto;
+    gap: 20px;
+    padding: 20px 22px;
+    background: #f7f7f8;
+    border-radius: 14px;
   }
 
-  /* Tighten cards/addresses to reduce vertical space */
-  .wl-sections {
-    grid-template-columns: 1fr 1fr; /* even split to reduce tall stacking */
-    align-items: start;
+  /* Topbar: image | store/method | date  */
+  .wl-topbar {
+    display: grid;
+    grid-template-columns: 120px 1fr auto;
     gap: 16px;
+    align-items: center;
+    background: #fff;
+    border-radius: 12px;
+    padding: 12px 14px;
+    box-shadow: 0 1px 0 rgba(0,0,0,.04);
   }
+  .wl-store-img { width: 120px; height: 78px; object-fit: cover; border-radius: 10px; }
+  .wl-method { margin: 0 0 4px; font-weight: 600; }
+  .wl-store-name { margin: 0; font-weight: 800; font-size: 1.15rem; }
+  .wl-store-street { margin: 3px 0 0; color: #333; }
+  .wl-date { font-size: .95rem; white-space: nowrap; }
+  .wl-pill { display:inline-block; padding:4px 10px; border-radius:999px; background:#ececef; font-size:.85rem; font-weight:600; }
+
+  /* Content sections row: left column (Contact/Addresses) | right column (Order card) */
+  .wl-sections {
+    display: grid;
+    grid-template-columns: 1fr 1.2fr; /* order gets more room */
+    gap: 20px;
+  }
+
+  /* Cards */
   .wl-card {
-    padding: 12px 14px; /* tighter */
+    background: #fff;
+    border-radius: 12px;
+    padding: 14px 16px;
+    box-shadow: 0 1px 0 rgba(0,0,0,.04);
   }
-  .wl-grid-2 {
-    grid-template-columns: 1fr 1fr;
-    gap: 10px 16px;
+  .wl-card h4 { margin: 0 0 10px; font-size: 1rem; font-weight: 700; }
+
+  /* LEFT column: Contact & Notes + Addresses stacked with tight rhythm */
+  .wl-left-stack { display: grid; gap: 16px; }
+  .wl-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+
+  .wl-kv { 
+    display: grid; 
+    grid-template-columns: 110px 1fr; /* more compact label column */
+    gap: 6px 10px; 
+    font-size: .95rem; 
   }
-  .wl-kv {
-    grid-template-columns: 120px 1fr; /* narrower label column */
-    margin-bottom: 4px;
-  }
+  .wl-kv .k { color:#555; }
+  .wl-kv .v { color:#111; }
+
+  /* Addresses: compact, two-up, fewer lines = less white space */
   .wl-address {
     margin: 0;
-    line-height: 1.35; /* tighter lines */
+    line-height: 1.35;
+    white-space: pre-line;
+    font-size: .95rem;
   }
+  .wl-address-wrap { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+  .wl-address-wrap .section-label { color:#666; font-size:.9rem; margin-bottom:4px; }
 
-  /* Order table column widths and alignment */
+  /* RIGHT column: Order table with tfoot-aligned totals */
   .wl-lines .wl-table {
-    table-layout: fixed;
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed; /* make widths stable for footer alignment */
+    font-size: .95rem;
   }
+  .wl-lines .wl-table th,
+  .wl-lines .wl-table td {
+    border-bottom: 1px solid #eaeaec;
+    padding: 10px 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+  /* Column widths for consistent alignment */
   .wl-lines .wl-table th:nth-child(1),
   .wl-lines .wl-table td:nth-child(1) { width: 140px; }           /* Product Code */
   .wl-lines .wl-table th:nth-child(2),
   .wl-lines .wl-table td:nth-child(2) { width: auto; }            /* Description */
   .wl-lines .wl-table th:nth-child(3),
-  .wl-lines .wl-table td:nth-child(3) { width: 80px; text-align: right; } /* Qty */
+  .wl-lines .wl-table td:nth-child(3) { width: 80px; text-align:right; } /* Qty */
   .wl-lines .wl-table th:nth-child(4),
   .wl-lines .wl-table td:nth-child(4) { width: 70px; }            /* UOM */
   .wl-lines .wl-table th:nth-child(5),
-  .wl-lines .wl-table td:nth-child(5) { width: 120px; text-align: right; } /* Price */
+  .wl-lines .wl-table td:nth-child(5) { width: 120px; text-align:right; } /* Price */
   .wl-lines .wl-table th:nth-child(6),
-  .wl-lines .wl-table td:nth-child(6) { width: 120px; text-align: right; } /* Total */
+  .wl-lines .wl-table td:nth-child(6) { width: 120px; text-align:right; } /* Total */
 
-  /* Style the footer totals that now live inside the table */
+  /* Tfoot totals lined up with price/total columns */
   .wl-lines .wl-table tfoot td {
     border-top: 2px solid #e5e5e5;
     padding-top: 10px;
     font-weight: 700;
   }
-  .wl-lines .wl-table tfoot tr:last-child td {
-    font-weight: 800; /* Total row emphasis */
-  }
-
-  /* Utility for right-aligned cells in tfoot */
+  .wl-lines .wl-table tfoot tr:last-child td { font-weight: 800; }
   .wl-right { text-align: right; }
 
+  /* Legal & actions at the bottom in flow (clean, not crowded) */
+  .wl-legal { font-size:.92rem; color:#333; }
+  .wl-legal .sub { color:#666; font-size:.9rem; margin-top:6px; }
+
+  .wl-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .wl-btn {
+    background:#6b0016; color:#fff; border:0; border-radius:10px; padding:12px 16px;
+    font-weight:700; font-size:1rem; cursor:pointer; width:100%;
+  }
+  .wl-btn.secondary { background:#e6e6e9; color:#111; font-weight:600; }
+  .wl-btn:hover { filter: brightness(.96); }
