@@ -166,6 +166,8 @@ const specialInstr = getValueByLabel(/Special\s+Instructions:?/i);
   `;
 
   main.insertBefore(shell, main.firstChild);
+  updateSummaryHeader();
+
 
   // After: main.insertBefore(shell, main.firstChild);
 
@@ -298,6 +300,13 @@ function getShipping() {
     else if (/^Total(\s*inc\s*Tax)?$/i.test(label)) total = tr.querySelector('td.numeric.totalRow, td.numeric')?.textContent?.trim() || val;
   }
   return { subtotal, tax, total };
+}
+
+function updateSummaryHeader(newText = "Review & Complete Your Order") {
+  const headerEl = document.getElementById("ctl00_PageBody_SummaryHeading_HeaderText");
+  if (headerEl) {
+    headerEl.textContent = newText;
+  }
 }
 
 
