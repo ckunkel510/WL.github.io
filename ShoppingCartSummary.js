@@ -62,15 +62,21 @@ const specialInstr = getValueByLabel(/Special\s+Instructions:?/i);
   // --- Store link/image maps (fill out the rest)
   const storeLinks = {
     "Buffalo": "https://www.woodsonlumber.com/buffalo",
-    // "Brenham": "https://www.woodsonlumber.com/brenham",
-    // "Bryan": "https://www.woodsonlumber.com/bryan",
-    // "Caldwell": "https://www.woodsonlumber.com/caldwell",
-    // "Groesbeck": "https://www.woodsonlumber.com/groesbeck",
-    // "Lexington": "https://www.woodsonlumber.com/lexington",
-    // "Mexia": "https://www.woodsonlumber.com/mexia",
+     "Brenham": "https://www.woodsonlumber.com/brenham",
+     "Bryan": "https://www.woodsonlumber.com/bryan",
+     "Caldwell": "https://www.woodsonlumber.com/caldwell",
+     "Groesbeck": "https://www.woodsonlumber.com/groesbeck",
+     "Lexington": "https://www.woodsonlumber.com/lexington",
+     "Mexia": "https://www.woodsonlumber.com/mexia",
   };
   const storeImages = {
-    "Buffalo": "https://images-woodsonlumber.sirv.com/Store-Images/store-buffalo.avif",
+    "Buffalo": "https://images-woodsonlumber.sirv.com/Store-Images/store-buffalo.png",
+    "Brenham": "https://images-woodsonlumber.sirv.com/Store-Images/store-brenham.png",
+    "Caldwell": "https://images-woodsonlumber.sirv.com/Store-Images/store-caldwell.png",
+    "Bryan": "https://images-woodsonlumber.sirv.com/Store-Images/store-bryan.png",
+    "Lexington": "https://images-woodsonlumber.sirv.com/Store-Images/store-lexington.png",
+    "Groesbeck": "https://images-woodsonlumber.sirv.com/Store-Images/store-groesbeck.png",
+    "Mexia": "https://images-woodsonlumber.sirv.com/Store-Images/store-mexia.png",
     // "Brenham": "https://images-woodsonlumber.sirv.com/Store-Images/brenham.jpg",
     // ...
   };
