@@ -140,7 +140,7 @@
   }
   .section-label { margin-bottom: 2px; color:#666; font-size: 12px; }
 
-  #ct100_PageBody_SummaryHeading_HeaderText {
+  span#ctl00_PageBody_SummaryHeading_HeaderText {
   font-size: 1.5rem;
   font-weight: 700;
   color: #6b0016;
@@ -149,7 +149,7 @@
   padding-top: 8px;
 }
 
-.wl-btn secondary {
+button.wl-btn.secondary {
   display: inline-block;
   padding: 10px 16px;
   font-size: 1rem;
