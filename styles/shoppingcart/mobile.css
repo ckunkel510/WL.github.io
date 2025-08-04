@@ -1,0 +1,75 @@
+
+  .wl-modern-summary {
+    padding: 16px;
+  }
+
+  .wl-topbar {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .wl-store-img {
+    width: 100%;
+    height: auto;
+    max-width: 320px;
+    border-radius: 10px;
+  }
+
+  .wl-store-name {
+    font-size: 1.1rem;
+  }
+
+  .wl-store-street {
+    font-size: 0.9rem;
+  }
+
+  .wl-pill {
+    font-size: 0.8rem;
+    padding: 3px 8px;
+  }
+
+  .wl-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .wl-kv {
+    grid-template-columns: 100px 1fr;
+    font-size: 0.88rem;
+  }
+
+  .wl-address {
+    font-size: 0.88rem;
+  }
+
+  .wl-table th,
+  .wl-table td {
+    font-size: 0.85rem;
+    padding: 6px 5px;
+  }
+
+  .wl-totals .row {
+    grid-template-columns: 1fr auto;
+    font-size: 0.9rem;
+  }
+
+  .wl-actions {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .wl-btn {
+    font-size: 1rem;
+    padding: 12px;
+  }
+
+  .wl-legal {
+    font-size: 0.85rem;
+  }
+
+  .wl-legal .sub {
+    font-size: 0.8rem;
+  }

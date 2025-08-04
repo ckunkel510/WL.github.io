@@ -1,0 +1,37 @@
+
+  .wl-topbar {
+    display: grid;
+    grid-template-columns: 90px 1fr;
+    gap: 16px;
+    align-items: center;
+  }
+
+  .wl-date {
+    grid-column: 1 / -1;
+    margin-top: 8px;
+  }
+
+  .wl-sections {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .wl-kv {
+    grid-template-columns: 120px 1fr;
+  }
+
+  .wl-table th,
+  .wl-table td {
+    font-size: 0.9rem;
+    padding: 8px 6px;
+  }
+
+  .wl-actions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .wl-btn {
+    font-size: 0.95rem;
+    padding: 10px 14px;
+  }
