@@ -272,68 +272,94 @@ hideLegacyButtons();
 })();
 
 
-(async function addThumbnailsToLines(){
-  const table = shell.querySelector('.wl-table');
+(async function addThumbnailsToLinesSafe(){
+  const table = document.querySelector('.wl-table');
   if (!table) return;
 
-  // 1) Build an image map from session first
+  // 1) Load the image map from session
   let imgMap = {};
   try { imgMap = JSON.parse(sessionStorage.getItem('wlCartImages') || '{}'); } catch(e){}
 
-  // 2) If map is empty or missing items, optionally merge the CSV fallback
-  const needFallback = table.querySelectorAll('tbody tr').length && !Object.keys(imgMap).length;
-  if (needFallback) {
-    try {
-      const sheetMap = await fetchImageMapFromCSV();
-      imgMap = { ...sheetMap, ...imgMap }; // session wins
-    } catch(e) { /* ignore */ }
-  }
+  // If no images, bail without changing layout
+  if (!imgMap || !Object.keys(imgMap).length) return;
 
-  // 3) Insert a new thumbnail column as first column
   const theadRow = table.querySelector('thead tr');
+  const bodyRows = table.querySelectorAll('tbody tr');
+  if (!theadRow || !bodyRows.length) return;
+
+  // 2) Build a list of codes from the table body and see if any have images
+  const codes = Array.from(bodyRows).map(tr => (tr.children[0]?.textContent || '').trim().toUpperCase());
+  const hasAnyImage = codes.some(c => imgMap[c]);
+  if (!hasAnyImage) return; // do not alter layout if no matches
+
+  // 3) Insert a new TH at the start
   const th = document.createElement('th');
   th.textContent = 'Item';
   theadRow.insertBefore(th, theadRow.firstChild);
 
-  table.querySelectorAll('tbody tr').forEach(tr => {
-    const codeCell = tr.children[0]; // old first col (Product Code)
-    const code = (codeCell?.textContent || '').trim();
-    const thumbUrl = imgMap[code];
+  // 4) Insert a new TD with thumbnail at the start of each row
+  bodyRows.forEach(tr => {
+    const codeCell = tr.children[1] ? tr.children[1] : tr.children[0]; // after we add the new col, code becomes index 1
+    const productCode = (tr.children[1]?.textContent || tr.children[0]?.textContent || '').trim().toUpperCase();
+    const imgUrl = imgMap[productCode];
 
     const td = document.createElement('td');
-    if (thumbUrl) {
-      td.innerHTML = `<img src="${thumbUrl}" alt="${code}" loading="lazy" style="width:48px;height:48px;object-fit:cover;border-radius:6px;">`;
-    } else {
-      td.innerHTML = `<div style="width:48px;height:48px;border-radius:6px;background:#f0f0f3;"></div>`;
-    }
+    td.innerHTML = imgUrl
+      ? `<img src="${imgUrl}" alt="${productCode}" loading="lazy" style="width:48px;height:48px;object-fit:cover;border-radius:6px;">`
+      : `<div style="width:48px;height:48px;border-radius:6px;background:#f0f0f3;"></div>`;
     tr.insertBefore(td, tr.firstChild);
   });
 
-  // 4) Rebalance desktop widths so Description still has space
-  const css = document.createElement('style');
-  css.textContent = `
+  // 5) Recalculate tfoot colspans so totals align with Price/Total
+  const tfoot = table.querySelector('tfoot');
+  if (tfoot) {
+    const colCount = theadRow.children.length; // includes new thumbnail
+    // We want labels to sit in the second-to-last column, amounts in the last column
+    // So the colspan is everything before the last 2 numeric columns
+    const labelSpan = Math.max(colCount - 2, 1);
+    tfoot.querySelectorAll('tr').forEach(tr => {
+      // Ensure exactly 6/7 cells: [colspan label cell], [label text cell], [amount cell]
+      // We keep structure as: <td colspan="X"></td><td>Label</td><td class="wl-right">Value</td>
+      const tds = tr.querySelectorAll('td');
+      if (tds.length === 6 || tds.length === 7 || tds.length === 3) {
+        // Normalize to 3 cells for safety
+        tr.innerHTML = `
+          <td colspan="${labelSpan}"></td>
+          <td>${tds[tds.length-2].textContent}</td>
+          <td class="wl-right">${tds[tds.length-1].textContent}</td>
+        `;
+      } else {
+        // If our previous builder created exactly the 3-cell structure already:
+        tr.children[0]?.setAttribute('colspan', String(labelSpan));
+      }
+    });
+  }
+
+  // 6) Desktop widths with thumbnail column (keep description wide)
+  const style = document.createElement('style');
+  style.textContent = `
     @media (min-width: 992px) {
+      /* After adding thumbnail, columns are:
+         1: Item (thumb) | 2: Product Code | 3: Description | 4: Qty | 5: UOM | 6: Price | 7: Total */
+      .wl-lines .wl-table { table-layout: fixed; }
       .wl-lines .wl-table th:nth-child(1),
-      .wl-lines .wl-table td:nth-child(1) { width: 64px; } /* thumbnail */
+      .wl-lines .wl-table td:nth-child(1) { width: 64px; }                 /* thumbnail */
       .wl-lines .wl-table th:nth-child(2),
-      .wl-lines .wl-table td:nth-child(2) { width: 110px; } /* Product Code */
+      .wl-lines .wl-table td:nth-child(2) { width: 110px; }                /* product code */
       .wl-lines .wl-table th:nth-child(3),
-      .wl-lines .wl-table td:nth-child(3) { width: auto; } /* Description (widest) */
+      .wl-lines .wl-table td:nth-child(3) { width: auto; }                 /* description (max) */
       .wl-lines .wl-table th:nth-child(4),
-      .wl-lines .wl-table td:nth-child(4) { width: 70px; text-align:right; } /* Qty */
+      .wl-lines .wl-table td:nth-child(4) { width: 70px; text-align:right; } /* qty */
       .wl-lines .wl-table th:nth-child(5),
-      .wl-lines .wl-table td:nth-child(5) { width: 60px; } /* UOM */
+      .wl-lines .wl-table td:nth-child(5) { width: 60px; }                 /* uom */
       .wl-lines .wl-table th:nth-child(6),
-      .wl-lines .wl-table td:nth-child(6) { width: 110px; text-align:right; } /* Price */
+      .wl-lines .wl-table td:nth-child(6) { width: 110px; text-align:right; } /* price */
       .wl-lines .wl-table th:nth-child(7),
-      .wl-lines .wl-table td:nth-child(7) { width: 120px; text-align:right; } /* Total */
-    }
-    @media (max-width: 599px) {
-      .wl-lines .wl-table th:nth-child(1),
-      .wl-lines .wl-table td:nth-child(1) { width: 48px; }
+      .wl-lines .wl-table td:nth-child(7) { width: 120px; text-align:right; } /* total */
+      .wl-lines .wl-table td:nth-child(3) { white-space: normal; overflow-wrap: break-word; hyphens: auto; }
     }
   `;
-  document.head.appendChild(css);
+  document.head.appendChild(style);
 })();
 
   // --- Wire up buttons
@@ -448,5 +474,30 @@ function updateSummaryHeader(newText = "Review & Complete Your Order") {
 
   function escapeHTML(s) {
     return (s || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  }
+})();
+
+(function cacheCartImages(){
+  try {
+    const map = {}; // { PRODUCTCODE: absoluteImgUrl }
+
+    document.querySelectorAll('.row.shopping-cart-item').forEach(item => {
+      const img = item.querySelector('.ThumbnailImage');
+      const codeEl = item.querySelector('a[title] .portalGridLink'); // span with product code text
+      const code = (codeEl?.textContent || '').trim();
+      let src = img?.getAttribute('src');
+
+      if (!code || !src) return;
+      // make absolute url if relative
+      if (src.startsWith('/')) src = location.origin + src;
+
+      map[code.toUpperCase()] = src;
+    });
+
+    if (Object.keys(map).length) {
+      sessionStorage.setItem('wlCartImages', JSON.stringify(map));
+    }
+  } catch(e) {
+    // no-op
   }
 })();
