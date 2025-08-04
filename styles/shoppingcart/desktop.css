@@ -439,11 +439,9 @@ margin-bottom: 0px !important;
 
 
  
-.wl-summary-card {
-  border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px 14px; margin: 8px 0; background: #fff;
-}
+.wl-summary-card { border:1px solid #e5e7eb; border-radius:12px; padding:12px 14px; margin:8px 0; background:#fff; }
 .wl-summary-header { display:flex; align-items:center; justify-content:space-between; gap:8px; }
-.wl-summary-sub { font-size: 12px; color:#6b7280; margin-top:2px; }
+.wl-summary-sub { font-size:12px; color:#6b7280; margin-top:2px; }
 .wl-summary-body { margin-top:8px; line-height:1.4; }
 .wl-btn-link { background:none; border:none; color:#2563eb; cursor:pointer; font-weight:600; }
 .wl-editor { margin-top:10px; padding:12px; border:1px dashed #d1d5db; border-radius:10px; background:#f9fafb; }
