@@ -280,3 +280,58 @@ textarea.form-control {
     height: 45px !important;
 }
 
+
+
+
+
+
+
+  .modern-checkout-summary {
+    font-family: sans-serif;
+    padding: 1rem;
+    background: #f9f9f9;
+    border-radius: 10px;
+  }
+  .pickup-summary {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+  }
+  .store-img {
+    width: 100px;
+    height: auto;
+    border-radius: 6px;
+  }
+  .address-section {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 1rem;
+  }
+  .order-lines-table {
+    width: 100%;
+    margin-top: 1rem;
+    border-collapse: collapse;
+  }
+  .order-lines-table td, .order-lines-table th {
+    padding: 8px;
+    border: 1px solid #ddd;
+  }
+  .terms-section {
+    margin-top: 1.5rem;
+  }
+  .checkout-buttons {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 1rem;
+  }
+  .checkout-buttons button {
+    background: #6b0016;
+    color: white;
+    padding: 0.75rem;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  .checkout-buttons button:hover {
+    background: #8d1a2d;
+  }
