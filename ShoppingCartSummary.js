@@ -227,8 +227,8 @@
       </div>
 
       <div class="wl-actions">
-        <button class="wl-btn secondary" type="button" id="wl-back">Back</button>
-        <button class="wl-btn" type="button" id="wl-complete">Complete Order</button>
+        <button class="wl-btn secondary desktop" type="button" id="wl-back">Back</button>
+        <button class="wl-btn desktop" type="button" id="wl-complete">Complete Order</button>
       </div>
     `;
     main.insertBefore(shell, main.firstChild);
@@ -263,7 +263,7 @@
       if (!headerEl) return;
       const b = document.createElement('button');
       b.type = 'button';
-      b.className = 'wl-btn secondary';
+      b.className = 'wl-btn secondary mobile';
       b.style.margin = '10px 0';
       b.textContent = 'Back';
       b.addEventListener('click', () => document.getElementById("ctl00_PageBody_BackToCartButton5")?.click());

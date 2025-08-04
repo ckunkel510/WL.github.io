@@ -415,3 +415,8 @@ textarea.form-control {
   .wl-sticky-bar{
     display:none;
   }
+
+  .wl-btn.secondary.mobile{
+display: none;
+  }
+  

@@ -164,6 +164,14 @@ button.wl-btn.secondary {
   margin-bottom: 0.5rem;
 }
 
+.wl-btn.desktop{
+display: none;
+}
+
+.wl-btn.secondary.desktop{
+  display:none;
+}
+
 #MainLayoutRow{
     margin-top: 10px !important;
 }
