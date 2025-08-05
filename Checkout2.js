@@ -1,4 +1,9 @@
+
 document.addEventListener('DOMContentLoaded', function() {
+  // Hide the original “Date Required” picker entirely
+  var dateColDefault = document.getElementById('ctl00_PageBody_dtRequired_DatePicker_wrapper');
+  if (dateColDefault) dateColDefault.style.display = 'none';
+
   // 1) Create wizard container & nav
   var container = document.querySelector('.container');
   var wizard    = document.createElement('div');
@@ -7,6 +12,15 @@ document.addEventListener('DOMContentLoaded', function() {
   var nav = document.createElement('ul');
   nav.className = 'checkout-steps';
   wizard.appendChild(nav);
+
+  // Helper to suppress ASP.NET postbacks on select changes
+  function suppressPostback(el) {
+    if (!el) return;
+    el.onchange = function(e) {
+      e.stopImmediatePropagation();
+      e.preventDefault();
+    };
+  }
 
   // 2) Define the 7 steps
   var steps = [
@@ -18,8 +32,6 @@ document.addEventListener('DOMContentLoaded', function() {
     { title:'Billing address',   findEls:()=>{ let gp=document.getElementById('ctl00_PageBody_InvoiceAddress_GoogleAddressSearchWrapper'); return gp?[gp.closest('.epi-form-col-single-checkout')]:[]; }},
     { title:'Special instructions', findEls:()=>{
         let arr=[];
-        let dateCol = document.getElementById('ctl00_PageBody_dtRequired_DatePicker_wrapper');
-        if(dateCol) arr.push(dateCol.closest('.epi-form-col-single-checkout'));
         let tbl = document.querySelector('.cartTable');
         if(tbl) arr.push(tbl.closest('table'));
         let si = document.getElementById('ctl00_PageBody_SpecialInstructionsTextBox');
@@ -172,10 +184,17 @@ document.addEventListener('DOMContentLoaded', function() {
     let col = pane5.querySelector('.epi-form-col-single-checkout'),
         wrap = document.createElement('div'),
         sum  = document.createElement('div');
-    wrap.className='delivery-inputs';
+    wrap.className = 'delivery-inputs';
     while(col.firstChild) wrap.appendChild(col.firstChild);
     col.appendChild(wrap);
-    sum.className='delivery-summary';
+    sum.className = 'delivery-summary';
+
+    // suppress delivery selects postback
+    let delState   = wrap.querySelector('#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList'),
+        delCountry = wrap.querySelector('#ctl00_PageBody_DeliveryAddress_CountrySelector');
+    suppressPostback(delState);
+    suppressPostback(delCountry);
+
     function upd(){
       let a1 = wrap.querySelector('#ctl00_PageBody_DeliveryAddress_AddressLine1').value||'',
           a2 = wrap.querySelector('#ctl00_PageBody_DeliveryAddress_AddressLine2').value||'',
@@ -188,20 +207,22 @@ document.addEventListener('DOMContentLoaded', function() {
         ${c}, ${s} ${z}<br>
         <button id="editDelivery" class="btn btn-link">Edit</button>`;
     }
-    wrap.style.display='none';
+    wrap.style.display = 'none';
     col.insertBefore(sum, wrap);
     sum.addEventListener('click', e=>{
       if(e.target.id!=='editDelivery') return;
-      sum.style.display='none'; wrap.style.display='';
+      sum.style.display = 'none';
+      wrap.style.display = '';
       wrap.scrollIntoView({behavior:'smooth'});
       if(!wrap.querySelector('#saveDelivery')){
-        let btn=document.createElement('button');
-        btn.id='saveDelivery'; btn.className='btn btn-primary mt-2';
-        btn.textContent='Save';
+        let btn = document.createElement('button');
+        btn.id = 'saveDelivery';
+        btn.className = 'btn btn-primary mt-2';
+        btn.textContent = 'Save';
         wrap.appendChild(btn);
-        btn.addEventListener('click', ()=>{
+        btn.addEventListener('click', ()=> {
           upd(); wrap.style.display='none'; sum.style.display=''; 
-          localStorage.currentStep=5;
+          localStorage.currentStep = 5;
         });
       }
     });
@@ -212,10 +233,9 @@ document.addEventListener('DOMContentLoaded', function() {
   (function(){
     let pane6 = wizard.querySelector('.checkout-step[data-step="6"]');
     if(!pane6) return;
-    // hide original copy button if present
     let orig = document.getElementById('copyDeliveryAddressButton');
     if(orig) orig.style.display='none';
-    // insert our checkbox
+
     let chkDiv = document.createElement('div');
     chkDiv.className='form-check mb-3';
     chkDiv.innerHTML=`
@@ -225,20 +245,26 @@ document.addEventListener('DOMContentLoaded', function() {
       </label>`;
     pane6.insertBefore(chkDiv, pane6.firstChild);
     let sameCheck = chkDiv.querySelector('#sameAsDeliveryCheck');
-    // invoice inputs & summary
-    let colInv = pane6.querySelector('.epi-form-col-single-checkout'),
-        wrapInv = document.createElement('div'),
-        sumInv  = document.createElement('div');
+
+    let colInv   = pane6.querySelector('.epi-form-col-single-checkout'),
+        wrapInv  = document.createElement('div'),
+        sumInv   = document.createElement('div');
     wrapInv.className='invoice-inputs';
     while(colInv.firstChild) wrapInv.appendChild(colInv.firstChild);
     colInv.appendChild(wrapInv);
     sumInv.className='invoice-summary';
+
+    // suppress invoice selects postback
+    let invState   = wrapInv.querySelector('#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList'),
+        invCountry = wrapInv.querySelector('#ctl00_PageBody_InvoiceAddress_CountrySelector1');
+    suppressPostback(invState);
+    suppressPostback(invCountry);
+
     function refreshInv(){
       let a1 = wrapInv.querySelector('#ctl00_PageBody_InvoiceAddress_AddressLine1').value||'',
           a2 = wrapInv.querySelector('#ctl00_PageBody_InvoiceAddress_AddressLine2').value||'',
           c  = wrapInv.querySelector('#ctl00_PageBody_InvoiceAddress_City').value||'',
-          st = wrapInv.querySelector('#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList')
-                 .selectedOptions[0].text||'',
+          st = invState?invState.selectedOptions[0].text:'', 
           z  = wrapInv.querySelector('#ctl00_PageBody_InvoiceAddress_Postcode').value||'',
           e  = wrapInv.querySelector('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox').value||'';
       sumInv.innerHTML = `<strong>Billing Address</strong><br>
@@ -250,7 +276,7 @@ document.addEventListener('DOMContentLoaded', function() {
     wrapInv.style.display='none';
     sumInv.style.display='none';
     colInv.insertBefore(sumInv, wrapInv);
-    // restore state from localStorage
+
     let same = localStorage.sameAsDelivery==='true';
     sameCheck.checked = same;
     if(same){
@@ -281,7 +307,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   })();
 
-  // 11) Step 7: pickup vs delivery logic & special instructions
+  // 11) Step 7: pickup vs delivery & special instructions
   (function(){
     let p7 = wizard.querySelector('.checkout-step[data-step="7"]');
     if(!p7) return;
@@ -289,6 +315,7 @@ document.addEventListener('DOMContentLoaded', function() {
         siWrap     = specialIns.closest('.epi-form-group-checkout')
                   || specialIns.closest('.epi-form-col-single-checkout')
                   || specialIns.parentElement;
+
     // pickup controls
     let pickupDiv = document.createElement('div');
     pickupDiv.className='form-group';
@@ -298,6 +325,7 @@ document.addEventListener('DOMContentLoaded', function() {
       <label for="pickupPerson">Pickup Person:</label>
       <input type="text" id="pickupPerson" class="form-control">`;
     pickupDiv.style.display='none';
+
     // delivery controls
     let deliveryDiv = document.createElement('div');
     deliveryDiv.className='form-group';
@@ -309,7 +337,7 @@ document.addEventListener('DOMContentLoaded', function() {
         <label><input type="radio" name="deliveryTime" value="Afternoon"> Afternoon</label>
       </div>`;
     deliveryDiv.style.display='none';
-    // insert after SI
+
     siWrap.insertAdjacentElement('afterend', pickupDiv);
     pickupDiv.insertAdjacentElement('afterend', deliveryDiv);
 
@@ -318,8 +346,9 @@ document.addEventListener('DOMContentLoaded', function() {
         zipInput = document.getElementById('ctl00_PageBody_DeliveryAddress_Postcode');
 
     function inZone(z){ return ['75','76','77','78','79'].includes((z||'').substring(0,2)); }
+
     function updateSpecial(){
-      specialIns.value='';
+      specialIns.value = '';
       if(rbPick.checked){
         let d = pickupDiv.querySelector('#pickupDate').value,
             p = pickupDiv.querySelector('#pickupPerson').value;
@@ -335,6 +364,7 @@ document.addEventListener('DOMContentLoaded', function() {
         }
       }
     }
+
     function onShip(){
       if(rbPick.checked){
         pickupDiv.style.display='block';
@@ -356,19 +386,28 @@ document.addEventListener('DOMContentLoaded', function() {
       }
       updateSpecial();
     }
+
     rbPick.addEventListener('change', onShip);
     rbDel .addEventListener('change', onShip);
-    pickupDiv.querySelector('#pickupDate')  .addEventListener('change', updateSpecial);
-    pickupDiv.querySelector('#pickupPerson').addEventListener('input',  updateSpecial);
+
+    // enforce 2-day min & no Sundays
     deliveryDiv.querySelector('#deliveryDate').addEventListener('change', function(){
       let today = new Date(); today.setDate(today.getDate()+2);
-      let sel = new Date(this.value);
-      if(sel<today){ alert('Select at least 2 days out'); this.value=''; }
-      else if(sel.getDay()===0){ alert('No Sunday deliveries'); this.value=''; }
+      let sel   = new Date(this.value);
+      if(sel < today){
+        alert('Select at least 2 days out');
+        this.value = '';
+      } else if(sel.getDay() === 0){
+        alert('No Sunday deliveries');
+        this.value = '';
+      }
       updateSpecial();
     });
+    pickupDiv.querySelector('#pickupDate').addEventListener('change', updateSpecial);
+    pickupDiv.querySelector('#pickupPerson').addEventListener('input',  updateSpecial);
     deliveryDiv.querySelectorAll('input[name="deliveryTime"]')
                .forEach(r=>r.addEventListener('change', updateSpecial));
+
     onShip();
   })();
 
@@ -381,7 +420,7 @@ document.addEventListener('DOMContentLoaded', function() {
       li.classList.toggle('active',    s===n);
       li.classList.toggle('completed', s< n);
     });
-    localStorage.currentStep=n;
+    localStorage.currentStep = n;
     window.scrollTo({ top: wizard.offsetTop, behavior: 'smooth' });
   }
   showStep(parseInt(localStorage.currentStep,10)||2);
