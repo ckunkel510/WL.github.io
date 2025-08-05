@@ -19,17 +19,16 @@ document.addEventListener('DOMContentLoaded', function() {
     { title:'Billing address',     findEls:()=>{ var gp=document.getElementById('ctl00_PageBody_InvoiceAddress_GoogleAddressSearchWrapper'); return gp?[gp.closest('.epi-form-col-single-checkout')]:[]; }},
     { title:'Special instructions',findEls:()=>{
         var arr=[];
-        // the date picker wrapper
+        // date picker wrapper
         var dateGrp = document.getElementById('ctl00_PageBody_dtRequired_DatePicker_wrapper');
         if(dateGrp) arr.push(dateGrp.closest('.epi-form-col-single-checkout'));
-        // the cart table
+        // cart table
         var tbl = document.querySelector('.cartTable');
         if(tbl) arr.push(tbl.closest('table'));
-        // the special instructions field
+        // special instructions input
         var si = document.getElementById('ctl00_PageBody_SpecialInstructionsTextBox');
         if(si){
-          // move its container (form-group or similar)
-          var wrap = si.closest('.epi-form-group-checkout') 
+          var wrap = si.closest('.epi-form-group-checkout')
                   || si.closest('.epi-form-col-single-checkout')
                   || si.parentElement;
           arr.push(wrap);
@@ -159,7 +158,7 @@ document.addEventListener('DOMContentLoaded', function() {
     $('#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').val(tel);
   });
 
-  // 9) Step 5: delivery summary/edit (unchanged)
+  // 9) Step 5: delivery summary/edit
   (function(){
     var p5=wizard.querySelector('[data-step="5"]'),
         col=p5&&p5.querySelector('.epi-form-col-single-checkout');
@@ -170,13 +169,15 @@ document.addEventListener('DOMContentLoaded', function() {
     while(col.firstChild) wrap.appendChild(col.firstChild);
     col.appendChild(wrap);
     sum.className='delivery-summary';
-    function upd(){ var a1=wrap.querySelector('#ctl00_PageBody_DeliveryAddress_AddressLine1').value||'',
-        a2=wrap.querySelector('#ctl00_PageBody_DeliveryAddress_AddressLine2').value||'',
-        c =wrap.querySelector('#ctl00_PageBody_DeliveryAddress_City').value||'',
-        s =wrap.querySelector('#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList').selectedOptions[0].text||'',
-        z =wrap.querySelector('#ctl00_PageBody_DeliveryAddress_Postcode').value||'';
+    function upd(){
+      var a1=wrap.querySelector('#ctl00_PageBody_DeliveryAddress_AddressLine1').value||'',
+          a2=wrap.querySelector('#ctl00_PageBody_DeliveryAddress_AddressLine2').value||'',
+          c =wrap.querySelector('#ctl00_PageBody_DeliveryAddress_City').value||'',
+          s =wrap.querySelector('#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList').selectedOptions[0].text||'',
+          z =wrap.querySelector('#ctl00_PageBody_DeliveryAddress_Postcode').value||'';
       sum.innerHTML=`<strong>Delivery Address</strong><br>${a1}${a2?'<br>'+a2:''}<br>${c}, ${s} ${z}<br>
-        <button id="editDelivery" class="btn btn-link">Edit</button>`;}
+        <button id="editDelivery" class="btn btn-link">Edit</button>`;
+    }
     wrap.style.display='none';
     col.insertBefore(sum,wrap);
     sum.addEventListener('click',function(e){
@@ -195,18 +196,17 @@ document.addEventListener('DOMContentLoaded', function() {
     upd();
   })();
 
-  // 10) Step 7: pickup vs delivery logic & special instructions (moved delivery/pickup after the SI input)
+  // 10) Step 7: pickup vs delivery logic & special instructions
   (function(){
     var p7 = wizard.querySelector('[data-step="7"]');
     if(!p7) return;
-    // grab special instructions input + its container
     var specialIns = document.getElementById('ctl00_PageBody_SpecialInstructionsTextBox'),
         siWrap     = specialIns.closest('.epi-form-group-checkout')
                   || specialIns.closest('.form-group')
                   || specialIns.parentElement;
 
     // pickup container
-    var pickupDiv=document.createElement('div');
+    var pickupDiv = document.createElement('div');
     pickupDiv.className='form-group';
     pickupDiv.innerHTML=`
       <label for="pickupDate">Requested Pickup Date:</label>
@@ -214,8 +214,9 @@ document.addEventListener('DOMContentLoaded', function() {
       <label for="pickupPerson">Pickup Person:</label>
       <input type="text" id="pickupPerson" class="form-control">`;
     pickupDiv.style.display='none';
+
     // delivery container
-    var deliveryDiv=document.createElement('div');
+    var deliveryDiv = document.createElement('div');
     deliveryDiv.className='form-group';
     deliveryDiv.innerHTML=`
       <label for="deliveryDate">Requested Delivery Date:</label>
@@ -226,13 +227,13 @@ document.addEventListener('DOMContentLoaded', function() {
       </div>`;
     deliveryDiv.style.display='none';
 
-    // insert both immediately after the SI container
-    p7.insertBefore(pickupDiv , siWrap.nextSibling);
-    p7.insertBefore(deliveryDiv, siWrap.nextSibling);
+    // insert after special instructions container
+    siWrap.insertAdjacentElement('afterend', pickupDiv);
+    pickupDiv.insertAdjacentElement('afterend', deliveryDiv);
 
-    var rbDel=document.getElementById('ctl00_PageBody_SaleTypeSelector_rbDelivered'),
-        rbPick=document.getElementById('ctl00_PageBody_SaleTypeSelector_rbCollectLater'),
-        zipInput=document.getElementById('ctl00_PageBody_DeliveryAddress_Postcode');
+    var rbDel    = document.getElementById('ctl00_PageBody_SaleTypeSelector_rbDelivered'),
+        rbPick   = document.getElementById('ctl00_PageBody_SaleTypeSelector_rbCollectLater'),
+        zipInput = document.getElementById('ctl00_PageBody_DeliveryAddress_Postcode');
 
     function inZone(zip){
       return ['75','76','77','78','79'].includes((zip||'').substring(0,2));
@@ -240,14 +241,14 @@ document.addEventListener('DOMContentLoaded', function() {
     function updateSpecial(){
       specialIns.value='';
       if(rbPick.checked){
-        var d=document.getElementById('pickupDate').value,
-            p=document.getElementById('pickupPerson').value;
+        var d=pickupDiv.querySelector('#pickupDate').value,
+            p=pickupDiv.querySelector('#pickupPerson').value;
         specialIns.value='Pickup on '+d+(p?' for '+p:'');
       } else if(rbDel.checked){
         var z=zipInput.value;
         if(inZone(z)){
-          var d2=document.getElementById('deliveryDate').value,
-              t=p7.querySelector('input[name="deliveryTime"]:checked');
+          var d2=deliveryDiv.querySelector('#deliveryDate').value,
+              t=deliveryDiv.querySelector('input[name="deliveryTime"]:checked');
           specialIns.value='Delivery on '+d2+(t?' ('+t.value+')':'');
         } else {
           specialIns.value='Ship via 3rd party delivery on next screen.';
@@ -288,14 +289,14 @@ document.addEventListener('DOMContentLoaded', function() {
       updateSpecial();
     });
     deliveryDiv.querySelectorAll('input[name="deliveryTime"]')
-      .forEach(r=>r.addEventListener('change',updateSpecial));
+               .forEach(r=>r.addEventListener('change',updateSpecial));
     onShip7();
   })();
 
   // 11) Step switcher + persistence
   function showStep(n){
     wizard.querySelectorAll('.checkout-step')
-      .forEach(p=>p.classList.toggle('active', +p.dataset.step===n));
+      .forEach(p=>p.classList.toggle('active',+p.dataset.step===n));
     nav.querySelectorAll('li').forEach(li=>{
       var s=+li.dataset.step;
       li.classList.toggle('active',    s===n);
@@ -305,5 +306,6 @@ document.addEventListener('DOMContentLoaded', function() {
     window.scrollTo({ top: wizard.offsetTop, behavior: 'smooth' });
   }
   showStep(parseInt(localStorage.currentStep,10)||2);
+
 });
 
