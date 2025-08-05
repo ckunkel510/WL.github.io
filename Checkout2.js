@@ -485,6 +485,20 @@ $('#ctl00_PageBody_BackToCartButton2').val('Back to Cart');
   onShip();
 })();
 
+  // 12) Step switcher + persistence
+  function showStep(n){
+    wizard.querySelectorAll('.checkout-step')
+      .forEach(p=>p.classList.toggle('active', +p.dataset.step===n));
+    nav.querySelectorAll('li').forEach(li=>{
+      let s=+li.dataset.step;
+      li.classList.toggle('active',    s===n);
+      li.classList.toggle('completed', s< n);
+    });
+    localStorage.currentStep = n;
+    window.scrollTo({ top: wizard.offsetTop, behavior: 'smooth' });
+  }
+  showStep(parseInt(localStorage.currentStep,10)||2);
+});
 
 $(document).ready(function(){
   $('#ctl00_PageBody_ContinueButton2').on('click', function(e){
