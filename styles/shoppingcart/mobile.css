@@ -227,3 +227,36 @@ display: none;
   .checkout-nav #ctl00_PageBody_ContinueButton2 {
     width: 100%;
   }
+
+  .checkout-steps {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding: 0;
+    margin-bottom: 1rem;
+  }
+
+  /* hide all steps by default */
+  .checkout-steps li {
+    display: none;
+    flex: 0 0 auto;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  /* only show completed steps + the active one */
+  .checkout-steps li.completed,
+  .checkout-steps li.active {
+    display: flex;
+    align-items: center;
+  }
+
+  /* add a little space between them */
+  .checkout-steps li + li {
+    margin-left: 1rem;
+  }
+
+  /* drop the connector lines on mobile */
+  .checkout-steps li::after {
+    display: none;
+  }
