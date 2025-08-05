@@ -395,7 +395,15 @@ document.addEventListener('DOMContentLoaded', function() {
       else if(sel.getDay()===0){ alert('No Sunday deliveries'); this.value=''; }
       updateSpecial();
     });
-    pickupDiv.querySelector('#pickupDate').addEventListener('change', updateSpecial);
+    pickupDiv.querySelector('#pickupDate').addEventListener('change', function() {
+  var sel = new Date(this.value);
+  if (sel.getDay() === 0) {
+    alert('No Sunday pickups');
+    this.value = '';
+  }
+  updateSpecial();
+});
+
     pickupDiv.querySelector('#pickupPerson').addEventListener('input',  updateSpecial);
     deliveryDiv.querySelectorAll('input[name="deliveryTime"]')
                .forEach(r=>r.addEventListener('change', updateSpecial));
