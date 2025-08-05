@@ -352,56 +352,52 @@ $(document).ready(function() {
     console.warn("Date picker wrapper not found.");
   }
     // ===================================================
-  // ===================================================
-// (G) Two-column layout for checkout fields — only once, and force-show
+// (G) Two-column layout for checkout fields — move whole col wrappers
 // ===================================================
-if ( ! $('.checkout-columns').length ) {
-
+if (!$('.checkout-columns').length) {
   // build wrapper + cols
   const $wrapper = $('<div class="checkout-columns row mt-4"></div>');
   const $left    = $('<div class="col-md-6"></div>');
   const $right   = $('<div class="col-md-6"></div>');
 
-  // — Left column: txn + ship + date + PO# + branch + instructions
-  $('#ctl00_PageBody_TransactionTypeDiv')
-    .show().detach()
-    .appendTo($left);
+  // — Left column: transaction type
+  $('.epi-form-col-single-checkout:has(#ctl00_PageBody_TransactionTypeDiv)')
+    .show().detach().appendTo($left);
 
-  $('.modern-shipping-selector')
-    .show().detach()
-    .appendTo($left);
+  // — Left column: shipping method
+  $('.epi-form-col-single-checkout:has(.SaleTypeSelector)')
+    .show().detach().appendTo($left);
 
-  $('#ctl00_PageBody_dtRequired_DatePicker_wrapper')
-    .closest('.epi-form-col-single-checkout')
-    .show().detach()
-    .appendTo($left);
+  // — Left column: date picker
+  $('.epi-form-col-single-checkout:has(#ctl00_PageBody_dtRequired_DatePicker_wrapper)')
+    .show().detach().appendTo($left);
 
+  // — Left column: PO/ref
   $('.epi-form-col-single-checkout:has(#ctl00_PageBody_PurchaseOrderNumberTextBox)')
-    .show().detach()
-    .appendTo($left);
+    .show().detach().appendTo($left);
 
+  // — Left column: branch selector
   $('#ctl00_PageBody_BranchSelector')
-    .show().detach()
-    .appendTo($left);
+    .show().detach().appendTo($left);
 
+  // — Left column: special instructions (cartTable)
   $('.cartTable')
-    .show().detach()
-    .appendTo($left);
+    .show().detach().appendTo($left);
 
-  // — Right column: your read-only address displays
-  $('.selected-address-display')
-    .closest('.epi-form-col-single-checkout')
-    .show().detach()
-    .appendTo($right);
+  // — Right column: delivery address display
+  $('.epi-form-col-single-checkout:has(.selected-address-display)')
+    .show().detach().appendTo($right);
 
-  $('.selected-invoice-address-display')
-    .closest('.epi-form-col-single-checkout')
-    .show().detach()
-    .appendTo($right);
+  // — Right column: invoice address display
+  $('.epi-form-col-single-checkout:has(.selected-invoice-address-display)')
+    .show().detach().appendTo($right);
 
-  // assemble and insert **after** the cart table (not inside it)
+  // assemble and insert just once
   $wrapper.append($left, $right);
-  $('.cartTable').after($wrapper);
+  // pick a single insertion point (after the last checkout column)
+  $('.epi-form-col-single-checkout, #ctl00_PageBody_BranchSelector, .cartTable')
+    .last()
+    .after($wrapper);
 }
 
 
