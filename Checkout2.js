@@ -1,13 +1,19 @@
-$(document).ready(function() {
-  console.log("Page loaded, initializing custom checkout experience...");
+/*
+  checkout_two_panel.js
+  ----------------------
+  Two-column checkout UI with modals and AJAX-driven field population.
+*/
 
-  // ===================================================
-  // 0. On Load: Hide specified Delivery and Invoice Address elements.
-  // ===================================================
+$(document).ready(function() {
+  const $checkoutForm = $('#ctl00_PageBody_MainForm');
+
+  // ---------------------------------------------------
+  // Field selectors to hide/show
+  // ---------------------------------------------------
   const deliveryHidden = [
     "#ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral",
-    "label:contains('First name:')",
-    "label:contains('Last name:')",
+    "label:contains('First name:'​)",
+    "label:contains('Last name:'​)",
     "#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox",
     "#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox",
     "#ctl00_PageBody_DeliveryAddress_GoogleAddressSearchWrapper",
@@ -30,8 +36,7 @@ $(document).ready(function() {
     "#ctl00_PageBody_DeliveryAddress_ContactTelephoneRow",
     "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTitleLiteral",
     "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox",
-    "#autocompleteDelivery",
-    "#ctl00_PageBody_ContinueButton1"
+    "#autocompleteDelivery"
   ];
   const invoiceHidden = [
     "#ctl00_PageBody_InvoiceAddress_GoogleAddressSearchWrapper",
@@ -57,300 +62,273 @@ $(document).ready(function() {
     "#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox"
   ];
 
-  // hide them
-  $(deliveryHidden.join(", ")).hide();
-  $(invoiceHidden.join(", ")).hide();
-
-  // show the rest of your checkout rows
-  $('.container .row').not('.shopping-cart-item').show();
-
-  // relabel the copy link
-  $("#ctl00_PageBody_CopyDeliveryAddressLinkButton")
-    .text("Billing address is the same as delivery address");
-
-
-  // ===================================================
-  // (A) Always-Attached Event Handlers & Helpers
-  // ===================================================
   let isEditingDelivery = false;
   let isEditingInvoice  = false;
 
+  // helper to refresh the summary displays
   function refreshReadOnlyDisplays() {
-    // Delivery
     if (!isEditingDelivery) {
-      const fn = $("#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox").val();
-      const ln = $("#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox").val();
-      const a1 = $("#ctl00_PageBody_DeliveryAddress_AddressLine1").val();
-      const ct = $("#ctl00_PageBody_DeliveryAddress_City").val();
-      const zp = $("#ctl00_PageBody_DeliveryAddress_Postcode").val();
-      const htmlDel = `
-        <strong>Delivery Address:</strong><br>
-        ${fn} ${ln}<br>
-        ${a1}<br>
-        ${ct}, ${zp}
-        <br>
-        <button type="button" id="internalEditDeliveryAddressButton" class="edit-button">
-          Edit Delivery Address
-        </button>
-      `;
-      $(".selected-address-display").html(htmlDel);
+      const fn = $('#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox').val();
+      const ln = $('#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox').val();
+      const a1 = $('#ctl00_PageBody_DeliveryAddress_AddressLine1').val();
+      const ct = $('#ctl00_PageBody_DeliveryAddress_City').val();
+      const zp = $('#ctl00_PageBody_DeliveryAddress_Postcode').val();
+      $('.selected-address-display').html(
+        `<strong>Delivery Address:</strong><br>${fn} ${ln}<br>${a1}<br>${ct}, ${zp}<br>` +
+        '<button type="button" id="internalEditDeliveryAddressButton" class="edit-button">Edit Delivery Address</button>'
+      );
     }
-
-    // Invoice
     if (!isEditingInvoice) {
-      const a1 = $("#ctl00_PageBody_InvoiceAddress_AddressLine1").val();
-      const ct = $("#ctl00_PageBody_InvoiceAddress_City").val();
-      const zp = $("#ctl00_PageBody_InvoiceAddress_Postcode").val();
-      const htmlInv = `
-        <strong>Invoice Address:</strong><br>
-        ${a1}<br>
-        ${ct}, ${zp}
-        <br>
-        <button type="button" id="internalEditInvoiceAddressButton" class="edit-button">
-          Edit Invoice Address
-        </button>
-      `;
-      $(".selected-invoice-address-display").html(htmlInv);
+      const a1 = $('#ctl00_PageBody_InvoiceAddress_AddressLine1').val();
+      const ct = $('#ctl00_PageBody_InvoiceAddress_City').val();
+      const zp = $('#ctl00_PageBody_InvoiceAddress_Postcode').val();
+      $('.selected-invoice-address-display').html(
+        `<strong>Billing Address:</strong><br>${a1}<br>${ct}, ${zp}<br>` +
+        '<button type="button" id="internalEditInvoiceAddressButton" class="edit-button">Edit Billing Address</button>'
+      );
     }
   }
+  // re-render when any input changes
+  $(document).on('change blur', '.epi-form-group-checkout input', refreshReadOnlyDisplays);
 
-  // trigger refresh on any checkout input change
-  $(document).on("change blur", ".epi-form-group-checkout input", refreshReadOnlyDisplays);
+  // initial: hide all detailed fields
+  $(deliveryHidden.join(',')).hide();
+  $(invoiceHidden.join(',')).hide();
 
+  // ---------------------------------------------------
+  // Layout: two panels
+  // ---------------------------------------------------
+  const $panelsRow = $('<div class="row custom-checkout-panels"></div>');
+  const $leftPanel  = $('<div id="leftPanel" class="col-md-6"></div>');
+  const $rightPanel = $('<div id="rightPanel" class="col-md-6"></div>');
+  $checkoutForm.wrapInner($panelsRow);
+  $checkoutForm.find('.custom-checkout-panels').append($leftPanel).append($rightPanel);
 
-  // Edit/Save Delivery
-  $(document).on("click", "#internalEditDeliveryAddressButton", function() {
-    console.log("Edit Delivery clicked");
-    isEditingDelivery = true;
-    $(deliveryHidden.join(", ")).show();
-    if (!$("#saveDeliveryAddressButton").length) {
-      $(".selected-address-display")
-        .append('<br><button type="button" id="saveDeliveryAddressButton" class="edit-button">Save Delivery Address</button>');
-    }
-  });
-  $(document).on("click", "#saveDeliveryAddressButton", function() {
-    console.log("Save Delivery clicked");
-    $(deliveryHidden.join(", ")).hide();
-    $("#saveDeliveryAddressButton").remove();
-    isEditingDelivery = false;
-    refreshReadOnlyDisplays();
-  });
+  // move left-side fields
+  $leftPanel.append($('#ctl00_PageBody_TransactionTypeDiv'));
+  $leftPanel.append($('.modern-shipping-selector').closest('.epi-form-col-single-checkout'));
+  $leftPanel.append($('#ctl00_PageBody_dtRequired_DatePicker_wrapper').closest('.epi-form-col-single-checkout'));
+  $leftPanel.append($('#ctl00_PageBody_txtPurchaseOrder').closest('.epi-form-col-single-checkout'));
+  $leftPanel.append($('#ctl00_PageBody_ddlBranchSelector').closest('.epi-form-col-single-checkout'));
+  $leftPanel.append($('#ctl00_PageBody_txtSpecialInstructions').closest('.epi-form-col-single-checkout'));
 
+  // navigation buttons
+  $('#ctl00_PageBody_BackToCartButton1').hide();
+  const $navButtons = $(
+    '<div class="d-flex justify-content-between mb-3 nav-buttons">' +
+      '<button id="backButton" class="btn btn-secondary">Back</button>' +
+      '<button id="continueButton" class="btn btn-primary">Continue</button>' +
+    '</div>'
+  );
+  $checkoutForm.prepend($navButtons);
+  $(document).on('click', '#backButton', e => { e.preventDefault(); $('#ctl00_PageBody_BackToCartButton1').click(); });
+  $(document).on('click', '#continueButton', e => { e.preventDefault(); $checkoutForm.submit(); });
 
-  // Edit/Save Invoice
-  $(document).on("click", "#internalEditInvoiceAddressButton", function() {
-    console.log("Edit Invoice clicked");
-    isEditingInvoice = true;
-    $(invoiceHidden.join(", ")).show();
-    if (!$("#saveInvoiceAddressButton").length) {
-      $(".selected-invoice-address-display")
-        .append('<br><button type="button" id="saveInvoiceAddressButton" class="edit-button">Save Invoice Address</button>');
-    }
-  });
-  $(document).on("click", "#saveInvoiceAddressButton", function() {
-    console.log("Save Invoice clicked");
-    $(invoiceHidden.join(", ")).hide();
-    $("#saveInvoiceAddressButton").remove();
-    isEditingInvoice = false;
-    refreshReadOnlyDisplays();
-  });
+  // billing sync radios
+  $('#ctl00_PageBody_CopyDeliveryAddressLinkButton').replaceWith(
+    '<div class="address-sync-toggle mb-3">'
+      + '<label class="me-3"><input type="radio" name="billingSync" value="same" checked> Billing same as delivery</label>'
+      + '<label><input type="radio" name="billingSync" value="different"> Use separate billing address</label>'
+    + '</div>'
+  );
 
+  // move right-side summaries
+  $rightPanel.append($('.selected-address-display').closest('.epi-form-col-single-checkout'));
+  $rightPanel.append($('.selected-invoice-address-display').closest('.epi-form-col-single-checkout'));
 
-  // ===================================================
-  // (B) Modern Transaction & Shipping Selectors
-  // ===================================================
-  if ($("#ctl00_PageBody_TransactionTypeDiv").length) {
-    $(".TransactionTypeSelector").hide();
-    const txnHTML = `
-      <div class="modern-transaction-selector d-flex justify-content-around">
-        <button id="btnOrder" class="btn btn-primary" data-value="rdbOrder">
-          <i class="fas fa-shopping-cart"></i> Order
-        </button>
-        <button id="btnQuote" class="btn btn-secondary" data-value="rdbQuote">
-          <i class="fas fa-file-alt"></i> Request Quote
-        </button>
-      </div>
-    `;
-    $("#ctl00_PageBody_TransactionTypeDiv").append(txnHTML);
+  // ---------------------------------------------------
+  // Modals for editing
+  // ---------------------------------------------------
+  const deliveryFields = $(deliveryHidden.join(',')).closest('.epi-form-col-single-checkout').clone();
+  const invoiceFields  = $(invoiceHidden.join(',')).closest('.epi-form-col-single-checkout').clone();
 
-    function updateTransactionStyles(val) {
-      console.log(`Transaction type updated: ${val}`);
-      const orderRad = $("#ctl00_PageBody_TransactionTypeSelector_rdbOrder");
-      const quoteRad = $("#ctl00_PageBody_TransactionTypeSelector_rdbQuote");
-      if (val === "rdbOrder") {
-        orderRad.prop("checked", true);
-        $("#btnOrder").addClass("btn-primary").removeClass("btn-secondary");
-        $("#btnQuote").addClass("btn-secondary").removeClass("btn-primary");
-      } else {
-        quoteRad.prop("checked", true);
-        $("#btnQuote").addClass("btn-primary").removeClass("btn-secondary");
-        $("#btnOrder").addClass("btn-secondary").removeClass("btn-primary");
-      }
-    }
+  $('body').append(`
+    <div class="modal fade" id="deliveryModal" tabindex="-1">
+      <div class="modal-dialog modal-lg" style="z-index:1050;"><div class="modal-content">
+        <div class="modal-header"><h5>Edit Delivery Address</h5>"
+          + "<button class="btn-close" data-bs-dismiss="modal"></button></div>"
+        + "<div class="modal-body"></div>"
+        + "<div class="modal-footer">" 
+          + "<button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>"
+          + "<button id="saveDeliveryModalButton" class="btn btn-primary">Save changes</button>"
+        + "</div></div></div></div>
+    <div class="modal fade" id="invoiceModal" tabindex="-1">
+      <div class="modal-dialog modal-lg" style="z-index:1050;"><div class="modal-content">
+        <div class="modal-header"><h5>Edit Billing Address</h5>"
+          + "<button class="btn-close" data-bs-dismiss="modal"></button></div>"
+        + "<div class="modal-body"></div>"
+        + "<div class="modal-footer">" 
+          + "<button class="btn btn-secondary" data-bs-dismiss="modal">Close</button>"
+          + "<button id="saveInvoiceModalButton" class="btn btn-primary">Save changes</button>"
+        + "</div></div></div></div>
+  `);
+  $('#deliveryModal .modal-body').append(deliveryFields);
+  $('#invoiceModal  .modal-body').append(invoiceFields);
 
-    // init & click
-    updateTransactionStyles(
-      $("#ctl00_PageBody_TransactionTypeSelector_rdbOrder").is(":checked") ? "rdbOrder" : "rdbQuote"
-    );
-    $(document).on("click", ".modern-transaction-selector button", function() {
-      updateTransactionStyles($(this).data("value"));
-    });
-  } else {
-    console.warn("Transaction type div not found.");
-  }
+  // show/hide via edit buttons
+  $(document).on('click', '#internalEditDeliveryAddressButton', () => $('#deliveryModal').modal('show'));
+  $(document).on('click', '#internalEditInvoiceAddressButton',  () => $('#invoiceModal').modal('show'));
+  $(document).on('click', '#saveDeliveryModalButton', () => { $('#deliveryModal').modal('hide'); $(deliveryHidden.join(',')).hide(); isEditingDelivery=false; refreshReadOnlyDisplays(); });
+  $(document).on('click', '#saveInvoiceModalButton',  () => { $('#invoiceModal').modal('hide'); $(invoiceHidden.join(',')).hide();  isEditingInvoice=false;  refreshReadOnlyDisplays(); });
 
-
-  if ($(".SaleTypeSelector").length) {
-    $(".SaleTypeSelector").hide();
-    const shipHTML = `
-      <div class="modern-shipping-selector d-flex justify-content-around">
-        <button id="btnDelivered" class="btn btn-primary" data-value="rbDelivered">
-          <i class="fas fa-truck"></i> Delivered
-        </button>
-        <button id="btnPickup" class="btn btn-secondary" data-value="rbCollectLater">
-          <i class="fas fa-store"></i> Pickup (Free)
-        </button>
-      </div>
-    `;
-    $(".epi-form-col-single-checkout:has(.SaleTypeSelector)").append(shipHTML);
-
-    function updateShippingStyles(val) {
-      console.log(`Shipping method updated: ${val}`);
-      const delRad = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
-      const pickRad = $("#ctl00_PageBody_SaleTypeSelector_rbCollectLater");
-      if (val === "rbDelivered") {
-        delRad.prop("checked", true);
-        $("#btnDelivered").addClass("btn-primary").removeClass("btn-secondary");
-        $("#btnPickup").addClass("btn-secondary").removeClass("btn-primary");
-      } else {
-        pickRad.prop("checked", true);
-        $("#btnPickup").addClass("btn-primary").removeClass("btn-secondary");
-        $("#btnDelivered").addClass("btn-secondary").removeClass("btn-primary");
-        refreshReadOnlyDisplays();
-      }
-    }
-
-    updateShippingStyles(
-      $("#ctl00_PageBody_SaleTypeSelector_rbDelivered").is(":checked") ? "rbDelivered" : "rbCollectLater"
-    );
-    $(document).on("click", ".modern-shipping-selector button", function() {
-      updateShippingStyles($(this).data("value"));
-    });
-  } else {
-    console.warn("Shipping method selector not found.");
-  }
-
-
-  // ===================================================
-  // (C) INITIAL PRE-POPULATION LOGIC
-  // ===================================================
-  if (!$("#ctl00_PageBody_DeliveryAddress_AddressLine1").val()) {
-    console.log("Initial address pre-population running...");
-    const $link = $("#ctl00_PageBody_CustomerAddressSelector_SelectAddressLinkButton");
+  // ---------------------------------------------------
+  // (C) Initial Address Pre-Population
+  // ---------------------------------------------------
+  if (!$('#ctl00_PageBody_DeliveryAddress_AddressLine1').val()) {
+    const $link = $('#ctl00_PageBody_CustomerAddressSelector_SelectAddressLinkButton');
     if ($link.length) {
-      let $entries = $(".AddressSelectorEntry");
+      let $entries = $('.AddressSelectorEntry');
       if ($entries.length) {
-        // find smallest ID
         let $pick = $entries.first();
-        let minId = parseInt($pick.find(".AddressId").text(), 10);
-        $entries.each(function() {
-          const id = +$(this).find(".AddressId").text();
-          if (id < minId) { minId = id; $pick = $(this); }
-        });
-        // parse text
-        const txt = $pick.find("dd p").first().text().trim();
-        const parts = txt.split(",").map(s => s.trim());
-        const [line1='', city=''] = parts;
-        let state = '', zip = '';
-        if (parts.length >= 4) {
-          state = parts[parts.length-2];
-          zip   = parts[parts.length-1];
-        } else if (parts.length>2) {
-          const m = parts[2].match(/(.+?)\s*(\d{5}(?:-\d{4})?)?$/);
-          if (m) { state = m[1].trim(); zip = m[2]||''; }
-        }
-        console.log(`Parsed Address: ${line1}, ${city}, ${state}, ${zip}`);
-        $("#ctl00_PageBody_DeliveryAddress_AddressLine1").val(line1);
-        $("#ctl00_PageBody_DeliveryAddress_City").val(city);
-        $("#ctl00_PageBody_DeliveryAddress_Postcode").val(zip);
-        $("#ctl00_PageBody_DeliveryAddress_CountrySelector").val("USA");
-        $("#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList option").each(function() {
-          if ($(this).text().trim().toLowerCase() === state.toLowerCase()) {
-            $(this).prop("selected", true);
-            return false;
-          }
-        });
+        let minId = parseInt($pick.find('.AddressId').text(),10);
+        $entries.each(function(){
+          const id = +$(this).find('.AddressId').text();
+          if(id<minId){minId=id;$pick=$(this);}  });
+        const txt = $pick.find('dd p').first().text().trim();
+        const parts = txt.split(',').map(s=>s.trim());
+        let [line1='',city=''] = parts;
+        let state='',zip='';
+        if(parts.length>=4){state=parts[parts.length-2];zip=parts[parts.length-1];}
+        else if(parts.length>2){const m=parts[2].match(/(.+?)\s*(\d{5}(?:-\d{4})?)?$/);if(m){state=m[1].trim();zip=m[2]||'';}}
+        $('#ctl00_PageBody_DeliveryAddress_AddressLine1').val(line1);
+        $('#ctl00_PageBody_DeliveryAddress_City').val(city);
+        $('#ctl00_PageBody_DeliveryAddress_Postcode').val(zip);
+        $('#ctl00_PageBody_DeliveryAddress_CountrySelector').val('USA');
+        $('#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList option').filter(function(){
+          return $(this).text().trim().toLowerCase()===state.toLowerCase();
+        }).prop('selected',true);
       }
-    } else {
-      console.warn("Address selector link button not found.");
     }
-  } else {
-    console.log("Address pre-population skipped; field not empty.");
   }
 
-
-  // ===================================================
-  // (D) ALWAYS RUN: Account Settings & Telephone Fetch
-  // ===================================================
-  $.get("https://webtrack.woodsonlumber.com/AccountSettings.aspx", function(data) {
+  // ---------------------------------------------------
+  // (D) Account & Telephone Fetch
+  // ---------------------------------------------------
+  $.get('https://webtrack.woodsonlumber.com/AccountSettings.aspx', function(data){
     const $acc = $(data);
-    const fn = $acc.find("#ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput").val() || "";
-    const ln = $acc.find("#ctl00_PageBody_ChangeUserDetailsControl_LastNameInput").val() || "";
-    let email = $acc.find("#ctl00_PageBody_ChangeUserDetailsControl_EmailAddressInput").val() || "";
-    email = email.replace(/^\([^)]*\)\s*/, "");
-    console.log("Fetched account settings:", fn, ln, email);
-    $("#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox").val(fn);
-    $("#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox").val(ln);
-    $("#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox").val(email);
+    const fn = $acc.find('#ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput').val()||'';
+    const ln = $acc.find('#ctl00_PageBody_ChangeUserDetailsControl_LastNameInput').val()||'';
+    let email = $acc.find('#ctl00_PageBody_ChangeUserDetailsControl_EmailAddressInput').val()||'';
+    email = email.replace(/^\([^)]*\)\s*/,'');
+    $('#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox').val(fn);
+    $('#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox').val(ln);
+    $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox').val(email);
     refreshReadOnlyDisplays();
   });
-  $.get("https://webtrack.woodsonlumber.com/AccountInfo_R.aspx", function(data) {
-    const tel = $(data).find("#ctl00_PageBody_TelephoneLink_TelephoneLink").text().trim();
-    console.log("Fetched telephone:", tel);
-    $("#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox").val(tel);
+  $.get('https://webtrack.woodsonlumber.com/AccountInfo_R.aspx', function(data){
+    const tel = $(data).find('#ctl00_PageBody_TelephoneLink_TelephoneLink').text().trim();
+    $('#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').val(tel);
     refreshReadOnlyDisplays();
   });
 
-
-  // ===================================================
-  // (E) Append Read-Only Display Containers
-  // ===================================================
-  const $cols = $(".epi-form-col-single-checkout");
-  if ($cols.length >= 7) {
-    if (!$cols.eq(5).find(".selected-address-display").length) {
-      $cols.eq(5).append(`
-        <div class="selected-address-display">
-          <strong>Delivery Address:</strong><br>
-          <button type="button" id="internalEditDeliveryAddressButton" class="edit-button">
-            Edit Delivery Address
-          </button>
-        </div>
-      `);
-    }
-    if (!$cols.eq(6).find(".selected-invoice-address-display").length) {
-      $cols.eq(6).append(`
-        <div class="selected-invoice-address-display">
-          <strong>Invoice Address:</strong><br>
-          <button type="button" id="internalEditInvoiceAddressButton" class="edit-button">
-            Edit Invoice Address
-          </button>
-        </div>
-      `);
-    }
-    refreshReadOnlyDisplays();
-  } else {
-    console.warn("Not enough .epi-form-col-single-checkout elements found.");
-  }
-  
-
-
-  // ===================================================
-  // (F) Date Picker (unchanged)
-  // ===================================================
-  if ($("#ctl00_PageBody_dtRequired_DatePicker_wrapper").length) {
-    console.log("Date selector found, no modifications made.");
-  } else {
-    console.warn("Date picker wrapper not found.");
-  }
+  // initial render of summaries
+  refreshReadOnlyDisplays();
 });
 
+/*
+  checkout_two_panel.js
+  ----------------------
+  Reorganized checkout into a two-column layout with modals for editing addresses.
+*/
+
+$(document).ready(function() {
+  const $checkoutForm = $('#ctl00_PageBody_MainForm'); // adjust if needed
+
+  // 1. Initialize panels row and columns
+  const $panelsRow = $('<div class="row custom-checkout-panels"></div>');
+  const $leftPanel  = $('<div id="leftPanel" class="col-md-6"></div>');
+  const $rightPanel = $('<div id="rightPanel" class="col-md-6"></div>');
+
+  $checkoutForm.wrapInner($panelsRow);
+  $checkoutForm.find('.custom-checkout-panels').append($leftPanel).append($rightPanel);
+
+  // 2. Build left panel (transaction, shipping, date, PO, branch, instructions)
+  $leftPanel.append($('#ctl00_PageBody_TransactionTypeDiv'));
+  $leftPanel.append($('.modern-shipping-selector').closest('.epi-form-col-single-checkout'));
+  $leftPanel.append($('#ctl00_PageBody_dtRequired_DatePicker_wrapper').closest('.epi-form-col-single-checkout'));
+  $leftPanel.append($('#ctl00_PageBody_txtPurchaseOrder').closest('.epi-form-col-single-checkout'));
+  $leftPanel.append($('#ctl00_PageBody_ddlBranchSelector').closest('.epi-form-col-single-checkout'));
+  $leftPanel.append($('#ctl00_PageBody_txtSpecialInstructions').closest('.epi-form-col-single-checkout'));
+
+  // 3. Top navigation buttons
+  const $navButtons = $(
+    '<div class="d-flex justify-content-between mb-3 nav-buttons">' +
+      '<button id="backButton" class="btn btn-secondary">Back</button>' +
+      '<button id="continueButton" class="btn btn-primary">Continue</button>' +
+    '</div>'
+  );
+  $checkoutForm.prepend($navButtons);
+
+  // 4. Replace billing-sync link with radio toggle
+  $('#ctl00_PageBody_CopyDeliveryAddressLinkButton').replaceWith(
+    '<div class="address-sync-toggle mb-3">' +
+      '<label class="me-3"><input type="radio" name="billingSync" value="same" checked> Billing same as delivery</label>' +
+      '<label><input type="radio" name="billingSync" value="different"> Use separate billing address</label>' +
+    '</div>'
+  );
+
+  // 5. Move read-only address displays into right panel
+  $rightPanel.append($('.selected-address-display').closest('.epi-form-col-single-checkout'));
+  $rightPanel.append($('.selected-invoice-address-display').closest('.epi-form-col-single-checkout'));
+
+  // 6. Prepare modals for editing addresses
+  const deliveryFields = $(deliveryHidden.join(', ')).closest('.epi-form-col-single-checkout').clone();
+  const invoiceFields  = $(invoiceHidden.join(', ')).closest('.epi-form-col-single-checkout').clone();
+
+  $('body').append(`
+    <div class="modal fade" id="deliveryModal" tabindex="-1">
+      <div class="modal-dialog modal-lg" style="z-index:1050;">
+        <div class="modal-content">
+          <div class="modal-header"><h5 class="modal-title">Edit Delivery Address</h5>" +
+          "<button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>" +
+          "<div class="modal-body"></div>" +
+          "<div class="modal-footer">" +
+            "<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>" +
+            "<button type="button" id="saveDeliveryModalButton" class="btn btn-primary">Save changes</button>" +
+          "</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal fade" id="invoiceModal" tabindex="-1">
+      <div class="modal-dialog modal-lg" style="z-index:1050;">
+        <div class="modal-content">
+          <div class="modal-header"><h5 class="modal-title">Edit Billing Address</h5>" +
+          "<button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>" +
+          "<div class="modal-body"></div>" +
+          "<div class="modal-footer">" +
+            "<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>" +
+            "<button type="button" id="saveInvoiceModalButton" class="btn btn-primary">Save changes</button>" +
+          "</div>
+        </div>
+      </div>
+    </div>
+  `);
+
+  $('#deliveryModal .modal-body').append(deliveryFields);
+  $('#invoiceModal .modal-body').append(invoiceFields);
+
+  // 7. Hook edit buttons to show modals
+  $(document).on('click', '#internalEditDeliveryAddressButton', function() {
+    $('#deliveryModal').modal('show');
+  });
+  $(document).on('click', '#internalEditInvoiceAddressButton', function() {
+    $('#invoiceModal').modal('show');
+  });
+
+  // 8. Save from modals: hide modal and refresh displays
+  $(document).on('click', '#saveDeliveryModalButton', function() {
+    $('#deliveryModal').modal('hide');
+    $('#deliveryModal').find('.epi-form-col-single-checkout').hide();
+    refreshReadOnlyDisplays();
+  });
+  $(document).on('click', '#saveInvoiceModalButton', function() {
+    $('#invoiceModal').modal('hide');
+    $('#invoiceModal').find('.epi-form-col-single-checkout').hide();
+    refreshReadOnlyDisplays();
+  });
+
+  // Ensure the original hidden fields are hidden initially
+  $(deliveryHidden.join(', ')).hide();
+  $(invoiceHidden.join(', ')).hide();
+
+});
