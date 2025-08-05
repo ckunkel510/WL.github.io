@@ -160,6 +160,24 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
+  // AJAX: fetch user name & email into delivery/invoice fields
+  $.get("https://webtrack.woodsonlumber.com/AccountSettings.aspx", function(data) {
+    const $acc = $(data);
+    const fn = $acc.find("#ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput").val() || "";
+    const ln = $acc.find("#ctl00_PageBody_ChangeUserDetailsControl_LastNameInput").val() || "";
+    let email = $acc.find("#ctl00_PageBody_ChangeUserDetailsControl_EmailAddressInput").val() || "";
+    email = email.replace(/^\([^)]*\)\s*/, "");
+    $("#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox").val(fn);
+    $("#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox").val(ln);
+    $("#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox").val(email);
+  });
+
+  // AJAX: fetch telephone into delivery field
+  $.get("https://webtrack.woodsonlumber.com/AccountInfo_R.aspx", function(data) {
+    const tel = $(data).find("#ctl00_PageBody_TelephoneLink_TelephoneLink").text().trim();
+    $("#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox").val(tel);
+  });
+
   // Step switcher
   function showStep(n) {
     wizard.querySelectorAll('.checkout-step').forEach(function(p){
