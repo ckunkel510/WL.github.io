@@ -9,43 +9,68 @@ document.addEventListener('DOMContentLoaded', function() {
   nav.className = 'checkout-steps';
   wizard.appendChild(nav);
 
-  // 2) Step definitions: date stays in step 2, step 7 only special instructions
+  // 2) Define the 7 steps
   var steps = [
-    { title: 'Order details', findEls: function() {
+    {
+      title: 'Order details',
+      findEls: function() {
         var tx = document.getElementById('ctl00_PageBody_TransactionTypeDiv');
         return tx ? [tx.closest('.epi-form-col-single-checkout')] : [];
-    }},
-    { title: 'Shipping method', findEls: function() {
-        var shipCol = document.querySelector('.SaleTypeSelector')
-                             .closest('.epi-form-col-single-checkout');
-        var dateCol = document
-          .getElementById('ctl00_PageBody_dtRequired_DatePicker_wrapper')
+      }
+    },
+    {
+      title: 'Shipping method',
+      findEls: function() {
+        var el = document
+          .getElementById('ctl00_PageBody_SaleTypeSelector_rbDelivered')
           .closest('.epi-form-col-single-checkout');
-        return [ shipCol, dateCol ];
-    }},
-    { title: 'Your reference', findEls: function() {
+        return el ? [el] : [];
+      }
+    },
+    {
+      title: 'Your reference',
+      findEls: function() {
         var po = document.getElementById('ctl00_PageBody_PurchaseOrderNumberTextBox');
-        return po ? [ po.closest('.epi-form-group-checkout') ] : [];
-    }},
-    { title: 'Branch', findEls: function() {
+        return po ? [po.closest('.epi-form-group-checkout')] : [];
+      }
+    },
+    {
+      title: 'Branch',
+      findEls: function() {
         var br = document.getElementById('ctl00_PageBody_BranchSelector');
-        return br ? [ br ] : [];
-    }},
-    { title: 'Delivery address', findEls: function() {
+        return br ? [br] : [];
+      }
+    },
+    {
+      title: 'Delivery address',
+      findEls: function() {
         var hdr = document.querySelector('.SelectableAddressType');
-        return hdr ? [ hdr.closest('.epi-form-col-single-checkout') ] : [];
-    }},
-    { title: 'Billing address', findEls: function() {
+        return hdr ? [hdr.closest('.epi-form-col-single-checkout')] : [];
+      }
+    },
+    {
+      title: 'Billing address',
+      findEls: function() {
         var gp = document.getElementById('ctl00_PageBody_InvoiceAddress_GoogleAddressSearchWrapper');
-        return gp ? [ gp.closest('.epi-form-col-single-checkout') ] : [];
-    }},
-    { title: 'Special instructions', findEls: function() {
+        return gp ? [gp.closest('.epi-form-col-single-checkout')] : [];
+      }
+    },
+    {
+      title: 'Special instructions',
+      findEls: function() {
+        var arr = [];
+        // Move "Date required" into step 7
+        var dateGrp = document.getElementById('ctl00_PageBody_dtRequired_DatePicker_wrapper');
+        if (dateGrp) arr.push(dateGrp.closest('.epi-form-col-single-checkout'));
+        // Special Instructions table
         var tbl = document.querySelector('.cartTable');
-        return tbl ? [ tbl ] : [];
-    }}
+        if (tbl) arr.push(tbl);
+        return arr;
+      }
+    }
   ];
 
-  // 3) Build wizard panes
+  // 3) Build each step & pane
   steps.forEach(function(step, i) {
     var num = i + 1;
     // Nav bullet
@@ -61,7 +86,7 @@ document.addEventListener('DOMContentLoaded', function() {
     pane.dataset.step = num;
     wizard.appendChild(pane);
 
-    // Move existing elements
+    // Move elements in
     step.findEls().forEach(function(el) {
       pane.appendChild(el);
     });
@@ -81,6 +106,7 @@ document.addEventListener('DOMContentLoaded', function() {
       });
       navDiv.appendChild(back);
     }
+
     if (num < steps.length) {
       var next = document.createElement('button');
       next.className = 'btn btn-primary';
@@ -103,52 +129,56 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
-  // 4) Step 3 optional tag
-  (function(){
+  // 4) Optional tag on step 3
+  (function() {
     var pane3 = wizard.querySelector('[data-step="3"]');
     var lbl   = pane3 && pane3.querySelector('label');
     if (lbl) {
       var opt = document.createElement('small');
-      opt.className = 'text-muted';
+      opt.className   = 'text-muted';
       opt.style.marginLeft = '8px';
       opt.textContent = '(optional)';
       lbl.appendChild(opt);
     }
   })();
 
-  // 5) Step 6 header tweak
-  (function(){
+  // 5) Change step 6 header
+  (function() {
     var pane6 = wizard.querySelector('[data-step="6"]');
     var hdr   = pane6 && pane6.querySelector('.font-weight-bold.mb-3.mt-4');
     if (hdr) hdr.textContent = 'Billing Address';
   })();
 
-  // 6) Step 7 optional tag
-  (function(){
+  // 6) Optional tag on step 7
+  (function() {
     var pane7 = wizard.querySelector('[data-step="7"]');
     var th    = pane7 && pane7.querySelector('th');
     if (th) {
       var opt = document.createElement('small');
-      opt.className = 'text-muted';
+      opt.className   = 'text-muted';
       opt.style.marginLeft = '8px';
       opt.textContent = '(optional)';
       th.appendChild(opt);
     }
   })();
 
-  // 7) Prefill Delivery (step 5) — unchanged
+  // 7) Prefill Delivery (step 5)
   if (!$('#ctl00_PageBody_DeliveryAddress_AddressLine1').val()) {
     var entries = $('.AddressSelectorEntry');
     if (entries.length) {
-      var pick = entries.first(), minId = parseInt(pick.find('.AddressId').text(), 10);
-      entries.each(function(){
+      var pick = entries.first(),
+          minId = parseInt(pick.find('.AddressId').text(), 10);
+      entries.each(function() {
         var id = parseInt($(this).find('.AddressId').text(), 10);
         if (id < minId) { minId = id; pick = $(this); }
       });
-      var parts = pick.find('dd p').first().text().trim().split(',').map(s=>s.trim()),
+      var parts = pick.find('dd p').first().text().trim()
+                   .split(',').map(function(s){return s.trim();}),
           line1 = parts[0]||'', city = parts[1]||'', state='', zip='';
-      if (parts.length>=4) { state=parts[parts.length-2]; zip=parts[parts.length-1]; }
-      else if (parts.length>2) {
+      if (parts.length>=4) {
+        state = parts[parts.length-2];
+        zip   = parts[parts.length-1];
+      } else if (parts.length>2) {
         var m = parts[2].match(/(.+?)\s*(\d{5}(?:-\d{4})?)?$/);
         if (m) { state=m[1].trim(); zip=m[2]||''; }
       }
@@ -165,47 +195,48 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  // 8) AJAX for name/email/phone — unchanged
-  $.get('https://webtrack.woodsonlumber.com/AccountSettings.aspx', function(data){
+  // 8) AJAX for name/email/phone
+  $.get('https://webtrack.woodsonlumber.com/AccountSettings.aspx', function(data) {
     var acc=$(data),
         fn=acc.find('#ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput').val()||'',
         ln=acc.find('#ctl00_PageBody_ChangeUserDetailsControl_LastNameInput').val()||'',
         em=(acc.find('#ctl00_PageBody_ChangeUserDetailsControl_EmailAddressInput').val()||'')
-            .replace(/^\([^)]*\)\s*/, '');
+             .replace(/^\([^)]*\)\s*/, '');
     $('#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox').val(fn);
     $('#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox').val(ln);
     $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox').val(em);
   });
-  $.get('https://webtrack.woodsonlumber.com/AccountInfo_R.aspx', function(data){
+  $.get('https://webtrack.woodsonlumber.com/AccountInfo_R.aspx', function(data) {
     var tel=$(data).find('#ctl00_PageBody_TelephoneLink_TelephoneLink').text().trim();
     $('#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').val(tel);
   });
 
-  // 9) Step 5 Delivery summary/edit — unchanged
-  (function(){
-    var pane5 = wizard.querySelector('[data-step="5"]'),
-        col   = pane5 && pane5.querySelector('.epi-form-col-single-checkout');
+  // 9) Step 5 Delivery summary/edit
+  (function() {
+    var p5  = wizard.querySelector('[data-step="5"]'),
+        col = p5 && p5.querySelector('.epi-form-col-single-checkout');
     if (!col) return;
     var wrap = document.createElement('div'),
         sum  = document.createElement('div');
     wrap.className = 'delivery-inputs';
-    while (col.firstChild) wrap.appendChild(col.firstChild);
+    while(col.firstChild) wrap.appendChild(col.firstChild);
     col.appendChild(wrap);
     sum.className = 'delivery-summary';
     function upd() {
-      var a1  = wrap.querySelector('#ctl00_PageBody_DeliveryAddress_AddressLine1').value||'',
-          a2  = wrap.querySelector('#ctl00_PageBody_DeliveryAddress_AddressLine2').value||'',
-          c   = wrap.querySelector('#ctl00_PageBody_DeliveryAddress_City').value||'',
-          s   = wrap.querySelector('#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList')
-                   .selectedOptions[0].text||'',
-          z   = wrap.querySelector('#ctl00_PageBody_DeliveryAddress_Postcode').value||'';
+      var a1 = wrap.querySelector('#ctl00_PageBody_DeliveryAddress_AddressLine1').value||'',
+          a2 = wrap.querySelector('#ctl00_PageBody_DeliveryAddress_AddressLine2').value||'',
+          c  = wrap.querySelector('#ctl00_PageBody_DeliveryAddress_City').value||'',
+          s  = wrap.querySelector('#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList')
+                    .selectedOptions[0].text||'',
+          z  = wrap.querySelector('#ctl00_PageBody_DeliveryAddress_Postcode').value||'';
       sum.innerHTML = `<strong>Delivery Address</strong><br>
-        ${a1}${a2?'<br>'+a2:''}<br>${c}, ${s} ${z}<br>
+        ${a1}${a2?'<br>'+a2:''}<br>
+        ${c}, ${s} ${z}<br>
         <button id="editDelivery" class="btn btn-link">Edit</button>`;
     }
     wrap.style.display = 'none';
     col.insertBefore(sum, wrap);
-    sum.addEventListener('click', function(e){
+    sum.addEventListener('click', function(e) {
       if (e.target.id!=='editDelivery') return;
       sum.style.display='none';
       wrap.style.display='';
@@ -216,7 +247,7 @@ document.addEventListener('DOMContentLoaded', function() {
         btn.className='btn btn-primary mt-2';
         btn.textContent='Save';
         wrap.appendChild(btn);
-        btn.addEventListener('click', function(){
+        btn.addEventListener('click', function() {
           upd();
           wrap.style.display='none';
           sum.style.display='';
@@ -227,109 +258,122 @@ document.addEventListener('DOMContentLoaded', function() {
     upd();
   })();
 
-  // 10) Step 2: add Pickup Person under date in step 2
-  (function(){
-    var pane2 = wizard.querySelector('[data-step="2"]');
-    if (!pane2) return;
-    // pickup person input
-    var pp = document.createElement('div');
-    pp.className = 'epi-form-group-checkout';
-    pp.innerHTML = `<div><label for="pickupPerson">Pickup Person:</label></div>
+  // 10) Step 7: Pickup Person & Delivery Date/Time in Special Instructions
+  (function() {
+    var p7      = wizard.querySelector('[data-step="7"]'),
+        special = document.getElementById('ctl00_PageBody_SpecialInstructionsTextBox'),
+        rbDel   = document.getElementById('ctl00_PageBody_SaleTypeSelector_rbDelivered'),
+        rbPick  = document.getElementById('ctl00_PageBody_SaleTypeSelector_rbCollectLater'),
+        zip     = document.getElementById('ctl00_PageBody_DeliveryAddress_Postcode'),
+        dateCnt = p7 && p7.querySelector('#ctl00_PageBody_dtRequired_DatePicker_wrapper')
+                    .closest('.epi-form-col-single-checkout'),
+        // Create Pickup Person input
+        pickupDiv = document.createElement('div'),
+        // Create custom Delivery Date/Time input
+        deliveryDiv = document.createElement('div');
+
+    if (!p7 || !special || !dateCnt) return;
+
+    pickupDiv.className = 'epi-form-group-checkout';
+    pickupDiv.innerHTML = `
+      <div><label for="pickupPerson">Pickup Person:</label></div>
       <div><input type="text" id="pickupPerson" class="form-control"></div>`;
-    pp.style.display='none';
-    pane2.appendChild(pp);
+    pickupDiv.style.display='none';
+    // Insert after date container
+    dateCnt.parentNode.insertBefore(pickupDiv, dateCnt.nextSibling);
 
-    var rbPick = document.getElementById('ctl00_PageBody_SaleTypeSelector_rbCollectLater'),
-        rbDel  = document.getElementById('ctl00_PageBody_SaleTypeSelector_rbDelivered');
-
-    function togglePickupPerson(){
-      pp.style.display = rbPick.checked ? '' : 'none';
-    }
-    rbPick.addEventListener('change', togglePickupPerson);
-    rbDel .addEventListener('change', togglePickupPerson);
-    togglePickupPerson();
-  })();
-
-  // 11) Step 7: delivery-only date/time update special instructions
-  (function(){
-    var pane7     = wizard.querySelector('[data-step="7"]');
-    var special  = document.getElementById('ctl00_PageBody_SpecialInstructionsTextBox');
-    var rbDel    = document.getElementById('ctl00_PageBody_SaleTypeSelector_rbDelivered'),
-        rbPick   = document.getElementById('ctl00_PageBody_SaleTypeSelector_rbCollectLater'),
-        zipInput = document.getElementById('ctl00_PageBody_DeliveryAddress_Postcode');
-
-    if (!pane7 || !special) return;
-
-    // create delivery date/time block
-    var delDiv = document.createElement('div');
-    delDiv.className = 'form-group';
-    delDiv.innerHTML = `
+    deliveryDiv.className = 'form-group';
+    deliveryDiv.innerHTML = `
       <label for="deliveryDate">Requested Delivery Date:</label>
       <input type="date" id="deliveryDate" class="form-control">
       <div>
         <label><input type="radio" name="deliveryTime" value="Morning"> Morning</label>
         <label><input type="radio" name="deliveryTime" value="Afternoon"> Afternoon</label>
       </div>`;
-    delDiv.style.display='none';
-    pane7.insertBefore(delDiv, pane7.querySelector('.cartTable')||pane7.firstChild);
+    deliveryDiv.style.display='none';
+    special.closest('table').parentNode.insertBefore(deliveryDiv, special.closest('table').nextSibling);
 
-    function inZone(zip){
-      return ['75','76','77','78','79'].includes((zip||'').substring(0,2));
+    function inZone(z) {
+      return ['75','76','77','78','79'].includes((z||'').substring(0,2));
     }
-    function updateSpecial(){
-      if (rbDel.checked) {
-        var z = zipInput.value||'';
+    function updateSpecial() {
+      if (rbPick.checked) {
+        var d = document.getElementById('ctl00_PageBody_dtRequired_DatePicker_dateInput').value,
+            p = document.getElementById('pickupPerson').value;
+        special.value = 'Pickup on ' + d + (p? ' for '+p : '');
+      } else if (rbDel.checked) {
+        var z = zip.value||'';
         if (inZone(z)) {
-          var d = document.getElementById('deliveryDate').value||'',
-              t = pane7.querySelector('input[name="deliveryTime"]:checked');
-          special.value = 'Delivery on ' + d + (t? ' ('+t.value+')':'');
+          var d2 = document.getElementById('deliveryDate').value,
+              t  = p7.querySelector('input[name="deliveryTime"]:checked');
+          special.value = 'Delivery on ' + d2 + (t? ' ('+t.value+')' : '');
         } else {
           special.value = 'Ship via 3rd party delivery selected on next screen.';
         }
       }
     }
-    function onShip7(){
-      if (rbDel.checked) {
-        delDiv.style.display='';
+    function onStep7() {
+      if (rbPick.checked) {
+        dateCnt.style.display = '';
+        pickupDiv.style.display = '';
+        deliveryDiv.style.display = 'none';
+        special.readOnly = false;
+      } else if (rbDel.checked) {
+        dateCnt.style.display = 'none';
+        pickupDiv.style.display = 'none';
         special.readOnly = true;
+        var z2 = zip.value||'';
+        if (inZone(z2)) {
+          deliveryDiv.style.display = '';
+        } else {
+          deliveryDiv.innerHTML = '<em>Ship via 3rd party delivery selected on next screen.</em>';
+          deliveryDiv.style.display = '';
+        }
       } else {
-        delDiv.style.display='none';
+        dateCnt.style.display = 'none';
+        pickupDiv.style.display = 'none';
+        deliveryDiv.style.display = 'none';
         special.readOnly = false;
       }
       updateSpecial();
     }
-    rbDel.addEventListener('change', onShip7);
-    rbPick.addEventListener('change', onShip7);
-    document.getElementById('deliveryDate').addEventListener('change', function(){
-      var sel = new Date(this.value),
-          min = new Date(); min.setDate(min.getDate()+2);
-      if (sel < min || sel.getDay()===0) {
-        alert('Select at least 2 days out and not a Sunday.');
-        this.value = '';
-      }
-      updateSpecial();
-    });
-    pane7.querySelectorAll('input[name="deliveryTime"]').forEach(function(r){
-      r.addEventListener('change', updateSpecial);
-    });
 
-    // initialize
-    onShip7();
+    rbPick.addEventListener('change', onStep7);
+    rbDel .addEventListener('change', onStep7);
+    // Listen to both date inputs
+    document.getElementById('ctl00_PageBody_dtRequired_DatePicker_dateInput')
+      .addEventListener('change', updateSpecial);
+    document.getElementById('deliveryDate')
+      .addEventListener('change', function(){
+        var sel=new Date(this.value),
+            min=new Date(); min.setDate(min.getDate()+2);
+        if (sel<min||sel.getDay()===0){
+          alert('Select at least 2 days out and not Sunday.');
+          this.value='';
+        }
+        updateSpecial();
+      });
+    document.getElementById('pickupPerson')
+      .addEventListener('input', updateSpecial);
+    p7.querySelectorAll('input[name="deliveryTime"]')
+      .forEach(r=>r.addEventListener('change', updateSpecial));
+
+    onStep7();
   })();
 
-  // 12) Step switcher + persistence
-  function showStep(n){
-    wizard.querySelectorAll('.checkout-step').forEach(function(p){
+  // 11) Step switcher + persistence
+  function showStep(n) {
+    wizard.querySelectorAll('.checkout-step').forEach(function(p) {
       p.classList.toggle('active', +p.dataset.step === n);
     });
-    nav.querySelectorAll('li').forEach(function(li){
+    nav.querySelectorAll('li').forEach(function(li) {
       var s = +li.dataset.step;
       li.classList.toggle('active',    s === n);
-      li.classList.toggle('completed', s < n);
+      li.classList.toggle('completed', s <  n);
     });
     localStorage.currentStep = n;
     window.scrollTo({ top: wizard.offsetTop, behavior: 'smooth' });
   }
-  showStep(parseInt(localStorage.currentStep,10)||2);
+  showStep(parseInt(localStorage.currentStep, 10) || 2);
 });
 
