@@ -1,5 +1,8 @@
 
 document.addEventListener('DOMContentLoaded', function() {
+  // reset wizard to step 1 on each fresh load
+localStorage.removeItem('currentStep');
+
   // Hide the original “Date Required” picker entirely
   var dateColDefault = document.getElementById('ctl00_PageBody_dtRequired_DatePicker_wrapper');
   if (dateColDefault) dateColDefault.style.display = 'none';
