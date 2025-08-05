@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', function() {
-  // 1) Wizard container & nav
+  // 1) Create wizard container & nav
   var container = document.querySelector('.container');
   var wizard    = document.createElement('div');
   wizard.className = 'checkout-wizard';
@@ -8,15 +8,22 @@ document.addEventListener('DOMContentLoaded', function() {
   nav.className = 'checkout-steps';
   wizard.appendChild(nav);
 
-  // 2) Define the seven steps (with updated title for step 6)
+  // 2) Define the 7 steps (step 2 now only shipping, step 7 includes date + instructions)
   var steps = [
     { title:'Order details',    findEls:()=>{ var tx=document.getElementById('ctl00_PageBody_TransactionTypeDiv'); return tx?[tx.closest('.epi-form-col-single-checkout')]:[]; }},
-    { title:'Shipping & date',   findEls:()=>{ var a=[], ship=document.getElementById('ctl00_PageBody_SaleTypeSelector_lblDelivered'); if(ship)a.push(ship.closest('.epi-form-col-single-checkout')); var dt=document.getElementById('ctl00_PageBody_dtRequired_DatePicker_wrapper'); if(dt)a.push(dt.closest('.epi-form-col-single-checkout')); return a; }},
+    { title:'Shipping method',   findEls:()=>{ var ship=document.getElementById('ctl00_PageBody_SaleTypeSelector_lblDelivered'); return ship?[ship.closest('.epi-form-col-single-checkout')]:[]; }},
     { title:'Your reference',    findEls:()=>{ var po=document.getElementById('ctl00_PageBody_PurchaseOrderNumberTextBox'); return po?[po.closest('.epi-form-group-checkout')]:[]; }},
     { title:'Branch',            findEls:()=>{ var br=document.getElementById('ctl00_PageBody_BranchSelector'); return br?[br]:[]; }},
     { title:'Delivery address',  findEls:()=>{ var hdr=document.querySelector('.SelectableAddressType'); return hdr?[hdr.closest('.epi-form-col-single-checkout')]:[]; }},
     { title:'Billing address',   findEls:()=>{ var gp=document.getElementById('ctl00_PageBody_InvoiceAddress_GoogleAddressSearchWrapper'); return gp?[gp.closest('.epi-form-col-single-checkout')]:[]; }},
-    { title:'Special instructions', findEls:()=>{ var tbl=document.querySelector('.cartTable'); return tbl?[tbl]:[]; }}
+    { title:'Special instructions', findEls:()=>{
+        var arr=[];
+        var dateCol = document.getElementById('ctl00_PageBody_dtRequired_DatePicker_wrapper');
+        if(dateCol) arr.push(dateCol.closest('.epi-form-col-single-checkout'));
+        var tbl = document.querySelector('.cartTable');
+        if(tbl) arr.push(tbl.closest('.cartTable'));
+        return arr;
+    }}
   ];
 
   // 3) Build each step and its pane
@@ -65,7 +72,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
-  // 4) Insert optional tag on step 3 ("Your reference")
+  // 4) Optional tag on step 3 ("Your reference")
   (function(){
     var pane3 = wizard.querySelector('.checkout-step[data-step="3"]');
     if(pane3){
@@ -80,17 +87,16 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   })();
 
-  // 5) Change header inside pane6 to "Billing Address"
+  // 5) Change pane6 header to "Billing Address"
   (function(){
     var pane6 = wizard.querySelector('.checkout-step[data-step="6"]');
     if(pane6){
-      // update pane header if present
       var hdr = pane6.querySelector('.font-weight-bold.mb-3.mt-4');
       if(hdr) hdr.textContent = 'Billing Address';
     }
   })();
 
-  // 6) Insert optional tag on step 7 ("Special instructions")
+  // 6) Optional tag on step7 ("Special instructions")
   (function(){
     var pane7 = wizard.querySelector('.checkout-step[data-step="7"]');
     if(pane7){
@@ -105,7 +111,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   })();
 
-  // 7) Prefill delivery address (step 5 logic)
+  // 7) Prefill delivery address (step 5)
   if(!$('#ctl00_PageBody_DeliveryAddress_AddressLine1').val()){
     var $link=$('#ctl00_PageBody_CustomerAddressSelector_SelectAddressLinkButton');
     if($link.length){
@@ -120,7 +126,7 @@ document.addEventListener('DOMContentLoaded', function() {
             parts=txt.split(',').map(s=>s.trim()),
             line1=parts[0]||'', city=parts[1]||'',
             state='', zip='';
-        if(parts.length>=4){ state=parts[parts.length-2]; zip=parts[parts.length-1]; }
+        if(parts.length>=4){state=parts[parts.length-2]; zip=parts[parts.length-1];}
         else if(parts.length>2){
           var m=parts[2].match(/(.+?)\s*(\d{5}(?:-\d{4})?)?$/);
           if(m){state=m[1].trim(); zip=m[2]||'';}
@@ -203,10 +209,8 @@ document.addEventListener('DOMContentLoaded', function() {
   (function(){
     var pane6=wizard.querySelector('.checkout-step[data-step="6"]');
     if(!pane6) return;
-    // hide original link
     var orig=document.getElementById('copyDeliveryAddressButton');
     if(orig) orig.style.display='none';
-    // insert checkbox
     var chkDiv=document.createElement('div');
     chkDiv.className='form-check mb-3';
     chkDiv.innerHTML=`
@@ -216,7 +220,6 @@ document.addEventListener('DOMContentLoaded', function() {
       </label>`;
     pane6.insertBefore(chkDiv,pane6.firstChild);
     var sameCheck=chkDiv.querySelector('#sameAsDeliveryCheck');
-    // wrap invoice inputs
     var colInv=pane6.querySelector('.epi-form-col-single-checkout'),
         wrapperInv=document.createElement('div'),
         summaryInv=document.createElement('div');
@@ -242,7 +245,6 @@ document.addEventListener('DOMContentLoaded', function() {
         Email: ${email}<br>
         <button id="editInvoice" class="btn btn-link">Enter new billing address</button>`;
     }
-    // initial based on stored choice
     wrapperInv.style.display='none'; summaryInv.style.display='none';
     colInv.insertBefore(summaryInv,wrapperInv);
     var same=localStorage.sameAsDelivery==='true';
@@ -257,7 +259,6 @@ document.addEventListener('DOMContentLoaded', function() {
       wrapperInv.style.display='';
       summaryInv.style.display='none';
     }
-    // checkbox change
     sameCheck.addEventListener('change',function(){
       if(this.checked){
         localStorage.sameAsDelivery='true';
@@ -268,7 +269,6 @@ document.addEventListener('DOMContentLoaded', function() {
         wrapperInv.style.display='';
       }
     });
-    // edit invoice
     summaryInv.addEventListener('click',function(e){
       if(e.target.id!=='editInvoice') return;
       summaryInv.style.display='none';
@@ -290,6 +290,6 @@ document.addEventListener('DOMContentLoaded', function() {
     localStorage.currentStep=n;
     window.scrollTo({ top: wizard.offsetTop, behavior: 'smooth' });
   }
-  // resume or start at step 2
   showStep(parseInt(localStorage.currentStep,10)||2);
 });
+
