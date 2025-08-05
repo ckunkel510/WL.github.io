@@ -8,7 +8,6 @@ document.addEventListener('DOMContentLoaded', function() {
   nav.className = 'checkout-steps';
   wizard.appendChild(nav);
 
-  // Step definitions with pure JS finders
   var steps = [
     {
       title: 'Order details',
@@ -42,7 +41,6 @@ document.addEventListener('DOMContentLoaded', function() {
     {
       title: 'Branch',
       findEls: function() {
-        // pull in the entire row containing your branch dropdown
         var brRow = document.getElementById('ctl00_PageBody_BranchSelector');
         return brRow ? [brRow] : [];
       }
@@ -59,12 +57,12 @@ document.addEventListener('DOMContentLoaded', function() {
     {
       title: 'Invoice address',
       findEls: function() {
-        var headers = document.querySelectorAll('.font-weight-bold.mb-3.mt-4');
-        for (var i=0; i<headers.length; i++) {
-          if (headers[i].textContent.trim().toLowerCase().startsWith('invoice address')) {
-            var wrap = headers[i].closest('.epi-form-col-single-checkout');
-            if (wrap) return [wrap];
-          }
+        // grab the Google-Places wrapper inside the invoice panel,
+        // then move its outer `.epi-form-col-single-checkout` container
+        var gp = document.getElementById('ctl00_PageBody_InvoiceAddress_GoogleAddressSearchWrapper');
+        if (gp) {
+          var wrap = gp.closest('.epi-form-col-single-checkout');
+          if (wrap) return [wrap];
         }
         return [];
       }
@@ -78,48 +76,53 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   ];
 
-  // Build wizard
-  steps.forEach(function(step, idx) {
-    var stepNum = idx + 1;
-    // Nav bullet
+  // build the steps & panes
+  steps.forEach(function(step, i) {
+    var num = i + 1;
+    // nav bullet
     var li = document.createElement('li');
-    li.setAttribute('data-step', stepNum);
+    li.setAttribute('data-step', num);
     li.textContent = step.title;
-    li.addEventListener('click', function(){ showStep(stepNum); });
+    li.addEventListener('click', function(){ showStep(num); });
     nav.appendChild(li);
-    // Pane
+
+    // pane
     var pane = document.createElement('div');
     pane.className = 'checkout-step';
-    pane.setAttribute('data-step', stepNum);
+    pane.setAttribute('data-step', num);
     wizard.appendChild(pane);
-    // Move elements
+
+    // move in existing elements
     step.findEls().forEach(function(el){
       pane.appendChild(el);
     });
-    // Buttons
+
+    // back/next buttons
     var navDiv = document.createElement('div');
     navDiv.className = 'checkout-nav';
     pane.appendChild(navDiv);
-    if (stepNum > 1) {
+
+    if (num > 1) {
       var back = document.createElement('button');
       back.className = 'btn btn-secondary';
       back.textContent = 'Back';
       back.addEventListener('click', function(e){
         e.preventDefault();
-        showStep(stepNum - 1);
+        showStep(num - 1);
       });
       navDiv.appendChild(back);
     }
-    if (stepNum < steps.length) {
+    if (num < steps.length) {
       var next = document.createElement('button');
       next.className = 'btn btn-primary';
       next.textContent = 'Next';
       next.addEventListener('click', function(e){
         e.preventDefault();
-        showStep(stepNum + 1);
+        showStep(num + 1);
       });
       navDiv.appendChild(next);
     } else {
+      // final: your real Continue
       var allCont = Array.from(
         document.querySelectorAll('#ctl00_PageBody_ContinueButton1, #ctl00_PageBody_ContinueButton2')
       );
@@ -131,7 +134,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
-  // Step switcher
   function showStep(n) {
     wizard.querySelectorAll('.checkout-step').forEach(function(p){
       p.classList.toggle('active', +p.getAttribute('data-step') === n);
@@ -144,6 +146,6 @@ document.addEventListener('DOMContentLoaded', function() {
     window.scrollTo({ top: wizard.offsetTop, behavior: 'smooth' });
   }
 
-  // show first step on load
+  // immediately open step 1
   showStep(1);
 });
