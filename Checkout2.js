@@ -61,6 +61,20 @@ $(document).ready(function() {
   $(deliveryHidden.join(", ")).hide();
   $(invoiceHidden.join(", ")).hide();
 
+  // ===================================================
+  // (A.5) Collapse entire delivery-address groups when not editing
+  // ===================================================
+  deliveryHidden.forEach(selector => {
+    const $el = $(selector);
+    if (!$el.length) return;
+    // hide any .epi-form-group-checkout wrapper
+    $el.closest('.epi-form-group-checkout').hide();
+    // special-case the bare div for ContactName
+    if (selector === '#ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral') {
+      $el.parent().hide();
+    }
+  });
+
   // show the rest of your checkout rows
   $('.container .row').not('.shopping-cart-item').show();
 
@@ -68,16 +82,11 @@ $(document).ready(function() {
   $("#ctl00_PageBody_CopyDeliveryAddressLinkButton")
     .text("Billing address is the same as delivery address");
 
-      
-  
-
-
   // ===================================================
   // (A) Always-Attached Event Handlers & Helpers
   // ===================================================
   let isEditingDelivery = false;
   let isEditingInvoice  = false;
-
 
   function refreshReadOnlyDisplays() {
     // Delivery
@@ -121,12 +130,18 @@ $(document).ready(function() {
   // trigger refresh on any checkout input change
   $(document).on("change blur", ".epi-form-group-checkout input", refreshReadOnlyDisplays);
 
-
   // Edit/Save Delivery
   $(document).on("click", "#internalEditDeliveryAddressButton", function() {
     console.log("Edit Delivery clicked");
     isEditingDelivery = true;
-    $(deliveryHidden.join(", ")).show();
+    // show all inputs + wrappers
+    deliveryHidden.forEach(selector => {
+      const $el = $(selector).show();
+      $el.closest('.epi-form-group-checkout').show();
+      if (selector === '#ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral') {
+        $el.parent().show();
+      }
+    });
     if (!$("#saveDeliveryAddressButton").length) {
       $(".selected-address-display")
         .append('<br><button type="button" id="saveDeliveryAddressButton" class="edit-button">Save Delivery Address</button>');
@@ -134,12 +149,18 @@ $(document).ready(function() {
   });
   $(document).on("click", "#saveDeliveryAddressButton", function() {
     console.log("Save Delivery clicked");
-    $(deliveryHidden.join(", ")).hide();
+    // re-hide inputs + wrappers
+    deliveryHidden.forEach(selector => {
+      const $el = $(selector).hide();
+      $el.closest('.epi-form-group-checkout').hide();
+      if (selector === '#ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral') {
+        $el.parent().hide();
+      }
+    });
     $("#saveDeliveryAddressButton").remove();
     isEditingDelivery = false;
     refreshReadOnlyDisplays();
   });
-
 
   // Edit/Save Invoice
   $(document).on("click", "#internalEditInvoiceAddressButton", function() {
@@ -158,7 +179,6 @@ $(document).ready(function() {
     isEditingInvoice = false;
     refreshReadOnlyDisplays();
   });
-
 
   // ===================================================
   // (B) Modern Transaction & Shipping Selectors
@@ -192,7 +212,6 @@ $(document).ready(function() {
       }
     }
 
-    // init & click
     updateTransactionStyles(
       $("#ctl00_PageBody_TransactionTypeSelector_rdbOrder").is(":checked") ? "rdbOrder" : "rdbQuote"
     );
@@ -202,7 +221,6 @@ $(document).ready(function() {
   } else {
     console.warn("Transaction type div not found.");
   }
-
 
   if ($(".SaleTypeSelector").length) {
     $(".SaleTypeSelector").hide();
@@ -243,7 +261,6 @@ $(document).ready(function() {
   } else {
     console.warn("Shipping method selector not found.");
   }
-
 
   // ===================================================
   // (C) INITIAL PRE-POPULATION LOGIC
@@ -292,7 +309,6 @@ $(document).ready(function() {
     console.log("Address pre-population skipped; field not empty.");
   }
 
-
   // ===================================================
   // (D) ALWAYS RUN: Account Settings & Telephone Fetch
   // ===================================================
@@ -314,7 +330,6 @@ $(document).ready(function() {
     $("#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox").val(tel);
     refreshReadOnlyDisplays();
   });
-
 
   // ===================================================
   // (E) Append Read-Only Display Containers
@@ -346,7 +361,6 @@ $(document).ready(function() {
     console.warn("Not enough .epi-form-col-single-checkout elements found.");
   }
 
-
   // ===================================================
   // (F) Date Picker (unchanged)
   // ===================================================
@@ -355,61 +369,41 @@ $(document).ready(function() {
   } else {
     console.warn("Date picker wrapper not found.");
   }
-   // ===================================================
-// (G) Two-column layout for checkout fields — move whole col wrappers
-// ===================================================
-if (!$('.checkout-columns').length) {
-  const $wrapper = $('<div class="checkout-columns row mt-4"></div>');
-  const $left    = $('<div class="col-md-6"></div>');
-  const $right   = $('<div class="col-md-6"></div>');
 
-  // — Left column: transaction type DIV itself
-  $('#ctl00_PageBody_TransactionTypeDiv')
-    .show().detach()
-    .appendTo($left);
+  // ===================================================
+  // (G) Two-column layout for checkout fields — move whole col wrappers
+  // ===================================================
+  if (!$('.checkout-columns').length) {
+    const $wrapper = $('<div class="checkout-columns row mt-4"></div>');
+    const $left    = $('<div class="col-md-6"></div>');
+    const $right   = $('<div class="col-md-6"></div>');
 
-  // — Left column: shipping method wrapper
-  $('.epi-form-col-single-checkout:has(.SaleTypeSelector)')
-    .show().detach()
-    .appendTo($left);
+    // — Left column: transaction type DIV itself
+    $('#ctl00_PageBody_TransactionTypeDiv').show().detach().appendTo($left);
 
-  // — Left column: date picker wrapper
-  $('.epi-form-col-single-checkout:has(#ctl00_PageBody_dtRequired_DatePicker_wrapper)')
-    .show().detach()
-    .appendTo($left);
+    // — Left column: shipping method wrapper
+    $('.epi-form-col-single-checkout:has(.SaleTypeSelector)').show().detach().appendTo($left);
 
-  // — Left column: PO/ref
-  $('.epi-form-col-single-checkout:has(#ctl00_PageBody_PurchaseOrderNumberTextBox)')
-    .show().detach()
-    .appendTo($left);
+    // — Left column: date picker wrapper
+    $('.epi-form-col-single-checkout:has(#ctl00_PageBody_dtRequired_DatePicker_wrapper)').show().detach().appendTo($left);
 
-  // — Left column: branch selector
-  $('#ctl00_PageBody_BranchSelector')
-    .show().detach()
-    .appendTo($left);
+    // — Left column: PO/ref
+    $('.epi-form-col-single-checkout:has(#ctl00_PageBody_PurchaseOrderNumberTextBox)').show().detach().appendTo($left);
 
-  // — Left column: special instructions (cartTable)
-  $('.cartTable')
-    .show().detach()
-    .appendTo($left);
+    // — Left column: branch selector
+    $('#ctl00_PageBody_BranchSelector').show().detach().appendTo($left);
 
-  // — Right column: delivery address display
-  $('.epi-form-col-single-checkout:has(.selected-address-display)')
-    .show().detach()
-    .appendTo($right);
+    // — Left column: special instructions (cartTable)
+    $('.cartTable').show().detach().appendTo($left);
 
-  // — Right column: invoice address display
-  $('.epi-form-col-single-checkout:has(.selected-invoice-address-display)')
-    .show().detach()
-    .appendTo($right);
+    // — Right column: delivery address display
+    $('.epi-form-col-single-checkout:has(.selected-address-display)').show().detach().appendTo($right);
 
-  // assemble & insert exactly once
-  $wrapper.append($left, $right);
-  $('.epi-form-col-single-checkout, #ctl00_PageBody_BranchSelector, .cartTable')
-    .last()
-    .after($wrapper);
-}
+    // — Right column: invoice address display
+    $('.epi-form-col-single-checkout:has(.selected-invoice-address-display)').show().detach().appendTo($right);
 
-
+    // assemble & insert exactly once
+    $wrapper.append($left, $right);
+    $('.epi-form-col-single-checkout, #ctl00_PageBody_BranchSelector, .cartTable').last().after($wrapper);
+  }
 });
-
