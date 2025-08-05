@@ -437,60 +437,52 @@ margin-bottom: 0px !important;
 
 
 
-
-/* wizard container */
 .checkout-wizard { max-width: 800px; margin: 2rem auto; }
+  .checkout-steps {
+    list-style: none;
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+    padding: 0;
+  }
+  .checkout-steps li {
+    flex: 1;
+    text-align: center;
+    position: relative;
+    cursor: pointer;
+  }
+  .checkout-steps li:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 1rem;
+    right: -50%;
+    width: 100%;
+    height: 2px;
+    background: #ddd;
+    z-index: -1;
+  }
+  .checkout-steps li::before {
+    content: attr(data-step);
+    display: inline-block;
+    margin-bottom: .5rem;
+    width: 2rem;
+    height: 2rem;
+    line-height: 2rem;
+    border-radius: 50%;
+    background: #ddd;
+    color: #fff;
+  }
+  .checkout-steps li.active::before,
+  .checkout-steps li.completed::before {
+    background: #6b0016;
+  }
+  .checkout-steps li.completed { color: #6b0016; }
 
-/* step indicator */
-.checkout-steps {
-  list-style: none;
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 1.5rem;
-  padding: 0;
-}
-.checkout-steps li {
-  flex: 1;
-  text-align: center;
-  position: relative;
-  cursor: pointer;
-}
-.checkout-steps li:not(:last-child)::after {
-  content: '';
-  position: absolute;
-  top: 1rem;
-  right: -50%;
-  width: 100%;
-  height: 2px;
-  background: #ddd;
-  z-index: -1;
-}
-.checkout-steps li::before {
-  content: attr(data-step);
-  display: inline-block;
-  margin-bottom: .5rem;
-  width: 2rem;
-  height: 2rem;
-  line-height: 2rem;
-  border-radius: 50%;
-  background: #ddd;
-  color: #fff;
-}
-.checkout-steps li.active::before,
-.checkout-steps li.completed::before {
-  background: #6b0016;
-}
-.checkout-steps li.completed {
-  color: #6b0016;
-}
+  .checkout-step { display: none; }
+  .checkout-step.active { display: block; }
 
-/* content panes */
-.checkout-step { display: none; }
-.checkout-step.active { display: block; }
-
-/* nav buttons */
-.checkout-nav {
-  margin-top: 1.5rem;
-  display: flex;
-  justify-content: space-between;
-}
+  .checkout-nav {
+    margin-top: 1.5rem;
+    display: flex;
+    justify-content: space-between;
+  }
