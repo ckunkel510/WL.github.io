@@ -57,14 +57,10 @@ document.addEventListener('DOMContentLoaded', function() {
     {
       title: 'Invoice address',
       findEls: function() {
-        // grab the Google-Places wrapper inside the invoice panel,
-        // then move its outer `.epi-form-col-single-checkout` container
         var gp = document.getElementById('ctl00_PageBody_InvoiceAddress_GoogleAddressSearchWrapper');
-        if (gp) {
-          var wrap = gp.closest('.epi-form-col-single-checkout');
-          if (wrap) return [wrap];
-        }
-        return [];
+        return gp && gp.closest('.epi-form-col-single-checkout')
+          ? [gp.closest('.epi-form-col-single-checkout')]
+          : [];
       }
     },
     {
@@ -76,28 +72,28 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   ];
 
-  // build the steps & panes
+  // Build wizard steps & panes
   steps.forEach(function(step, i) {
     var num = i + 1;
-    // nav bullet
+    // Nav bullet
     var li = document.createElement('li');
     li.setAttribute('data-step', num);
     li.textContent = step.title;
     li.addEventListener('click', function(){ showStep(num); });
     nav.appendChild(li);
 
-    // pane
+    // Pane
     var pane = document.createElement('div');
     pane.className = 'checkout-step';
     pane.setAttribute('data-step', num);
     wizard.appendChild(pane);
 
-    // move in existing elements
+    // Move in elements
     step.findEls().forEach(function(el){
       pane.appendChild(el);
     });
 
-    // back/next buttons
+    // Back/Next buttons
     var navDiv = document.createElement('div');
     navDiv.className = 'checkout-nav';
     pane.appendChild(navDiv);
@@ -122,7 +118,6 @@ document.addEventListener('DOMContentLoaded', function() {
       });
       navDiv.appendChild(next);
     } else {
-      // final: your real Continue
       var allCont = Array.from(
         document.querySelectorAll('#ctl00_PageBody_ContinueButton1, #ctl00_PageBody_ContinueButton2')
       );
@@ -134,6 +129,21 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
+  // Insert "(optional)" tag into the Your reference step
+  var refPane  = wizard.querySelector('.checkout-step[data-step="3"]');
+  var refGroup = refPane && refPane.querySelector('.epi-form-group-checkout');
+  if (refGroup) {
+    var label = refGroup.querySelector('label');
+    if (label) {
+      var optionalTag = document.createElement('small');
+      optionalTag.className = 'text-muted';
+      optionalTag.style.marginLeft = '8px';
+      optionalTag.textContent = '(optional)';
+      label.appendChild(optionalTag);
+    }
+  }
+
+  // Step switcher
   function showStep(n) {
     wizard.querySelectorAll('.checkout-step').forEach(function(p){
       p.classList.toggle('active', +p.getAttribute('data-step') === n);
@@ -146,6 +156,6 @@ document.addEventListener('DOMContentLoaded', function() {
     window.scrollTo({ top: wizard.offsetTop, behavior: 'smooth' });
   }
 
-  // immediately open step 1
-  showStep(1);
+  // On load go straight to step 2 (marks step 1 as completed)
+  showStep(2);
 });
