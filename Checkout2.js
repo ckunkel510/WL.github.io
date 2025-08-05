@@ -85,7 +85,7 @@ document.addEventListener('DOMContentLoaded', function() {
       if(conts.length){
         let cont = conts.pop();
         cont.style.display = '';
-        cont.type = 'button';
+        cont.type = 'submit';
         navDiv.appendChild(cont);
       }
     }
