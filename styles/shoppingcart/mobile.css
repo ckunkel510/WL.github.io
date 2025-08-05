@@ -260,3 +260,24 @@ display: none;
   .checkout-steps li::after {
     display: none;
   }
+
+  /* make each completed or active step a full-width “bar” */
+.checkout-steps li.completed,
+.checkout-steps li.active {
+  display: block;              /* stack vertically */
+  width: 100%;                 /* full width of the wizard */
+  background: #fff;            /* white background */
+  color: #6b0016;              /* maroon text */
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* light gray shadow */
+  border-radius: 0.25rem;      /* slight rounding */
+  padding: 1rem;               /* roomy tap area */
+  margin-bottom: 0.5rem;       /* space between bars */
+  font-size: 1.1rem;           /* slightly larger text */
+  line-height: 1.2;            /* good readability */
+  min-height: 3rem;            /* ensure at least ~48px tall */
+}
+
+/* hide the numeric bullet on mobile bars */
+.checkout-steps li::before {
+  display: none !important;
+}
