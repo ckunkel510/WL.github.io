@@ -1,463 +1,354 @@
-// == Custom Checkout UI: Summary + Left Drawer Editors ==
-(function () {
-  if (window.__checkoutUIInit) return;
-  window.__checkoutUIInit = true;
+$(document).ready(function() {
+  console.log("Page loaded, initializing custom checkout experience...");
 
-  $(document).ready(function () {
-    // ============= Utilities =============
-    const first = (arr) => arr.find((sel) => $(sel).length);
-    const valOf = (selOrArr) => {
-      const s = Array.isArray(selOrArr) ? first(selOrArr) : selOrArr;
-      return s ? $(s).val() : "";
-    };
-    const setVal = (selOrArr, v) => {
-      const s = Array.isArray(selOrArr) ? first(selOrArr) : selOrArr;
-      if (s) $(s).val(v).trigger("change");
-    };
-    const setChecked = (sel, checked) => $(sel).prop("checked", !!checked).trigger("change");
-    const T = (s) => (s || "").toString().trim();
-    const jqWrap = (v) => $.isFunction(v) ? $(v()) : $(v);
+  // ===================================================
+  // 0. On Load: Hide specified Delivery and Invoice Address elements.
+  // ===================================================
+  const deliveryHidden = [
+    "#ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral",
+    "label:contains('First name:')",
+    "label:contains('Last name:')",
+    "#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox",
+    "#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox",
+    "#ctl00_PageBody_DeliveryAddress_GoogleAddressSearchWrapper",
+    "label[for='locationFieldDelivery']",
+    "#locationFieldDelivery",
+    "#ctl00_PageBody_DeliveryAddress_AddressLine1TitleLiteral",
+    "#ctl00_PageBody_DeliveryAddress_AddressLine1",
+    "#ctl00_PageBody_DeliveryAddress_AddressLine2TitleLiteral",
+    "#ctl00_PageBody_DeliveryAddress_AddressLine2",
+    "#ctl00_PageBody_DeliveryAddress_AddressLine3TitleLiteral",
+    "#ctl00_PageBody_DeliveryAddress_AddressLine3",
+    "#ctl00_PageBody_DeliveryAddress_AddressCityTitleLiteral",
+    "#ctl00_PageBody_DeliveryAddress_City",
+    "#ctl00_PageBody_DeliveryAddress_AddressCountyTitleLiteral",
+    "#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList",
+    "#ctl00_PageBody_DeliveryAddress_AddressPostcodeTitleLiteral",
+    "#ctl00_PageBody_DeliveryAddress_Postcode",
+    "#ctl00_PageBody_DeliveryAddress_AddressCountryTitleLiteral",
+    "#ctl00_PageBody_DeliveryAddress_CountrySelector",
+    "#ctl00_PageBody_DeliveryAddress_ContactTelephoneRow",
+    "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTitleLiteral",
+    "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox",
+    "#autocompleteDelivery",
+    "#ctl00_PageBody_ContinueButton1"
+  ];
+  const invoiceHidden = [
+    "#ctl00_PageBody_InvoiceAddress_GoogleAddressSearchWrapper",
+    "label[for='locationFieldInvoice']",
+    "#locationFieldInvoice",
+    "#autocompleteInvoice",
+    "#ctl00_PageBody_InvoiceAddress_AddressLine1TitleLiteral",
+    "#ctl00_PageBody_InvoiceAddress_AddressLine1",
+    "#ctl00_PageBody_InvoiceAddress_AddressLine2TitleLiteral",
+    "#ctl00_PageBody_InvoiceAddress_AddressLine2",
+    "#ctl00_PageBody_InvoiceAddress_AddressLine3TitleLiteral",
+    "#ctl00_PageBody_InvoiceAddress_AddressLine3",
+    "#ctl00_PageBody_InvoiceAddress_AddressCityTitleLiteral",
+    "#ctl00_PageBody_InvoiceAddress_City",
+    "#ctl00_PageBody_InvoiceAddress_AddressCountyTitleLiteral",
+    "#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList",
+    "#ctl00_PageBody_InvoiceAddress_AddressPostcodeTitleLiteral",
+    "#ctl00_PageBody_InvoiceAddress_Postcode",
+    "#ctl00_PageBody_InvoiceAddress_AddressCountryTitleLiteral",
+    "#ctl00_PageBody_InvoiceAddress_CountrySelector1",
+    "#ctl00_PageBody_InvoiceAddress_EmailAddressRow",
+    "#ctl00_PageBody_InvoiceAddress_EmailAddressTitleLiteral",
+    "#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox"
+  ];
 
-    // ============= Selectors =============
-    const S = {
-      txnOrder:  "#ctl00_PageBody_TransactionTypeSelector_rdbOrder",
-      txnQuote:  "#ctl00_PageBody_TransactionTypeSelector_rdbQuote",
-      txnWrap:   "#ctl00_PageBody_TransactionTypeDiv",
+  // hide them
+  $(deliveryHidden.join(", ")).hide();
+  $(invoiceHidden.join(", ")).hide();
 
-      shipDelivered: "#ctl00_PageBody_SaleTypeSelector_rbDelivered",
-      shipPickup:    "#ctl00_PageBody_SaleTypeSelector_rbCollectLater",
-      shipWrapGuess: ".epi-form-col-single-checkout:has(.SaleTypeSelector)",
+  // show the rest of your checkout rows
+  $('.container .row').not('.shopping-cart-item').show();
 
-      dateWrap: "#ctl00_PageBody_dtRequired_DatePicker_wrapper",
-      dateInputs: [
-        "#ctl00_PageBody_dtRequired_dateInput",
-        "#ctl00_PageBody_dtRequired_dateInput_text",
-        "#ctl00_PageBody_dtRequired_DatePicker input[type='text']"
-      ],
+  // relabel the copy link
+  $("#ctl00_PageBody_CopyDeliveryAddressLinkButton")
+    .text("Billing address is the same as delivery address");
 
-      po: [
-        "#ctl00_PageBody_PurchaseOrderNo",
-        "#ctl00_PageBody_POTextBox",
-        "input[id*='PurchaseOrder'][type='text']",
-        "input[id*='PONumber'][type='text']"
-      ],
-      notes: [
-        "#ctl00_PageBody_SpecialInstructionsTextBox",
-        "textarea[id*='Special']",
-        "textarea[id*='Notes']"
-      ],
 
-      del: {
-        first:  "#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox",
-        last:   "#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox",
-        line1:  "#ctl00_PageBody_DeliveryAddress_AddressLine1",
-        line2:  "#ctl00_PageBody_DeliveryAddress_AddressLine2",
-        line3:  "#ctl00_PageBody_DeliveryAddress_AddressLine3",
-        city:   "#ctl00_PageBody_DeliveryAddress_City",
-        county: "#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList",
-        zip:    "#ctl00_PageBody_DeliveryAddress_Postcode",
-        country:"#ctl00_PageBody_DeliveryAddress_CountrySelector",
-        phone:  "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox"
-      },
-      inv: {
-        line1:  "#ctl00_PageBody_InvoiceAddress_AddressLine1",
-        line2:  "#ctl00_PageBody_InvoiceAddress_AddressLine2",
-        line3:  "#ctl00_PageBody_InvoiceAddress_AddressLine3",
-        city:   "#ctl00_PageBody_InvoiceAddress_City",
-        county: "#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList",
-        zip:    "#ctl00_PageBody_InvoiceAddress_Postcode",
-        country:"#ctl00_PageBody_InvoiceAddress_CountrySelector1, #ctl00_PageBody_InvoiceAddress_CountrySelector",
-        email:  "#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox"
-      },
+  // ===================================================
+  // (A) Always-Attached Event Handlers & Helpers
+  // ===================================================
+  let isEditingDelivery = false;
+  let isEditingInvoice  = false;
 
-      copyDelToInv: "#ctl00_PageBody_CopyDeliveryAddressLinkButton",
-      rowGroup: ".epi-form-group-checkout"
-    };
-
-    // Keep your hide lists
-    const deliveryHidden = [
-      "#ctl00_PageBody_DeliveryAddress_ContactNameTitleLiteral",
-      "label:contains('First name:')",
-      "label:contains('Last name:')",
-      S.del.first, S.del.last,
-      "#ctl00_PageBody_DeliveryAddress_GoogleAddressSearchWrapper",
-      "label[for='locationFieldDelivery']",
-      "#locationFieldDelivery",
-      "#ctl00_PageBody_DeliveryAddress_AddressLine1TitleLiteral",
-      S.del.line1,
-      "#ctl00_PageBody_DeliveryAddress_AddressLine2TitleLiteral",
-      S.del.line2,
-      "#ctl00_PageBody_DeliveryAddress_AddressLine3TitleLiteral",
-      S.del.line3,
-      "#ctl00_PageBody_DeliveryAddress_AddressCityTitleLiteral",
-      S.del.city,
-      "#ctl00_PageBody_DeliveryAddress_AddressCountyTitleLiteral",
-      S.del.county,
-      "#ctl00_PageBody_DeliveryAddress_AddressPostcodeTitleLiteral",
-      S.del.zip,
-      "#ctl00_PageBody_DeliveryAddress_AddressCountryTitleLiteral",
-      S.del.country,
-      "#ctl00_PageBody_DeliveryAddress_ContactTelephoneRow",
-      "#ctl00_PageBody_DeliveryAddress_ContactTelephoneTitleLiteral",
-      S.del.phone,
-      "#autocompleteDelivery",
-      "#ctl00_PageBody_ContinueButton1"
-    ];
-    const invoiceHidden = [
-      "#ctl00_PageBody_InvoiceAddress_GoogleAddressSearchWrapper",
-      "label[for='locationFieldInvoice']",
-      "#locationFieldInvoice",
-      "#autocompleteInvoice",
-      "#ctl00_PageBody_InvoiceAddress_AddressLine1TitleLiteral",
-      S.inv.line1,
-      "#ctl00_PageBody_InvoiceAddress_AddressLine2TitleLiteral",
-      S.inv.line2,
-      "#ctl00_PageBody_InvoiceAddress_AddressLine3TitleLiteral",
-      S.inv.line3,
-      "#ctl00_PageBody_InvoiceAddress_AddressCityTitleLiteral",
-      S.inv.city,
-      "#ctl00_PageBody_InvoiceAddress_AddressCountyTitleLiteral",
-      S.inv.county,
-      "#ctl00_PageBody_InvoiceAddress_AddressPostcodeTitleLiteral",
-      S.inv.zip,
-      "#ctl00_PageBody_InvoiceAddress_AddressCountryTitleLiteral",
-      S.inv.country,
-      "#ctl00_PageBody_InvoiceAddress_EmailAddressRow",
-      "#ctl00_PageBody_InvoiceAddress_EmailAddressTitleLiteral",
-      S.inv.email
-    ];
-
-    // Hide native rows; show rest
-    $(deliveryHidden.join(", ")).hide();
-    $(invoiceHidden.join(", ")).hide();
-    $(".container .row").not(".shopping-cart-item").show();
-    $(S.copyDelToInv).text("Billing address is the same as delivery address");
-
-    // ============= Summary + Left Drawer DOM =============
-    const panelHTML = `
-      <div class="checkout-layout-wrapper">
-        <div class="checkout-summary-panel" id="checkoutSummaryPanel">
-          <h2>Your Order Summary</h2>
-          ${[
-            ["order-type","Order Type"],
-            ["order-method","Order Method"],
-            ["date","Date"],
-            ["po","PO Number"],
-            ["notes","Special Notes"],
-            ["delivery","Delivery Address"],
-            ["invoice","Invoice Address"],
-            ["contact","Contact Info"],
-          ].map(([key,label]) => `
-            <div class="checkout-summary-section" data-section="${key}">
-              <div class="section-title-row">
-                <span class="section-status" id="status-${key}">•</span>
-                <h3>${label}</h3>
-              </div>
-              <p id="summary-${key}">Loading...</p>
-              <button class="edit-button" data-edit="${key}">Edit</button>
-            </div>
-          `).join("")}
-        </div>
-      </div>
-    `;
-    $(S.txnWrap).before(panelHTML);
-
-    // Left drawer elements appended to body to avoid overflow clipping
-    const drawerHTML = `
-      <div class="modal-overlay" id="checkoutModalOverlay"></div>
-      <div class="side-modal" id="checkoutSideModal">
-        <div class="modal-header">
-          <h3 id="checkoutModalTitle">Edit</h3>
-          <button class="btn-secondary" id="modalCloseBtn">Close</button>
-        </div>
-        <div class="modal-body" id="checkoutModalBody"></div>
-        <div class="modal-actions">
-          <button class="btn-secondary" id="modalCancelBtn">Cancel</button>
-          <button class="edit-button" id="modalSaveBtn">Save</button>
-        </div>
-      </div>
-    `;
-    $("body").append(drawerHTML);
-
-    // ============= Transaction & Shipping buttons =============
-    function updateTxn(val) {
-      const isOrder = (val === "rdbOrder");
-      setChecked(S.txnOrder, isOrder);
-      setChecked(S.txnQuote, !isOrder);
-      refreshSummary();
-    }
-    function updateShip(val) {
-      const isDelivered = (val === "rbDelivered");
-      setChecked(S.shipDelivered, isDelivered);
-      setChecked(S.shipPickup, !isDelivered);
-      refreshSummary();
+  function refreshReadOnlyDisplays() {
+    // Delivery
+    if (!isEditingDelivery) {
+      const fn = $("#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox").val();
+      const ln = $("#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox").val();
+      const a1 = $("#ctl00_PageBody_DeliveryAddress_AddressLine1").val();
+      const ct = $("#ctl00_PageBody_DeliveryAddress_City").val();
+      const zp = $("#ctl00_PageBody_DeliveryAddress_Postcode").val();
+      const htmlDel = `
+        <strong>Delivery Address:</strong><br>
+        ${fn} ${ln}<br>
+        ${a1}<br>
+        ${ct}, ${zp}
+        <br>
+        <button type="button" id="internalEditDeliveryAddressButton" class="edit-button">
+          Edit Delivery Address
+        </button>
+      `;
+      $(".selected-address-display").html(htmlDel);
     }
 
-    if ($(S.txnWrap).length) {
-      $(".TransactionTypeSelector").hide();
-      $(S.txnWrap).append(`
-        <div class="modern-transaction-selector" style="display:flex; gap:.5rem; margin-bottom:.75rem;">
-          <button id="btnOrder" class="edit-button" data-value="rdbOrder">Order</button>
-          <button id="btnQuote" class="edit-button btn-secondary" data-value="rdbQuote">Request Quote</button>
-        </div>
-      `);
-      updateTxn($(S.txnOrder).is(":checked") ? "rdbOrder" : "rdbQuote");
-      $(document).on("click", ".modern-transaction-selector button", function () {
-        updateTxn($(this).data("value"));
-      });
+    // Invoice
+    if (!isEditingInvoice) {
+      const a1 = $("#ctl00_PageBody_InvoiceAddress_AddressLine1").val();
+      const ct = $("#ctl00_PageBody_InvoiceAddress_City").val();
+      const zp = $("#ctl00_PageBody_InvoiceAddress_Postcode").val();
+      const htmlInv = `
+        <strong>Invoice Address:</strong><br>
+        ${a1}<br>
+        ${ct}, ${zp}
+        <br>
+        <button type="button" id="internalEditInvoiceAddressButton" class="edit-button">
+          Edit Invoice Address
+        </button>
+      `;
+      $(".selected-invoice-address-display").html(htmlInv);
     }
+  }
 
-    if ($(".SaleTypeSelector").length) {
-      $(".SaleTypeSelector").hide();
-      $(S.shipWrapGuess).append(`
-        <div class="modern-shipping-selector" style="display:flex; gap:.5rem;">
-          <button id="btnDelivered" class="edit-button" data-value="rbDelivered">Delivered</button>
-          <button id="btnPickup" class="edit-button btn-secondary" data-value="rbCollectLater">Pickup (Free)</button>
-        </div>
-      `);
-      updateShip($(S.shipDelivered).is(":checked") ? "rbDelivered" : "rbCollectLater");
-      $(document).on("click", ".modern-shipping-selector button", function () {
-        updateShip($(this).data("value"));
-      });
+  // trigger refresh on any checkout input change
+  $(document).on("change blur", ".epi-form-group-checkout input", refreshReadOnlyDisplays);
+
+
+  // Edit/Save Delivery
+  $(document).on("click", "#internalEditDeliveryAddressButton", function() {
+    console.log("Edit Delivery clicked");
+    isEditingDelivery = true;
+    $(deliveryHidden.join(", ")).show();
+    if (!$("#saveDeliveryAddressButton").length) {
+      $(".selected-address-display")
+        .append('<br><button type="button" id="saveDeliveryAddressButton" class="edit-button">Save Delivery Address</button>');
     }
-
-    // ============= Account Prefill (kept) =============
-    $.get("https://webtrack.woodsonlumber.com/AccountSettings.aspx", function (data) {
-      const $acc = $(data);
-      const fn = $acc.find("#ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput").val() || "";
-      const ln = $acc.find("#ctl00_PageBody_ChangeUserDetailsControl_LastNameInput").val() || "";
-      let email = $acc.find("#ctl00_PageBody_ChangeUserDetailsControl_EmailAddressInput").val() || "";
-      email = email.replace(/^\([^)]*\)\s*/, "");
-      setVal(S.del.first, fn);
-      setVal(S.del.last, ln);
-      setVal(S.inv.email, email);
-      refreshSummary();
-    });
-    $.get("https://webtrack.woodsonlumber.com/AccountInfo_R.aspx", function (data) {
-      const tel = $(data).find("#ctl00_PageBody_TelephoneLink_TelephoneLink").text().trim();
-      setVal(S.del.phone, tel);
-      refreshSummary();
-    });
-
-    // ============= Summary & Status logic =============
-    const getOrderType = () => ($(S.txnOrder).is(":checked") ? "Order" : "Request Quote");
-    const getOrderMethod = () => ($(S.shipDelivered).is(":checked") ? "Delivered" : "Pickup (Free)");
-    const getDateNeeded = () => T(valOf(S.dateInputs)) || "Not selected";
-    const getPO     = () => T(valOf(S.po)) || "Not provided";
-    const getNotes  = () => T(valOf(S.notes)) || "None";
-
-    function getDeliverySummary() {
-      const fn = T($(S.del.first).val());
-      const ln = T($(S.del.last).val());
-      const a1 = T($(S.del.line1).val());
-      const a2 = T($(S.del.line2).val());
-      const a3 = T($(S.del.line3).val());
-      const ct = T($(S.del.city).val());
-      const zp = T($(S.del.zip).val());
-      const lines = [
-        [fn, ln].filter(Boolean).join(" "),
-        a1, a2, a3,
-        [ct, zp].filter(Boolean).join(", ")
-      ].filter(Boolean);
-      return lines.join("\n") || "Not provided";
-    }
-    function getInvoiceSummary() {
-      const a1 = T($(S.inv.line1).val());
-      const a2 = T($(S.inv.line2).val());
-      const a3 = T($(S.inv.line3).val());
-      const ct = T($(S.inv.city).val());
-      const zp = T($(S.inv.zip).val());
-      const lines = [a1, a2, a3, [ct, zp].filter(Boolean).join(", ")].filter(Boolean);
-      return lines.join("\n") || "Not provided";
-    }
-    function getContactSummary() {
-      const fn = T($(S.del.first).val());
-      const ln = T($(S.del.last).val());
-      const ph = T($(S.del.phone).val());
-      const em = T($(S.inv.email).val());
-      const name = [fn, ln].filter(Boolean).join(" ") || "Name not set";
-      return [name, em || "Email not set", ph || "Phone not set"].join("\n");
-    }
-
-    // Completion rules (✓ / ✗)
-    function isOrderTypeOK()   { return $(S.txnOrder).is(":checked") || $(S.txnQuote).is(":checked"); }
-    function isOrderMethodOK() { return $(S.shipDelivered).is(":checked") || $(S.shipPickup).is(":checked"); }
-    function isDateOK()        { return !!T(valOf(S.dateInputs)); }
-    function isPOOK()          { return !!T(valOf(S.po)); }              // mark red if empty (change if optional)
-    function isNotesOK()       { return !!T(valOf(S.notes)); }           // mark red if empty (change if optional)
-    function isDeliveryOK() {
-      return !!T($(S.del.line1).val()) && !!T($(S.del.city).val()) && !!T($(S.del.zip).val());
-    }
-    function isInvoiceOK() {
-      return !!T($(S.inv.line1).val()) && !!T($(S.inv.city).val()) && !!T($(S.inv.zip).val());
-    }
-    function isContactOK() {
-      return !!T($(S.del.first).val()) && !!T($(S.del.last).val()) && !!T($(S.del.phone).val()) && !!T($(S.inv.email).val());
-    }
-
-    function setStatus(key, ok) {
-      const $el = $("#status-" + key);
-      $el.text(ok ? "✓" : "✗").toggleClass("ok", ok).toggleClass("bad", !ok);
-    }
-
-    function refreshSummary() {
-      $("#summary-order-type").text(getOrderType());   setStatus("order-type",   isOrderTypeOK());
-      $("#summary-order-method").text(getOrderMethod()); setStatus("order-method", isOrderMethodOK());
-      $("#summary-date").text(getDateNeeded());        setStatus("date",         isDateOK());
-      $("#summary-po").text(getPO());                  setStatus("po",           isPOOK());
-      $("#summary-notes").text(getNotes());            setStatus("notes",        isNotesOK());
-      $("#summary-delivery").text(getDeliverySummary()); setStatus("delivery",   isDeliveryOK());
-      $("#summary-invoice").text(getInvoiceSummary());   setStatus("invoice",    isInvoiceOK());
-      $("#summary-contact").text(getContactSummary());   setStatus("contact",    isContactOK());
-    }
-
-    $(document).on("change input blur", [
-      S.txnOrder, S.txnQuote,
-      S.shipDelivered, S.shipPickup,
-      S.dateInputs.join(","),
-      S.po.join(","), S.notes.join(","),
-      S.del.first, S.del.last, S.del.line1, S.del.line2, S.del.line3, S.del.city, S.del.zip, S.del.phone,
-      S.inv.line1, S.inv.line2, S.inv.line3, S.inv.city, S.inv.zip, S.inv.email
-    ].join(",")).on("change input blur", refreshSummary);
-
-    refreshSummary();
-
-    // ============= Left Drawer Editor =============
-    const originalSlots = {}; // section -> [{node,parent,nextSibling}]
-    const sectionsConfig = {
-      "order-type": {
-        title: "Order Type",
-        editSelectors: [S.txnWrap]
-      },
-      "order-method": {
-        title: "Order Method",
-        editSelectors: [function () {
-          const $guess = $(S.shipWrapGuess);
-          if ($guess.length) return $guess;
-          const $a = $(S.shipDelivered).closest(S.rowGroup);
-          const $b = $(S.shipPickup).closest(S.rowGroup);
-          return $a.add($b);
-        }]
-      },
-      "date": {
-        title: "Date",
-        editSelectors: [function () {
-          const $w = $(S.dateWrap);
-          return $w.length ? $w : jqWrap(S.dateInputs).closest(S.rowGroup);
-        }]
-      },
-      "po": {
-        title: "PO Number",
-        editSelectors: [function(){
-          const $i = jqWrap(S.po).first();
-          return $i.length ? $i.closest(S.rowGroup + ", .epi-form-col-single-checkout, .form-group") : $();
-        }]
-      },
-      "notes": {
-        title: "Special Notes",
-        editSelectors: [function(){
-          const $i = jqWrap(S.notes).first();
-          return $i.length ? $i.closest(S.rowGroup + ", .epi-form-col-single-checkout, .form-group") : $();
-        }]
-      },
-      "delivery": {
-        title: "Delivery Address",
-        editSelectors: [function(){
-          return $(deliveryHidden.join(", ")).map(function(){
-            const $row = $(this).closest(S.rowGroup);
-            return $row.length ? $row[0] : this;
-          });
-        }],
-        onOpen: () => $(deliveryHidden.join(", ")).show(),
-        onClose: () => $(deliveryHidden.join(", ")).hide()
-      },
-      "invoice": {
-        title: "Invoice Address",
-        editSelectors: [function(){
-          return $(invoiceHidden.join(", ")).map(function(){
-            const $row = $(this).closest(S.rowGroup);
-            return $row.length ? $row[0] : this;
-          });
-        }],
-        onOpen: () => $(invoiceHidden.join(", ")).show(),
-        onClose: () => $(invoiceHidden.join(", ")).hide()
-      },
-      "contact": {
-        title: "Contact Info",
-        editSelectors: [function(){
-          const $els = $()
-            .add($(S.del.first))
-            .add($(S.del.last))
-            .add($(S.del.phone))
-            .add($(S.inv.email));
-          return $els.map(function(){
-            const $row = $(this).closest(S.rowGroup);
-            return $row.length ? $row[0] : this;
-          });
-        }]
-      }
-    };
-
-    function openEditor(sectionKey) {
-      const cfg = sectionsConfig[sectionKey];
-      if (!cfg) return;
-      $("#checkoutModalTitle").text(`Edit ${cfg.title}`);
-      $("#checkoutModalBody").empty();
-      $("#checkoutSideModal").attr("data-section", sectionKey);
-      originalSlots[sectionKey] = [];
-
-      if (cfg.onOpen) cfg.onOpen();
-
-      cfg.editSelectors.forEach(sel => {
-        const $nodes = jqWrap(sel);
-        $nodes.each(function () {
-          const node = this;
-          const parent = node.parentNode;
-          const nextSibling = node.nextSibling;
-          originalSlots[sectionKey].push({ node, parent, nextSibling });
-
-          const placeholder = document.createElement("div");
-          placeholder.className = "_placeholder";
-          parent.insertBefore(placeholder, nextSibling);
-
-          $("#checkoutModalBody")[0].appendChild(node);
-        });
-      });
-
-      $("#checkoutModalOverlay, #checkoutSideModal").addClass("active");
-    }
-
-    function closeEditor(sectionKey, save) {
-      const slots = originalSlots[sectionKey] || [];
-      slots.forEach(({ node, parent, nextSibling }) => {
-        if (nextSibling) parent.insertBefore(node, nextSibling);
-        else parent.appendChild(node);
-      });
-      $("#checkoutModalBody").find("._placeholder").remove();
-      $("#checkoutModalBody").empty();
-      $("#checkoutModalOverlay, #checkoutSideModal").removeClass("active");
-
-      const cfg = sectionsConfig[sectionKey];
-      if (cfg && cfg.onClose) cfg.onClose();
-
-      if (save) refreshSummary();
-      delete originalSlots[sectionKey];
-    }
-
-    // Open/Close events
-    $(document).on("click", ".checkout-summary-panel .edit-button", function () {
-      openEditor($(this).data("edit"));
-    });
-    $(document).on("click", "#checkoutModalOverlay, #modalCloseBtn, #modalCancelBtn", function () {
-      const section = $("#checkoutSideModal").attr("data-section");
-      if (section) closeEditor(section, false);
-    });
-    $(document).on("click", "#modalSaveBtn", function () {
-      const section = $("#checkoutSideModal").attr("data-section");
-      if (section) closeEditor(section, true);
-    });
-
-    // Safety: refresh on any field change
-    $(document).on("change input blur", ".epi-form-group-checkout input, .epi-form-group-checkout textarea, .epi-form-group-checkout select", refreshSummary);
   });
-})();
+  $(document).on("click", "#saveDeliveryAddressButton", function() {
+    console.log("Save Delivery clicked");
+    $(deliveryHidden.join(", ")).hide();
+    $("#saveDeliveryAddressButton").remove();
+    isEditingDelivery = false;
+    refreshReadOnlyDisplays();
+  });
+
+
+  // Edit/Save Invoice
+  $(document).on("click", "#internalEditInvoiceAddressButton", function() {
+    console.log("Edit Invoice clicked");
+    isEditingInvoice = true;
+    $(invoiceHidden.join(", ")).show();
+    if (!$("#saveInvoiceAddressButton").length) {
+      $(".selected-invoice-address-display")
+        .append('<br><button type="button" id="saveInvoiceAddressButton" class="edit-button">Save Invoice Address</button>');
+    }
+  });
+  $(document).on("click", "#saveInvoiceAddressButton", function() {
+    console.log("Save Invoice clicked");
+    $(invoiceHidden.join(", ")).hide();
+    $("#saveInvoiceAddressButton").remove();
+    isEditingInvoice = false;
+    refreshReadOnlyDisplays();
+  });
+
+
+  // ===================================================
+  // (B) Modern Transaction & Shipping Selectors
+  // ===================================================
+  if ($("#ctl00_PageBody_TransactionTypeDiv").length) {
+    $(".TransactionTypeSelector").hide();
+    const txnHTML = `
+      <div class="modern-transaction-selector d-flex justify-content-around">
+        <button id="btnOrder" class="btn btn-primary" data-value="rdbOrder">
+          <i class="fas fa-shopping-cart"></i> Order
+        </button>
+        <button id="btnQuote" class="btn btn-secondary" data-value="rdbQuote">
+          <i class="fas fa-file-alt"></i> Request Quote
+        </button>
+      </div>
+    `;
+    $("#ctl00_PageBody_TransactionTypeDiv").append(txnHTML);
+
+    function updateTransactionStyles(val) {
+      console.log(`Transaction type updated: ${val}`);
+      const orderRad = $("#ctl00_PageBody_TransactionTypeSelector_rdbOrder");
+      const quoteRad = $("#ctl00_PageBody_TransactionTypeSelector_rdbQuote");
+      if (val === "rdbOrder") {
+        orderRad.prop("checked", true);
+        $("#btnOrder").addClass("btn-primary").removeClass("btn-secondary");
+        $("#btnQuote").addClass("btn-secondary").removeClass("btn-primary");
+      } else {
+        quoteRad.prop("checked", true);
+        $("#btnQuote").addClass("btn-primary").removeClass("btn-secondary");
+        $("#btnOrder").addClass("btn-secondary").removeClass("btn-primary");
+      }
+    }
+
+    // init & click
+    updateTransactionStyles(
+      $("#ctl00_PageBody_TransactionTypeSelector_rdbOrder").is(":checked") ? "rdbOrder" : "rdbQuote"
+    );
+    $(document).on("click", ".modern-transaction-selector button", function() {
+      updateTransactionStyles($(this).data("value"));
+    });
+  } else {
+    console.warn("Transaction type div not found.");
+  }
+
+
+  if ($(".SaleTypeSelector").length) {
+    $(".SaleTypeSelector").hide();
+    const shipHTML = `
+      <div class="modern-shipping-selector d-flex justify-content-around">
+        <button id="btnDelivered" class="btn btn-primary" data-value="rbDelivered">
+          <i class="fas fa-truck"></i> Delivered
+        </button>
+        <button id="btnPickup" class="btn btn-secondary" data-value="rbCollectLater">
+          <i class="fas fa-store"></i> Pickup (Free)
+        </button>
+      </div>
+    `;
+    $(".epi-form-col-single-checkout:has(.SaleTypeSelector)").append(shipHTML);
+
+    function updateShippingStyles(val) {
+      console.log(`Shipping method updated: ${val}`);
+      const delRad = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
+      const pickRad = $("#ctl00_PageBody_SaleTypeSelector_rbCollectLater");
+      if (val === "rbDelivered") {
+        delRad.prop("checked", true);
+        $("#btnDelivered").addClass("btn-primary").removeClass("btn-secondary");
+        $("#btnPickup").addClass("btn-secondary").removeClass("btn-primary");
+      } else {
+        pickRad.prop("checked", true);
+        $("#btnPickup").addClass("btn-primary").removeClass("btn-secondary");
+        $("#btnDelivered").addClass("btn-secondary").removeClass("btn-primary");
+        refreshReadOnlyDisplays();
+      }
+    }
+
+    updateShippingStyles(
+      $("#ctl00_PageBody_SaleTypeSelector_rbDelivered").is(":checked") ? "rbDelivered" : "rbCollectLater"
+    );
+    $(document).on("click", ".modern-shipping-selector button", function() {
+      updateShippingStyles($(this).data("value"));
+    });
+  } else {
+    console.warn("Shipping method selector not found.");
+  }
+
+
+  // ===================================================
+  // (C) INITIAL PRE-POPULATION LOGIC
+  // ===================================================
+  if (!$("#ctl00_PageBody_DeliveryAddress_AddressLine1").val()) {
+    console.log("Initial address pre-population running...");
+    const $link = $("#ctl00_PageBody_CustomerAddressSelector_SelectAddressLinkButton");
+    if ($link.length) {
+      let $entries = $(".AddressSelectorEntry");
+      if ($entries.length) {
+        // find smallest ID
+        let $pick = $entries.first();
+        let minId = parseInt($pick.find(".AddressId").text(), 10);
+        $entries.each(function() {
+          const id = +$(this).find(".AddressId").text();
+          if (id < minId) { minId = id; $pick = $(this); }
+        });
+        // parse text
+        const txt = $pick.find("dd p").first().text().trim();
+        const parts = txt.split(",").map(s => s.trim());
+        const [line1='', city=''] = parts;
+        let state = '', zip = '';
+        if (parts.length >= 4) {
+          state = parts[parts.length-2];
+          zip   = parts[parts.length-1];
+        } else if (parts.length>2) {
+          const m = parts[2].match(/(.+?)\s*(\d{5}(?:-\d{4})?)?$/);
+          if (m) { state = m[1].trim(); zip = m[2]||''; }
+        }
+        console.log(`Parsed Address: ${line1}, ${city}, ${state}, ${zip}`);
+        $("#ctl00_PageBody_DeliveryAddress_AddressLine1").val(line1);
+        $("#ctl00_PageBody_DeliveryAddress_City").val(city);
+        $("#ctl00_PageBody_DeliveryAddress_Postcode").val(zip);
+        $("#ctl00_PageBody_DeliveryAddress_CountrySelector").val("USA");
+        $("#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList option").each(function() {
+          if ($(this).text().trim().toLowerCase() === state.toLowerCase()) {
+            $(this).prop("selected", true);
+            return false;
+          }
+        });
+      }
+    } else {
+      console.warn("Address selector link button not found.");
+    }
+  } else {
+    console.log("Address pre-population skipped; field not empty.");
+  }
+
+
+  // ===================================================
+  // (D) ALWAYS RUN: Account Settings & Telephone Fetch
+  // ===================================================
+  $.get("https://webtrack.woodsonlumber.com/AccountSettings.aspx", function(data) {
+    const $acc = $(data);
+    const fn = $acc.find("#ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput").val() || "";
+    const ln = $acc.find("#ctl00_PageBody_ChangeUserDetailsControl_LastNameInput").val() || "";
+    let email = $acc.find("#ctl00_PageBody_ChangeUserDetailsControl_EmailAddressInput").val() || "";
+    email = email.replace(/^\([^)]*\)\s*/, "");
+    console.log("Fetched account settings:", fn, ln, email);
+    $("#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox").val(fn);
+    $("#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox").val(ln);
+    $("#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox").val(email);
+    refreshReadOnlyDisplays();
+  });
+  $.get("https://webtrack.woodsonlumber.com/AccountInfo_R.aspx", function(data) {
+    const tel = $(data).find("#ctl00_PageBody_TelephoneLink_TelephoneLink").text().trim();
+    console.log("Fetched telephone:", tel);
+    $("#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox").val(tel);
+    refreshReadOnlyDisplays();
+  });
+
+
+  // ===================================================
+  // (E) Append Read-Only Display Containers
+  // ===================================================
+  const $cols = $(".epi-form-col-single-checkout");
+  if ($cols.length >= 7) {
+    if (!$cols.eq(5).find(".selected-address-display").length) {
+      $cols.eq(5).append(`
+        <div class="selected-address-display">
+          <strong>Delivery Address:</strong><br>
+          <button type="button" id="internalEditDeliveryAddressButton" class="edit-button">
+            Edit Delivery Address
+          </button>
+        </div>
+      `);
+    }
+    if (!$cols.eq(6).find(".selected-invoice-address-display").length) {
+      $cols.eq(6).append(`
+        <div class="selected-invoice-address-display">
+          <strong>Invoice Address:</strong><br>
+          <button type="button" id="internalEditInvoiceAddressButton" class="edit-button">
+            Edit Invoice Address
+          </button>
+        </div>
+      `);
+    }
+    refreshReadOnlyDisplays();
+  } else {
+    console.warn("Not enough .epi-form-col-single-checkout elements found.");
+  }
+
+
+  // ===================================================
+  // (F) Date Picker (unchanged)
+  // ===================================================
+  if ($("#ctl00_PageBody_dtRequired_DatePicker_wrapper").length) {
+    console.log("Date selector found, no modifications made.");
+  } else {
+    console.warn("Date picker wrapper not found.");
+  }
+});
