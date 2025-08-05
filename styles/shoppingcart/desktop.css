@@ -486,3 +486,28 @@ margin-bottom: 0px !important;
     display: flex;
     justify-content: space-between;
   }
+
+   .form-group {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    /* optional: constrain max width of the whole group */
+    max-width: 500px;
+    margin: 0 auto; /* center it if you like */
+  }
+
+  /* Enlarge and pad the date input */
+  #pickupDate {
+    width: 250px;           /* wider picker */
+    padding: 0.5rem 1rem;   /* more click/tap area */
+    font-size: 1rem;        /* larger text */
+    border-radius: 4px;     /* soften the corners */
+    border: 1px solid #ccc; /* subtle border */
+  }
+
+  /* Nudge the calendar icon in from the right edge */
+  #pickupDate::-webkit-calendar-picker-indicator {
+    right: 10px;    /* move it left */
+    left: auto;     /* override any default left positioning */
+    opacity: 0.7;   /* slightly subdued */
+  }
