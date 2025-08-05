@@ -14,6 +14,11 @@ $('label').filter(function(){
 // Hide the default date-picker wrapper and its form-control container
 $('div.form-control').hide();
 $('#ctl00_PageBody_dtRequired_DatePicker_wrapper').hide();
+// hide the entire epi‐form group that contains the “Date required” picker
+$('#ctl00_PageBody_dtRequired_DatePicker_wrapper')
+  .closest('.epi-form-col-single-checkout.epi-form-group-checkout')
+  .hide();
+
 
 // Rename the secondary back button
 $('#ctl00_PageBody_BackToCartButton2').val('Back to Cart');
