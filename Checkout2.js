@@ -19,10 +19,21 @@ document.addEventListener('DOMContentLoaded', function() {
     { title:'Billing address',     findEls:()=>{ var gp=document.getElementById('ctl00_PageBody_InvoiceAddress_GoogleAddressSearchWrapper'); return gp?[gp.closest('.epi-form-col-single-checkout')]:[]; }},
     { title:'Special instructions',findEls:()=>{
         var arr=[];
+        // the date picker wrapper
         var dateGrp = document.getElementById('ctl00_PageBody_dtRequired_DatePicker_wrapper');
         if(dateGrp) arr.push(dateGrp.closest('.epi-form-col-single-checkout'));
+        // the cart table
         var tbl = document.querySelector('.cartTable');
         if(tbl) arr.push(tbl.closest('table'));
+        // the special instructions field
+        var si = document.getElementById('ctl00_PageBody_SpecialInstructionsTextBox');
+        if(si){
+          // move its container (form-group or similar)
+          var wrap = si.closest('.epi-form-group-checkout') 
+                  || si.closest('.epi-form-col-single-checkout')
+                  || si.parentElement;
+          arr.push(wrap);
+        }
         return arr;
     }}
   ];
@@ -184,14 +195,15 @@ document.addEventListener('DOMContentLoaded', function() {
     upd();
   })();
 
-  // 10) Step 7: pickup vs delivery logic & special instructions
+  // 10) Step 7: pickup vs delivery logic & special instructions (moved delivery/pickup after the SI input)
   (function(){
-    var p7=wizard.querySelector('[data-step="7"]');
+    var p7 = wizard.querySelector('[data-step="7"]');
     if(!p7) return;
-    var specialIns=document.getElementById('ctl00_PageBody_SpecialInstructionsTextBox'),
-        rbDel=document.getElementById('ctl00_PageBody_SaleTypeSelector_rbDelivered'),
-        rbPick=document.getElementById('ctl00_PageBody_SaleTypeSelector_rbCollectLater'),
-        zipInput=document.getElementById('ctl00_PageBody_DeliveryAddress_Postcode');
+    // grab special instructions input + its container
+    var specialIns = document.getElementById('ctl00_PageBody_SpecialInstructionsTextBox'),
+        siWrap     = specialIns.closest('.epi-form-group-checkout')
+                  || specialIns.closest('.form-group')
+                  || specialIns.parentElement;
 
     // pickup container
     var pickupDiv=document.createElement('div');
@@ -202,8 +214,6 @@ document.addEventListener('DOMContentLoaded', function() {
       <label for="pickupPerson">Pickup Person:</label>
       <input type="text" id="pickupPerson" class="form-control">`;
     pickupDiv.style.display='none';
-    p7.insertBefore(pickupDiv,p7.querySelector('table')||p7.firstChild);
-
     // delivery container
     var deliveryDiv=document.createElement('div');
     deliveryDiv.className='form-group';
@@ -215,7 +225,14 @@ document.addEventListener('DOMContentLoaded', function() {
         <label><input type="radio" name="deliveryTime" value="Afternoon"> Afternoon</label>
       </div>`;
     deliveryDiv.style.display='none';
-    p7.insertBefore(deliveryDiv,p7.querySelector('table')||p7.firstChild);
+
+    // insert both immediately after the SI container
+    p7.insertBefore(pickupDiv , siWrap.nextSibling);
+    p7.insertBefore(deliveryDiv, siWrap.nextSibling);
+
+    var rbDel=document.getElementById('ctl00_PageBody_SaleTypeSelector_rbDelivered'),
+        rbPick=document.getElementById('ctl00_PageBody_SaleTypeSelector_rbCollectLater'),
+        zipInput=document.getElementById('ctl00_PageBody_DeliveryAddress_Postcode');
 
     function inZone(zip){
       return ['75','76','77','78','79'].includes((zip||'').substring(0,2));
@@ -233,7 +250,7 @@ document.addEventListener('DOMContentLoaded', function() {
               t=p7.querySelector('input[name="deliveryTime"]:checked');
           specialIns.value='Delivery on '+d2+(t?' ('+t.value+')':'');
         } else {
-          specialIns.value='Ship via 3rd party delivery selected on next screen.';
+          specialIns.value='Ship via 3rd party delivery on next screen.';
         }
       }
     }
@@ -249,7 +266,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if(inZone(z)){
           deliveryDiv.style.display='block';
         } else {
-          deliveryDiv.innerHTML='<em>Ship via 3rd party delivery selected on next screen.</em>';
+          deliveryDiv.innerHTML='<em>Ship via 3rd party delivery on next screen.</em>';
           deliveryDiv.style.display='block';
         }
       } else {
@@ -270,13 +287,15 @@ document.addEventListener('DOMContentLoaded', function() {
       else if(sel.getDay()===0){ alert('No Sunday deliveries'); this.value=''; }
       updateSpecial();
     });
-    deliveryDiv.querySelectorAll('input[name="deliveryTime"]').forEach(r=>r.addEventListener('change',updateSpecial));
+    deliveryDiv.querySelectorAll('input[name="deliveryTime"]')
+      .forEach(r=>r.addEventListener('change',updateSpecial));
     onShip7();
   })();
 
   // 11) Step switcher + persistence
   function showStep(n){
-    wizard.querySelectorAll('.checkout-step').forEach(p=>p.classList.toggle('active',+p.dataset.step===n));
+    wizard.querySelectorAll('.checkout-step')
+      .forEach(p=>p.classList.toggle('active', +p.dataset.step===n));
     nav.querySelectorAll('li').forEach(li=>{
       var s=+li.dataset.step;
       li.classList.toggle('active',    s===n);
