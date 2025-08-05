@@ -407,3 +407,73 @@ $(document).ready(function() {
     $('.epi-form-col-single-checkout, #ctl00_PageBody_BranchSelector, .cartTable').last().after($wrapper);
   }
 });
+
+
+// ———— 1) Inject some minimal styling ————
+$('<style>')
+  .prop('type','text/css')
+  .html(`
+    .checkout-step { border:1px solid #e2e2e2; padding:1rem; margin-bottom:1.5rem; background:#fff; border-radius:.25rem; }
+    .checkout-nav .epi-button { min-width:120px; margin-right:.5rem; }
+  `)
+  .appendTo('head');
+
+// ———— 2) Build the “skeleton” above everything ————
+const $c = $('.container').first();
+const $shell = $(`
+  <div id="checkout-shell">
+    <div class="row mb-4 checkout-nav"><div class="col" id="checkout-nav-1"></div></div>
+    <div class="row mb-4 checkout-step" id="step-1">
+      <div class="col-md-4" id="module-transaction"></div>
+      <div class="col-md-4" id="module-shipping"></div>
+      <div class="col-md-4" id="module-date"></div>
+    </div>
+    <div class="row mb-4 checkout-step" id="step-2">
+      <div class="col-md-4" id="module-po"></div>
+      <div class="col-md-4" id="module-branch"></div>
+      <div class="col-md-4" id="module-instructions"></div>
+    </div>
+    <div class="row mb-4 checkout-step" id="step-3">
+      <div class="col-md-6" id="module-delivery"></div>
+      <div class="col-md-6" id="module-invoice"></div>
+    </div>
+    <div class="row checkout-nav"><div class="col" id="checkout-nav-2"></div></div>
+  </div>
+`);
+$c.prepend($shell);
+
+// ———— 3) Reparent your real controls ————
+// Nav #1
+$('#ctl00_PageBody_BackToCartButton1, #ctl00_PageBody_ContinueButton1')
+  .detach().appendTo('#checkout-nav-1');
+
+// Step 1
+$('#ctl00_PageBody_TransactionTypeDiv').detach().appendTo('#module-transaction');
+$('.modern-transaction-selector').detach().appendTo('#module-transaction');
+
+$('.epi-form-col-single-checkout:has(.SaleTypeSelector)')
+  .detach().appendTo('#module-shipping');
+$('.modern-shipping-selector').detach().appendTo('#module-shipping');
+
+$('.epi-form-col-single-checkout:has(#ctl00_PageBody_dtRequired_DatePicker_wrapper)')
+  .detach().appendTo('#module-date');
+
+// Step 2
+$('.epi-form-col-single-checkout:has(#ctl00_PageBody_PurchaseOrderNumberTextBox)')
+  .detach().appendTo('#module-po');
+$('#ctl00_PageBody_BranchSelector').detach().appendTo('#module-branch');
+$('.cartTable').detach().appendTo('#module-instructions');
+
+// Step 3
+$('.epi-form-col-single-checkout:has(.selected-address-display)')
+  .detach().appendTo('#module-delivery');
+$('.epi-form-col-single-checkout:has(.selected-invoice-address-display)')
+  .detach().appendTo('#module-invoice');
+
+// Nav #2 (if you have a second back/continue)
+$('#ctl00_PageBody_BackToCartButton2, #ctl00_PageBody_ContinueButton2')
+  .detach().appendTo('#checkout-nav-2');
+
+// ———— 4) Hide any leftover empty rows ————
+$c.find('> .row').not('#checkout-shell .row').hide();
+
