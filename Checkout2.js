@@ -68,7 +68,17 @@ $(document).ready(function() {
   $("#ctl00_PageBody_CopyDeliveryAddressLinkButton")
     .text("Billing address is the same as delivery address");
 
-      // ===================================================
+      
+  
+
+
+  // ===================================================
+  // (A) Always-Attached Event Handlers & Helpers
+  // ===================================================
+  let isEditingDelivery = false;
+  let isEditingInvoice  = false;
+
+    // ===================================================
   // (A1) Replace copy‐link spans with radio buttons
   // ===================================================
   // remove the old link-spans entirely
@@ -99,12 +109,6 @@ $(document).ready(function() {
     }
   });
 
-
-  // ===================================================
-  // (A) Always-Attached Event Handlers & Helpers
-  // ===================================================
-  let isEditingDelivery = false;
-  let isEditingInvoice  = false;
 
   function refreshReadOnlyDisplays() {
     // Delivery
