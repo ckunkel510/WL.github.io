@@ -409,7 +409,10 @@ $(document).ready(function() {
 });
 
 
-// ———— 1) Inject some minimal styling ————
+
+
+
+// ———— Inject minimal CSS for our new layout ————
 $('<style>')
   .prop('type','text/css')
   .html(`
@@ -418,8 +421,8 @@ $('<style>')
   `)
   .appendTo('head');
 
-// ———— 2) Build the “skeleton” above everything ————
-const $c = $('.container').first();
+// ———— Build the shell ————
+const $container = $('.container').first();
 const $shell = $(`
   <div id="checkout-shell">
     <div class="row mb-4 checkout-nav"><div class="col" id="checkout-nav-1"></div></div>
@@ -440,40 +443,43 @@ const $shell = $(`
     <div class="row checkout-nav"><div class="col" id="checkout-nav-2"></div></div>
   </div>
 `);
-$c.prepend($shell);
+$container.prepend($shell);
 
-// ———— 3) Reparent your real controls ————
-// Nav #1
+// ———— Reparent only the VISIBLE modules ————
 $('#ctl00_PageBody_BackToCartButton1, #ctl00_PageBody_ContinueButton1')
   .detach().appendTo('#checkout-nav-1');
 
-// Step 1
-$('#ctl00_PageBody_TransactionTypeDiv').detach().appendTo('#module-transaction');
-$('.modern-transaction-selector').detach().appendTo('#module-transaction');
+// Step 1: transaction, shipping, date
+$('.modern-transaction-selector')
+  .detach().appendTo('#module-transaction');
 
-$('.epi-form-col-single-checkout:has(.SaleTypeSelector)')
+$('.modern-shipping-selector')
   .detach().appendTo('#module-shipping');
-$('.modern-shipping-selector').detach().appendTo('#module-shipping');
 
 $('.epi-form-col-single-checkout:has(#ctl00_PageBody_dtRequired_DatePicker_wrapper)')
   .detach().appendTo('#module-date');
 
-// Step 2
+// Step 2: PO/ref, branch, instructions
 $('.epi-form-col-single-checkout:has(#ctl00_PageBody_PurchaseOrderNumberTextBox)')
   .detach().appendTo('#module-po');
-$('#ctl00_PageBody_BranchSelector').detach().appendTo('#module-branch');
-$('.cartTable').detach().appendTo('#module-instructions');
 
-// Step 3
-$('.epi-form-col-single-checkout:has(.selected-address-display)')
-  .detach().appendTo('#module-delivery');
-$('.epi-form-col-single-checkout:has(.selected-invoice-address-display)')
-  .detach().appendTo('#module-invoice');
+$('#ctl00_PageBody_BranchSelector')
+  .detach().appendTo('#module-branch');
 
-// Nav #2 (if you have a second back/continue)
+$('.cartTable')
+  .detach().appendTo('#module-instructions');
+
+// Step 3: Delivery & invoice read-only displays
+$('.selected-address-display')
+  .closest('.epi-form-col-single-checkout')
+  .detach()
+  .appendTo('#module-delivery');
+
+$('.selected-invoice-address-display')
+  .closest('.epi-form-col-single-checkout')
+  .detach()
+  .appendTo('#module-invoice');
+
+// Nav2 (if present)
 $('#ctl00_PageBody_BackToCartButton2, #ctl00_PageBody_ContinueButton2')
   .detach().appendTo('#checkout-nav-2');
-
-// ———— 4) Hide any leftover empty rows ————
-$c.find('> .row').not('#checkout-shell .row').hide();
-
