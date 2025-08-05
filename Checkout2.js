@@ -1,5 +1,5 @@
 document.addEventListener('DOMContentLoaded', function() {
-  // 1) Create wizard container & nav
+  // 1) Wizard container & nav
   var container = document.querySelector('.container');
   var wizard    = document.createElement('div');
   wizard.className = 'checkout-wizard';
@@ -8,14 +8,14 @@ document.addEventListener('DOMContentLoaded', function() {
   nav.className = 'checkout-steps';
   wizard.appendChild(nav);
 
-  // 2) Define the seven steps
+  // 2) Define the seven steps (with updated title for step 6)
   var steps = [
     { title:'Order details',    findEls:()=>{ var tx=document.getElementById('ctl00_PageBody_TransactionTypeDiv'); return tx?[tx.closest('.epi-form-col-single-checkout')]:[]; }},
     { title:'Shipping & date',   findEls:()=>{ var a=[], ship=document.getElementById('ctl00_PageBody_SaleTypeSelector_lblDelivered'); if(ship)a.push(ship.closest('.epi-form-col-single-checkout')); var dt=document.getElementById('ctl00_PageBody_dtRequired_DatePicker_wrapper'); if(dt)a.push(dt.closest('.epi-form-col-single-checkout')); return a; }},
     { title:'Your reference',    findEls:()=>{ var po=document.getElementById('ctl00_PageBody_PurchaseOrderNumberTextBox'); return po?[po.closest('.epi-form-group-checkout')]:[]; }},
     { title:'Branch',            findEls:()=>{ var br=document.getElementById('ctl00_PageBody_BranchSelector'); return br?[br]:[]; }},
     { title:'Delivery address',  findEls:()=>{ var hdr=document.querySelector('.SelectableAddressType'); return hdr?[hdr.closest('.epi-form-col-single-checkout')]:[]; }},
-    { title:'Invoice address',   findEls:()=>{ var gp=document.getElementById('ctl00_PageBody_InvoiceAddress_GoogleAddressSearchWrapper'); return gp?[gp.closest('.epi-form-col-single-checkout')]:[]; }},
+    { title:'Billing address',   findEls:()=>{ var gp=document.getElementById('ctl00_PageBody_InvoiceAddress_GoogleAddressSearchWrapper'); return gp?[gp.closest('.epi-form-col-single-checkout')]:[]; }},
     { title:'Special instructions', findEls:()=>{ var tbl=document.querySelector('.cartTable'); return tbl?[tbl]:[]; }}
   ];
 
@@ -65,7 +65,47 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
-  // 4) Prefill delivery address (step 5)
+  // 4) Insert optional tag on step 3 ("Your reference")
+  (function(){
+    var pane3 = wizard.querySelector('.checkout-step[data-step="3"]');
+    if(pane3){
+      var lbl = pane3.querySelector('label');
+      if(lbl){
+        var opt = document.createElement('small');
+        opt.className = 'text-muted';
+        opt.style.marginLeft = '8px';
+        opt.textContent = '(optional)';
+        lbl.appendChild(opt);
+      }
+    }
+  })();
+
+  // 5) Change header inside pane6 to "Billing Address"
+  (function(){
+    var pane6 = wizard.querySelector('.checkout-step[data-step="6"]');
+    if(pane6){
+      // update pane header if present
+      var hdr = pane6.querySelector('.font-weight-bold.mb-3.mt-4');
+      if(hdr) hdr.textContent = 'Billing Address';
+    }
+  })();
+
+  // 6) Insert optional tag on step 7 ("Special instructions")
+  (function(){
+    var pane7 = wizard.querySelector('.checkout-step[data-step="7"]');
+    if(pane7){
+      var th = pane7.querySelector('th');
+      if(th){
+        var opt2 = document.createElement('small');
+        opt2.className = 'text-muted';
+        opt2.style.marginLeft = '8px';
+        opt2.textContent = '(optional)';
+        th.appendChild(opt2);
+      }
+    }
+  })();
+
+  // 7) Prefill delivery address (step 5 logic)
   if(!$('#ctl00_PageBody_DeliveryAddress_AddressLine1').val()){
     var $link=$('#ctl00_PageBody_CustomerAddressSelector_SelectAddressLinkButton');
     if($link.length){
@@ -98,7 +138,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  // 5) AJAX fetch name/email & telephone
+  // 8) AJAX fetch name/email & telephone
   $.get('https://webtrack.woodsonlumber.com/AccountSettings.aspx', function(data){
     var $acc=$(data),
         fn=$acc.find('#ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput').val()||'',
@@ -113,7 +153,7 @@ document.addEventListener('DOMContentLoaded', function() {
     $('#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').val(tel);
   });
 
-  // 6) Delivery summary/edit (step 5)
+  // 9) Delivery summary/edit (step 5)
   (function(){
     var pane5=wizard.querySelector('.checkout-step[data-step="5"]');
     if(!pane5) return;
@@ -159,7 +199,7 @@ document.addEventListener('DOMContentLoaded', function() {
     refreshSummary();
   })();
 
-  // 7) Billing-same checkbox + invoice summary/edit (step 6)
+  // 10) Billing-same checkbox + invoice summary/edit (step 6)
   (function(){
     var pane6=wizard.querySelector('.checkout-step[data-step="6"]');
     if(!pane6) return;
@@ -196,13 +236,13 @@ document.addEventListener('DOMContentLoaded', function() {
           zip=wrapperInv.querySelector('#ctl00_PageBody_InvoiceAddress_Postcode').value||'',
           email=wrapperInv.querySelector('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox').value||'';
       summaryInv.innerHTML=`
-        <strong>Invoice Address</strong><br>
+        <strong>Billing Address</strong><br>
         ${a1}${a2?'<br>'+a2:''}<br>
         ${city}, ${state} ${zip}<br>
         Email: ${email}<br>
         <button id="editInvoice" class="btn btn-link">Enter new billing address</button>`;
     }
-    // initial visibility based on saved choice
+    // initial based on stored choice
     wrapperInv.style.display='none'; summaryInv.style.display='none';
     colInv.insertBefore(summaryInv,wrapperInv);
     var same=localStorage.sameAsDelivery==='true';
@@ -237,7 +277,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   })();
 
-  // 8) Step switcher + persistence
+  // 11) Step switcher + persistence
   function showStep(n){
     wizard.querySelectorAll('.checkout-step').forEach(function(p){
       p.classList.toggle('active', +p.dataset.step===n);
@@ -250,7 +290,6 @@ document.addEventListener('DOMContentLoaded', function() {
     localStorage.currentStep=n;
     window.scrollTo({ top: wizard.offsetTop, behavior: 'smooth' });
   }
-  // resume or start at 2
+  // resume or start at step 2
   showStep(parseInt(localStorage.currentStep,10)||2);
 });
-
