@@ -438,11 +438,10 @@ margin-bottom: 0px !important;
 
 
 
-
-/* overall wizard wrapper */
+/* wizard container */
 .checkout-wizard { max-width: 800px; margin: 2rem auto; }
 
-/* step indicator nav */
+/* step indicator */
 .checkout-steps {
   list-style: none;
   display: flex;
@@ -485,7 +484,7 @@ margin-bottom: 0px !important;
   color: #6b0016;
 }
 
-/* step content panes */
+/* content panes */
 .checkout-step { display: none; }
 .checkout-step.active { display: block; }
 

@@ -1,27 +1,5 @@
-
-
 document.addEventListener('DOMContentLoaded', function() {
-  // 1) Define your steps: title + a selector pointing at something unique in that section
-  var steps = [
-    { title: 'Order details',       selector: '#ctl00_PageBody_TransactionTypeDiv'                },
-    { title: 'Shipping & date',      selector: '#ctl00_PageBody_dtRequired_DatePicker_wrapper'      },
-    { title: 'Your reference',       selector: '#ctl00_PageBody_PurchaseOrderNumberTextBox'         },
-    { title: 'Branch',               selector: '#ctl00_PageBody_BranchSelector'                     },
-    { title: 'Delivery address',     selector: '.font-weight-bold:contains("Delivery")'             },
-    { title: 'Invoice address',      selector: '.font-weight-bold.mt-4:contains("Invoice")'          },
-    { title: 'Special instructions', selector: '.cartTable'                                           }
-  ];
-
-  // Helper: querySelector with :contains for plain JS
-  function queryContains(tagOrSelector, text) {
-    var nodes = document.querySelectorAll(tagOrSelector);
-    for (var i=0; i<nodes.length; i++) {
-      if (nodes[i].textContent.trim().indexOf(text) !== -1) return nodes[i];
-    }
-    return null;
-  }
-
-  // 2) Build the wizard container & nav
+  // 1) Grab your container and build the wizard shell
   var container = document.querySelector('.container');
   var wizard   = document.createElement('div');
   wizard.className = 'checkout-wizard';
@@ -31,86 +9,141 @@ document.addEventListener('DOMContentLoaded', function() {
   nav.className = 'checkout-steps';
   wizard.appendChild(nav);
 
-  // 3) For each step, pull its existing DOM into a new pane
-  steps.forEach(function(step, i) {
-    var stepNum = i + 1;
+  // 2) Define each step and which existing elements to move
+  var steps = [
+    {
+      title: 'Order details',
+      paneEls: [
+        document.querySelector('#ctl00_PageBody_TransactionTypeDiv')
+                .closest('.epi-form-col-single-checkout')
+      ]
+    },
+    {
+      title: 'Shipping & date',
+      paneEls: [
+        // shipping method column
+        document.querySelector('#ctl00_PageBody_SaleTypeSelector_lblDelivered')
+                .closest('.epi-form-col-single-checkout'),
+        // date required column
+        document.querySelector('#ctl00_PageBody_dtRequired_DatePicker_wrapper')
+                .closest('.epi-form-col-single-checkout')
+      ]
+    },
+    {
+      title: 'Your reference',
+      paneEls: [
+        document.querySelector('#ctl00_PageBody_PurchaseOrderNumberTextBox')
+                .closest('.epi-form-group-checkout')
+      ]
+    },
+    {
+      title: 'Branch',
+      paneEls: [
+        document.querySelector('#ctl00_PageBody_BranchSelector')
+                .closest('.epi-form-col-both-checkout')
+      ]
+    },
+    {
+      title: 'Delivery address',
+      paneEls: [
+        document.querySelector('.SelectableAddressType')
+                .closest('.epi-form-col-single-checkout')
+      ]
+    },
+    {
+      title: 'Invoice address',
+      paneEls: [
+        document.querySelector(
+          '.font-weight-bold.mt-4:contains("Invoice")'
+        )?.closest('.epi-form-col-single-checkout')
+      ]
+    },
+    {
+      title: 'Special instructions',
+      paneEls: [
+        document.querySelector('.cartTable')
+      ]
+    }
+  ];
 
-    // NAV ITEM
+  // 3) Build each step in the DOM
+  steps.forEach(function(step, i) {
+    var idx = i + 1;
+
+    // Nav bullet
     var li = document.createElement('li');
-    li.setAttribute('data-step', stepNum);
+    li.setAttribute('data-step', idx);
     li.textContent = step.title;
-    li.addEventListener('click', function(){ showStep(stepNum); });
+    li.addEventListener('click', function() { showStep(idx); });
     nav.appendChild(li);
 
-    // PANE
+    // Content pane
     var pane = document.createElement('div');
     pane.className = 'checkout-step';
-    pane.setAttribute('data-step', stepNum);
+    pane.setAttribute('data-step', idx);
     wizard.appendChild(pane);
 
-    // FIND & MOVE existing element
-    var targetEl = document.querySelector(step.selector)
-              || (step.selector.match(/:contains/) && queryContains(step.selector.split(':')[0], step.title));
-    if (targetEl) {
-      // find an appropriate wrapper
-      var wrapper = targetEl.closest('.row, .cartTable, .epi-form-group-checkout');
-      pane.appendChild(wrapper);
-    }
+    // Move each element into this pane
+    step.paneEls.forEach(function(el) {
+      if (el) pane.appendChild(el);
+    });
 
-    // NAV BUTTONS
+    // Back / Next buttons
     var navDiv = document.createElement('div');
     navDiv.className = 'checkout-nav';
     pane.appendChild(navDiv);
 
-    if (stepNum > 1) {
+    if (idx > 1) {
       var back = document.createElement('button');
-      back.className = 'btn btn-secondary prev';
+      back.className = 'btn btn-secondary';
       back.textContent = 'Back';
-      back.addEventListener('click', function(e){
+      back.addEventListener('click', function(e) {
         e.preventDefault();
-        showStep(stepNum - 1);
+        showStep(idx - 1);
       });
       navDiv.appendChild(back);
     }
 
-    if (stepNum < steps.length) {
+    if (idx < steps.length) {
       var next = document.createElement('button');
-      next.className = 'btn btn-primary next';
+      next.className = 'btn btn-primary';
       next.textContent = 'Next';
-      next.addEventListener('click', function(e){
+      next.addEventListener('click', function(e) {
         e.preventDefault();
-        showStep(stepNum + 1);
+        showStep(idx + 1);
       });
       navDiv.appendChild(next);
     } else {
-      // LAST STEP: append your real Continue button
-      var continues = Array.prototype.slice.call(
-        document.querySelectorAll('#ctl00_PageBody_ContinueButton1, #ctl00_PageBody_ContinueButton2')
+      // last step: pull in your real Continue button
+      var continues = Array.from(
+        document.querySelectorAll(
+          '#ctl00_PageBody_ContinueButton1, #ctl00_PageBody_ContinueButton2'
+        )
       );
       if (continues.length) {
         var cont = continues[continues.length - 1];
-        cont.style.display = '';           // ensure it's visible
+        cont.style.display = '';
         navDiv.appendChild(cont);
       }
     }
   });
 
-  // 4) function to switch steps
+  // 4) Step switcher
   function showStep(n) {
-    // panes
-    wizard.querySelectorAll('.checkout-step').forEach(function(p){
-      p.classList.toggle('active', parseInt(p.getAttribute('data-step')) === n);
+    wizard.querySelectorAll('.checkout-step').forEach(function(p) {
+      p.classList.toggle('active',
+        parseInt(p.getAttribute('data-step'), 10) === n
+      );
     });
-    // nav bullets
-    nav.querySelectorAll('li').forEach(function(b){
-      var s = parseInt(b.getAttribute('data-step'));
-      b.classList.toggle('active', s === n);
-      b.classList.toggle('completed', s < n);
+    nav.querySelectorAll('li').forEach(function(b) {
+      var s = parseInt(b.getAttribute('data-step'), 10);
+      b.classList.toggle('active',    s === n);
+      b.classList.toggle('completed', s <  n);
     });
     // scroll into view
     window.scrollTo({ top: wizard.offsetTop, behavior: 'smooth' });
   }
 
-  // 5) kick it off
+  // 5) Immediately open step 1
   showStep(1);
 });
