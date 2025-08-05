@@ -441,49 +441,107 @@ margin-bottom: 0px !important;
  
 
 
-/* Layout polish */
-:root{
-  --wl-text:#0f172a; --wl-sub:#64748b; --wl-border:#e5e7eb; --wl-accent:#111827;
-  --wl-card:#fff; --wl-bg:#f6f7fb; --wl-radius:14px; --wl-shadow:0 6px 30px rgba(2,6,23,.08);
+/* --- Checkout Summary & Modal --- */
+.checkout-layout-wrapper {
+  display: flex;
+  gap: 2rem;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
 }
-.wl-summary-card{
-  background:var(--wl-card);
-  border:1px solid var(--wl-border);
-  border-radius:var(--wl-radius);
-  padding:14px 16px; margin:10px 0;
-  box-shadow:0 2px 12px rgba(2,6,23,.06);
+.checkout-summary-panel {
+  flex: 1 1 340px;
+  min-width: 320px;
+  background: #fdfdfd;
+  border: 1px solid #e7e7e7;
+  border-radius: 12px;
+  padding: 1.25rem 1.25rem 0.25rem;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.04);
 }
-.wl-summary-header{display:grid;grid-template-columns:1fr auto;align-items:center;gap:8px;margin-bottom:8px}
-.wl-summary-header strong{color:var(--wl-text);font-weight:700}
-.wl-summary-sub{font-size:12px;color:var(--wl-sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.wl-btn-link{background:#fff;border:1px solid var(--wl-border);border-radius:999px;padding:6px 10px;font-weight:600;cursor:pointer}
-.wl-btn-link:hover{background:#f8fafc}
+.checkout-summary-panel h2 {
+  color: #6b0016;
+  margin: 0 0 0.75rem;
+  font-size: 1.15rem;
+}
+.checkout-summary-section {
+  border-top: 1px dashed #e0e0e0;
+  padding: 0.9rem 0;
+}
+.checkout-summary-section:first-of-type {
+  border-top: 0;
+}
+.checkout-summary-section h3 {
+  margin: 0 0 0.25rem;
+  font-size: 0.95rem;
+  color: #222;
+  font-weight: 600;
+}
+.checkout-summary-section p {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #444;
+  line-height: 1.35;
+  white-space: pre-line;
+}
+.edit-button {
+  margin-top: 0.5rem;
+  font-size: 0.85rem;
+  background: #6b0016;
+  color: #fff;
+  border: none;
+  padding: 0.42rem 0.8rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+.edit-button:hover { background-color: #8d8d8d; }
 
-/* Side-by-side cards on desktop */
-@media(min-width:1024px){
-  #wlDeliverySummary, #wlBillingSummary{margin:8px 0}
-  .wl-summary-card{padding:12px 14px}
-  .epi-form-col-single-checkout:has(#wlDeliverySummary){display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.modal-overlay { display: none; }
+.modal-box { display: none; }
+
+.modal-overlay.active {
+  display: block;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.45);
+  z-index: 9999;
+}
+.modal-box.active {
+  display: block;
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  background: #fff;
+  z-index: 10000;
+  padding: 1.25rem;
+  max-width: 620px;
+  width: 92%;
+  border-radius: 12px;
+  box-shadow: 0 14px 38px rgba(0,0,0,0.18);
+}
+.modal-header {
+  display: flex; justify-content: space-between; align-items: center;
+  border-bottom: 1px solid #eee; padding-bottom: 0.5rem; margin-bottom: 0.75rem;
+}
+.modal-header h3 { margin: 0; color: #6b0016; font-size: 1.05rem; }
+.modal-body { max-height: 65vh; overflow: auto; }
+.modal-actions {
+  display: flex; gap: .5rem; justify-content: flex-end; margin-top: 1rem;
+}
+.btn-secondary {
+  background: transparent; color: #6b0016; border: 1px solid #6b0016;
+  padding: 0.4rem 0.75rem; border-radius: 6px; cursor: pointer;
+}
+.btn-secondary:hover { background: #6b0016; color: #fff; }
+.input-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;
+}
+.input-grid .full { grid-column: 1 / -1; }
+.form-row label { font-size: 0.85rem; color: #333; display:block; margin-bottom: 0.25rem; }
+.form-row input, .form-row select, .form-row textarea {
+  width: 100%; padding: 0.55rem 0.6rem; border: 1px solid #ccc; border-radius: 6px;
+  font-size: 0.92rem;
 }
 
-/* Modal */
-.wl-modal-overlay{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;align-items:center;justify-content:center;z-index:9999}
-.wl-modal-overlay.is-open{display:flex}
-.wl-modal{width:min(720px,92vw);background:#fff;border-radius:16px;box-shadow:var(--wl-shadow);overflow:hidden}
-.wl-modal-header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--wl-border)}
-.wl-modal-header h3{margin:0;color:var(--wl-text)}
-.wl-modal-close{background:transparent;border:0;font-size:22px;line-height:1;cursor:pointer;padding:4px 8px}
-.wl-modal-body{padding:14px 16px;background:var(--wl-bg)}
-.wl-modal-footer{padding:12px 16px;display:flex;justify-content:flex-end;gap:10px;background:#fff;border-top:1px solid var(--wl-border)}
-.wl-btn-primary,.wl-btn-secondary{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}
-.wl-btn-primary{background:var(--wl-accent);color:#fff}
-.wl-btn-secondary{background:#eef1f6;color:var(--wl-text)}
-.wl-modal-grid{display:grid;gap:12px}
-@media(min-width:900px){.wl-modal-grid{grid-template-columns:1fr 1fr}}
-/* Ensure native groups look decent inside modal even if they come as blocks */
-.wl-modal-grid .epi-form-group-checkout{display:block !important;background:#fff;padding:10px;border:1px solid #e5e7eb;border-radius:10px}
-
-/* Accessibility */
-.wl-btn-link:focus,.wl-btn-primary:focus,.wl-btn-secondary:focus,.wl-modal-close:focus{
-  outline:3px solid rgba(59,130,246,.35);outline-offset:2px
+/* Optional: tighten default page area on desktop */
+@media (min-width: 992px) {
+  .checkout-main-area { flex: 2 1 600px; min-width: 520px; }
 }
