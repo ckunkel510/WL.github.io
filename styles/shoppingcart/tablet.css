@@ -120,3 +120,39 @@
   .checkout-nav button {
     flex: 1 1 calc(50% - 0.5rem);
   }
+
+  /* stack steps vertically */
+  .checkout-steps {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  /* hide all steps by default */
+  .checkout-steps li {
+    display: none;
+    width: 100%;
+  }
+
+  /* show only completed + active as full bars */
+  .checkout-steps li.completed,
+  .checkout-steps li.active {
+    display: block;
+    background: #fff;
+    color: #6b0016;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border-radius: 0.25rem;
+    padding: 1rem;
+    font-size: 1.1rem;
+    line-height: 1.4;
+    min-height: 3rem;
+    cursor: pointer;
+  }
+
+  /* remove numeric bullets and connector lines */
+  .checkout-steps li::before {
+    display: none !important;
+  }
+  .checkout-steps li:not(:last-child)::after {
+    display: none;
+  }
