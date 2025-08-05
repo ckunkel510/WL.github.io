@@ -454,3 +454,38 @@ $('#ctl00_PageBody_BackToCartButton2').val('Back to Cart');
   showStep(parseInt(localStorage.currentStep,10)||2);
 });
 
+$(document).ready(function(){
+  $('#ctl00_PageBody_ContinueButton2').on('click', function(e){
+    var valid = true;
+    var errors = [];
+
+    // DELIVERY validation
+    if ($('#deliveryDate').closest('.form-group').is(':visible')) {
+      if (!$('#deliveryDate').val()) {
+        valid = false;
+        errors.push('• Please select a Requested Delivery Date.');
+      }
+      if (!$('input[name="deliveryTime"]:checked').length) {
+        valid = false;
+        errors.push('• Please choose a Delivery Time (Morning or Afternoon).');
+      }
+    }
+
+    // PICKUP validation
+    if ($('#pickupDate').closest('.form-group').is(':visible')) {
+      if (!$('#pickupDate').val()) {
+        valid = false;
+        errors.push('• Please select a Requested Pickup Date.');
+      }
+      if (!$('#pickupPerson').val().trim()) {
+        valid = false;
+        errors.push('• Please enter a Pickup Person.');
+      }
+    }
+
+    if (!valid) {
+      e.preventDefault();
+      alert('Hold on – we need a bit more info:\n\n' + errors.join('\n'));
+    }
+  });
+});
