@@ -3,6 +3,21 @@ document.addEventListener('DOMContentLoaded', function() {
   // Hide the original “Date Required” picker entirely
   var dateColDefault = document.getElementById('ctl00_PageBody_dtRequired_DatePicker_wrapper');
   if (dateColDefault) dateColDefault.style.display = 'none';
+  // Hide the ASP.NET panel of default Back/Continue
+$('.submit-button-panel').hide();
+
+// Hide the original “Date required:” label
+$('label').filter(function(){
+  return $(this).text().trim() === 'Date required:';
+}).hide();
+
+// Hide the default date-picker wrapper and its form-control container
+$('div.form-control').hide();
+$('#ctl00_PageBody_dtRequired_DatePicker_wrapper').hide();
+
+// Rename the secondary back button
+$('#ctl00_PageBody_BackToCartButton2').val('Back to Cart');
+
 
   // 1) Create wizard container & nav
   var container = document.querySelector('.container');
