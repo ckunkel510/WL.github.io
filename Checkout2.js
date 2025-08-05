@@ -339,12 +339,12 @@ $('#ctl00_PageBody_BackToCartButton2').val('Back to Cart');
   })();
 
   // 11) Step 7: pickup/delivery & special instructions
-  // Step 7: pickup vs delivery logic, special instructions, and Sunday‐bumping
+  // Step 7: pickup vs delivery logic, special instructions, no past dates & no Sundays
 (function(){
   const p7 = wizard.querySelector('.checkout-step[data-step="7"]');
   if (!p7) return;
 
-  // 1) Optional tag on the step table header
+  // 1) Optional “(optional)” tag
   const th = p7.querySelector('th');
   if (th) {
     const opt2 = document.createElement('small');
@@ -354,13 +354,13 @@ $('#ctl00_PageBody_BackToCartButton2').val('Back to Cart');
     th.appendChild(opt2);
   }
 
-  // 2) Grab the special instructions textarea + its wrapper
+  // 2) Special instructions field + wrapper
   const specialIns = document.getElementById('ctl00_PageBody_SpecialInstructionsTextBox');
   const siWrap = specialIns.closest('.epi-form-group-checkout')
               || specialIns.closest('.epi-form-col-single-checkout')
               || specialIns.parentElement;
 
-  // 3) Build the pickup inputs
+  // 3) Build pickup inputs
   const pickupDiv = document.createElement('div');
   pickupDiv.className = 'form-group';
   pickupDiv.innerHTML = `
@@ -370,7 +370,7 @@ $('#ctl00_PageBody_BackToCartButton2').val('Back to Cart');
     <input type="text" id="pickupPerson" class="form-control">`;
   pickupDiv.style.display = 'none';
 
-  // 4) Build the delivery inputs
+  // 4) Build delivery inputs
   const deliveryDiv = document.createElement('div');
   deliveryDiv.className = 'form-group';
   deliveryDiv.innerHTML = `
@@ -382,40 +382,76 @@ $('#ctl00_PageBody_BackToCartButton2').val('Back to Cart');
     </div>`;
   deliveryDiv.style.display = 'none';
 
-  // 5) Insert them after the SI wrapper
+  // 5) Insert them
   siWrap.insertAdjacentElement('afterend', pickupDiv);
   pickupDiv.insertAdjacentElement('afterend', deliveryDiv);
 
-  // 6) Grab radios and zip
+  // 6) Set up min-dates on the native date inputs
+  const today       = new Date();
+  const isoToday    = today.toISOString().slice(0,10);
+  const minDelivery = new Date();
+  minDelivery.setDate(minDelivery.getDate()+2);
+  const isoDel      = minDelivery.toISOString().slice(0,10);
+
+  const pickupInput   = pickupDiv.querySelector('#pickupDate');
+  const deliveryInput = deliveryDiv.querySelector('#deliveryDate');
+
+  pickupInput.setAttribute('min', isoToday);
+  deliveryInput.setAttribute('min', isoDel);
+
+  // 7) Prevent Sundays and past dates
+  pickupInput.addEventListener('change', function(){
+    if (!this.value) return updateSpecial();
+    let d = new Date(this.value);
+    if (d.getDay() === 0) {
+      alert('No Sunday pickups – moved to Monday');
+      d.setDate(d.getDate()+1);
+    }
+    this.value = d.toISOString().slice(0,10);
+    updateSpecial();
+  });
+  deliveryInput.addEventListener('change', function(){
+    if (!this.value) return updateSpecial();
+    let d = new Date(this.value);
+    if (d.getDay() === 0) {
+      alert('No Sunday deliveries – moved to Monday');
+      d.setDate(d.getDate()+1);
+    }
+    if (d < minDelivery) {
+      alert('Select at least 2 days out');
+      d = minDelivery;
+    }
+    this.value = d.toISOString().slice(0,10);
+    updateSpecial();
+  });
+
+  // 8) Radios + zip for logic
   const rbPick   = document.getElementById('ctl00_PageBody_SaleTypeSelector_rbCollectLater');
   const rbDel    = document.getElementById('ctl00_PageBody_SaleTypeSelector_rbDelivered');
   const zipInput = document.getElementById('ctl00_PageBody_DeliveryAddress_Postcode');
 
-  // 7) Utility: in‐zone check
-  function inZone(z) {
-    return ['75','76','77','78','79'].includes((z||'').substring(0,2));
-  }
+  function inZone(z){ return ['75','76','77','78','79'].includes((z||'').substring(0,2)); }
 
-  // 8) Build or clear special instructions text
+  // 9) Update the special instructions text
   function updateSpecial(){
     specialIns.value = '';
     if (rbPick.checked) {
-      const d = pickupDiv.querySelector('#pickupDate').value;
+      const d = pickupInput.value;
       const p = pickupDiv.querySelector('#pickupPerson').value;
-      specialIns.value = 'Pickup on ' + d + (p ? ' for ' + p : '');
+      specialIns.value = 'Pickup on '+d+(p?' for '+p:'');
     } else if (rbDel.checked) {
       const z = zipInput.value;
       if (inZone(z)) {
-        const d2 = deliveryDiv.querySelector('#deliveryDate').value;
+        const d2 = deliveryInput.value;
         const t  = deliveryDiv.querySelector('input[name="deliveryTime"]:checked');
-        specialIns.value = 'Delivery on ' + d2 + (t ? ' (' + t.value + ')' : '');
+        specialIns.value = 'Delivery on '+d2+(t?' ('+t.value+')':'');
       } else {
         specialIns.value = 'Ship via 3rd party delivery on next screen.';
       }
     }
   }
 
-  // 9) Show/hide logic
+  // 10) Show/hide pickup vs delivery
   function onShip(){
     if (rbPick.checked) {
       pickupDiv.style.display   = 'block';
@@ -440,65 +476,15 @@ $('#ctl00_PageBody_BackToCartButton2').val('Back to Cart');
 
   rbPick.addEventListener('change', onShip);
   rbDel .addEventListener('change', onShip);
-
-  // 10) Enforce 2-day min and bump Sundays to Monday for delivery
-  deliveryDiv.querySelector('#deliveryDate').addEventListener('change', function(){
-    if (!this.value) return updateSpecial();
-    let sel = new Date(this.value);
-    const minDate = new Date();
-    minDate.setDate(minDate.getDate() + 2);
-
-    // bump Sunday → Monday
-    if (sel.getDay() === 0) {
-      alert('No Sunday deliveries – moved to Monday');
-      sel.setDate(sel.getDate() + 1);
-    }
-    // enforce >2 days out
-    if (sel < minDate) {
-      alert('Select at least 2 days out');
-      sel = minDate;
-    }
-    this.value = sel.toISOString().slice(0,10);
-    updateSpecial();
-  });
-
-  // 11) Bump Sunday → Monday for pickup
-  pickupDiv.querySelector('#pickupDate').addEventListener('change', function(){
-    if (!this.value) return updateSpecial();
-    let sel = new Date(this.value);
-    if (sel.getDay() === 0) {
-      alert('No Sunday pickups – moved to Monday');
-      sel.setDate(sel.getDate() + 1);
-      this.value = sel.toISOString().slice(0,10);
-    }
-    updateSpecial();
-  });
-
-  // 12) Wire rest of inputs
   pickupDiv.querySelector('#pickupPerson')
            .addEventListener('input', updateSpecial);
   deliveryDiv.querySelectorAll('input[name="deliveryTime"]')
              .forEach(r=>r.addEventListener('change', updateSpecial));
 
-  // 13) Initialize
+  // 11) Initialize step 7
   onShip();
 })();
 
-
-  // 12) Step switcher + persistence
-  function showStep(n){
-    wizard.querySelectorAll('.checkout-step')
-      .forEach(p=>p.classList.toggle('active', +p.dataset.step===n));
-    nav.querySelectorAll('li').forEach(li=>{
-      let s=+li.dataset.step;
-      li.classList.toggle('active',    s===n);
-      li.classList.toggle('completed', s< n);
-    });
-    localStorage.currentStep = n;
-    window.scrollTo({ top: wizard.offsetTop, behavior: 'smooth' });
-  }
-  showStep(parseInt(localStorage.currentStep,10)||2);
-});
 
 $(document).ready(function(){
   $('#ctl00_PageBody_ContinueButton2').on('click', function(e){
