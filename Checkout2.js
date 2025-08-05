@@ -28,7 +28,6 @@ $('#ctl00_PageBody_dtRequired_DatePicker_wrapper')
 // Rename the secondary back button
 $('#ctl00_PageBody_BackToCartButton2').val('Back to Cart');
 // clear any old “billing-same” flag so we always start unchecked
-localStorage.removeItem('sameAsDelivery');
 
 
 
