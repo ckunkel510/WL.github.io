@@ -279,18 +279,12 @@ document.addEventListener('DOMContentLoaded', function() {
     sumInv.style.display='none';
     colInv.insertBefore(sumInv, wrapInv);
 
-    let same = localStorage.sameAsDelivery==='true';
-    sameCheck.checked = same;
-    if(same){
-      setTimeout(()=>{
-        refreshInv();
-        wrapInv.style.display='none';
-        sumInv.style.display='';
-      },50);
-    } else {
-      wrapInv.style.display='';
-      sumInv.style.display='none';
-    }
+    // force “not same” on first load
+sameCheck.checked = false;
+localStorage.sameAsDelivery = 'false';
+wrapInv.style.display  = '';
+sumInv.style.display   = 'none';
+
     sameCheck.addEventListener('change', function(){
       if(this.checked){
         localStorage.sameAsDelivery='true';
