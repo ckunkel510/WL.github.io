@@ -351,58 +351,45 @@ $(document).ready(function() {
   } else {
     console.warn("Date picker wrapper not found.");
   }
+    // ===================================================
+  // (G) Two-column layout for checkout fields — only build once
   // ===================================================
-  // (G) Two-column layout for checkout fields
-  // ===================================================
-  const $checkoutWrapper = $('<div class="checkout-columns row mt-4"></div>');
-  const $leftCol  = $('<div class="col-md-6"></div>');
-  const $rightCol = $('<div class="col-md-6"></div>');
+  if ( ! $('.checkout-columns').length ) {
 
-  // — Left column: Transaction & Shipping, Date Picker, PO#, Branch, Special Instructions
-  $('#ctl00_PageBody_TransactionTypeDiv')
-    .detach()
-    .appendTo($leftCol);
+    const $checkoutWrapper = $('<div class="checkout-columns row mt-4"></div>');
+    const $leftCol  = $('<div class="col-md-6"></div>');
+    const $rightCol = $('<div class="col-md-6"></div>');
 
-  $('.modern-shipping-selector')
-    .detach()
-    .appendTo($leftCol);
+    // Detach & move into left col:
+    $('#ctl00_PageBody_TransactionTypeDiv').detach().appendTo($leftCol);
+    $('.modern-shipping-selector').detach().appendTo($leftCol);
+    $('#ctl00_PageBody_dtRequired_DatePicker_wrapper')
+      .closest('.epi-form-col-single-checkout')
+      .detach()
+      .appendTo($leftCol);
+    $('.epi-form-col-single-checkout:has(#ctl00_PageBody_PurchaseOrderNumberTextBox)')
+      .detach()
+      .appendTo($leftCol);
+    $('#ctl00_PageBody_BranchSelector').detach().appendTo($leftCol);
+    $('.cartTable').detach().appendTo($leftCol);
 
-  // Move the date-picker wrapper (and its label)
-  $('#ctl00_PageBody_dtRequired_DatePicker_wrapper')
-    .closest('.epi-form-col-single-checkout')
-    .detach()
-    .appendTo($leftCol);
+    // Detach & move your read-only address blocks into right col:
+    $('.selected-address-display')
+      .closest('.epi-form-col-single-checkout')
+      .detach()
+      .appendTo($rightCol);
+    $('.selected-invoice-address-display')
+      .closest('.epi-form-col-single-checkout')
+      .detach()
+      .appendTo($rightCol);
 
-  // Purchase order / your ref
-  $('.epi-form-col-single-checkout:has(#ctl00_PageBody_PurchaseOrderNumberTextBox)')
-    .detach()
-    .appendTo($leftCol);
+    // build wrapper
+    $checkoutWrapper.append($leftCol, $rightCol);
 
-  // Branch selector
-  $('#ctl00_PageBody_BranchSelector')
-    .detach()
-    .appendTo($leftCol);
+    // insert it once, right after the last cart item
+    $('.shopping-cart-item').last().after($checkoutWrapper);
+  }
 
-  // Special Instructions table
-  $('.cartTable')
-    .detach()
-    .appendTo($leftCol);
-
-  // — Right column: leave your address displays where they belong
-  $('.selected-address-display')
-    .closest('.epi-form-col-single-checkout')
-    .detach()
-    .appendTo($rightCol);
-
-  $('.selected-invoice-address-display')
-    .closest('.epi-form-col-single-checkout')
-    .detach()
-    .appendTo($rightCol);
-
-  // Now append both cols into the form area
-  $('.container .row').append(
-    $checkoutWrapper.append($leftCol, $rightCol)
-  );
 
 
 });
