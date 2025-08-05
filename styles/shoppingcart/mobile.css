@@ -177,7 +177,15 @@ display: none;
 }
 
 
-.checkout-wizard {
+.checkout-step {
+    display: none !important;
+  }
+  .checkout-step.active {
+    display: block !important;
+  }
+
+  /* make the wizard fill the screen with side padding */
+  .checkout-wizard {
     max-width: 100%;
     margin: 1rem;
     padding: 0 1rem;
@@ -190,12 +198,12 @@ display: none;
     gap: 1rem;
   }
 
-  /* hide the connecting lines on mobile */
+  /* hide the connector lines */
   .checkout-steps li:not(:last-child)::after {
     display: none;
   }
 
-  /* full-width steps + smaller numbers */
+  /* full-width, left-aligned steps + smaller numbers */
   .checkout-steps li {
     width: 100%;
     text-align: left;
