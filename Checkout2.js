@@ -72,28 +72,22 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   ];
 
-  // Build wizard steps & panes
+  // Build steps & panes
   steps.forEach(function(step, i) {
     var num = i + 1;
-    // Nav bullet
     var li = document.createElement('li');
     li.setAttribute('data-step', num);
     li.textContent = step.title;
     li.addEventListener('click', function(){ showStep(num); });
     nav.appendChild(li);
 
-    // Pane
     var pane = document.createElement('div');
     pane.className = 'checkout-step';
     pane.setAttribute('data-step', num);
     wizard.appendChild(pane);
 
-    // Move in elements
-    step.findEls().forEach(function(el){
-      pane.appendChild(el);
-    });
+    step.findEls().forEach(function(el){ pane.appendChild(el); });
 
-    // Back/Next buttons
     var navDiv = document.createElement('div');
     navDiv.className = 'checkout-nav';
     pane.appendChild(navDiv);
@@ -129,17 +123,40 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
-  // Insert "(optional)" tag into the Your reference step
-  var refPane  = wizard.querySelector('.checkout-step[data-step="3"]');
-  var refGroup = refPane && refPane.querySelector('.epi-form-group-checkout');
-  if (refGroup) {
-    var label = refGroup.querySelector('label');
-    if (label) {
-      var optionalTag = document.createElement('small');
-      optionalTag.className = 'text-muted';
-      optionalTag.style.marginLeft = '8px';
-      optionalTag.textContent = '(optional)';
-      label.appendChild(optionalTag);
+  // Prefill delivery address on load (step 5 inputs)
+  if (!$('#ctl00_PageBody_DeliveryAddress_AddressLine1').val()) {
+    const $link = $('#ctl00_PageBody_CustomerAddressSelector_SelectAddressLinkButton');
+    if ($link.length) {
+      let $entries = $('.AddressSelectorEntry');
+      if ($entries.length) {
+        let $pick = $entries.first();
+        let minId = parseInt($pick.find('.AddressId').text(), 10);
+        $entries.each(function() {
+          const id = parseInt($(this).find('.AddressId').text(), 10);
+          if (id < minId) { minId = id; $pick = $(this); }
+        });
+        const txt = $pick.find('dd p').first().text().trim();
+        const parts = txt.split(',').map(s => s.trim());
+        const [line1 = '', city = ''] = parts;
+        let state = '', zip = '';
+        if (parts.length >= 4) {
+          state = parts[parts.length - 2];
+          zip   = parts[parts.length - 1];
+        } else if (parts.length > 2) {
+          const m = parts[2].match(/(.+?)\s*(\d{5}(?:-\d{4})?)?$/);
+          if (m) { state = m[1].trim(); zip = m[2] || ''; }
+        }
+        $('#ctl00_PageBody_DeliveryAddress_AddressLine1').val(line1);
+        $('#ctl00_PageBody_DeliveryAddress_City').val(city);
+        $('#ctl00_PageBody_DeliveryAddress_Postcode').val(zip);
+        $('#ctl00_PageBody_DeliveryAddress_CountrySelector').val('USA');
+        $('#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList option').each(function() {
+          if ($(this).text().trim().toLowerCase() === state.toLowerCase()) {
+            $(this).prop('selected', true);
+            return false;
+          }
+        });
+      }
     }
   }
 
@@ -156,6 +173,6 @@ document.addEventListener('DOMContentLoaded', function() {
     window.scrollTo({ top: wizard.offsetTop, behavior: 'smooth' });
   }
 
-  // On load go straight to step 2 (marks step 1 as completed)
+  // Immediately show step 2 (marks step 1 complete)
   showStep(2);
 });
