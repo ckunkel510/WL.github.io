@@ -42,10 +42,9 @@ document.addEventListener('DOMContentLoaded', function() {
     {
       title: 'Branch',
       findEls: function() {
-        var br = document.getElementById('ctl00_PageBody_BranchSelector');
-        return br && br.closest('.epi-form-col-both-checkout')
-          ? [br.closest('.epi-form-col-both-checkout')]
-          : [];
+        // pull in the entire row containing your branch dropdown
+        var brRow = document.getElementById('ctl00_PageBody_BranchSelector');
+        return brRow ? [brRow] : [];
       }
     },
     {
@@ -79,7 +78,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   ];
 
-  // Build the wizard steps & panes
+  // Build wizard
   steps.forEach(function(step, idx) {
     var stepNum = idx + 1;
     // Nav bullet
@@ -88,24 +87,19 @@ document.addEventListener('DOMContentLoaded', function() {
     li.textContent = step.title;
     li.addEventListener('click', function(){ showStep(stepNum); });
     nav.appendChild(li);
-
     // Pane
     var pane = document.createElement('div');
     pane.className = 'checkout-step';
     pane.setAttribute('data-step', stepNum);
     wizard.appendChild(pane);
-
-    // Pull in existing elements
-    var els = step.findEls();
-    els.forEach(function(el) {
-      if (el) pane.appendChild(el);
+    // Move elements
+    step.findEls().forEach(function(el){
+      pane.appendChild(el);
     });
-
-    // Nav buttons
+    // Buttons
     var navDiv = document.createElement('div');
     navDiv.className = 'checkout-nav';
     pane.appendChild(navDiv);
-
     if (stepNum > 1) {
       var back = document.createElement('button');
       back.className = 'btn btn-secondary';
@@ -116,7 +110,6 @@ document.addEventListener('DOMContentLoaded', function() {
       });
       navDiv.appendChild(back);
     }
-
     if (stepNum < steps.length) {
       var next = document.createElement('button');
       next.className = 'btn btn-primary';
@@ -127,7 +120,6 @@ document.addEventListener('DOMContentLoaded', function() {
       });
       navDiv.appendChild(next);
     } else {
-      // final step: append real Continue button
       var allCont = Array.from(
         document.querySelectorAll('#ctl00_PageBody_ContinueButton1, #ctl00_PageBody_ContinueButton2')
       );
@@ -139,7 +131,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   });
 
-  // Step switching logic
+  // Step switcher
   function showStep(n) {
     wizard.querySelectorAll('.checkout-step').forEach(function(p){
       p.classList.toggle('active', +p.getAttribute('data-step') === n);
@@ -152,6 +144,6 @@ document.addEventListener('DOMContentLoaded', function() {
     window.scrollTo({ top: wizard.offsetTop, behavior: 'smooth' });
   }
 
-  // Open step 1 immediately
+  // show first step on load
   showStep(1);
 });
