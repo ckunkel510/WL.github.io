@@ -78,37 +78,6 @@ $(document).ready(function() {
   let isEditingDelivery = false;
   let isEditingInvoice  = false;
 
-    // ===================================================
-  // (A1) Replace copy‐link spans with radio buttons
-  // ===================================================
-  // remove the old link-spans entirely
-  $('#copyDeliveryAddressButton, #copySaleAddressButton').remove();
-
-  // inject two radio buttons in their place
-  const copyRadios = $(`
-    <div class="form-group epi-form-col-single-checkout mb-3">
-      <label class="mr-3">
-        <input type="radio" name="copyAddress" value="delivery" checked>
-        Billing = Delivery
-      </label>
-      <label>
-        <input type="radio" name="copyAddress" value="sales">
-        Use Sales Address
-      </label>
-    </div>
-  `);
-  // insert it right above the delivery-display container
-  $('.selected-invoice-address-display').before(copyRadios);
-
-  // when the user toggles, fire the existing __doPostBack behind the scenes
-  $(document).on('change', 'input[name="copyAddress"]', function() {
-    if (this.value === 'delivery') {
-      __doPostBack('ctl00$PageBody$CopyDeliveryAddressLinkButton','');
-    } else {
-      __doPostBack('ctl00$PageBody$CopyDeliveryAddressLinkButton2','');
-    }
-  });
-
 
   function refreshReadOnlyDisplays() {
     // Delivery
