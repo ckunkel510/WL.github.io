@@ -279,11 +279,18 @@ document.addEventListener('DOMContentLoaded', function() {
     sumInv.style.display='none';
     colInv.insertBefore(sumInv, wrapInv);
 
-    // force “not same” on first load
-sameCheck.checked = false;
-localStorage.sameAsDelivery = 'false';
-wrapInv.style.display  = '';
-sumInv.style.display   = 'none';
+    if (localStorage.sameAsDelivery === 'true') {
+  // user had checked it previously → show summary
+  sameCheck.checked = true;
+  refreshInv();
+  wrapInv.style.display = 'none';
+  sumInv.style.display  = '';
+} else {
+  // default or user had unchecked → show full form
+  sameCheck.checked = false;
+  wrapInv.style.display = '';
+  sumInv.style.display  = 'none';
+}
 
     sameCheck.addEventListener('change', function(){
       if(this.checked){
