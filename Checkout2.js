@@ -115,6 +115,58 @@ $('#ctl00_PageBody_BackToCartButton2').val('Back to Cart');
         cont.type = 'submit';
         navDiv.appendChild(cont);
       }
+
+  // ——— immediately after appending the Continue input into navDiv ———
+  // find the real Continue button and disable it
+  var continueBtn = pane.querySelector('#ctl00_PageBody_ContinueButton1');
+  continueBtn.disabled = true;
+
+  // insert an inline error message
+  var err = document.createElement('div');
+  err.className = 'text-danger mt-2';
+  err.style.display = 'none';
+  err.textContent = 'Please fill in all required fields before continuing.';
+  navDiv.appendChild(err);
+
+  // validation function
+  function validateStep7() {
+    var ok = false;
+    if (rbPick.checked) {
+      // require both date and person
+      var d = pickupDiv.querySelector('#pickupDate').value.trim();
+      var p = pickupDiv.querySelector('#pickupPerson').value.trim();
+      ok = !!(d && p);
+    } else if (rbDel.checked) {
+      if (inZone(zipInput.value)) {
+        // require delivery date + time choice
+        var dd = deliveryDiv.querySelector('#deliveryDate').value.trim();
+        var t  = deliveryDiv.querySelector('input[name="deliveryTime"]:checked');
+        ok = !!(dd && t);
+      } else {
+        // out-of-zone always valid
+        ok = true;
+      }
+    }
+    continueBtn.disabled = !ok;
+    err.style.display = ok ? 'none' : 'block';
+  }
+
+  // wire validation up to all inputs that can change validity
+  [ pickupDiv.querySelector('#pickupDate'),
+    pickupDiv.querySelector('#pickupPerson'),
+    deliveryDiv.querySelector('#deliveryDate'),
+    ...deliveryDiv.querySelectorAll('input[name="deliveryTime"]')
+  ].forEach(el => el.addEventListener('change', validateStep7));
+
+  // also run it whenever they switch between pickup vs delivery
+  rbPick.addEventListener('change', validateStep7);
+  rbDel .addEventListener('change', validateStep7);
+
+  // and finally call it once now to set initial state
+  validateStep7();
+
+
+
     }
   });
 
