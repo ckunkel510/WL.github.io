@@ -826,6 +826,76 @@ async function removeCartItem(eventTarget) {
   }
 }
 
+async function addToQuicklist(productCode) {
+  console.log(`[SFL] Attempting to add product ${productCode} to Saved For Later...`);
+
+  try {
+    // 1. Fetch the product detail page HTML
+    const response = await fetch(`/ProductDetail.aspx?pid=${productCode}`);
+    const text = await response.text();
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(text, "text/html");
+
+    // 2. Look for the "Add to Saved For Later" option
+    const savedForLaterLink = Array.from(
+      doc.querySelectorAll("a[href^=\"javascript:__doPostBack\"]")
+    ).find(a => a.textContent.includes("Saved For Later"));
+
+    if (!savedForLaterLink) {
+      throw new Error("Could not find 'Add to Saved For Later' link in dropdown.");
+    }
+
+    // 3. Extract the __doPostBack target from the href
+    const href = savedForLaterLink.getAttribute("href");
+    const match = href.match(/__doPostBack\('([^']+)'/);
+    if (!match) {
+      throw new Error("Could not extract __EVENTTARGET value from link.");
+    }
+
+    const eventTargetValue = match[1];
+    console.log(`[SFL] Found dynamic EVENTTARGET: ${eventTargetValue}`);
+
+    // 4. Create hidden form to POST the request
+    const form = document.createElement("form");
+    form.method = "POST";
+    form.action = `/ProductDetail.aspx?pid=${productCode}`;
+    form.style.display = "none";
+
+    const targetInput = document.createElement("input");
+    targetInput.type = "hidden";
+    targetInput.name = "__EVENTTARGET";
+    targetInput.value = eventTargetValue;
+    form.appendChild(targetInput);
+
+    const argInput = document.createElement("input");
+    argInput.type = "hidden";
+    argInput.name = "__EVENTARGUMENT";
+    argInput.value = "";
+    form.appendChild(argInput);
+
+    document.body.appendChild(form);
+
+    const iframe = document.createElement("iframe");
+    iframe.name = "sflTempFrame";
+    iframe.style.display = "none";
+    document.body.appendChild(iframe);
+
+    form.target = "sflTempFrame";
+
+    return new Promise((resolve) => {
+      iframe.onload = () => {
+        console.log(`[SFL] Successfully added ${productCode} to Saved For Later.`);
+        resolve();
+      };
+      form.submit();
+    });
+
+  } catch (err) {
+    console.error("[SFL] Error in addToQuicklist:", err);
+    throw err;
+  }
+}
+
 
 
 console.log("[SFL] Script loaded – injecting Save for Later buttons...");
