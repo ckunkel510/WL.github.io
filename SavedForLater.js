@@ -722,89 +722,63 @@ for (const tr of rows) {
 
 
 
-(function(){
-  const BASE = location.origin + "/";
+function injectSaveForLaterButtons() {
+  const cartRows = document.querySelectorAll("#ctl00_PageBody_ShoppingCartSummaryTableControl_ShoppingCartGrid_ctl00 tr.rgRow, tr.rgAltRow");
 
-  async function fetchHtml(url, options = {}) {
-    const res = await fetch(url, { credentials: "include", ...options });
-    if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-    const text = await res.text();
-    const doc = new DOMParser().parseFromString(text, "text/html");
-    return { text, doc };
-  }
-  function getHiddenFields(doc) {
-    const fields = {};
-    doc.querySelectorAll('input[type="hidden"]').forEach(inp => {
-      if (inp.name) fields[inp.name] = inp.value || "";
-    });
-    return fields;
-  }
-  function toFormData(obj) {
-    const fd = new FormData();
-    Object.entries(obj).forEach(([k, v]) => fd.append(k, v));
-    return fd;
-  }
+  cartRows.forEach(row => {
+    // Avoid duplicate buttons
+    if (row.querySelector(".js-save-for-later")) return;
 
-  // Add a product to the SFL quicklist by posting back the PDP’s Quicklist menu item.
-  async function addPidToSavedForLaterViaPdp(pid) {
-    const url = BASE + "ProductDetail.aspx?pid=" + encodeURIComponent(pid);
-    const { doc } = await fetchHtml(url);
-    const hidden = getHiddenFields(doc);
+    const productCode = row.querySelector("td[data-title='Product Code']")?.textContent?.trim();
+    const deleteBtn = row.querySelector("input[type='image'][name*='DeleteButton']");
+    const deleteEventTarget = deleteBtn?.name;
 
-    // 1) Trigger the "Quicklist Options" opening if needed (some pages require a prep postback).
-    // If opening is client-side only, you can skip and directly target the specific "Saved For Later" menu item.
-
-    // 2) Find the menu item for "Saved For Later" in PDP markup.
-    // Look for an <a href="javascript:__doPostBack('ctl00$...$QuicklistMenu$...','')">Saved For Later</a>
-    const menuItem = Array.from(doc.querySelectorAll('a[href^="javascript:__doPostBack"]'))
-      .find(a => a.textContent.trim().toLowerCase() === "saved for later");
-    if (!menuItem) throw new Error("Could not locate 'Saved For Later' quicklist menu item on PDP.");
-
-    const href = menuItem.getAttribute("href");
-    const m = href.match(/__doPostBack\('([^']+)'/);
-    if (!m) throw new Error("Could not parse Quicklist __EVENTTARGET.");
-    const target = m[1];
-
-    hidden["__EVENTTARGET"] = target;
-    hidden["__EVENTARGUMENT"] = "";
-
-    const fd = toFormData(hidden);
-    const res = await fetch(url, {
-      method: "POST",
-      credentials: "include",
-      body: fd
-    });
-    if (!res.ok) throw new Error("Failed to add to Saved For Later via PDP.");
-    return true;
-  }
-
-  // Example wiring — you’ll replace the selector with your cart row buttons
-  document.addEventListener("click", async (e) => {
-    const btn = e.target.closest(".js-save-for-later-from-cart");
-    if (!btn) return;
-
-    btn.disabled = true;
-    btn.textContent = "Saving…";
-
-    const row = btn.closest("[data-pid], [data-productcode]");
-    const pid = row?.dataset?.pid || btn.dataset.pid;
-    try {
-      await addPidToSavedForLaterViaPdp(pid);
-
-      // Remove the line from cart (call your existing delete function or postback)
-      // deleteCartLine(row);
-
-      // Optional: refresh SFL
-      if (typeof window.__sflReload === "function") await window.__sflReload();
-
-      btn.textContent = "Saved";
-    } catch (err) {
-      console.error(err);
-      btn.textContent = "Try Again";
-      btn.disabled = false;
+    if (!productCode || !deleteEventTarget) {
+      console.warn("[SFL] Skipping row — missing product code or delete button");
+      return;
     }
+
+    const btn = document.createElement("button");
+    btn.className = "sflBtn js-save-for-later";
+    btn.textContent = "Save for Later";
+    btn.style.marginLeft = "8px";
+
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      btn.textContent = "Saving…";
+
+      try {
+        const listName = await ensureQuicklistExists();
+        await addToQuicklistByProductCode(productCode, listName);
+        console.log(`[SFL] Added ${productCode} to Saved For Later list`);
+
+        // Now remove from cart
+        console.log(`[SFL] Removing ${productCode} from cart via __doPostBack('${deleteEventTarget}', '')`);
+        __doPostBack(deleteEventTarget, "");
+
+      } catch (err) {
+        console.error("[SFL] Failed to save for later:", err);
+        btn.textContent = "Try Again";
+        btn.disabled = false;
+      }
+    });
+
+    // Append to Actions column
+    const actionCell = row.querySelector("td[data-title='Actions']") || row.lastElementChild;
+    if (actionCell) actionCell.appendChild(btn);
   });
-})();
+}
+
+// Ensure it runs on page load
+document.addEventListener("DOMContentLoaded", () => {
+  setTimeout(() => {
+    try {
+      injectSaveForLaterButtons();
+    } catch (e) {
+      console.error("[SFL] Error injecting Save for Later buttons:", e);
+    }
+  }, 1000); // slight delay for table rendering
+});
 
 
 
