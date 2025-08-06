@@ -1,10 +1,10 @@
 
 
-document.addEventListener("DOMContentLoaded", function() {
-    var main = document.querySelector(".mainContents");
-    if (!main) return;
+  $(function() {
+    var $main = $('.mainContents');
+    if ( !$main.length ) return;
 
-    var html = ''
+    var savedForLater = ''
       + '<div id="savedForLater" style="display:none;">'
       + '  <div id="sflHeader">'
       + '    <span>Saved For Later</span>'
@@ -17,9 +17,11 @@ document.addEventListener("DOMContentLoaded", function() {
       + '  </div>'
       + '</div>';
 
-    // insert after the mainContents div
-    main.insertAdjacentHTML('afterend', html);
+    // append it right after
+    $main.after(savedForLater);
   });
+
+
 
                             (function() {
                               const SFL_NAME = "Saved For Later";
