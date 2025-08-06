@@ -1,25 +1,56 @@
 
+$(function() {
+  // 1) Inject Saved For Later HTML
+  var $main = $('.mainContents');
+  if (!$main.length) return;
 
-  $(function() {
-    var $main = $('.mainContents');
-    if ( !$main.length ) return;
+  var savedForLater = ''
+    + '<div id="savedForLater" style="display:none;">'
+    + '  <div id="sflHeader">'
+    + '    <span>Saved For Later</span>'
+    + '    <span class="sflCount" id="sflCount"></span>'
+    + '  </div>'
+    + '  <div id="sflBody">'
+    + '    <div id="sflLoading">Loading your saved items…</div>'
+    + '    <div id="sflList" style="display:none;"></div>'
+    + '    <div id="sflEmpty" style="display:none;">No items saved for later.</div>'
+    + '  </div>'
+    + '</div>';
+  $main.after(savedForLater);
 
-    var savedForLater = ''
-      + '<div id="savedForLater" style="display:none;">'
-      + '  <div id="sflHeader">'
-      + '    <span>Saved For Later</span>'
-      + '    <span class="sflCount" id="sflCount"></span>'
-      + '  </div>'
-      + '  <div id="sflBody">'
-      + '    <div id="sflLoading">Loading your saved items…</div>'
-      + '    <div id="sflList" style="display:none;"></div>'
-      + '    <div id="sflEmpty" style="display:none;">No items saved for later.</div>'
-      + '  </div>'
-      + '</div>';
+  // 2) Define your helpers (or import them)
+  function ensureSflContainer() {
+    const el = document.getElementById("savedForLater");
+    if (el) el.style.display = "block";
+    return el;
+  }
 
-    // append it right after
-    $main.after(savedForLater);
-  });
+  function setLoading(msg = "Loading your saved items…") {
+    const load = document.getElementById("sflLoading");
+    if (!load) return;
+    load.style.display = "block";
+    load.textContent = msg;
+    document.getElementById("sflList").style.display = "none";
+    document.getElementById("sflEmpty").style.display = "none";
+  }
+
+  // 3) Run your init now that everything’s in the DOM
+  ensureSflContainer();
+  setLoading();
+
+  // 4) Kick off the rest of your async load/render logic…
+  (async function initSfl() {
+    try {
+      const { items } = await loadSflItems();
+      renderSflList(items);
+    } catch (err) {
+      console.error("[SFL] Error initializing:", err);
+      setEmpty();
+    }
+  })();
+});
+
+
 
 
 
