@@ -465,7 +465,7 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
     "ctl00$PageBody$ctl01$QuicklistDetailGrid_ClientState": hiddenFields["ctl00$PageBody$ctl01$QuicklistDetailGrid_ClientState"] || "",
   });
 
-  const postUrl = detailUrl;
+  const postUrl = detailUrl.split("#")[0]; // ✅ same page for POST request
 
   const postRes = await fetch(postUrl, {
     method: "POST",
