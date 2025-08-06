@@ -436,32 +436,32 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
     throw new Error("Quicklist detail URL not found");
   }
 
-  // Step 1: Load the QuicklistDetails page
-  const response = await fetch(detailUrl, {
-    credentials: "include"
-  });
+  // Step 1: Load detail page HTML
+  const response = await fetch(detailUrl, { credentials: "include" });
   const html = await response.text();
+
   console.log("[SFL] Loaded quicklist detail page");
 
-  // Step 2: Parse the HTML
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
 
-  // Step 3: Extract all __doPostBack hidden fields
-  const hiddenFields = [...doc.querySelectorAll("input[type='hidden']")];
-  const postData = new URLSearchParams();
+  // Step 2: Extract all hidden fields from the main form (if exists)
+  const form = doc.querySelector("form") || doc;
+  const hiddenInputs = [...form.querySelectorAll("input[type='hidden']")];
 
-  hiddenFields.forEach(input => {
-    postData.set(input.name, input.value);
+  const postData = new URLSearchParams();
+  hiddenInputs.forEach(input => {
+    if (input.name) postData.set(input.name, input.value);
   });
 
-  // Inject the event target and empty argument
+  // Step 3: Set postback values
   postData.set("__EVENTTARGET", eventTarget);
   postData.set("__EVENTARGUMENT", "");
 
-  console.log("[SFL] Extracted hidden fields:", hiddenFields.map(i => i.name));
+  console.log("[SFL] Extracted hidden inputs:", hiddenInputs.map(i => i.name));
+  console.log("[SFL] Submitting delete POST...");
 
-  // Step 4: Submit the POST back to the same URL
+  // Step 4: Submit POST request
   const postResponse = await fetch(detailUrl, {
     method: "POST",
     headers: {
@@ -472,18 +472,22 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
   });
 
   const postText = await postResponse.text();
+  const preview = postText.slice(0, 500).trim();
 
-  // Step 5: Validate success
-  if (postResponse.ok && !postText.includes("Validation error") && !postText.includes("Server Error")) {
-    console.log("[SFL] Item successfully removed from Quicklist.");
-    return true;
+  // Step 5: Check for confirmation
+  if (postResponse.ok && !preview.includes("Server Error") && !preview.includes("Validation error")) {
+    if (preview.includes("Quicklist") && !preview.includes(eventTarget)) {
+      console.log("[SFL] Item successfully removed from Quicklist.");
+      return true;
+    } else {
+      console.warn("[SFL] Delete may have worked, but verify by checking updated HTML.");
+    }
   } else {
     console.error("[SFL] Delete postback may have failed");
-    console.log("[SFL] Response text preview:", postText.slice(0, 500));
+    console.log("[SFL] Response text preview:", preview);
     throw new Error("Failed to remove item from Quicklist.");
   }
 }
-
 
 
 
