@@ -729,75 +729,77 @@ function injectSaveForLaterButtons() {
   console.log(`[SFL] Found ${cartItems.length} cart items.`);
 
   cartItems.forEach((item, index) => {
-  console.log(`[SFL] Processing cart item #${index + 1}`);
+    console.log(`[SFL] Processing cart item #${index + 1}`);
 
-  // === STEP 1: Extract product code ===
-  const codeLink = item.querySelector("a[title] .portalGridLink") || item.querySelector(".portalGridLink");
-  const productCode = codeLink?.textContent?.trim();
+    // === STEP 1: Extract product code ===
+    const codeLink = item.querySelector("a[title] .portalGridLink") || item.querySelector(".portalGridLink");
+    const productCode = codeLink?.textContent?.trim();
 
-  if (!productCode) {
-    console.warn("[SFL] Could not find product code in item:", item);
-    return;
-  }
-  console.log(`[SFL] Found product code: ${productCode}`);
+    if (!productCode) {
+      console.warn("[SFL] Could not find product code in item:", item);
+      return;
+    }
+    console.log(`[SFL] Found product code: ${productCode}`);
 
-  // === STEP 2: Find delete anchor with doPostBack ===
-  // --- Try to find the delete button in the cart row
-const deleteBtn = item.querySelector('a[href*="WebForm_DoPostBackWithOptions"][href*="del_"]');
+    // === STEP 1.5: Extract productId (pid) from the product link href ===
+    const productLink = item.querySelector('a[href*="ProductDetail.aspx?"]');
+    const pidMatch = productLink?.href?.match(/pid=(\d+)/);
+    if (!pidMatch) {
+      console.warn("[SFL] Could not extract pid from product link:", productLink?.href);
+      return;
+    }
+    const productId = pidMatch[1];
+    console.log(`[SFL] Found pid: ${productId}`);
 
-if (!deleteBtn) {
-  console.warn('[SFL] Could not find delete button in item:', item);
-  return;
-}
+    // === STEP 2: Find delete anchor with doPostBack ===
+    const deleteBtn = item.querySelector('a[href*="WebForm_DoPostBackWithOptions"][href*="del_"]');
+    if (!deleteBtn) {
+      console.warn("[SFL] Could not find delete button in item:", item);
+      return;
+    }
 
-const href = deleteBtn.getAttribute('href');
-const match = href.match(/WebForm_PostBackOptions\("([^"]+)"/);
-const pidMatch = deleteBtn.id.match(/CartLineControl_(\d+)_del_/); //
+    const href = deleteBtn.getAttribute("href");
+    const match = href.match(/WebForm_PostBackOptions\("([^"]+)"/);
+    if (!match || !match[1]) {
+      console.warn("[SFL] Could not extract delete __doPostBack target.");
+      return;
+    }
+    const deleteEventTarget = match[1];
+    console.log(`[SFL] Found delete postback target: ${deleteEventTarget}`);
 
+    // === STEP 3: Create "Save for Later" button ===
+    const btn = document.createElement("button");
+    btn.textContent = "Save for Later";
+    btn.className = "btn btn-link text-primary btn-sm sfl-button";
+    btn.style.marginLeft = "1rem";
 
-if (!match || !match[1]) {
-  console.warn('[SFL] Could not extract delete __doPostBack target.');
-  return;
-}
+    btn.addEventListener("click", async (e) => {
+      e.preventDefault();
+      btn.disabled = true;
+      btn.textContent = "Saving...";
 
-const deleteEventTarget = match[1];
-const productId = pidMatch[1];
-console.log(`[SFL] Found delete postback target: ${deleteEventTarget}`);
+      try {
+        await addToQuicklist(productId);
+        await removeCartItem(deleteEventTarget);
+        location.reload(); // Hard refresh to update cart state
+      } catch (err) {
+        console.error("[SFL] Failed to save for later:", err);
+        btn.textContent = "Error – Try Again";
+        btn.disabled = false;
+      }
+    });
 
-
-  // === STEP 3: Create "Save for Later" button ===
-  const btn = document.createElement("button");
-  btn.textContent = "Save for Later";
-  btn.className = "btn btn-link text-primary btn-sm sfl-button";
-  btn.style.marginLeft = "1rem";
-
-  btn.addEventListener("click", async (e) => {
-    e.preventDefault();
-    btn.disabled = true;
-    btn.textContent = "Saving...";
-
-    try {
-      await addToQuicklist(productId);
-      await removeCartItem(deleteEventTarget);
-      location.reload(); // Hard refresh to update cart state
-    } catch (err) {
-      console.error("[SFL] Failed to save for later:", err);
-      btn.textContent = "Error – Try Again";
-      btn.disabled = false;
+    // === STEP 4: Inject button into cart row ===
+    const btnContainer = item.querySelector(".fa-times")?.parentElement;
+    if (btnContainer) {
+      btnContainer.appendChild(btn);
+      console.log("[SFL] Injected Save for Later button.");
+    } else {
+      console.warn("[SFL] Could not find container to inject button.");
     }
   });
-
-  // === STEP 4: Inject button into cart row ===
-  const btnContainer = item.querySelector(".fa-times")?.parentElement;
-  if (btnContainer) {
-    btnContainer.appendChild(btn);
-    console.log("[SFL] Injected Save for Later button.");
-  } else {
-    console.warn("[SFL] Could not find container to inject button.");
-  }
-});
-
 }
+
 
 async function removeCartItem(eventTarget) {
   const form = document.querySelector("form");
