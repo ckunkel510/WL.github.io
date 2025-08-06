@@ -340,25 +340,36 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
 
   // --------- Init
   (async function initSfl() {
-    waitForMainContents()
-  .then(main => {
-    console.log("[SFL] .mainContents loaded. Injecting container...");
-    main.insertAdjacentElement("afterend", savedForLaterWrapper); // or however you're injecting it
-    loadSflItems(); // or kick off your loader
-  })
-  .catch(err => {
-    console.error("[SFL] Failed to find .mainContents in time:", err);
-  });
+   console.log("[SFL] Initializing...");
 
-    try {
-      console.log("[SFL] Initializing...");
-      const { items } = await loadSflItems();
-      renderSflList(items);
-      console.log("[SFL] Done.");
-    } catch (err) {
-      console.error("[SFL] Error during init:", err);
-      setEmpty();
+  try {
+    const mainContents = await waitForMainContents();
+    console.log("[SFL] .mainContents loaded, injecting container...");
+
+    // Only inject once
+    if (document.getElementById("savedForLaterContainer")) {
+      console.warn("[SFL] Container already exists. Skipping injection.");
+      return;
     }
+
+    const savedForLaterWrapper = document.createElement("div");
+    savedForLaterWrapper.id = "savedForLaterContainer";
+    savedForLaterWrapper.innerHTML = `
+      <div class="saved-for-later-header">
+        <h2>Saved for Later (<span id="sflCount">0</span>)</h2>
+      </div>
+      <div class="saved-for-later-items" id="sflItemList">
+        <div class="sfl-loading">Loading your saved items…</div>
+      </div>
+    `;
+
+    mainContents.insertAdjacentElement("afterend", savedForLaterWrapper);
+    console.log("[SFL] Injected Saved For Later HTML container");
+
+    loadSflItems(); // Kick off loading
+  } catch (err) {
+    console.error("[SFL] Failed to inject Saved For Later container:", err);
+  }
   })();
 })();
 
