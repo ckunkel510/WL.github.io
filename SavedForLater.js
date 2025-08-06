@@ -186,22 +186,21 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
   function parseSflItems(detailDoc) {
   console.log("[SFL] Parsing Quicklist detail page...");
 
-  const grid = detailDoc.querySelector("#ctl00_PageBody_ctl01_QuicklistDetailGrid");
+  // Find the outer grid div (fallback to .RadGrid or .rgMasterTable)
+  let grid = detailDoc.querySelector(".RadGrid") || detailDoc.querySelector("table.rgMasterTable");
   if (!grid) {
     console.error("[SFL] Grid container not found");
     return [];
   }
 
-  const table = grid.querySelector("table.rgMasterTable");
+  // Ensure we have the actual table
+  let table = grid.tagName === "TABLE" ? grid : grid.querySelector("table.rgMasterTable");
   if (!table) {
     console.error("[SFL] .rgMasterTable not found inside grid container");
     return [];
   }
 
-  console.log("[SFL] Dumping table.innerHTML for debugging:");
-  console.log(table.innerHTML.slice(0, 2000));  // trim for now
-
-  const rows = table.querySelectorAll("tbody > tr");
+  const rows = table.querySelectorAll("tr.rgRow");
   console.log(`[SFL] Found ${rows.length} row(s) in Quicklist table`);
 
   const items = [];
@@ -242,6 +241,7 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
 
   return items;
 }
+
 
 
   async function loadSflItems() {
