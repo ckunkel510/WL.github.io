@@ -168,7 +168,10 @@ if (mainContents && mainContents.parentNode) {
   const found = await findSavedForLaterList(); // loads Quicklists_R.aspx
   if (found.exists && found.detailUrl) {
     console.log("[SFL] Found valid Quicklist detail URL:", found.detailUrl);
-    sessionStorage.setItem("sfl_detail_url", found.detailUrl);
+    const fixedUrl = found.detailUrl.replace("QuicklistDetails.aspx", "Quicklists_R.aspx");
+sessionStorage.setItem("sfl_detail_url", fixedUrl);
+console.log("[SFL] Saved corrected detail URL:", fixedUrl);
+
     return found.detailUrl;
   }
 
