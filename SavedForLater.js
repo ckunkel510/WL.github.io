@@ -4,6 +4,33 @@
   const SFL_DESC = "Saved For Later";
   const BASE = location.origin + "/";
 
+  function waitForMainContents(timeout = 5000) {
+  return new Promise((resolve, reject) => {
+    const existing = document.querySelector(".mainContents");
+    if (existing) return resolve(existing);
+
+    const timeoutId = setTimeout(() => {
+      observer.disconnect();
+      reject(new Error("Timed out waiting for .mainContents"));
+    }, timeout);
+
+    const observer = new MutationObserver(() => {
+      const target = document.querySelector(".mainContents");
+      if (target) {
+        clearTimeout(timeoutId);
+        observer.disconnect();
+        resolve(target);
+      }
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  });
+}
+
+
   // Inject container HTML into DOM
   const container = document.createElement("div");
   container.id = "savedForLater";
@@ -313,6 +340,16 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
 
   // --------- Init
   (async function initSfl() {
+    waitForMainContents()
+  .then(main => {
+    console.log("[SFL] .mainContents loaded. Injecting container...");
+    main.insertAdjacentElement("afterend", savedForLaterWrapper); // or however you're injecting it
+    loadSflItems(); // or kick off your loader
+  })
+  .catch(err => {
+    console.error("[SFL] Failed to find .mainContents in time:", err);
+  });
+
     try {
       console.log("[SFL] Initializing...");
       const { items } = await loadSflItems();
