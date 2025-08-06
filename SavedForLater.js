@@ -421,21 +421,33 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
 
 
   async function removeQuicklistLine(detailUrl, eventTarget) {
-    const { doc } = await fetchHtml(detailUrl);
-    const hidden = getHiddenFields(doc);
-    hidden["__EVENTTARGET"] = eventTarget;
-    hidden["__EVENTARGUMENT"] = "";
-
-    const fd = toFormData(hidden);
-    const res = await fetch(detailUrl, {
-      method: "POST",
-      credentials: "include",
-      body: fd
-    });
-    if (!res.ok) throw new Error("Failed to remove item from Quicklist.");
-
-    return true;
+  console.log("[SFL] Removing item from quicklist using:", eventTarget);
+  if (!eventTarget) {
+    console.warn("[SFL] No event target provided — skipping removal");
+    return;
   }
+
+  const { doc } = await fetchHtml(detailUrl);
+  const hidden = getHiddenFields(doc);
+
+  hidden["__EVENTTARGET"] = eventTarget;
+  hidden["__EVENTARGUMENT"] = "";
+
+  const fd = toFormData(hidden);
+  const res = await fetch(detailUrl, {
+    method: "POST",
+    credentials: "include",
+    body: fd
+  });
+
+  if (!res.ok) {
+    console.error("[SFL] Failed to POST quicklist delete");
+    throw new Error("Failed to remove item from Quicklist.");
+  }
+
+  console.log("[SFL] Item successfully removed from Quicklist.");
+}
+
 
   async function refreshSfl() {
     // Re-run the loader from Phase 1
@@ -469,7 +481,8 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
 
         // 3. Reload the page to reflect changes
     console.log("[SFL] Refreshing ShoppingCart page to show updated cart...");
-    location.reload();
+    location.replace(location.href);
+
 
       // Refresh UI
       await refreshSfl();
