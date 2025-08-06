@@ -435,24 +435,27 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
     return;
   }
 
-  // Step 1: Load the detail page
-  const { doc, text } = await fetchHtml(detailUrl);
+  const { doc } = await fetchHtml(detailUrl);
   console.log("[SFL] Loaded quicklist detail page");
 
-  // Step 2: Extract hidden fields
   const hidden = getHiddenFields(doc);
   console.log("[SFL] Extracted hidden fields:", Object.keys(hidden));
 
-  // Step 3: Set the delete postback
+  // === Required fields for async postback ===
   hidden["__EVENTTARGET"] = eventTarget;
   hidden["__EVENTARGUMENT"] = "";
+  hidden["__ASYNCPOST"] = "true";  // <- key addition
+  hidden["ctl00$ScriptManager1"] = "ctl00$PageBody$ctl00$QuicklistDetailGrid|"+eventTarget;
 
   const fd = toFormData(hidden);
 
-  // Step 4: Submit the delete POST request
   const res = await fetch(detailUrl, {
     method: "POST",
     credentials: "include",
+    headers: {
+      "X-MicrosoftAjax": "Delta=true",
+      "X-Requested-With": "XMLHttpRequest"
+    },
     body: fd
   });
 
@@ -466,6 +469,7 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
 
   console.log("[SFL] Item successfully removed from Quicklist.");
 }
+
 
 
 
