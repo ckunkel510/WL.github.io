@@ -1,7 +1,8 @@
-
 $(function() {
-  // 1) Inject Saved For Later HTML
-  var $main = $('.mainContents');
+  // ——————————————————————————————————————————————————————————
+  // 1) Inject the HTML
+  // ——————————————————————————————————————————————————————————
+  var $main = $(".mainContents");
   if (!$main.length) return;
 
   var savedForLater = ''
@@ -18,37 +19,88 @@ $(function() {
     + '</div>';
   $main.after(savedForLater);
 
-  // 2) Define your helpers (or import them)
+
+  // ——————————————————————————————————————————————————————————
+  // 2) Helpers you were calling
+  // ——————————————————————————————————————————————————————————
+
+  // Show the whole container
   function ensureSflContainer() {
-    const el = document.getElementById("savedForLater");
+    var el = document.getElementById("savedForLater");
     if (el) el.style.display = "block";
-    return el;
   }
 
-  function setLoading(msg = "Loading your saved items…") {
-    const load = document.getElementById("sflLoading");
-    if (!load) return;
-    load.style.display = "block";
-    load.textContent = msg;
-    document.getElementById("sflList").style.display = "none";
+  // Put it into “loading” state
+  function setLoading(msg) {
+    msg = msg || "Loading your saved items…";
+    var L = document.getElementById("sflLoading"),
+        LST = document.getElementById("sflList"),
+        EM = document.getElementById("sflEmpty");
+    if (!L || !LST || !EM) return;
+    L.textContent = msg;    L.style.display = "block";
+    LST.style.display = "none";
+    EM.style.display = "none";
+  }
+
+  // Put it into “empty” state
+  function setEmpty(msg) {
+    msg = msg || "No items saved for later.";
+    var L = document.getElementById("sflLoading"),
+        LST = document.getElementById("sflList"),
+        EM = document.getElementById("sflEmpty");
+    if (!L || !LST || !EM) return;
+    L.style.display   = "none";
+    LST.style.display = "none";
+    EM.textContent    = msg;
+    EM.style.display  = "block";
+  }
+
+  // Stub: fetch your real items here
+  // Should return an object like { items: [ … ] }
+  async function loadSflItems() {
+    // =–= Replace this with your real AJAX/fetch
+    // return fetch('/your/api/for/saved').then(r=>r.json());
+    return { items: [] };
+  }
+
+  // Render the list into #sflList
+  function renderSflList(items) {
+    var LST = document.getElementById("sflList"),
+        COUNT = document.getElementById("sflCount");
+    if (!LST || !COUNT) return;
+
+    if (!items || !items.length) {
+      setEmpty();
+      COUNT.textContent = "0";
+      return;
+    }
+
+    // build out your list (example assumes items is array of { html } or strings)
+    LST.innerHTML = items.map(i => "<div class='sfl-item'>" + i.html + "</div>").join("");
+    LST.style.display = "block";
+    document.getElementById("sflLoading").style.display = "none";
     document.getElementById("sflEmpty").style.display = "none";
+    COUNT.textContent = items.length;
   }
 
-  // 3) Run your init now that everything’s in the DOM
+
+  // ——————————————————————————————————————————————————————————
+  // 3) Kick it off
+  // ——————————————————————————————————————————————————————————
   ensureSflContainer();
   setLoading();
 
-  // 4) Kick off the rest of your async load/render logic…
   (async function initSfl() {
     try {
-      const { items } = await loadSflItems();
-      renderSflList(items);
+      var data = await loadSflItems();
+      renderSflList(data.items);
     } catch (err) {
       console.error("[SFL] Error initializing:", err);
-      setEmpty();
+      setEmpty("Failed to load saved items.");
     }
   })();
 });
+
 
 
 
