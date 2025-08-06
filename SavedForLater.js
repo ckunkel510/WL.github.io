@@ -427,48 +427,63 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
 }
 
 
- async function removeQuicklistLine(detailUrl, eventTarget) {
+ async function removeQuicklistLine(eventTarget) {
   console.log("[SFL] Removing item from quicklist using:", eventTarget);
 
-  if (!eventTarget) {
-    console.warn("[SFL] No event target provided — skipping removal");
-    return;
+  const detailUrl = sessionStorage.getItem("sfl_detail_url");
+  if (!detailUrl) {
+    console.error("[SFL] Cannot remove item: Missing sfl_detail_url");
+    throw new Error("Quicklist detail URL not found");
   }
 
-  const { doc } = await fetchHtml(detailUrl);
+  // Step 1: Load the QuicklistDetails page
+  const response = await fetch(detailUrl, {
+    credentials: "include"
+  });
+  const html = await response.text();
   console.log("[SFL] Loaded quicklist detail page");
 
-  const hidden = getHiddenFields(doc);
-  console.log("[SFL] Extracted hidden fields:", Object.keys(hidden));
+  // Step 2: Parse the HTML
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
 
-  // === Required fields for async postback ===
-  hidden["__EVENTTARGET"] = eventTarget;
-  hidden["__EVENTARGUMENT"] = "";
-  hidden["__ASYNCPOST"] = "true";  // <- key addition
-  hidden["ctl00$ScriptManager1"] = "ctl00$PageBody$ctl00$QuicklistDetailGrid|"+eventTarget;
+  // Step 3: Extract all __doPostBack hidden fields
+  const hiddenFields = [...doc.querySelectorAll("input[type='hidden']")];
+  const postData = new URLSearchParams();
 
-  const fd = toFormData(hidden);
-
-  const res = await fetch(detailUrl, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "X-MicrosoftAjax": "Delta=true",
-      "X-Requested-With": "XMLHttpRequest"
-    },
-    body: fd
+  hiddenFields.forEach(input => {
+    postData.set(input.name, input.value);
   });
 
-  const resText = await res.text();
+  // Inject the event target and empty argument
+  postData.set("__EVENTTARGET", eventTarget);
+  postData.set("__EVENTARGUMENT", "");
 
-  if (!res.ok || resText.includes("Unhandled exception") || resText.includes("Error")) {
+  console.log("[SFL] Extracted hidden fields:", hiddenFields.map(i => i.name));
+
+  // Step 4: Submit the POST back to the same URL
+  const postResponse = await fetch(detailUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    credentials: "include",
+    body: postData
+  });
+
+  const postText = await postResponse.text();
+
+  // Step 5: Validate success
+  if (postResponse.ok && !postText.includes("Validation error") && !postText.includes("Server Error")) {
+    console.log("[SFL] Item successfully removed from Quicklist.");
+    return true;
+  } else {
     console.error("[SFL] Delete postback may have failed");
-    console.log("[SFL] Response text preview:", resText.slice(0, 1000));
+    console.log("[SFL] Response text preview:", postText.slice(0, 500));
     throw new Error("Failed to remove item from Quicklist.");
   }
-
-  console.log("[SFL] Item successfully removed from Quicklist.");
 }
+
 
 
 
