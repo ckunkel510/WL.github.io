@@ -366,16 +366,34 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
 
   // --------- Init
   (async function initSfl() {
-   try {
-      console.log("[SFL] Initializing...");
-      const { items } = await loadSflItems();
-      renderSflList(items);
-      console.log("[SFL] Done.");
-    } catch (err) {
-      console.error("[SFL] Error during init:", err);
-      setEmpty();
-    }
+  try {
+    console.log("[SFL] Initializing...");
+    const { items } = await loadSflItems();
+    renderSflList(items);
+    hideSflIfOnFinalStep();  // ✅ Check if we should hide it based on current step
+    console.log("[SFL] Done.");
+  } catch (err) {
+    console.error("[SFL] Error during init:", err);
+    setEmpty();
+  }
 })();
+
+// === New logic to hide SFL block based on page step ===
+function hideSflIfOnFinalStep() {
+  const paymentHeader = document.querySelector("#ctl00_PageBody_CardOnFileViewTitle_HeaderText");
+  const reviewHeader = document.querySelector("#ctl00_PageBody_SummaryHeading_HeaderText");
+  const sflBlock = document.getElementById("savedForLater");
+
+  if (!sflBlock) return;
+
+  const isVisible = (el) => el && el.offsetParent !== null;
+
+  if (isVisible(paymentHeader) || isVisible(reviewHeader)) {
+    sflBlock.style.display = "none";
+    console.log("[SFL] Hiding Saved For Later section on payment or review step.");
+  }
+}
+
 })();
 
 
