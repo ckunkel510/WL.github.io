@@ -448,21 +448,24 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
   const form = doc.querySelector("form");
   if (!form) throw new Error("No form found on quicklist detail page");
 
-  const inputs = [...form.querySelectorAll("input[type=hidden]")];
-  const formData = new URLSearchParams();
+  const hiddenInputs = [...form.querySelectorAll("input[type=hidden]")];
+  const hiddenFields = {};
+  hiddenInputs.forEach((input) => {
+    if (input.name) hiddenFields[input.name] = input.value;
+  });
 
-  for (const input of inputs) {
-    const name = input.name;
-    const value = input.value;
-    if (name) formData.append(name, value);
-  }
-
-  // Set required postback fields
-  formData.set("__EVENTTARGET", eventTarget);
-  formData.set("__EVENTARGUMENT", "");
+  const postData = new URLSearchParams({
+    __EVENTTARGET: eventTarget,
+    __EVENTARGUMENT: "",
+    __VIEWSTATE: hiddenFields["__VIEWSTATE"],
+    __VIEWSTATEGENERATOR: hiddenFields["__VIEWSTATEGENERATOR"],
+    __SCROLLPOSITIONX: hiddenFields["__SCROLLPOSITIONX"] || "0",
+    __SCROLLPOSITIONY: hiddenFields["__SCROLLPOSITIONY"] || "0",
+    __PREVIOUSPAGE: hiddenFields["__PREVIOUSPAGE"] || "",
+    "ctl00$PageBody$ctl01$QuicklistDetailGrid_ClientState": hiddenFields["ctl00$PageBody$ctl01$QuicklistDetailGrid_ClientState"] || "",
+  });
 
   const postUrl = "https://webtrack.woodsonlumber.com/QuicklistDetails.aspx";
-
 
   const postRes = await fetch(postUrl, {
     method: "POST",
@@ -470,7 +473,7 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
     headers: {
       "Content-Type": "application/x-www-form-urlencoded"
     },
-    body: formData.toString()
+    body: postData.toString()
   });
 
   const resText = await postRes.text();
@@ -482,6 +485,7 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
 
   console.log("[SFL] Item successfully removed from Quicklist.");
 }
+
 
 
 
