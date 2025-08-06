@@ -382,9 +382,8 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
 function hideSflIfOnFinalStep() {
   const paymentHeader = document.querySelector("#ctl00_PageBody_CardOnFileViewTitle_HeaderText");
   const reviewHeader = document.querySelector("#ctl00_PageBody_SummaryHeading_HeaderText");
+  const summaryEntry2 = document.getElementById("SummaryEntry2");
   const sflBlock = document.getElementById("savedForLater");
-  const summaryHeader = document.querySelector("table.cartTable tbody tr th");
-  const isSummaryCart = summaryHeader && summaryHeader.textContent.trim().toLowerCase() === "summary";
 
   if (!sflBlock) return;
 
@@ -393,12 +392,13 @@ function hideSflIfOnFinalStep() {
   if (
     isVisible(paymentHeader) ||
     isVisible(reviewHeader) ||
-    isSummaryCart
+    isVisible(summaryEntry2)
   ) {
     sflBlock.style.display = "none";
-    console.log("[SFL] Hiding Saved For Later section due to page step or summary table.");
+    console.log("[SFL] Hiding Saved For Later section on payment, review, or summary step.");
   }
 }
+
 
 
 })();
