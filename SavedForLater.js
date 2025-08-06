@@ -219,13 +219,20 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
     const price = tds[2].textContent.trim();
     const per = tds[3].textContent.trim();
 
-    const deleteAnchor = tds[4].querySelector("a[href^='javascript:__doPostBack']");
-    let eventTarget = null;
-    if (deleteAnchor) {
-      const href = deleteAnchor.getAttribute("href") || "";
-      const m = href.match(/__doPostBack\('([^']+)'/);
-      if (m) eventTarget = m[1];
+    const deleteAnchor = tr.querySelector("a[href*='DeleteQuicklistLineButtonX']");
+  let eventTarget = null;
+  if (deleteAnchor) {
+    const href = deleteAnchor.getAttribute("href") || "";
+    const m = href.match(/__doPostBack\('([^']+)'/);
+    if (m) {
+      eventTarget = m[1];
+      console.log(`[SFL] Row ${i}: Found delete __EVENTTARGET:`, eventTarget);
+    } else {
+      console.warn(`[SFL] Row ${i}: Failed to extract delete event target`);
     }
+  } else {
+    console.warn(`[SFL] Row ${i}: No delete link found`);
+  }
 
     console.log(`[SFL] Row ${i}: ${productCode} | ${description} | $${price} | ${per}`);
 
