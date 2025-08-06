@@ -505,7 +505,7 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
 
         // 3. Reload the page to reflect changes
     console.log("[SFL] Refreshing ShoppingCart page to show updated cart...");
-    location.replace(location.href);
+    
 
 
       // Refresh UI
