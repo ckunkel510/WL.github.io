@@ -195,6 +195,9 @@ if (mainContents && mainContents.parentNode) {
     return [];
   }
 
+  console.log("[SFL] Dumping table.innerHTML for debugging:");
+  console.log(table.innerHTML.slice(0, 2000));  // trim for now
+
   const rows = table.querySelectorAll("tbody > tr");
   console.log(`[SFL] Found ${rows.length} row(s) in Quicklist table`);
 
