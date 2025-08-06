@@ -795,6 +795,10 @@ function injectSaveForLaterButtons() {
   });
 }
 
+document.addEventListener("DOMContentLoaded", () => {
+  console.log("[SFL] DOM fully loaded – initializing...");
+  injectSaveForLaterButtons();
+});
 
 
 // Ensure it runs on page load
