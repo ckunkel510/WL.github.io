@@ -320,6 +320,7 @@ display: none;
 }
 
 .sflPer {
+  Display:none;
   position: absolute;
   top: 100%;
   left: 0;
@@ -329,4 +330,10 @@ display: none;
   z-index: 1;
   white-space: nowrap;
   transform: translateY(-4px); /* pull up under price */
+}
+
+.sflPrice::before {
+  content: "$";
+  margin-right: 2px;
+  font-weight: 400;
 }
