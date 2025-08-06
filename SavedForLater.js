@@ -200,7 +200,7 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
     return [];
   }
 
-  const rows = table.querySelectorAll("tr.rgRow");
+  const rows = table.querySelectorAll("tr.rgRow, tr.rgAltRow");
   console.log(`[SFL] Found ${rows.length} row(s) in Quicklist table`);
 
   const items = [];
