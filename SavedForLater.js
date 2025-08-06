@@ -282,7 +282,7 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
     return "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/placeholder.png";
   }
 
-  async function renderSflList(items) {
+ async function renderSflList(items) {
   const list = document.getElementById("sflList");
   list.innerHTML = "";
 
@@ -295,10 +295,20 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
 
   for (const item of items) {
     const pid = item.productHref ? pidFromHref(item.productHref) : null;
+    const productUrl = pid ? `https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=${pid}` : "#";
+
+    // === Create image element ===
     const imgElement = document.createElement("img");
     imgElement.className = "sflImg";
     imgElement.src = placeholder;
 
+    // === Wrap image in anchor ===
+    const link = document.createElement("a");
+    link.href = productUrl;
+    link.target = "_blank"; // optional: open in new tab
+    link.appendChild(imgElement);
+
+    // === Build row ===
     const row = document.createElement("div");
     row.className = "sflRow";
     row.innerHTML = `
@@ -314,18 +324,19 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
       </div>
     `;
 
-    // Insert image into wrapper to allow lazy update
-    row.querySelector(".sflImgWrapper").appendChild(imgElement);
+    // Add the <a><img></a> to the image wrapper
+    row.querySelector(".sflImgWrapper").appendChild(link);
 
+    // Add data attributes
     row.dataset.eventTarget = item.eventTarget || "";
     row.dataset.pid = pid || "";
     row.dataset.code = item.productCode || "";
+
+    // Append to the list
     list.appendChild(row);
 
-    // Asynchronously fetch and update image if PID is available
+    // === Update image if available ===
     if (pid) {
-      const productUrl = `https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=${pid}`;
-
       try {
         const response = await fetch("https://wlmarketingdashboard.vercel.app/api/get-product-image", {
           method: "POST",
@@ -350,6 +361,7 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
   document.getElementById("sflEmpty").style.display = "none";
   list.style.display = "block";
 }
+
 
 
   // --------- Init
