@@ -1,16 +1,25 @@
 
 
-<div id="savedForLater" style="display:none;">
-  <div id="sflHeader">
-      <span>Saved For Later</span>
-          <span class="sflCount" id="sflCount"></span>
-            </div>
-              <div id="sflBody">
-                  <div id="sflLoading">Loading your saved items…</div>
-                      <div id="sflList" style="display:none;"></div>
-                          <div id="sflEmpty" style="display:none;">No items saved for later.</div>
-                            </div>
-                            </div>
+document.addEventListener("DOMContentLoaded", function() {
+    var main = document.querySelector(".mainContents");
+    if (!main) return;
+
+    var html = ''
+      + '<div id="savedForLater" style="display:none;">'
+      + '  <div id="sflHeader">'
+      + '    <span>Saved For Later</span>'
+      + '    <span class="sflCount" id="sflCount"></span>'
+      + '  </div>'
+      + '  <div id="sflBody">'
+      + '    <div id="sflLoading">Loading your saved items…</div>'
+      + '    <div id="sflList" style="display:none;"></div>'
+      + '    <div id="sflEmpty" style="display:none;">No items saved for later.</div>'
+      + '  </div>'
+      + '</div>';
+
+    // insert after the mainContents div
+    main.insertAdjacentHTML('afterend', html);
+  });
 
                             (function() {
                               const SFL_NAME = "Saved For Later";
