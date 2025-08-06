@@ -723,34 +723,51 @@ for (const tr of rows) {
 
 
 function injectSaveForLaterButtons() {
+  console.log("[SFL] Starting Save for Later button injection...");
+
   const cartItems = document.querySelectorAll(".row.shopping-cart-item");
+  console.log(`[SFL] Found ${cartItems.length} cart items.`);
 
-  cartItems.forEach(item => {
-    // Avoid duplicate button
-    if (item.querySelector(".js-save-for-later")) return;
+  cartItems.forEach((item, index) => {
+    console.log(`[SFL] Processing cart item #${index + 1}`);
 
-    // Extract Product Code (from anchor inside span)
+    // Avoid duplicate injection
+    if (item.querySelector(".js-save-for-later")) {
+      console.log("[SFL] Button already exists, skipping...");
+      return;
+    }
+
+    // Product code extraction
     const productCodeEl = item.querySelector("a[id*='ProductCodeHyperLink'] span");
     const productCode = productCodeEl?.textContent?.trim();
 
-    // Extract delete __doPostBack event from anchor tag
+    if (!productCode) {
+      console.warn("[SFL] Could not find product code in item:", item);
+      return;
+    }
+
+    // Delete event target extraction
     const deleteAnchor = item.querySelector("a[id*='_del_']");
     const deleteOnClick = deleteAnchor?.getAttribute("href");
     const deleteEventMatch = deleteOnClick?.match(/__doPostBack\('([^']+)'/);
     const deleteEventTarget = deleteEventMatch?.[1];
 
-    if (!productCode || !deleteEventTarget) {
-      console.warn("[SFL] Missing product code or delete event in cart row.");
+    if (!deleteEventTarget) {
+      console.warn("[SFL] Could not extract delete __doPostBack target.");
       return;
     }
 
-    // Build Save For Later Button
+    console.log(`[SFL] Product Code: ${productCode}`);
+    console.log(`[SFL] Delete Event Target: ${deleteEventTarget}`);
+
+    // Build button
     const btn = document.createElement("button");
     btn.className = "sflBtn js-save-for-later btn btn-sm btn-outline-secondary";
     btn.textContent = "Save for Later";
     btn.style.marginTop = "0.5rem";
 
     btn.addEventListener("click", async () => {
+      console.log(`[SFL] Clicked save button for ${productCode}`);
       btn.disabled = true;
       btn.textContent = "Saving…";
 
@@ -767,11 +784,17 @@ function injectSaveForLaterButtons() {
       }
     });
 
-    // Append to bottom of item (or anywhere else you want)
+    // Append to row (adjust this if needed)
     const rightCol = item.querySelector(".col-12.col-sm-3");
-    if (rightCol) rightCol.appendChild(btn);
+    if (rightCol) {
+      rightCol.appendChild(btn);
+      console.log("[SFL] Injected Save for Later button.");
+    } else {
+      console.warn("[SFL] Could not find column to append button.");
+    }
   });
 }
+
 
 
 // Ensure it runs on page load
