@@ -435,39 +435,57 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
 }
 
 
-async function removeQuicklistLine(eventTarget) {
-  console.log(`[SFL] Removing item from quicklist using eventTarget: ${eventTarget}`);
-
+async function removeQuicklistLine(productCodeToRemove) {
   const detailUrl = sessionStorage.getItem("sfl_detail_url");
   if (!detailUrl) throw new Error("Missing quicklist detail URL");
 
+  console.log(`[SFL] Removing item from quicklist using detail URL: ${detailUrl}`);
+
+  // 1. Load the quicklist page HTML
   const response = await fetch(detailUrl, { credentials: "include" });
   const html = await response.text();
-  console.log("[SFL] Loaded quicklist detail page");
-
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
+  console.log("[SFL] Loaded quicklist detail page");
 
+  // 2. Parse the grid rows and find the correct delete __EVENTTARGET
+  const rows = doc.querySelectorAll("tr.rgRow, tr.rgAltRow");
+  let eventTarget = null;
+
+  rows.forEach((tr, i) => {
+    const link = tr.querySelector("a[href*='ProductDetail.aspx']");
+    const productCode = link?.textContent.trim();
+
+    if (productCode === productCodeToRemove) {
+      const deleteAnchor = tr.querySelector("a[href*='DeleteQuicklistLineButtonX']");
+      const href = deleteAnchor?.getAttribute("href") || "";
+      const match = href.match(/__doPostBack\('([^']+)'/);
+
+      if (match) {
+        eventTarget = match[1];
+        console.log(`[SFL] Matched product '${productCodeToRemove}' — using eventTarget: ${eventTarget}`);
+      }
+    }
+  });
+
+  if (!eventTarget) {
+    console.error(`[SFL] Could not find delete button for product ${productCodeToRemove}`);
+    throw new Error("Delete button not found in DOM.");
+  }
+
+  // 3. Build form data for POST
   const form = doc.querySelector("form");
-  if (!form) throw new Error("No form found on quicklist detail page");
-
   const inputs = [...form.querySelectorAll("input[type=hidden]")];
   const formData = new URLSearchParams();
 
-  for (const input of inputs) {
-    const name = input.name;
-    const value = input.value;
-    if (name) formData.append(name, value);
-  }
+  inputs.forEach(input => {
+    if (input.name) formData.append(input.name, input.value);
+  });
 
-  // Add the required postback fields
   formData.set("__EVENTTARGET", eventTarget);
   formData.set("__EVENTARGUMENT", "");
 
-  // 🧠 DEBUG: Log the entire formData string
-  console.log("[SFL] Posting with data:\n", decodeURIComponent(formData.toString()));
-
-  const postUrl = "https://webtrack.woodsonlumber.com/QuicklistDetails.aspx";
+  const postUrl = new URL(form.getAttribute("action"), detailUrl).href;
 
   const postRes = await fetch(postUrl, {
     method: "POST",
@@ -478,20 +496,15 @@ async function removeQuicklistLine(eventTarget) {
     body: formData.toString()
   });
 
-  console.log("[SFL] POST status:", postRes.status);
-  console.log("[SFL] POST headers:", [...postRes.headers.entries()]);
-
   const resText = await postRes.text();
-
-  // 🧠 DEBUG: Log entire response (temporarily)
-  console.log("[SFL] Full POST response text:\n", resText);
-
   if (!resText.includes("QuicklistDetailGrid")) {
+    console.error("[SFL] Response text preview:\n", resText.slice(0, 500));
     throw new Error("Failed to remove item from Quicklist.");
   }
 
   console.log("[SFL] Item successfully removed from Quicklist.");
 }
+
 
 
 
