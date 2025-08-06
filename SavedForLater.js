@@ -162,22 +162,22 @@ if (mainContents && mainContents.parentNode) {
 
   // --------- Step 2: Resolve detail URL for SFL
   async function ensureSflDetailUrl() {
-    const cached = sessionStorage.getItem("sfl_detail_url");
-    if (cached) {
-      console.log("[SFL] Using cached detail URL:", cached);
-      return cached;
-    }
+  console.log("[SFL] Locating Saved For Later Quicklist via Quicklists_R.aspx...");
+  sessionStorage.removeItem("sfl_detail_url"); // always re-check
 
-    const found = await findSavedForLaterList();
-    if (found.exists && found.detailUrl) {
-      sessionStorage.setItem("sfl_detail_url", found.detailUrl);
-      return found.detailUrl;
-    }
-
-    const createdUrl = await createSavedForLaterList();
-    sessionStorage.setItem("sfl_detail_url", createdUrl);
-    return createdUrl;
+  const found = await findSavedForLaterList(); // loads Quicklists_R.aspx
+  if (found.exists && found.detailUrl) {
+    console.log("[SFL] Found valid Quicklist detail URL:", found.detailUrl);
+    sessionStorage.setItem("sfl_detail_url", found.detailUrl);
+    return found.detailUrl;
   }
+
+  console.log("[SFL] Not found, creating new Saved For Later list...");
+  const createdUrl = await createSavedForLaterList();
+  sessionStorage.setItem("sfl_detail_url", createdUrl);
+  return createdUrl;
+}
+
 
   // --------- Step 3: Load items
   function parseSflItems(detailDoc) {
