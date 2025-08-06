@@ -833,41 +833,44 @@ async function removeCartItem(eventTarget) {
 async function addToQuicklist(productId) {
   console.log(`[SFL] Attempting to add ProductID ${productId} to Saved For Later...`);
 
-  // Step 1: Try to find the hidden dropdown with quicklist items
-  const quickListDropdown = document.querySelector("#ctl00_PageBody_productDetail_ctl00_QuickList_QuickListRepeater") || document.querySelector("[id*='QuickListRepeater']");
+  // Step 1: Try to find any element that contains the "Add to Saved For Later" anchor
+  const allHiddenLists = Array.from(document.querySelectorAll("a"))
+    .filter(a => a.textContent.trim() === "Add to Saved For Later");
 
-  if (!quickListDropdown) {
-    throw new Error("QuickList dropdown not found in DOM.");
+  console.log(`[SFL] Found ${allHiddenLists.length} potential 'Add to Saved For Later' anchors.`);
+
+  if (allHiddenLists.length === 0) {
+    throw new Error("Could not find any 'Add to Saved For Later' anchor tags.");
   }
 
-  // Step 2: Find the correct <a> element inside that has "Add to Saved For Later" as innerText
-  const addLink = Array.from(quickListDropdown.querySelectorAll("a"))
-    .find(a => a.textContent.trim() === "Add to Saved For Later");
+  // Step 2: Find one with a __doPostBack href
+  const addLink = allHiddenLists.find(a => a.getAttribute("href")?.includes("__doPostBack"));
 
   if (!addLink) {
-    throw new Error("Could not find 'Add to Saved For Later' link in dropdown.");
+    throw new Error("Found anchor(s) but none with a __doPostBack href.");
   }
 
-  // Step 3: Extract the __doPostBack target from href
   const href = addLink.getAttribute("href");
   const match = href.match(/__doPostBack\('([^']+)'/);
+
   if (!match || !match[1]) {
-    throw new Error("Could not extract __doPostBack target.");
+    throw new Error("Could not extract __doPostBack target from href.");
   }
 
   const postbackTarget = match[1];
-  console.log(`[SFL] Found postback target: ${postbackTarget}`);
+  console.log(`[SFL] Found __doPostBack target: ${postbackTarget}`);
 
-  // Step 4: Set hidden fields and trigger postback
+  // Step 3: Trigger postback
   const form = document.forms[0];
   if (!form) throw new Error("Main form not found.");
 
   form.__EVENTTARGET.value = postbackTarget;
   form.__EVENTARGUMENT.value = "";
 
-  console.log("[SFL] Submitting form to add to quicklist...");
+  console.log(`[SFL] Submitting form to add product ${productId} to quicklist...`);
   form.submit();
 }
+
 
 
 
