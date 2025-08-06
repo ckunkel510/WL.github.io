@@ -558,6 +558,8 @@ for (const tr of rows) {
 
     // 3. Refresh UI
     console.log("[SFL] Refreshing ShoppingCart page to show updated cart...");
+    location.replace(location.href);
+
     await refreshSfl();
   } catch (err) {
     console.error("[SFL] Add to cart/remove failed:", err);
