@@ -438,7 +438,9 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
   const detailUrl = sessionStorage.getItem("sfl_detail_url");
   if (!detailUrl) throw new Error("Missing quicklist detail URL");
 
-  const response = await fetch(detailUrl, { credentials: "include" });
+  const fetchUrl = detailUrl.split("#")[0]; // Strip #anchor if present
+
+  const response = await fetch(fetchUrl, { credentials: "include" });
   const html = await response.text();
   console.log("[SFL] Loaded quicklist detail page");
 
@@ -448,32 +450,29 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
   const form = doc.querySelector("form");
   if (!form) throw new Error("No form found on quicklist detail page");
 
-  const hiddenInputs = [...form.querySelectorAll("input[type=hidden]")];
-  const hiddenFields = {};
-  hiddenInputs.forEach((input) => {
-    if (input.name) hiddenFields[input.name] = input.value;
-  });
+  const inputs = [...form.querySelectorAll("input[type=hidden]")];
+  const formData = new URLSearchParams();
 
-  const postData = new URLSearchParams({
-    __EVENTTARGET: eventTarget,
-    __EVENTARGUMENT: "",
-    __VIEWSTATE: hiddenFields["__VIEWSTATE"],
-    __VIEWSTATEGENERATOR: hiddenFields["__VIEWSTATEGENERATOR"],
-    __SCROLLPOSITIONX: hiddenFields["__SCROLLPOSITIONX"] || "0",
-    __SCROLLPOSITIONY: hiddenFields["__SCROLLPOSITIONY"] || "0",
-    __PREVIOUSPAGE: hiddenFields["__PREVIOUSPAGE"] || "",
-    "ctl00$PageBody$ctl01$QuicklistDetailGrid_ClientState": hiddenFields["ctl00$PageBody$ctl01$QuicklistDetailGrid_ClientState"] || "",
-  });
+  for (const input of inputs) {
+    const name = input.name;
+    const value = input.value;
+    if (name) formData.append(name, value);
+  }
 
-  const postUrl = detailUrl.split("#")[0]; // ✅ same page for POST request
+  // Add required postback fields
+  formData.set("__EVENTTARGET", eventTarget);
+  formData.set("__EVENTARGUMENT", "");
 
-  const postRes = await fetch(postUrl, {
+  // Also simulate the button click input, which may be required
+  formData.append(eventTarget, "Delete");
+
+  const postRes = await fetch(fetchUrl, {
     method: "POST",
     credentials: "include",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded"
     },
-    body: postData.toString()
+    body: formData.toString()
   });
 
   const resText = await postRes.text();
@@ -485,6 +484,7 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
 
   console.log("[SFL] Item successfully removed from Quicklist.");
 }
+
 
 
 
