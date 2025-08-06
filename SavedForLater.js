@@ -282,44 +282,75 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
     return "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/placeholder.png";
   }
 
-  function renderSflList(items) {
-    const list = $("#sflList");
-    list.innerHTML = "";
+  async function renderSflList(items) {
+  const list = document.getElementById("sflList");
+  list.innerHTML = "";
 
-    if (!items.length) {
-      setEmpty();
-      return;
-    }
-
-    items.forEach(item => {
-      const pid = item.productHref ? pidFromHref(item.productHref) : null;
-      const img = productImageUrlFromPid(pid);
-
-      const row = document.createElement("div");
-      row.className = "sflRow";
-      row.innerHTML = `
-        <img class="sflImg" src="${img}" alt="">
-        <div>
-          <div class="sflTitle">${item.productCode || ""}</div>
-          <div class="sflDesc">${item.description || ""}</div>
-        </div>
-        <div class="sflPrice">${item.price || ""}</div>
-        <div class="sflPer">${item.per || ""}</div>
-        <div class="sflActions">
-          <button class="sflBtn js-sfl-add" data-pid="${pid || ""}" data-code="${item.productCode || ""}">Add to Cart</button>
-        </div>
-      `;
-      row.dataset.eventTarget = item.eventTarget || "";
-      row.dataset.pid = pid || "";
-      row.dataset.code = item.productCode || "";
-      list.appendChild(row);
-    });
-
-    setListCount(items.length);
-    $("#sflLoading").style.display = "none";
-    $("#sflEmpty").style.display = "none";
-    list.style.display = "block";
+  if (!items.length) {
+    setEmpty();
+    return;
   }
+
+  const placeholder = "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/placeholder.png";
+
+  for (const item of items) {
+    const pid = item.productHref ? pidFromHref(item.productHref) : null;
+    const imgElement = document.createElement("img");
+    imgElement.className = "sflImg";
+    imgElement.src = placeholder;
+
+    const row = document.createElement("div");
+    row.className = "sflRow";
+    row.innerHTML = `
+      <div class="sflImgWrapper"></div>
+      <div>
+        <div class="sflTitle">${item.productCode || ""}</div>
+        <div class="sflDesc">${item.description || ""}</div>
+      </div>
+      <div class="sflPrice">${item.price || ""}</div>
+      <div class="sflPer">${item.per || ""}</div>
+      <div class="sflActions">
+        <button class="sflBtn js-sfl-add" data-pid="${pid || ""}" data-code="${item.productCode || ""}">Add to Cart</button>
+      </div>
+    `;
+
+    // Insert image into wrapper to allow lazy update
+    row.querySelector(".sflImgWrapper").appendChild(imgElement);
+
+    row.dataset.eventTarget = item.eventTarget || "";
+    row.dataset.pid = pid || "";
+    row.dataset.code = item.productCode || "";
+    list.appendChild(row);
+
+    // Asynchronously fetch and update image if PID is available
+    if (pid) {
+      const productUrl = `https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=${pid}`;
+
+      try {
+        const response = await fetch("https://wlmarketingdashboard.vercel.app/api/get-product-image", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ productUrl })
+        });
+
+        const result = await response.json();
+        if (result.imageUrl) {
+          imgElement.src = result.imageUrl;
+        } else {
+          console.warn(`[SFL] No image found for PID ${pid}`);
+        }
+      } catch (err) {
+        console.error(`[SFL] Error fetching image for PID ${pid}:`, err.message);
+      }
+    }
+  }
+
+  setListCount(items.length);
+  document.getElementById("sflLoading").style.display = "none";
+  document.getElementById("sflEmpty").style.display = "none";
+  list.style.display = "block";
+}
+
 
   // --------- Init
   (async function initSfl() {
