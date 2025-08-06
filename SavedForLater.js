@@ -19,7 +19,15 @@
       <div id="sflEmpty" style="display:none;">No items saved for later.</div>
     </div>
   `;
+  const mainContents = document.querySelector('.mainContents');
+if (mainContents && mainContents.parentNode) {
+  mainContents.parentNode.insertBefore(container, mainContents.nextSibling);
+  console.log("[SFL] Injected after .mainContents");
+} else {
+  console.warn("[SFL] .mainContents not found, appending to body");
   document.body.appendChild(container);
+}
+
   console.log("[SFL] Injected Saved For Later HTML container");
 
   // Utility functions
