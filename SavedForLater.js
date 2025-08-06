@@ -435,55 +435,45 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
  async function removeQuicklistLine(eventTarget) {
   console.log(`[SFL] Removing item from quicklist using: ${eventTarget}`);
 
-  const detailUrl = sessionStorage.getItem("sfl_detail_url");
-  if (!detailUrl) throw new Error("Missing quicklist detail URL");
+  // Try to find the delete button by its name attribute
+  const deleteBtn = document.querySelector(`[name="${eventTarget}"]`);
 
-  const fetchUrl = detailUrl.split("#")[0]; // Strip #anchor if present
-
-  const response = await fetch(fetchUrl, { credentials: "include" });
-  const html = await response.text();
-  console.log("[SFL] Loaded quicklist detail page");
-
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, "text/html");
-
-  const form = doc.querySelector("form");
-  if (!form) throw new Error("No form found on quicklist detail page");
-
-  const inputs = [...form.querySelectorAll("input[type=hidden]")];
-  const formData = new URLSearchParams();
-
-  for (const input of inputs) {
-    const name = input.name;
-    const value = input.value;
-    if (name) formData.append(name, value);
+  if (!deleteBtn) {
+    console.error("[SFL] Could not find delete button in DOM:", eventTarget);
+    throw new Error("Delete button not found in DOM.");
   }
 
-  // Add required postback fields
-  formData.set("__EVENTTARGET", eventTarget);
-  formData.set("__EVENTARGUMENT", "");
+  // Click the delete button to trigger the modal
+  deleteBtn.click();
+  console.log("[SFL] Delete button clicked. Waiting for modal to appear...");
 
-  // Also simulate the button click input, which may be required
-  formData.append(eventTarget, "Delete");
+  // Wait for the confirmation modal to be visible
+  const waitForConfirmModal = async () => {
+    for (let i = 0; i < 10; i++) {
+      const confirmBtn = document.querySelector("#genericConfirmModalYesBtn");
+      const modalVisible = confirmBtn && confirmBtn.offsetParent !== null;
 
-  const postRes = await fetch(fetchUrl, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded"
-    },
-    body: formData.toString()
-  });
+      if (modalVisible) {
+        console.log("[SFL] Modal appeared. Clicking OK...");
+        confirmBtn.click();
+        return true;
+      }
 
-  const resText = await postRes.text();
+      await new Promise((resolve) => setTimeout(resolve, 300)); // wait 300ms
+    }
 
-  if (!resText.includes("QuicklistDetailGrid")) {
-    console.error("[SFL] Response text preview:\n", resText.slice(0, 500));
-    throw new Error("Failed to remove item from Quicklist.");
+    throw new Error("Confirmation modal did not appear.");
+  };
+
+  try {
+    await waitForConfirmModal();
+    console.log("[SFL] Successfully triggered delete via modal.");
+  } catch (err) {
+    console.error("[SFL] Failed to confirm delete:", err);
+    throw err;
   }
-
-  console.log("[SFL] Item successfully removed from Quicklist.");
 }
+
 
 
 
