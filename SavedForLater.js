@@ -464,7 +464,12 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
       const detailUrl = sessionStorage.getItem("sfl_detail_url");
       if (eventTarget && detailUrl) {
         await removeQuicklistLine(detailUrl, eventTarget);
+        console.log("[SFL] Removed item from Saved For Later list");
       }
+
+        // 3. Reload the page to reflect changes
+    console.log("[SFL] Refreshing ShoppingCart page to show updated cart...");
+    location.reload();
 
       // Refresh UI
       await refreshSfl();
