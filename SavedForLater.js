@@ -188,7 +188,7 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
 
 
   // --------- Step 3: Load items
-  function parseSflItems(detailDoc) {
+ function parseSflItems(detailDoc) {
   console.log("[SFL] Parsing Quicklist detail page...");
 
   // Find the outer grid div (fallback to .RadGrid or .rgMasterTable)
@@ -224,20 +224,21 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
     const price = tds[2].textContent.trim();
     const per = tds[3].textContent.trim();
 
-    const deleteAnchor = tr.querySelector("a[href*='DeleteQuicklistLineButtonX']");
-  let eventTarget = null;
-  if (deleteAnchor) {
-    const href = deleteAnchor.getAttribute("href") || "";
-    const m = href.match(/__doPostBack\('([^']+)'/);
-    if (m) {
-      eventTarget = m[1];
-      console.log(`[SFL] Row ${i}: Found delete __EVENTTARGET:`, eventTarget);
+    // 🧠 Extract delete event target from inline JS
+    const deleteAnchor = tr.querySelector("a[id*='DeleteQuicklistLineButtonX']");
+    let eventTarget = null;
+    if (deleteAnchor) {
+      const href = deleteAnchor.getAttribute("href") || "";
+      const m = href.match(/__doPostBack\('([^']+)'/);
+      if (m) {
+        eventTarget = m[1];
+        console.log(`[SFL] Row ${i}: Found delete __EVENTTARGET:`, eventTarget);
+      } else {
+        console.warn(`[SFL] Row ${i}: Failed to extract delete event target`);
+      }
     } else {
-      console.warn(`[SFL] Row ${i}: Failed to extract delete event target`);
+      console.warn(`[SFL] Row ${i}: No delete anchor found`);
     }
-  } else {
-    console.warn(`[SFL] Row ${i}: No delete link found`);
-  }
 
     console.log(`[SFL] Row ${i}: ${productCode} | ${description} | $${price} | ${per}`);
 
@@ -247,12 +248,14 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
       description,
       price,
       per,
-      eventTarget
+      eventTarget // 🔥 Include in item object
     });
   });
 
   return items;
 }
+
+
 
 
 
@@ -435,8 +438,7 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
  async function removeQuicklistLine(eventTarget) {
   console.log(`[SFL] Removing item from quicklist using: ${eventTarget}`);
 
-  // Try to find the delete button by its name attribute
-  const deleteBtn = document.querySelector(`[name="${eventTarget}"]`);
+  const deleteBtn = document.getElementById(eventTarget);
 
   if (!deleteBtn) {
     console.error("[SFL] Could not find delete button in DOM:", eventTarget);
@@ -447,7 +449,7 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
   deleteBtn.click();
   console.log("[SFL] Delete button clicked. Waiting for modal to appear...");
 
-  // Wait for the confirmation modal to be visible
+  // Wait for modal and confirm
   const waitForConfirmModal = async () => {
     for (let i = 0; i < 10; i++) {
       const confirmBtn = document.querySelector("#genericConfirmModalYesBtn");
@@ -459,7 +461,7 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
         return true;
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 300)); // wait 300ms
+      await new Promise((resolve) => setTimeout(resolve, 300));
     }
 
     throw new Error("Confirmation modal did not appear.");
@@ -473,6 +475,7 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
     throw err;
   }
 }
+
 
 
 
