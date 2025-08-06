@@ -532,41 +532,40 @@ for (const tr of rows) {
 
   // Wire up the click handler
   document.addEventListener("click", async (e) => {
-    const btn = e.target.closest(".js-sfl-add");
-    if (!btn) return;
+  const btn = e.target.closest(".js-sfl-add");
+  if (!btn) return;
 
-    btn.disabled = true;
-    btn.textContent = "Adding…";
+  btn.disabled = true;
+  btn.textContent = "Adding…";
 
-    const row = btn.closest(".sflRow");
-    const pid = row?.dataset?.pid || null;
-    const eventTarget = row?.dataset?.eventTarget || null;
+  const row = btn.closest(".sflRow");
+  const pid = row?.dataset?.pid || null;
+  const productCode = row?.dataset?.code || null;
 
-    try {
-      if (!pid) throw new Error("Missing PID for add-to-cart.");
-      // Add to cart
-      await addPidToCart(pid, 1);
+  try {
+    if (!pid) throw new Error("Missing PID for add-to-cart.");
 
-      // Remove from Quicklist
-      const detailUrl = sessionStorage.getItem("sfl_detail_url");
-      if (eventTarget && detailUrl) {
-        await removeQuicklistLine(detailUrl, eventTarget);
-        console.log("[SFL] Removed item from Saved For Later list");
-      }
+    // 1. Add to cart
+    await addPidToCart(pid, 1);
 
-        // 3. Reload the page to reflect changes
-    console.log("[SFL] Refreshing ShoppingCart page to show updated cart...");
-    
-
-
-      // Refresh UI
-      await refreshSfl();
-    } catch (err) {
-      console.error("[SFL] Add to cart/remove failed:", err);
-      btn.textContent = "Try Again";
-      btn.disabled = false;
+    // 2. Remove from Quicklist using productCode
+    if (productCode) {
+      await removeQuicklistLine(productCode);
+      console.log("[SFL] Removed item from Saved For Later list");
+    } else {
+      throw new Error("Missing productCode for removal.");
     }
-  });
+
+    // 3. Refresh UI
+    console.log("[SFL] Refreshing ShoppingCart page to show updated cart...");
+    await refreshSfl();
+  } catch (err) {
+    console.error("[SFL] Add to cart/remove failed:", err);
+    btn.textContent = "Try Again";
+    btn.disabled = false;
+  }
+});
+
 
   // Expose a hook Phase 1 can call to re-render
   window.__sflReload = async function() {
