@@ -224,23 +224,24 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
     const price = tds[2].textContent.trim();
     const per = tds[3].textContent.trim();
 
-    // 🧠 Extract delete event target from inline JS
+    // 🔍 Find delete anchor and extract EVENTTARGET
     const deleteAnchor = tr.querySelector("a[id*='DeleteQuicklistLineButtonX']");
     let eventTarget = null;
+
     if (deleteAnchor) {
       const href = deleteAnchor.getAttribute("href") || "";
-      const m = href.match(/__doPostBack\('([^']+)'/);
-      if (m) {
-        eventTarget = m[1];
-        console.log(`[SFL] Row ${i}: Found delete __EVENTTARGET:`, eventTarget);
+      const match = href.match(/__doPostBack\('([^']+)'/);
+      if (match) {
+        eventTarget = match[1];
+        console.log(`[SFL] Row ${i}: Found delete __EVENTTARGET: ${eventTarget}`);
       } else {
-        console.warn(`[SFL] Row ${i}: Failed to extract delete event target`);
+        console.warn(`[SFL] Row ${i}: Failed to extract __EVENTTARGET from href`);
       }
     } else {
       console.warn(`[SFL] Row ${i}: No delete anchor found`);
     }
 
-    console.log(`[SFL] Row ${i}: ${productCode} | ${description} | $${price} | ${per}`);
+    console.log(`[SFL] Row ${i}: ${productCode} | ${description} | ${price} | ${per}`);
 
     items.push({
       productHref,
@@ -248,12 +249,13 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
       description,
       price,
       per,
-      eventTarget // 🔥 Include in item object
+      eventTarget // 💡 used later to remove item
     });
   });
 
   return items;
 }
+
 
 
 
