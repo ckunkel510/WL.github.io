@@ -454,13 +454,14 @@ async function removeQuicklistLine(productCodeToRemove) {
   const rows = doc.querySelectorAll("tr.rgRow, tr.rgAltRow");
   let eventTarget = null;
 
-  for (const tr of rows) {
-  const link = tr.querySelector("a[href*='ProductDetail.aspx']");
-  const productCode = link?.textContent.trim().toUpperCase();
+for (const tr of rows) {
+  const deleteAnchor = tr.querySelector("a[id*='DeleteQuicklistLineButtonX']");
+  const onclick = deleteAnchor?.getAttribute("onclick") || "";
+  const productCodeMatch = onclick.match(/PromptDeleteQuicklistLine\("([^"]+)"/);
+  const productCode = productCodeMatch?.[1]?.trim().toUpperCase();
 
   if (productCode === productCodeToRemove.toUpperCase()) {
-    const deleteAnchor = tr.querySelector("a[href*='DeleteQuicklistLineButtonX']");
-    const href = deleteAnchor?.getAttribute("href") || "";
+    const href = deleteAnchor.getAttribute("href") || "";
     const match = href.match(/__doPostBack\('([^']+)'/);
 
     if (match) {
@@ -470,6 +471,7 @@ async function removeQuicklistLine(productCodeToRemove) {
     }
   }
 }
+
 
 
   if (!eventTarget) {
