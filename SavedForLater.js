@@ -723,25 +723,32 @@ for (const tr of rows) {
 
 
 function injectSaveForLaterButtons() {
-  const cartRows = document.querySelectorAll("#ctl00_PageBody_ShoppingCartSummaryTableControl_ShoppingCartGrid_ctl00 tr.rgRow, tr.rgAltRow");
+  const cartItems = document.querySelectorAll(".row.shopping-cart-item");
 
-  cartRows.forEach(row => {
-    // Avoid duplicate buttons
-    if (row.querySelector(".js-save-for-later")) return;
+  cartItems.forEach(item => {
+    // Avoid duplicate button
+    if (item.querySelector(".js-save-for-later")) return;
 
-    const productCode = row.querySelector("td[data-title='Product Code']")?.textContent?.trim();
-    const deleteBtn = row.querySelector("input[type='image'][name*='DeleteButton']");
-    const deleteEventTarget = deleteBtn?.name;
+    // Extract Product Code (from anchor inside span)
+    const productCodeEl = item.querySelector("a[id*='ProductCodeHyperLink'] span");
+    const productCode = productCodeEl?.textContent?.trim();
+
+    // Extract delete __doPostBack event from anchor tag
+    const deleteAnchor = item.querySelector("a[id*='_del_']");
+    const deleteOnClick = deleteAnchor?.getAttribute("href");
+    const deleteEventMatch = deleteOnClick?.match(/__doPostBack\('([^']+)'/);
+    const deleteEventTarget = deleteEventMatch?.[1];
 
     if (!productCode || !deleteEventTarget) {
-      console.warn("[SFL] Skipping row — missing product code or delete button");
+      console.warn("[SFL] Missing product code or delete event in cart row.");
       return;
     }
 
+    // Build Save For Later Button
     const btn = document.createElement("button");
-    btn.className = "sflBtn js-save-for-later";
+    btn.className = "sflBtn js-save-for-later btn btn-sm btn-outline-secondary";
     btn.textContent = "Save for Later";
-    btn.style.marginLeft = "8px";
+    btn.style.marginTop = "0.5rem";
 
     btn.addEventListener("click", async () => {
       btn.disabled = true;
@@ -750,24 +757,22 @@ function injectSaveForLaterButtons() {
       try {
         const listName = await ensureQuicklistExists();
         await addToQuicklistByProductCode(productCode, listName);
-        console.log(`[SFL] Added ${productCode} to Saved For Later list`);
+        console.log(`[SFL] Saved ${productCode} to quicklist`);
 
-        // Now remove from cart
-        console.log(`[SFL] Removing ${productCode} from cart via __doPostBack('${deleteEventTarget}', '')`);
         __doPostBack(deleteEventTarget, "");
-
       } catch (err) {
-        console.error("[SFL] Failed to save for later:", err);
-        btn.textContent = "Try Again";
+        console.error("[SFL] Error saving item:", err);
         btn.disabled = false;
+        btn.textContent = "Try Again";
       }
     });
 
-    // Append to Actions column
-    const actionCell = row.querySelector("td[data-title='Actions']") || row.lastElementChild;
-    if (actionCell) actionCell.appendChild(btn);
+    // Append to bottom of item (or anywhere else you want)
+    const rightCol = item.querySelector(".col-12.col-sm-3");
+    if (rightCol) rightCol.appendChild(btn);
   });
 }
+
 
 // Ensure it runs on page load
 document.addEventListener("DOMContentLoaded", () => {
