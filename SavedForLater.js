@@ -427,33 +427,46 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
 }
 
 
-  async function removeQuicklistLine(detailUrl, eventTarget) {
+ async function removeQuicklistLine(detailUrl, eventTarget) {
   console.log("[SFL] Removing item from quicklist using:", eventTarget);
+
   if (!eventTarget) {
     console.warn("[SFL] No event target provided — skipping removal");
     return;
   }
 
-  const { doc } = await fetchHtml(detailUrl);
-  const hidden = getHiddenFields(doc);
+  // Step 1: Load the detail page
+  const { doc, text } = await fetchHtml(detailUrl);
+  console.log("[SFL] Loaded quicklist detail page");
 
+  // Step 2: Extract hidden fields
+  const hidden = getHiddenFields(doc);
+  console.log("[SFL] Extracted hidden fields:", Object.keys(hidden));
+
+  // Step 3: Set the delete postback
   hidden["__EVENTTARGET"] = eventTarget;
   hidden["__EVENTARGUMENT"] = "";
 
   const fd = toFormData(hidden);
+
+  // Step 4: Submit the delete POST request
   const res = await fetch(detailUrl, {
     method: "POST",
     credentials: "include",
     body: fd
   });
 
-  if (!res.ok) {
-    console.error("[SFL] Failed to POST quicklist delete");
+  const resText = await res.text();
+
+  if (!res.ok || resText.includes("Unhandled exception") || resText.includes("Error")) {
+    console.error("[SFL] Delete postback may have failed");
+    console.log("[SFL] Response text preview:", resText.slice(0, 1000));
     throw new Error("Failed to remove item from Quicklist.");
   }
 
   console.log("[SFL] Item successfully removed from Quicklist.");
 }
+
 
 
   async function refreshSfl() {
