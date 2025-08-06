@@ -729,71 +729,95 @@ function injectSaveForLaterButtons() {
   console.log(`[SFL] Found ${cartItems.length} cart items.`);
 
   cartItems.forEach((item, index) => {
-    console.log(`[SFL] Processing cart item #${index + 1}`);
+  console.log(`[SFL] Processing cart item #${index + 1}`);
 
-    // Avoid duplicate injection
-    if (item.querySelector(".js-save-for-later")) {
-      console.log("[SFL] Button already exists, skipping...");
-      return;
-    }
+  // === STEP 1: Extract product code ===
+  const codeLink = item.querySelector("a[title] .portalGridLink") || item.querySelector(".portalGridLink");
+  const productCode = codeLink?.textContent?.trim();
 
-    // Product code extraction
-    const productCodeEl = item.querySelector("a[id*='ProductCodeHyperLink'] span");
-    const productCode = productCodeEl?.textContent?.trim();
+  if (!productCode) {
+    console.warn("[SFL] Could not find product code in item:", item);
+    return;
+  }
+  console.log(`[SFL] Found product code: ${productCode}`);
 
-    if (!productCode) {
-      console.warn("[SFL] Could not find product code in item:", item);
-      return;
-    }
+  // === STEP 2: Find delete anchor with doPostBack ===
+  const deleteAnchor = item.querySelector("a[id*='del_']");
+  const onclick = deleteAnchor?.getAttribute("href") || "";
+  const match = onclick.match(/__doPostBack\('([^']+)'/);
 
-    // Delete event target extraction
-    const deleteAnchor = item.querySelector("a[id*='_del_']");
-    const deleteOnClick = deleteAnchor?.getAttribute("href");
-    const deleteEventMatch = deleteOnClick?.match(/__doPostBack\('([^']+)'/);
-    const deleteEventTarget = deleteEventMatch?.[1];
+  if (!match) {
+    console.warn("[SFL] Could not extract delete __doPostBack target.");
+    return;
+  }
 
-    if (!deleteEventTarget) {
-      console.warn("[SFL] Could not extract delete __doPostBack target.");
-      return;
-    }
+  const deleteTarget = match[1];
+  console.log(`[SFL] Found delete __EVENTTARGET: ${deleteTarget}`);
 
-    console.log(`[SFL] Product Code: ${productCode}`);
-    console.log(`[SFL] Delete Event Target: ${deleteEventTarget}`);
+  // === STEP 3: Create "Save for Later" button ===
+  const btn = document.createElement("button");
+  btn.textContent = "Save for Later";
+  btn.className = "btn btn-link text-primary btn-sm sfl-button";
+  btn.style.marginLeft = "1rem";
 
-    // Build button
-    const btn = document.createElement("button");
-    btn.className = "sflBtn js-save-for-later btn btn-sm btn-outline-secondary";
-    btn.textContent = "Save for Later";
-    btn.style.marginTop = "0.5rem";
+  btn.addEventListener("click", async (e) => {
+    e.preventDefault();
+    btn.disabled = true;
+    btn.textContent = "Saving...";
 
-    btn.addEventListener("click", async () => {
-      console.log(`[SFL] Clicked save button for ${productCode}`);
-      btn.disabled = true;
-      btn.textContent = "Saving…";
-
-      try {
-        const listName = await ensureQuicklistExists();
-        await addToQuicklistByProductCode(productCode, listName);
-        console.log(`[SFL] Saved ${productCode} to quicklist`);
-
-        __doPostBack(deleteEventTarget, "");
-      } catch (err) {
-        console.error("[SFL] Error saving item:", err);
-        btn.disabled = false;
-        btn.textContent = "Try Again";
-      }
-    });
-
-    // Append to row (adjust this if needed)
-    const rightCol = item.querySelector(".col-12.col-sm-3");
-    if (rightCol) {
-      rightCol.appendChild(btn);
-      console.log("[SFL] Injected Save for Later button.");
-    } else {
-      console.warn("[SFL] Could not find column to append button.");
+    try {
+      await addToQuicklist(productCode);
+      await removeCartItem(deleteTarget);
+      location.reload(); // Hard refresh to update cart state
+    } catch (err) {
+      console.error("[SFL] Failed to save for later:", err);
+      btn.textContent = "Error – Try Again";
+      btn.disabled = false;
     }
   });
+
+  // === STEP 4: Inject button into cart row ===
+  const btnContainer = item.querySelector(".fa-times")?.parentElement;
+  if (btnContainer) {
+    btnContainer.appendChild(btn);
+    console.log("[SFL] Injected Save for Later button.");
+  } else {
+    console.warn("[SFL] Could not find container to inject button.");
+  }
+});
+
 }
+
+async function removeCartItem(eventTarget) {
+  const form = document.querySelector("form");
+  const inputs = [...form.querySelectorAll("input[type=hidden]")];
+  const formData = new URLSearchParams();
+
+  inputs.forEach(input => {
+    if (input.name) formData.append(input.name, input.value);
+  });
+
+  formData.set("__EVENTTARGET", eventTarget);
+  formData.set("__EVENTARGUMENT", "");
+
+  const postUrl = form.getAttribute("action");
+
+  const res = await fetch(postUrl, {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: formData.toString()
+  });
+
+  const resText = await res.text();
+  if (!resText.includes("ShoppingCart.aspx")) {
+    console.warn("[SFL] Remove POST response didn't contain expected content.");
+  }
+}
+
+
 
 console.log("[SFL] Script loaded – injecting Save for Later buttons...");
 injectSaveForLaterButtons();
