@@ -461,7 +461,8 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
   formData.set("__EVENTTARGET", eventTarget);
   formData.set("__EVENTARGUMENT", "");
 
-  const postUrl = detailUrl.split("?")[0];
+  const postUrl = "https://webtrack.woodsonlumber.com/QuicklistDetails.aspx";
+
 
   const postRes = await fetch(postUrl, {
     method: "POST",
