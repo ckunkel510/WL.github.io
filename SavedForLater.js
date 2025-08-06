@@ -4,31 +4,7 @@
   const SFL_DESC = "Saved For Later";
   const BASE = location.origin + "/";
 
-  function waitForMainContents(timeout = 5000) {
-  return new Promise((resolve, reject) => {
-    const existing = document.querySelector(".mainContents");
-    if (existing) return resolve(existing);
 
-    const timeoutId = setTimeout(() => {
-      observer.disconnect();
-      reject(new Error("Timed out waiting for .mainContents"));
-    }, timeout);
-
-    const observer = new MutationObserver(() => {
-      const target = document.querySelector(".mainContents");
-      if (target) {
-        clearTimeout(timeoutId);
-        observer.disconnect();
-        resolve(target);
-      }
-    });
-
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-  });
-}
 
 
   // Inject container HTML into DOM
@@ -340,37 +316,16 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
 
   // --------- Init
   (async function initSfl() {
-   console.log("[SFL] Initializing...");
-
-  try {
-    const mainContents = await waitForMainContents();
-    console.log("[SFL] .mainContents loaded, injecting container...");
-
-    // Only inject once
-    if (document.getElementById("savedForLaterContainer")) {
-      console.warn("[SFL] Container already exists. Skipping injection.");
-      return;
+   try {
+      console.log("[SFL] Initializing...");
+      const { items } = await loadSflItems();
+      renderSflList(items);
+      console.log("[SFL] Done.");
+    } catch (err) {
+      console.error("[SFL] Error during init:", err);
+      setEmpty();
     }
-
-    const savedForLaterWrapper = document.createElement("div");
-    savedForLaterWrapper.id = "savedForLaterContainer";
-    savedForLaterWrapper.innerHTML = `
-      <div class="saved-for-later-header">
-        <h2>Saved for Later (<span id="sflCount">0</span>)</h2>
-      </div>
-      <div class="saved-for-later-items" id="sflItemList">
-        <div class="sfl-loading">Loading your saved items…</div>
-      </div>
-    `;
-
-    mainContents.insertAdjacentElement("afterend", savedForLaterWrapper);
-    console.log("[SFL] Injected Saved For Later HTML container");
-
-    loadSflItems(); // Kick off loading
-  } catch (err) {
-    console.error("[SFL] Failed to inject Saved For Later container:", err);
-  }
-  })();
+})();
 })();
 
 
