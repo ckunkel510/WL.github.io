@@ -492,6 +492,7 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
 
 
 
+
   async function refreshSfl() {
     // Re-run the loader from Phase 1
     const init = window.__sflReload;
