@@ -435,7 +435,7 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
 }
 
 
- async function removeQuicklistLine(eventTarget) {
+async function removeQuicklistLine(eventTarget) {
   console.log(`[SFL] Removing item from quicklist using eventTarget: ${eventTarget}`);
 
   const detailUrl = sessionStorage.getItem("sfl_detail_url");
@@ -460,9 +460,12 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
     if (name) formData.append(name, value);
   }
 
-  // ✅ Set the postback values using the extracted eventTarget
+  // Add the required postback fields
   formData.set("__EVENTTARGET", eventTarget);
   formData.set("__EVENTARGUMENT", "");
+
+  // 🧠 DEBUG: Log the entire formData string
+  console.log("[SFL] Posting with data:\n", decodeURIComponent(formData.toString()));
 
   const postUrl = "https://webtrack.woodsonlumber.com/QuicklistDetails.aspx";
 
@@ -475,15 +478,21 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
     body: formData.toString()
   });
 
+  console.log("[SFL] POST status:", postRes.status);
+  console.log("[SFL] POST headers:", [...postRes.headers.entries()]);
+
   const resText = await postRes.text();
 
+  // 🧠 DEBUG: Log entire response (temporarily)
+  console.log("[SFL] Full POST response text:\n", resText);
+
   if (!resText.includes("QuicklistDetailGrid")) {
-    console.error("[SFL] Response text preview:\n", resText.slice(0, 500));
     throw new Error("Failed to remove item from Quicklist.");
   }
 
   console.log("[SFL] Item successfully removed from Quicklist.");
 }
+
 
 
 
