@@ -1,49 +1,44 @@
 
 (function() {
-  // Only run once
-  if (window.__branchNotifyInitialized) return;
-  window.__branchNotifyInitialized = true;
+  // ensure it only runs once
+  if (window.__orderNotify) return;
+  window.__orderNotify = true;
 
   document.addEventListener("DOMContentLoaded", () => {
-    // We poll briefly in case the panels render after DOMContentLoaded
     let attempts = 0;
     const maxAttempts = 10;
+
     const interval = setInterval(() => {
       attempts++;
-      const thankYouPanel = document.querySelector("#CartResponseMessage");
-      const merchantPanel = document.querySelector("#ctl00_PageBody_SuccessfulPaymentResults_MerchantDetailsPanel");
 
-      if (thankYouPanel && merchantPanel) {
+      const thankYou = document.querySelector("#CartResponseMessage");
+      const merchant = document.querySelector("#ctl00_PageBody_SuccessfulPaymentResults_MerchantDetailsPanel");
+
+      if (thankYou && merchant) {
         clearInterval(interval);
 
-        // Extract order number
-        const orderNumberEl = thankYouPanel.querySelector("strong");
-        const orderNumber = orderNumberEl
-          ? orderNumberEl.textContent.trim()
-          : "UNKNOWN";
+        // extract order number
+        const orderEl = thankYou.querySelector("strong");
+        const orderNumber = orderEl ? orderEl.textContent.trim() : "";
 
-        // Extract branch name (first line of the address block)
-        const td = merchantPanel.querySelector("td");
+        // extract branch name (first line of the address block)
+        const td = merchant.querySelector("td");
         const branchName = td
           ? td.textContent.split("\n")[0].trim()
-          : "UNKNOWN";
+          : "";
 
-        // Post to your Vercel API
-        fetch("https://wlmarketingdashboard.vercel.app/api/notify-branch", {
+        // POST to your Apps Script Web App
+        fetch("https://script.google.com/macros/s/AKfycbyyNX8SshEk5opzF6YUHZpCcBomWWWXv3RG3dh3JPGqVGDsgriFT0s1ZuMEX7m73etF/exec", {
           method: "POST",
           headers: {
-            "Content-Type": "application/json",
-            // Optional: add a secret header to protect your endpoint
-            "x-notify-secret": "YOUR_SHARED_SECRET"
+            "Content-Type": "application/json"
           },
-          body: JSON.stringify({
-            orderNumber,
-            branchName
-          })
+          body: JSON.stringify({ orderNumber, branchName })
         })
-        .catch(err => console.error("Branch notify failed:", err));
+        .catch(err => console.error("Order notify failed:", err));
       }
 
+      // stop polling after too many attempts
       if (attempts >= maxAttempts) {
         clearInterval(interval);
       }
