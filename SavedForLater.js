@@ -830,46 +830,63 @@ async function removeCartItem(eventTarget) {
   }
 }
 
-async function addToQuicklist(productId) {
+function addToQuicklist(productId) {
   console.log(`[SFL] Attempting to add ProductID ${productId} to Saved For Later...`);
 
-  // Step 1: Try to find any element that contains the "Add to Saved For Later" anchor
-  const allHiddenLists = Array.from(document.querySelectorAll("a"))
-    .filter(a => a.textContent.trim() === "Add to Saved For Later");
+  return new Promise((resolve, reject) => {
+    const iframe = document.createElement("iframe");
+    iframe.style.display = "none";
+    iframe.src = `/ProductDetail.aspx?pid=${productId}`;
+    document.body.appendChild(iframe);
 
-  console.log(`[SFL] Found ${allHiddenLists.length} potential 'Add to Saved For Later' anchors.`);
+    iframe.onload = () => {
+      try {
+        const doc = iframe.contentDocument || iframe.contentWindow.document;
 
-  if (allHiddenLists.length === 0) {
-    throw new Error("Could not find any 'Add to Saved For Later' anchor tags.");
-  }
+        console.log("[SFL] Product detail iframe loaded.");
 
-  // Step 2: Find one with a __doPostBack href
-  const addLink = allHiddenLists.find(a => a.getAttribute("href")?.includes("__doPostBack"));
+        const link = Array.from(doc.querySelectorAll("a")).find(
+          a => a.textContent?.trim() === "Add to Saved For Later"
+        );
 
-  if (!addLink) {
-    throw new Error("Found anchor(s) but none with a __doPostBack href.");
-  }
+        if (!link) {
+          throw new Error("Could not find 'Add to Saved For Later' link in iframe.");
+        }
 
-  const href = addLink.getAttribute("href");
-  const match = href.match(/__doPostBack\('([^']+)'/);
+        const href = link.getAttribute("href");
+        const match = href.match(/__doPostBack\('([^']+)'/);
 
-  if (!match || !match[1]) {
-    throw new Error("Could not extract __doPostBack target from href.");
-  }
+        if (!match || !match[1]) {
+          throw new Error("Could not extract __doPostBack target.");
+        }
 
-  const postbackTarget = match[1];
-  console.log(`[SFL] Found __doPostBack target: ${postbackTarget}`);
+        const postbackTarget = match[1];
+        console.log(`[SFL] Found __EVENTTARGET: ${postbackTarget}`);
 
-  // Step 3: Trigger postback
-  const form = document.forms[0];
-  if (!form) throw new Error("Main form not found.");
+        const form = doc.forms[0];
+        if (!form) throw new Error("Form not found in iframe.");
 
-  form.__EVENTTARGET.value = postbackTarget;
-  form.__EVENTARGUMENT.value = "";
+        form.__EVENTTARGET.value = postbackTarget;
+        form.__EVENTARGUMENT.value = "";
 
-  console.log(`[SFL] Submitting form to add product ${productId} to quicklist...`);
-  form.submit();
+        form.submit();
+
+        console.log(`[SFL] Submitted postback to add product ${productId} to quicklist.`);
+
+        // Give it time to complete, then cleanup
+        setTimeout(() => {
+          document.body.removeChild(iframe);
+          resolve();
+        }, 1500); // Adjust timing if needed
+      } catch (err) {
+        console.error("[SFL] Error in addToQuicklist via iframe:", err);
+        document.body.removeChild(iframe);
+        reject(err);
+      }
+    };
+  });
 }
+
 
 
 
