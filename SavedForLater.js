@@ -437,7 +437,7 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
 }
 
 
-async function removeQuicklistLine(productCodeToRemove) {
+async function removeQuicklistLine(productcode) {
   const detailUrl = sessionStorage.getItem("sfl_detail_url");
   if (!detailUrl) throw new Error("Missing quicklist detail URL");
 
