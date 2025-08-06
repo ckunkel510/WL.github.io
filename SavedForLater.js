@@ -454,21 +454,23 @@ async function removeQuicklistLine(productCodeToRemove) {
   const rows = doc.querySelectorAll("tr.rgRow, tr.rgAltRow");
   let eventTarget = null;
 
-  rows.forEach((tr, i) => {
-    const link = tr.querySelector("a[href*='ProductDetail.aspx']");
-    const productCode = link?.textContent.trim();
+  for (const tr of rows) {
+  const link = tr.querySelector("a[href*='ProductDetail.aspx']");
+  const productCode = link?.textContent.trim().toUpperCase();
 
-    if (productCode === productCodeToRemove) {
-      const deleteAnchor = tr.querySelector("a[href*='DeleteQuicklistLineButtonX']");
-      const href = deleteAnchor?.getAttribute("href") || "";
-      const match = href.match(/__doPostBack\('([^']+)'/);
+  if (productCode === productCodeToRemove.toUpperCase()) {
+    const deleteAnchor = tr.querySelector("a[href*='DeleteQuicklistLineButtonX']");
+    const href = deleteAnchor?.getAttribute("href") || "";
+    const match = href.match(/__doPostBack\('([^']+)'/);
 
-      if (match) {
-        eventTarget = match[1];
-        console.log(`[SFL] Matched product '${productCodeToRemove}' — using eventTarget: ${eventTarget}`);
-      }
+    if (match) {
+      eventTarget = match[1];
+      console.log(`[SFL] Matched product '${productCodeToRemove}' — using eventTarget: ${eventTarget}`);
+      break;
     }
-  });
+  }
+}
+
 
   if (!eventTarget) {
     console.error(`[SFL] Could not find delete button for product ${productCodeToRemove}`);
