@@ -1,116 +1,34 @@
-(function(){
-  $(function() {
-    // 1) Inject “Saved For Later” HTML right after .mainContents
-    var $main = $(".mainContents");
-    if (!$main.length) return;
-
-    var savedForLater = ''
-      + '<div id="savedForLater" style="display:none;">'
-      + '  <div id="sflHeader">'
-      + '    <span>Saved For Later</span>'
-      + '    <span class="sflCount" id="sflCount"></span>'
-      + '  </div>'
-      + '  <div id="sflBody">'
-      + '    <div id="sflLoading">Loading your saved items…</div>'
-      + '    <div id="sflList" style="display:none;"></div>'
-      + '    <div id="sflEmpty" style="display:none;">No items saved for later.</div>'
-      + '  </div>'
-      + '</div>';
-    $main.after(savedForLater);
-
-    // 2) Helpers
-    function ensureSflContainer() {
-      var el = document.getElementById("savedForLater");
-      if (el) el.style.display = "block";
-    }
-
-    function setLoading(msg) {
-      msg = msg || "Loading your saved items…";
-      var L   = document.getElementById("sflLoading"),
-          LST = document.getElementById("sflList"),
-          EM  = document.getElementById("sflEmpty");
-      if (!L || !LST || !EM) return;
-      L.textContent        = msg;
-      L.style.display      = "block";
-      LST.style.display    = "none";
-      EM.style.display     = "none";
-    }
-
-    function setEmpty(msg) {
-      msg = msg || "No items saved for later.";
-      var L   = document.getElementById("sflLoading"),
-          LST = document.getElementById("sflList"),
-          EM  = document.getElementById("sflEmpty");
-      if (!L || !LST || !EM) return;
-      L.style.display      = "none";
-      LST.style.display    = "none";
-      EM.textContent       = msg;
-      EM.style.display     = "block";
-    }
-
-    // Stub—you’ll replace this with your real AJAX/fetch call:
-    async function loadSflItems() {
-      // return fetch('/api/sfl').then(r => r.json());
-      return { items: [] };
-    }
-
-    function renderSflList(items) {
-      var LST     = document.getElementById("sflList"),
-          COUNT   = document.getElementById("sflCount"),
-          LOADING = document.getElementById("sflLoading"),
-          EMPTY   = document.getElementById("sflEmpty");
-      if (!LST || !COUNT || !LOADING || !EMPTY) return;
-
-      if (!items || !items.length) {
-        setEmpty();
-        COUNT.textContent = "0";
-        return;
-      }
-
-      LST.innerHTML   = items.map(function(i) {
-                           return "<div class='sfl-item'>" + (i.html || i) + "</div>";
-                         }).join("");
-      LOADING.style.display = "none";
-      EMPTY.style.display   = "none";
-      LST.style.display     = "block";
-      COUNT.textContent     = items.length;
-    }
-
-    // 3) Initialize
-    ensureSflContainer();
-    setLoading();
-
-    (async function initSfl() {
-      try {
-        var data = await loadSflItems();
-        renderSflList(data.items);
-      } catch (err) {
-        console.error("[SFL] Error initializing:", err);
-        setEmpty("Failed to load saved items.");
-      }
-    })();
-  });
-})();
-
-
-
-
-
-
-
 
 (function() {
   const SFL_NAME = "Saved For Later";
   const SFL_DESC = "Saved For Later";
   const BASE = location.origin + "/";
 
-  // ---------- Utility Functions ----------
+  // Inject container HTML into DOM
+  const container = document.createElement("div");
+  container.id = "savedForLater";
+  container.style.display = "none";
+  container.innerHTML = `
+    <div id="sflHeader">
+      <span>Saved For Later</span>
+      <span class="sflCount" id="sflCount"></span>
+    </div>
+    <div id="sflBody">
+      <div id="sflLoading">Loading your saved items…</div>
+      <div id="sflList" style="display:none;"></div>
+      <div id="sflEmpty" style="display:none;">No items saved for later.</div>
+    </div>
+  `;
+  document.body.appendChild(container);
+  console.log("[SFL] Injected Saved For Later HTML container");
+
+  // Utility functions
   async function fetchHtml(url, options = {}) {
-    console.log(`[SFL] Fetching HTML from: ${url}`);
+    console.log("[SFL] Fetching HTML from:", url);
     const res = await fetch(url, { credentials: "include", ...options });
+    if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
     const text = await res.text();
     const doc = new DOMParser().parseFromString(text, "text/html");
-    if (!res.ok) throw new Error(`Fetch failed: ${url} — HTTP ${res.status}`);
     return { text, doc };
   }
 
@@ -128,8 +46,13 @@
     return fd;
   }
 
-  function $(sel, root=document) { return root.querySelector(sel); }
-  function $all(sel, root=document) { return Array.from(root.querySelectorAll(sel)); }
+  function $(sel, root = document) {
+    return root.querySelector(sel);
+  }
+
+  function $all(sel, root = document) {
+    return Array.from(root.querySelectorAll(sel));
+  }
 
   function ensureSflContainer() {
     const el = document.getElementById("savedForLater");
@@ -138,57 +61,67 @@
   }
 
   function setLoading(msg = "Loading your saved items…") {
+    console.log("[SFL] setLoading:", msg);
     $("#sflLoading").style.display = "block";
     $("#sflLoading").textContent = msg;
     $("#sflList").style.display = "none";
     $("#sflEmpty").style.display = "none";
   }
+
   function setEmpty() {
+    console.log("[SFL] No items found");
     $("#sflLoading").style.display = "none";
     $("#sflList").style.display = "none";
     $("#sflEmpty").style.display = "block";
     $("#sflCount").textContent = "(0)";
   }
+
   function setListCount(n) {
+    console.log(`[SFL] Found ${n} items`);
     $("#sflCount").textContent = `(${n})`;
   }
 
-  // ---------- Step 0: Check sign-in ----------
-  const wlUserId = localStorage.getItem("wl_user_id");
+  // --------- Step 0: must be signed in
+  const wlUserId = (typeof localStorage !== "undefined") ? localStorage.getItem("wl_user_id") : null;
+  console.log("[SFL] wl_user_id =", wlUserId);
   if (!wlUserId) {
-    console.warn("[SFL] No wl_user_id found. User not signed in.");
+    console.log("[SFL] Not signed in — skipping");
     return;
   }
-  console.log("[SFL] User is signed in:", wlUserId);
+
   ensureSflContainer();
   setLoading();
 
-  // ---------- Step 1: Find Quicklist ----------
+  // --------- Step 1: Find or create the Saved For Later quicklist
   async function findSavedForLaterList() {
-    console.log("[SFL] Checking for existing Saved For Later quicklist...");
+    console.log("[SFL] Searching for existing quicklist...");
     const { doc } = await fetchHtml(BASE + "Quicklists_R.aspx");
     const table = doc.querySelector("table.rgMasterTable");
-    if (!table) {
-      console.warn("[SFL] Quicklist table not found.");
-      return { exists: false };
-    }
+    if (!table) return { exists: false };
 
+    let sflRow = null;
     const rows = $all("tbody > tr", table);
     for (const tr of rows) {
       const anchor = tr.querySelector('td a[href*="Quicklists_R.aspx"]');
-      if (anchor && anchor.textContent.trim().toLowerCase() === SFL_NAME.toLowerCase()) {
-        const href = new URL(anchor.getAttribute("href"), BASE).toString();
-        console.log("[SFL] Found Saved For Later quicklist at:", href);
-        return { exists: true, detailUrl: href };
+      if (!anchor) continue;
+      if (anchor.textContent.trim().toLowerCase() === SFL_NAME.toLowerCase()) {
+        sflRow = { tr, anchor };
+        break;
       }
     }
-    console.log("[SFL] No Saved For Later quicklist found.");
+
+    if (sflRow) {
+      const href = new URL(sflRow.anchor.getAttribute("href"), BASE).toString();
+      console.log("[SFL] Found existing Saved For Later quicklist:", href);
+      return { exists: true, detailUrl: href };
+    }
+
+    console.log("[SFL] Quicklist not found — will create new");
     return { exists: false };
   }
 
-  // ---------- Step 1B: Create Quicklist ----------
   async function createSavedForLaterList() {
-    console.log("[SFL] Creating Saved For Later quicklist...");
+    console.log("[SFL] Creating Saved For Later quicklist…");
     const addUrl = BASE + "Quicklists_R.aspx?addNew=1";
     const { doc } = await fetchHtml(addUrl);
 
@@ -200,11 +133,11 @@
     const val = defaultSel ? (defaultSel.value || "no") : "no";
     hidden["ctl00$PageBody$EditDefaultQuicklistDropdown"] = val;
 
+    // Simulate Save button click via __doPostBack
     hidden["__EVENTTARGET"] = "ctl00$PageBody$SaveQuickListButton";
     hidden["__EVENTARGUMENT"] = "";
 
-    console.log("[SFL] Submitting quicklist form with fields:", hidden);
-
+    console.log("[SFL] Submitting quicklist creation form with postback to SaveQuickListButton");
     const fd = toFormData(hidden);
     const res = await fetch(addUrl, {
       method: "POST",
@@ -212,24 +145,18 @@
       body: fd
     });
 
-    if (!res.ok) throw new Error("Failed to save new Quicklist");
-
-    console.log("[SFL] Quicklist form submitted. Verifying creation...");
+    if (!res.ok) throw new Error("Quicklist creation POST failed.");
 
     const found = await findSavedForLaterList();
-    if (!found.exists) {
-      console.error("[SFL] Creation failed — could not find Saved For Later quicklist after submit.");
-      throw new Error("Quicklist was not created as expected.");
-    }
-    console.log("[SFL] Quicklist created successfully!");
+    if (!found.exists) throw new Error("Quicklist was not created as expected.");
     return found.detailUrl;
   }
 
-  // ---------- Step 2: Resolve Quicklist Detail URL ----------
+  // --------- Step 2: Resolve detail URL for SFL
   async function ensureSflDetailUrl() {
     const cached = sessionStorage.getItem("sfl_detail_url");
     if (cached) {
-      console.log("[SFL] Using cached quicklist detail URL:", cached);
+      console.log("[SFL] Using cached detail URL:", cached);
       return cached;
     }
 
@@ -239,13 +166,12 @@
       return found.detailUrl;
     }
 
-    console.log("[SFL] Quicklist not found. Creating...");
     const createdUrl = await createSavedForLaterList();
     sessionStorage.setItem("sfl_detail_url", createdUrl);
     return createdUrl;
   }
 
-  // ---------- Step 3: Load Items ----------
+  // --------- Step 3: Load items
   function parseSflItems(detailDoc) {
     const grid = detailDoc.querySelector("#ctl00_PageBody_ctl01_QuicklistDetailGrid");
     if (!grid) return [];
@@ -259,40 +185,45 @@
       if (tds.length < 5) return;
 
       const a = tds[0].querySelector("a[href*='ProductDetail.aspx']");
-      const productHref = a?.getAttribute("href") || null;
-      const productCode = a?.textContent.trim() || "";
+      const productHref = a ? a.getAttribute("href") : null;
+      const productCode = a ? a.textContent.trim() : "";
       const description = tds[1].textContent.trim();
       const price = tds[2].textContent.trim();
       const per = tds[3].textContent.trim();
 
       const deleteAnchor = tds[4].querySelector("a[href^='javascript:__doPostBack']");
-      const eventTarget = deleteAnchor?.getAttribute("href")?.match(/__doPostBack\('([^']+)'/)?.[1] || null;
+      let eventTarget = null;
+      if (deleteAnchor) {
+        const href = deleteAnchor.getAttribute("href") || "";
+        const m = href.match(/__doPostBack\('([^']+)'/);
+        if (m) eventTarget = m[1];
+      }
 
       items.push({ productHref, productCode, description, price, per, eventTarget });
     });
 
-    console.log(`[SFL] Parsed ${items.length} items from quicklist.`);
+    console.log(`[SFL] Parsed ${items.length} items from Quicklist`);
     return items;
   }
 
   async function loadSflItems() {
     const detailUrl = await ensureSflDetailUrl();
-    console.log("[SFL] Loading detail page:", detailUrl);
     const { doc } = await fetchHtml(detailUrl);
-    const items = parseSflItems(doc);
-    return { detailUrl, items, doc };
+    return { detailUrl, items: parseSflItems(doc), doc };
   }
 
-  // ---------- Step 4: Render ----------
-  function productImageUrlFromPid(pid) {
-    return "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/placeholder.png";
-  }
-
+  // --------- Step 4: Render
   function pidFromHref(href) {
     try {
       const u = new URL(href, BASE);
       return u.searchParams.get("pid");
-    } catch (e) { return null; }
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function productImageUrlFromPid(pid) {
+    return "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/placeholder.png";
   }
 
   function renderSflList(items) {
@@ -313,13 +244,13 @@
       row.innerHTML = `
         <img class="sflImg" src="${img}" alt="">
         <div>
-          <div class="sflTitle">${item.productCode}</div>
-          <div class="sflDesc">${item.description}</div>
+          <div class="sflTitle">${item.productCode || ""}</div>
+          <div class="sflDesc">${item.description || ""}</div>
         </div>
-        <div class="sflPrice">${item.price}</div>
-        <div class="sflPer">${item.per}</div>
+        <div class="sflPrice">${item.price || ""}</div>
+        <div class="sflPer">${item.per || ""}</div>
         <div class="sflActions">
-          <button class="sflBtn js-sfl-add" data-pid="${pid}" data-code="${item.productCode}">Add to Cart</button>
+          <button class="sflBtn js-sfl-add" data-pid="${pid || ""}" data-code="${item.productCode || ""}">Add to Cart</button>
         </div>
       `;
       row.dataset.eventTarget = item.eventTarget || "";
@@ -332,21 +263,23 @@
     $("#sflLoading").style.display = "none";
     $("#sflEmpty").style.display = "none";
     list.style.display = "block";
-    console.log("[SFL] Rendered Saved For Later section.");
   }
 
-  // ---------- Init ----------
+  // --------- Init
   (async function initSfl() {
     try {
-      console.log("[SFL] Initializing Saved For Later...");
+      console.log("[SFL] Initializing...");
       const { items } = await loadSflItems();
       renderSflList(items);
+      console.log("[SFL] Done.");
     } catch (err) {
-      console.error("[SFL] Error initializing:", err);
+      console.error("[SFL] Error during init:", err);
       setEmpty();
     }
   })();
 })();
+
+
 
 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
