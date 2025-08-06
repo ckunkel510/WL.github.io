@@ -383,7 +383,7 @@ function hideSflIfOnFinalStep() {
   const paymentHeader = document.querySelector("#ctl00_PageBody_CardOnFileViewTitle_HeaderText");
   const reviewHeader = document.querySelector("#ctl00_PageBody_SummaryHeading_HeaderText");
   const sflBlock = document.getElementById("savedForLater");
-  const summaryHeader = document.querySelector("table.cartTable th");
+  const summaryHeader = document.querySelector("table.cartTable tbody tr th");
   const isSummaryCart = summaryHeader && summaryHeader.textContent.trim().toLowerCase() === "summary";
 
   if (!sflBlock) return;
