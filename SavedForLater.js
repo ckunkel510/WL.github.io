@@ -1,105 +1,97 @@
-$(function() {
-  // ——————————————————————————————————————————————————————————
-  // 1) Inject the HTML
-  // ——————————————————————————————————————————————————————————
-  var $main = $(".mainContents");
-  if (!$main.length) return;
+(function(){
+  $(function() {
+    // 1) Inject “Saved For Later” HTML right after .mainContents
+    var $main = $(".mainContents");
+    if (!$main.length) return;
 
-  var savedForLater = ''
-    + '<div id="savedForLater" style="display:none;">'
-    + '  <div id="sflHeader">'
-    + '    <span>Saved For Later</span>'
-    + '    <span class="sflCount" id="sflCount"></span>'
-    + '  </div>'
-    + '  <div id="sflBody">'
-    + '    <div id="sflLoading">Loading your saved items…</div>'
-    + '    <div id="sflList" style="display:none;"></div>'
-    + '    <div id="sflEmpty" style="display:none;">No items saved for later.</div>'
-    + '  </div>'
-    + '</div>';
-  $main.after(savedForLater);
+    var savedForLater = ''
+      + '<div id="savedForLater" style="display:none;">'
+      + '  <div id="sflHeader">'
+      + '    <span>Saved For Later</span>'
+      + '    <span class="sflCount" id="sflCount"></span>'
+      + '  </div>'
+      + '  <div id="sflBody">'
+      + '    <div id="sflLoading">Loading your saved items…</div>'
+      + '    <div id="sflList" style="display:none;"></div>'
+      + '    <div id="sflEmpty" style="display:none;">No items saved for later.</div>'
+      + '  </div>'
+      + '</div>';
+    $main.after(savedForLater);
 
-
-  // ——————————————————————————————————————————————————————————
-  // 2) Helpers you were calling
-  // ——————————————————————————————————————————————————————————
-
-  // Show the whole container
-  function ensureSflContainer() {
-    var el = document.getElementById("savedForLater");
-    if (el) el.style.display = "block";
-  }
-
-  // Put it into “loading” state
-  function setLoading(msg) {
-    msg = msg || "Loading your saved items…";
-    var L = document.getElementById("sflLoading"),
-        LST = document.getElementById("sflList"),
-        EM = document.getElementById("sflEmpty");
-    if (!L || !LST || !EM) return;
-    L.textContent = msg;    L.style.display = "block";
-    LST.style.display = "none";
-    EM.style.display = "none";
-  }
-
-  // Put it into “empty” state
-  function setEmpty(msg) {
-    msg = msg || "No items saved for later.";
-    var L = document.getElementById("sflLoading"),
-        LST = document.getElementById("sflList"),
-        EM = document.getElementById("sflEmpty");
-    if (!L || !LST || !EM) return;
-    L.style.display   = "none";
-    LST.style.display = "none";
-    EM.textContent    = msg;
-    EM.style.display  = "block";
-  }
-
-  // Stub: fetch your real items here
-  // Should return an object like { items: [ … ] }
-  async function loadSflItems() {
-    // =–= Replace this with your real AJAX/fetch
-    // return fetch('/your/api/for/saved').then(r=>r.json());
-    return { items: [] };
-  }
-
-  // Render the list into #sflList
-  function renderSflList(items) {
-    var LST = document.getElementById("sflList"),
-        COUNT = document.getElementById("sflCount");
-    if (!LST || !COUNT) return;
-
-    if (!items || !items.length) {
-      setEmpty();
-      COUNT.textContent = "0";
-      return;
+    // 2) Helpers
+    function ensureSflContainer() {
+      var el = document.getElementById("savedForLater");
+      if (el) el.style.display = "block";
     }
 
-    // build out your list (example assumes items is array of { html } or strings)
-    LST.innerHTML = items.map(i => "<div class='sfl-item'>" + i.html + "</div>").join("");
-    LST.style.display = "block";
-    document.getElementById("sflLoading").style.display = "none";
-    document.getElementById("sflEmpty").style.display = "none";
-    COUNT.textContent = items.length;
-  }
-
-
-  // ——————————————————————————————————————————————————————————
-  // 3) Kick it off
-  // ——————————————————————————————————————————————————————————
-  ensureSflContainer();
-  setLoading();
-
-  (async function initSfl() {
-    try {
-      var data = await loadSflItems();
-      renderSflList(data.items);
-    } catch (err) {
-      console.error("[SFL] Error initializing:", err);
-      setEmpty("Failed to load saved items.");
+    function setLoading(msg) {
+      msg = msg || "Loading your saved items…";
+      var L   = document.getElementById("sflLoading"),
+          LST = document.getElementById("sflList"),
+          EM  = document.getElementById("sflEmpty");
+      if (!L || !LST || !EM) return;
+      L.textContent        = msg;
+      L.style.display      = "block";
+      LST.style.display    = "none";
+      EM.style.display     = "none";
     }
-  })();
-});
+
+    function setEmpty(msg) {
+      msg = msg || "No items saved for later.";
+      var L   = document.getElementById("sflLoading"),
+          LST = document.getElementById("sflList"),
+          EM  = document.getElementById("sflEmpty");
+      if (!L || !LST || !EM) return;
+      L.style.display      = "none";
+      LST.style.display    = "none";
+      EM.textContent       = msg;
+      EM.style.display     = "block";
+    }
+
+    // Stub—you’ll replace this with your real AJAX/fetch call:
+    async function loadSflItems() {
+      // return fetch('/api/sfl').then(r => r.json());
+      return { items: [] };
+    }
+
+    function renderSflList(items) {
+      var LST     = document.getElementById("sflList"),
+          COUNT   = document.getElementById("sflCount"),
+          LOADING = document.getElementById("sflLoading"),
+          EMPTY   = document.getElementById("sflEmpty");
+      if (!LST || !COUNT || !LOADING || !EMPTY) return;
+
+      if (!items || !items.length) {
+        setEmpty();
+        COUNT.textContent = "0";
+        return;
+      }
+
+      LST.innerHTML   = items.map(function(i) {
+                           return "<div class='sfl-item'>" + (i.html || i) + "</div>";
+                         }).join("");
+      LOADING.style.display = "none";
+      EMPTY.style.display   = "none";
+      LST.style.display     = "block";
+      COUNT.textContent     = items.length;
+    }
+
+    // 3) Initialize
+    ensureSflContainer();
+    setLoading();
+
+    (async function initSfl() {
+      try {
+        var data = await loadSflItems();
+        renderSflList(data.items);
+      } catch (err) {
+        console.error("[SFL] Error initializing:", err);
+        setEmpty("Failed to load saved items.");
+      }
+    })();
+  });
+})();
+
 
 
 
