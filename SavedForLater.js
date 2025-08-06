@@ -383,16 +383,23 @@ function hideSflIfOnFinalStep() {
   const paymentHeader = document.querySelector("#ctl00_PageBody_CardOnFileViewTitle_HeaderText");
   const reviewHeader = document.querySelector("#ctl00_PageBody_SummaryHeading_HeaderText");
   const sflBlock = document.getElementById("savedForLater");
+  const summaryHeader = document.querySelector("table.cartTable th");
+  const isSummaryCart = summaryHeader && summaryHeader.textContent.trim().toLowerCase() === "summary";
 
   if (!sflBlock) return;
 
   const isVisible = (el) => el && el.offsetParent !== null;
 
-  if (isVisible(paymentHeader) || isVisible(reviewHeader)) {
+  if (
+    isVisible(paymentHeader) ||
+    isVisible(reviewHeader) ||
+    isSummaryCart
+  ) {
     sflBlock.style.display = "none";
-    console.log("[SFL] Hiding Saved For Later section on payment or review step.");
+    console.log("[SFL] Hiding Saved For Later section due to page step or summary table.");
   }
 }
+
 
 })();
 
