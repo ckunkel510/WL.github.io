@@ -742,17 +742,25 @@ function injectSaveForLaterButtons() {
   console.log(`[SFL] Found product code: ${productCode}`);
 
   // === STEP 2: Find delete anchor with doPostBack ===
-  const deleteAnchor = item.querySelector("a[id*='del_']");
-  const onclick = deleteAnchor?.getAttribute("href") || "";
-  const match = onclick.match(/__doPostBack\('([^']+)'/);
+  // --- Try to find the delete button in the cart row
+const deleteBtn = item.querySelector('a[href*="WebForm_DoPostBackWithOptions"][href*="del_"]');
 
-  if (!match) {
-    console.warn("[SFL] Could not extract delete __doPostBack target.");
-    return;
-  }
+if (!deleteBtn) {
+  console.warn('[SFL] Could not find delete button in item:', item);
+  return;
+}
 
-  const deleteTarget = match[1];
-  console.log(`[SFL] Found delete __EVENTTARGET: ${deleteTarget}`);
+const href = deleteBtn.getAttribute('href');
+const match = href.match(/WebForm_PostBackOptions\(&quot;([^&]*)&quot;/);
+
+if (!match || !match[1]) {
+  console.warn('[SFL] Could not extract delete __doPostBack target.');
+  return;
+}
+
+const deleteEventTarget = match[1];
+console.log(`[SFL] Found delete postback target: ${deleteEventTarget}`);
+
 
   // === STEP 3: Create "Save for Later" button ===
   const btn = document.createElement("button");
