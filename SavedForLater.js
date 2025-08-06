@@ -368,15 +368,37 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
   (async function initSfl() {
   try {
     console.log("[SFL] Initializing...");
+
+    // Check if we're on a step where SFL should be hidden
+    const shouldHide = (() => {
+      const isVisible = (el) => el && el.offsetParent !== null;
+      const paymentHeader = document.querySelector("#ctl00_PageBody_CardOnFileViewTitle_HeaderText");
+      const reviewHeader = document.querySelector("#ctl00_PageBody_SummaryHeading_HeaderText");
+      const summaryEntry2 = document.getElementById("SummaryEntry2");
+
+      return (
+        isVisible(paymentHeader) ||
+        isVisible(reviewHeader) ||
+        isVisible(summaryEntry2)
+      );
+    })();
+
+    if (shouldHide) {
+      console.log("[SFL] Skipping SFL load — on final step.");
+      const sflBlock = document.getElementById("savedForLater");
+      if (sflBlock) sflBlock.style.display = "none";
+      return; // exit early
+    }
+
     const { items } = await loadSflItems();
     renderSflList(items);
-    hideSflIfOnFinalStep();  // ✅ Check if we should hide it based on current step
     console.log("[SFL] Done.");
   } catch (err) {
     console.error("[SFL] Error during init:", err);
     setEmpty();
   }
 })();
+
 
 // === New logic to hide SFL block based on page step ===
 function hideSflIfOnFinalStep() {
