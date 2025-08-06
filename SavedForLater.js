@@ -751,7 +751,8 @@ if (!deleteBtn) {
 }
 
 const href = deleteBtn.getAttribute('href');
-const match = href.match(/WebForm_PostBackOptions\(&quot;([^&]*)&quot;/);
+const match = href.match(/WebForm_PostBackOptions\("([^"]+)"/);
+
 
 if (!match || !match[1]) {
   console.warn('[SFL] Could not extract delete __doPostBack target.');
@@ -775,7 +776,7 @@ console.log(`[SFL] Found delete postback target: ${deleteEventTarget}`);
 
     try {
       await addToQuicklist(productCode);
-      await removeCartItem(deleteTarget);
+      await removeCartItem(deleteEventTarget);
       location.reload(); // Hard refresh to update cart state
     } catch (err) {
       console.error("[SFL] Failed to save for later:", err);
