@@ -181,44 +181,69 @@ if (mainContents && mainContents.parentNode) {
 
   // --------- Step 3: Load items
   function parseSflItems(detailDoc) {
-    const grid = detailDoc.querySelector("#ctl00_PageBody_ctl01_QuicklistDetailGrid");
-    if (!grid) return [];
+  console.log("[SFL] Parsing Quicklist detail page...");
 
-    const table = grid.querySelector("table.rgMasterTable");
-    if (!table) return [];
-
-    const items = [];
-    $all("tbody > tr", table).forEach(tr => {
-      const tds = $all("td", tr);
-      if (tds.length < 5) return;
-
-      const a = tds[0].querySelector("a[href*='ProductDetail.aspx']");
-      const productHref = a ? a.getAttribute("href") : null;
-      const productCode = a ? a.textContent.trim() : "";
-      const description = tds[1].textContent.trim();
-      const price = tds[2].textContent.trim();
-      const per = tds[3].textContent.trim();
-
-      const deleteAnchor = tds[4].querySelector("a[href^='javascript:__doPostBack']");
-      let eventTarget = null;
-      if (deleteAnchor) {
-        const href = deleteAnchor.getAttribute("href") || "";
-        const m = href.match(/__doPostBack\('([^']+)'/);
-        if (m) eventTarget = m[1];
-      }
-
-      items.push({ productHref, productCode, description, price, per, eventTarget });
-    });
-
-    console.log(`[SFL] Parsed ${items.length} items from Quicklist`);
-    return items;
+  const grid = detailDoc.querySelector("#ctl00_PageBody_ctl01_QuicklistDetailGrid");
+  if (!grid) {
+    console.error("[SFL] Grid container not found");
+    return [];
   }
+
+  const table = grid.querySelector("table.rgMasterTable");
+  if (!table) {
+    console.error("[SFL] .rgMasterTable not found inside grid container");
+    return [];
+  }
+
+  const rows = table.querySelectorAll("tbody > tr");
+  console.log(`[SFL] Found ${rows.length} row(s) in Quicklist table`);
+
+  const items = [];
+
+  rows.forEach((tr, i) => {
+    const tds = Array.from(tr.querySelectorAll("td"));
+    if (tds.length < 5) {
+      console.warn(`[SFL] Skipping row ${i} — only ${tds.length} td cells`);
+      return;
+    }
+
+    const a = tds[0].querySelector("a[href*='ProductDetail.aspx']");
+    const productHref = a?.getAttribute("href") || null;
+    const productCode = a?.textContent.trim() || "";
+    const description = tds[1].textContent.trim();
+    const price = tds[2].textContent.trim();
+    const per = tds[3].textContent.trim();
+
+    const deleteAnchor = tds[4].querySelector("a[href^='javascript:__doPostBack']");
+    let eventTarget = null;
+    if (deleteAnchor) {
+      const href = deleteAnchor.getAttribute("href") || "";
+      const m = href.match(/__doPostBack\('([^']+)'/);
+      if (m) eventTarget = m[1];
+    }
+
+    console.log(`[SFL] Row ${i}: ${productCode} | ${description} | $${price} | ${per}`);
+
+    items.push({
+      productHref,
+      productCode,
+      description,
+      price,
+      per,
+      eventTarget
+    });
+  });
+
+  return items;
+}
+
 
   async function loadSflItems() {
-    const detailUrl = await ensureSflDetailUrl();
-    const { doc } = await fetchHtml(detailUrl);
-    return { detailUrl, items: parseSflItems(doc), doc };
-  }
+  const detailUrl = await ensureSflDetailUrl();
+  const { doc } = await fetchHtml(detailUrl);
+  const items = parseSflItems(doc);
+  return { detailUrl, items, doc };
+}
 
   // --------- Step 4: Render
   function pidFromHref(href) {
