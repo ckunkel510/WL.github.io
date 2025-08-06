@@ -177,107 +177,130 @@ display: none;
 }
 
 
-.checkout-step {
-    display: none !important;
-  }
-  .checkout-step.active {
-    display: block !important;
-  }
 
-  /* make the wizard fill the screen with side padding */
-  .checkout-wizard {
-    max-width: 100%;
-    margin: 1rem;
-    padding: 0 1rem;
-  }
 
-  /* stack the step bullets vertically */
-  .checkout-steps {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 1rem;
-  }
 
-  /* hide the connector lines */
-  .checkout-steps li:not(:last-child)::after {
-    display: none;
-  }
 
-  /* full-width, left-aligned steps + smaller numbers */
-  .checkout-steps li {
-    width: 100%;
-    text-align: left;
-    font-size: 0.9rem;
-  }
-  .checkout-steps li::before {
-    margin-right: 0.5rem;
-    margin-bottom: 0;
-    width: 1.75rem;
-    height: 1.75rem;
-    line-height: 1.75rem;
-  }
 
-  /* stack the nav buttons under each pane */
-  .checkout-nav {
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-  .checkout-nav button,
-  .checkout-nav #ctl00_PageBody_ContinueButton1,
-  .checkout-nav #ctl00_PageBody_ContinueButton2 {
-    width: 100%;
-  }
 
-  .checkout-steps {
-    display: flex;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding: 0;
-    margin-bottom: 1rem;
-  }
 
-  /* hide all steps by default */
-  .checkout-steps li {
-    display: none;
-    flex: 0 0 auto;
-    white-space: nowrap;
-    cursor: pointer;
-  }
 
-  /* only show completed steps + the active one */
-  .checkout-steps li.completed,
-  .checkout-steps li.active {
-    display: flex;
-    align-items: center;
-  }
 
-  /* add a little space between them */
-  .checkout-steps li + li {
-    margin-left: 1rem;
-  }
 
-  /* drop the connector lines on mobile */
-  .checkout-steps li::after {
-    display: none;
-  }
 
-  /* make each completed or active step a full-width “bar” */
-.checkout-steps li.completed,
-.checkout-steps li.active {
-  display: block;              /* stack vertically */
-  width: 100%;                 /* full width of the wizard */
-  background: #fff;            /* white background */
-  color: #6b0016;              /* maroon text */
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1); /* light gray shadow */
-  border-radius: 0.25rem;      /* slight rounding */
-  padding: 1rem;               /* roomy tap area */
-  margin-bottom: 0.5rem;       /* space between bars */
-  font-size: 1.1rem;           /* slightly larger text */
-  line-height: 1.2;            /* good readability */
-  min-height: 3rem;            /* ensure at least ~48px tall */
+
+
+
+
+
+
+
+
+
+/* Mobile-first base layout */
+#savedForLater {
+  margin-top: 30px;
+  border: 1px solid #eee;
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.05);
 }
 
-/* hide the numeric bullet on mobile bars */
-.checkout-steps li::before {
-  display: none !important;
+#sflHeader {
+  padding: 12px 16px;
+  background: #6b0016;
+  color: #fff;
+  font-weight: 600;
+  font-size: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+#sflHeader .sflCount {
+  font-weight: 400;
+  font-size: 14px;
+  opacity: 0.85;
+}
+
+#sflBody {
+  padding: 12px;
+}
+
+/* Stack each product vertically on mobile */
+.sflRow {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.sflRow:last-child {
+  border-bottom: none;
+}
+
+.sflImg {
+  width: 100%;
+  height: auto;
+  max-height: 160px;
+  object-fit: contain;
+  border-radius: 8px;
+  border: 1px solid #eee;
+  background: #fafafa;
+  padding: 4px;
+}
+
+.sflTitle {
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.sflPrice,
+.sflPer {
+  font-size: 15px;
+  color: #333;
+}
+
+.sflActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sflBtn {
+  flex: 1 1 48%;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #6b0016;
+  background: #6b0016;
+  color: #fff;
+  font-size: 14px;
+  cursor: pointer;
+  text-align: center;
+  transition: background 0.2s ease;
+}
+
+.sflBtn:hover {
+  background: #8d1e2b;
+}
+
+.sflBtn.secondary {
+  background: #fff;
+  color: #6b0016;
+}
+
+.sflBtn.secondary:hover {
+  background: #f9f9f9;
+}
+
+/* Empty and Loading states */
+#sflEmpty,
+#sflLoading {
+  padding: 16px;
+  text-align: center;
+  color: #777;
+  font-style: italic;
 }
