@@ -752,6 +752,7 @@ if (!deleteBtn) {
 
 const href = deleteBtn.getAttribute('href');
 const match = href.match(/WebForm_PostBackOptions\("([^"]+)"/);
+const pidMatch = deleteBtn.id.match(/CartLineControl_(\d+)_del_/); //
 
 
 if (!match || !match[1]) {
@@ -760,6 +761,7 @@ if (!match || !match[1]) {
 }
 
 const deleteEventTarget = match[1];
+const productId = pidMatch[1];
 console.log(`[SFL] Found delete postback target: ${deleteEventTarget}`);
 
 
@@ -775,7 +777,7 @@ console.log(`[SFL] Found delete postback target: ${deleteEventTarget}`);
     btn.textContent = "Saving...";
 
     try {
-      await addToQuicklist(productCode);
+      await addToQuicklist(productId);
       await removeCartItem(deleteEventTarget);
       location.reload(); // Hard refresh to update cart state
     } catch (err) {
