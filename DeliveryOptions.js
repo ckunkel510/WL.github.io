@@ -61,80 +61,60 @@ $(function(){
 
 
 
+
 $(function(){
-  var $areaSelect = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas');
-  var $optSelect  = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList');
-  var $summary    = $('#SummaryEntry2');
+  // Grab the summary container
+  var $summary = $('#SummaryEntry2');
+  if (!$summary.length) return;
 
-  // Only run on delivered flow when those selects are visible
-  if ($areaSelect.is(':visible') && $optSelect.is(':visible')) {
-    console.log('[DeliveryOptions] Modernizing summary & delivery selector');
+  // Extract values
+  var subtotalText    = $summary.find('tr:has(td:contains("Subtotal")) .numeric').text().trim();
+  var deliveryText    = $summary.find('#ctl00_PageBody_CartSummary2_DeliveryCostsRow .numeric').text().trim();
+  var taxText         = $summary.find('#ctl00_PageBody_CartSummary2_TaxTotals .numeric').text().trim();
+  var totalText       = $summary.find('#ctl00_PageBody_CartSummary2_GrandTotalRow .numeric').text().trim();
 
-    // 1) Hide the Total discount row
-    $summary.find('.summaryTotals tr').filter(function(){
-      return $(this).find('td:first').text().trim() === 'Total discount';
-    }).hide();
+  // Extract the shipping method label
+  var shipLabel = $('#ctl00_PageBody_CartSummary2_DeliveryOptionsPanel')
+                    .find('b:contains("Shipping Method")')
+                    .parent()
+                    .text()
+                    .replace(/Shipping Method\s*:\s*/i, '')
+                    .trim();
 
-    // 2) Wrap the summary in a Bootstrap card (only once)
-    if (!$summary.find('.summary-card').length) {
-      $summary.wrapInner('<div class="card summary-card shadow-sm mb-3"></div>');
-      $summary.find('.summary-card').addClass('p-3');
-      // Make the table borderless
-      $summary.find('.summaryTotals').addClass('table table-borderless mb-0');
-    }
+  // Build the Shipping Method widget
+  var $shipWidget = $(`
+    <div class="card mb-3 shipping-method-widget">
+      <div class="card-body p-3">
+        <h5 class="card-title mb-2">Shipping Method</h5>
+        <div class="card-text">${shipLabel}</div>
+      </div>
+    </div>
+  `);
 
-    // 3) Build inline delivery-options pills
-    var baseCost = parseFloat(
-      $('#ctl00_PageBody_CartSummary2_DeliveryCostsRow td.numeric')
-        .text().replace(/[^0-9.-]/g,'')
-    );
-    var $inline = $('<div class="delivery-options-inline d-flex flex-wrap mb-3"></div>');
+  // Build the Order Totals widget (vertical, low→high)
+  var $totalsWidget = $(`
+    <div class="card mb-3 order-totals-widget">
+      <div class="card-body p-3">
+        <h5 class="card-title mb-3">Order Summary</h5>
+        <div class="d-flex justify-content-between mb-2"><span>Subtotal</span><span>${subtotalText}</span></div>
+        <div class="d-flex justify-content-between mb-2"><span>Delivery</span><span>${deliveryText}</span></div>
+        <div class="d-flex justify-content-between mb-2"><span>Tax</span><span>${taxText}</span></div>
+        <hr>
+        <div class="d-flex justify-content-between"><strong>Total (inc. Tax)</strong><strong>${totalText}</strong></div>
+      </div>
+    </div>
+  `);
 
-    $optSelect.find('option').each(function(){
-      var $opt = $(this);
-      var txt  = $opt.text().trim();
-      var label = txt.replace(/\s*\(.*\)/,'').trim();
-      var m     = txt.match(/\(([^)]+)\)/);
-      var extra = m ? m[1] : '';
-      var total = extra.startsWith('+')
-        ? baseCost + parseFloat(extra.replace(/[^0-9.-]/g,''))
-        : parseFloat(extra.replace(/[^0-9.-]/g,'')) || baseCost;
-      var costLabel = '$' + total.toFixed(2);
+  // Clear out the existing summary table
+  $summary.empty();
 
-      var $btn = $(`
-        <button type="button" class="btn btn-outline-primary m-1">
-          ${label}<br><small>${costLabel}</small>
-        </button>
-      `);
-
-      if ($opt.is(':selected')) {
-        $btn.removeClass('btn-outline-primary').addClass('btn-primary');
-      }
-
-      $btn.on('click', function(){
-        $optSelect.val($opt.val());
-        $inline.find('button').removeClass('btn-primary').addClass('btn-outline-primary');
-        $btn.removeClass('btn-outline-primary').addClass('btn-primary');
-        // trigger the postback exactly like the select would
-        setTimeout(function(){
-          __doPostBack(
-            'ctl00$PageBody$CartSummary2$LocalDeliveryChargeControl$DeliveryOptionsDropDownList',
-            ''
-          );
-        }, 0);
-      });
-
-      $inline.append($btn);
-    });
-
-    // 4) Hide the original “Area” and “Options” rows
-    $areaSelect.closest('tr').hide();
-    $optSelect.closest('tr').hide();
-
-    // 5) Inject our inline pills at the top of the panel
-    $('#ctl00_PageBody_CartSummary2_LocalDeliveryPanel').prepend($inline);
-  }
+  // Inject the new widgets
+  $summary
+    .append($shipWidget)
+    .append($totalsWidget);
 });
+
+
 
 
 
