@@ -115,3 +115,43 @@ $(function(){
   });
 });
 
+
+
+
+
+
+
+
+
+
+$(function(){
+  // 1) Detach the subtotal panel
+  var $subtotal = $('.SubtotalWrapper').detach();
+
+  // 2) Detach the entire buttons div, then grab only the Place Order button
+  var $buttonsDiv = $subtotal.next('div').detach();
+  var $placeOrder = $buttonsDiv.find('#ctl00_PageBody_PlaceOrderButton').detach();
+
+  // 3) Build a new summary widget
+  var $widget = $(`
+    <div class="cart-summary-widget p-3 border rounded ms-3" style="min-width:260px;">
+      <div class="summary-subtotal mb-3"></div>
+      <div class="summary-action"></div>
+    </div>
+  `);
+  $widget.find('.summary-subtotal').append($subtotal);
+  // style the Place Order button nice and big
+  $placeOrder
+    .addClass('btn btn-primary btn-lg w-100')
+    .find('span').css('font-size','1.1rem');
+  $widget.find('.summary-action').append($placeOrder);
+
+  // 4) Insert into the page: make the cart-details flex and append widget
+  $('.shopping-cart-details')
+    .css({ display:'flex', alignItems:'flex-start' })
+    // ensure the items container flex-grows to fill
+    .children().first().css('flex','1')
+    .end()
+    .append($widget);
+});
+
