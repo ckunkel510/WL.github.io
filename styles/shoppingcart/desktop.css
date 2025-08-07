@@ -681,4 +681,9 @@ margin-bottom: 0px !important;
 max-width:70%;
 float: left;
   }
+
+  .cart-summary-widget{
+float:right;
+max-width:25%;
+  }
   
