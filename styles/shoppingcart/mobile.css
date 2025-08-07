@@ -452,3 +452,21 @@ display: none;
   margin-right: 2px;
   font-weight: 400;
 }
+
+
+
+  /* Limit card width and center it */
+  .cart-item-card {
+    max-width: 600px;
+    width: 100%;
+    margin: 0 auto;
+  }
+  /* Force long text to wrap */
+  .cart-item-card .card-body {
+    word-break: break-word;
+  }
+  /* Make images scale inside their box without clipping */
+  .cart-item-card img {
+    object-fit: contain !important;
+  }
+
