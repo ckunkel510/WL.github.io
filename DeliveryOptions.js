@@ -55,3 +55,82 @@ $(function(){
   }
 });
 
+
+
+
+
+
+$(function(){
+  var $areaSelect = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas');
+  var $optSelect  = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList');
+
+  // Only run if both selects are present and visible
+  if ($areaSelect.length && $optSelect.length &&
+      $areaSelect.is(':visible') && $optSelect.is(':visible')) {
+
+    console.log('[DeliveryOptions] Replacing dropdown with inline selector');
+
+    // Parse base delivery cost
+    var baseCostText = $('#ctl00_PageBody_CartSummary2_DeliveryCostsRow td.numeric')
+                         .text().trim();
+    var baseCost = parseFloat(baseCostText.replace(/[^0-9.-]/g, ''));
+
+    // Build inline buttons container
+    var $inline = $('<div class="delivery-options-inline mb-3"></div>');
+
+    $optSelect.find('option').each(function(){
+      var $opt  = $(this);
+      var val   = $opt.val();
+      var txt   = $opt.text().trim();
+
+      // Extract label and cost info
+      var label = txt.replace(/\s*\(.*\)/, '').trim();
+      var m     = txt.match(/\(([^)]+)\)/);
+      var costInfo = m ? m[1] : '';
+      var totalCost = baseCost;
+      if (costInfo.startsWith('+')) {
+        var diff = parseFloat(costInfo.replace(/[^0-9.-]/g, ''));
+        totalCost = baseCost + diff;
+      } else {
+        totalCost = parseFloat(costInfo.replace(/[^0-9.-]/g, ''));
+      }
+      var costLabel = '$' + totalCost.toFixed(2);
+
+      // Create button
+      var $btn = $('<button type="button" class="delivery-option-btn btn btn-outline-secondary me-2 mb-2"></button>');
+      $btn.text(label + ' — ' + costLabel);
+      $btn.data('value', val);
+
+      // Highlight selected
+      if ($opt.is(':selected')) {
+        $btn.addClass('active btn-primary').removeClass('btn-outline-secondary');
+      }
+
+      // Click handler
+      $btn.on('click', function(){
+        // Update the original select value
+        $optSelect.val($(this).data('value'));
+        // Visually update buttons
+        $inline.find('button').removeClass('btn-primary active').addClass('btn-outline-secondary');
+        $(this).addClass('btn-primary active').removeClass('btn-outline-secondary');
+        // Fire postback just like the onchange
+        setTimeout(function(){
+          __doPostBack(
+            'ctl00$PageBody$CartSummary2$LocalDeliveryChargeControl$DeliveryOptionsDropDownList',
+            ''
+          );
+        }, 0);
+      });
+
+      $inline.append($btn);
+    });
+
+    // Hide the original area + option rows
+    $areaSelect.closest('tr').hide();
+    $optSelect.closest('tr').hide();
+
+    // Insert our inline selector at the top of the LocalDeliveryPanel
+    $('#ctl00_PageBody_CartSummary2_LocalDeliveryPanel').prepend($inline);
+  }
+});
+
