@@ -773,21 +773,44 @@ $(document).ready(function() {
 
 
 
-$(document).ready(function() {
-  // helper to read cookies
+
+(function(){
+  // Helper to read a cookie by name
   function readCookie(name) {
-    return document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith(name+'='))?.split('=')[1];
+    return document.cookie
+      .split(';')
+      .map(c => c.trim())
+      .find(c => c.startsWith(name + '='))
+      ?.split('=')[1];
   }
 
-  if (readCookie('pickupSelected') === 'true') {
-    // poll for the Continue button
-    const tid = setInterval(() => {
-      const $continue = $('#ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView');
-      if ($continue.length) {
-        clearInterval(tid);
-        $continue.click();
-      }
-    }, 200);
+  // Try to find & click (or invoke) the Continue button
+  function tryAutoContinue() {
+    if (readCookie('pickupSelected') !== 'true') return;
+    var btn = document.getElementById('ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView');
+    if (!btn) return;
+    // Stop polling/handlers once we've found it
+    clearInterval(pollTimer);
+
+    // If it has an href with WebForm_DoPostBackWithOptions, invoke it directly
+    var href = btn.getAttribute('href') || '';
+    if (href.startsWith('javascript:')) {
+      href = href.replace(/^javascript:/, '');
+      try { eval(href); } catch(e){ console.error(e); }
+    } else {
+      // Fallback to click()
+      btn.click();
+    }
   }
-});
+
+  // On initial load, start polling every 200ms
+  var pollTimer = setInterval(tryAutoContinue, 200);
+
+  // Also hook into ASP.NET AJAX partial‐postback endRequest so it works if Continue
+  // appears after an UpdatePanel refresh
+  if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
+    Sys.WebForms.PageRequestManager.getInstance().add_endRequest(tryAutoContinue);
+  }
+})();
+
 
