@@ -75,6 +75,7 @@ $(function(){
 
 
 
+
 (function(){
   function addBusinessDays(date, days) {
     const d = new Date(date);
@@ -89,11 +90,14 @@ $(function(){
   function initializeDeliveryWidget() {
     const $summary = $('#SummaryEntry2');
     const $select  = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList');
-    if (!$summary.length || !$select.length || !$select.is(':visible')) {
-      console.log('[DeliveryOptions] Summary or select not visible; abort');
+    if (!$summary.length || !$select.length) {
+      console.log('[DeliveryOptions] Summary or select not present; abort');
       return;
     }
     console.log('[DeliveryOptions] Initializing widget');
+
+    // hide the original dropdown
+    $select.hide();
 
     // remove old widgets
     $('.shipping-method-widget, .order-totals-widget').remove();
@@ -107,7 +111,7 @@ $(function(){
 
     const baseCost = parseFloat(deliveryText.replace(/[^0-9.-]/g, ''));
 
-    // remove original table
+    // remove original summary table
     $summary.find('.summaryTotals').remove();
     $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas').closest('tr').remove();
     $select.closest('tr').remove();
@@ -131,7 +135,7 @@ $(function(){
     });
     console.log('[DeliveryOptions] Parsed options:', options);
 
-    // build UI
+    // build shipping method widget
     const $shipCard = $(
       `<div class="card mb-3 shipping-method-widget">
          <div class="card-body p-3">
@@ -153,24 +157,16 @@ $(function(){
 
       $btn.on('click', () => {
         console.log('[DeliveryOptions] Clicked option:', opt);
+        // set local storage
         localStorage.setItem('selectedShippingValue', opt.value);
-        $select.val(opt.value);
-        const target = $select.prop('name');
-        // delay to allow inspection
-        setTimeout(() => {
-          console.log('[DeliveryOptions] Performing postback for', target);
-          if (typeof __doPostBack === 'function') {
-            __doPostBack(target, '');
-          } else {
-            console.error('[DeliveryOptions] __doPostBack not available');
-          }
-        }, 3000);
+        // update the hidden dropdown and trigger its onchange
+        $select.val(opt.value).trigger('change');
       });
       $list.append($btn);
     });
     $shipBody.append($list);
 
-    // always show change button below
+    // change button
     const $changeBtn = $('<button type="button" class="btn btn-link mb-3">Change Shipping Speed</button>')
       .on('click', () => {
         console.log('[DeliveryOptions] Change clicked');
@@ -200,6 +196,7 @@ $(function(){
 
     $summary.empty().append($shipCard).append($totalsCard);
 
+    // render selection
     function renderSelection(reset) {
       const sel = localStorage.getItem('selectedShippingValue');
       console.log('[DeliveryOptions] renderSelection:', {sel, reset});
@@ -207,11 +204,8 @@ $(function(){
       $list.children('button').each(function(){
         const o = $(this).data('opt');
         let isSel = false;
-        if (!reset && sel) {
-          isSel = (o.value === sel);
-        } else if (!reset && !sel) {
-          isSel = ($select.val() === o.value);
-        }
+        if (!reset && sel) isSel = (o.value === sel);
+        else if (!reset && !sel) isSel = ($select.val() === o.value);
         console.log(`[DeliveryOptions] ${o.label} selected? ${isSel}`);
         if (isSel) {
           $(this).show().removeClass('btn-outline-primary').addClass('btn-primary');
@@ -241,6 +235,7 @@ $(function(){
     Sys.WebForms.PageRequestManager.getInstance().add_endRequest(initializeDeliveryWidget);
   }
 })();
+
 
 
 
