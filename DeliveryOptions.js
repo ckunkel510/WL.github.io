@@ -65,7 +65,7 @@ $(function(){
 
 
 (function(){
-  // Utility to add business days
+  // Add business days (skip weekends)
   function addBusinessDays(date, days) {
     var d = new Date(date);
     while (days > 0) {
@@ -78,31 +78,30 @@ $(function(){
 
   function initializeDeliveryWidget() {
     var $summary   = $('#SummaryEntry2');
-    var $optSelect = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList');
-    if (!$summary.length || !$optSelect.length || !$optSelect.is(':visible')) return;
+    var $select    = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList');
+    if (!$summary.length || !$select.length || !$select.is(':visible')) return;
+
     console.log("[DeliveryOptions] Initializing widget");
 
-    // Remove old widgets
+    // Remove old
     $('.shipping-method-widget, .order-totals-widget').remove();
 
-    // Hide original summary table & discount row
+    // Hide originals
     $summary.find('.summaryTotals').hide();
-    $summary.find('.summaryTotals tr').filter((_,tr)=>
-      $(tr).find('td:first').text().trim()==='Total discount'
-    ).hide();
-
-    // Hide original selects
+    $summary.find('.summaryTotals tr')
+      .filter((_,tr) => $(tr).find('td:first').text().trim()==='Total discount')
+      .hide();
     $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas').closest('tr').hide();
-    $optSelect.closest('tr').hide();
+    $select.closest('tr').hide();
 
-    // Read fresh values
-    var subtotalText = $summary.find('tr:has(td:contains("Subtotal")) .numeric').text().trim();
-    var deliveryText = $summary.find('#ctl00_PageBody_CartSummary2_DeliveryCostsRow .numeric').text().trim();
-    var taxText      = $summary.find('#ctl00_PageBody_CartSummary2_TaxTotals .numeric').text().trim();
-    var totalText    = $summary.find('#ctl00_PageBody_CartSummary2_GrandTotalRow .numeric').text().trim();
-    var baseCost     = parseFloat(deliveryText.replace(/[^0-9.-]/g,''));
+    // Read summary values
+    var subtotal = $summary.find('tr:has(td:contains("Subtotal")) .numeric').text().trim();
+    var delivery = $summary.find('#ctl00_PageBody_CartSummary2_DeliveryCostsRow .numeric').text().trim();
+    var tax      = $summary.find('#ctl00_PageBody_CartSummary2_TaxTotals .numeric').text().trim();
+    var total    = $summary.find('#ctl00_PageBody_CartSummary2_GrandTotalRow .numeric').text().trim();
+    var baseCost = parseFloat(delivery.replace(/[^0-9.-]/g,''));
 
-    // Parse options
+    // Build options data
     var transitMap = { 'Standard delivery':5,'3 Day Select':3,'2nd Day Air':2,'Next Day Air':1 };
     var descMap    = {
       'Standard delivery':'Traditional Ground',
@@ -110,117 +109,125 @@ $(function(){
       '2nd Day Air':'2nd Day Air',
       'Next Day Air':'Next Day Air'
     };
-    var shippingOptions = $optSelect.find('option').map(function(){
-      var $o    = $(this),
-          txt   = $o.text().trim(),
-          label = txt.replace(/\s*\(.*\)/,'').trim(),
-          extra = (txt.match(/\(([^)]+)\)/)||[])[1]||'',
-          cost  = extra.startsWith('+')
-            ? baseCost + parseFloat(extra.replace(/[^0-9.-]/g,''))
-            : (parseFloat(extra.replace(/[^0-9.-]/g,''))||baseCost);
+    var opts = $select.find('option').map(function(){
+      var txt = $(this).text().trim();
+      var label = txt.replace(/\s*\(.*\)/,'').trim();
+      var extra = (txt.match(/\(([^)]+)\)/)||[])[1]||'';
+      var cost = extra.startsWith('+')
+        ? baseCost + parseFloat(extra.replace(/[^0-9.-]/g,''))
+        : parseFloat(extra.replace(/[^0-9.-]/g,''))||baseCost;
       return {
-        value:       $o.val(),
-        label:       label,
-        costLabel:   '$' + cost.toFixed(2),
-        transitDays: transitMap[label] || 0,
-        description: descMap[label]    || label
+        value: $(this).val(),
+        label,
+        costLabel: '$'+cost.toFixed(2),
+        transitDays: transitMap[label]||0,
+        description: descMap[label]||label
       };
     }).get();
 
-    // Build Shipping Method card
+    // Shipping Method card
     var $shipCard = $(`
       <div class="card mb-3 shipping-method-widget">
         <div class="card-body p-3">
           <h5 class="card-title mb-3">Shipping Method</h5>
         </div>
-      </div>
-    `);
+      </div>`);
     var $shipBody = $shipCard.find('.card-body');
     var $list     = $('<div class="d-flex flex-column mb-3"></div>');
 
-    shippingOptions.forEach(function(opt){
-      var selected = ($optSelect.val() === opt.value);
-      var $btn = $(`
-        <button type="button" class="btn mb-2 text-start ${selected?'btn-primary':'btn-outline-primary'}">
-          <div class="fw-semibold">${opt.label}</div>
-          <div class="fw-bold text-white">${opt.costLabel}</div>
-        </button>
-      `).data('opt', opt);
+    // Build buttons
+    opts.forEach(opt => {
+      var selected = ($select.val() === opt.value);
+      var $btn = $(`<button type="button" class="btn mb-2 text-start"></button>`)
+        .append(`<div class="fw-semibold">${opt.label}</div>`)
+        .append(`<div class="fw-bold text-white">${opt.costLabel}</div>`)
+        .data('opt', opt)
+        .toggleClass('btn-primary', selected)
+        .toggleClass('btn-outline-primary', !selected);
 
       $btn.on('click', function(){
-        // store selection, update select, and trigger postback
+        // on user click only: store and postback
         localStorage.setItem('selectedShippingValue', opt.value);
-        $optSelect.val(opt.value);
+        $select.val(opt.value);
         __doPostBack(
-          'ctl00$PageBody$CartSummary2$LocalDeliveryChargeControl$DeliveryOptionsDropDownList',
-          ''
+          'ctl00$PageBody$CartSummary2$LocalDeliveryChargeControl$DeliveryOptionsDropDownList',''
         );
       });
-
       $list.append($btn);
     });
+
     $shipBody.append($list);
 
-    // Change Shipping Speed button
-    var $changeBtn = $(`
-      <button type="button" class="btn btn-link mb-3" style="display:none;">
-        Change Shipping Speed
-      </button>
-    `).on('click', function(){
-      localStorage.removeItem('selectedShippingValue');
-      initializeDeliveryWidget();
-    });
-    $shipBody.append($changeBtn);
+    // Change Speed button
+    var $change = $(`<button type="button" class="btn btn-link mb-3">Change Shipping Speed</button>`)
+      .on('click', function(){
+        localStorage.removeItem('selectedShippingValue');
+        renderSelection(); // just re-render UI without posting back
+      }).hide();
+    $shipBody.append($change);
 
-    // Build Totals card
+    // Totals card
     var $totalsCard = $(`
       <div class="card order-totals-widget mb-3">
         <div class="card-body p-3">
           <h5 class="card-title mb-3">Order Summary</h5>
         </div>
-      </div>
-    `);
+      </div>`);
     var $totalsBody = $totalsCard.find('.card-body');
-    function row(label, value, strong) {
-      var tag = strong ? 'strong' : 'span';
-      return $(`
-        <div class="d-flex justify-content-between mb-2">
-          <${tag}>${label}</${tag}><${tag}>${value}</${tag}>
-        </div>
-      `);
+    function row(label,val,strong){
+      var tag = strong?'strong':'span';
+      return $(`<div class="d-flex justify-content-between mb-2">
+        <${tag}>${label}</${tag}><${tag}>${val}</${tag}>
+      </div>`);
     }
     $totalsBody
-      .append(row('Subtotal',       subtotalText))
-      .append(row('Delivery',       deliveryText))
-      .append(row('Tax',            taxText))
+      .append(row('Subtotal',subtotal))
+      .append(row('Delivery',delivery))
+      .append(row('Tax',tax))
       .append('<hr>')
-      .append(row('Total (inc. Tax)', totalText, true));
+      .append(row('Total (inc. Tax)',total,true));
 
-    // Inject both
-    $summary.empty()
-            .append($shipCard)
-            .append($totalsCard);
+    // Inject
+    $summary.empty().append($shipCard).append($totalsCard);
 
-    // Restore persisted selection and banner
-    var sel = localStorage.getItem('selectedShippingValue');
-    if (sel) {
+    // Render selection without triggering postback
+    renderSelection();
+
+    function renderSelection(){
+      var sel = localStorage.getItem('selectedShippingValue');
+      $shipBody.find('.shipping-banner').remove();
       $list.find('button').each(function(){
         var o = $(this).data('opt');
-        if (o.value === sel) {
-          $(this).trigger('click');
+        var isSel = sel? o.value===sel : $select.val()===o.value;
+        $(this)
+          .toggleClass('btn-primary',  isSel)
+          .toggleClass('btn-outline-primary', !isSel)
+          .toggle(true); // always show buttons
+        if (isSel){
+          // banner
+          var dt = addBusinessDays(new Date(), o.transitDays+1);
+          var ds = dt.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+          var $b = $(`<div class="alert alert-info shipping-banner mb-3">
+            <strong>${o.description}</strong><br>Expected arrival: ${ds}
+          </div>`);
+          $shipBody.prepend($b);
+          if (sel) {
+            // hide others only after initial render?
+            $list.find('button').not(this).hide();
+            $change.show();
+          }
         }
       });
     }
   }
 
-  // Bind on ready and after partial postbacks
+  // Bind
   $(document).ready(initializeDeliveryWidget);
-  if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
-    Sys.WebForms.PageRequestManager
-      .getInstance()
-      .add_endRequest(initializeDeliveryWidget);
+  if (window.Sys?.WebForms?.PageRequestManager) {
+    Sys.WebForms.PageRequestManager.getInstance().add_endRequest(initializeDeliveryWidget);
   }
 })();
+
 
 
 
