@@ -1,5 +1,5 @@
 (function(){
-  console.log("[AutoNav] Script loaded");
+  console.log("[AutoNav] Loaded");
 
   // ── Cookie utils ────────────────────────────────────────────────
   function readCookie(name) {
@@ -10,82 +10,93 @@
   }
   function setCookie(name, val) {
     document.cookie = `${name}=${val};path=/`;
+    console.log(`[AutoNav] Cookie ${name}=${val}`);
   }
   function clearCookie(name) {
     document.cookie = `${name}=;path=/;expires=Thu,01 Jan 1970 00:00:00 GMT`;
+    console.log(`[AutoNav] Cleared ${name}`);
   }
 
-  // ── ASP.NET AJAX manager (if any) ────────────────────────────────
+  // ── ASP.NET AJAX manager ────────────────────────────────────────
   const prm = window.Sys?.WebForms?.PageRequestManager?.getInstance();
 
-  // ── FORWARD: auto‐click Continue ─────────────────────────────────
+  // ── FORWARD: auto-click Continue ─────────────────────────────────
   let pollTimer;
   function tryAutoContinue() {
-    // stop if flag cleared
+    console.log("[AutoNav] tryAutoContinue()");
     if (readCookie('pickupSelected') !== 'true') {
+      console.log("[AutoNav] pickupSelected≠true → stop forward automation");
       clearInterval(pollTimer);
       prm?.remove_endRequest(tryAutoContinue);
-      console.log("[AutoNav] pickupSelected=false → forward automation stopped");
       return;
     }
     const btn = document.getElementById(
       'ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView'
     );
-    if (!btn) return;
+    if (!btn) {
+      console.log("[AutoNav] Continue button missing");
+      return;
+    }
+    console.log("[AutoNav] Continue found — firing postback");
 
-    console.log("[AutoNav] Continue button found → auto-clicking");
     clearInterval(pollTimer);
     prm?.remove_endRequest(tryAutoContinue);
 
-    const href = btn.getAttribute('href') || '';
+    const href = btn.getAttribute('href')||'';
     if (href.startsWith('javascript:')) {
       eval(href.replace(/^javascript:/,''));
     } else {
       btn.click();
     }
 
-    // clear forward flag, disable backward skip
+    // Clear only the forward flag; leave skipBack=true
     clearCookie('pickupSelected');
-    setCookie('skipBack','false');
   }
 
   // ── BACKWARD: intercept card-page Back ───────────────────────────
   function initAutoBack() {
+    console.log("[AutoNav] initAutoBack()");
     const backBtn = document.getElementById('ctl00_PageBody_btnBack_CardOnFileView');
+    console.log("[AutoNav] backBtn:", backBtn);
     if (!backBtn) return;
 
-    // replace to drop old handlers
+    // Clear old handlers by replacing
     const fresh = backBtn.cloneNode(true);
     backBtn.parentNode.replaceChild(fresh, backBtn);
 
     fresh.addEventListener('click', function(e) {
-      if (readCookie('skipBack') !== 'true') return;
-      e.preventDefault();
+      console.log("[AutoNav] Card Back clicked, skipBack=", readCookie('skipBack'));
+      if (readCookie('skipBack') === 'true') {
+        e.preventDefault();
 
-      console.log("[AutoNav] skipBack=true → rerouting cart-back");
-      // set skipBack again for next leg, clear forward flag
-      setCookie('skipBack','true');
-      clearCookie('pickupSelected');
+        // Fire the cart‐page Back anchor
+        const cartBack = document.getElementById('ctl00_PageBody_BackToCartButton3');
+        console.log("[AutoNav] cartBack:", cartBack);
+        if (cartBack) {
+          const href2 = cartBack.getAttribute('href')||'';
+          if (href2.startsWith('javascript:')) {
+            eval(href2.replace(/^javascript:/,''));
+          } else {
+            cartBack.click();
+          }
+        } else {
+          console.warn("[AutoNav] BackToCartButton3 not found");
+        }
 
-      const cartBack = document.getElementById('ctl00_PageBody_BackToCartButton3');
-      if (!cartBack) return console.warn("[AutoNav] BackToCartButton3 missing");
-
-      const href2 = cartBack.getAttribute('href') || '';
-      if (href2.startsWith('javascript:')) {
-        eval(href2.replace(/^javascript:/,''));
-      } else {
-        cartBack.click();
+        // Clear skipBack so we don't loop
+        clearCookie('skipBack');
       }
     });
+    console.log("[AutoNav] Back interceptor attached");
   }
 
-  // ── Init on DOM ready & after partial postbacks ─────────────────
+  // ── Initialize on DOM ready & partial postbacks ──────────────────
   document.addEventListener('DOMContentLoaded', () => {
-    // BACK handler always attaches
+    // Back handler
     initAutoBack();
-    if (prm) prm.add_endRequest(initAutoBack);
+    prm?.add_endRequest(initAutoBack);
 
-    // only start forward automation if pickupSelected=true
+    // Forward automation only if pickupSelected=true
     if (readCookie('pickupSelected') === 'true') {
       pollTimer = setInterval(tryAutoContinue, 200);
       prm?.add_endRequest(tryAutoContinue);
