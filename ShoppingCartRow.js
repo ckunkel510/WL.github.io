@@ -141,7 +141,7 @@ $(function(){
   var $widget = $('<div class="cart-summary-widget"></div>').append($subtotal);
 
   // 5) Append the widget
-  $('.shopping-cart-details').append($widget);
+  $('.ShoppingCartDetailPanel').append($widget);
 });
 
 
