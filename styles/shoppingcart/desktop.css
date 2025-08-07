@@ -689,3 +689,12 @@ float:right;
 max-width:25%;
   }
   
+  .cart-header.mb-3{
+    padding: 14px 16px;
+  background: #6b0016; /* Brand color */
+  color: #fff;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  }
