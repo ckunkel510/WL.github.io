@@ -38,8 +38,14 @@ $(function(){
       .text().trim();
 
     // — build Delete button —
-    var $delBtn = $('<button type="button" class="btn btn-sm btn-outline-danger delete-btn">Delete</button>');
-    if (delJs) $delBtn.on('click', ()=>eval(delJs));
+    // Build a plain “Delete” text link
+var $delBtn = $('<a href="#" class="delete-link ms-2">Delete</a>');
+if (delJs) {
+  $delBtn.on('click', function(e){
+    e.preventDefault();
+    eval(delJs);
+  });
+}
 
     // — build card —
     var $card = $(`
