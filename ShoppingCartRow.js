@@ -138,7 +138,7 @@ $(function(){
     .append($placeOrderBtn);
 
   // 4) Insert it after the cart items container
-  $('.shopping-cart-details').append($widget);
+  $('.ShoppingCartDetailPanel').append($widget);
 });
 
 
