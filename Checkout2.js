@@ -557,3 +557,104 @@ $(document).ready(function(){
     }
   });
 })();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ===================================================
+  // (B) Modern Transaction & Shipping Selectors
+  // ===================================================
+  if ($("#ctl00_PageBody_TransactionTypeDiv").length) {
+    $(".TransactionTypeSelector").hide();
+    const txnHTML = `
+      <div class="modern-transaction-selector d-flex justify-content-around">
+        <button id="btnOrder" class="btn btn-primary" data-value="rdbOrder">
+          <i class="fas fa-shopping-cart"></i> Order
+        </button>
+        <button id="btnQuote" class="btn btn-secondary" data-value="rdbQuote">
+          <i class="fas fa-file-alt"></i> Request Quote
+        </button>
+      </div>
+    `;
+    $("#ctl00_PageBody_TransactionTypeDiv").append(txnHTML);
+
+    function updateTransactionStyles(val) {
+      console.log(`Transaction type updated: ${val}`);
+      const orderRad = $("#ctl00_PageBody_TransactionTypeSelector_rdbOrder");
+      const quoteRad = $("#ctl00_PageBody_TransactionTypeSelector_rdbQuote");
+      if (val === "rdbOrder") {
+        orderRad.prop("checked", true);
+        $("#btnOrder").addClass("btn-primary").removeClass("btn-secondary");
+        $("#btnQuote").addClass("btn-secondary").removeClass("btn-primary");
+      } else {
+        quoteRad.prop("checked", true);
+        $("#btnQuote").addClass("btn-primary").removeClass("btn-secondary");
+        $("#btnOrder").addClass("btn-secondary").removeClass("btn-primary");
+      }
+    }
+
+    // init & click
+    updateTransactionStyles(
+      $("#ctl00_PageBody_TransactionTypeSelector_rdbOrder").is(":checked") ? "rdbOrder" : "rdbQuote"
+    );
+    $(document).on("click", ".modern-transaction-selector button", function() {
+      updateTransactionStyles($(this).data("value"));
+    });
+  } else {
+    console.warn("Transaction type div not found.");
+  }
+
+
+  if ($(".SaleTypeSelector").length) {
+    $(".SaleTypeSelector").hide();
+    const shipHTML = `
+      <div class="modern-shipping-selector d-flex justify-content-around">
+        <button id="btnDelivered" class="btn btn-primary" data-value="rbDelivered">
+          <i class="fas fa-truck"></i> Delivered
+        </button>
+        <button id="btnPickup" class="btn btn-secondary" data-value="rbCollectLater">
+          <i class="fas fa-store"></i> Pickup (Free)
+        </button>
+      </div>
+    `;
+    $(".epi-form-col-single-checkout:has(.SaleTypeSelector)").append(shipHTML);
+
+    function updateShippingStyles(val) {
+      console.log(`Shipping method updated: ${val}`);
+      const delRad = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
+      const pickRad = $("#ctl00_PageBody_SaleTypeSelector_rbCollectLater");
+      if (val === "rbDelivered") {
+        delRad.prop("checked", true);
+        $("#btnDelivered").addClass("btn-primary").removeClass("btn-secondary");
+        $("#btnPickup").addClass("btn-secondary").removeClass("btn-primary");
+      } else {
+        pickRad.prop("checked", true);
+        $("#btnPickup").addClass("btn-primary").removeClass("btn-secondary");
+        $("#btnDelivered").addClass("btn-secondary").removeClass("btn-primary");
+        refreshReadOnlyDisplays();
+      }
+    }
+
+    updateShippingStyles(
+      $("#ctl00_PageBody_SaleTypeSelector_rbDelivered").is(":checked") ? "rbDelivered" : "rbCollectLater"
+    );
+    $(document).on("click", ".modern-shipping-selector button", function() {
+      updateShippingStyles($(this).data("value"));
+    });
+  } else {
+    console.warn("Shipping method selector not found.");
+  }
+
