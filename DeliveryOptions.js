@@ -5,16 +5,28 @@ $(function(){
   if (costText === '$250.00') {
     console.log('[DeliveryCheck] High delivery cost detected:', costText);
 
-    // 2) Grab & detach the original “Back” anchor
+    // 2) Grab & detach the original Back-to-Cart anchor
     var $origBack = $('#ctl00_PageBody_BackToCartButton3').detach();
-    var backHref = $origBack.attr('href');
+    var backJs = ($origBack.attr('href') || '')
+      .replace(/^javascript:/, '');
 
-    // 3) Build a “Change Address” button that reuses its postback
+    // 3) Build a “Change Address” link that sets currentStep=5 and then fires the same postback
     var $changeAddr = $(`
-      <a id="changeAddressBtn" class="epi-button mr-2" href="${backHref}">
+      <a href="#" id="changeAddressBtn" class="epi-button mr-2">
         <span>Change Address</span>
       </a>
-    `);
+    `).on('click', function(e){
+      e.preventDefault();
+      console.log('[DeliveryCheck] Change Address clicked');
+      // set the localStorage step
+      localStorage.setItem('currentStep', '5');
+      // invoke the original postback
+      try {
+        eval(backJs);
+      } catch (err) {
+        console.error('[DeliveryCheck] Postback failed:', err);
+      }
+    });
 
     // 4) Build a new “Edit Cart” button
     var $editCart = $(`
@@ -27,7 +39,7 @@ $(function(){
     var $container = $('.mainContents').empty();
     var $message = $(`
       <div class="delivery-error-message mb-4">
-        An item in your cart is not eligible for delivery to your selected delivery address.
+        An item in your cart is not eligible for delivery to your selected delivery address.<br>
         Please select a new address or remove the item from your cart.
       </div>
     `);
