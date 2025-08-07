@@ -74,6 +74,7 @@ $(function(){
 
 
 
+
 (function(){
   function addBusinessDays(date, days) {
     const d = new Date(date);
@@ -157,19 +158,22 @@ $(function(){
         console.log('[DeliveryOptions] Postback target:', target);
         console.log('[DeliveryOptions] __doPostBack:', typeof __doPostBack, 'WebForm_DoPostBackWithOptions:', typeof WebForm_DoPostBackWithOptions);
 
-        if (typeof WebForm_DoPostBackWithOptions === 'function') {
-          console.log('[DeliveryOptions] Calling WebForm_DoPostBackWithOptions');
-          WebForm_DoPostBackWithOptions(
-            new WebForm_PostBackOptions(target,'',true,'','',false,true)
-          );
-        }
-        else if (typeof __doPostBack === 'function') {
-          console.log('[DeliveryOptions] Calling __doPostBack');
-          __doPostBack(target, '');
-        }
-        else {
-          console.error('[DeliveryOptions] No postback function available');
-        }
+        // delay postback so logs remain visible
+        setTimeout(() => {
+          if (typeof WebForm_DoPostBackWithOptions === 'function') {
+            console.log('[DeliveryOptions] Calling WebForm_DoPostBackWithOptions');
+            WebForm_DoPostBackWithOptions(
+              new WebForm_PostBackOptions(target,'',true,'','',false,true)
+            );
+          }
+          else if (typeof __doPostBack === 'function') {
+            console.log('[DeliveryOptions] Calling __doPostBack');
+            __doPostBack(target, '');
+          }
+          else {
+            console.error('[DeliveryOptions] No postback function available');
+          }
+        }, 10000);
       });
       $list.append($btn);
     });
@@ -241,6 +245,8 @@ $(function(){
     Sys.WebForms.PageRequestManager.getInstance().add_endRequest(initializeDeliveryWidget);
   }
 })();
+
+
 
 
 
