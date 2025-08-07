@@ -776,42 +776,74 @@ $(document).ready(function() {
 
 
 (function(){
+  console.log("[AutoContinue] Script loaded");
+
   // Helper to read a cookie by name
   function readCookie(name) {
-    return document.cookie
+    const match = document.cookie
       .split(';')
       .map(c => c.trim())
-      .find(c => c.startsWith(name + '='))
-      ?.split('=')[1];
+      .find(c => c.startsWith(name + '='));
+    const val = match?.split('=')[1];
+    console.log(`[AutoContinue] Cookie "${name}" =`, val);
+    return val;
   }
 
-  // Try to find & click (or invoke) the Continue button
+  // Attempt to find & invoke the Continue button postback
   function tryAutoContinue() {
-    if (readCookie('pickupSelected') !== 'true') return;
-    var btn = document.getElementById('ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView');
-    if (!btn) return;
-    // Stop polling/handlers once we've found it
-    clearInterval(pollTimer);
+    console.log("[AutoContinue] tryAutoContinue() invoked");
+    if (readCookie('pickupSelected') !== 'true') {
+      console.log("[AutoContinue] pickupSelected !== 'true'; aborting");
+      return;
+    }
+    const btn = document.getElementById('ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView');
+    if (!btn) {
+      console.log("[AutoContinue] Continue button not found yet");
+      return;
+    }
+    console.log("[AutoContinue] Continue button found:", btn);
 
-    // If it has an href with WebForm_DoPostBackWithOptions, invoke it directly
-    var href = btn.getAttribute('href') || '';
+    // Stop further polling
+    clearInterval(pollTimer);
+    console.log("[AutoContinue] Cleared pollTimer");
+
+    const href = btn.getAttribute('href') || '';
+    console.log("[AutoContinue] Continue button href:", href);
+
     if (href.startsWith('javascript:')) {
-      href = href.replace(/^javascript:/, '');
-      try { eval(href); } catch(e){ console.error(e); }
+      const js = href.replace(/^javascript:/, '');
+      console.log("[AutoContinue] Executing postback via eval:", js);
+      try {
+        eval(js);
+        console.log("[AutoContinue] eval() succeeded");
+      } catch (err) {
+        console.error("[AutoContinue] eval() failed:", err);
+      }
     } else {
-      // Fallback to click()
-      btn.click();
+      console.log("[AutoContinue] Invoking btn.click()");
+      try {
+        btn.click();
+        console.log("[AutoContinue] btn.click() invoked");
+      } catch (err) {
+        console.error("[AutoContinue] btn.click() failed:", err);
+      }
     }
   }
 
-  // On initial load, start polling every 200ms
-  var pollTimer = setInterval(tryAutoContinue, 200);
+  // Start polling
+  const pollTimer = setInterval(tryAutoContinue, 200);
+  console.log("[AutoContinue] pollTimer started");
 
-  // Also hook into ASP.NET AJAX partial‐postback endRequest so it works if Continue
-  // appears after an UpdatePanel refresh
-  if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
-    Sys.WebForms.PageRequestManager.getInstance().add_endRequest(tryAutoContinue);
+  // Hook into ASP.NET AJAX endRequest if available
+  if (window.Sys?.WebForms?.PageRequestManager) {
+    console.log("[AutoContinue] Registering endRequest handler");
+    Sys.WebForms.PageRequestManager.getInstance().add_endRequest(function() {
+      console.log("[AutoContinue] ASP.NET AJAX endRequest fired");
+      tryAutoContinue();
+    });
   }
 })();
+
+
 
 
