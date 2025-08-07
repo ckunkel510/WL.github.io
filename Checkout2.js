@@ -377,7 +377,7 @@ $('#ctl00_PageBody_BackToCartButton2').val('Back to Cart');
   pickupDiv.innerHTML = `
     <label for="pickupDate">Requested Pickup Date:</label>
     <input type="date" id="pickupDate" class="form-control">
-    <label for="pickupTime">Pickup Time:</label>
+    <label for="pickupTime">Requested Pickup Time:</label>
     <select id="pickupTime" class="form-control" disabled></select>
     <label for="pickupPerson">Pickup Person:</label>
     <input type="text" id="pickupPerson" class="form-control">`;
