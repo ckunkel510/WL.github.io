@@ -84,125 +84,176 @@ $(function(){
     }
     console.log('[DeliveryOptions] Initializing widget');
 
-    // clean up
+    // Clean up any existing widgets
     $('.shipping-method-widget, .order-totals-widget').remove();
     $summary.find('.summaryTotals').hide();
-    $summary.find('.summaryTotals tr').filter((_,tr)=>(
-      $(tr).find('td:first').text().trim()==='Total discount'
-    )).hide();
+    $summary.find('.summaryTotals tr').filter((_, tr) =>
+      $(tr).find('td:first').text().trim() === 'Total discount'
+    ).hide();
     $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas').closest('tr').hide();
     $select.closest('tr').hide();
 
-    // grab summary
+    // Read current summary values
     const subtotalText = $summary.find('tr:has(td:contains("Subtotal")) .numeric').text().trim();
     const deliveryText = $summary.find('#ctl00_PageBody_CartSummary2_DeliveryCostsRow .numeric').text().trim();
-    const taxText = $summary.find('#ctl00_PageBody_CartSummary2_TaxTotals .numeric').text().trim();
-    const totalText = $summary.find('#ctl00_PageBody_CartSummary2_GrandTotalRow .numeric').text().trim();
+    const taxText      = $summary.find('#ctl00_PageBody_CartSummary2_TaxTotals .numeric').text().trim();
+    const totalText    = $summary.find('#ctl00_PageBody_CartSummary2_GrandTotalRow .numeric').text().trim();
     console.log('[DeliveryOptions] Summary:', {subtotalText, deliveryText, taxText, totalText});
-    const baseCost = parseFloat(deliveryText.replace(/[^0-9.-]/g,''));
+    const baseCost = parseFloat(deliveryText.replace(/[^0-9.-]/g, ''));
 
-    // options data
-    const transitMap = {'Standard delivery':5,'3 Day Select':3,'2nd Day Air':2,'Next Day Air':1};
-    const descMap = {'Standard delivery':'Traditional Ground','3 Day Select':'3 Day Service','2nd Day Air':'2nd Day Air','Next Day Air':'Next Day Air'};
-    const options=[];
+    // Build options array
+    const transitMap = { 'Standard delivery':5, '3 Day Select':3, '2nd Day Air':2, 'Next Day Air':1 };
+    const descMap    = {
+      'Standard delivery':'Traditional Ground',
+      '3 Day Select':'3 Day Service',
+      '2nd Day Air':'2nd Day Air',
+      'Next Day Air':'Next Day Air'
+    };
+    const options = [];
     $select.find('option').each(function(){
-      const $o=$(this);
-      const txt=$o.text().trim();
-      const label=txt.replace(/\s*\(.*\)/,'').trim();
-      const extra=(txt.match(/\(([^)]+)\)/)||[])[1]||'';
-      let cost=baseCost;
-      if(extra.startsWith('+')) cost=baseCost+parseFloat(extra.replace(/[^0-9.-]/g,''));
-      else{ const p=parseFloat(extra.replace(/[^0-9.-]/g,'')); if(!isNaN(p)) cost=p;}      
-      options.push({value:$o.val(),label,costLabel:'$'+cost.toFixed(2),transitDays:transitMap[label]||0,description:descMap[label]||label});
+      const $o = $(this);
+      const txt = $o.text().trim();
+      const label = txt.replace(/\s*\(.*\)/,'').trim();
+      const extra = (txt.match(/\(([^)]+)\)/)||[])[1]||'';
+      let cost = baseCost;
+      if (extra.startsWith('+')) cost = baseCost + parseFloat(extra.replace(/[^0-9.-]/g,''));
+      else {
+        const p = parseFloat(extra.replace(/[^0-9.-]/g,''));
+        if (!isNaN(p)) cost = p;
+      }
+      options.push({
+        value: $o.val(),
+        label,
+        costLabel: '$' + cost.toFixed(2),
+        transitDays: transitMap[label]||0,
+        description: descMap[label]||label
+      });
     });
     console.log('[DeliveryOptions] Options:', options);
 
-    // shipping card
-    const $shipCard=$(
-      `<div class="card mb-3 shipping-method-widget"><div class="card-body p-3"><h5 class="card-title mb-3">Shipping Method</h5></div></div>`
+    // Create Shipping Method card
+    const $shipCard = $(
+      `<div class="card mb-3 shipping-method-widget">
+         <div class="card-body p-3">
+           <h5 class="card-title mb-3">Shipping Method</h5>
+         </div>
+       </div>`
     );
-    const $shipBody=$shipCard.find('.card-body');
-    const $list=$('<div class="d-flex flex-column mb-3"></div>');
+    const $shipBody = $shipCard.find('.card-body');
+    const $list = $('<div class="d-flex flex-column mb-3"></div>');
 
+    // Build buttons
     options.forEach(opt=>{
-      const isSel=($select.val()===opt.value);
-      const $btn=$(
+      const isSel = ($select.val()===opt.value);
+      const $btn = $(
         `<button type="button" class="btn mb-2 text-start ${isSel?'btn-primary':'btn-outline-primary'}">
            <div class="fw-semibold">${opt.label}</div>
            <div class="fw-bold text-white">${opt.costLabel}</div>
          </button>`
       ).data('opt',opt);
 
-      $btn.on('click',function(){
-        console.log('[DeliveryOptions] Click:',opt);
-        localStorage.setItem('selectedShippingValue',opt.value);
+      $btn.on('click', function(){
+        console.log('[DeliveryOptions] Clicked:', opt);
+        localStorage.setItem('selectedShippingValue', opt.value);
         $select.val(opt.value);
-        console.log('[DeliveryOptions] Firing postback...');
-        if(typeof __doPostBack==='function'){
-          __doPostBack('ctl00$PageBody$CartSummary2$LocalDeliveryChargeControl$DeliveryOptionsDropDownList','');
-        } else if(window.WebForm_DoPostBackWithOptions){
-          WebForm_DoPostBackWithOptions(new WebForm_PostBackOptions(
-            'ctl00$PageBody$CartSummary2$LocalDeliveryChargeControl$DeliveryOptionsDropDownList','',true,'','',false,true
-          ));
-        } else console.error('No postback fn');
+        console.log('[DeliveryOptions] Triggering postback');
+        if (typeof __doPostBack === 'function') {
+          __doPostBack(
+            'ctl00$PageBody$CartSummary2$LocalDeliveryChargeControl$DeliveryOptionsDropDownList',''
+          );
+        } else if (window.WebForm_DoPostBackWithOptions) {
+          WebForm_DoPostBackWithOptions(
+            new WebForm_PostBackOptions(
+              'ctl00$PageBody$CartSummary2$LocalDeliveryChargeControl$DeliveryOptionsDropDownList',
+              '', true,'','',false,true
+            )
+          );
+        } else {
+          console.error('[DeliveryOptions] No postback function');
+        }
       });
       $list.append($btn);
     });
     $shipBody.append($list);
 
-    // change speed
-    const $changeBtn=$(
-      `<button type="button" class="btn btn-link mb-3">Change Shipping Speed</button>`
-    ).on('click',function(){
+    // Change Shipping Speed button
+    const $changeBtn = $(
+      `<button type="button" class="btn btn-link mb-3" style="display:none;">Change Shipping Speed</button>`
+    ).on('click', function(){
       console.log('[DeliveryOptions] Change clicked');
       localStorage.removeItem('selectedShippingValue');
       renderSelection(true);
-    }).hide();
+    });
     $shipBody.append($changeBtn);
 
-    // totals
-    const $totalsCard=$(
-      `<div class="card order-totals-widget mb-3"><div class="card-body p-3"><h5 class="card-title mb-3">Order Summary</h5></div></div>`
+    // Create Totals card
+    const $totalsCard = $(
+      `<div class="card order-totals-widget mb-3">
+         <div class="card-body p-3">
+           <h5 class="card-title mb-3">Order Summary</h5>
+         </div>
+       </div>`
     );
-    const $totalsBody=$totalsCard.find('.card-body');
-    function row(l,v,s){const t=s?'strong':'span';return$(`<div class="d-flex justify-content-between mb-2"><${t}>${l}</${t}><${t}>${v}</${t}></div>`);}
-    $totalsBody.append(row('Subtotal',subtotalText)).append(row('Delivery',deliveryText)).append(row('Tax',taxText)).append('<hr>').append(row('Total (inc. Tax)',totalText,true));
+    const $totalsBody = $totalsCard.find('.card-body');
+    function row(label, value, strong) {
+      const tag = strong ? 'strong' : 'span';
+      return $(
+        `<div class="d-flex justify-content-between mb-2">
+           <${tag}>${label}</${tag}><${tag}>${value}</${tag}>
+         </div>`
+      );
+    }
+    $totalsBody
+      .append(row('Subtotal', subtotalText))
+      .append(row('Delivery', deliveryText))
+      .append(row('Tax', taxText))
+      .append('<hr>')
+      .append(row('Total (inc. Tax)', totalText, true));
 
+    // Inject cards
     $summary.empty().append($shipCard).append($totalsCard);
 
-    function renderSelection(reset){
-      const sel= localStorage.getItem('selectedShippingValue');
-      console.log('[DeliveryOptions] render sel=',sel,' reset=',reset);
+    // Render selection & banner
+    function renderSelection(reset) {
+      const sel = localStorage.getItem('selectedShippingValue');
+      console.log('[DeliveryOptions] render sel=', sel, ' reset=', reset);
       $shipBody.find('.shipping-banner').remove();
       $list.children('button').each(function(){
-        const o=$(this).data('opt');
-        let isSel=false;
-        if(sel&&!reset) isSel=o.value===sel;
-        else if(!sel&&!reset) isSel=$select.val()===o.value;
-        console.log('[DeliveryOptions] opt',o.label,'isSel=',isSel);
-        if(reset||!sel){
-          $(this).show().removeClass('btn-primary').addClass('btn-outline-primary');
-        } else if(isSel){
+        const o = $(this).data('opt');
+        let isSel = false;
+        if (!reset && sel) isSel = (o.value === sel);
+        else if (!reset && !sel) isSel = ($select.val() === o.value);
+        console.log('[DeliveryOptions] Option', o.label, 'isSel=', isSel);
+        if (isSel) {
           $(this).show().removeClass('btn-outline-primary').addClass('btn-primary');
-          const arr=addBusinessDays(new Date(),o.transitDays+1);
-          const ds=arr.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
-          $shipBody.prepend(`<div class="alert alert-info shipping-banner mb-3"><strong>${o.description}</strong><br>Expected arrival: ${ds}</div>`);
+          const arrival = addBusinessDays(new Date(), o.transitDays + 1);
+          const ds = arrival.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' });
+          $shipBody.prepend(
+            `<div class="alert alert-info shipping-banner mb-3">
+               <strong>${o.description}</strong><br>
+               Expected arrival: ${ds}
+             </div>`
+          );
         } else {
-          $(this).hide();
+          // show unselected only on reset
+          if (reset) $(this).show().removeClass('btn-primary').addClass('btn-outline-primary');
+          else $(this).hide();
         }
       });
-      $changeBtn.toggle(!!sel&&!reset);
+      $changeBtn.toggle(!!sel && !reset);
       console.log('[DeliveryOptions] render complete');
     }
 
     renderSelection(false);
   }
 
+  // Bind initialization and partial-postbacks
   $(document).ready(initializeDeliveryWidget);
-  if(window.Sys&&Sys.WebForms&&Sys.WebForms.PageRequestManager){
+  if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
     Sys.WebForms.PageRequestManager.getInstance().add_endRequest(initializeDeliveryWidget);
   }
 })();
+
 
 
 
