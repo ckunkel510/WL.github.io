@@ -714,3 +714,7 @@ max-width:25%;
     padding-left: 10px;
     padding-right: 10px;
   }
+
+  .text-end.action-block{
+display: contents;
+  }
