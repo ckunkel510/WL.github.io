@@ -60,60 +60,62 @@ $(function(){
 
 
 
+
 $(function(){
   var $areaSelect = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas');
   var $optSelect  = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList');
+  var $summary    = $('#SummaryEntry2');
 
-  // Only run if both selects are present and visible
-  if ($areaSelect.length && $optSelect.length &&
-      $areaSelect.is(':visible') && $optSelect.is(':visible')) {
+  // Only run on delivered flow when those selects are visible
+  if ($areaSelect.is(':visible') && $optSelect.is(':visible')) {
+    console.log('[DeliveryOptions] Modernizing summary & delivery selector');
 
-    console.log('[DeliveryOptions] Replacing dropdown with inline selector');
+    // 1) Hide the Total discount row
+    $summary.find('.summaryTotals tr').filter(function(){
+      return $(this).find('td:first').text().trim() === 'Total discount';
+    }).hide();
 
-    // Parse base delivery cost
-    var baseCostText = $('#ctl00_PageBody_CartSummary2_DeliveryCostsRow td.numeric')
-                         .text().trim();
-    var baseCost = parseFloat(baseCostText.replace(/[^0-9.-]/g, ''));
+    // 2) Wrap the summary in a Bootstrap card (only once)
+    if (!$summary.find('.summary-card').length) {
+      $summary.wrapInner('<div class="card summary-card shadow-sm mb-3"></div>');
+      $summary.find('.summary-card').addClass('p-3');
+      // Make the table borderless
+      $summary.find('.summaryTotals').addClass('table table-borderless mb-0');
+    }
 
-    // Build inline buttons container
-    var $inline = $('<div class="delivery-options-inline mb-3"></div>');
+    // 3) Build inline delivery-options pills
+    var baseCost = parseFloat(
+      $('#ctl00_PageBody_CartSummary2_DeliveryCostsRow td.numeric')
+        .text().replace(/[^0-9.-]/g,'')
+    );
+    var $inline = $('<div class="delivery-options-inline d-flex flex-wrap mb-3"></div>');
 
     $optSelect.find('option').each(function(){
-      var $opt  = $(this);
-      var val   = $opt.val();
-      var txt   = $opt.text().trim();
-
-      // Extract label and cost info
-      var label = txt.replace(/\s*\(.*\)/, '').trim();
+      var $opt = $(this);
+      var txt  = $opt.text().trim();
+      var label = txt.replace(/\s*\(.*\)/,'').trim();
       var m     = txt.match(/\(([^)]+)\)/);
-      var costInfo = m ? m[1] : '';
-      var totalCost = baseCost;
-      if (costInfo.startsWith('+')) {
-        var diff = parseFloat(costInfo.replace(/[^0-9.-]/g, ''));
-        totalCost = baseCost + diff;
-      } else {
-        totalCost = parseFloat(costInfo.replace(/[^0-9.-]/g, ''));
-      }
-      var costLabel = '$' + totalCost.toFixed(2);
+      var extra = m ? m[1] : '';
+      var total = extra.startsWith('+')
+        ? baseCost + parseFloat(extra.replace(/[^0-9.-]/g,''))
+        : parseFloat(extra.replace(/[^0-9.-]/g,'')) || baseCost;
+      var costLabel = '$' + total.toFixed(2);
 
-      // Create button
-      var $btn = $('<button type="button" class="delivery-option-btn btn btn-outline-secondary me-2 mb-2"></button>');
-      $btn.text(label + ' — ' + costLabel);
-      $btn.data('value', val);
+      var $btn = $(`
+        <button type="button" class="btn btn-outline-primary m-1">
+          ${label}<br><small>${costLabel}</small>
+        </button>
+      `);
 
-      // Highlight selected
       if ($opt.is(':selected')) {
-        $btn.addClass('active btn-primary').removeClass('btn-outline-secondary');
+        $btn.removeClass('btn-outline-primary').addClass('btn-primary');
       }
 
-      // Click handler
       $btn.on('click', function(){
-        // Update the original select value
-        $optSelect.val($(this).data('value'));
-        // Visually update buttons
-        $inline.find('button').removeClass('btn-primary active').addClass('btn-outline-secondary');
-        $(this).addClass('btn-primary active').removeClass('btn-outline-secondary');
-        // Fire postback just like the onchange
+        $optSelect.val($opt.val());
+        $inline.find('button').removeClass('btn-primary').addClass('btn-outline-primary');
+        $btn.removeClass('btn-outline-primary').addClass('btn-primary');
+        // trigger the postback exactly like the select would
         setTimeout(function(){
           __doPostBack(
             'ctl00$PageBody$CartSummary2$LocalDeliveryChargeControl$DeliveryOptionsDropDownList',
@@ -125,12 +127,14 @@ $(function(){
       $inline.append($btn);
     });
 
-    // Hide the original area + option rows
+    // 4) Hide the original “Area” and “Options” rows
     $areaSelect.closest('tr').hide();
     $optSelect.closest('tr').hide();
 
-    // Insert our inline selector at the top of the LocalDeliveryPanel
+    // 5) Inject our inline pills at the top of the panel
     $('#ctl00_PageBody_CartSummary2_LocalDeliveryPanel').prepend($inline);
   }
 });
+
+
 
