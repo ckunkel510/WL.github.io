@@ -75,6 +75,7 @@ $(function(){
 
 
 
+
 (function(){
   function addBusinessDays(date, days) {
     const d = new Date(date);
@@ -160,8 +161,9 @@ $(function(){
         console.log('[DeliveryOptions] __doPostBack:', typeof __doPostBack);
         console.log('[DeliveryOptions] WebForm_PostBackOptions:', typeof WebForm_PostBackOptions);
 
-        // delay postback so logs remain visible
+        // delay postback so logs remain visible, with a pause for inspection
         setTimeout(() => {
+          debugger; // pause here in DevTools
           try {
             if (typeof WebForm_DoPostBackWithOptions === 'function' && typeof WebForm_PostBackOptions === 'function') {
               console.log('[DeliveryOptions] Using WebForm_DoPostBackWithOptions with options');
@@ -179,7 +181,7 @@ $(function(){
           } catch (err) {
             console.error('[DeliveryOptions] Postback execution error', err);
           }
-        }, 10000);
+        }, 5000);
       });
       $list.append($btn);
     });
@@ -225,7 +227,7 @@ $(function(){
         let isSel = false;
         if (!reset && sel) isSel = (o.value === sel);
         else if (!reset && !sel) isSel = ($select.val() === o.value);
-        console.log(`[DeliveryOptions] ${o.label} selected?`, isSel);
+        console.log(`[,DeliveryOptions] ${o.label} selected?`, isSel);
         if (isSel) {
           $(this).show().removeClass('btn-outline-primary').addClass('btn-primary');
           const arr = addBusinessDays(new Date(), o.transitDays+1);
@@ -251,6 +253,8 @@ $(function(){
     Sys.WebForms.PageRequestManager.getInstance().add_endRequest(initializeDeliveryWidget);
   }
 })();
+
+
 
 
 
