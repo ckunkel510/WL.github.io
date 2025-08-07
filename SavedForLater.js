@@ -1008,9 +1008,22 @@ document.addEventListener("DOMContentLoaded", () => {
     return val;
   }
 
-  // Try to find & fire the Continue button postback
+  // will hold our polling timer
+  let pollTimer;
+
+  // ASP.NET AJAX PageRequestManager (if present)
+  const prm = window.Sys?.WebForms?.PageRequestManager?.getInstance();
+
+  // endRequest handler reference so we can remove it later
+  const endRequestHandler = function() {
+    console.log("[AutoContinue] endRequest fired");
+    tryAutoContinue();
+  };
+
+  // Attempt to find & fire the Continue button postback
   function tryAutoContinue() {
     console.log("[AutoContinue] tryAutoContinue()");
+    // only run when pickupSelected is true
     if (readCookie('pickupSelected') !== 'true') {
       console.log("[AutoContinue] pickupSelected ≠ 'true', skipping");
       return;
@@ -1023,10 +1036,15 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     console.log("[AutoContinue] Continue button found", btn);
 
+    // SUCCESS: stop further polling and AJAX hooks
     clearInterval(pollTimer);
     console.log("[AutoContinue] Polling stopped");
+    if (prm && endRequestHandler) {
+      prm.remove_endRequest(endRequestHandler);
+      console.log("[AutoContinue] Unregistered endRequest handler");
+    }
 
-    // pull out the href/javascript call
+    // execute the postback JavaScript if present
     const href = btn.getAttribute('href') || '';
     console.log("[AutoContinue] href:", href);
 
@@ -1050,20 +1068,63 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Wait for DOM & any partial postbacks
+  // Start when DOM is ready
   document.addEventListener('DOMContentLoaded', () => {
     console.log("[AutoContinue] DOMContentLoaded");
-    // start polling every 200ms
+    // begin polling every 200ms
     pollTimer = setInterval(tryAutoContinue, 200);
     console.log("[AutoContinue] pollTimer started");
 
-    // ASP.NET AJAX support
-    if (window.Sys?.WebForms?.PageRequestManager) {
-      console.log("[AutoContinue] hooking endRequest");
-      Sys.WebForms.PageRequestManager.getInstance().add_endRequest(() => {
-        console.log("[AutoContinue] endRequest fired");
-        tryAutoContinue();
-      });
+    // hook AJAX partial-postback if available
+    if (prm) {
+      prm.add_endRequest(endRequestHandler);
+      console.log("[AutoContinue] endRequest handler registered");
     }
   });
 })();
+
+
+(function(){
+  // Helper to read a cookie by name
+  function readCookie(name) {
+    const match = document.cookie
+      .split(';')
+      .map(c => c.trim())
+      .find(c => c.startsWith(name + '='));
+    return match?.split('=')[1] || '';
+  }
+
+  // Wire up the “Back” redirect
+  function initAutoBack() {
+    const backBtn = document.getElementById('ctl00_PageBody_btnBack_CardOnFileView');
+    if (!backBtn) {
+      console.log('[AutoBack] Back button not found');
+      return;
+    }
+
+    backBtn.addEventListener('click', function(e) {
+      if (readCookie('pickupSelected') === 'true') {
+        e.preventDefault(); // cancel the normal back
+        const cartBack = document.getElementById('ctl00_PageBody_BackToCartButton3');
+        if (cartBack) {
+          console.log('[AutoBack] pickupSelected=true → clicking BackToCartButton3');
+          cartBack.click();
+        } else {
+          console.warn('[AutoBack] BackToCartButton3 not found');
+        }
+      }
+    });
+    console.log('[AutoBack] Listener attached to btnBack_CardOnFileView');
+  }
+
+  // Run on DOM ready and after any ASP.NET partial postback
+  document.addEventListener('DOMContentLoaded', () => {
+    initAutoBack();
+    if (window.Sys?.WebForms?.PageRequestManager) {
+      window.Sys.WebForms.PageRequestManager
+        .getInstance()
+        .add_endRequest(initAutoBack);
+    }
+  });
+})();
+
