@@ -727,6 +727,7 @@ $(document).ready(function() {
         .addClass("btn-primary").removeClass("btn-secondary");
       $("#btnDelivered")
         .addClass("btn-secondary").removeClass("btn-primary");
+        document.cookie = "pickupSelected=true; path=/";
     }
   }
 
@@ -772,20 +773,21 @@ $(document).ready(function() {
 
 
 
-$(function(){
-  // When the Pickup button is clicked, set a cookie
-  $('#btnPickup').on('click', function(){
-    document.cookie = 'pickupSelected=true; path=/';
-  });
+$(document).ready(function() {
+  // helper to read cookies
+  function readCookie(name) {
+    return document.cookie.split(';').map(c=>c.trim()).find(c=>c.startsWith(name+'='))?.split('=')[1];
+  }
 
-  // If the pickupSelected cookie is present, watch for the Continue button
-  if (document.cookie.split(';').some((item) => item.trim().startsWith('pickupSelected=true'))) {
-    var checkContinue = setInterval(function(){
-      var $continueBtn = $('#ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView');
-      if ($continueBtn.length) {
-        clearInterval(checkContinue);
-        $continueBtn.click();
+  if (readCookie('pickupSelected') === 'true') {
+    // poll for the Continue button
+    const tid = setInterval(() => {
+      const $continue = $('#ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView');
+      if ($continue.length) {
+        clearInterval(tid);
+        $continue.click();
       }
-    }, 300);
+    }, 200);
   }
 });
+
