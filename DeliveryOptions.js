@@ -123,8 +123,8 @@ $(function(){
       let cost = baseCost;
       if (extra.startsWith('+')) cost = baseCost + parseFloat(extra.replace(/[^0-9.-]/g,''));
       else {
-        const p=parseFloat(extra.replace(/[^0-9.-]/g,''));
-        if (!isNaN(p)&&extra.indexOf('+')<0) cost=p;
+        const p = parseFloat(extra.replace(/[^0-9.-]/g,''));
+        if (!isNaN(p) && extra.indexOf('+') < 0) cost = p;
       }
       options.push({ value:$o.val(), label, costLabel:'$'+cost.toFixed(2), transitDays: transitMap[label]||0, description: descMap[label]||label });
     });
@@ -156,22 +156,28 @@ $(function(){
         $select.val(opt.value);
         const target = $select.prop('name');
         console.log('[DeliveryOptions] Postback target:', target);
-        console.log('[DeliveryOptions] __doPostBack:', typeof __doPostBack, 'WebForm_DoPostBackWithOptions:', typeof WebForm_DoPostBackWithOptions);
+        console.log('[DeliveryOptions] WebForm_DoPostBackWithOptions:', typeof WebForm_DoPostBackWithOptions);
+        console.log('[DeliveryOptions] __doPostBack:', typeof __doPostBack);
+        console.log('[DeliveryOptions] WebForm_PostBackOptions:', typeof WebForm_PostBackOptions);
 
         // delay postback so logs remain visible
         setTimeout(() => {
-          if (typeof WebForm_DoPostBackWithOptions === 'function') {
-            console.log('[DeliveryOptions] Calling WebForm_DoPostBackWithOptions');
-            WebForm_DoPostBackWithOptions(
-              new WebForm_PostBackOptions(target,'',true,'','',false,true)
-            );
-          }
-          else if (typeof __doPostBack === 'function') {
-            console.log('[DeliveryOptions] Calling __doPostBack');
-            __doPostBack(target, '');
-          }
-          else {
-            console.error('[DeliveryOptions] No postback function available');
+          try {
+            if (typeof WebForm_DoPostBackWithOptions === 'function' && typeof WebForm_PostBackOptions === 'function') {
+              console.log('[DeliveryOptions] Using WebForm_DoPostBackWithOptions with options');
+              const opts = new WebForm_PostBackOptions(target, '', true, '', '', false, true);
+              console.log('[DeliveryOptions] Options object:', opts);
+              WebForm_DoPostBackWithOptions(opts);
+            }
+            else if (typeof __doPostBack === 'function') {
+              console.log('[DeliveryOptions] Falling back to __doPostBack');
+              __doPostBack(target, '');
+            }
+            else {
+              console.error('[DeliveryOptions] No postback function available');
+            }
+          } catch (err) {
+            console.error('[DeliveryOptions] Postback execution error', err);
           }
         }, 10000);
       });
@@ -212,7 +218,7 @@ $(function(){
 
     function renderSelection(reset) {
       const sel = localStorage.getItem('selectedShippingValue');
-      console.log('[DeliveryOptions] renderSelection:', {sel,reset});
+      console.log('[DeliveryOptions] renderSelection:', {sel, reset});
       $shipBody.find('.shipping-banner').remove();
       $list.children('button').each(function(){
         const o = $(this).data('opt');
@@ -245,6 +251,8 @@ $(function(){
     Sys.WebForms.PageRequestManager.getInstance().add_endRequest(initializeDeliveryWidget);
   }
 })();
+
+
 
 
 
