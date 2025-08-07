@@ -677,3 +677,8 @@ margin-bottom: 0px !important;
     object-fit: contain !important;
   }
 
+  .shopping-cart-details{
+max-width:70%;
+float: left;
+  }
+  
