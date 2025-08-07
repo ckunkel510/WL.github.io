@@ -163,3 +163,26 @@ $(function(){
     #ctl00_PageBody_EmptyCartButtonTop').hide();
 });
 
+
+
+
+$(function(){
+  // 1) Detach the existing title span
+  var $oldTitle = $('#ctl00_PageBody_ShoppingCartTitle_HeaderText').detach();
+
+  // 2) Extract the item count
+  var match = $oldTitle.text().match(/\d+/);
+  var count = match ? parseInt(match[0], 10) : 0;
+
+  // 3) Build new header block
+  var $newHeader = $(`
+    <div class="cart-header mb-3">
+      <h2>Shopping Cart</h2>
+      <p>${count} item${count === 1 ? '' : 's'}</p>
+    </div>
+  `);
+
+  // 4) Insert it immediately before .shopping-cart-details
+  $('.shopping-cart-details').before($newHeader);
+});
+
