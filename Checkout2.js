@@ -365,11 +365,13 @@ $('#ctl00_PageBody_BackToCartButton2').val('Back to Cart');
     th.appendChild(opt2);
   }
 
-  // 2) Special instructions field
+  // 2) Special instructions field (hidden)
   const specialIns = document.getElementById('ctl00_PageBody_SpecialInstructionsTextBox');
-  const siWrap = specialIns.closest('.epi-form-group-checkout')
-              || specialIns.closest('.epi-form-col-single-checkout')
-              || specialIns.parentElement;
+  const siWrap     = specialIns.closest('.epi-form-group-checkout')
+                  || specialIns.closest('.epi-form-col-single-checkout')
+                  || specialIns.parentElement;
+  // hide the original text box completely
+  specialIns.style.display = 'none';
 
   // 3) Pickup inputs
   const pickupDiv = document.createElement('div');
@@ -399,7 +401,16 @@ $('#ctl00_PageBody_BackToCartButton2').val('Back to Cart');
   siWrap.insertAdjacentElement('afterend', pickupDiv);
   pickupDiv.insertAdjacentElement('afterend', deliveryDiv);
 
-  // 6) Date limits
+  // 6) Additional instructions textarea
+  const extraDiv = document.createElement('div');
+  extraDiv.className = 'form-group';
+  extraDiv.innerHTML = `
+    <label for="specialInsExtra">Additional instructions:</label>
+    <textarea id="specialInsExtra" class="form-control" placeholder="Optional additional notes"></textarea>`;
+  deliveryDiv.insertAdjacentElement('afterend', extraDiv);
+  const specialExtra = document.getElementById('specialInsExtra');
+
+  // 7) Date limits
   const today      = new Date();
   const isoToday   = formatLocal(today);
 
@@ -417,7 +428,7 @@ $('#ctl00_PageBody_BackToCartButton2').val('Back to Cart');
   pickupInput.setAttribute('max', isoMaxPick);
   deliveryInput.setAttribute('min', isoDel);
 
-  // 7) Time-block builder
+  // 8) Time-block builder
   function formatTime(h,m){
     const ampm = h >= 12 ? 'PM' : 'AM';
     const hh = (h % 12) || 12;
@@ -443,7 +454,7 @@ $('#ctl00_PageBody_BackToCartButton2').val('Back to Cart');
     pickupTimeSel.disabled = false;
   }
 
-  // 8) Pickup change
+  // 9) Pickup change
   pickupInput.addEventListener('change', function(){
     if (!this.value) return updateSpecial();
     let d = parseLocalDate(this.value);
@@ -464,7 +475,7 @@ $('#ctl00_PageBody_BackToCartButton2').val('Back to Cart');
     updateSpecial();
   });
 
-  // 9) Delivery change (same Sunday + 2-day logic)
+  // 10) Delivery change
   deliveryInput.addEventListener('change', function(){
     if (!this.value) return updateSpecial();
     let d = parseLocalDate(this.value);
@@ -482,31 +493,33 @@ $('#ctl00_PageBody_BackToCartButton2').val('Back to Cart');
     updateSpecial();
   });
 
-  // 10) Show/hide & special-instructions update
+  // 11) Show/hide & special-instructions update
   const rbPick   = document.getElementById('ctl00_PageBody_SaleTypeSelector_rbCollectLater');
   const rbDel    = document.getElementById('ctl00_PageBody_SaleTypeSelector_rbDelivered');
   const zipInput = document.getElementById('ctl00_PageBody_DeliveryAddress_Postcode');
   function inZone(z){ return ['75','76','77','78','79'].includes((z||'').substring(0,2)); }
 
   function updateSpecial(){
-    specialIns.value = '';
+    let baseText = '';
     if (rbPick.checked) {
       const d = pickupInput.value;
       const t = pickupTimeSel.value;
       const p = pickupDiv.querySelector('#pickupPerson').value;
       specialIns.readOnly = false;
-      specialIns.value = 'Pickup on ' + d + (t ? ' at ' + t : '') + (p ? ' for '+p : '');
+      baseText = 'Pickup on ' + d + (t ? ' at ' + t : '') + (p ? ' for ' + p : '');
     }
     else if (rbDel.checked) {
       specialIns.readOnly = true;
       if (inZone(zipInput.value)) {
         const d2 = deliveryInput.value;
         const t2 = deliveryDiv.querySelector('input[name="deliveryTime"]:checked');
-        specialIns.value = 'Delivery on '+d2 + (t2 ? ' ('+t2.value+')' : '');
+        baseText = 'Delivery on ' + d2 + (t2 ? ' (' + t2.value + ')' : '');
       } else {
-        specialIns.value = 'Ship via 3rd party delivery on next screen.';
+        baseText = 'Ship via 3rd party delivery on next screen.';
       }
     }
+    // append any extra notes
+    specialIns.value = baseText + (specialExtra.value ? ' – ' + specialExtra.value : '');
   }
 
   function onShip(){
@@ -529,9 +542,11 @@ $('#ctl00_PageBody_BackToCartButton2').val('Back to Cart');
            .addEventListener('input', updateSpecial);
   deliveryDiv.querySelectorAll('input[name="deliveryTime"]')
              .forEach(r=>r.addEventListener('change', updateSpecial));
+  specialExtra.addEventListener('input', updateSpecial);
 
   onShip();
 })();
+
 
 
 
