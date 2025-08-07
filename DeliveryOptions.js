@@ -75,7 +75,6 @@ $(function(){
 
 
 
-
 (function(){
   function addBusinessDays(date, days) {
     const d = new Date(date);
@@ -96,23 +95,24 @@ $(function(){
     }
     console.log('[DeliveryOptions] Initializing widget');
 
-    // Clean up previous widgets
+    // remove old widgets
     $('.shipping-method-widget, .order-totals-widget').remove();
 
-    // Capture summary values
+    // extract summary values
     const subtotalText = $summary.find('tr:has(td:contains("Subtotal")) .numeric').text().trim();
     const deliveryText = $summary.find('#ctl00_PageBody_CartSummary2_DeliveryCostsRow .numeric').text().trim();
     const taxText      = $summary.find('#ctl00_PageBody_CartSummary2_TaxTotals .numeric').text().trim();
     const totalText    = $summary.find('#ctl00_PageBody_CartSummary2_GrandTotalRow .numeric').text().trim();
     console.log('[DeliveryOptions] Summary values:', {subtotalText, deliveryText, taxText, totalText});
+
     const baseCost = parseFloat(deliveryText.replace(/[^0-9.-]/g, ''));
 
-    // Remove original table rows
+    // remove original table
     $summary.find('.summaryTotals').remove();
     $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas').closest('tr').remove();
     $select.closest('tr').remove();
 
-    // Parse options
+    // parse options
     const transitMap = { 'Standard delivery':5,'3 Day Select':3,'2nd Day Air':2,'Next Day Air':1 };
     const descMap    = { 'Standard delivery':'Traditional Ground','3 Day Select':'3 Day Service','2nd Day Air':'2nd Day Air','Next Day Air':'Next Day Air' };
     const options = [];
@@ -125,13 +125,13 @@ $(function(){
       if (extra.startsWith('+')) cost = baseCost + parseFloat(extra.replace(/[^0-9.-]/g,''));
       else {
         const p = parseFloat(extra.replace(/[^0-9.-]/g,''));
-        if (!isNaN(p) && extra.indexOf('+') < 0) cost = p;
+        if (!isNaN(p) && extra.indexOf('+')<0) cost = p;
       }
       options.push({ value:$o.val(), label, costLabel:'$'+cost.toFixed(2), transitDays: transitMap[label]||0, description: descMap[label]||label });
     });
     console.log('[DeliveryOptions] Parsed options:', options);
 
-    // Shipping Method Card
+    // build UI
     const $shipCard = $(
       `<div class="card mb-3 shipping-method-widget">
          <div class="card-body p-3">
@@ -156,48 +156,30 @@ $(function(){
         localStorage.setItem('selectedShippingValue', opt.value);
         $select.val(opt.value);
         const target = $select.prop('name');
-        console.log('[DeliveryOptions] Postback target:', target);
-        console.log('[DeliveryOptions] WebForm_DoPostBackWithOptions:', typeof WebForm_DoPostBackWithOptions);
-        console.log('[DeliveryOptions] __doPostBack:', typeof __doPostBack);
-        console.log('[DeliveryOptions] WebForm_PostBackOptions:', typeof WebForm_PostBackOptions);
-
-        // delay postback so logs remain visible, with a pause for inspection
+        // delay to allow inspection
         setTimeout(() => {
-          debugger; // pause here in DevTools
-          try {
-            if (typeof WebForm_DoPostBackWithOptions === 'function' && typeof WebForm_PostBackOptions === 'function') {
-              console.log('[DeliveryOptions] Using WebForm_DoPostBackWithOptions with options');
-              const opts = new WebForm_PostBackOptions(target, '', true, '', '', false, true);
-              console.log('[DeliveryOptions] Options object:', opts);
-              WebForm_DoPostBackWithOptions(opts);
-            }
-            else if (typeof __doPostBack === 'function') {
-              console.log('[DeliveryOptions] Falling back to __doPostBack');
-              __doPostBack(target, '');
-            }
-            else {
-              console.error('[DeliveryOptions] No postback function available');
-            }
-          } catch (err) {
-            console.error('[DeliveryOptions] Postback execution error', err);
+          console.log('[DeliveryOptions] Performing postback for', target);
+          if (typeof __doPostBack === 'function') {
+            __doPostBack(target, '');
+          } else {
+            console.error('[DeliveryOptions] __doPostBack not available');
           }
-        }, 5000);
+        }, 3000);
       });
       $list.append($btn);
     });
     $shipBody.append($list);
 
-    // Change Speed
-    const $changeBtn = $(
-      `<button type="button" class="btn btn-link mb-3">Change Shipping Speed</button>`
-    ).on('click', () => {
-      console.log('[DeliveryOptions] Change clicked');
-      localStorage.removeItem('selectedShippingValue');
-      renderSelection(true);
-    });
+    // always show change button below
+    const $changeBtn = $('<button type="button" class="btn btn-link mb-3">Change Shipping Speed</button>')
+      .on('click', () => {
+        console.log('[DeliveryOptions] Change clicked');
+        localStorage.removeItem('selectedShippingValue');
+        renderSelection(true);
+      });
     $shipBody.append($changeBtn);
 
-    // Order Summary Card
+    // order totals widget
     const $totalsCard = $(
       `<div class="card order-totals-widget mb-3">
          <div class="card-body p-3">
@@ -225,9 +207,12 @@ $(function(){
       $list.children('button').each(function(){
         const o = $(this).data('opt');
         let isSel = false;
-        if (!reset && sel) isSel = (o.value === sel);
-        else if (!reset && !sel) isSel = ($select.val() === o.value);
-        console.log(`[,DeliveryOptions] ${o.label} selected?`, isSel);
+        if (!reset && sel) {
+          isSel = (o.value === sel);
+        } else if (!reset && !sel) {
+          isSel = ($select.val() === o.value);
+        }
+        console.log(`[DeliveryOptions] ${o.label} selected? ${isSel}`);
         if (isSel) {
           $(this).show().removeClass('btn-outline-primary').addClass('btn-primary');
           const arr = addBusinessDays(new Date(), o.transitDays+1);
@@ -239,8 +224,11 @@ $(function(){
              </div>`
           );
         } else {
-          if (reset) $(this).show().removeClass('btn-primary').addClass('btn-outline-primary');
-          else $(this).hide();
+          if (reset) {
+            $(this).show().removeClass('btn-primary').addClass('btn-outline-primary');
+          } else {
+            $(this).hide();
+          }
         }
       });
     }
