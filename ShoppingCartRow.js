@@ -147,7 +147,7 @@ $(function(){
     .append($btn);
 
   // 5) Insert it at the top of the shopping-cart-details
-  $('.ShoppingCartDetailPanel').prepend($newWrapper);
+  $('.ShoppingCartDetailPanel').append($newWrapper);
 });
 
 
