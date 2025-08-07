@@ -747,3 +747,45 @@ $(document).ready(function() {
   }
 
 })
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+$(function(){
+  // When the Pickup button is clicked, set a cookie
+  $('#btnPickup').on('click', function(){
+    document.cookie = 'pickupSelected=true; path=/';
+  });
+
+  // If the pickupSelected cookie is present, watch for the Continue button
+  if (document.cookie.split(';').some((item) => item.trim().startsWith('pickupSelected=true'))) {
+    var checkContinue = setInterval(function(){
+      var $continueBtn = $('#ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView');
+      if ($continueBtn.length) {
+        clearInterval(checkContinue);
+        $continueBtn.click();
+      }
+    }, 300);
+  }
+});
