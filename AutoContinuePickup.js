@@ -70,58 +70,63 @@
 
 
 
-(function(){
-  console.log("[AutoNav] Card-page Back interceptor loaded");
 
-  // ── Cookie helpers ─────────────────────────────────────────────
+(function(){
+  console.log("[AutoNav-Promo] loaded");
+
+  // ── Cookie utils ────────────────────────────────────────────────
   function readCookie(name) {
-    return document.cookie
+    const m = document.cookie
       .split(';').map(c=>c.trim())
-      .find(c=>c.startsWith(name+'='))
-      ?.split('=')[1] || '';
+      .find(c=>c.startsWith(name+'='));
+    const v = m?.split('=')[1] || '';
+    console.log(`[AutoNav-Promo] readCookie("${name}") → "${v}"`);
+    return v;
   }
   function clearCookie(name) {
     document.cookie = `${name}=;path=/;expires=Thu,01 Jan 1970 00:00:00 GMT`;
-    console.log(`[AutoNav] Cleared ${name}`);
+    console.log(`[AutoNav-Promo] clearCookie("${name}")`);
   }
 
-  // ── Bind on DOM ready ───────────────────────────────────────────
-  document.addEventListener('DOMContentLoaded', function(){
-    const cardBack = document.getElementById('ctl00_PageBody_btnBack_CardOnFileView');
-    if (!cardBack) {
-      console.log("[AutoNav] Card Back button not present");
+  // ── Try to find & click the real Back-to-Cart button ─────────────
+  let timer;
+  function trySkipBack() {
+    console.log("[AutoNav-Promo] trySkipBack()");
+    if (readCookie('skipBack') !== 'true') {
+      console.log("[AutoNav-Promo] skipBack≠true → stopping");
+      clearInterval(timer);
       return;
     }
-    console.log("[AutoNav] Found card Back button");
+    const btn = document.getElementById('ctl00_PageBody_BackToCartButton3');
+    if (!btn) {
+      console.log("[AutoNav-Promo] BackToCartButton3 not in DOM yet");
+      return;
+    }
+    console.log("[AutoNav-Promo] Found BackToCartButton3 → clicking");
+    clearInterval(timer);
 
-    cardBack.addEventListener('click', function(e){
-      if (readCookie('skipBack') !== 'true') return;
+    // fire the ASP.NET postback by clicking it
+    btn.click();
 
-      e.preventDefault();
-      console.log("[AutoNav] skipBack=true → firing BackToCart postback directly");
+    // clear the flag so it won’t run again
+    clearCookie('skipBack');
+  }
 
-      // Directly invoke the same WebForm postback as BackToCartButton3
-      if (window.WebForm_DoPostBackWithOptions) {
-        WebForm_DoPostBackWithOptions(
-          new WebForm_PostBackOptions(
-            'ctl00$PageBody$BackToCartButton3','',true,'','',false,true
-          )
-        );
-      }
-      else if (typeof __doPostBack === 'function') {
-        __doPostBack('ctl00$PageBody$BackToCartButton3','');
-      }
-      else {
-        console.warn("[AutoNav] Postback API missing—falling back to history.back()");
-        history.back();
-      }
+  // ── Bootstrap on DOM ready & after partial postbacks ─────────────
+  document.addEventListener('DOMContentLoaded', function(){
+    console.log("[AutoNav-Promo] DOMContentLoaded");
+    // Start polling
+    timer = setInterval(trySkipBack, 200);
 
-      // Clear flags so this only runs once
-      clearCookie('skipBack');
-      clearCookie('pickupSelected');
-    });
-
-    console.log("[AutoNav] Card Back interceptor attached");
+    // Also hook into ASP.NET AJAX updates
+    if (window.Sys?.WebForms?.PageRequestManager) {
+      Sys.WebForms.PageRequestManager
+        .getInstance()
+        .add_endRequest(trySkipBack);
+      console.log("[AutoNav-Promo] Registered endRequest handler");
+    }
   });
 })();
+
+
 
