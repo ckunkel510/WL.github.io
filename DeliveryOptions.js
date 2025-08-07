@@ -64,6 +64,7 @@ $(function(){
 
 
 
+
 $(function(){
   var $summary   = $('#SummaryEntry2');
   var $optSelect = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList');
@@ -87,7 +88,7 @@ $(function(){
   $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas').closest('tr').hide();
   $optSelect.closest('tr').hide();
 
-  // Parse options
+  // Parse shipping options
   var baseCost = parseFloat(deliveryText.replace(/[^0-9.-]/g,''));
   var transitMap = { 'Standard delivery':5,'3 Day Select':3,'2nd Day Air':2,'Next Day Air':1 };
   var descMap    = { 'Standard delivery':'Traditional Ground','3 Day Select':'3 Day Service','2nd Day Air':'2nd Day Air','Next Day Air':'Next Day Air' };
@@ -96,7 +97,7 @@ $(function(){
     var label = txt.replace(/\s*\(.*\)/,'').trim();
     var extra = (txt.match(/\(([^)]+)\)/)||[])[1]||'';
     var total= baseCost;
-    if(extra.startsWith('+')) total= baseCost+parseFloat(extra.replace(/[^0-9.-]/g,''));
+    if(extra.startsWith('+')) total= baseCost+parseFloat(extra.replace(/[^0-9.-]/g,'')); 
     else total=parseFloat(extra.replace(/[^0-9.-]/g,''))||baseCost;
     return {
       value: $o.val(),
@@ -131,17 +132,31 @@ $(function(){
 
   shippingOptions.forEach(opt=>{
     var $btn = $(`
-      <button type="button" class="btn mb-2 text-start"></button>
-    `).append(
-      `<div class="fw-semibold">${opt.label}</div>`,
-      `<div class="fw-bold text-dark">${opt.costLabel}</div>`
-    ).data('opt',opt);
+      <button type="button" class="btn mb-2 text-start">
+        <div class="fw-semibold">${opt.label}</div>
+        <div class="fw-bold text-dark">${opt.costLabel}</div>
+      </button>
+    `).data('opt',opt);
 
     $btn.on('click', function(){
-      // persist choice
-      localStorage.setItem('selectedShippingValue',opt.value);
-      // update native select & trigger original onchange
-      $optSelect.val(opt.value).trigger('change');
+      // remember for after postback
+      localStorage.setItem('selectedShippingValue', opt.value);
+      // perform the actual ASP.NET postback
+      if (window.WebForm_DoPostBackWithOptions) {
+        WebForm_DoPostBackWithOptions(
+          new WebForm_PostBackOptions(
+            'ctl00$PageBody$CartSummary2$LocalDeliveryChargeControl$DeliveryOptionsDropDownList',
+            '', true, '', '', false, true
+          )
+        );
+      } else if (typeof __doPostBack === 'function') {
+        __doPostBack(
+          'ctl00$PageBody$CartSummary2$LocalDeliveryChargeControl$DeliveryOptionsDropDownList',
+          ''
+        );
+      } else {
+        console.warn('[DeliveryOptions] No postback API found');
+      }
     });
 
     $list.append($btn);
@@ -172,7 +187,7 @@ $(function(){
         .toggleClass('btn-outline-primary', !isSel)
         .toggle(sel? isSel : true);
       if(isSel){
-        var arr = addBusinessDays(new Date(),o.transitDays+1);
+        var arr = addBusinessDays(new Date(), o.transitDays+1);
         var arrStr = arr.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
         var $banner = $(`
           <div class="alert alert-info shipping-banner mb-3">
@@ -212,6 +227,8 @@ $(function(){
   // Inject
   $summary.empty().append($shipCard).append($totalsCard);
 });
+
+
 
 
 
