@@ -535,3 +535,29 @@ $(document).ready(function(){
     }
   });
 });
+
+
+(function () {
+  // Wait for DOM to be ready
+  document.addEventListener('DOMContentLoaded', function () {
+    const placeOrderBtn = document.getElementById('ctl00_PageBody_PlaceOrderButton');
+    const backToCartBtn = document.getElementById('ctl00_PageBody_BackToCartButton3');
+
+    function clearSessionIfNeeded() {
+      if (localStorage.sameAsDelivery !== 'true') {
+        console.log('[Checkout] Clearing currentStep from localStorage');
+        localStorage.removeItem('currentStep');
+      } else {
+        console.log('[Checkout] sameAsDelivery is true, currentStep retained');
+      }
+    }
+
+    if (placeOrderBtn) {
+      placeOrderBtn.addEventListener('click', clearSessionIfNeeded);
+    }
+
+    if (backToCartBtn) {
+      backToCartBtn.addEventListener('click', clearSessionIfNeeded);
+    }
+  });
+})();
