@@ -785,52 +785,49 @@ for (const tr of rows) {
 
 
 
-function injectSaveForLaterButtons() {
+async function injectSaveForLaterButtons() {
   console.log("[SFL] Starting Save for Later button injection...");
 
-  const cartItems = document.querySelectorAll(".row.shopping-cart-item");
+  const cartItems = document.querySelectorAll(".shopping-cart-item");
   console.log(`[SFL] Found ${cartItems.length} cart items.`);
 
   cartItems.forEach((item, index) => {
     console.log(`[SFL] Processing cart item #${index + 1}`);
 
-    // === STEP 1: Extract product code ===
-    const codeLink = item.querySelector("a[title] .portalGridLink") || item.querySelector(".portalGridLink");
+    // === STEP 1: Extract product code from the card’s title link ===
+    const codeLink = item.querySelector("h6 a");
     const productCode = codeLink?.textContent?.trim();
-
     if (!productCode) {
       console.warn("[SFL] Could not find product code in item:", item);
       return;
     }
     console.log(`[SFL] Found product code: ${productCode}`);
 
-    // === STEP 1.5: Extract productId (pid) from the product link href ===
-    const productLink = item.querySelector('a[href*="ProductDetail.aspx?"]');
-    const pidMatch = productLink?.href?.match(/pid=(\d+)/);
+    // === STEP 1.5: Extract pid from that same href ===
+    const pidMatch = codeLink.href?.match(/pid=(\d+)/);
     if (!pidMatch) {
-      console.warn("[SFL] Could not extract pid from product link:", productLink?.href);
+      console.warn("[SFL] Could not extract pid from product link:", codeLink.href);
       return;
     }
     const productId = pidMatch[1];
     console.log(`[SFL] Found pid: ${productId}`);
 
-    // === STEP 2: Find delete anchor with doPostBack ===
-    const deleteBtn = item.querySelector('a[href*="WebForm_DoPostBackWithOptions"][href*="del_"]');
+    // === STEP 2: Grab the original delete anchor (still has del_ postback) ===
+    const deleteBtn = item.querySelector('a[href*="del_"]');
     if (!deleteBtn) {
       console.warn("[SFL] Could not find delete button in item:", item);
       return;
     }
-
-    const href = deleteBtn.getAttribute("href");
+    const href = deleteBtn.getAttribute("href") || "";
     const match = href.match(/WebForm_PostBackOptions\("([^"]+)"/);
-    if (!match || !match[1]) {
-      console.warn("[SFL] Could not extract delete __doPostBack target.");
+    if (!match?.[1]) {
+      console.warn("[SFL] Could not extract delete postback target.");
       return;
     }
     const deleteEventTarget = match[1];
     console.log(`[SFL] Found delete postback target: ${deleteEventTarget}`);
 
-    // === STEP 3: Create "Save for Later" button ===
+    // === STEP 3: Build the “Save for Later” button ===
     const btn = document.createElement("button");
     btn.textContent = "Save for Later";
     btn.className = "btn btn-link text-primary btn-sm sfl-button";
@@ -840,11 +837,10 @@ function injectSaveForLaterButtons() {
       e.preventDefault();
       btn.disabled = true;
       btn.textContent = "Saving...";
-
       try {
         await addToQuicklist(productId);
         await removeCartItem(deleteEventTarget);
-        location.reload(); // Hard refresh to update cart state
+        location.reload();
       } catch (err) {
         console.error("[SFL] Failed to save for later:", err);
         btn.textContent = "Error – Try Again";
@@ -852,13 +848,13 @@ function injectSaveForLaterButtons() {
       }
     });
 
-    // === STEP 4: Inject button into cart row ===
-    const btnContainer = item.querySelector(".fa-times")?.parentElement;
-    if (btnContainer) {
-      btnContainer.appendChild(btn);
+    // === STEP 4: Inject into the placeholder we added in each card ===
+    const container = item.querySelector(".sfl-placeholder");
+    if (container) {
+      container.appendChild(btn);
       console.log("[SFL] Injected Save for Later button.");
     } else {
-      console.warn("[SFL] Could not find container to inject button.");
+      console.warn("[SFL] Could not find .sfl-placeholder to inject button.");
     }
   });
 }
