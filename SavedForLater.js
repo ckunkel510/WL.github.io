@@ -792,48 +792,55 @@ async function injectSaveForLaterButtons() {
   console.log(`[SFL] Found ${cartItems.length} cart items.`);
 
   cartItems.forEach((item, index) => {
-    console.log(`[SFL] Processing cart item #${index + 1}`);
+    console.log(`[SFL] Processing cart item #${index+1}`);
 
-    // === STEP 1: Extract product code from the card’s title link ===
+    // STEP 1: product code from card title
     const codeLink = item.querySelector("h6 a");
-    const productCode = codeLink?.textContent?.trim();
+    const productCode = codeLink?.textContent.trim();
     if (!productCode) {
-      console.warn("[SFL] Could not find product code in item:", item);
+      console.warn("[SFL] No product code:", item);
       return;
     }
     console.log(`[SFL] Found product code: ${productCode}`);
 
-    // === STEP 1.5: Extract pid from that same href ===
+    // STEP 1.5: pid from that same href
     const pidMatch = codeLink.href?.match(/pid=(\d+)/);
     if (!pidMatch) {
-      console.warn("[SFL] Could not extract pid from product link:", codeLink.href);
+      console.warn("[SFL] No pid in href:", codeLink.href);
       return;
     }
     const productId = pidMatch[1];
     console.log(`[SFL] Found pid: ${productId}`);
 
-    // === STEP 2: Grab the original delete anchor (still has del_ postback) ===
-    const deleteBtn = item.querySelector('a[href*="del_"]');
+    // STEP 2: find the Delete link (plain text) or fallback to old anchor
+    const deleteBtn =
+      item.querySelector("a.delete-link") ||
+      item.querySelector('a[href*="del_"]');
     if (!deleteBtn) {
       console.warn("[SFL] Could not find delete button in item:", item);
       return;
     }
-    const href = deleteBtn.getAttribute("href") || "";
-    const match = href.match(/WebForm_PostBackOptions\("([^"]+)"/);
-    if (!match?.[1]) {
+
+    // STEP 2.5: determine the postback target
+    let deleteEventTarget = deleteBtn.dataset.deleteTarget;
+    if (!deleteEventTarget) {
+      const href = deleteBtn.getAttribute("href") || "";
+      const m = href.match(/WebForm_PostBackOptions\("([^"]+)"/);
+      deleteEventTarget = m?.[1];
+    }
+    if (!deleteEventTarget) {
       console.warn("[SFL] Could not extract delete postback target.");
       return;
     }
-    const deleteEventTarget = match[1];
-    console.log(`[SFL] Found delete postback target: ${deleteEventTarget}`);
+    console.log(`[SFL] Found delete target: ${deleteEventTarget}`);
 
-    // === STEP 3: Build the “Save for Later” button ===
+    // STEP 3: build the SFL button
     const btn = document.createElement("button");
     btn.textContent = "Save for Later";
     btn.className = "btn btn-link text-primary btn-sm sfl-button";
     btn.style.marginLeft = "1rem";
 
-    btn.addEventListener("click", async (e) => {
+    btn.addEventListener("click", async e => {
       e.preventDefault();
       btn.disabled = true;
       btn.textContent = "Saving...";
@@ -848,16 +855,17 @@ async function injectSaveForLaterButtons() {
       }
     });
 
-    // === STEP 4: Inject into the placeholder we added in each card ===
-    const container = item.querySelector(".sfl-placeholder");
-    if (container) {
-      container.appendChild(btn);
+    // STEP 4: inject into the placeholder
+    const placeholder = item.querySelector(".sfl-placeholder");
+    if (placeholder) {
+      placeholder.appendChild(btn);
       console.log("[SFL] Injected Save for Later button.");
     } else {
-      console.warn("[SFL] Could not find .sfl-placeholder to inject button.");
+      console.warn("[SFL] No .sfl-placeholder found");
     }
   });
 }
+
 
 
 async function removeCartItem(eventTarget) {
