@@ -86,7 +86,7 @@ $(function(){
     }
     console.log('[DeliveryOptions] Initializing widget');
 
-    // Remove any existing widgets
+    // Remove old widgets
     $('.shipping-method-widget, .order-totals-widget').remove();
 
     // Hide original summary table and discount row
@@ -99,7 +99,7 @@ $(function(){
     $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas').closest('tr').hide();
     $select.closest('tr').hide();
 
-    // Read up-to-date summary values
+    // Read fresh summary values
     const subtotalText = $summary.find('tr:has(td:contains("Subtotal")) .numeric').text().trim();
     const deliveryText = $summary.find('#ctl00_PageBody_CartSummary2_DeliveryCostsRow .numeric').text().trim();
     const taxText      = $summary.find('#ctl00_PageBody_CartSummary2_TaxTotals .numeric').text().trim();
@@ -185,9 +185,9 @@ $(function(){
          Change Shipping Speed
        </button>`
     ).on('click', function() {
-      console.log('[DeliveryOptions] Change clicked, clearing stored selection');
+      console.log('[DeliveryOptions] Change clicked, clearing selection');
       localStorage.removeItem('selectedShippingValue');
-      renderSelection(true); // show all options
+      renderSelection(); // show all options, no reset param
     });
     $shipBody.append($changeBtn);
 
@@ -215,35 +215,22 @@ $(function(){
       .append('<hr>')
       .append(row('Total (inc. Tax)', totalText, true));
 
-    // Inject both widgets
+    // Inject widgets
     $summary.empty()
             .append($shipCard)
             .append($totalsCard);
 
-    // renderSelection: shows banner + hides/shows options
-    function renderSelection(reset) {
+    // renderSelection: shows banner + controls visibility
+    function renderSelection() {
       const sel = localStorage.getItem('selectedShippingValue');
-      console.log('[DeliveryOptions] renderSelection, sel =', sel, ' reset=', reset);
+      console.log('[DeliveryOptions] renderSelection, sel =', sel);
       $shipBody.find('.shipping-banner').remove();
       $list.children('button').each(function() {
         const o = $(this).data('opt');
-        let isSel;
-        if (reset) {
-          isSel = false;
-        } else if (sel) {
-          isSel = (o.value === sel);
-        } else {
-          isSel = ($select.val() === o.value);
-        }
+        const isSel = (o.value === sel) || (!sel && $select.val() === o.value);
         console.log(`[DeliveryOptions] option=${o.label}, isSel=${isSel}`);
-        if (!sel || reset) {
-          // show all, none highlighted
-          $(this).show()
-            .removeClass('btn-primary').addClass('btn-outline-primary');
-        }
         if (isSel) {
-          $(this).show()
-            .removeClass('btn-outline-primary').addClass('btn-primary');
+          $(this).show().removeClass('btn-outline-primary').addClass('btn-primary');
           const arrival = addBusinessDays(new Date(), o.transitDays + 1);
           const arrStr = arrival.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' });
           const $banner = $(
@@ -253,14 +240,16 @@ $(function(){
              </div>`
           );
           $shipBody.prepend($banner);
+        } else {
+          $(this).hide();
         }
       });
-      $changeBtn.toggle(!!sel || reset);
+      $changeBtn.toggle(!!sel);
       console.log('[DeliveryOptions] renderSelection complete');
     }
 
-    // Initial render (no reset)
-    renderSelection(false);
+    // Initial render
+    renderSelection();
   }
 
   // Bind initialize
@@ -270,6 +259,7 @@ $(function(){
       .add_endRequest(initializeDeliveryWidget);
   }
 })();
+
 
 
 
