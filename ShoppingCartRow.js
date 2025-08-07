@@ -127,24 +127,30 @@ $(function(){
 
 
 
+
 $(function(){
-  // 1) Detach & relabel the Place Order button
+  // 1) Grab and clone the original subtotal panel, then hide it
+  var $origSub = $('.SubtotalWrapper');
+  var $cloneSub = $origSub.clone();
+  $origSub.hide();
+
+  // 2) Clean the clone (remove any free-shipping note)
+  $cloneSub.find('div[style]').remove();
+
+  // 3) Detach & relabel the Place Order button so no other script can remove it
   var $btn = $('#ctl00_PageBody_PlaceOrderButton').detach();
   $btn.find('span').text('Proceed to checkout');
 
-  // 2) Prepend it directly into your SubtotalWrapper
-  var $sub = $('.SubtotalWrapper');
-  if ($sub.length) {
-    $sub.prepend($btn);
-  } else {
-    // fallback: wrap the subtotal in its own div and append both
-    var $subtotal = $('.SubtotalWrapper').detach();
-    var $widget = $('<div class="cart-summary-widget"></div>')
-      .append($btn)
-      .append($subtotal);
-    $('.ShoppingCartDetailPanel').append($widget);
-  }
+  // 4) Build your own wrapper
+  var $newWrapper = $('<div class="custom-subtotal-wrapper"></div>')
+    .append($cloneSub)
+    .append($btn);
+
+  // 5) Insert it at the top of the shopping-cart-details
+  $('.ShoppingCartDetailPanel').prepend($newWrapper);
 });
+
+
 
 
 
