@@ -572,6 +572,7 @@ $(document).ready(function(){
 
 
 
+$(document).ready(function() {
 
 
 // ===================================================
@@ -658,3 +659,4 @@ $(document).ready(function(){
     console.warn("Shipping method selector not found.");
   }
 
+})
