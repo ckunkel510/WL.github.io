@@ -681,42 +681,53 @@ $(document).ready(function() {
 
 
   if ($(".SaleTypeSelector").length) {
-    $(".SaleTypeSelector").hide();
-    const shipHTML = `
-      <div class="modern-shipping-selector d-flex justify-content-around">
-        <button id="btnDelivered" class="btn btn-primary" data-value="rbDelivered">
-          <i class="fas fa-truck"></i> Delivered
-        </button>
-        <button id="btnPickup" class="btn btn-secondary" data-value="rbCollectLater">
-          <i class="fas fa-store"></i> Pickup (Free)
-        </button>
-      </div>
-    `;
-    $(".epi-form-col-single-checkout:has(.SaleTypeSelector)").append(shipHTML);
+  $(".SaleTypeSelector").hide();
+  const shipHTML = `
+    <div class="modern-shipping-selector d-flex justify-content-around">
+      <button id="btnDelivered" class="btn btn-primary" data-value="rbDelivered">
+        <i class="fas fa-truck"></i> Delivered
+      </button>
+      <button id="btnPickup" class="btn btn-secondary" data-value="rbCollectLater">
+        <i class="fas fa-store"></i> Pickup (Free)
+      </button>
+    </div>
+  `;
+  $(".epi-form-col-single-checkout:has(.SaleTypeSelector)").append(shipHTML);
 
-    function updateShippingStyles(val) {
-      console.log(`Shipping method updated: ${val}`);
-      const delRad = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
-      const pickRad = $("#ctl00_PageBody_SaleTypeSelector_rbCollectLater");
-      if (val === "rbDelivered") {
-        delRad.prop("checked", true);
-        $("#btnDelivered").addClass("btn-primary").removeClass("btn-secondary");
-        $("#btnPickup").addClass("btn-secondary").removeClass("btn-primary");
-      } else {
-        pickRad.prop("checked", true);
-        $("#btnPickup").addClass("btn-primary").removeClass("btn-secondary");
-        $("#btnDelivered").addClass("btn-secondary").removeClass("btn-primary");
-        refreshReadOnlyDisplays();
-      }
+  function updateShippingStyles(val) {
+    console.log(`Shipping method updated: ${val}`);
+    const delRad  = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
+    const pickRad = $("#ctl00_PageBody_SaleTypeSelector_rbCollectLater");
+
+    if (val === "rbDelivered") {
+      // check & trigger change so your Step 7 script’s onShip() runs
+      delRad.prop("checked", true).trigger("change");
+      $("#btnDelivered")
+        .addClass("btn-primary").removeClass("btn-secondary");
+      $("#btnPickup")
+        .addClass("btn-secondary").removeClass("btn-primary");
+    } else {
+      pickRad.prop("checked", true).trigger("change");
+      $("#btnPickup")
+        .addClass("btn-primary").removeClass("btn-secondary");
+      $("#btnDelivered")
+        .addClass("btn-secondary").removeClass("btn-primary");
     }
+  }
 
-    updateShippingStyles(
-      $("#ctl00_PageBody_SaleTypeSelector_rbDelivered").is(":checked") ? "rbDelivered" : "rbCollectLater"
-    );
-    $(document).on("click", ".modern-shipping-selector button", function() {
-      updateShippingStyles($(this).data("value"));
-    });
-  } else {
+  // initialize based on whatever’s already checked
+  updateShippingStyles(
+    $("#ctl00_PageBody_SaleTypeSelector_rbDelivered").is(":checked")
+      ? "rbDelivered"
+      : "rbCollectLater"
+  );
+
+  // wire up your modern buttons
+  $(document).on("click", ".modern-shipping-selector button", function() {
+    updateShippingStyles($(this).data("value"));
+  });
+}
+ else {
     console.warn("Shipping method selector not found.");
   }
 
