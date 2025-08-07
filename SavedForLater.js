@@ -375,11 +375,13 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
       const paymentHeader = document.querySelector("#ctl00_PageBody_CardOnFileViewTitle_HeaderText");
       const reviewHeader = document.querySelector("#ctl00_PageBody_SummaryHeading_HeaderText");
       const summaryEntry2 = document.getElementById("SummaryEntry2");
+      const CheckoutDetails = document.querySelector("ctl00_PageBody_CheckoutTitle_HeaderText");
 
       return (
         isVisible(paymentHeader) ||
         isVisible(reviewHeader) ||
-        isVisible(summaryEntry2)
+        isVisible(summaryEntry2) ||
+        isVisible(CheckoutDetails)
       );
     })();
 
@@ -405,6 +407,7 @@ function hideSflIfOnFinalStep() {
   const paymentHeader = document.querySelector("#ctl00_PageBody_CardOnFileViewTitle_HeaderText");
   const reviewHeader = document.querySelector("#ctl00_PageBody_SummaryHeading_HeaderText");
   const summaryEntry2 = document.getElementById("SummaryEntry2");
+  const CheckoutDetails = document.querySelector("ctl00_PageBody_CheckoutTitle_HeaderText");
   const sflBlock = document.getElementById("savedForLater");
 
   if (!sflBlock) return;
@@ -414,7 +417,8 @@ function hideSflIfOnFinalStep() {
   if (
     isVisible(paymentHeader) ||
     isVisible(reviewHeader) ||
-    isVisible(summaryEntry2)
+    isVisible(summaryEntry2) ||
+    isVisible(CheckoutDetails)
   ) {
     sflBlock.style.display = "none";
     console.log("[SFL] Hiding Saved For Later section on payment, review, or summary step.");
