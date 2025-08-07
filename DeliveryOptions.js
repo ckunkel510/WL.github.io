@@ -62,57 +62,113 @@ $(function(){
 
 
 
+
 $(function(){
-  // Grab the summary container
   var $summary = $('#SummaryEntry2');
   if (!$summary.length) return;
 
-  // Extract values
-  var subtotalText    = $summary.find('tr:has(td:contains("Subtotal")) .numeric').text().trim();
-  var deliveryText    = $summary.find('#ctl00_PageBody_CartSummary2_DeliveryCostsRow .numeric').text().trim();
-  var taxText         = $summary.find('#ctl00_PageBody_CartSummary2_TaxTotals .numeric').text().trim();
-  var totalText       = $summary.find('#ctl00_PageBody_CartSummary2_GrandTotalRow .numeric').text().trim();
+  // Only run if the delivery-options dropdown is present & visible
+  var $optSelect = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList');
+  if (!$optSelect.length || !$optSelect.is(':visible')) return;
 
-  // Extract the shipping method label
-  var shipLabel = $('#ctl00_PageBody_CartSummary2_DeliveryOptionsPanel')
-                    .find('b:contains("Shipping Method")')
-                    .parent()
-                    .text()
-                    .replace(/Shipping Method\s*:\s*/i, '')
-                    .trim();
+  console.log('[DeliveryOptions] Rendering modern shipping & totals widgets');
 
-  // Build the Shipping Method widget
-  var $shipWidget = $(`
+  // 1) Hide the original summary table (but leave selects in DOM)
+  $summary.find('.summaryTotals').hide();
+
+  // 2) Extract the four key numbers
+  var subtotalText = $summary.find('tr:has(td:contains("Subtotal")) .numeric').text().trim();
+  var deliveryText = $summary.find('#ctl00_PageBody_CartSummary2_DeliveryCostsRow .numeric').text().trim();
+  var taxText      = $summary.find('#ctl00_PageBody_CartSummary2_TaxTotals .numeric').text().trim();
+  var totalText    = $summary.find('#ctl00_PageBody_CartSummary2_GrandTotalRow .numeric').text().trim();
+
+  // 3) Parse out the shipping options from the <select>
+  var baseCost = parseFloat(deliveryText.replace(/[^0-9.-]/g,''));
+  var shippingOptions = [];
+  $optSelect.find('option').each(function(){
+    var $opt = $(this), txt = $opt.text().trim();
+    var label = txt.replace(/\s*\(.*\)/,'').trim();
+    var extra = (txt.match(/\(([^)]+)\)/)||[])[1]||'';
+    var total = baseCost;
+    if (extra.startsWith('+')) {
+      total = baseCost + parseFloat(extra.replace(/[^0-9.-]/g,''));
+    } else {
+      total = parseFloat(extra.replace(/[^0-9.-]/g,''))||baseCost;
+    }
+    shippingOptions.push({
+      value: $opt.val(),
+      label,
+      costLabel: '$' + total.toFixed(2),
+      selected: $opt.is(':selected')
+    });
+  });
+
+  // 4) Build the Shipping Method card with inline selectable pills (vertical)
+  var $shipCard = $(`
     <div class="card mb-3 shipping-method-widget">
       <div class="card-body p-3">
-        <h5 class="card-title mb-2">Shipping Method</h5>
-        <div class="card-text">${shipLabel}</div>
+        <h5 class="card-title mb-3">Shipping Method</h5>
       </div>
     </div>
   `);
+  var $shipBody = $shipCard.find('.card-body');
+  var $list = $('<div class="d-flex flex-column"></div>');
+  shippingOptions.forEach(opt => {
+    var $btn = $(`
+      <button type="button"
+              class="btn mb-2 text-start ${opt.selected ? 'btn-primary' : 'btn-outline-primary'}">
+        <div>${opt.label}</div>
+        <div class="small text-muted">${opt.costLabel}</div>
+      </button>
+    `).data('value', opt.value);
 
-  // Build the Order Totals widget (vertical, low→high)
-  var $totalsWidget = $(`
+    $btn.on('click', function(){
+      // update the hidden <select> and re-postback
+      $optSelect.val($(this).data('value'));
+      $list.find('button').removeClass('btn-primary').addClass('btn-outline-primary');
+      $(this).removeClass('btn-outline-primary').addClass('btn-primary');
+      setTimeout(function(){
+        __doPostBack(
+          'ctl00$PageBody$CartSummary2$LocalDeliveryChargeControl$DeliveryOptionsDropDownList',
+          ''
+        );
+      }, 0);
+    });
+
+    $list.append($btn);
+  });
+  $shipBody.append($list);
+
+  // 5) Build the Totals card (vertical low→high)
+  var $totalsCard = $(`
     <div class="card mb-3 order-totals-widget">
       <div class="card-body p-3">
         <h5 class="card-title mb-3">Order Summary</h5>
-        <div class="d-flex justify-content-between mb-2"><span>Subtotal</span><span>${subtotalText}</span></div>
-        <div class="d-flex justify-content-between mb-2"><span>Delivery</span><span>${deliveryText}</span></div>
-        <div class="d-flex justify-content-between mb-2"><span>Tax</span><span>${taxText}</span></div>
-        <hr>
-        <div class="d-flex justify-content-between"><strong>Total (inc. Tax)</strong><strong>${totalText}</strong></div>
       </div>
     </div>
   `);
+  var $totalsBody = $totalsCard.find('.card-body');
+  function row(label, value, isStrong) {
+    var tag = isStrong ? 'strong' : 'span';
+    return $(`
+      <div class="d-flex justify-content-between mb-2">
+        <${tag}>${label}</${tag}>
+        <${tag}>${value}</${tag}>
+      </div>
+    `);
+  }
+  $totalsBody
+    .append(row('Subtotal', subtotalText))
+    .append(row('Delivery', deliveryText))
+    .append(row('Tax', taxText))
+    .append('<hr>')
+    .append(row('Total (inc. Tax)', totalText, true));
 
-  // Clear out the existing summary table
-  $summary.empty();
-
-  // Inject the new widgets
-  $summary
-    .append($shipWidget)
-    .append($totalsWidget);
+  // 6) Inject both cards at the top of the summary container
+  $summary.prepend($totalsCard).prepend($shipCard);
 });
+
+
 
 
 
