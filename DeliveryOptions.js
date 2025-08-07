@@ -73,6 +73,7 @@ $(function(){
 
 
 
+
 (function(){
   function addBusinessDays(date, days) {
     const d = new Date(date);
@@ -86,49 +87,49 @@ $(function(){
 
   function initializeDeliveryWidget() {
     const $summary = $('#SummaryEntry2');
-    const $select = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList');
+    const $select  = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList');
     if (!$summary.length || !$select.length || !$select.is(':visible')) {
       console.log('[DeliveryOptions] Summary or select not visible; abort');
       return;
     }
     console.log('[DeliveryOptions] Initializing widget');
 
-    // Clean up existing widgets
+    // Clean up previous widgets
     $('.shipping-method-widget, .order-totals-widget').remove();
 
-    // Capture current summary values before clearing
+    // Capture summary values
     const subtotalText = $summary.find('tr:has(td:contains("Subtotal")) .numeric').text().trim();
     const deliveryText = $summary.find('#ctl00_PageBody_CartSummary2_DeliveryCostsRow .numeric').text().trim();
-    const taxText = $summary.find('#ctl00_PageBody_CartSummary2_TaxTotals .numeric').text().trim();
-    const totalText = $summary.find('#ctl00_PageBody_CartSummary2_GrandTotalRow .numeric').text().trim();
-    console.log('[DeliveryOptions] Summary values:', { subtotalText, deliveryText, taxText, totalText });
+    const taxText      = $summary.find('#ctl00_PageBody_CartSummary2_TaxTotals .numeric').text().trim();
+    const totalText    = $summary.find('#ctl00_PageBody_CartSummary2_GrandTotalRow .numeric').text().trim();
+    console.log('[DeliveryOptions] Summary values:', {subtotalText, deliveryText, taxText, totalText});
     const baseCost = parseFloat(deliveryText.replace(/[^0-9.-]/g, ''));
 
-    // Hide original form elements
+    // Remove original table rows
     $summary.find('.summaryTotals').remove();
     $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas').closest('tr').remove();
     $select.closest('tr').remove();
 
-    // Build options
-    const transitMap = { 'Standard delivery':5, '3 Day Select':3, '2nd Day Air':2, 'Next Day Air':1 };
-    const descMap = { 'Standard delivery':'Traditional Ground', '3 Day Select':'3 Day Service', '2nd Day Air':'2nd Day Air', 'Next Day Air':'Next Day Air' };
+    // Parse options
+    const transitMap = { 'Standard delivery':5,'3 Day Select':3,'2nd Day Air':2,'Next Day Air':1 };
+    const descMap    = { 'Standard delivery':'Traditional Ground','3 Day Select':'3 Day Service','2nd Day Air':'2nd Day Air','Next Day Air':'Next Day Air' };
     const options = [];
-    $select.find('option').each(function() {
+    $select.find('option').each(function(){
       const $o = $(this);
       const txt = $o.text().trim();
       const label = txt.replace(/\s*\(.*\)/, '').trim();
-      const extra = (txt.match(/\(([^)]+)\)/) || [])[1] || '';
+      const extra = (txt.match(/\(([^)]+)\)/)||[])[1]||'';
       let cost = baseCost;
-      if (extra.startsWith('+')) cost = baseCost + parseFloat(extra.replace(/[^0-9.-]/g, ''));
+      if (extra.startsWith('+')) cost = baseCost + parseFloat(extra.replace(/[^0-9.-]/g,''));
       else {
-        const p = parseFloat(extra.replace(/[^0-9.-]/g, ''));
-        if (!isNaN(p) && extra.indexOf('+') < 0) cost = p;
+        const p=parseFloat(extra.replace(/[^0-9.-]/g,''));
+        if (!isNaN(p)&&extra.indexOf('+')<0) cost=p;
       }
-      options.push({ value: $o.val(), label, costLabel: '$'+cost.toFixed(2), transitDays: transitMap[label]||0, description: descMap[label]||label });
+      options.push({ value:$o.val(), label, costLabel:'$'+cost.toFixed(2), transitDays: transitMap[label]||0, description: descMap[label]||label });
     });
     console.log('[DeliveryOptions] Parsed options:', options);
 
-    // Build Shipping Method card
+    // Shipping Method Card
     const $shipCard = $(
       `<div class="card mb-3 shipping-method-widget">
          <div class="card-body p-3">
@@ -137,9 +138,8 @@ $(function(){
        </div>`
     );
     const $shipBody = $shipCard.find('.card-body');
-    const $list = $('<div class="d-flex flex-column mb-3"></div>');
+    const $list     = $('<div class="d-flex flex-column mb-3"></div>');
 
-    // Create buttons
     options.forEach(opt => {
       const selected = ($select.val() === opt.value);
       const $btn = $(
@@ -148,23 +148,34 @@ $(function(){
            <div class="fw-bold text-white">${opt.costLabel}</div>
          </button>`
       ).data('opt', opt);
+
       $btn.on('click', () => {
         console.log('[DeliveryOptions] Clicked option:', opt);
         localStorage.setItem('selectedShippingValue', opt.value);
         $select.val(opt.value);
         const target = $select.prop('name');
-        console.log('[DeliveryOptions] Trigger postback target:', target);
-        if (typeof __doPostBack === 'function') {
+        console.log('[DeliveryOptions] Postback target:', target);
+        console.log('[DeliveryOptions] __doPostBack:', typeof __doPostBack, 'WebForm_DoPostBackWithOptions:', typeof WebForm_DoPostBackWithOptions);
+
+        if (typeof WebForm_DoPostBackWithOptions === 'function') {
+          console.log('[DeliveryOptions] Calling WebForm_DoPostBackWithOptions');
+          WebForm_DoPostBackWithOptions(
+            new WebForm_PostBackOptions(target,'',true,'','',false,true)
+          );
+        }
+        else if (typeof __doPostBack === 'function') {
+          console.log('[DeliveryOptions] Calling __doPostBack');
           __doPostBack(target, '');
-        } else if (window.WebForm_DoPostBackWithOptions) {
-          WebForm_DoPostBackWithOptions(new WebForm_PostBackOptions(target, '', true, '', '', false, true));
-        } else console.error('[DeliveryOptions] No postback function');
+        }
+        else {
+          console.error('[DeliveryOptions] No postback function available');
+        }
       });
       $list.append($btn);
     });
     $shipBody.append($list);
 
-    // Always show Change Shipping Speed
+    // Change Speed
     const $changeBtn = $(
       `<button type="button" class="btn btn-link mb-3">Change Shipping Speed</button>`
     ).on('click', () => {
@@ -174,7 +185,7 @@ $(function(){
     });
     $shipBody.append($changeBtn);
 
-    // Build Totals card
+    // Order Summary Card
     const $totalsCard = $(
       `<div class="card order-totals-widget mb-3">
          <div class="card-body p-3">
@@ -184,22 +195,20 @@ $(function(){
     );
     const $totalsBody = $totalsCard.find('.card-body');
     function row(label, value, strong) {
-      const tag = strong ? 'strong' : 'span';
+      const tag = strong?'strong':'span';
       return $(`<div class="d-flex justify-content-between mb-2"><${tag}>${label}</${tag}><${tag}>${value}</${tag}></div>`);
     }
     $totalsBody.append(row('Subtotal', subtotalText))
-                .append(row('Delivery', deliveryText))
-                .append(row('Tax', taxText))
-                .append('<hr>')
-                .append(row('Total (inc. Tax)', totalText, true));
+               .append(row('Delivery', deliveryText))
+               .append(row('Tax', taxText))
+               .append('<hr>')
+               .append(row('Total (inc. Tax)', totalText, true));
 
-    // Insert
     $summary.empty().append($shipCard).append($totalsCard);
 
-    // Render selection logic
     function renderSelection(reset) {
       const sel = localStorage.getItem('selectedShippingValue');
-      console.log('[DeliveryOptions] render selection:', { sel, reset });
+      console.log('[DeliveryOptions] renderSelection:', {sel,reset});
       $shipBody.find('.shipping-banner').remove();
       $list.children('button').each(function(){
         const o = $(this).data('opt');
@@ -209,9 +218,14 @@ $(function(){
         console.log(`[DeliveryOptions] ${o.label} selected?`, isSel);
         if (isSel) {
           $(this).show().removeClass('btn-outline-primary').addClass('btn-primary');
-          const arr = addBusinessDays(new Date(), o.transitDays + 1);
+          const arr = addBusinessDays(new Date(), o.transitDays+1);
           const ds = arr.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
-          $shipBody.prepend(`<div class="alert alert-info shipping-banner mb-3"><strong>${o.description}</strong><br>Expected arrival: ${ds}</div>`);
+          $shipBody.prepend(
+            `<div class="alert alert-info shipping-banner mb-3">
+               <strong>${o.description}</strong><br>
+               Expected arrival: ${ds}
+             </div>`
+          );
         } else {
           if (reset) $(this).show().removeClass('btn-primary').addClass('btn-outline-primary');
           else $(this).hide();
@@ -227,6 +241,7 @@ $(function(){
     Sys.WebForms.PageRequestManager.getInstance().add_endRequest(initializeDeliveryWidget);
   }
 })();
+
 
 
 
