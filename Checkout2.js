@@ -721,6 +721,7 @@ $(document).ready(function() {
         .addClass("btn-primary").removeClass("btn-secondary");
       $("#btnPickup")
         .addClass("btn-secondary").removeClass("btn-primary");
+        document.cookie = "pickupSelected=false; path=/";
     } else {
       pickRad.prop("checked", true).trigger("change");
       $("#btnPickup")
