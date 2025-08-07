@@ -538,26 +538,22 @@ $(document).ready(function(){
 
 
 (function () {
-  // Wait for DOM to be ready
   document.addEventListener('DOMContentLoaded', function () {
     const placeOrderBtn = document.getElementById('ctl00_PageBody_PlaceOrderButton');
     const backToCartBtn = document.getElementById('ctl00_PageBody_BackToCartButton3');
 
-    function clearSessionIfNeeded() {
-      if (localStorage.sameAsDelivery !== 'true') {
-        console.log('[Checkout] Clearing currentStep from localStorage');
-        localStorage.removeItem('currentStep');
-      } else {
-        console.log('[Checkout] sameAsDelivery is true, currentStep retained');
-      }
+    function overrideSessionState() {
+      console.log('[Checkout] Overriding localStorage: sameAsDelivery = false, currentStep = 2');
+      localStorage.setItem('sameAsDelivery', 'false');
+      localStorage.setItem('currentStep', '2');
     }
 
     if (placeOrderBtn) {
-      placeOrderBtn.addEventListener('click', clearSessionIfNeeded);
+      placeOrderBtn.addEventListener('click', overrideSessionState);
     }
 
     if (backToCartBtn) {
-      backToCartBtn.addEventListener('click', clearSessionIfNeeded);
+      backToCartBtn.addEventListener('click', overrideSessionState);
     }
   });
 })();
