@@ -775,6 +775,7 @@ $(document).ready(function() {
 
 
 
+
 (function(){
   console.log("[AutoContinue] Script loaded");
 
@@ -789,60 +790,67 @@ $(document).ready(function() {
     return val;
   }
 
-  // Attempt to find & invoke the Continue button postback
+  // Try to find & fire the Continue button postback
   function tryAutoContinue() {
-    console.log("[AutoContinue] tryAutoContinue() invoked");
+    console.log("[AutoContinue] tryAutoContinue()");
     if (readCookie('pickupSelected') !== 'true') {
-      console.log("[AutoContinue] pickupSelected !== 'true'; aborting");
+      console.log("[AutoContinue] pickupSelected ≠ 'true', skipping");
       return;
     }
+
     const btn = document.getElementById('ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView');
     if (!btn) {
-      console.log("[AutoContinue] Continue button not found yet");
+      console.log("[AutoContinue] Continue button not in DOM yet");
       return;
     }
-    console.log("[AutoContinue] Continue button found:", btn);
+    console.log("[AutoContinue] Continue button found", btn);
 
-    // Stop further polling
     clearInterval(pollTimer);
-    console.log("[AutoContinue] Cleared pollTimer");
+    console.log("[AutoContinue] Polling stopped");
 
+    // pull out the href/javascript call
     const href = btn.getAttribute('href') || '';
-    console.log("[AutoContinue] Continue button href:", href);
+    console.log("[AutoContinue] href:", href);
 
     if (href.startsWith('javascript:')) {
       const js = href.replace(/^javascript:/, '');
-      console.log("[AutoContinue] Executing postback via eval:", js);
+      console.log("[AutoContinue] Executing:", js);
       try {
         eval(js);
-        console.log("[AutoContinue] eval() succeeded");
-      } catch (err) {
-        console.error("[AutoContinue] eval() failed:", err);
+        console.log("[AutoContinue] eval succeeded");
+      } catch (e) {
+        console.error("[AutoContinue] eval failed", e);
       }
     } else {
-      console.log("[AutoContinue] Invoking btn.click()");
+      console.log("[AutoContinue] Falling back to btn.click()");
       try {
         btn.click();
-        console.log("[AutoContinue] btn.click() invoked");
-      } catch (err) {
-        console.error("[AutoContinue] btn.click() failed:", err);
+        console.log("[AutoContinue] click() succeeded");
+      } catch (e) {
+        console.error("[AutoContinue] click() failed", e);
       }
     }
   }
 
-  // Start polling
-  const pollTimer = setInterval(tryAutoContinue, 200);
-  console.log("[AutoContinue] pollTimer started");
+  // Wait for DOM & any partial postbacks
+  document.addEventListener('DOMContentLoaded', () => {
+    console.log("[AutoContinue] DOMContentLoaded");
+    // start polling every 200ms
+    pollTimer = setInterval(tryAutoContinue, 200);
+    console.log("[AutoContinue] pollTimer started");
 
-  // Hook into ASP.NET AJAX endRequest if available
-  if (window.Sys?.WebForms?.PageRequestManager) {
-    console.log("[AutoContinue] Registering endRequest handler");
-    Sys.WebForms.PageRequestManager.getInstance().add_endRequest(function() {
-      console.log("[AutoContinue] ASP.NET AJAX endRequest fired");
-      tryAutoContinue();
-    });
-  }
+    // ASP.NET AJAX support
+    if (window.Sys?.WebForms?.PageRequestManager) {
+      console.log("[AutoContinue] hooking endRequest");
+      Sys.WebForms.PageRequestManager.getInstance().add_endRequest(() => {
+        console.log("[AutoContinue] endRequest fired");
+        tryAutoContinue();
+      });
+    }
+  });
 })();
+
+
 
 
 
