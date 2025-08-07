@@ -80,7 +80,7 @@ $(function(){
           <div class="d-flex justify-content-between align-items-center">
             <div class="d-flex align-items-center qty-section"></div>
             <div class="text-end action-block">
-              <div>Total: <span class="fw-bold">${totalText}</span></div>
+              <div><span class="fw-bold">${totalText}</span></div>
               <div class="mt-1"></div>
               <div class="sfl-placeholder mt-1"></div>
             </div>
