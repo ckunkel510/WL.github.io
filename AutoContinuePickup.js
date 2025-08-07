@@ -1,5 +1,5 @@
 (function(){
-  console.log("[AutoNav] Loaded");
+  console.log("[AutoNav] Script loaded");
 
   // ── Cookie utils ────────────────────────────────────────────────
   function readCookie(name) {
@@ -9,94 +9,90 @@
       ?.split('=')[1] || '';
   }
   function setCookie(name, val) {
-    document.cookie = `${name}=${val}; path=/`;
-    console.log(`[AutoNav] Cookie ${name}=${val}`);
+    document.cookie = `${name}=${val};path=/`;
   }
   function clearCookie(name) {
-    document.cookie = `${name}=; path=/; expires=Thu,01 Jan 1970 00:00:00 GMT`;
-    console.log(`[AutoNav] Cleared ${name}`);
+    document.cookie = `${name}=;path=/;expires=Thu,01 Jan 1970 00:00:00 GMT`;
   }
 
   // ── ASP.NET AJAX manager (if any) ────────────────────────────────
   const prm = window.Sys?.WebForms?.PageRequestManager?.getInstance();
 
-  // ── FORWARD: auto-click Continue ─────────────────────────────────
+  // ── FORWARD: auto‐click Continue ─────────────────────────────────
   let pollTimer;
   function tryAutoContinue() {
-    console.log("[AutoNav] tryAutoContinue()");
+    // stop if flag cleared
     if (readCookie('pickupSelected') !== 'true') {
-      console.log("[AutoNav] pickupSelected≠true → skip forward");
+      clearInterval(pollTimer);
+      prm?.remove_endRequest(tryAutoContinue);
+      console.log("[AutoNav] pickupSelected=false → forward automation stopped");
       return;
     }
     const btn = document.getElementById(
       'ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView'
     );
-    if (!btn) {
-      console.log("[AutoNav] Continue button missing");
-      return;
-    }
-    console.log("[AutoNav] Continue found → firing");
+    if (!btn) return;
 
+    console.log("[AutoNav] Continue button found → auto-clicking");
     clearInterval(pollTimer);
     prm?.remove_endRequest(tryAutoContinue);
 
-    // fire the postback
-    const href = btn.getAttribute('href')||'';
+    const href = btn.getAttribute('href') || '';
     if (href.startsWith('javascript:')) {
       eval(href.replace(/^javascript:/,''));
     } else {
       btn.click();
     }
 
-    // now clear pickupSelected, disable backward skip
+    // clear forward flag, disable backward skip
     clearCookie('pickupSelected');
-    setCookie('skipBack', 'false');
+    setCookie('skipBack','false');
   }
 
-  // ── BACKWARD: intercept first Back click on the card page ─────────
+  // ── BACKWARD: intercept card-page Back ───────────────────────────
   function initAutoBack() {
-    console.log("[AutoNav] initAutoBack()");
     const backBtn = document.getElementById('ctl00_PageBody_btnBack_CardOnFileView');
-    if (!backBtn) {
-      console.log("[AutoNav] Card Back button missing");
-      return;
-    }
-    // replace to clear old handlers
+    if (!backBtn) return;
+
+    // replace to drop old handlers
     const fresh = backBtn.cloneNode(true);
     backBtn.parentNode.replaceChild(fresh, backBtn);
 
     fresh.addEventListener('click', function(e) {
-      console.log("[AutoNav] Card Back clicked, skipBack=", readCookie('skipBack'));
-      if (readCookie('skipBack') === 'true') {
-        e.preventDefault();
-        // set skipBack true for the next target-back page
-        setCookie('skipBack','true');
-        // clear pickupSelected so forward won’t fire
-        clearCookie('pickupSelected');
+      if (readCookie('skipBack') !== 'true') return;
+      e.preventDefault();
 
-        const cartBack = document.getElementById('ctl00_PageBody_BackToCartButton3');
-        console.log("[AutoNav] Redirecting to cart Back →", cartBack);
-        if (cartBack) {
-          const href2 = cartBack.getAttribute('href')||'';
-          if (href2.startsWith('javascript:')) {
-            eval(href2.replace(/^javascript:/,''));
-          } else {
-            cartBack.click();
-          }
-        } else {
-          console.warn("[AutoNav] Cart BackToCartButton3 missing");
-        }
+      console.log("[AutoNav] skipBack=true → rerouting cart-back");
+      // set skipBack again for next leg, clear forward flag
+      setCookie('skipBack','true');
+      clearCookie('pickupSelected');
+
+      const cartBack = document.getElementById('ctl00_PageBody_BackToCartButton3');
+      if (!cartBack) return console.warn("[AutoNav] BackToCartButton3 missing");
+
+      const href2 = cartBack.getAttribute('href') || '';
+      if (href2.startsWith('javascript:')) {
+        eval(href2.replace(/^javascript:/,''));
+      } else {
+        cartBack.click();
       }
     });
-    console.log("[AutoNav] Card Back handler attached");
   }
 
-  // ── Initialize on load & partial-postbacks ────────────────────────
-  document.addEventListener('DOMContentLoaded', function(){
-    pollTimer = setInterval(tryAutoContinue, 200);
-    prm?.add_endRequest(tryAutoContinue);
-
+  // ── Init on DOM ready & after partial postbacks ─────────────────
+  document.addEventListener('DOMContentLoaded', () => {
+    // BACK handler always attaches
     initAutoBack();
-    prm?.add_endRequest(initAutoBack);
+    if (prm) prm.add_endRequest(initAutoBack);
+
+    // only start forward automation if pickupSelected=true
+    if (readCookie('pickupSelected') === 'true') {
+      pollTimer = setInterval(tryAutoContinue, 200);
+      prm?.add_endRequest(tryAutoContinue);
+      console.log("[AutoNav] Forward automation enabled");
+    } else {
+      console.log("[AutoNav] Forward automation disabled");
+    }
   });
 })();
+
