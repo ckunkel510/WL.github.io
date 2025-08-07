@@ -125,21 +125,26 @@ $(function(){
 
 
 
+
 $(function(){
   // 1) Detach the existing subtotal panel
   var $subtotal = $('.SubtotalWrapper').detach();
 
-  // 2) Detach only the “Place Order” button
-  var $placeOrderBtn = $('#ctl00_PageBody_PlaceOrderButton').detach();
+  // 2) Detach the Place Order button and relabel it
+  var $placeOrder = $('#ctl00_PageBody_PlaceOrderButton').detach();
+  $placeOrder.find('span').text('Proceed to checkout');
 
-  // 3) Build a simple wrapper for them
-  var $widget = $('<div class="cart-summary-widget"></div>')
-    .append($subtotal)
-    .append($placeOrderBtn);
+  // 3) Insert the button into the subtotal area
+  $subtotal.append($placeOrder);
 
-  // 4) Insert it after the cart items container
-  $('.ShoppingCartDetailPanel').append($widget);
+  // 4) Wrap into your widget container
+  var $widget = $('<div class="cart-summary-widget"></div>').append($subtotal);
+
+  // 5) Append the widget
+  $('.shopping-cart-details').append($widget);
 });
+
+
 
 
 
