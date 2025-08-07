@@ -1,11 +1,10 @@
 (function(){
   console.log("[AutoNav] Script loaded");
 
-  // Cookie helpers
+  // ── Cookie helpers ─────────────────────────────────────────────
   function readCookie(name) {
     return document.cookie
-      .split(';')
-      .map(c=>c.trim())
+      .split(';').map(c=>c.trim())
       .find(c=>c.startsWith(name+'='))
       ?.split('=')[1] || '';
   }
@@ -14,10 +13,10 @@
     console.log(`[AutoNav] Cleared cookie "${name}"`);
   }
 
-  // ASP.NET AJAX manager (if any)
+  // ── ASP.NET AJAX manager (if any) ─────────────────────────────
   const prm = window.Sys?.WebForms?.PageRequestManager?.getInstance();
 
-  // — FORWARD: auto-click Continue when ready —
+  // ── FORWARD: auto‐click Continue ───────────────────────────────
   let pollTimer;
   function tryAutoContinue() {
     console.log("[AutoNav] tryAutoContinue()");
@@ -35,64 +34,64 @@
     clearInterval(pollTimer);
     if (prm) prm.remove_endRequest(tryAutoContinue);
 
-    // fire the postback
     const href = btn.getAttribute('href')||'';
+    console.log("[AutoNav] executing forward:", href);
     if (href.startsWith('javascript:')) {
-      const js = href.replace(/^javascript:/,'');
-      console.log("[AutoNav] eval:", js);
-      try { eval(js); }
+      try { eval(href.replace(/^javascript:/,'')); }
       catch(e){ console.error(e); }
     } else {
-      console.log("[AutoNav] click()");
       btn.click();
     }
 
-    // done
     clearCookie('pickupSelected');
   }
 
-  // — BACKWARD: intercept Back click and reroute —
+  // ── BACKWARD: intercept Back and reroute ────────────────────────
   function initAutoBack() {
     console.log("[AutoNav] initAutoBack()");
     const backBtn = document.getElementById('ctl00_PageBody_btnBack_CardOnFileView');
-    if (!backBtn) {
-      console.log("[AutoNav] Back button not present");
-      return;
-    }
-    // remove previous handlers
-    backBtn.replaceWith(backBtn.cloneNode(true));
-    const fresh = document.getElementById('ctl00_PageBody_btnBack_CardOnFileView');
+    console.log("[AutoNav] backBtn element:", backBtn);
+    if (!backBtn) return;
+
+    // replace to remove old handlers
+    const fresh = backBtn.cloneNode(true);
+    backBtn.parentNode.replaceChild(fresh, backBtn);
 
     fresh.addEventListener('click', function(e){
-      console.log("[AutoNav] Back clicked, cookie =", readCookie('pickupSelected'));
+      console.log("[AutoNav] Back clicked, pickupSelected =", readCookie('pickupSelected'));
       if (readCookie('pickupSelected') === 'true') {
         e.preventDefault();
         const cartBack = document.getElementById('ctl00_PageBody_BackToCartButton3');
+        console.log("[AutoNav] cartBack element:", cartBack);
         if (cartBack) {
-          console.log("[AutoNav] Redirecting to cart Back");
-          cartBack.click();
+          const href2 = cartBack.getAttribute('href')||'';
+          console.log("[AutoNav] executing back:", href2);
+          if (href2.startsWith('javascript:')) {
+            try { eval(href2.replace(/^javascript:/,'')); }
+            catch(err){ console.error(err); }
+          } else {
+            cartBack.click();
+          }
           clearCookie('pickupSelected');
         } else {
-          console.warn("[AutoNav] Cart Back link missing");
+          console.warn("[AutoNav] BackToCartButton3 not found");
         }
       }
     });
     console.log("[AutoNav] Back interceptor attached");
   }
 
-  // — Bootstrap on DOM ready & AJAX events —
+  // ── Initialize on DOM ready & after any partial postback ───────
   document.addEventListener('DOMContentLoaded', function(){
     console.log("[AutoNav] DOMContentLoaded");
-    // start forward polling
     pollTimer = setInterval(tryAutoContinue, 200);
     console.log("[AutoNav] Forward poll started");
+    initAutoBack();
     if (prm) {
       prm.add_endRequest(tryAutoContinue);
-      console.log("[AutoNav] Registered AJAX endRequest for forward");
       prm.add_endRequest(initAutoBack);
-      console.log("[AutoNav] Registered AJAX endRequest for back");
+      console.log("[AutoNav] AJAX handlers registered");
     }
-    // also attach Back on initial load
-    initAutoBack();
   });
 })();
+
