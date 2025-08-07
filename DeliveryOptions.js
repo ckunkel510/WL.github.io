@@ -90,33 +90,46 @@ $(function(){
 
   // Parse shipping options
   var baseCost = parseFloat(deliveryText.replace(/[^0-9.-]/g,''));
-  var transitMap = { 'Standard delivery':5,'3 Day Select':3,'2nd Day Air':2,'Next Day Air':1 };
-  var descMap    = { 'Standard delivery':'Traditional Ground','3 Day Select':'3 Day Service','2nd Day Air':'2nd Day Air','Next Day Air':'Next Day Air' };
+  var transitMap = {
+    'Standard delivery': 5,
+    '3 Day Select':      3,
+    '2nd Day Air':       2,
+    'Next Day Air':      1
+  };
+  var descMap = {
+    'Standard delivery': 'Traditional Ground',
+    '3 Day Select':      '3 Day Service',
+    '2nd Day Air':       '2nd Day Air',
+    'Next Day Air':      'Next Day Air'
+  };
   var shippingOptions = $optSelect.find('option').map(function(){
-    var $o = $(this), txt=$o.text().trim();
+    var $o = $(this), txt = $o.text().trim();
     var label = txt.replace(/\s*\(.*\)/,'').trim();
     var extra = (txt.match(/\(([^)]+)\)/)||[])[1]||'';
-    var total= baseCost;
-    if(extra.startsWith('+')) total= baseCost+parseFloat(extra.replace(/[^0-9.-]/g,'')); 
-    else total=parseFloat(extra.replace(/[^0-9.-]/g,''))||baseCost;
+    var cost  = baseCost;
+    if (extra.startsWith('+')) {
+      cost = baseCost + parseFloat(extra.replace(/[^0-9.-]/g,''));
+    } else {
+      cost = parseFloat(extra.replace(/[^0-9.-]/g,'')) || baseCost;
+    }
     return {
-      value: $o.val(),
-      label,
-      costLabel:'$'+total.toFixed(2),
-      transitDays: transitMap[label]||0,
-      description: descMap[label]||label
+      value:       $o.val(),
+      label:       label,
+      costLabel:   '$' + cost.toFixed(2),
+      transitDays: transitMap[label] || 0,
+      description: descMap[label]   || label
     };
   }).get();
 
   // Business-day adder
-  function addBusinessDays(d, days){
-    var date=new Date(d);
-    while(days>0){
-      date.setDate(date.getDate()+1);
-      var wd=date.getDay();
-      if(wd>0&&wd<6) days--;
+  function addBusinessDays(date, days) {
+    var d = new Date(date);
+    while (days > 0) {
+      d.setDate(d.getDate() + 1);
+      var wd = d.getDay();
+      if (wd > 0 && wd < 6) days--;
     }
-    return date;
+    return d;
   }
 
   // Build Shipping Method card
@@ -130,33 +143,25 @@ $(function(){
   var $shipBody = $shipCard.find('.card-body');
   var $list     = $('<div class="d-flex flex-column mb-3"></div>');
 
-  shippingOptions.forEach(opt=>{
+  shippingOptions.forEach(opt => {
     var $btn = $(`
       <button type="button" class="btn mb-2 text-start">
         <div class="fw-semibold">${opt.label}</div>
-        <div class="fw-bold text-dark">${opt.costLabel}</div>
+        <div class="fw-bold text-white">${opt.costLabel}</div>
       </button>
-    `).data('opt',opt);
+    `).data('opt', opt);
 
     $btn.on('click', function(){
-      // remember for after postback
+      // remember selection
       localStorage.setItem('selectedShippingValue', opt.value);
-      // perform the actual ASP.NET postback
-      if (window.WebForm_DoPostBackWithOptions) {
-        WebForm_DoPostBackWithOptions(
-          new WebForm_PostBackOptions(
-            'ctl00$PageBody$CartSummary2$LocalDeliveryChargeControl$DeliveryOptionsDropDownList',
-            '', true, '', '', false, true
-          )
-        );
-      } else if (typeof __doPostBack === 'function') {
-        __doPostBack(
-          'ctl00$PageBody$CartSummary2$LocalDeliveryChargeControl$DeliveryOptionsDropDownList',
-          ''
-        );
-      } else {
-        console.warn('[DeliveryOptions] No postback API found');
-      }
+      // update the hidden select and fire its onchange
+      $optSelect.val(opt.value);
+      setTimeout(function(){
+        var onchange = $optSelect.attr('onchange');
+        if (onchange) {
+          eval(onchange);
+        }
+      }, 0);
     });
 
     $list.append($btn);
@@ -180,18 +185,18 @@ $(function(){
     var sel = localStorage.getItem('selectedShippingValue');
     $shipBody.find('.shipping-banner').remove();
     $list.children('button').each(function(){
-      var o = $(this).data('opt');
-      var isSel = sel ? o.value===sel : $optSelect.val()===o.value;
+      var opt = $(this).data('opt');
+      var isSel = sel ? (opt.value === sel) : ($optSelect.val() === opt.value);
       $(this)
         .toggleClass('btn-primary', isSel)
         .toggleClass('btn-outline-primary', !isSel)
-        .toggle(sel? isSel : true);
-      if(isSel){
-        var arr = addBusinessDays(new Date(), o.transitDays+1);
-        var arrStr = arr.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+        .toggle(sel ? isSel : true);
+      if (isSel) {
+        var arrival = addBusinessDays(new Date(), opt.transitDays + 1);
+        var arrStr = arrival.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' });
         var $banner = $(`
           <div class="alert alert-info shipping-banner mb-3">
-            <strong>${o.description}</strong><br>
+            <strong>${opt.description}</strong><br>
             Expected arrival: ${arrStr}
           </div>
         `);
@@ -212,21 +217,27 @@ $(function(){
     </div>
   `);
   var $totalsBody = $totalsCard.find('.card-body');
-  function row(l,v,s){ return $(`
-    <div class="d-flex justify-content-between mb-2">
-      <${s?'strong':'span'}>${l}</${s?'strong':'span'}>
-      <${s?'strong':'span'}>${v}</${s?'strong':'span'}>
-    </div>`); }
+  function row(label, value, strong) {
+    var tag = strong ? 'strong' : 'span';
+    return $(`
+      <div class="d-flex justify-content-between mb-2">
+        <${tag}>${label}</${tag}><${tag}>${value}</${tag}>
+      </div>
+    `);
+  }
   $totalsBody
-    .append(row('Subtotal',subtotalText))
-    .append(row('Delivery',deliveryText))
-    .append(row('Tax',taxText))
+    .append(row('Subtotal',      subtotalText))
+    .append(row('Delivery',      deliveryText))
+    .append(row('Tax',           taxText))
     .append('<hr>')
-    .append(row('Total (inc. Tax)',totalText,true));
+    .append(row('Total (inc. Tax)', totalText, true));
 
-  // Inject
-  $summary.empty().append($shipCard).append($totalsCard);
+  // Inject updated widgets
+  $summary.empty()
+          .append($shipCard)
+          .append($totalsCard);
 });
+
 
 
 
