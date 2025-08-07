@@ -794,7 +794,7 @@ async function injectSaveForLaterButtons() {
   cartItems.forEach((item, index) => {
     console.log(`[SFL] Processing cart item #${index+1}`);
 
-    // STEP 1: product code from card title
+    // 1) Get the product link & code
     const codeLink = item.querySelector("h6 a");
     const productCode = codeLink?.textContent.trim();
     if (!productCode) {
@@ -803,7 +803,7 @@ async function injectSaveForLaterButtons() {
     }
     console.log(`[SFL] Found product code: ${productCode}`);
 
-    // STEP 1.5: pid from that same href
+    // 2) Extract pid from that href
     const pidMatch = codeLink.href?.match(/pid=(\d+)/);
     if (!pidMatch) {
       console.warn("[SFL] No pid in href:", codeLink.href);
@@ -812,29 +812,14 @@ async function injectSaveForLaterButtons() {
     const productId = pidMatch[1];
     console.log(`[SFL] Found pid: ${productId}`);
 
-    // STEP 2: find the Delete link (plain text) or fallback to old anchor
-    const deleteBtn =
-      item.querySelector("a.delete-link") ||
-      item.querySelector('a[href*="del_"]');
+    // 3) Find the “Delete” link you created
+    const deleteBtn = item.querySelector("a.delete-link");
     if (!deleteBtn) {
-      console.warn("[SFL] Could not find delete button in item:", item);
+      console.warn("[SFL] Could not find delete-link in item:", item);
       return;
     }
 
-    // STEP 2.5: determine the postback target
-    let deleteEventTarget = deleteBtn.dataset.deleteTarget;
-    if (!deleteEventTarget) {
-      const href = deleteBtn.getAttribute("href") || "";
-      const m = href.match(/WebForm_PostBackOptions\("([^"]+)"/);
-      deleteEventTarget = m?.[1];
-    }
-    if (!deleteEventTarget) {
-      console.warn("[SFL] Could not extract delete postback target.");
-      return;
-    }
-    console.log(`[SFL] Found delete target: ${deleteEventTarget}`);
-
-    // STEP 3: build the SFL button
+    // 4) Build the SFL button
     const btn = document.createElement("button");
     btn.textContent = "Save for Later";
     btn.className = "btn btn-link text-primary btn-sm sfl-button";
@@ -843,11 +828,11 @@ async function injectSaveForLaterButtons() {
     btn.addEventListener("click", async e => {
       e.preventDefault();
       btn.disabled = true;
-      btn.textContent = "Saving...";
+      btn.textContent = "Saving…";
       try {
         await addToQuicklist(productId);
-        await removeCartItem(deleteEventTarget);
-        location.reload();
+        // now trigger your Delete link to remove from cart
+        deleteBtn.click();
       } catch (err) {
         console.error("[SFL] Failed to save for later:", err);
         btn.textContent = "Error – Try Again";
@@ -855,7 +840,7 @@ async function injectSaveForLaterButtons() {
       }
     });
 
-    // STEP 4: inject into the placeholder
+    // 5) Inject into the placeholder
     const placeholder = item.querySelector(".sfl-placeholder");
     if (placeholder) {
       placeholder.appendChild(btn);
@@ -865,6 +850,7 @@ async function injectSaveForLaterButtons() {
     }
   });
 }
+
 
 
 
