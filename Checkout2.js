@@ -722,6 +722,7 @@ $(document).ready(function() {
       $("#btnPickup")
         .addClass("btn-secondary").removeClass("btn-primary");
         document.cookie = "pickupSelected=false; path=/";
+        document.cookie = "skipBack=false; path=/";
     } else {
       pickRad.prop("checked", true).trigger("change");
       $("#btnPickup")
@@ -729,6 +730,7 @@ $(document).ready(function() {
       $("#btnDelivered")
         .addClass("btn-secondary").removeClass("btn-primary");
         document.cookie = "pickupSelected=true; path=/";
+        document.cookie = "skipBack=true; path=/";
     }
   }
 
