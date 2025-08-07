@@ -375,7 +375,7 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
       const paymentHeader = document.querySelector("#ctl00_PageBody_CardOnFileViewTitle_HeaderText");
       const reviewHeader = document.querySelector("#ctl00_PageBody_SummaryHeading_HeaderText");
       const summaryEntry2 = document.getElementById("SummaryEntry2");
-      const CheckoutDetails = document.querySelector("ctl00_PageBody_CheckoutTitle_HeaderText");
+      const CheckoutDetails = document.getElementById("ctl00_PageBody_CheckoutTitle_HeaderText");
 
       return (
         isVisible(paymentHeader) ||
@@ -407,7 +407,7 @@ function hideSflIfOnFinalStep() {
   const paymentHeader = document.querySelector("#ctl00_PageBody_CardOnFileViewTitle_HeaderText");
   const reviewHeader = document.querySelector("#ctl00_PageBody_SummaryHeading_HeaderText");
   const summaryEntry2 = document.getElementById("SummaryEntry2");
-  const CheckoutDetails = document.querySelector("ctl00_PageBody_CheckoutTitle_HeaderText");
+  const CheckoutDetails = document.getElementById("ctl00_PageBody_CheckoutTitle_HeaderText");
   const sflBlock = document.getElementById("savedForLater");
 
   if (!sflBlock) return;
