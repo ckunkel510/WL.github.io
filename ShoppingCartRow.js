@@ -1,3 +1,4 @@
+
 $(function(){
   $('.shopping-cart-details .shopping-cart-item').each(function(){
     var $item = $(this);
@@ -6,28 +7,27 @@ $(function(){
     $item.find('[style*="display: table-row"]').remove();
     $item.find('span[id$="_QuantityValidator"]').remove();
 
-    // 2) Capture & remove the original Delete link
+    // 2) Capture & remove original Delete link
     var $origDel = $item.find('a[id*="_del_"]').first();
     var delJs = '';
     if ($origDel.length) {
-      var href = $origDel.attr('href') || '';
-      delJs = href.replace(/^javascript:/, '');
+      delJs = ($origDel.attr('href') || '').replace(/^javascript:/, '');
     }
     $origDel.remove();
 
-    // 3) Capture & remove the original Refresh link
+    // 3) Capture & remove original Refresh link
     var $origRef = $item.find('a.refresh-cart-line-total').first();
     var refJs = '';
     if ($origRef.length) {
-      var href2 = $origRef.attr('href') || '';
-      refJs = href2.replace(/^javascript:/, '');
+      refJs = ($origRef.attr('href') || '').replace(/^javascript:/, '');
     }
     $origRef.remove();
 
-    // 4) Grab the qty input
-    var $origQty = $item.find('span.RadInput input.riTextBox').first();
+    // 4) Detach the entire RadInput wrapper (text + hidden state)
+    var $origQtyWrap = $item.find('span.RadInput').first();
+    $origQtyWrap.detach();
 
-    // 5) Pull other data
+    // 5) Grab the rest of your data
     var imgSrc = $item.find('img.ThumbnailImage').attr('src');
     var $infoCol = $item.find('.row.pl-2.w-100 .col-12.col-sm-6').first();
     var $link   = $infoCol.find('a:has(.portalGridLink)').first();
@@ -42,13 +42,13 @@ $(function(){
       .find('.col-12.col-sm-3 .d-flex div').first()
       .text().trim();
 
-    // 6) Build Delete button with safe eval
+    // 6) Build Delete button
     var $delBtn = $('<button type="button" class="btn btn-outline-danger btn-sm mb-1">Delete</button>');
     if (delJs) {
       $delBtn.on('click', function(){ eval(delJs); });
     }
 
-    // 7) Build the card
+    // 7) Build our compact card
     var $card = $(`
       <div class="card mb-2 cart-item-card">
         <div class="card-body p-2">
@@ -76,19 +76,22 @@ $(function(){
       </div>
     `);
 
-    // 8) Insert qty input and wire auto-postback
-    var $qtyClone = $origQty.clone();
+    // 8) Clone & append the full RadInput wrapper
+    var $qtyClone = $origQtyWrap.clone();
     $card.find('.qty-section')
-      .append($qtyClone)
-      .append(' ea');
+         .append($qtyClone)
+         .append(' ea');
+
+    // wire up auto-postback on the actual text input
+    var $qtyInput = $qtyClone.find('input.riTextBox');
     if (refJs) {
-      $qtyClone
+      $qtyInput
         .on('blur', () => eval(refJs))
         .on('keydown', e => {
           if (e.key === 'Enter') {
             e.preventDefault();
             eval(refJs);
-            $qtyClone.blur();
+            $qtyInput.blur();
           }
         });
     }
@@ -98,8 +101,7 @@ $(function(){
     $actions.append($delBtn);
     $actions.append('<div class="sfl-placeholder mt-1"></div>');
 
-    // 10) Swap in
+    // 10) Replace the old row with our new card
     $item.empty().append($card);
   });
 });
-
