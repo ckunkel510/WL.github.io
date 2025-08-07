@@ -1,134 +1,98 @@
 (function(){
-  console.log("[AutoContinue] Script loaded");
+  console.log("[AutoNav] Script loaded");
 
-  // Helper to read a cookie by name
+  // Cookie helpers
   function readCookie(name) {
-    const match = document.cookie
+    return document.cookie
       .split(';')
-      .map(c => c.trim())
-      .find(c => c.startsWith(name + '='));
-    const val = match?.split('=')[1];
-    console.log(`[AutoContinue] Cookie "${name}" =`, val);
-    return val;
+      .map(c=>c.trim())
+      .find(c=>c.startsWith(name+'='))
+      ?.split('=')[1] || '';
+  }
+  function clearCookie(name) {
+    document.cookie = name + '=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    console.log(`[AutoNav] Cleared cookie "${name}"`);
   }
 
-  // will hold our polling timer
-  let pollTimer;
-
-  // ASP.NET AJAX PageRequestManager (if present)
+  // ASP.NET AJAX manager (if any)
   const prm = window.Sys?.WebForms?.PageRequestManager?.getInstance();
 
-  // endRequest handler reference so we can remove it later
-  const endRequestHandler = function() {
-    console.log("[AutoContinue] endRequest fired");
-    tryAutoContinue();
-  };
-
-  // Attempt to find & fire the Continue button postback
+  // — FORWARD: auto-click Continue when ready —
+  let pollTimer;
   function tryAutoContinue() {
-    console.log("[AutoContinue] tryAutoContinue()");
-    // only run when pickupSelected is true
+    console.log("[AutoNav] tryAutoContinue()");
     if (readCookie('pickupSelected') !== 'true') {
-      console.log("[AutoContinue] pickupSelected ≠ 'true', skipping");
+      console.log("[AutoNav] pickupSelected ≠ true, skipping forward");
       return;
     }
-
     const btn = document.getElementById('ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView');
     if (!btn) {
-      console.log("[AutoContinue] Continue button not in DOM yet");
+      console.log("[AutoNav] Continue button not found yet");
       return;
     }
-    console.log("[AutoContinue] Continue button found", btn);
+    console.log("[AutoNav] Continue button found", btn);
 
-    // SUCCESS: stop further polling and AJAX hooks
     clearInterval(pollTimer);
-    console.log("[AutoContinue] Polling stopped");
-    if (prm && endRequestHandler) {
-      prm.remove_endRequest(endRequestHandler);
-      console.log("[AutoContinue] Unregistered endRequest handler");
-    }
+    if (prm) prm.remove_endRequest(tryAutoContinue);
 
-    // execute the postback JavaScript if present
-    const href = btn.getAttribute('href') || '';
-    console.log("[AutoContinue] href:", href);
-
+    // fire the postback
+    const href = btn.getAttribute('href')||'';
     if (href.startsWith('javascript:')) {
-      const js = href.replace(/^javascript:/, '');
-      console.log("[AutoContinue] Executing:", js);
-      try {
-        eval(js);
-        console.log("[AutoContinue] eval succeeded");
-      } catch (e) {
-        console.error("[AutoContinue] eval failed", e);
-      }
+      const js = href.replace(/^javascript:/,'');
+      console.log("[AutoNav] eval:", js);
+      try { eval(js); }
+      catch(e){ console.error(e); }
     } else {
-      console.log("[AutoContinue] Falling back to btn.click()");
-      try {
-        btn.click();
-        console.log("[AutoContinue] click() succeeded");
-      } catch (e) {
-        console.error("[AutoContinue] click() failed", e);
-      }
+      console.log("[AutoNav] click()");
+      btn.click();
     }
+
+    // done
+    clearCookie('pickupSelected');
   }
 
-  // Start when DOM is ready
-  document.addEventListener('DOMContentLoaded', () => {
-    console.log("[AutoContinue] DOMContentLoaded");
-    // begin polling every 200ms
-    pollTimer = setInterval(tryAutoContinue, 200);
-    console.log("[AutoContinue] pollTimer started");
-
-    // hook AJAX partial-postback if available
-    if (prm) {
-      prm.add_endRequest(endRequestHandler);
-      console.log("[AutoContinue] endRequest handler registered");
-    }
-  });
-})();
-
-
-(function(){
-  // Helper to read a cookie by name
-  function readCookie(name) {
-    const match = document.cookie
-      .split(';')
-      .map(c => c.trim())
-      .find(c => c.startsWith(name + '='));
-    return match?.split('=')[1] || '';
-  }
-
-  // Wire up the “Back” redirect
+  // — BACKWARD: intercept Back click and reroute —
   function initAutoBack() {
+    console.log("[AutoNav] initAutoBack()");
     const backBtn = document.getElementById('ctl00_PageBody_btnBack_CardOnFileView');
     if (!backBtn) {
-      console.log('[AutoBack] Back button not found');
+      console.log("[AutoNav] Back button not present");
       return;
     }
+    // remove previous handlers
+    backBtn.replaceWith(backBtn.cloneNode(true));
+    const fresh = document.getElementById('ctl00_PageBody_btnBack_CardOnFileView');
 
-    backBtn.addEventListener('click', function(e) {
+    fresh.addEventListener('click', function(e){
+      console.log("[AutoNav] Back clicked, cookie =", readCookie('pickupSelected'));
       if (readCookie('pickupSelected') === 'true') {
-        e.preventDefault(); // cancel the normal back
+        e.preventDefault();
         const cartBack = document.getElementById('ctl00_PageBody_BackToCartButton3');
         if (cartBack) {
-          console.log('[AutoBack] pickupSelected=true → clicking BackToCartButton3');
+          console.log("[AutoNav] Redirecting to cart Back");
           cartBack.click();
+          clearCookie('pickupSelected');
         } else {
-          console.warn('[AutoBack] BackToCartButton3 not found');
+          console.warn("[AutoNav] Cart Back link missing");
         }
       }
     });
-    console.log('[AutoBack] Listener attached to btnBack_CardOnFileView');
+    console.log("[AutoNav] Back interceptor attached");
   }
 
-  // Run on DOM ready and after any ASP.NET partial postback
-  document.addEventListener('DOMContentLoaded', () => {
-    initAutoBack();
-    if (window.Sys?.WebForms?.PageRequestManager) {
-      window.Sys.WebForms.PageRequestManager
-        .getInstance()
-        .add_endRequest(initAutoBack);
+  // — Bootstrap on DOM ready & AJAX events —
+  document.addEventListener('DOMContentLoaded', function(){
+    console.log("[AutoNav] DOMContentLoaded");
+    // start forward polling
+    pollTimer = setInterval(tryAutoContinue, 200);
+    console.log("[AutoNav] Forward poll started");
+    if (prm) {
+      prm.add_endRequest(tryAutoContinue);
+      console.log("[AutoNav] Registered AJAX endRequest for forward");
+      prm.add_endRequest(initAutoBack);
+      console.log("[AutoNav] Registered AJAX endRequest for back");
     }
+    // also attach Back on initial load
+    initAutoBack();
   });
 })();
-
