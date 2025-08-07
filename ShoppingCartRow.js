@@ -1,75 +1,64 @@
+
 $(function(){
   $('.shopping-cart-details .shopping-cart-item').each(function(){
-    var $item       = $(this);
-    // — grab all the bits we need —
-    var imgSrc      = $item.find('img.ThumbnailImage').attr('src');
-    var $prodLink   = $item.find('a:has(.portalGridLink)').first();
-    var prodCode    = $prodLink.find('.portalGridLink').text().trim();
-    var prodHref    = $prodLink.attr('href');
-    var desc        = $item
-      .find('.col-12.col-sm-6').first()         // first col = code & description
-      .children('div').eq(2)                    // third <div> in there
-      .text().trim();
-    var branch      = $item
-      .find('.col-12.col-sm-6').last()          // second col = stock info
-      .find('div div').eq(0).text().trim();
-    var stock       = $item
-      .find('.col-12.col-sm-6').last()
-      .find('div div').eq(1).text().trim();
-    // price text node (e.g. “$2.84 ea”)
-    var price       = $item
-      .find('.col-12.col-sm-9 .col-6').first()
-      .contents().filter(function(){ return this.nodeType===3; })
-      .text().trim();
-    // quantity input + its wrapper and the refresh button
-    var $qtyWrapper = $item.find('span.RadInput').parent();
-    var $refreshBtn = $item.find('a.refresh-cart-line-total');
-    // total and remove/save buttons
-    var total       = $item.find('.col-12.col-sm-3 .d-flex div').first().text().trim();
-    var $removeBtn  = $item.find('a[id*="_del_"]');
-    var $saveBtn    = $item.find('button.sfl-button');
+    var $item     = $(this);
+    // pull out what we need
+    var imgSrc    = $item.find('img.ThumbnailImage').attr('src');
+    var $link     = $item.find('a:has(.portalGridLink)').first();
+    var code      = $link.find('.portalGridLink').text().trim();
+    var href      = $link.attr('href');
+    var desc      = $item.find('.col-12.col-sm-6')
+                         .first().find('> div').eq(2).text().trim();
+    var priceText = $item.find('.col-12.col-sm-9 .col-6')
+                         .contents().filter((i,n)=>n.nodeType===3).text().trim();
+    var $qtyWrap  = $item.find('span.RadInput').parent();
+    var $refresh  = $item.find('a.refresh-cart-line-total');
+    var totalText = $item.find('.col-12.col-sm-3 .d-flex div')
+                         .first().text().trim();
+    var $delBtn   = $item.find('a[id*="_del_"]');
+    var $saveBtn  = $item.find('button.sfl-button');
 
-    // — build our new card structure —
-    var $card = $('<div class="card mb-3 cart-item-card"></div>');
-    var $cardBody = $('<div class="card-body p-3"></div>');
-    var $row = $('<div class="row g-0"></div>');
+    // hide the old validator text
+    $item.find('.QuantityValidator').hide();
 
-    // image column
-    var $imgCol = $(`
-      <div class="col-auto">
-        <img src="${imgSrc}" class="img-fluid rounded" alt="Product image">
-      </div>`);
+    // build new compact row
+    var $row = $(`
+      <div class="card mb-2 cart-item-card">
+        <div class="card-body p-2">
+          <div class="d-flex align-items-center">
+            <div class="flex-shrink-0">
+              <img src="${imgSrc}"
+                   style="width:60px; height:60px; object-fit:cover; border-radius:4px;">
+            </div>
+            <div class="flex-grow-1 ms-3">
+              <h6 class="mb-1">
+                <a href="${href}">${code}</a>
+              </h6>
+              <p class="mb-1 small text-secondary">${desc}</p>
+              <div class="d-flex flex-wrap align-items-center">
+                <div class="me-3">
+                  <span class="fw-bold">${priceText}</span>
+                </div>
+                <div class="me-3 d-flex align-items-center">
+                  ${$qtyWrap.prop('outerHTML')}
+                  ${$refresh.prop('outerHTML')}
+                </div>
+                <div class="me-3">
+                  <span class="fw-bold">${totalText}</span>
+                </div>
+              </div>
+            </div>
+            <div class="flex-shrink-0 text-end">
+              ${$delBtn.prop('outerHTML')}
+              ${$saveBtn.prop('outerHTML')}
+            </div>
+          </div>
+        </div>
+      </div>
+    `);
 
-    // content column
-    var $contentCol = $('<div class="col"></div>');
-    var $content = $('<div></div>')
-      .append(`<h5 class="card-title"><a href="${prodHref}">${prodCode}</a></h5>`)
-      .append(`<p class="card-text">${desc}</p>`)
-      .append(`<p class="card-text"><small class="text-muted">${branch} | ${stock}</small></p>`)
-      .append(
-        $('<div class="d-flex justify-content-between align-items-center"></div>')
-          .append(
-            $('<div></div>')
-              .append(`<span class="fw-bold">${price}</span> `)
-              .append($qtyWrapper)
-              .append(' ')
-              .append($refreshBtn)
-          )
-          .append(
-            $('<div></div>')
-              .append(`<span class="fw-bold">${total}</span> `)
-              .append($removeBtn)
-              .append(' ')
-              .append($saveBtn)
-          )
-      );
-
-    $contentCol.append($content);
-    $row.append($imgCol).append($contentCol);
-    $cardBody.append($row);
-    $card.append($cardBody);
-
-    // — swap it in —
-    $item.empty().append($card);
+    // swap in
+    $item.empty().append($row);
   });
 });
+
