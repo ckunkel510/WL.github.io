@@ -142,3 +142,24 @@ $(function(){
 });
 
 
+
+
+
+
+$(function(){
+  // Detach the “Empty Cart” button
+  var $emptyBtn = $('#ctl00_PageBody_EmptyCartButton').detach();
+
+  // Append it to the bottom of .shopping-cart-details
+  $('.shopping-cart-details').append($emptyBtn);
+});
+
+
+$(function(){
+  // Hide the top/bottom “Shop for More”, “Place Order”, and “Empty Cart” buttons
+  $('#ctl00_PageBody_ShopForMoreButton, \
+    #ctl00_PageBody_PlaceOrderButtonTop, \
+    #ctl00_PageBody_ShopForMoreButtonTop, \
+    #ctl00_PageBody_EmptyCartButtonTop').hide();
+});
+
