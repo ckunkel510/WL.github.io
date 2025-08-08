@@ -143,7 +143,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function computeExpected(days) {
       const now = new Date();
-      const total = new Date(now.getTime() + (days + 1) * 86400000);
+      const total = new Date(now.getTime() + (days + 2) * 86400000);
       return total.toLocaleDateString(undefined, {
         month: 'long', day: 'numeric', year: 'numeric'
       });
