@@ -85,9 +85,7 @@
   ];
 
   // Find any that exist on the page
-  const inputs = STATE_INPUT_IDS
-    .map(id => document.getElementById(id))
-    .filter(Boolean);
+  const inputs = STATE_INPUT_IDS.map(id => document.getElementById(id)).filter(Boolean);
   if (!inputs.length) return;
 
   // 50 states
@@ -119,9 +117,17 @@
     return STATES.filter(([ab, nm]) => ab.toLowerCase().startsWith(v) || nm.toLowerCase().includes(v));
   }
 
-  // Styles
+  // Styles (+ autofill animation hook)
   const style = document.createElement("style");
   style.textContent = `
+    /* Autofill detection animation */
+    @keyframes stateAutofill { from { } to { } }
+    input.state-autofill:-webkit-autofill {
+      animation-name: stateAutofill;
+      animation-duration: 0.001s;
+      animation-iteration-count: 1;
+    }
+
     .statepicker-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:9998;display:none}
     .statepicker-modal{
       position:fixed;z-index:9999;display:none;
@@ -162,7 +168,7 @@
   let isModal = false;
   let activeIndex = -1;
   let currentItems = [];
-  let activeInput = null; // track which input is being edited
+  let activeInput = null;
 
   function isSmall() { return window.matchMedia("(max-width: 640px)").matches; }
 
@@ -174,9 +180,9 @@
       div.textContent = `${nm} (${ab})`;
       div.addEventListener("mousedown", e => e.preventDefault());
       div.addEventListener("click", () => {
-  selectState({ab, nm});
-  if (isModal) closePicker(); // explicitly close modal on mobile
-});
+        selectState({ab, nm});
+        if (isModal) closePicker(); // ensure modal closes on mobile tap
+      });
       container.appendChild(div);
     });
   }
@@ -234,18 +240,56 @@
 
   function selectState({ab, nm}) {
     if (!activeInput) return;
-    activeInput.value = nm;
-    activeInput.dataset.stateAbbr = ab;
+    activeInput.value = nm;                 // write full name
+    activeInput.dataset.stateAbbr = ab;     // keep abbr if needed later
     activeInput.dispatchEvent(new Event("change", {bubbles:true}));
-    closePicker();
+    // closePicker() is also called in the click handler on mobile; desktop is fine too
     activeInput.focus();
   }
 
+  // ---- Autofill normalization helpers ----
+  function normalizeField(el) {
+    const match = normalize(el.value);
+    if (match) {
+      // Always store full name in the visible input; keep abbr in data-attr
+      if (el.value !== match.nm) {
+        el.value = match.nm;
+        el.dataset.stateAbbr = match.ab;
+        // Fire a synthetic change so any validators react
+        el.dispatchEvent(new Event("change", {bubbles:true}));
+      } else {
+        el.dataset.stateAbbr = match.ab;
+      }
+    }
+  }
+
+  // Sweep briefly after load/focus to catch delayed autofill (Chrome/iOS)
+  function scheduleAutofillSweep(el) {
+    const end = Date.now() + 3000; // up to ~3s
+    const int = setInterval(() => {
+      normalizeField(el);
+      if (Date.now() > end) clearInterval(int);
+    }, 250);
+  }
+
+  // Global listener for the WebKit autofill animation hook
+  document.addEventListener("animationstart", (e) => {
+    if (e.animationName === "stateAutofill" && inputs.includes(e.target)) {
+      normalizeField(e.target);
+    }
+  }, true);
+
   // Wire up each input
   inputs.forEach(el => {
+    el.classList.add("state-autofill");
     el.setAttribute("autocomplete","address-level1");
 
-    el.addEventListener("focus", () => openPicker(el));
+    el.addEventListener("focus", () => {
+      openPicker(el);
+      // Start a short sweep when focused (often when autofill applies)
+      scheduleAutofillSweep(el);
+    });
+
     el.addEventListener("click", () => { if (!isOpen) openPicker(el); });
 
     el.addEventListener("input", () => {
@@ -260,21 +304,11 @@
       }
     });
 
-    el.addEventListener("change", () => {
-      const match = normalize(el.value);
-      if (match) {
-        el.value = match.nm;
-        el.dataset.stateAbbr = match.ab;
-      }
-    });
+    // Normalize on change (covers paste + manual + autofill)
+    el.addEventListener("change", () => normalizeField(el));
 
-    setTimeout(() => {
-      const match = normalize(el.value);
-      if (match) {
-        el.value = match.nm;
-        el.dataset.stateAbbr = match.ab;
-      }
-    }, 300);
+    // Initial delayed normalize to catch page-load autofill
+    setTimeout(() => normalizeField(el), 300);
   });
 
   // Modal actions
@@ -294,7 +328,7 @@
     closePicker();
   });
 
-  // Keep sizes correct on resize/scroll
+  // Keep sizes/position correct
   window.addEventListener("resize", () => {
     if (isOpen && isModal) setListMaxHeight();
     if (isOpen && !isModal && activeInput) positionDropdown(activeInput);
