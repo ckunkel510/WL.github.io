@@ -76,90 +76,106 @@ $(function(){
 
 
 (function($){
-  // encapsulate all of our injection logic
-  function initDeliveryOptions() {
-    var $areaSelect = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas'),
-        $optSelect  = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList'),
-        $summary    = $('#SummaryEntry2');
+  // single “init” that runs on load + after any AJAX postback
+  function initDeliveryWidget() {
+    var $area = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas'),
+        $opts = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList'),
+        $summary = $('#SummaryEntry2');
 
-    // only run on delivered flow when both selects exist & are visible
-    if (!$areaSelect.length || !$optSelect.length || 
-        !$areaSelect.is(':visible') || !$optSelect.is(':visible')) {
+    // only on the “Delivered” step if both selects are present & visible
+    if (!$area.length || !$opts.length ||
+        !$area.is(':visible') || !$opts.is(':visible')) {
       return;
     }
 
-    console.log('[DeliveryOptions] Modernizing summary & delivery selector');
+    // 1) hide the old rows
+    $area.closest('tr').hide();
+    $opts.closest('tr').hide();
 
-    // hide Total discount row
+    // 2) hide “Total discount”
     $summary.find('.summaryTotals tr').filter(function(){
-      return $(this).find('td:first').text().trim() === 'Total discount';
+      return $(this).find('td:first').text().trim()==='Total discount';
     }).hide();
 
-    // wrap summary in a card (once)
+    // 3) wrap summary in its own card (once)
     if (!$summary.find('.summary-card').length) {
-      $summary.wrapInner('<div class="card summary-card shadow-sm mb-3 p-3"></div>')
-              .find('.summaryTotals').addClass('table table-borderless mb-0');
+      $summary.wrapInner(`
+        <div class="card summary-card shadow-sm mb-4">
+          <div class="card-body p-3"></div>
+        </div>
+      `);
+      $summary.find('.summaryTotals')
+              .addClass('table table-borderless mb-0');
     }
 
-    // build inline pills container (remove old if re-running)
-    $summary.find('.delivery-options-inline').remove();
+    // 4) build (or rebuild) the shipping‐method widget
+    $summary.prev('.shipping-card').remove();  // clear old if re-run
     var baseCost = parseFloat(
       $('#ctl00_PageBody_CartSummary2_DeliveryCostsRow td.numeric')
         .text().replace(/[^0-9\.-]/g,'')
     );
-    var $inline = $('<div class="delivery-options-inline d-flex flex-wrap mb-3"></div>');
+    var $shipCard = $(`
+      <div class="card shipping-card shadow-sm mb-4">
+        <div class="card-header bg-light">
+          <strong>Shipping Method</strong>
+        </div>
+        <div class="card-body delivery-pills d-flex flex-wrap"></div>
+      </div>
+    `);
 
-    // for each <option> create a pill
-    $optSelect.find('option').each(function(){
-      var $opt    = $(this),
-          txt     = $opt.text().trim(),
-          label   = txt.replace(/\s*\(.*\)/,'').trim(),
-          match   = txt.match(/\(([^)]+)\)/),
-          extra   = match ? match[1] : '',
-          total   = extra.startsWith('+')
-                    ? baseCost + parseFloat(extra.replace(/[^0-9\.-]/g,'')) 
-                    : parseFloat(extra.replace(/[^0-9\.-]/g,'')) || baseCost,
-          costLbl = '$' + total.toFixed(2),
-          $btn    = $(
-            `<button type="button" class="btn btn-outline-primary m-1">
-               ${label}<br><small>${costLbl}</small>
-             </button>`
-          );
+    // populate one pill per <option>
+    $opts.find('option').each(function(){
+      var $o = $(this),
+          txt = $o.text().trim(),
+          label = txt.replace(/\s*\(.*\)/,'').trim(),
+          m = txt.match(/\(([^)]+)\)/),
+          extra = m ? m[1] : '',
+          cost = extra.startsWith('+')
+                 ? baseCost + parseFloat(extra.replace(/[^0-9\.-]/g,''))
+                 : parseFloat(extra.replace(/[^0-9\.-]/g,'')) || baseCost,
+          costLbl = '$'+cost.toFixed(2),
+          $btn = $(`
+            <button type="button" class="btn btn-outline-primary m-1">
+              ${label}<br><small>${costLbl}</small>
+            </button>
+          `);
 
-      // highlight currently selected option
-      if ($opt.is(':selected')) {
-        $btn.removeClass('btn-outline-primary').addClass('btn-primary');
+      // highlight current
+      if ($o.is(':selected')) {
+        $btn.removeClass('btn-outline-primary')
+            .addClass('btn-primary');
       }
 
+      // wire up
       $btn.on('click', function(){
-        // set the dropdown to this value and fire its native change
-        $optSelect.val($opt.val()).change();
+        // set the real <select> + fire its change (posts back)
+        $opts.val($o.val()).change();
 
-        // update pill styles
-        $inline.find('button')
-               .removeClass('btn-primary')
-               .addClass('btn-outline-primary');
+        // restyle pills
+        $shipCard.find('button')
+                 .removeClass('btn-primary')
+                 .addClass('btn-outline-primary');
         $btn.removeClass('btn-outline-primary')
             .addClass('btn-primary');
       });
 
-      $inline.append($btn);
+      $shipCard.find('.delivery-pills').append($btn);
     });
 
-    // prepend pills into the delivery panel
-    $('#ctl00_PageBody_CartSummary2_LocalDeliveryPanel')
-      .prepend($inline);
+    // 5) inject shipping widget above the summary card
+    $summary.before($shipCard);
   }
 
-  // wire up on initial load...
-  $(document).ready(initDeliveryOptions);
+  // run on whole-page load
+  $(initDeliveryWidget);
 
-  // ...and after any ASP.NET AJAX partial postback
+  // re-run after partial postback
   if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
     Sys.WebForms.PageRequestManager.getInstance()
-       .add_endRequest(initDeliveryOptions);
+      .add_endRequest(initDeliveryWidget);
   }
 })(jQuery);
+
 
 
 
