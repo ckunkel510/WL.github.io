@@ -75,156 +75,80 @@ $(function(){
 
 
 
-(function(){
-  function addBusinessDays(date, days) {
-    const d = new Date(date);
-    while (days > 0) {
-      d.setDate(d.getDate() + 1);
-      const wd = d.getDay();
-      if (wd > 0 && wd < 6) days--;
+$(function(){
+  var $areaSelect = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas');
+  var $optSelect  = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList');
+  var $summary    = $('#SummaryEntry2');
+
+  // Only run on delivered flow when those selects are visible
+  if ($areaSelect.is(':visible') && $optSelect.is(':visible')) {
+    console.log('[DeliveryOptions] Modernizing summary & delivery selector');
+
+    // 1) Hide the Total discount row
+    $summary.find('.summaryTotals tr').filter(function(){
+      return $(this).find('td:first').text().trim() === 'Total discount';
+    }).hide();
+
+    // 2) Wrap the summary in a Bootstrap card (only once)
+    if (!$summary.find('.summary-card').length) {
+      $summary.wrapInner('<div class="card summary-card shadow-sm mb-3"></div>');
+      $summary.find('.summary-card').addClass('p-3');
+      // Make the table borderless
+      $summary.find('.summaryTotals').addClass('table table-borderless mb-0');
     }
-    return d;
-  }
 
-  function initializeDeliveryWidget() {
-    const $summary = $('#SummaryEntry2');
-    const $select  = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList');
-    if (!$summary.length || !$select.length) {
-      console.log('[DeliveryOptions] Summary or select not present; abort');
-      return;
-    }
-    console.log('[DeliveryOptions] Initializing widget');
+    // 3) Build inline delivery-options pills
+    var baseCost = parseFloat(
+      $('#ctl00_PageBody_CartSummary2_DeliveryCostsRow td.numeric')
+        .text().replace(/[^0-9.-]/g,'')
+    );
+    var $inline = $('<div class="delivery-options-inline d-flex flex-wrap mb-3"></div>');
 
-    // keep original dropdown in DOM (hidden) for native onchange/postback
-    $select.css({ position: 'absolute', left: '-9999px', opacity: 0 });
+    $optSelect.find('option').each(function(){
+      var $opt = $(this);
+      var txt  = $opt.text().trim();
+      var label = txt.replace(/\s*\(.*\)/,'').trim();
+      var m     = txt.match(/\(([^)]+)\)/);
+      var extra = m ? m[1] : '';
+      var total = extra.startsWith('+')
+        ? baseCost + parseFloat(extra.replace(/[^0-9.-]/g,''))
+        : parseFloat(extra.replace(/[^0-9.-]/g,'')) || baseCost;
+      var costLabel = '$' + total.toFixed(2);
 
-    // hide original summary table and dropdown rows rather than remove
-    $summary.find('.summaryTotals').hide();
-    $summary.find('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas').closest('tr').hide();
-    $select.closest('tr').hide();
+      var $btn = $(`
+        <button type="button" class="btn btn-outline-primary m-1">
+          ${label}<br><small>${costLabel}</small>
+        </button>
+      `);
 
-    // extract summary values from hidden table
-    const subtotalText = $summary.find('tr:has(td:contains("Subtotal")) .numeric').text().trim();
-    const deliveryText = $summary.find('#ctl00_PageBody_CartSummary2_DeliveryCostsRow .numeric').text().trim();
-    const taxText      = $summary.find('#ctl00_PageBody_CartSummary2_TaxTotals .numeric').text().trim();
-    const totalText    = $summary.find('#ctl00_PageBody_CartSummary2_GrandTotalRow .numeric').text().trim();
-    console.log('[DeliveryOptions] Summary values:', {subtotalText, deliveryText, taxText, totalText});
-
-    const baseCost = parseFloat(deliveryText.replace(/[^0-9.-]/g, ''));
-
-    // parse options from original select
-    const transitMap = { 'Standard delivery':5,'3 Day Select':3,'2nd Day Air':2,'Next Day Air':1 };
-    const descMap    = { 'Standard delivery':'Traditional Ground','3 Day Select':'3 Day Service','2nd Day Air':'2nd Day Air','Next Day Air':'Next Day Air' };
-    const options = [];
-    $select.find('option').each(function(){
-      const $o = $(this);
-      const txt = $o.text().trim();
-      const label = txt.replace(/\s*\(.*\)/, '').trim();
-      const extra = (txt.match(/\(([^)]+)\)/)||[])[1]||'';
-      let cost = baseCost;
-      if (extra.startsWith('+')) cost = baseCost + parseFloat(extra.replace(/[^0-9.-]/g,''));
-      else {
-        const p = parseFloat(extra.replace(/[^0-9.-]/g,''));
-        if (!isNaN(p) && extra.indexOf('+')<0) cost = p;
+      if ($opt.is(':selected')) {
+        $btn.removeClass('btn-outline-primary').addClass('btn-primary');
       }
-      options.push({ value:$o.val(), label, costLabel:'$'+cost.toFixed(2), transitDays: transitMap[label]||0, description: descMap[label]||label });
-    });
-    console.log('[DeliveryOptions] Parsed options:', options);
 
-    // build custom widget
-    const $shipCard = $(
-      `<div class="card mb-3 shipping-method-widget">
-         <div class="card-body p-3">
-           <h5 class="card-title mb-3">Shipping Method</h5>
-         </div>
-       </div>`
-    );
-    const $shipBody = $shipCard.find('.card-body');
-    const $list     = $('<div class="d-flex flex-column mb-3"></div>');
-
-    options.forEach(opt => {
-      const selected = ($select.val() === opt.value);
-      const $btn = $(
-        `<button type="button" class="btn mb-2 text-start ${selected?'btn-primary':'btn-outline-primary'}">
-           <div class="fw-semibold">${opt.label}</div>
-           <div class="fw-bold text-white">${opt.costLabel}</div>
-         </button>`
-      ).data('opt', opt);
-
-      $btn.on('click', () => {
-        console.log('[DeliveryOptions] Clicked option:', opt);
-        // update original select value to trigger native onchange
-        $select.val(opt.value).change();
-      });
-      $list.append($btn);
-    });
-    $shipBody.append($list);
-
-    // change button resets to standard
-    const $changeBtn = $('<button type="button" class="btn btn-link mb-3">Change Shipping Speed</button>')
-      .on('click', () => {
-        console.log('[DeliveryOptions] Change clicked');
-        $select.val(options[0].value).change();
-      });
-    $shipBody.append($changeBtn);
-
-    // order totals widget
-    const $totalsCard = $(
-      `<div class="card order-totals-widget mb-3">
-         <div class="card-body p-3">
-           <h5 class="card-title mb-3">Order Summary</h5>
-         </div>
-       </div>`
-    );
-    const $totalsBody = $totalsCard.find('.card-body');
-    function row(label,value,strong){
-      const tag=strong?'strong':'span';
-      return $(`<div class="d-flex justify-content-between mb-2"><${tag}>${label}</${tag}><${tag}>${value}</${tag}></div>`);
-    }
-    $totalsBody.append(row('Subtotal',subtotalText))
-               .append(row('Delivery',deliveryText))
-               .append(row('Tax',taxText))
-               .append('<hr>')
-               .append(row('Total (inc. Tax)',totalText,true));
-
-    $summary.empty().append($shipCard).append($totalsCard);
-
-    function renderSelection() {
-      const sel = $select.val();
-      console.log('[DeliveryOptions] renderSelection; selected:', sel);
-      $shipBody.find('.shipping-banner').remove();
-      $list.children('button').each(function(){
-        const o = $(this).data('opt');
-        const isSel = (o.value===sel);
-        console.log(`[DeliveryOptions] ${o.label} selected? ${isSel}`);
-        if (isSel) {
-          $(this).removeClass('btn-outline-primary').addClass('btn-primary');
-          const arr = addBusinessDays(new Date(), o.transitDays+1);
-          const ds = arr.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
-          $shipBody.prepend(
-            `<div class="alert alert-info shipping-banner mb-3">
-               <strong>${o.description}</strong><br>
-               Expected arrival: ${ds}
-             </div>`
+      $btn.on('click', function(){
+        $optSelect.val($opt.val());
+        $inline.find('button').removeClass('btn-primary').addClass('btn-outline-primary');
+        $btn.removeClass('btn-outline-primary').addClass('btn-primary');
+        // trigger the postback exactly like the select would
+        setTimeout(function(){
+          __doPostBack(
+            'ctl00$PageBody$CartSummary2$LocalDeliveryChargeControl$DeliveryOptionsDropDownList',
+            ''
           );
-        } else {
-          $(this).removeClass('btn-primary').addClass('btn-outline-primary');
-        }
+        }, 0);
       });
-    }
 
-    // initial and postback render
-    renderSelection();
-    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
-      Sys.WebForms.PageRequestManager.getInstance().add_endRequest(renderSelection);
-    }
-  }
+      $inline.append($btn);
+    });
 
-  $(document).ready(initializeDeliveryWidget);
-  if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
-    Sys.WebForms.PageRequestManager.getInstance().add_endRequest(initializeDeliveryWidget);
+    // 4) Hide the original “Area” and “Options” rows
+    $areaSelect.closest('tr').hide();
+    $optSelect.closest('tr').hide();
+
+    // 5) Inject our inline pills at the top of the panel
+    $('#ctl00_PageBody_CartSummary2_LocalDeliveryPanel').prepend($inline);
   }
-})();
+});
 
 
 
