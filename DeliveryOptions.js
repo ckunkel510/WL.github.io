@@ -79,7 +79,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
-
 (function ($) {
   function initDeliveryWidget() {
     var $area = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas'),
@@ -87,160 +86,146 @@ document.addEventListener('DOMContentLoaded', function () {
         $summary = $('#SummaryEntry2'),
         $panel = $('#ctl00_PageBody_CartSummary2_DeliveryOptionsPanel');
 
-    if (!$area.length || !$opts.length ||
-        !$area.is(':visible') || !$opts.is(':visible')) {
-      return;
-    }
+    if (!$area.length || !$opts.length || !$area.is(':visible') || !$opts.is(':visible')) return;
 
-    // Hide selects visually but leave them functional for ASP.NET postbacks
+    // Hide the select boxes (not removed for ASP.NET postback support)
     $area.closest('tr').css({
-      position: 'absolute',
-      width: '1px',
-      height: '1px',
-      overflow: 'hidden',
-      clip: 'rect(1px, 1px, 1px, 1px)',
-      clipPath: 'inset(50%)',
-      whiteSpace: 'nowrap'
+      position: 'absolute', width: '1px', height: '1px',
+      overflow: 'hidden', clip: 'rect(1px, 1px, 1px, 1px)',
+      clipPath: 'inset(50%)', whiteSpace: 'nowrap'
     });
 
     $opts.closest('tr').css({
-      position: 'absolute',
-      width: '1px',
-      height: '1px',
-      overflow: 'hidden',
-      clip: 'rect(1px, 1px, 1px, 1px)',
-      clipPath: 'inset(50%)',
-      whiteSpace: 'nowrap'
+      position: 'absolute', width: '1px', height: '1px',
+      overflow: 'hidden', clip: 'rect(1px, 1px, 1px, 1px)',
+      clipPath: 'inset(50%)', whiteSpace: 'nowrap'
     });
 
-    // Hide the Total Discount row
     $summary.find('.summaryTotals tr').filter(function () {
       return $(this).find('td:first').text().trim() === 'Total discount';
     }).hide();
 
-    // Wrap summary table in a card if not already wrapped
     if (!$summary.find('.summary-card').length) {
       $summary.wrapInner(
-        '<div class="card summary-card shadow-sm mb-4">' +
-        '<div class="card-body p-3"></div>' +
-        '</div>'
+        '<div class="card summary-card shadow-sm mb-4"><div class="card-body p-3"></div></div>'
       );
-      $summary.find('.summaryTotals')
-        .addClass('table table-borderless mb-0');
+      $summary.find('.summaryTotals').addClass('table table-borderless mb-0');
     }
 
-    // Remove any old widget
     $summary.prev('.shipping-card').remove();
+    $summary.prev('.expected-widget').remove(); // clean up existing widget
 
-    // Figure base standard cost from option value = -1
     var standardText = $opts.find('option[value="-1"]').text(),
         mstd = standardText.match(/\(([^)]+)\)/),
-        standardCost = mstd
-          ? parseFloat(mstd[1].replace(/[^0-9\.-]/g, ''))
-          : 0;
+        standardCost = mstd ? parseFloat(mstd[1].replace(/[^0-9\.-]/g, '')) : 0;
 
-    // Build shipping card layout
     var $ship = $(
       '<div class="card shipping-card shadow-sm mb-4">' +
-      '<div class="card-header bg-light"><strong>Shipping Method</strong></div>' +
-      '<div class="card-body">' +
-      '<div class="delivery-summary text-muted small mb-2"></div>' + // Moved text goes here
-      '<div class="delivery-pills d-flex flex-wrap mb-2"></div>' +
-      '<div class="expected-by text-muted small"></div>' +
-      '</div>' +
+        '<div class="card-header bg-light"><strong>Shipping Method</strong></div>' +
+        '<div class="card-body">' +
+          '<div class="delivery-summary text-muted small mb-2"></div>' +
+          '<div class="delivery-pills d-flex flex-wrap mb-2"></div>' +
+        '</div>' +
       '</div>'
     );
 
-    // Move the "Shipping Method: Delivered" text into the shipping card
     if ($panel.length) {
-      var summaryText = $panel.clone()
-        .children()
-        .first()
-        .html();
-
+      var summaryText = $panel.clone().children().first().html();
       if (summaryText) {
         $ship.find('.delivery-summary').html(summaryText);
       }
-
-      // Hide original delivery panel (not removed!)
       $panel.css({
-        position: 'absolute',
-        width: '1px',
-        height: '1px',
-        overflow: 'hidden',
-        clip: 'rect(1px, 1px, 1px, 1px)',
-        clipPath: 'inset(50%)',
-        whiteSpace: 'nowrap'
+        position: 'absolute', width: '1px', height: '1px',
+        overflow: 'hidden', clip: 'rect(1px, 1px, 1px, 1px)',
+        clipPath: 'inset(50%)', whiteSpace: 'nowrap'
       });
     }
 
-    // Expected date calculation
     function computeExpected(days) {
-      var now = new Date(),
-          total = new Date(now.getTime() + (days + 1) * 86400000),
-          fmt = total.toLocaleDateString(undefined, {
-            month: 'long', day: 'numeric', year: 'numeric'
-          });
-      return fmt;
+      const now = new Date();
+      const total = new Date(now.getTime() + (days + 1) * 86400000);
+      return total.toLocaleDateString(undefined, {
+        month: 'long', day: 'numeric', year: 'numeric'
+      });
     }
 
-    // Build pill buttons for each shipping method
+    function getArrowGraphic(speedLevel) {
+      const totalArrows = 8;
+      let arrows = '';
+      for (let i = 1; i <= totalArrows; i++) {
+        arrows += i <= speedLevel
+          ? '<span class="maroon-arrow">➤</span>'
+          : '<span class="gray-arrow">➤</span>';
+      }
+      return arrows;
+    }
+
+    function getSpeedLabel(speedLevel) {
+      switch (speedLevel) {
+        case 1: return 'Slowest Shipping';
+        case 3: return 'Moderate Speed';
+        case 6: return 'Fast Shipping';
+        case 8: return 'Fastest Shipping';
+        default: return 'Estimated Shipping';
+      }
+    }
+
+    // Expected widget that appears after shipping card
+    const $expectedWidget = $(
+      '<div class="expected-widget text-center my-3">' +
+        '<div class="shipping-speed-graphic mb-2"></div>' +
+        '<div class="expected-by-text fw-bold fs-5 text-maroon"></div>' +
+      '</div>'
+    );
+
     $opts.find('option').each(function () {
-      var $o = $(this),
-          txt = $o.text().trim(),
-          label = txt.replace(/\s*\(.*\)/, '').trim(),
-          extraMatch = txt.match(/\(([^)]+)\)/),
-          extraRaw = extraMatch ? extraMatch[1] : '',
-          extra = parseFloat(extraRaw.replace(/[^0-9\.-]/g, '')) || 0,
-          cost = $o.val() === '-1'
-            ? standardCost
-            : standardCost + extra,
-          costLbl = '$' + cost.toFixed(2),
-          days = /Next\s*Day/i.test(txt) ? 1
-               : /2nd\s*Day/i.test(txt) ? 2
-               : /3\s*Day/i.test(txt) ? 3
-               : 5,
-          $btn = $(
-            '<button type="button" class="btn btn-outline-primary m-1">' +
-            label + '<br><small>' + costLbl + '</small>' +
-            '</button>'
-          );
+      const $o = $(this),
+            txt = $o.text().trim(),
+            label = txt.replace(/\s*\(.*\)/, '').trim(),
+            extraMatch = txt.match(/\(([^)]+)\)/),
+            extraRaw = extraMatch ? extraMatch[1] : '',
+            extra = parseFloat(extraRaw.replace(/[^0-9\.-]/g, '')) || 0,
+            cost = $o.val() === '-1' ? standardCost : standardCost + extra,
+            costLbl = '$' + cost.toFixed(2),
+            days = /Next\s*Day/i.test(txt) ? 1 :
+                   /2nd\s*Day/i.test(txt)  ? 2 :
+                   /3\s*Day/i.test(txt)    ? 3 : 5,
+            speedLevel = /Next\s*Day/i.test(txt) ? 8 :
+                         /2nd\s*Day/i.test(txt)  ? 6 :
+                         /3\s*Day/i.test(txt)    ? 3 : 1,
+            $btn = $('<button type="button" class="btn btn-outline-primary m-1">' +
+                    label + '<br><small>' + costLbl + '</small></button>');
 
       if ($o.is(':selected')) {
         $btn.removeClass('btn-outline-primary').addClass('btn-primary');
-        $ship.find('.expected-by')
-          .text('Expected by ' + computeExpected(days));
+        $expectedWidget.find('.shipping-speed-graphic').html(getArrowGraphic(speedLevel));
+        $expectedWidget.find('.expected-by-text').html(getSpeedLabel(speedLevel) + ' – Expected by ' + computeExpected(days));
       }
 
       $btn.on('click', function () {
-        $opts.val($o.val()).change(); // triggers postback
+        $opts.val($o.val()).change();
         $ship.find('button')
           .removeClass('btn-primary')
           .addClass('btn-outline-primary');
-        $btn.removeClass('btn-outline-primary')
-          .addClass('btn-primary');
-        $ship.find('.expected-by')
-          .text('Expected by ' + computeExpected(days));
+        $btn.removeClass('btn-outline-primary').addClass('btn-primary');
+        $expectedWidget.find('.shipping-speed-graphic').html(getArrowGraphic(speedLevel));
+        $expectedWidget.find('.expected-by-text').html(getSpeedLabel(speedLevel) + ' – Expected by ' + computeExpected(days));
       });
 
       $ship.find('.delivery-pills').append($btn);
     });
 
-    // Insert shipping card above order summary
+    $summary.before($expectedWidget);
     $summary.before($ship);
   }
 
-  // Initial load
   $(initDeliveryWidget);
 
-  // Re-run after ASP.NET partial postback
   if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
     Sys.WebForms.PageRequestManager.getInstance()
       .add_endRequest(initDeliveryWidget);
   }
 })(jQuery);
-
-
 
 
 

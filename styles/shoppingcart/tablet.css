@@ -201,3 +201,26 @@
     object-fit: contain !important;
   }
 
+
+
+  .expected-widget {
+  font-family: inherit;
+}
+
+.expected-by-text {
+  color: #6b0016; /* Crown Maroon */
+}
+
+.shipping-speed-graphic {
+  font-size: 1.2rem;
+  letter-spacing: 2px;
+}
+
+.maroon-arrow {
+  color: #6b0016;
+}
+
+.gray-arrow {
+  color: #ccc;
+}
+
