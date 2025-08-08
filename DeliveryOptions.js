@@ -75,8 +75,6 @@ $(function(){
 
 
 
-
-
 (function(){
   function addBusinessDays(date, days) {
     const d = new Date(date);
@@ -97,10 +95,10 @@ $(function(){
     }
     console.log('[DeliveryOptions] Initializing widget');
 
-    // keep the original dropdown in DOM but hide it off-screen via CSS so its onchange still fires
+    // hide original dropdown off-screen but keep in DOM for postback
     $select.css({ position: 'absolute', left: '-9999px', opacity: 0 });
 
-    // remove old custom widgets
+    // remove old widgets
     $('.shipping-method-widget, .order-totals-widget').remove();
 
     // extract summary values
@@ -136,7 +134,7 @@ $(function(){
     });
     console.log('[DeliveryOptions] Parsed options:', options);
 
-    // build shipping method widget
+    // build widget
     const $shipCard = $(
       `<div class="card mb-3 shipping-method-widget">
          <div class="card-body p-3">
@@ -148,7 +146,7 @@ $(function(){
     const $list     = $('<div class="d-flex flex-column mb-3"></div>');
 
     options.forEach(opt => {
-      const selected = ($select.val() === opt.value) || (localStorage.getItem('selectedShippingValue') === opt.value);
+      const selected = (localStorage.getItem('selectedShippingValue') === opt.value) || ($select.val() === opt.value);
       const $btn = $(
         `<button type="button" class="btn mb-2 text-start ${selected?'btn-primary':'btn-outline-primary'}">
            <div class="fw-semibold">${opt.label}</div>
@@ -160,14 +158,24 @@ $(function(){
         console.log('[DeliveryOptions] Clicked option:', opt);
         // store selection
         localStorage.setItem('selectedShippingValue', opt.value);
-        // update the hidden dropdown and let its native onchange fire
-        $select.val(opt.value).trigger('change');
+        // update original select
+        $select.val(opt.value);
+        // fire native onchange to trigger postback
+        if ($select[0].dispatchEvent) {
+          $select[0].dispatchEvent(new Event('change', { bubbles:true }));
+        }
+        // fallback to explicit __doPostBack
+        const target = $select.attr('name');
+        if (typeof __doPostBack === 'function') {
+          console.log('[DeliveryOptions] Calling __doPostBack for', target);
+          __doPostBack(target, '');
+        }
       });
       $list.append($btn);
     });
     $shipBody.append($list);
 
-    // change button to reset
+    // change button
     const $changeBtn = $('<button type="button" class="btn btn-link mb-3">Change Shipping Speed</button>')
       .on('click', () => {
         console.log('[DeliveryOptions] Change clicked');
@@ -176,7 +184,7 @@ $(function(){
       });
     $shipBody.append($changeBtn);
 
-    // order totals widget
+    // totals widget
     const $totalsCard = $(
       `<div class="card order-totals-widget mb-3">
          <div class="card-body p-3">
@@ -185,31 +193,27 @@ $(function(){
        </div>`
     );
     const $totalsBody = $totalsCard.find('.card-body');
-    function row(label, value, strong) {
-      const tag = strong?'strong':'span';
-      return $(`<div class="d-flex justify-content-between mb-2"><${tag}>${label}</${tag}><${tag}>${value}</${tag}></div>`);
-    }
-    $totalsBody.append(row('Subtotal', subtotalText))
-               .append(row('Delivery', deliveryText))
-               .append(row('Tax', taxText))
+    function row(label,value,strong){const tag=strong?'strong':'span';return $(`<div class="d-flex justify-content-between mb-2"><${tag}>${label}</${tag}><${tag}>${value}</${tag}></div>`);}    
+    $totalsBody.append(row('Subtotal',subtotalText))
+               .append(row('Delivery',deliveryText))
+               .append(row('Tax',taxText))
                .append('<hr>')
-               .append(row('Total (inc. Tax)', totalText, true));
+               .append(row('Total (inc. Tax)',totalText,true));
 
     $summary.empty().append($shipCard).append($totalsCard);
 
-    // render selection and banner
     function renderSelection(reset) {
       const sel = localStorage.getItem('selectedShippingValue');
       console.log('[DeliveryOptions] renderSelection:', {sel, reset});
       $shipBody.find('.shipping-banner').remove();
       $list.children('button').each(function(){
         const o = $(this).data('opt');
-        const isSel = (!reset && sel ? o.value === sel : o.value === $select.val());
+        const isSel = (!reset && sel ? o.value===sel : o.value=== $select.val());
         console.log(`[DeliveryOptions] ${o.label} selected? ${isSel}`);
         if (isSel) {
           $(this).show().removeClass('btn-outline-primary').addClass('btn-primary');
           const arr = addBusinessDays(new Date(), o.transitDays+1);
-          const ds = arr.toLocaleDateString(undefined, {weekday:'short', month:'short', day:'numeric'});
+          const ds = arr.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
           $shipBody.prepend(
             `<div class="alert alert-info shipping-banner mb-3">
                <strong>${o.description}</strong><br>
@@ -234,8 +238,6 @@ $(function(){
     Sys.WebForms.PageRequestManager.getInstance().add_endRequest(initializeDeliveryWidget);
   }
 })();
-
-
 
 
 
