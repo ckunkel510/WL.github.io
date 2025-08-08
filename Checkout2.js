@@ -142,20 +142,7 @@ $('#ctl00_PageBody_BackToCartButton2').val('Back to Cart');
     }
   })();
 
-  // 6) Optional tag on step 7
-  (function(){
-    let p7 = wizard.querySelector('.checkout-step[data-step="7"]');
-    if(p7){
-      let th = p7.querySelector('th');
-      if(th){
-        let opt2 = document.createElement('small');
-        opt2.className='text-muted';
-        opt2.style.marginLeft='8px';
-        opt2.textContent='(optional)';
-        th.appendChild(opt2);
-      }
-    }
-  })();
+
 
   // 7) Prefill delivery address
   if(!$('#ctl00_PageBody_DeliveryAddress_AddressLine1').val()){
