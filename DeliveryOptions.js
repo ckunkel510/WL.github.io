@@ -95,13 +95,15 @@ $(function(){
     }
     console.log('[DeliveryOptions] Initializing widget');
 
-    // hide original dropdown off-screen but keep in DOM for ASP.NET onchange
+    // keep original dropdown in DOM (hidden) for native onchange/postback
     $select.css({ position: 'absolute', left: '-9999px', opacity: 0 });
 
-    // cleanup old
-    $('.shipping-method-widget, .order-totals-widget').remove();
+    // hide original summary table and dropdown rows rather than remove
+    $summary.find('.summaryTotals').hide();
+    $summary.find('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas').closest('tr').hide();
+    $select.closest('tr').hide();
 
-    // extract summary values
+    // extract summary values from hidden table
     const subtotalText = $summary.find('tr:has(td:contains("Subtotal")) .numeric').text().trim();
     const deliveryText = $summary.find('#ctl00_PageBody_CartSummary2_DeliveryCostsRow .numeric').text().trim();
     const taxText      = $summary.find('#ctl00_PageBody_CartSummary2_TaxTotals .numeric').text().trim();
@@ -110,12 +112,7 @@ $(function(){
 
     const baseCost = parseFloat(deliveryText.replace(/[^0-9.-]/g, ''));
 
-    // remove original table rows for area and select
-    $summary.find('.summaryTotals').remove();
-    $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas').closest('tr').remove();
-    $select.closest('tr').remove();
-
-    // parse options
+    // parse options from original select
     const transitMap = { 'Standard delivery':5,'3 Day Select':3,'2nd Day Air':2,'Next Day Air':1 };
     const descMap    = { 'Standard delivery':'Traditional Ground','3 Day Select':'3 Day Service','2nd Day Air':'2nd Day Air','Next Day Air':'Next Day Air' };
     const options = [];
@@ -134,7 +131,7 @@ $(function(){
     });
     console.log('[DeliveryOptions] Parsed options:', options);
 
-    // build widget
+    // build custom widget
     const $shipCard = $(
       `<div class="card mb-3 shipping-method-widget">
          <div class="card-body p-3">
@@ -157,17 +154,17 @@ $(function(){
       $btn.on('click', () => {
         console.log('[DeliveryOptions] Clicked option:', opt);
         // update original select value to trigger native onchange
-        $select.val(opt.value).trigger('change');
+        $select.val(opt.value).change();
       });
       $list.append($btn);
     });
     $shipBody.append($list);
 
-    // change button
+    // change button resets to standard
     const $changeBtn = $('<button type="button" class="btn btn-link mb-3">Change Shipping Speed</button>')
       .on('click', () => {
         console.log('[DeliveryOptions] Change clicked');
-        $select.val(options[0].value).trigger('change');
+        $select.val(options[0].value).change();
       });
     $shipBody.append($changeBtn);
 
@@ -216,10 +213,8 @@ $(function(){
       });
     }
 
-    // initial render
+    // initial and postback render
     renderSelection();
-
-    // re-render after any partial postback
     if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
       Sys.WebForms.PageRequestManager.getInstance().add_endRequest(renderSelection);
     }
@@ -230,6 +225,7 @@ $(function(){
     Sys.WebForms.PageRequestManager.getInstance().add_endRequest(initializeDeliveryWidget);
   }
 })();
+
 
 
 
