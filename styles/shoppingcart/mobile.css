@@ -572,3 +572,14 @@ display: none;
     color: black;
     text-decoration: underline;
   }
+
+
+
+
+
+
+
+  .btn.btn-outline-primary.m-1{
+    border-color: black;
+    color: black
+  }
