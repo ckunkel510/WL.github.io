@@ -220,3 +220,56 @@ $(function(){
 
 });
 })();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+(function () {
+  const wrapper = document.querySelector('.custom-subtotal-wrapper');
+  if (!wrapper) return;
+
+  const observer = new IntersectionObserver(
+    ([entry]) => {
+      if (!entry.isIntersecting) {
+        // User scrolled past the element — stick to top
+        wrapper.classList.remove('fixed-bottom');
+        wrapper.classList.add('sticky-top');
+      } else {
+        // User scrolled back up — return to bottom if it was originally off-screen
+        if (wasOffScreen) {
+          wrapper.classList.add('fixed-bottom');
+          wrapper.classList.remove('sticky-top');
+        }
+      }
+    },
+    {
+      threshold: 0,
+    }
+  );
+
+  // Check if element is below the fold on initial load
+  const rect = wrapper.getBoundingClientRect();
+  const wasOffScreen = rect.top > window.innerHeight;
+
+  if (wasOffScreen) {
+    wrapper.classList.add('fixed-bottom');
+  } else {
+    wrapper.classList.add('sticky-top');
+  }
+
+  observer.observe(wrapper);
+})();
