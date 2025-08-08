@@ -66,7 +66,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const headers = document.querySelectorAll('th');
   headers.forEach(th => {
     if (th.textContent.trim() === 'Summary') {
-      th.textContent = 'Shipping Options';
+      th.textContent = 'Shipping';
     }
   });
 });
