@@ -224,3 +224,11 @@
   color: #ccc;
 }
 
+
+.checkout-nav .btn.btn-primary{
+    height: 50px;
+  }
+
+  .checkout-nav{
+    display: flex;
+  }
