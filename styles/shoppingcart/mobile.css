@@ -492,3 +492,43 @@ display: none;
 .gray-arrow {
   color: #ccc;
 }
+
+
+
+ .custom-subtotal-wrapper {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: #ffffff;
+    border-top: 2px solid #ccc;
+    padding: 10px 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    z-index: 1000;
+    box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.1);
+  }
+
+  .custom-subtotal-wrapper .SubtotalWrapper {
+    font-size: 14px;
+    margin-bottom: 8px;
+    text-align: center;
+  }
+
+  .custom-subtotal-wrapper .epi-button {
+    font-size: 18px;
+    padding: 14px;
+    text-align: center;
+    background-color: #6b0016; /* Maroon */
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    width: 100%;
+    box-sizing: border-box;
+    cursor: pointer;
+  }
+
+  .custom-subtotal-wrapper .epi-button:hover {
+    background-color: #8d8d8d;
+  }
