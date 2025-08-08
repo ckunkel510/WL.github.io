@@ -772,3 +772,12 @@ $(document).ready(function() {
 
 
 
+
+
+
+document.querySelectorAll('th').forEach(th => {
+  if (th.textContent.includes('Special Instructions')) {
+    th.style.display = 'none';
+  }
+});
+
