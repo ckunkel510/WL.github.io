@@ -546,7 +546,7 @@
   style.textContent = `
     .pw-reqs { margin:.25rem 0 .5rem; color:#555; }
     .pw-msg { margin-top:.25rem; font-size:.85rem; }
-    .pw-msg.err { color:#a40000; }
+    .pw-msg.err { color:#a40000; text-wrap: auto; }
     .pw-msg.ok { color:#0a6; }
     .is-invalid { border-color:#a40000 !important; }
     .is-valid { border-color:#0a6 !important; }
