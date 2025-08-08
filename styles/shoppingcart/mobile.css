@@ -532,3 +532,7 @@ display: none;
   .custom-subtotal-wrapper .epi-button:hover {
     background-color: #8d8d8d;
   }
+
+  .text-end.action-block{
+    display: contents;
+  }
