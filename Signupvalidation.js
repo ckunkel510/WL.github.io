@@ -446,3 +446,106 @@
   });
 })();
 
+
+
+
+
+
+
+
+
+(function () {
+  const INPUT_ID = "ctl00_PageBody_Password1TextBox";
+  const pwd = document.getElementById(INPUT_ID);
+  if (!pwd) return;
+
+  // Put a helpful requirements line under the label
+  const label = document.querySelector(`label[for="${INPUT_ID}"]`);
+  if (label && !label.nextElementSibling?.classList?.contains("pw-reqs")) {
+    const req = document.createElement("div");
+    req.className = "pw-reqs";
+    req.innerHTML = `
+      <small>
+        Must be <strong>12+ characters</strong> and include at least
+        <strong>1 uppercase letter</strong>, <strong>1 number</strong>, and <strong>1 symbol</strong>.
+      </small>`;
+    label.insertAdjacentElement("afterend", req);
+  }
+
+  // Message area under the input (ARIA friendly)
+  let msg = document.createElement("div");
+  msg.className = "pw-msg";
+  msg.setAttribute("aria-live", "polite");
+  pwd.insertAdjacentElement("afterend", msg);
+
+  // Helpful attributes
+  pwd.setAttribute("autocomplete", "new-password");
+  pwd.setAttribute("minlength", "12");
+
+  // Simple validator
+  const reUpper = /[A-Z]/;
+  const reDigit = /\d/;
+  const reSymbol = /[^A-Za-z0-9]/;
+
+  function getIssues(v) {
+    const issues = [];
+    if (!v || v.length < 12) issues.push("12+ characters");
+    if (!reUpper.test(v)) issues.push("1 uppercase letter");
+    if (!reDigit.test(v)) issues.push("1 number");
+    if (!reSymbol.test(v)) issues.push("1 symbol");
+    return issues;
+  }
+
+  function renderMessage(issues) {
+    if (!issues.length) {
+      msg.textContent = "Looks good.";
+      msg.className = "pw-msg ok";
+    } else {
+      msg.textContent = "Need: " + issues.join(", ");
+      msg.className = "pw-msg err";
+    }
+  }
+
+  function validatePassword() {
+    const val = pwd.value || "";
+    const issues = getIssues(val);
+    renderMessage(issues);
+    // Hook into native constraint validation
+    pwd.setCustomValidity(issues.length ? "Password does not meet requirements." : "");
+    // Optional visual cue
+    pwd.classList.toggle("is-invalid", !!issues.length);
+    pwd.classList.toggle("is-valid", !issues.length && val.length > 0);
+  }
+
+  // Live & autofill validation
+  pwd.addEventListener("input", validatePassword);
+  pwd.addEventListener("blur", validatePassword);
+  setTimeout(validatePassword, 200); // catch autofill
+
+  // Block submit nicely and focus the field
+  document.addEventListener("submit", function (e) {
+    validatePassword();
+    if (!e.target || !e.target.checkValidity) return; // non-form submits
+    if (!e.target.checkValidity()) {
+      // If our password is the reason, focus it
+      if (!pwd.checkValidity()) {
+        e.preventDefault();
+        pwd.focus();
+      }
+    }
+  }, true);
+
+  // Light styles (optional)
+  const style = document.createElement("style");
+  style.textContent = `
+    .pw-reqs { margin:.25rem 0 .5rem; color:#555; }
+    .pw-msg { margin-top:.25rem; font-size:.85rem; }
+    .pw-msg.err { color:#a40000; }
+    .pw-msg.ok { color:#0a6; }
+    .is-invalid { border-color:#a40000 !important; }
+    .is-valid { border-color:#0a6 !important; }
+  `;
+  document.head.appendChild(style);
+})();
+
+
