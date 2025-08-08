@@ -229,14 +229,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
-document.addEventListener('DOMContentLoaded', function () {
-  const deliveryOptionsPanel = document.getElementById('ctl00_PageBody_CartSummary2_DeliveryOptionsPanel');
-  if (deliveryOptionsPanel) {
-    deliveryOptionsPanel.style.display = 'none';
-    console.log('[HIDE] Delivery Options Panel hidden');
-  } else {
-    console.warn('[HIDE] Delivery Options Panel not found');
-  }
-});
+
 
 
