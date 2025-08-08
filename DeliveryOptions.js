@@ -75,80 +75,91 @@ $(function(){
 
 
 
-$(function(){
-  var $areaSelect = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas');
-  var $optSelect  = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList');
-  var $summary    = $('#SummaryEntry2');
+(function($){
+  // encapsulate all of our injection logic
+  function initDeliveryOptions() {
+    var $areaSelect = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas'),
+        $optSelect  = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList'),
+        $summary    = $('#SummaryEntry2');
 
-  // Only run on delivered flow when those selects are visible
-  if ($areaSelect.is(':visible') && $optSelect.is(':visible')) {
+    // only run on delivered flow when both selects exist & are visible
+    if (!$areaSelect.length || !$optSelect.length || 
+        !$areaSelect.is(':visible') || !$optSelect.is(':visible')) {
+      return;
+    }
+
     console.log('[DeliveryOptions] Modernizing summary & delivery selector');
 
-    // 1) Hide the Total discount row
+    // hide Total discount row
     $summary.find('.summaryTotals tr').filter(function(){
       return $(this).find('td:first').text().trim() === 'Total discount';
     }).hide();
 
-    // 2) Wrap the summary in a Bootstrap card (only once)
+    // wrap summary in a card (once)
     if (!$summary.find('.summary-card').length) {
-      $summary.wrapInner('<div class="card summary-card shadow-sm mb-3"></div>');
-      $summary.find('.summary-card').addClass('p-3');
-      // Make the table borderless
-      $summary.find('.summaryTotals').addClass('table table-borderless mb-0');
+      $summary.wrapInner('<div class="card summary-card shadow-sm mb-3 p-3"></div>')
+              .find('.summaryTotals').addClass('table table-borderless mb-0');
     }
 
-    // 3) Build inline delivery-options pills
+    // build inline pills container (remove old if re-running)
+    $summary.find('.delivery-options-inline').remove();
     var baseCost = parseFloat(
       $('#ctl00_PageBody_CartSummary2_DeliveryCostsRow td.numeric')
-        .text().replace(/[^0-9.-]/g,'')
+        .text().replace(/[^0-9\.-]/g,'')
     );
     var $inline = $('<div class="delivery-options-inline d-flex flex-wrap mb-3"></div>');
 
+    // for each <option> create a pill
     $optSelect.find('option').each(function(){
-      var $opt = $(this);
-      var txt  = $opt.text().trim();
-      var label = txt.replace(/\s*\(.*\)/,'').trim();
-      var m     = txt.match(/\(([^)]+)\)/);
-      var extra = m ? m[1] : '';
-      var total = extra.startsWith('+')
-        ? baseCost + parseFloat(extra.replace(/[^0-9.-]/g,''))
-        : parseFloat(extra.replace(/[^0-9.-]/g,'')) || baseCost;
-      var costLabel = '$' + total.toFixed(2);
+      var $opt    = $(this),
+          txt     = $opt.text().trim(),
+          label   = txt.replace(/\s*\(.*\)/,'').trim(),
+          match   = txt.match(/\(([^)]+)\)/),
+          extra   = match ? match[1] : '',
+          total   = extra.startsWith('+')
+                    ? baseCost + parseFloat(extra.replace(/[^0-9\.-]/g,'')) 
+                    : parseFloat(extra.replace(/[^0-9\.-]/g,'')) || baseCost,
+          costLbl = '$' + total.toFixed(2),
+          $btn    = $(
+            `<button type="button" class="btn btn-outline-primary m-1">
+               ${label}<br><small>${costLbl}</small>
+             </button>`
+          );
 
-      var $btn = $(`
-        <button type="button" class="btn btn-outline-primary m-1">
-          ${label}<br><small>${costLabel}</small>
-        </button>
-      `);
-
+      // highlight currently selected option
       if ($opt.is(':selected')) {
         $btn.removeClass('btn-outline-primary').addClass('btn-primary');
       }
 
       $btn.on('click', function(){
-        $optSelect.val($opt.val());
-        $inline.find('button').removeClass('btn-primary').addClass('btn-outline-primary');
-        $btn.removeClass('btn-outline-primary').addClass('btn-primary');
-        // trigger the postback exactly like the select would
-        setTimeout(function(){
-          __doPostBack(
-            'ctl00$PageBody$CartSummary2$LocalDeliveryChargeControl$DeliveryOptionsDropDownList',
-            ''
-          );
-        }, 0);
+        // set the dropdown to this value and fire its native change
+        $optSelect.val($opt.val()).change();
+
+        // update pill styles
+        $inline.find('button')
+               .removeClass('btn-primary')
+               .addClass('btn-outline-primary');
+        $btn.removeClass('btn-outline-primary')
+            .addClass('btn-primary');
       });
 
       $inline.append($btn);
     });
 
-    // 4) Hide the original “Area” and “Options” rows
-    $areaSelect.closest('tr').hide();
-    $optSelect.closest('tr').hide();
-
-    // 5) Inject our inline pills at the top of the panel
-    $('#ctl00_PageBody_CartSummary2_LocalDeliveryPanel').prepend($inline);
+    // prepend pills into the delivery panel
+    $('#ctl00_PageBody_CartSummary2_LocalDeliveryPanel')
+      .prepend($inline);
   }
-});
+
+  // wire up on initial load...
+  $(document).ready(initDeliveryOptions);
+
+  // ...and after any ASP.NET AJAX partial postback
+  if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
+    Sys.WebForms.PageRequestManager.getInstance()
+       .add_endRequest(initDeliveryOptions);
+  }
+})(jQuery);
 
 
 
