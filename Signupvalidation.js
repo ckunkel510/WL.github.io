@@ -454,12 +454,16 @@
 
 
 
+
 (function () {
   const INPUT_ID = "ctl00_PageBody_Password1TextBox";
-  const pwd = document.getElementById(INPUT_ID);
-  if (!pwd) return;
+  const BTN_ID = "ctl00_PageBody_SignupButton";
 
-  // Put a helpful requirements line under the label
+  const pwd = document.getElementById(INPUT_ID);
+  const btn = document.getElementById(BTN_ID);
+  if (!pwd || !btn) return;
+
+  // === Add rules explanation ===
   const label = document.querySelector(`label[for="${INPUT_ID}"]`);
   if (label && !label.nextElementSibling?.classList?.contains("pw-reqs")) {
     const req = document.createElement("div");
@@ -472,17 +476,16 @@
     label.insertAdjacentElement("afterend", req);
   }
 
-  // Message area under the input (ARIA friendly)
+  // Message area
   let msg = document.createElement("div");
   msg.className = "pw-msg";
   msg.setAttribute("aria-live", "polite");
   pwd.insertAdjacentElement("afterend", msg);
 
-  // Helpful attributes
   pwd.setAttribute("autocomplete", "new-password");
   pwd.setAttribute("minlength", "12");
 
-  // Simple validator
+  // Patterns
   const reUpper = /[A-Z]/;
   const reDigit = /\d/;
   const reSymbol = /[^A-Za-z0-9]/;
@@ -506,36 +509,39 @@
     }
   }
 
+  function updateButtonState(valid) {
+    if (valid) {
+      btn.classList.remove("disabled");
+      btn.setAttribute("aria-disabled", "false");
+      btn.style.pointerEvents = "";
+      btn.style.opacity = "";
+    } else {
+      btn.classList.add("disabled");
+      btn.setAttribute("aria-disabled", "true");
+      btn.style.pointerEvents = "none";
+      btn.style.opacity = "0.5";
+    }
+  }
+
   function validatePassword() {
     const val = pwd.value || "";
     const issues = getIssues(val);
     renderMessage(issues);
-    // Hook into native constraint validation
     pwd.setCustomValidity(issues.length ? "Password does not meet requirements." : "");
-    // Optional visual cue
     pwd.classList.toggle("is-invalid", !!issues.length);
     pwd.classList.toggle("is-valid", !issues.length && val.length > 0);
+    updateButtonState(issues.length === 0);
   }
 
-  // Live & autofill validation
+  // Events
   pwd.addEventListener("input", validatePassword);
   pwd.addEventListener("blur", validatePassword);
-  setTimeout(validatePassword, 200); // catch autofill
+  setTimeout(validatePassword, 200); // initial/autofill check
 
-  // Block submit nicely and focus the field
-  document.addEventListener("submit", function (e) {
-    validatePassword();
-    if (!e.target || !e.target.checkValidity) return; // non-form submits
-    if (!e.target.checkValidity()) {
-      // If our password is the reason, focus it
-      if (!pwd.checkValidity()) {
-        e.preventDefault();
-        pwd.focus();
-      }
-    }
-  }, true);
+  // Initial lock
+  updateButtonState(false);
 
-  // Light styles (optional)
+  // Styles
   const style = document.createElement("style");
   style.textContent = `
     .pw-reqs { margin:.25rem 0 .5rem; color:#555; }
@@ -544,8 +550,10 @@
     .pw-msg.ok { color:#0a6; }
     .is-invalid { border-color:#a40000 !important; }
     .is-valid { border-color:#0a6 !important; }
+    #${BTN_ID}.disabled { cursor:not-allowed; }
   `;
   document.head.appendChild(style);
 })();
+
 
 
