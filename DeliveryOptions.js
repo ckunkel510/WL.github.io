@@ -73,109 +73,129 @@ $(function(){
 
 
 
-
-
 (function($){
-  // single “init” that runs on load + after any AJAX postback
   function initDeliveryWidget() {
     var $area = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas'),
         $opts = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList'),
         $summary = $('#SummaryEntry2');
 
-    // only on the “Delivered” step if both selects are present & visible
     if (!$area.length || !$opts.length ||
         !$area.is(':visible') || !$opts.is(':visible')) {
       return;
     }
 
-    // 1) hide the old rows
+    // hide original rows & discount
     $area.closest('tr').hide();
     $opts.closest('tr').hide();
-
-    // 2) hide “Total discount”
     $summary.find('.summaryTotals tr').filter(function(){
       return $(this).find('td:first').text().trim()==='Total discount';
     }).hide();
 
-    // 3) wrap summary in its own card (once)
+    // wrap summary in card
     if (!$summary.find('.summary-card').length) {
-      $summary.wrapInner(`
-        <div class="card summary-card shadow-sm mb-4">
-          <div class="card-body p-3"></div>
-        </div>
-      `);
+      $summary.wrapInner(
+        '<div class="card summary-card shadow-sm mb-4">' +
+          '<div class="card-body p-3"></div>' +
+        '</div>'
+      );
       $summary.find('.summaryTotals')
               .addClass('table table-borderless mb-0');
     }
 
-    // 4) build (or rebuild) the shipping‐method widget
-    $summary.prev('.shipping-card').remove();  // clear old if re-run
-    var baseCost = parseFloat(
-      $('#ctl00_PageBody_CartSummary2_DeliveryCostsRow td.numeric')
-        .text().replace(/[^0-9\.-]/g,'')
-    );
-    var $shipCard = $(`
-      <div class="card shipping-card shadow-sm mb-4">
-        <div class="card-header bg-light">
-          <strong>Shipping Method</strong>
-        </div>
-        <div class="card-body delivery-pills d-flex flex-wrap"></div>
-      </div>
-    `);
+    // remove any old widget
+    $summary.prev('.shipping-card').remove();
 
-    // populate one pill per <option>
+    // figure standard base cost from option value=-1
+    var standardText = $opts.find('option[value="-1"]').text(),
+        mstd = standardText.match(/\(([^)]+)\)/),
+        standardCost = mstd
+          ? parseFloat(mstd[1].replace(/[^0-9\.-]/g,''))
+          : 0;
+
+    // build shipping card
+    var $ship = $(
+      '<div class="card shipping-card shadow-sm mb-4">' +
+        '<div class="card-header bg-light"><strong>Shipping Method</strong></div>' +
+        '<div class="card-body">' +
+          '<div class="delivery-pills d-flex flex-wrap mb-2"></div>' +
+          '<div class="expected-by text-muted small"></div>' +
+        '</div>' +
+      '</div>'
+    );
+
+    function computeExpected(days) {
+      var now = new Date(),
+          total = new Date(now.getTime() + (days+1)*86400000),
+          fmt = total.toLocaleDateString(undefined,{
+            month:'long', day:'numeric', year:'numeric'
+          });
+      return fmt;
+    }
+
+    // create pills
     $opts.find('option').each(function(){
       var $o = $(this),
           txt = $o.text().trim(),
           label = txt.replace(/\s*\(.*\)/,'').trim(),
-          m = txt.match(/\(([^)]+)\)/),
-          extra = m ? m[1] : '',
-          cost = extra.startsWith('+')
-                 ? baseCost + parseFloat(extra.replace(/[^0-9\.-]/g,''))
-                 : parseFloat(extra.replace(/[^0-9\.-]/g,'')) || baseCost,
+          extraMatch = txt.match(/\(([^)]+)\)/),
+          extraRaw = extraMatch ? extraMatch[1] : '',
+          extra = parseFloat(extraRaw.replace(/[^0-9\.-]/g,'')) || 0,
+          cost = $o.val()==='-1'
+                 ? standardCost
+                 : standardCost + extra,
           costLbl = '$'+cost.toFixed(2),
-          $btn = $(`
-            <button type="button" class="btn btn-outline-primary m-1">
-              ${label}<br><small>${costLbl}</small>
-            </button>
-          `);
+          // infer transit days:
+          days = /Next\s*Day/i.test(txt)   ? 1
+               : /2nd\s*Day/i.test(txt)    ? 2
+               : /3\s*Day/i.test(txt)     ? 3
+               :                                 5,
+          $btn = $(
+            '<button type="button" class="btn btn-outline-primary m-1">'+
+              label+'<br><small>'+costLbl+'</small>'+
+            '</button>'
+          );
 
       // highlight current
       if ($o.is(':selected')) {
         $btn.removeClass('btn-outline-primary')
             .addClass('btn-primary');
+        // set initial expected
+        $ship.find('.expected-by')
+             .text('Expected by '+computeExpected(days));
       }
 
-      // wire up
       $btn.on('click', function(){
-        // set the real <select> + fire its change (posts back)
+        // wire real <select> & fire its change (so ASP.NET postbacks)
         $opts.val($o.val()).change();
 
         // restyle pills
-        $shipCard.find('button')
-                 .removeClass('btn-primary')
-                 .addClass('btn-outline-primary');
+        $ship.find('button')
+             .removeClass('btn-primary')
+             .addClass('btn-outline-primary');
         $btn.removeClass('btn-outline-primary')
             .addClass('btn-primary');
+
+        // update expected date
+        $ship.find('.expected-by')
+             .text('Expected by '+computeExpected(days));
       });
 
-      $shipCard.find('.delivery-pills').append($btn);
+      $ship.find('.delivery-pills').append($btn);
     });
 
-    // 5) inject shipping widget above the summary card
-    $summary.before($shipCard);
+    $summary.before($ship);
   }
 
-  // run on whole-page load
+  // on page load
   $(initDeliveryWidget);
 
-  // re-run after partial postback
+  // on partial postback
   if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
-    Sys.WebForms.PageRequestManager.getInstance()
+    Sys.WebForms.PageRequestManager
+      .getInstance()
       .add_endRequest(initDeliveryWidget);
   }
 })(jQuery);
-
 
 
 
