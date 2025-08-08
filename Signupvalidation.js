@@ -341,3 +341,108 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+(function () {
+  const COUNTRY_INPUT_IDS = [
+    "ctl00_PageBody_DeliveryCountryTextBox",
+    "ctl00_PageBody_InvoiceCountryTextBox"
+  ];
+
+  const inputs = COUNTRY_INPUT_IDS.map(id => document.getElementById(id)).filter(Boolean);
+  if (!inputs.length) return;
+
+  // Values we’ll treat as United States (case/spacing/punctuation-insensitive)
+  const US_ALIASES = new Set([
+    "united states", "united states of america", "u.s.", "u.s", "u.s.a.", "u.s.a",
+    "us", "usa", "u s", "u s a", "america" // last one is optional—remove if you prefer stricter match
+  ]);
+
+  // Normalize to "United States" always
+  function normalizeCountry(el) {
+    const raw = (el.value || "").trim();
+    if (!raw) {
+      setUnitedStates(el);
+      return;
+    }
+    const cleaned = raw.toLowerCase().replace(/[^\w ]+/g, "").replace(/\s+/g, " ").trim();
+    if (!US_ALIASES.has(cleaned)) {
+      // Hard-code to US regardless of what was entered/autofilled
+      setUnitedStates(el);
+    } else {
+      // Already some US form—snap to our canonical text
+      if (raw !== "United States") setUnitedStates(el);
+    }
+  }
+
+  function setUnitedStates(el) {
+    el.value = "United States";
+    el.dataset.countryCode = "US";
+    // Fire change so any validators/bindings react
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+
+  // Sweep briefly to catch delayed autofill (Chrome/iOS Safari)
+  function scheduleAutofillSweep(el) {
+    const end = Date.now() + 3000; // ~3s
+    const int = setInterval(() => {
+      normalizeCountry(el);
+      if (Date.now() > end) clearInterval(int);
+    }, 250);
+  }
+
+  // Add a WebKit autofill CSS hook so we can detect autofill reliably
+  const style = document.createElement("style");
+  style.textContent = `
+    @keyframes countryAutofill { from { } to { } }
+    input.country-autofill:-webkit-autofill {
+      animation-name: countryAutofill;
+      animation-duration: 0.001s;
+      animation-iteration-count: 1;
+    }
+  `;
+  document.head.appendChild(style);
+
+  // Global listener for the autofill animation
+  document.addEventListener("animationstart", (e) => {
+    if (e.animationName === "countryAutofill" && inputs.includes(e.target)) {
+      normalizeCountry(e.target);
+    }
+  }, true);
+
+  inputs.forEach(el => {
+    // Hint to browsers that this is a country name field
+    el.classList.add("country-autofill");
+    el.setAttribute("autocomplete", "country-name");
+
+    // Set to United States on load if empty (or if anything else was pre-filled)
+    setTimeout(() => normalizeCountry(el), 50);
+
+    // Re-normalize on focus (and run a short sweep for autofill timing)
+    el.addEventListener("focus", () => {
+      normalizeCountry(el);
+      scheduleAutofillSweep(el);
+    });
+
+    // If something types/pastes in, snap it back
+    el.addEventListener("input", () => normalizeCountry(el));
+    el.addEventListener("change", () => normalizeCountry(el));
+    el.addEventListener("blur",  () => normalizeCountry(el));
+  });
+})();
+
