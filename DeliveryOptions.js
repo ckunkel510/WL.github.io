@@ -251,13 +251,12 @@ document.addEventListener('DOMContentLoaded', function () {
     // Bail if either doesn't exist
     if (!$areaDropdown.length || !$deliveryPanel.length) return;
 
-    // Check if the dropdown is visible and no other visible <select> elements exist inside the panel
+    // Hide delivery panel if only area dropdown is shown
     var $otherVisibleSelects = $deliveryPanel.find('select').filter(function () {
       return $(this).attr('id') !== $areaDropdown.attr('id') && $(this).is(':visible');
     });
 
     if ($areaDropdown.is(':visible') && $otherVisibleSelects.length === 0) {
-      // Hide entire delivery panel
       $deliveryPanel.css({
         position: 'absolute',
         width: '1px',
@@ -268,12 +267,17 @@ document.addEventListener('DOMContentLoaded', function () {
         whiteSpace: 'nowrap'
       });
     }
+
+    // Hide "Total discount" row wherever it appears
+    $('tr').filter(function () {
+      return $(this).find('td:first').text().trim() === 'Total discount';
+    }).hide();
   }
 
-  // Run it on load
+  // Run on load
   $(hideDeliveryPanelIfOnlyAreaDropdownShown);
 
-  // Also rerun on ASP.NET async postbacks
+  // Run on partial postbacks
   if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
     Sys.WebForms.PageRequestManager.getInstance()
       .add_endRequest(hideDeliveryPanelIfOnlyAreaDropdownShown);
