@@ -201,3 +201,22 @@ $(function(){
   $('.shopping-cart-details').before($newHeader);
 });
 
+
+
+(function () {
+  document.addEventListener('DOMContentLoaded', function () {
+    const placeOrderBtn = document.getElementById('ctl00_PageBody_PlaceOrderButton');
+    
+
+    function overrideSessionState() {
+      console.log('[Checkout] Overriding localStorage: sameAsDelivery = false, currentStep = 2');
+      localStorage.setItem('sameAsDelivery', 'false');
+      localStorage.setItem('currentStep', '2');
+    }
+
+    if (placeOrderBtn) {
+      placeOrderBtn.addEventListener('click', overrideSessionState);
+    }
+
+});
+})();
