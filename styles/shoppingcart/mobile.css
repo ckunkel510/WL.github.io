@@ -495,19 +495,32 @@ display: none;
 
 
 
- .custom-subtotal-wrapper {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
+
+
+
+
+
+.text-end.action-block{
+    display: contents;
+  }
+
+
+
+
+
+
+
+
+
+
+.custom-subtotal-wrapper {
+    position: sticky;
+    top: 0;
     background: #ffffff;
-    border-top: 2px solid #ccc;
     padding: 10px 16px;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
     z-index: 1000;
-    box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.1);
+    border-bottom: 2px solid #ccc;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
   }
 
   .custom-subtotal-wrapper .SubtotalWrapper {
@@ -531,8 +544,4 @@ display: none;
 
   .custom-subtotal-wrapper .epi-button:hover {
     background-color: #8d8d8d;
-  }
-
-  .text-end.action-block{
-    display: contents;
   }
