@@ -97,10 +97,10 @@ $(function(){
     }
     console.log('[DeliveryOptions] Initializing widget');
 
-    // hide the original dropdown
-    $select.hide();
+    // keep the original dropdown in DOM but hide it off-screen via CSS so its onchange still fires
+    $select.css({ position: 'absolute', left: '-9999px', opacity: 0 });
 
-    // remove old widgets
+    // remove old custom widgets
     $('.shipping-method-widget, .order-totals-widget').remove();
 
     // extract summary values
@@ -112,7 +112,7 @@ $(function(){
 
     const baseCost = parseFloat(deliveryText.replace(/[^0-9.-]/g, ''));
 
-    // remove original summary table
+    // remove original summary table and area selector
     $summary.find('.summaryTotals').remove();
     $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas').closest('tr').remove();
     $select.closest('tr').remove();
@@ -148,7 +148,7 @@ $(function(){
     const $list     = $('<div class="d-flex flex-column mb-3"></div>');
 
     options.forEach(opt => {
-      const selected = ($select.val() === opt.value);
+      const selected = ($select.val() === opt.value) || (localStorage.getItem('selectedShippingValue') === opt.value);
       const $btn = $(
         `<button type="button" class="btn mb-2 text-start ${selected?'btn-primary':'btn-outline-primary'}">
            <div class="fw-semibold">${opt.label}</div>
@@ -158,16 +158,16 @@ $(function(){
 
       $btn.on('click', () => {
         console.log('[DeliveryOptions] Clicked option:', opt);
-        // set local storage
+        // store selection
         localStorage.setItem('selectedShippingValue', opt.value);
-        // update the hidden dropdown and trigger its onchange
+        // update the hidden dropdown and let its native onchange fire
         $select.val(opt.value).trigger('change');
       });
       $list.append($btn);
     });
     $shipBody.append($list);
 
-    // change button
+    // change button to reset
     const $changeBtn = $('<button type="button" class="btn btn-link mb-3">Change Shipping Speed</button>')
       .on('click', () => {
         console.log('[DeliveryOptions] Change clicked');
@@ -197,21 +197,19 @@ $(function(){
 
     $summary.empty().append($shipCard).append($totalsCard);
 
-    // render selection
+    // render selection and banner
     function renderSelection(reset) {
       const sel = localStorage.getItem('selectedShippingValue');
       console.log('[DeliveryOptions] renderSelection:', {sel, reset});
       $shipBody.find('.shipping-banner').remove();
       $list.children('button').each(function(){
         const o = $(this).data('opt');
-        let isSel = false;
-        if (!reset && sel) isSel = (o.value === sel);
-        else if (!reset && !sel) isSel = ($select.val() === o.value);
+        const isSel = (!reset && sel ? o.value === sel : o.value === $select.val());
         console.log(`[DeliveryOptions] ${o.label} selected? ${isSel}`);
         if (isSel) {
           $(this).show().removeClass('btn-outline-primary').addClass('btn-primary');
           const arr = addBusinessDays(new Date(), o.transitDays+1);
-          const ds = arr.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+          const ds = arr.toLocaleDateString(undefined, {weekday:'short', month:'short', day:'numeric'});
           $shipBody.prepend(
             `<div class="alert alert-info shipping-banner mb-3">
                <strong>${o.description}</strong><br>
@@ -236,6 +234,7 @@ $(function(){
     Sys.WebForms.PageRequestManager.getInstance().add_endRequest(initializeDeliveryWidget);
   }
 })();
+
 
 
 
