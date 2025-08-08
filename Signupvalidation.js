@@ -78,7 +78,6 @@
 
 
 
-
 (function () {
   const INPUT_ID = "ctl00_PageBody_DeliveryStateCountyTextBox";
   const input = document.getElementById(INPUT_ID);
@@ -98,43 +97,50 @@
     ["VA","Virginia"],["WA","Washington"],["WV","West Virginia"],["WI","Wisconsin"],["WY","Wyoming"]
   ];
 
-  // Utilities
+  // Maps for normalization
   const byName = new Map(STATES.map(([ab, nm]) => [nm.toLowerCase(), {ab, nm}]));
   const byAbbr = new Map(STATES.map(([ab, nm]) => [ab.toLowerCase(), {ab, nm}]));
+
   function normalize(val) {
     if (!val) return null;
     const v = val.trim().toLowerCase();
     return byAbbr.get(v) || byName.get(v) || null;
   }
+
   function filterStates(q) {
     const v = (q||"").trim().toLowerCase();
     if (!v) return STATES;
     return STATES.filter(([ab, nm]) => ab.toLowerCase().startsWith(v) || nm.toLowerCase().includes(v));
   }
 
-  // Base styles (scoped-ish)
+  // Inject styles
   const style = document.createElement("style");
   style.textContent = `
-  .statepicker-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:9998;display:none}
-  .statepicker-modal{position:fixed;inset:auto 0 0 0;background:#fff;z-index:9999;display:none;max-height:80vh;border-radius:16px 16px 0 0;box-shadow:0 -10px 30px rgba(0,0,0,.2)}
-  .statepicker-head{padding:12px 16px;border-bottom:1px solid #eee;display:flex;gap:8px;align-items:center}
-  .statepicker-search{flex:1;border:1px solid #ddd;border-radius:8px;padding:10px 12px;font-size:16px}
-  .statepicker-cancel{border:none;background:transparent;font-size:16px}
-  .statepicker-list{max-height:60vh;overflow:auto}
-  .statepicker-item{padding:10px 16px;cursor:pointer}
-  .statepicker-item:hover,.statepicker-item[aria-selected="true"]{background:#f5f5f5}
-  .statepicker-dd{position:absolute;z-index:9999;background:#fff;border:1px solid #ddd;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);display:none;max-height:240px;overflow:auto}
-  .statepicker-dd .statepicker-item{padding:8px 12px}
+    .statepicker-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:9998;display:none}
+    .statepicker-modal{
+      position:fixed;z-index:9999;display:none;
+      top:50%;left:50%;transform:translate(-50%,-50%);
+      width:min(640px,92vw);max-height:70vh;background:#fff;border-radius:16px;
+      box-shadow:0 16px 40px rgba(0,0,0,.25)
+    }
+    .statepicker-head{padding:12px 16px;border-bottom:1px solid #eee;display:flex;gap:8px;align-items:center}
+    .statepicker-search{flex:1;border:1px solid #ddd;border-radius:8px;padding:10px 12px;font-size:16px}
+    .statepicker-cancel{border:none;background:transparent;font-size:16px}
+    .statepicker-list{overflow:auto}
+    .statepicker-item{padding:10px 16px;cursor:pointer}
+    .statepicker-item:hover,.statepicker-item[aria-selected="true"]{background:#f5f5f5}
+    .statepicker-dd{position:absolute;z-index:9999;background:#fff;border:1px solid #ddd;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.12);display:none;max-height:240px;overflow:auto}
+    .statepicker-dd .statepicker-item{padding:8px 12px}
   `;
   document.head.appendChild(style);
 
-  // Elements for dropdown (desktop/tablet)
+  // Build elements: desktop dropdown
   const dd = document.createElement("div");
   dd.className = "statepicker-dd";
   dd.setAttribute("role","listbox");
   document.body.appendChild(dd);
 
-  // Elements for modal (mobile)
+  // Build elements: mobile modal
   const backdrop = document.createElement("div"); backdrop.className = "statepicker-backdrop";
   const modal = document.createElement("div"); modal.className = "statepicker-modal";
   const head = document.createElement("div"); head.className = "statepicker-head";
@@ -146,10 +152,11 @@
   modal.appendChild(head); modal.appendChild(list);
   document.body.appendChild(backdrop); document.body.appendChild(modal);
 
+  // State
   let isOpen = false;
   let isModal = false;
   let activeIndex = -1;
-  let currentItems = []; // [ [ab, name], ... ] currently rendered
+  let currentItems = [];
 
   function isSmall() { return window.matchMedia("(max-width: 640px)").matches; }
 
@@ -163,26 +170,43 @@
       div.setAttribute("data-ab", ab);
       div.setAttribute("data-nm", nm);
       div.textContent = `${nm} (${ab})`;
-      div.addEventListener("mousedown", e => e.preventDefault()); // prevents blur before click
+      div.addEventListener("mousedown", e => e.preventDefault()); // keep input from blurring
       div.addEventListener("click", () => selectState({ab, nm}));
       container.appendChild(div);
     });
   }
 
+  // Sizing so results sit right under the search bar in modal
+  function setListMaxHeight() {
+    const headH = head.offsetHeight || 56;
+    const modalStyles = getComputedStyle(modal);
+    const maxVh = parseInt((modalStyles.maxHeight || "70vh").replace("vh","")) || 70;
+    const pxMaxH = Math.round(window.innerHeight * (maxVh / 100));
+    list.style.maxHeight = Math.max(180, pxMaxH - headH - 12) + "px";
+  }
+
   function openPicker() {
     isModal = isSmall();
     currentItems = filterStates(input.value);
+
     if (isModal) {
       renderList(list, currentItems);
       backdrop.style.display = "block";
       modal.style.display = "block";
+      setListMaxHeight();
+      list.scrollTop = 0;
+
       search.value = "";
-      setTimeout(() => search.focus(), 0);
+      setTimeout(() => {
+        search.focus({ preventScroll: true });
+        modal.scrollIntoView({ block: "center", inline: "center" });
+      }, 0);
     } else {
       renderList(dd, currentItems);
       positionDropdown();
       dd.style.display = "block";
     }
+
     isOpen = true;
     activeIndex = -1;
   }
@@ -199,34 +223,37 @@
   function positionDropdown() {
     const r = input.getBoundingClientRect();
     dd.style.minWidth = r.width + "px";
-    dd.style.top = window.scrollY + r.bottom + "px";
-    dd.style.left = window.scrollX + r.left + "px";
+    dd.style.top = (window.scrollY + r.bottom) + "px";
+    dd.style.left = (window.scrollX + r.left) + "px";
   }
-  window.addEventListener("resize", () => { if (isOpen && !isModal) positionDropdown(); });
-  window.addEventListener("scroll", () => { if (isOpen && !isModal) positionDropdown(); }, true);
 
   function selectState({ab, nm}) {
-    input.value = nm;            // write full name into the textbox
-    input.dataset.stateAbbr = ab; // stash abbr if you need it later
+    input.value = nm;                    // Write full name into the textbox
+    input.dataset.stateAbbr = ab;        // Keep abbreviation if you need it
     input.dispatchEvent(new Event("change", {bubbles:true}));
     closePicker();
     input.focus();
   }
 
-  // Input events
-  input.setAttribute("autocomplete","address-level1"); // hint to browsers that this is a state
+  // Input wiring
+  input.setAttribute("autocomplete","address-level1"); // hint to browsers this is a state
   input.addEventListener("focus", () => openPicker());
   input.addEventListener("click", () => { if (!isOpen) openPicker(); });
 
-  // As user types, filter list (works with manual entry or autofill tweaks)
+  // Manual typing on the input filters options
   input.addEventListener("input", () => {
     if (!isOpen) openPicker();
     currentItems = filterStates(input.value);
-    if (isModal) renderList(list, currentItems);
-    else renderList(dd, currentItems);
+    if (isModal) {
+      renderList(list, currentItems);
+      setListMaxHeight();
+      list.scrollTop = 0;
+    } else {
+      renderList(dd, currentItems);
+    }
   });
 
-  // Keyboard navigation for dropdown mode
+  // Keyboard nav in dropdown mode
   input.addEventListener("keydown", (e) => {
     if (!isOpen || isModal) return;
     const max = currentItems.length - 1;
@@ -269,27 +296,35 @@
   search.addEventListener("input", () => {
     currentItems = filterStates(search.value);
     renderList(list, currentItems);
+    setListMaxHeight();
+    list.scrollTop = 0;
   });
 
-  // Close if clicking outside (dropdown mode)
+  // Close dropdown if click outside
   document.addEventListener("mousedown", (e) => {
     if (!isOpen || isModal) return;
     if (e.target === input || dd.contains(e.target)) return;
     closePicker();
   });
 
+  // Keep sizes sane when viewport/keyboard changes
+  window.addEventListener("resize", () => {
+    if (isOpen && isModal) setListMaxHeight();
+    if (isOpen && !isModal) positionDropdown();
+  });
+  window.addEventListener("scroll", () => {
+    if (isOpen && !isModal) positionDropdown();
+  }, true);
+
   // Accept valid autofill values; normalize on load & on change
   function normalizeIfValid() {
     const match = normalize(input.value);
     if (match) {
-      // keep full name for clarity; stash abbr
-      input.value = match.nm;
+      input.value = match.nm;            // Keep full name for clarity
       input.dataset.stateAbbr = match.ab;
     }
   }
-  // Handle delayed browser autofill
-  setTimeout(normalizeIfValid, 300);
+  setTimeout(normalizeIfValid, 300);     // delayed to catch browser autofill
   input.addEventListener("change", normalizeIfValid);
-
 })();
 
