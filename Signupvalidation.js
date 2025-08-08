@@ -173,7 +173,10 @@
       div.className = "statepicker-item";
       div.textContent = `${nm} (${ab})`;
       div.addEventListener("mousedown", e => e.preventDefault());
-      div.addEventListener("click", () => selectState({ab, nm}));
+      div.addEventListener("click", () => {
+  selectState({ab, nm});
+  if (isModal) closePicker(); // explicitly close modal on mobile
+});
       container.appendChild(div);
     });
   }
