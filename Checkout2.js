@@ -50,13 +50,13 @@ $('#ctl00_PageBody_BackToCartButton2').val('Back to Cart');
 
   // 2) Define steps
   var steps = [
-    { title:'Order details',    findEls:()=>{ let tx=document.getElementById('ctl00_PageBody_TransactionTypeDiv'); return tx?[tx.closest('.epi-form-col-single-checkout')]:[]; }},
-    { title:'Shipping method',   findEls:()=>{ let ship=document.getElementById('ctl00_PageBody_SaleTypeSelector_lblDelivered'); return ship?[ship.closest('.epi-form-col-single-checkout')]:[]; }},
+    { title:'Order Details',    findEls:()=>{ let tx=document.getElementById('ctl00_PageBody_TransactionTypeDiv'); return tx?[tx.closest('.epi-form-col-single-checkout')]:[]; }},
+    { title:'Ship/Pickup',   findEls:()=>{ let ship=document.getElementById('ctl00_PageBody_SaleTypeSelector_lblDelivered'); return ship?[ship.closest('.epi-form-col-single-checkout')]:[]; }},
     { title:'Your reference',    findEls:()=>{ let po=document.getElementById('ctl00_PageBody_PurchaseOrderNumberTextBox'); return po?[po.closest('.epi-form-group-checkout')]:[]; }},
     { title:'Branch',            findEls:()=>{ let br=document.getElementById('ctl00_PageBody_BranchSelector'); return br?[br]:[]; }},
-    { title:'Delivery address',  findEls:()=>{ let hdr=document.querySelector('.SelectableAddressType'); return hdr?[hdr.closest('.epi-form-col-single-checkout')]:[]; }},
-    { title:'Billing address',   findEls:()=>{ let gp=document.getElementById('ctl00_PageBody_InvoiceAddress_GoogleAddressSearchWrapper'); return gp?[gp.closest('.epi-form-col-single-checkout')]:[]; }},
-    { title:'Special instructions', findEls:()=>{
+    { title:'Delivery Address',  findEls:()=>{ let hdr=document.querySelector('.SelectableAddressType'); return hdr?[hdr.closest('.epi-form-col-single-checkout')]:[]; }},
+    { title:'Billing Address',   findEls:()=>{ let gp=document.getElementById('ctl00_PageBody_InvoiceAddress_GoogleAddressSearchWrapper'); return gp?[gp.closest('.epi-form-col-single-checkout')]:[]; }},
+    { title:'Date & Instructions', findEls:()=>{
         let arr=[];
         let tbl = document.querySelector('.cartTable');
         if(tbl) arr.push(tbl.closest('table'));
