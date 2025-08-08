@@ -566,3 +566,9 @@ display: none;
   .checkout-nav{
     display: flex;
   }
+
+  .checkout-nav .btn.btn-secondary{
+    background-color: white;
+    color: black;
+    text-decoration: underline;
+  }
