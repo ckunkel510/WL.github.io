@@ -79,9 +79,16 @@
 
 
 (function () {
-  const INPUT_ID = "ctl00_PageBody_DeliveryStateCountyTextBox";
-  const input = document.getElementById(INPUT_ID);
-  if (!input) return;
+  const STATE_INPUT_IDS = [
+    "ctl00_PageBody_DeliveryStateCountyTextBox",
+    "ctl00_PageBody_InvoiceStateCountyTextBox"
+  ];
+
+  // Find any that exist on the page
+  const inputs = STATE_INPUT_IDS
+    .map(id => document.getElementById(id))
+    .filter(Boolean);
+  if (!inputs.length) return;
 
   // 50 states
   const STATES = [
@@ -97,7 +104,6 @@
     ["VA","Virginia"],["WA","Washington"],["WV","West Virginia"],["WI","Wisconsin"],["WY","Wyoming"]
   ];
 
-  // Maps for normalization
   const byName = new Map(STATES.map(([ab, nm]) => [nm.toLowerCase(), {ab, nm}]));
   const byAbbr = new Map(STATES.map(([ab, nm]) => [ab.toLowerCase(), {ab, nm}]));
 
@@ -113,7 +119,7 @@
     return STATES.filter(([ab, nm]) => ab.toLowerCase().startsWith(v) || nm.toLowerCase().includes(v));
   }
 
-  // Inject styles
+  // Styles
   const style = document.createElement("style");
   style.textContent = `
     .statepicker-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:9998;display:none}
@@ -134,13 +140,12 @@
   `;
   document.head.appendChild(style);
 
-  // Build elements: desktop dropdown
+  // Shared UI elements
   const dd = document.createElement("div");
   dd.className = "statepicker-dd";
   dd.setAttribute("role","listbox");
   document.body.appendChild(dd);
 
-  // Build elements: mobile modal
   const backdrop = document.createElement("div"); backdrop.className = "statepicker-backdrop";
   const modal = document.createElement("div"); modal.className = "statepicker-modal";
   const head = document.createElement("div"); head.className = "statepicker-head";
@@ -152,31 +157,27 @@
   modal.appendChild(head); modal.appendChild(list);
   document.body.appendChild(backdrop); document.body.appendChild(modal);
 
-  // State
+  // State vars
   let isOpen = false;
   let isModal = false;
   let activeIndex = -1;
   let currentItems = [];
+  let activeInput = null; // track which input is being edited
 
   function isSmall() { return window.matchMedia("(max-width: 640px)").matches; }
 
-  // Render helpers
   function renderList(container, items) {
     container.innerHTML = "";
-    items.forEach(([ab, nm], idx) => {
+    items.forEach(([ab, nm]) => {
       const div = document.createElement("div");
       div.className = "statepicker-item";
-      div.setAttribute("role","option");
-      div.setAttribute("data-ab", ab);
-      div.setAttribute("data-nm", nm);
       div.textContent = `${nm} (${ab})`;
-      div.addEventListener("mousedown", e => e.preventDefault()); // keep input from blurring
+      div.addEventListener("mousedown", e => e.preventDefault());
       div.addEventListener("click", () => selectState({ab, nm}));
       container.appendChild(div);
     });
   }
 
-  // Sizing so results sit right under the search bar in modal
   function setListMaxHeight() {
     const headH = head.offsetHeight || 56;
     const modalStyles = getComputedStyle(modal);
@@ -185,9 +186,10 @@
     list.style.maxHeight = Math.max(180, pxMaxH - headH - 12) + "px";
   }
 
-  function openPicker() {
+  function openPicker(forInput) {
+    activeInput = forInput;
     isModal = isSmall();
-    currentItems = filterStates(input.value);
+    currentItems = filterStates(forInput.value);
 
     if (isModal) {
       renderList(list, currentItems);
@@ -195,7 +197,6 @@
       modal.style.display = "block";
       setListMaxHeight();
       list.scrollTop = 0;
-
       search.value = "";
       setTimeout(() => {
         search.focus({ preventScroll: true });
@@ -203,7 +204,7 @@
       }, 0);
     } else {
       renderList(dd, currentItems);
-      positionDropdown();
+      positionDropdown(forInput);
       dd.style.display = "block";
     }
 
@@ -218,79 +219,62 @@
     modal.style.display = "none";
     isOpen = false;
     activeIndex = -1;
+    activeInput = null;
   }
 
-  function positionDropdown() {
-    const r = input.getBoundingClientRect();
+  function positionDropdown(el) {
+    const r = el.getBoundingClientRect();
     dd.style.minWidth = r.width + "px";
     dd.style.top = (window.scrollY + r.bottom) + "px";
     dd.style.left = (window.scrollX + r.left) + "px";
   }
 
   function selectState({ab, nm}) {
-    input.value = nm;                    // Write full name into the textbox
-    input.dataset.stateAbbr = ab;        // Keep abbreviation if you need it
-    input.dispatchEvent(new Event("change", {bubbles:true}));
+    if (!activeInput) return;
+    activeInput.value = nm;
+    activeInput.dataset.stateAbbr = ab;
+    activeInput.dispatchEvent(new Event("change", {bubbles:true}));
     closePicker();
-    input.focus();
+    activeInput.focus();
   }
 
-  // Input wiring
-  input.setAttribute("autocomplete","address-level1"); // hint to browsers this is a state
-  input.addEventListener("focus", () => openPicker());
-  input.addEventListener("click", () => { if (!isOpen) openPicker(); });
+  // Wire up each input
+  inputs.forEach(el => {
+    el.setAttribute("autocomplete","address-level1");
 
-  // Manual typing on the input filters options
-  input.addEventListener("input", () => {
-    if (!isOpen) openPicker();
-    currentItems = filterStates(input.value);
-    if (isModal) {
-      renderList(list, currentItems);
-      setListMaxHeight();
-      list.scrollTop = 0;
-    } else {
-      renderList(dd, currentItems);
-    }
-  });
+    el.addEventListener("focus", () => openPicker(el));
+    el.addEventListener("click", () => { if (!isOpen) openPicker(el); });
 
-  // Keyboard nav in dropdown mode
-  input.addEventListener("keydown", (e) => {
-    if (!isOpen || isModal) return;
-    const max = currentItems.length - 1;
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      activeIndex = Math.min(max, activeIndex + 1);
-      highlight(activeIndex);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      activeIndex = Math.max(0, activeIndex - 1);
-      highlight(activeIndex);
-    } else if (e.key === "Enter") {
-      if (activeIndex >= 0 && currentItems[activeIndex]) {
-        e.preventDefault();
-        const [ab, nm] = currentItems[activeIndex];
-        selectState({ab, nm});
+    el.addEventListener("input", () => {
+      if (!isOpen) openPicker(el);
+      currentItems = filterStates(el.value);
+      if (isModal) {
+        renderList(list, currentItems);
+        setListMaxHeight();
+        list.scrollTop = 0;
+      } else {
+        renderList(dd, currentItems);
       }
-    } else if (e.key === "Escape") {
-      closePicker();
-    }
+    });
+
+    el.addEventListener("change", () => {
+      const match = normalize(el.value);
+      if (match) {
+        el.value = match.nm;
+        el.dataset.stateAbbr = match.ab;
+      }
+    });
+
+    setTimeout(() => {
+      const match = normalize(el.value);
+      if (match) {
+        el.value = match.nm;
+        el.dataset.stateAbbr = match.ab;
+      }
+    }, 300);
   });
 
-  function highlight(idx) {
-    const items = dd.querySelectorAll(".statepicker-item");
-    items.forEach((el, i) => el.setAttribute("aria-selected", String(i === idx)));
-    const el = items[idx];
-    if (el) {
-      const cTop = dd.scrollTop;
-      const cBot = cTop + dd.clientHeight;
-      const eTop = el.offsetTop;
-      const eBot = eTop + el.offsetHeight;
-      if (eTop < cTop) dd.scrollTop = eTop;
-      else if (eBot > cBot) dd.scrollTop = eBot - dd.clientHeight;
-    }
-  }
-
-  // Modal interactions
+  // Modal actions
   backdrop.addEventListener("click", closePicker);
   cancel.addEventListener("click", closePicker);
   search.addEventListener("input", () => {
@@ -300,31 +284,23 @@
     list.scrollTop = 0;
   });
 
-  // Close dropdown if click outside
+  // Close dropdown if clicking outside
   document.addEventListener("mousedown", (e) => {
     if (!isOpen || isModal) return;
-    if (e.target === input || dd.contains(e.target)) return;
+    if (e.target === activeInput || dd.contains(e.target)) return;
     closePicker();
   });
 
-  // Keep sizes sane when viewport/keyboard changes
+  // Keep sizes correct on resize/scroll
   window.addEventListener("resize", () => {
     if (isOpen && isModal) setListMaxHeight();
-    if (isOpen && !isModal) positionDropdown();
+    if (isOpen && !isModal && activeInput) positionDropdown(activeInput);
   });
   window.addEventListener("scroll", () => {
-    if (isOpen && !isModal) positionDropdown();
+    if (isOpen && !isModal && activeInput) positionDropdown(activeInput);
   }, true);
 
-  // Accept valid autofill values; normalize on load & on change
-  function normalizeIfValid() {
-    const match = normalize(input.value);
-    if (match) {
-      input.value = match.nm;            // Keep full name for clarity
-      input.dataset.stateAbbr = match.ab;
-    }
-  }
-  setTimeout(normalizeIfValid, 300);     // delayed to catch browser autofill
-  input.addEventListener("change", normalizeIfValid);
 })();
+
+
 
