@@ -243,6 +243,45 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
+(function ($) {
+  function hideDeliveryPanelIfOnlyAreaDropdownShown() {
+    var $areaDropdown = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas');
+    var $deliveryPanel = $('#ctl00_PageBody_CartSummary2_DeliveryOptionsPanel');
+
+    // Bail if either doesn't exist
+    if (!$areaDropdown.length || !$deliveryPanel.length) return;
+
+    // Check if the dropdown is visible and no other visible <select> elements exist inside the panel
+    var $otherVisibleSelects = $deliveryPanel.find('select').filter(function () {
+      return $(this).attr('id') !== $areaDropdown.attr('id') && $(this).is(':visible');
+    });
+
+    if ($areaDropdown.is(':visible') && $otherVisibleSelects.length === 0) {
+      // Hide entire delivery panel
+      $deliveryPanel.css({
+        position: 'absolute',
+        width: '1px',
+        height: '1px',
+        overflow: 'hidden',
+        clip: 'rect(1px, 1px, 1px, 1px)',
+        clipPath: 'inset(50%)',
+        whiteSpace: 'nowrap'
+      });
+    }
+  }
+
+  // Run it on load
+  $(hideDeliveryPanelIfOnlyAreaDropdownShown);
+
+  // Also rerun on ASP.NET async postbacks
+  if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
+    Sys.WebForms.PageRequestManager.getInstance()
+      .add_endRequest(hideDeliveryPanelIfOnlyAreaDropdownShown);
+  }
+})(jQuery);
+
+
+
 
 
 
