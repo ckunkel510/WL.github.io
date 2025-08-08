@@ -81,7 +81,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 
-
 (function($){
   function initDeliveryWidget() {
     var $area = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas'),
@@ -93,11 +92,14 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
 
+    // REMOVE the unwanted delivery options panel entirely
+    $('#ctl00_PageBody_CartSummary2_DeliveryOptionsPanel').remove();
+
     // hide original rows & discount
     $area.closest('tr').hide();
     $opts.closest('tr').hide();
     $summary.find('.summaryTotals tr').filter(function(){
-      return $(this).find('td:first').text().trim()==='Total discount';
+      return $(this).find('td:first').text().trim() === 'Total discount';
     }).hide();
 
     // wrap summary in card
@@ -135,7 +137,7 @@ document.addEventListener('DOMContentLoaded', function () {
     function computeExpected(days) {
       var now = new Date(),
           total = new Date(now.getTime() + (days+1)*86400000),
-          fmt = total.toLocaleDateString(undefined,{
+          fmt = total.toLocaleDateString(undefined, {
             month:'long', day:'numeric', year:'numeric'
           });
       return fmt;
@@ -152,29 +154,28 @@ document.addEventListener('DOMContentLoaded', function () {
           cost = $o.val()==='-1'
                  ? standardCost
                  : standardCost + extra,
-          costLbl = '$'+cost.toFixed(2),
+          costLbl = '$' + cost.toFixed(2),
           // infer transit days:
           days = /Next\s*Day/i.test(txt)   ? 1
                : /2nd\s*Day/i.test(txt)    ? 2
-               : /3\s*Day/i.test(txt)     ? 3
-               :                                 5,
+               : /3\s*Day/i.test(txt)      ? 3
+               :                               5,
           $btn = $(
-            '<button type="button" class="btn btn-outline-primary m-1">'+
-              label+'<br><small>'+costLbl+'</small>'+
+            '<button type="button" class="btn btn-outline-primary m-1">' +
+              label + '<br><small>' + costLbl + '</small>' +
             '</button>'
           );
 
-      // highlight current
       if ($o.is(':selected')) {
         $btn.removeClass('btn-outline-primary')
             .addClass('btn-primary');
-        // set initial expected
+
+        // set initial expected date
         $ship.find('.expected-by')
-             .text('Expected by '+computeExpected(days));
+             .text('Expected by ' + computeExpected(days));
       }
 
       $btn.on('click', function(){
-        // wire real <select> & fire its change (so ASP.NET postbacks)
         $opts.val($o.val()).change();
 
         // restyle pills
@@ -186,7 +187,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // update expected date
         $ship.find('.expected-by')
-             .text('Expected by '+computeExpected(days));
+             .text('Expected by ' + computeExpected(days));
       });
 
       $ship.find('.delivery-pills').append($btn);
@@ -205,7 +206,6 @@ document.addEventListener('DOMContentLoaded', function () {
       .add_endRequest(initDeliveryWidget);
   }
 })(jQuery);
-
 
 
 
