@@ -127,44 +127,46 @@
 
   // ---------- OPEN CHECKOUT / DEX ----------
   function openDexOverlay() {
-    // Select “Check” if present to match allowed_methods
-    const checkRadio = document.querySelector("#ctl00_PageBody_rbPayByCheck");
-    if (checkRadio) { checkRadio.checked = true; checkRadio.click(); }
+  // select “Check” if present (optional)
+  const checkRadio = document.querySelector("#ctl00_PageBody_rbPayByCheck");
+  if (checkRadio) { checkRadio.checked = true; checkRadio.click(); }
 
-    // Click the original button to trigger Forte’s own overlay loader
-    setTimeout(() => {
-      let paymentButton = getPaymentBtn();
-      if (paymentButton) {
-        console.log("[ForteVault] Opening DEX overlay…");
-        paymentButton.click();
-      } else {
-        console.warn("[ForteVault] Make Payment button not found at launch time.");
-      }
-    }, 150);
-  }
+  const btn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
+  if (!btn) { console.warn("[ForteVault] Make Payment button not found at launch."); return; }
+
+  // allow button click to pass through our interceptor
+  sessionStorage.setItem("skipVaultModal", "true");
+
+  // Important: click the ORIGINAL node so Forte handlers fire
+  btn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+}
+
 
   // ---------- INTERCEPT "MAKE PAYMENT" (show our modal) ----------
   function attachPaymentIntercept() {
-    const paymentBtn = getPaymentBtn();
-    if (!paymentBtn) { console.warn("[ForteVault] Make Payment button not found."); return; }
+  if (window._fv_bound) return;
+  window._fv_bound = true;
 
-    paymentBtn.addEventListener("click", function (e) {
-      const skipVault = sessionStorage.getItem("skipVaultModal");
-      if (skipVault === "true") {
-        sessionStorage.removeItem("skipVaultModal");
-        console.log("[ForteVault] Skipping vault modal — proceed to DEX.");
-        return; // allow Forte to proceed
-      }
+  const paymentBtn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
+  if (!paymentBtn) { console.warn("[ForteVault] Make Payment button not found."); return; }
 
-      e.preventDefault();
+  paymentBtn.addEventListener("click", function (e) {
+    const skipVault = sessionStorage.getItem("skipVaultModal");
+    if (skipVault === "true") {
+      sessionStorage.removeItem("skipVaultModal");
+      console.log("[ForteVault] Skipping vault modal — letting Forte handle click.");
+      return; // do NOT preventDefault; let Forte's handler run
+    }
 
-      if (vaultedAccounts.length > 0) {
-        showVaultListModal(vaultedAccounts);
-      } else {
-        showNoAccountModal();
-      }
-    });
-  }
+    e.preventDefault(); // we’re showing our modal instead
+    if (vaultedAccounts.length > 0) {
+      showVaultListModal(vaultedAccounts);
+    } else {
+      showNoAccountModal();
+    }
+  });
+}
+
 
   // ---------- SUBMIT-TIME SIGNER (final values) ----------
   function attachSubmitSigner() {
