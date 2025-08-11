@@ -51,18 +51,50 @@ setTimeout(() => {
   }
 
   // ---------- SIGNATURE HELPERS ----------
-  async function signCheckout({ method, version_number, total_amount, order_number, customer_token, paymethod_token }) {
-    const payload = { method, version_number, total_amount, order_number, customer_token, paymethod_token };
-    const resp = await fetch(SIGN_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    });
-    if (!resp.ok) throw new Error(`signCheckout HTTP ${resp.status}`);
-    const data = await resp.json();
-    if (!data.signature || !data.utc_time) throw new Error("signCheckout: missing signature/utc_time");
-    return data; // { signature, utc_time }
+  // ---------- SIGNATURE HELPERS ----------
+async function signCheckout({
+  method,
+  version_number,
+  total_amount,
+  order_number,
+  customer_token,
+  paymethod_token,
+  utc_time            // <-- accept utc_time
+}) {
+  // quick sanity logs
+  console.log("[ForteVault] signCheckout →", {
+    method, version_number, total_amount, order_number,
+    hasCustomerToken: !!customer_token,
+    hasPaymethodToken: !!paymethod_token,
+    utc_time
+  });
+
+  if (!utc_time) {
+    throw new Error("utc_time missing before signCheckout");
   }
+  if (!total_amount || !order_number) {
+    throw new Error("total_amount or order_number missing before signCheckout");
+  }
+
+  const resp = await fetch("https://wlmarketingdashboard.vercel.app/api/public/signCheckout", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      method,
+      version_number,
+      total_amount,
+      order_number,
+      customer_token,
+      paymethod_token,
+      utc_time       // <-- include utc_time in body
+    })
+  });
+  if (!resp.ok) throw new Error(`signCheckout HTTP ${resp.status}`);
+  const data = await resp.json();
+  if (!data.signature || !data.utc_time) throw new Error("signCheckout: missing signature/utc_time");
+  return data; // { signature, utc_time }
+}
+
 
   function setFieldOrAttr(name, value) {
     const paymentBtn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
