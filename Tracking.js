@@ -69,7 +69,7 @@
 
 
 
-<script>
+
 (function () {
   // Run only when requested
   const qs = new URLSearchParams(location.search);
@@ -213,7 +213,7 @@
   setTimeout(updateOnce, 150);   // quick pass
   setTimeout(updateOnce, 1200);  // later pass
 })();
-</script>
+
 
 
 
