@@ -1,23 +1,27 @@
 
 (function(){
+  // ---- HARD GUARD: run once per page load ----
+  if (window.__WL_OPENORDERS_TRACKER_INITED__) { return; }
+  window.__WL_OPENORDERS_TRACKER_INITED__ = true;
+
   const UPS_REGEX = /^1Z[0-9A-Z]{16}$/i;
-  const MAX_IFRAME_CONCURRENCY = 2; // polite parallelism
+  const MAX_IFRAME_CONCURRENCY = 2;
   const startTs = performance.now();
   const log = (...args) =>
     console.log('%cOpenOrders Tracker','color:#6b0016;font-weight:bold;',
       `[+${(performance.now()-startTs).toFixed(1)}ms]`, ...args);
 
-  // --- grid helpers (for this page) ---
+  // --- grid helpers ---
   const getGridHost = () => document.querySelector('#ctl00_PageBody_OrdersGrid, .RadGrid[id*="OrdersGrid"]');
   const getMasterTable = (host) => host && (host.querySelector('#ctl00_PageBody_OrdersGrid_ctl00') || host.querySelector('.rgMasterTable'));
   const getRows = (master) => Array.from(master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow'));
   const getOidFromRow = (tr) => {
     const a = tr.querySelector('td.wide-only a[href*="oid="], td.narrow-only a[href*="oid="]');
-    const m = a && /[?&]oid=(\d+)/.exec(a.getAttribute('href')||'');
+    const m = a && /[?&]oid=(\d+)/.exec(a?.getAttribute('href')||'');
     return m ? m[1] : null;
   };
   const injectButton = (tr, oid) => {
-    if (tr.querySelector('.wl-track-btn')) return; // already added
+    if (tr.querySelector('.wl-track-btn')) return;
     const vt = tr.querySelector('td[data-title="Vehicle Tracking"] span[id*="VehicleTracking"]');
     const target = vt || tr.lastElementChild || tr;
     const a = document.createElement('a');
@@ -40,11 +44,11 @@
     document.head.appendChild(css);
   })();
 
-  // --- iframe checker (single shot) ---
+  // --- single-scan iframe checker (no retries) ---
   const createHiddenIframe = () => {
     const ifr = document.createElement('iframe');
     ifr.className = 'wl-hidden-iframe';
-    // no sandbox -> avoids console warning; page is same-origin
+    // same-origin, no sandbox (avoids console warning)
     document.body.appendChild(ifr);
     return ifr;
   };
@@ -56,30 +60,28 @@
       let finished = false;
       const done = (ok) => { if (finished) return; finished = true; try{ ifr.remove(); }catch{} resolve(!!ok); };
 
-      const scan = () => {
-        try{
-          const doc = ifr.contentDocument;
-          if (!doc) return done(false);
-          const table = doc.querySelector('#ctl00_PageBody_ctl02_OrderDetailsGrid_ctl00, .RadGrid[id*="OrderDetailsGrid"] .rgMasterTable, .rgMasterTable');
-          if (!table) return done(false);
-
-          let found = false;
-          table.querySelectorAll('tr').forEach(tr=>{
-            const code = tr.querySelector('td[data-title="Product Code"]');
-            const desc = tr.querySelector('td[data-title="Description"]');
-            if (!code || !desc) return;
-            if (code.textContent.trim().toUpperCase() === 'UPS'){
-              const raw = desc.textContent.trim().replace(/\s+/g,'');
-              if (raw && (UPS_REGEX.test(raw) || raw.length >= 8)) found = true;
-            }
-          });
-          done(found);
-        }catch(e){ done(false); }
-      };
-
       ifr.addEventListener('load', () => {
-        // single pass: quick scan once
-        setTimeout(scan, 200);
+        // wait a touch longer so the details section finishes rendering
+        setTimeout(() => {
+          try {
+            const doc = ifr.contentDocument;
+            if (!doc) return done(false);
+            const table = doc.querySelector('#ctl00_PageBody_ctl02_OrderDetailsGrid_ctl00, .RadGrid[id*="OrderDetailsGrid"] .rgMasterTable, .rgMasterTable');
+            if (!table) return done(false);
+
+            let found = false;
+            table.querySelectorAll('tr').forEach(tr=>{
+              const code = tr.querySelector('td[data-title="Product Code"]');
+              const desc = tr.querySelector('td[data-title="Description"]');
+              if (!code || !desc) return;
+              if (code.textContent.trim().toUpperCase() === 'UPS'){
+                const raw = desc.textContent.trim().replace(/\s+/g,'');
+                if (raw && (UPS_REGEX.test(raw) || raw.length >= 8)) found = true;
+              }
+            });
+            done(found);
+          } catch(e){ done(false); }
+        }, 1000); // <- 1s single delay, no polling
       });
 
       // safety timeout
@@ -91,7 +93,6 @@
   }
 
   async function checkOidsOnce(oids, onResult){
-    // simple pool
     const queue = oids.slice();
     let active = 0;
     return new Promise((resolve)=>{
@@ -119,7 +120,6 @@
     const oids = rows.map(getOidFromRow).filter(Boolean);
     log('Rows:', rows.length, 'OIDs:', oids.join(',') || '(none)');
 
-    // Show a quick "Checking…" hint (optional)
     const rowByOid = new Map();
     rows.forEach(tr => {
       const oid = getOidFromRow(tr);
@@ -135,7 +135,6 @@
       }
     });
 
-    // One pass only
     await checkOidsOnce(oids, (oid, ok)=>{
       const tr = rowByOid.get(oid);
       if (tr && tr.__wlChecking) { tr.__wlChecking.remove(); delete tr.__wlChecking; }
