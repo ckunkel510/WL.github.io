@@ -100,6 +100,44 @@ function ensureUtcTime() {
   return utc;
 }
 
+// Ensure order_number exists; prefer existing hidden field, else generate one.
+// Returns the order_number we will sign & submit.
+function ensureOrderNumber() {
+  const form = getPaymentForm();
+
+  // 1) Existing hidden field?
+  let input = form.querySelector('[name="order_number"]');
+  if (input && input.value && String(input.value).trim() !== "") {
+    return String(input.value).trim();
+  }
+
+  // 2) Try to derive from any page value you may have (optional hooks)
+  // const fromInvoice = document.querySelector('#SomeInvoiceId');
+  // if (fromInvoice?.textContent) candidate = fromInvoice.textContent.trim();
+
+  // 3) Fallback: generate a unique, Forte-friendly id (alphanumeric, dashes/underscores are fine)
+  const ts = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0,14); // yyyymmddhhmmss
+  const rand = Math.random().toString(36).slice(2,8).toUpperCase();
+  const candidate = `WT-${ts}-${rand}`;
+
+  // Create/overwrite hidden field so payload + signature use the same value
+  if (!input) {
+    input = document.createElement("input");
+    input.type = "hidden";
+    input.name = "order_number";
+    form.appendChild(input);
+  }
+  input.value = candidate;
+
+  // (Optional) also mirror on the button attribute for transparency
+  const btn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
+  if (btn) btn.setAttribute("order_number", candidate);
+
+  console.log("[ForteVault] Injected order_number:", candidate);
+  return candidate;
+}
+
+
 
   // .NET ticks: 0001-01-01 to now, in 100ns units
 function getDotNetTicksNow() {
@@ -257,7 +295,7 @@ async function prepareAndLaunchWithTokens(paymethodToken) {
   const method         = paymentBtn.getAttribute("method")         || "sale";
   const version_number = paymentBtn.getAttribute("version_number") || "2.0";
   const total_amount   = getFromFieldOrAttr("total_amount");
-  const order_number   = getFromFieldOrAttr("order_number");
+  const order_number   = ensureOrderNumber(); 
   const utc_time_page  = ensureUtcTime();
 
   // guard: fail fast if missing
@@ -339,7 +377,7 @@ async function prepareAndLaunchWithoutTokens() {
   const method         = paymentBtn.getAttribute("method")         || "sale";
   const version_number = paymentBtn.getAttribute("version_number") || "2.0";
   const total_amount   = getFromFieldOrAttr("total_amount", "0.00");
-  const order_number   = getFromFieldOrAttr("order_number", "ORDER");
+  const order_number   = ensureOrderNumber(); 
   const utc_time_page  = ensureUtcTime(); // <-- NEW
 
   const { signature } = await signCheckout({
