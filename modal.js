@@ -154,11 +154,11 @@
     const skipVault = sessionStorage.getItem("skipVaultModal");
     if (skipVault === "true") {
       sessionStorage.removeItem("skipVaultModal");
-      console.log("[ForteVault] Skipping vault modal — letting Forte handle click.");
-      return; // do NOT preventDefault; let Forte's handler run
+      // Let Forte’s own click handler run
+      return;
     }
-
-    e.preventDefault(); // we’re showing our modal instead
+    // Our modal flow
+    e.preventDefault();
     if (vaultedAccounts.length > 0) {
       showVaultListModal(vaultedAccounts);
     } else {
@@ -168,70 +168,74 @@
 }
 
 
+
   // ---------- SUBMIT-TIME SIGNER (final values) ----------
   function attachSubmitSigner() {
-    const btn  = getPaymentBtn();
-    const form = btn && (btn.form || btn.closest("form"));
-    if (!form) { console.warn("[ForteVault] Payment form not found for submit signing."); return; }
+  const btn  = document.querySelector("#ctl00_PageBody_ForteMakePayment");
+  const form = btn && (btn.form || btn.closest("form"));
+  if (!form) { console.warn("[ForteVault] Payment form not found for submit signing."); return; }
 
-    form.addEventListener("submit", async function onSubmit(e) {
-      if (sessionStorage.getItem("fv_signed_once") === "1") {
-        sessionStorage.removeItem("fv_signed_once");
-        return; // already signed; let it submit
+  form.addEventListener("submit", async function onSubmit(e) {
+    // If we’re re-entering after we already signed, allow normal flow
+    if (sessionStorage.getItem("fv_signed_once") === "1") {
+      sessionStorage.removeItem("fv_signed_once");
+      return; // let Forte proceed
+    }
+
+    e.preventDefault(); // stop this submit once so we can re-sign
+
+    try {
+      const method         = btn.getAttribute("method") || "sale";
+      const version_number = btn.getAttribute("version_number") || "2.0";
+
+      // Use the exact strings that will be posted
+      const total_amount = ensureTotalAmount(); // sync from amount textbox -> hidden
+      const order_number = ensureOrderNumber(); // use system’s, or generate once
+      const utc_time     = ensureUtcTime();     // use system’s, or generate once
+
+      // Mirror tokens (if user picked a saved method)
+      const paymethodToken = sessionStorage.getItem("selectedPaymethodToken");
+      if (paymethodToken && window.forteCustomerToken) {
+        setFieldOrAttr("customer_token", window.forteCustomerToken);
+        setFieldOrAttr("paymethod_token", paymethodToken);
+        setFieldOrAttr("payment_token",  paymethodToken);
+        btn.setAttribute("customer_token", window.forteCustomerToken);
+        btn.setAttribute("paymethod_token", paymethodToken);
+        btn.setAttribute("payment_token",  paymethodToken);
+      } else {
+        // clear if new account
+        setFieldOrAttr("customer_token", "");
+        setFieldOrAttr("paymethod_token", "");
+        setFieldOrAttr("payment_token",  "");
+        btn.removeAttribute("customer_token");
+        btn.removeAttribute("paymethod_token");
+        btn.removeAttribute("payment_token");
       }
 
-      e.preventDefault();
+      // Sign with FINAL values
+      const { signature } = await signCheckout({
+        method, version_number, total_amount, order_number,
+        customer_token: window.forteCustomerToken || "",
+        paymethod_token: paymethodToken || "",
+        utc_time
+      });
 
-      try {
-        const method         = btn.getAttribute("method") || "sale";
-        const version_number = btn.getAttribute("version_number") || "2.0";
+      setFieldOrAttr("signature", signature);
+      setFieldOrAttr("allowed_methods", "echeck");
 
-        // ensure these are exactly what the form will post
-        const total_amount = ensureTotalAmount();
-        const order_number = ensureOrderNumber();
-        const utc_time     = ensureUtcTime();
+      // Mark signed and re-trigger the ORIGINAL click so Forte handlers run
+      sessionStorage.setItem("fv_signed_once", "1");
+      btn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
 
-        // ensure tokens mirrored into form + button (if user picked a saved method)
-        const paymethodToken = sessionStorage.getItem("selectedPaymethodToken");
-        if (paymethodToken && window.forteCustomerToken) {
-          setFieldOrAttr("customer_token", window.forteCustomerToken);
-          setFieldOrAttr("paymethod_token", paymethodToken);
-          setFieldOrAttr("payment_token",  paymethodToken);
-          btn.setAttribute("customer_token", window.forteCustomerToken);
-          btn.setAttribute("paymethod_token", paymethodToken);
-          btn.setAttribute("payment_token",  paymethodToken);
-        } else {
-          // clear if not using saved method
-          setFieldOrAttr("customer_token", "");
-          setFieldOrAttr("paymethod_token", "");
-          setFieldOrAttr("payment_token",  "");
-          btn.removeAttribute("customer_token");
-          btn.removeAttribute("paymethod_token");
-          btn.removeAttribute("payment_token");
-        }
+    } catch (err) {
+      console.error("[ForteVault] Submit signer failed:", err);
+      // Fail-open: let Forte handle it (may show blank overlay)
+      sessionStorage.setItem("fv_signed_once", "1");
+      btn.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    }
+  }, true); // capture to run before other submit handlers
+}
 
-        // re-sign with the final strings
-        const { signature } = await signCheckout({
-          method, version_number, total_amount, order_number,
-          customer_token: window.forteCustomerToken || "",
-          paymethod_token: paymethodToken || "",
-          utc_time
-        });
-
-        setFieldOrAttr("signature", signature);
-        setFieldOrAttr("allowed_methods", "echeck");
-
-        // avoid loop and submit for real
-        sessionStorage.setItem("fv_signed_once", "1");
-        form.submit();
-
-      } catch (err) {
-        console.error("[ForteVault] Submit signer failed:", err);
-        sessionStorage.setItem("fv_signed_once", "1");
-        form.submit(); // fail-open to avoid blocking checkout
-      }
-    }, true); // capture so we beat other handlers
-  }
 
   // ---------- FLOWS (WITH / WITHOUT TOKENS) ----------
   async function prepareAndLaunchWithTokens(paymethodToken) {
