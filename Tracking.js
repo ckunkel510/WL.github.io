@@ -1,19 +1,13 @@
 
 (function(){
   const UPS_REGEX = /^1Z[0-9A-Z]{16}$/i;
-  const MAX_IFRAME_CONCURRENCY = 2;
+  const MAX_IFRAME_CONCURRENCY = 2; // polite parallelism
   const startTs = performance.now();
+  const log = (...args) =>
+    console.log('%cOpenOrders Tracker','color:#6b0016;font-weight:bold;',
+      `[+${(performance.now()-startTs).toFixed(1)}ms]`, ...args);
 
-  // ---- tiny logger ----
-  const log = (...args) => console.log('%cOpenOrders Tracker','color:#6b0016;font-weight:bold;', `[+${(performance.now()-startTs).toFixed(1)}ms]`, ...args);
-
-  // ---- state ----
-  const checked = new Map();     // oid -> true/false
-  const inflight = new Set();    // oids currently checking
-  let lastSignature = '';
-  let observer, debounceTimer;
-
-  // ---- grid helpers ----
+  // --- grid helpers (for this page) ---
   const getGridHost = () => document.querySelector('#ctl00_PageBody_OrdersGrid, .RadGrid[id*="OrdersGrid"]');
   const getMasterTable = (host) => host && (host.querySelector('#ctl00_PageBody_OrdersGrid_ctl00') || host.querySelector('.rgMasterTable'));
   const getRows = (master) => Array.from(master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow'));
@@ -23,18 +17,18 @@
     return m ? m[1] : null;
   };
   const injectButton = (tr, oid) => {
-    if (tr.querySelector('.wl-track-btn')) return; // already injected
+    if (tr.querySelector('.wl-track-btn')) return; // already added
     const vt = tr.querySelector('td[data-title="Vehicle Tracking"] span[id*="VehicleTracking"]');
     const target = vt || tr.lastElementChild || tr;
     const a = document.createElement('a');
-    a.className='wl-track-btn';
-    a.href=`/OpenOrders_r.aspx?oid=${encodeURIComponent(oid)}&tracking=yes#detailsAnchor`;
-    a.textContent='Track order';
+    a.className = 'wl-track-btn';
+    a.href = `/OpenOrders_r.aspx?oid=${encodeURIComponent(oid)}&tracking=yes#detailsAnchor`;
+    a.textContent = 'Track order';
     target.appendChild(a);
     log('Injected button', oid);
   };
 
-  // ---- styles ----
+  // --- minimal styles ---
   (function(){
     const css = document.createElement('style');
     css.textContent = `
@@ -46,11 +40,11 @@
     document.head.appendChild(css);
   })();
 
-  // ---- iframe checker (runs page scripts, then reads DOM) ----
+  // --- iframe checker (single shot) ---
   const createHiddenIframe = () => {
     const ifr = document.createElement('iframe');
     ifr.className = 'wl-hidden-iframe';
-    ifr.setAttribute('sandbox','allow-same-origin allow-scripts allow-forms');
+    // no sandbox -> avoids console warning; page is same-origin
     document.body.appendChild(ifr);
     return ifr;
   };
@@ -60,7 +54,7 @@
       const ifr = createHiddenIframe();
       const url = `/OpenOrders_r.aspx?oid=${encodeURIComponent(oid)}#detailsAnchor`;
       let finished = false;
-      const done = (ok) => { if (finished) return; finished = true; try{ifr.remove();}catch{} resolve(ok); };
+      const done = (ok) => { if (finished) return; finished = true; try{ ifr.remove(); }catch{} resolve(!!ok); };
 
       const scan = () => {
         try{
@@ -84,18 +78,20 @@
       };
 
       ifr.addEventListener('load', () => {
-        // try twice to allow UpdatePanel to finish
-        setTimeout(scan, 150);
-        setTimeout(scan, 650);
+        // single pass: quick scan once
+        setTimeout(scan, 200);
       });
-      setTimeout(()=>done(false), 8000); // safety
+
+      // safety timeout
+      setTimeout(()=>done(false), 6000);
+
       ifr.src = url;
       log('Start iframe check', oid);
     });
   }
 
-  // pool the checks
-  async function checkOidsWithPool(oids, onResult){
+  async function checkOidsOnce(oids, onResult){
+    // simple pool
     const queue = oids.slice();
     let active = 0;
     return new Promise((resolve)=>{
@@ -104,11 +100,8 @@
         while (active < MAX_IFRAME_CONCURRENCY && queue.length){
           const oid = queue.shift();
           active++;
-          inflight.add(oid);
           checkOrderInIframe(oid).then(ok => onResult(oid, ok)).finally(()=>{
-            inflight.delete(oid);
-            active--;
-            pump();
+            active--; pump();
           });
         }
       };
@@ -116,95 +109,47 @@
     });
   }
 
-  // ---- main runner (debounced) ----
-  async function processGrid(){
+  async function runOnce(){
     const host = getGridHost();
-    if (!host) { log('Grid host not found'); return; }
+    if (!host){ log('Grid host not found'); return; }
     const master = getMasterTable(host);
-    if (!master) { log('Master table not found yet'); return; }
+    if (!master){ log('Master table not found'); return; }
 
     const rows = getRows(master);
     const oids = rows.map(getOidFromRow).filter(Boolean);
-    const signature = oids.join(',');
+    log('Rows:', rows.length, 'OIDs:', oids.join(',') || '(none)');
 
-    // skip if nothing changed and no inflight work
-    if (signature === lastSignature && inflight.size === 0) return;
-    lastSignature = signature;
-
-    log('Rows:', rows.length, 'OIDs:', signature || '(none)');
-
-    const toCheck = [];
+    // Show a quick "Checking…" hint (optional)
     const rowByOid = new Map();
     rows.forEach(tr => {
       const oid = getOidFromRow(tr);
       if (!oid) return;
       rowByOid.set(oid, tr);
-
-      if (checked.has(oid)) {
-        // already resolved
-        if (checked.get(oid) === true) injectButton(tr, oid);
-        return;
+      const vt = tr.querySelector('td[data-title="Vehicle Tracking"] span[id*="VehicleTracking"]');
+      if (vt && !tr.querySelector('.wl-checking')){
+        const s = document.createElement('span');
+        s.className = 'wl-checking';
+        s.textContent = ' Checking…';
+        vt.appendChild(s);
+        tr.__wlChecking = s;
       }
-      if (inflight.has(oid)) return; // already checking
-
-      // mark UI as checking once
-      if (!tr.querySelector('.wl-checking')) {
-        const vt = tr.querySelector('td[data-title="Vehicle Tracking"] span[id*="VehicleTracking"]');
-        if (vt) { const s=document.createElement('span'); s.className='wl-checking'; s.textContent=' Checking…'; vt.appendChild(s); tr.__wlChecking = s; }
-      }
-      toCheck.push(oid);
     });
 
-    if (!toCheck.length) return;
-
-    await checkOidsWithPool(toCheck, (oid, ok)=>{
-      checked.set(oid, !!ok);
+    // One pass only
+    await checkOidsOnce(oids, (oid, ok)=>{
       const tr = rowByOid.get(oid);
       if (tr && tr.__wlChecking) { tr.__wlChecking.remove(); delete tr.__wlChecking; }
       log('Result', oid, 'UPS=', ok);
       if (ok && tr) injectButton(tr, oid);
     });
 
-    // if we got here and nothing is inflight, we can stop observing for now
-    if (inflight.size === 0 && observer) {
-      log('Quiescent — disconnecting observer until next postback.');
-      observer.disconnect();
-      observer = null;
-    }
+    log('Done. (single pass complete)');
   }
 
-  function schedule(){
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(processGrid, 500);
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', runOnce, { once: true });
+  } else {
+    runOnce();
   }
-
-  function init(){
-    schedule();
-
-    // Observe only around the grid to reduce noise
-    const host = getGridHost() || document.body;
-    observer = new MutationObserver(schedule);
-    observer.observe(host === document.body ? document.body : host.parentElement || host, { childList:true, subtree:true });
-
-    // Re-run after ASP.NET partial postbacks
-    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
-      const prm = Sys.WebForms.PageRequestManager.getInstance();
-      prm.add_endRequest(function(){
-        log('endRequest');
-        // force reprocess: reset signature so next run isn’t skipped
-        lastSignature = '';
-        // reattach observer if we had disconnected
-        if (!observer){
-          const h = getGridHost() || document.body;
-          observer = new MutationObserver(schedule);
-          observer.observe(h === document.body ? document.body : h.parentElement || h, { childList:true, subtree:true });
-        }
-        schedule();
-      });
-      log('Hooked PageRequestManager endRequest');
-    }
-  }
-
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
-  else init();
 })();
+
