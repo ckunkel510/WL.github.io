@@ -50,6 +50,40 @@ setTimeout(() => {
     });
   }
 
+  // .NET ticks: 0001-01-01 to now, in 100ns units
+function getDotNetTicksNow() {
+  // ms since Unix epoch + offset to 0001-01-01, then * 10,000 to get ticks
+  const ms = Date.now();
+  const EPOCH_OFFSET_MS = 62135596800000; // 1970-01-01 -> 0001-01-01
+  const ticks = (ms + EPOCH_OFFSET_MS) * 10000;
+  return String(Math.floor(ticks));
+}
+
+// Read utc_time from page (hidden input or button attr)
+function getUtcTimeFromPage() {
+  const input = document.querySelector('[name="utc_time"]');
+  if (input && input.value) return input.value;
+  const btn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
+  if (btn && btn.getAttribute("utc_time")) return btn.getAttribute("utc_time");
+  return null;
+}
+
+// Ensure utc_time exists on page; if not, create it using .NET ticks
+function ensureUtcTime() {
+  let utc = getUtcTimeFromPage();
+  if (!utc) {
+    utc = getDotNetTicksNow();
+    // write to both hidden input (if present) and button attr for consistency
+    const btn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
+    const input = document.querySelector('[name="utc_time"]');
+    if (input) input.value = utc;
+    if (btn) btn.setAttribute("utc_time", utc);
+    console.log("[ForteVault] Injected utc_time:", utc);
+  }
+  return utc;
+}
+
+
   // ---------- SIGNATURE HELPERS ----------
   // ---------- SIGNATURE HELPERS ----------
 async function signCheckout({
@@ -138,100 +172,68 @@ async function prepareAndLaunchWithTokens(paymethodToken) {
   let paymentBtn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
   if (!paymentBtn) { console.warn("[ForteVault] Pay button not found."); return; }
 
-  // Put tokens on the button
-  if (forteCustomerToken) {
-    paymentBtn.setAttribute("customer_token", forteCustomerToken);
-  } else {
-    paymentBtn.removeAttribute("customer_token");
-    console.warn("[ForteVault] No forteCustomerToken — overlay may not preselect.");
-  }
-  paymentBtn.setAttribute("paymethod_token", paymethodToken);
-  paymentBtn.setAttribute("payment_token", paymethodToken);
-  paymentBtn.setAttribute("save_token", "false");
+  // ... (tokens + hidden inputs exactly as you have)
 
-  // Also mirror as hidden inputs
-  setFieldOrAttr("customer_token", forteCustomerToken || "");
-  setFieldOrAttr("paymethod_token", paymethodToken || "");
-  setFieldOrAttr("payment_token", paymethodToken || "");
-  setFieldOrAttr("save_token", "false");
-
-  // Gather values for signature
   const method         = paymentBtn.getAttribute("method")         || "sale";
   const version_number = paymentBtn.getAttribute("version_number") || "2.0";
   const total_amount   = getFromFieldOrAttr("total_amount", "0.00");
   const order_number   = getFromFieldOrAttr("order_number", "ORDER");
-  const utc_time_page  = getFromFieldOrAttr("utc_time"); // <-- Use the page's utc_time
+  const utc_time_page  = ensureUtcTime(); // <-- NEW
 
   const { signature } = await signCheckout({
     method, version_number, total_amount, order_number,
     customer_token: forteCustomerToken || "",
     paymethod_token: paymethodToken || "",
-    utc_time: utc_time_page // <-- Send the same time for signing
+    utc_time: utc_time_page
   });
 
   setFieldOrAttr("signature", signature);
-  // Do NOT overwrite utc_time — keep page's
   setFieldOrAttr("allowed_methods", "echeck");
 
-  // Replace node to force re-bind
   paymentBtn = replaceButtonNode(paymentBtn);
-
-  // Debug: show attributes
   console.log("[ForteVault] Button before click (WITH tokens):", paymentBtn.outerHTML);
 
-  debugger; // stops JS until you resume in DevTools
-  await new Promise(r => setTimeout(r, 3000)); // pause so you can inspect
+  debugger;
+  await new Promise(r => setTimeout(r, 3000));
 
-  // Bypass modal and launch overlay
   sessionStorage.setItem("skipVaultModal", "true");
   openDexOverlay();
 }
+
 
 // ---------- BUTTON PREP (WITHOUT TOKENS) ----------
 async function prepareAndLaunchWithoutTokens() {
   let paymentBtn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
   if (!paymentBtn) { console.warn("[ForteVault] Pay button not found."); return; }
 
-  // Ensure no tokens are present
-  paymentBtn.removeAttribute("customer_token");
-  paymentBtn.removeAttribute("paymethod_token");
-  paymentBtn.removeAttribute("payment_token");
-  paymentBtn.setAttribute("save_token", "false");
-
-  // Clear any inputs too
-  setFieldOrAttr("customer_token", "");
-  setFieldOrAttr("paymethod_token", "");
-  setFieldOrAttr("payment_token", "");
-  setFieldOrAttr("save_token", "false");
+  // ... (clear tokens exactly as you have)
 
   const method         = paymentBtn.getAttribute("method")         || "sale";
   const version_number = paymentBtn.getAttribute("version_number") || "2.0";
   const total_amount   = getFromFieldOrAttr("total_amount", "0.00");
   const order_number   = getFromFieldOrAttr("order_number", "ORDER");
-  const utc_time_page  = getFromFieldOrAttr("utc_time"); // <-- Use the page's utc_time
+  const utc_time_page  = ensureUtcTime(); // <-- NEW
 
   const { signature } = await signCheckout({
     method, version_number, total_amount, order_number,
     customer_token: "",
     paymethod_token: "",
-    utc_time: utc_time_page // <-- Send the same time for signing
+    utc_time: utc_time_page
   });
 
   setFieldOrAttr("signature", signature);
-  // Keep original utc_time
   setFieldOrAttr("allowed_methods", "echeck");
 
-  // Replace to ensure fresh attributes are read
   paymentBtn = replaceButtonNode(paymentBtn);
-
   console.log("[ForteVault] Button before click (NO tokens):", paymentBtn.outerHTML);
 
-  debugger; // optional: stop so you can inspect before overlay
+  debugger;
   await new Promise(r => setTimeout(r, 3000));
 
   sessionStorage.setItem("skipVaultModal", "true");
   openDexOverlay();
 }
+
 
 
   // ---------- MODALS ----------
