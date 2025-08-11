@@ -195,7 +195,7 @@ async function signCheckout({
 
   // try common fallbacks for amount/order number if hidden field isn't found
   if (name === "total_amount") {
-    const txtAmt = document.querySelector('#ctl00_PageBody_txtAmount');
+    const txtAmt = document.querySelector('#ctl00_PageBody_PaymentAmountTextBox');
     if (txtAmt && txtAmt.value) return formatAmount(txtAmt.value);
     const anyAmt = document.querySelector('[id*="Amount"]');
     if (anyAmt && anyAmt.value) return formatAmount(anyAmt.value);
