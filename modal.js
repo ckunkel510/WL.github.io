@@ -56,30 +56,7 @@ function getPaymentForm() {
   return (btn && (btn.form || btn.closest("form"))) || document;
 }
 
-function getValueFromFormOrAttr(name, fallback = "") {
-  const form = getPaymentForm();
-  const input = form.querySelector(`[name="${name}"]`);
-  if (input && input.value != null && String(input.value).trim() !== "") return String(input.value).trim();
 
-  // try common fallbacks for amount/order number if hidden field isn't found
-  if (name === "total_amount") {
-    const txtAmt = document.querySelector('#ctl00_PageBody_txtAmount');
-    if (txtAmt && txtAmt.value) return formatAmount(txtAmt.value);
-    const anyAmt = document.querySelector('[id*="Amount"]');
-    if (anyAmt && anyAmt.value) return formatAmount(anyAmt.value);
-  }
-  if (name === "order_number") {
-    const ordHidden = document.querySelector('#ctl00_PageBody_OrderNumberHidden');
-    if (ordHidden && ordHidden.value) return String(ordHidden.value).trim();
-  }
-
-  // check button attributes last
-  const btn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
-  const attr = btn && btn.getAttribute(name);
-  if (attr) return String(attr).trim();
-
-  return fallback;
-}
 
 function formatAmount(val) {
   const num = Number(String(val).replace(/[^0-9.]/g, ""));
@@ -211,11 +188,30 @@ async function signCheckout({
     if (paymentBtn) paymentBtn.setAttribute(name, value);
   }
 
-  function getFromFieldOrAttr(name, fallback = "") {
-    const paymentBtn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
-    const input = document.querySelector(`[name="${name}"]`);
-    return (input?.value) || (paymentBtn?.getAttribute(name)) || fallback;
+  function getValueFromFormOrAttr(name, fallback = "") {
+  const form = getPaymentForm();
+  const input = form.querySelector(`[name="${name}"]`);
+  if (input && input.value != null && String(input.value).trim() !== "") return String(input.value).trim();
+
+  // try common fallbacks for amount/order number if hidden field isn't found
+  if (name === "total_amount") {
+    const txtAmt = document.querySelector('#ctl00_PageBody_txtAmount');
+    if (txtAmt && txtAmt.value) return formatAmount(txtAmt.value);
+    const anyAmt = document.querySelector('[id*="Amount"]');
+    if (anyAmt && anyAmt.value) return formatAmount(anyAmt.value);
   }
+  if (name === "order_number") {
+    const ordHidden = document.querySelector('#ctl00_PageBody_OrderNumberHidden');
+    if (ordHidden && ordHidden.value) return String(ordHidden.value).trim();
+  }
+
+  // check button attributes last
+  const btn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
+  const attr = btn && btn.getAttribute(name);
+  if (attr) return String(attr).trim();
+
+  return fallback;
+}
 
   // In case Checkout binds events to the button early, replace the node so attributes are re-read
   function replaceButtonNode(btn) {
