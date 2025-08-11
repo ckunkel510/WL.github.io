@@ -101,7 +101,8 @@ setTimeout(() => {
   }
 
   // ---------- BUTTON PREP (WITH TOKENS) ----------
-  async function prepareAndLaunchWithTokens(paymethodToken) {
+ // ---------- BUTTON PREP (WITH TOKENS) ----------
+async function prepareAndLaunchWithTokens(paymethodToken) {
   let paymentBtn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
   if (!paymentBtn) { console.warn("[ForteVault] Pay button not found."); return; }
 
@@ -113,13 +114,13 @@ setTimeout(() => {
     console.warn("[ForteVault] No forteCustomerToken — overlay may not preselect.");
   }
   paymentBtn.setAttribute("paymethod_token", paymethodToken);
-  paymentBtn.setAttribute("payment_token",  paymethodToken);
+  paymentBtn.setAttribute("payment_token", paymethodToken);
   paymentBtn.setAttribute("save_token", "false");
 
   // Also mirror as hidden inputs
   setFieldOrAttr("customer_token", forteCustomerToken || "");
   setFieldOrAttr("paymethod_token", paymethodToken || "");
-  setFieldOrAttr("payment_token",  paymethodToken || "");
+  setFieldOrAttr("payment_token", paymethodToken || "");
   setFieldOrAttr("save_token", "false");
 
   // Gather values for signature
@@ -127,15 +128,17 @@ setTimeout(() => {
   const version_number = paymentBtn.getAttribute("version_number") || "2.0";
   const total_amount   = getFromFieldOrAttr("total_amount", "0.00");
   const order_number   = getFromFieldOrAttr("order_number", "ORDER");
+  const utc_time_page  = getFromFieldOrAttr("utc_time"); // <-- Use the page's utc_time
 
-  const { signature, utc_time } = await signCheckout({
+  const { signature } = await signCheckout({
     method, version_number, total_amount, order_number,
     customer_token: forteCustomerToken || "",
-    paymethod_token: paymethodToken || ""
+    paymethod_token: paymethodToken || "",
+    utc_time: utc_time_page // <-- Send the same time for signing
   });
 
   setFieldOrAttr("signature", signature);
-  setFieldOrAttr("utc_time", utc_time);
+  // Do NOT overwrite utc_time — keep page's
   setFieldOrAttr("allowed_methods", "echeck");
 
   // Replace node to force re-bind
@@ -144,56 +147,60 @@ setTimeout(() => {
   // Debug: show attributes
   console.log("[ForteVault] Button before click (WITH tokens):", paymentBtn.outerHTML);
 
-  // --- HERE'S THE BREAKPOINT & DELAY ---
   debugger; // stops JS until you resume in DevTools
-  await new Promise(r => setTimeout(r, 3000)); // or comment out if you only want the debugger
+  await new Promise(r => setTimeout(r, 3000)); // pause so you can inspect
 
   // Bypass modal and launch overlay
   sessionStorage.setItem("skipVaultModal", "true");
   openDexOverlay();
 }
 
+// ---------- BUTTON PREP (WITHOUT TOKENS) ----------
+async function prepareAndLaunchWithoutTokens() {
+  let paymentBtn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
+  if (!paymentBtn) { console.warn("[ForteVault] Pay button not found."); return; }
 
-  // ---------- BUTTON PREP (WITHOUT TOKENS) ----------
-  async function prepareAndLaunchWithoutTokens() {
-    let paymentBtn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
-    if (!paymentBtn) { console.warn("[ForteVault] Pay button not found."); return; }
+  // Ensure no tokens are present
+  paymentBtn.removeAttribute("customer_token");
+  paymentBtn.removeAttribute("paymethod_token");
+  paymentBtn.removeAttribute("payment_token");
+  paymentBtn.setAttribute("save_token", "false");
 
-    // Ensure no tokens are present
-    paymentBtn.removeAttribute("customer_token");
-    paymentBtn.removeAttribute("paymethod_token");
-    paymentBtn.removeAttribute("payment_token");
-    paymentBtn.setAttribute("save_token", "false");
+  // Clear any inputs too
+  setFieldOrAttr("customer_token", "");
+  setFieldOrAttr("paymethod_token", "");
+  setFieldOrAttr("payment_token", "");
+  setFieldOrAttr("save_token", "false");
 
-    // Clear any inputs too
-    setFieldOrAttr("customer_token", "");
-    setFieldOrAttr("paymethod_token", "");
-    setFieldOrAttr("payment_token",  "");
-    setFieldOrAttr("save_token", "false");
+  const method         = paymentBtn.getAttribute("method")         || "sale";
+  const version_number = paymentBtn.getAttribute("version_number") || "2.0";
+  const total_amount   = getFromFieldOrAttr("total_amount", "0.00");
+  const order_number   = getFromFieldOrAttr("order_number", "ORDER");
+  const utc_time_page  = getFromFieldOrAttr("utc_time"); // <-- Use the page's utc_time
 
-    const method         = paymentBtn.getAttribute("method")         || "sale";
-    const version_number = paymentBtn.getAttribute("version_number") || "2.0";
-    const total_amount   = getFromFieldOrAttr("total_amount", "0.00");
-    const order_number   = getFromFieldOrAttr("order_number", "ORDER");
+  const { signature } = await signCheckout({
+    method, version_number, total_amount, order_number,
+    customer_token: "",
+    paymethod_token: "",
+    utc_time: utc_time_page // <-- Send the same time for signing
+  });
 
-    const { signature, utc_time } = await signCheckout({
-      method, version_number, total_amount, order_number,
-      customer_token: "", paymethod_token: ""
-    });
+  setFieldOrAttr("signature", signature);
+  // Keep original utc_time
+  setFieldOrAttr("allowed_methods", "echeck");
 
-    setFieldOrAttr("signature", signature);
-    setFieldOrAttr("utc_time", utc_time);
-    setFieldOrAttr("allowed_methods", "echeck");
+  // Replace to ensure fresh attributes are read
+  paymentBtn = replaceButtonNode(paymentBtn);
 
-    // Replace to ensure fresh attributes are read
-    paymentBtn = replaceButtonNode(paymentBtn);
+  console.log("[ForteVault] Button before click (NO tokens):", paymentBtn.outerHTML);
 
-    // Debug
-    console.log("[ForteVault] Button before click (NO tokens):", paymentBtn.outerHTML);
+  debugger; // optional: stop so you can inspect before overlay
+  await new Promise(r => setTimeout(r, 3000));
 
-    sessionStorage.setItem("skipVaultModal", "true");
-    openDexOverlay();
-  }
+  sessionStorage.setItem("skipVaultModal", "true");
+  openDexOverlay();
+}
+
 
   // ---------- MODALS ----------
   function showVaultListModal(accounts) {
