@@ -255,8 +255,7 @@
 
     // ensure amount/order/time exist before launch (submit signer will re-check)
     ensureTotalAmount();
-    ensureOrderNumber();
-    ensureUtcTime();
+    
 
     // Replace node so Forte re-reads fresh attrs
     btn = replaceButtonNode(btn);
@@ -281,8 +280,7 @@
     setFieldOrAttr("save_token", "false");
 
     ensureTotalAmount();
-    ensureOrderNumber();
-    ensureUtcTime();
+    
 
     btn = replaceButtonNode(btn);
 
