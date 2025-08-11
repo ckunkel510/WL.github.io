@@ -7,9 +7,8 @@
   // ---------- STATE ----------
   const userID = localStorage.getItem("wl_user_id");
   let vaultedAccounts = [];
-  window.forteCustomerToken = null; // expose for submit signer
+  window.forteCustomerToken = null; // exposed so submit signer can use it
 
-  console.log("[ForteVault] wl_user_id:", userID);
   if (!userID) { console.warn("[ForteVault] No wl_user_id found."); return; }
 
   // ---------- BOOTSTRAP ----------
@@ -23,15 +22,18 @@
     console.log("[ForteVault] Vault fetch:", data);
     window.forteCustomerToken = data.customerToken || null;
     vaultedAccounts = Array.isArray(data.paymentMethods) ? data.paymentMethods : [];
-    attachPaymentIntercept();
-    attachSubmitSigner(); // <-- sign using FINAL values at submit time
+    attachPaymentIntercept(); // modal to pick saved method / add new
+    attachSubmitSigner();     // sign with final values right before post
   })
   .catch(err => console.error("[ForteVault] fetch error:", err));
 
-  // ---------- FORM/DOM HELPERS ----------
+  // ---------- DOM / FORM HELPERS ----------
+  function getPaymentBtn() {
+    return document.querySelector("#ctl00_PageBody_ForteMakePayment");
+  }
   function getPaymentForm() {
-    const btn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
-    return (btn && (btn.form || btn.closest("form"))) || document;
+    const btn = getPaymentBtn();
+    return (btn && (btn.form || btn.closest("form"))) || document.forms[0] || document;
   }
   function setFieldOrAttr(name, value) {
     const form = getPaymentForm();
@@ -43,32 +45,28 @@
       form.appendChild(input);
     }
     input.value = value;
-    const paymentBtn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
-    if (paymentBtn) paymentBtn.setAttribute(name, value);
+    const btn = getPaymentBtn();
+    if (btn) btn.setAttribute(name, value);
   }
-  function getValueFromFormOrAttr(name, fallback = "") {
-    const form = getPaymentForm();
-    const input = form.querySelector(`[name="${name}"]`);
-    if (input && input.value != null && String(input.value).trim() !== "") return String(input.value).trim();
-    const btn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
-    const attr = btn && btn.getAttribute(name);
-    if (attr) return String(attr).trim();
-    return fallback;
+  function replaceButtonNode(btn) {
+    const clone = btn.cloneNode(true);
+    btn.parentNode.replaceChild(clone, btn);
+    return getPaymentBtn();
   }
+
+  // amount / order / utc_time
   function formatAmount(val) {
     const num = Number(String(val).replace(/[^0-9.]/g, ""));
     if (Number.isFinite(num)) return num.toFixed(2);
     return "0.00";
   }
   function readPaymentAmountFromPage() {
-    const el = document.querySelector('#ctl00_PageBody_PaymentAmountTextBox') 
+    const el = document.querySelector('#ctl00_PageBody_PaymentAmountTextBox')
             || document.querySelector('[name="ctl00$PageBody$PaymentAmountTextBox"]');
     if (!el) return null;
     const raw = String(el.value || "").trim();
     if (!raw) return null;
-    const num = Number(raw.replace(/[^0-9.]/g, ""));
-    if (!Number.isFinite(num)) return null;
-    return num.toFixed(2);
+    return formatAmount(raw);
   }
   function ensureTotalAmount() {
     const form = getPaymentForm();
@@ -78,34 +76,20 @@
       if (hidden && hidden.value) amount = String(hidden.value).trim();
     }
     if (!amount) amount = "0.00";
-    let hidden = form.querySelector('[name="total_amount"]');
-    if (!hidden) {
-      hidden = document.createElement("input");
-      hidden.type = "hidden";
-      hidden.name = "total_amount";
-      form.appendChild(hidden);
-    }
-    hidden.value = amount;
+    setFieldOrAttr("total_amount", amount);
     return amount;
   }
   function ensureOrderNumber() {
     const form = getPaymentForm();
     let input = form.querySelector('[name="order_number"]');
     if (input && input.value && String(input.value).trim() !== "") {
+      setFieldOrAttr("order_number", String(input.value).trim());
       return String(input.value).trim();
     }
     const ts = new Date().toISOString().replace(/[-:TZ.]/g, '').slice(0,14); // yyyymmddhhmmss
     const rand = Math.random().toString(36).slice(2,8).toUpperCase();
     const candidate = `WT-${ts}-${rand}`;
-    if (!input) {
-      input = document.createElement("input");
-      input.type = "hidden";
-      input.name = "order_number";
-      form.appendChild(input);
-    }
-    input.value = candidate;
-    const btn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
-    if (btn) btn.setAttribute("order_number", candidate);
+    setFieldOrAttr("order_number", candidate);
     console.log("[ForteVault] Injected order_number:", candidate);
     return candidate;
   }
@@ -113,60 +97,27 @@
     const EPOCH_OFFSET_MS = 62135596800000;
     return String(Math.floor((Date.now() + EPOCH_OFFSET_MS) * 10000));
   }
-  function getUtcTimeFromPage() {
-    const form = getPaymentForm();
-    const input = form.querySelector('[name="utc_time"]');
-    if (input && input.value) return input.value;
-    const btn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
-    if (btn && btn.getAttribute("utc_time")) return btn.getAttribute("utc_time");
-    return null;
-  }
   function ensureUtcTime() {
-    let utc = getUtcTimeFromPage();
+    const form = getPaymentForm();
+    let input = form.querySelector('[name="utc_time"]');
+    let utc = input && input.value ? String(input.value).trim() : null;
     if (!utc) {
       utc = getDotNetTicksNow();
-      const form = getPaymentForm();
-      let input = form.querySelector('[name="utc_time"]');
-      if (!input) {
-        input = document.createElement("input");
-        input.type = "hidden";
-        input.name = "utc_time";
-        form.appendChild(input);
-      }
-      input.value = utc;
-      const btn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
-      if (btn) btn.setAttribute("utc_time", utc);
+      setFieldOrAttr("utc_time", utc);
       console.log("[ForteVault] Injected utc_time:", utc);
     }
     return utc;
   }
 
-  // ---------- SIGNATURE HELPERS ----------
-  async function signCheckout({
-    method,
-    version_number,
-    total_amount,
-    order_number,
-    customer_token,
-    paymethod_token,
-    utc_time
-  }) {
-    console.log("[ForteVault] signCheckout →", {
-      method, version_number, total_amount, order_number,
-      hasCustomerToken: !!customer_token,
-      hasPaymethodToken: !!paymethod_token,
-      utc_time
-    });
-    if (!utc_time)   throw new Error("utc_time missing before signCheckout");
+  // ---------- SIGNATURE API ----------
+  async function signCheckout({ method, version_number, total_amount, order_number, customer_token, paymethod_token, utc_time }) {
+    if (!utc_time) throw new Error("utc_time missing before signCheckout");
     if (!total_amount || !order_number) throw new Error("total_amount or order_number missing before signCheckout");
 
     const resp = await fetch(SIGN_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        method, version_number, total_amount, order_number,
-        customer_token, paymethod_token, utc_time
-      })
+      body: JSON.stringify({ method, version_number, total_amount, order_number, customer_token, paymethod_token, utc_time })
     });
     if (!resp.ok) throw new Error(`signCheckout HTTP ${resp.status}`);
     const data = await resp.json();
@@ -174,31 +125,27 @@
     return data; // { signature, utc_time }
   }
 
-  function replaceButtonNode(btn) {
-    const clone = btn.cloneNode(true);
-    btn.parentNode.replaceChild(clone, btn);
-    return document.querySelector("#ctl00_PageBody_ForteMakePayment");
-  }
-
   // ---------- OPEN CHECKOUT / DEX ----------
   function openDexOverlay() {
+    // Select “Check” if present to match allowed_methods
     const checkRadio = document.querySelector("#ctl00_PageBody_rbPayByCheck");
     if (checkRadio) { checkRadio.checked = true; checkRadio.click(); }
 
+    // Click the original button to trigger Forte’s own overlay loader
     setTimeout(() => {
-      let paymentButton = document.querySelector("#ctl00_PageBody_ForteMakePayment");
+      let paymentButton = getPaymentBtn();
       if (paymentButton) {
         console.log("[ForteVault] Opening DEX overlay…");
         paymentButton.click();
       } else {
         console.warn("[ForteVault] Make Payment button not found at launch time.");
       }
-    }, 250);
+    }, 150);
   }
 
-  // ---------- INTERCEPT "MAKE PAYMENT" (VAULT MODAL) ----------
+  // ---------- INTERCEPT "MAKE PAYMENT" (show our modal) ----------
   function attachPaymentIntercept() {
-    const paymentBtn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
+    const paymentBtn = getPaymentBtn();
     if (!paymentBtn) { console.warn("[ForteVault] Make Payment button not found."); return; }
 
     paymentBtn.addEventListener("click", function (e) {
@@ -206,7 +153,7 @@
       if (skipVault === "true") {
         sessionStorage.removeItem("skipVaultModal");
         console.log("[ForteVault] Skipping vault modal — proceed to DEX.");
-        return; // allow normal Checkout/DEX to open
+        return; // allow Forte to proceed
       }
 
       e.preventDefault();
@@ -219,16 +166,16 @@
     });
   }
 
-  // ---------- SUBMIT-TIME SIGNER (FINAL VALUES) ----------
+  // ---------- SUBMIT-TIME SIGNER (final values) ----------
   function attachSubmitSigner() {
-    const btn  = document.querySelector("#ctl00_PageBody_ForteMakePayment");
-    const form = (btn && (btn.form || btn.closest("form")));
+    const btn  = getPaymentBtn();
+    const form = btn && (btn.form || btn.closest("form"));
     if (!form) { console.warn("[ForteVault] Payment form not found for submit signing."); return; }
 
     form.addEventListener("submit", async function onSubmit(e) {
       if (sessionStorage.getItem("fv_signed_once") === "1") {
         sessionStorage.removeItem("fv_signed_once");
-        return; // already signed; allow submit
+        return; // already signed; let it submit
       }
 
       e.preventDefault();
@@ -237,12 +184,12 @@
         const method         = btn.getAttribute("method") || "sale";
         const version_number = btn.getAttribute("version_number") || "2.0";
 
-        // ensure these are present as the form will actually post them
-        const total_amount = ensureTotalAmount();   // sync from visible amount box
-        const order_number = ensureOrderNumber();   // generate if missing
-        const utc_time     = ensureUtcTime();       // generate if missing
+        // ensure these are exactly what the form will post
+        const total_amount = ensureTotalAmount();
+        const order_number = ensureOrderNumber();
+        const utc_time     = ensureUtcTime();
 
-        // if we have a selected token, mirror into hidden fields + attrs
+        // ensure tokens mirrored into form + button (if user picked a saved method)
         const paymethodToken = sessionStorage.getItem("selectedPaymethodToken");
         if (paymethodToken && window.forteCustomerToken) {
           setFieldOrAttr("customer_token", window.forteCustomerToken);
@@ -251,9 +198,17 @@
           btn.setAttribute("customer_token", window.forteCustomerToken);
           btn.setAttribute("paymethod_token", paymethodToken);
           btn.setAttribute("payment_token",  paymethodToken);
+        } else {
+          // clear if not using saved method
+          setFieldOrAttr("customer_token", "");
+          setFieldOrAttr("paymethod_token", "");
+          setFieldOrAttr("payment_token",  "");
+          btn.removeAttribute("customer_token");
+          btn.removeAttribute("paymethod_token");
+          btn.removeAttribute("payment_token");
         }
 
-        // sign with the exact strings that will be posted
+        // re-sign with the final strings
         const { signature } = await signCheckout({
           method, version_number, total_amount, order_number,
           customer_token: window.forteCustomerToken || "",
@@ -262,6 +217,7 @@
         });
 
         setFieldOrAttr("signature", signature);
+        setFieldOrAttr("allowed_methods", "echeck");
 
         // avoid loop and submit for real
         sessionStorage.setItem("fv_signed_once", "1");
@@ -270,75 +226,63 @@
       } catch (err) {
         console.error("[ForteVault] Submit signer failed:", err);
         sessionStorage.setItem("fv_signed_once", "1");
-        form.submit(); // fallback: let it go (may open blank overlay)
+        form.submit(); // fail-open to avoid blocking checkout
       }
-    }, true); // capture to run before other handlers
+    }, true); // capture so we beat other handlers
   }
 
-  // ---------- BUTTON PREP (WITH TOKENS) ----------
+  // ---------- FLOWS (WITH / WITHOUT TOKENS) ----------
   async function prepareAndLaunchWithTokens(paymethodToken) {
-    let paymentBtn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
-    if (!paymentBtn) { console.warn("[ForteVault] Pay button not found."); return; }
+    let btn = getPaymentBtn();
+    if (!btn) { console.warn("[ForteVault] Pay button not found."); return; }
 
-    // Put tokens on the button + hidden inputs
+    // tokens on button + hidden inputs
     if (window.forteCustomerToken) {
-      paymentBtn.setAttribute("customer_token", window.forteCustomerToken);
+      btn.setAttribute("customer_token", window.forteCustomerToken);
     } else {
-      paymentBtn.removeAttribute("customer_token");
+      btn.removeAttribute("customer_token");
       console.warn("[ForteVault] No forteCustomerToken — overlay may not preselect.");
     }
-    paymentBtn.setAttribute("paymethod_token", paymethodToken);
-    paymentBtn.setAttribute("payment_token",  paymethodToken);
-    paymentBtn.setAttribute("save_token", "false");
+    btn.setAttribute("paymethod_token", paymethodToken);
+    btn.setAttribute("payment_token",  paymethodToken);
+    btn.setAttribute("save_token", "false");
     setFieldOrAttr("customer_token", window.forteCustomerToken || "");
     setFieldOrAttr("paymethod_token", paymethodToken || "");
     setFieldOrAttr("payment_token",  paymethodToken || "");
     setFieldOrAttr("save_token", "false");
 
-    // Ensure amount/order/time exist before user proceeds
+    // ensure amount/order/time exist before launch (submit signer will re-check)
     ensureTotalAmount();
     ensureOrderNumber();
     ensureUtcTime();
 
-    // Replace node to force re-bind
-    paymentBtn = replaceButtonNode(paymentBtn);
+    // Replace node so Forte re-reads fresh attrs
+    btn = replaceButtonNode(btn);
 
-    console.log("[ForteVault] Button before click (WITH tokens):", paymentBtn.outerHTML);
-
-    debugger; // pause to inspect
-    await new Promise(r => setTimeout(r, 1500));
-
+    // Bypass our intercept once and open overlay
     sessionStorage.setItem("skipVaultModal", "true");
     openDexOverlay();
   }
 
-  // ---------- BUTTON PREP (WITHOUT TOKENS) ----------
   async function prepareAndLaunchWithoutTokens() {
-    let paymentBtn = document.querySelector("#ctl00_PageBody_ForteMakePayment");
-    if (!paymentBtn) { console.warn("[ForteVault] Pay button not found."); return; }
+    let btn = getPaymentBtn();
+    if (!btn) { console.warn("[ForteVault] Pay button not found."); return; }
 
-    // Clear tokens
-    paymentBtn.removeAttribute("customer_token");
-    paymentBtn.removeAttribute("paymethod_token");
-    paymentBtn.removeAttribute("payment_token");
-    paymentBtn.setAttribute("save_token", "false");
+    // clear tokens; keep save_token false
+    btn.removeAttribute("customer_token");
+    btn.removeAttribute("paymethod_token");
+    btn.removeAttribute("payment_token");
+    btn.setAttribute("save_token", "false");
     setFieldOrAttr("customer_token", "");
     setFieldOrAttr("paymethod_token", "");
     setFieldOrAttr("payment_token",  "");
     setFieldOrAttr("save_token", "false");
 
-    // Ensure amount/order/time exist
     ensureTotalAmount();
     ensureOrderNumber();
     ensureUtcTime();
 
-    // Replace node to ensure fresh attributes are read
-    paymentBtn = replaceButtonNode(paymentBtn);
-
-    console.log("[ForteVault] Button before click (NO tokens):", paymentBtn.outerHTML);
-
-    debugger; // pause to inspect
-    await new Promise(r => setTimeout(r, 1500));
+    btn = replaceButtonNode(btn);
 
     sessionStorage.setItem("skipVaultModal", "true");
     openDexOverlay();
@@ -352,17 +296,17 @@
 
     accounts.forEach(pm => {
       const label = `${pm.label || "Saved Account"}${pm.last4 ? " ••••"+pm.last4 : ""}${pm.accountType ? " ("+pm.accountType.toLowerCase()+")" : ""}`;
-      const btn = button(label, baseBtnStyle(), () => {
+      const selBtn = button(label, baseBtnStyle(), () => {
         cleanupModal();
         showPreviewModal(pm);
       });
-      list.appendChild(btn);
+      list.appendChild(selBtn);
     });
 
     const newBtn = primaryButton("Use a New Account", async () => {
       cleanupModal();
-      try { await prepareAndLaunchWithoutTokens(); }
-      catch (e) { console.error("[ForteVault] New-account flow failed:", e); }
+      sessionStorage.removeItem("selectedPaymethodToken");
+      try { await prepareAndLaunchWithoutTokens(); } catch(e) { console.error(e); }
     });
 
     appendToModal(modal, [title, list, newBtn]);
@@ -392,8 +336,8 @@
 
     const useDifferentBtn = button("Use a Different Account", outlineBtnStyle(), async () => {
       cleanupModal();
-      try { await prepareAndLaunchWithoutTokens(); }
-      catch (e) { console.error("[ForteVault] Different-account flow failed:", e); }
+      sessionStorage.removeItem("selectedPaymethodToken");
+      try { await prepareAndLaunchWithoutTokens(); } catch(e) { console.error(e); }
     });
 
     const confirmBtn = primaryButton("Confirm & Continue", async () => {
@@ -415,8 +359,8 @@
     const text  = p("You’ll need to add a bank account before you can make a payment.");
     const addBtn = primaryButton("Add Payment Method", async () => {
       cleanupModal();
-      try { await prepareAndLaunchWithoutTokens(); }
-      catch (e) { console.error("[ForteVault] Add-new flow failed:", e); }
+      sessionStorage.removeItem("selectedPaymethodToken");
+      try { await prepareAndLaunchWithoutTokens(); } catch(e) { console.error(e); }
     });
     appendToModal(modal, [title, text, addBtn]);
   }
