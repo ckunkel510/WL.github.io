@@ -914,7 +914,7 @@ btn.addEventListener('click', async (e) => {
               <div id="wl-barcode-inline-svg" aria-hidden="true"></div>
               <div class="wl-barcode-caption">
                 <div class="lbl">Show this at pickup</div>
-                <div class="val">SO;${orderNo}</div>
+                <div class="val">${orderNo}</div>
               </div>
             </div>
           ` : ``}
@@ -927,7 +927,7 @@ btn.addEventListener('click', async (e) => {
       const inlineSvgHost = head.querySelector('#wl-barcode-inline-svg');
       if (inlineSvgHost){
         try{
-          inlineSvgHost.innerHTML = code128B_SVG(`SO;${orderNo}`, { module: 2, height: 80 });
+          inlineSvgHost.innerHTML = code128B_SVG(`${orderNo}`, { module: 2, height: 80 });
           log('Inline barcode rendered: SO;', orderNo);
         }catch(ex){ err('Inline barcode render failed', ex); }
       }
