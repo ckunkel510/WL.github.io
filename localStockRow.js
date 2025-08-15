@@ -13,8 +13,9 @@ setTimeout(() => {
     ];
 
     const DEFAULT_STORE = 'Groesbeck';
-    const useActualColumn = !!(await getSignedInBranch());
-    const finalBranch = (await getSignedInBranch()) || (await getNearestStoreBranch(stores)) || DEFAULT_STORE;
+    const signedInBranch = await getSignedInBranch();
+    const useActualColumn = !!signedInBranch;
+    const finalBranch = signedInBranch || (await getNearestStoreBranch(stores)) || DEFAULT_STORE;
 
     console.log(`[LocalStock] Final branch: ${finalBranch}`);
 
@@ -30,12 +31,18 @@ setTimeout(() => {
 
       // Fetch stock data for this PID
       const stockDataUrl = `https://webtrack.woodsonlumber.com/Catalog/ShowStock.aspx?productid=${pid}`;
-      const res = await fetch(stockDataUrl);
-      const text = await res.text();
+      let text;
+      try {
+        const res = await fetch(stockDataUrl, { credentials: "include" });
+        text = await res.text();
+      } catch (e) {
+        console.warn(`[LocalStock] Fetch failed for PID ${pid}`, e);
+        return;
+      }
+
       const tempDiv = document.createElement("div");
       tempDiv.innerHTML = text;
       const table = tempDiv.querySelector("#StockDataGrid_ctl00");
-
       if (!table) {
         console.warn(`[LocalStock] No stock table for PID ${pid}`);
         return;
@@ -43,22 +50,62 @@ setTimeout(() => {
 
       const rows = table.querySelectorAll("tr");
       const columnIndex = useActualColumn ? 4 : 2;
-      let quantity = null;
 
+      let rawQtyText = null;
       for (let row of rows) {
         const branchCell = row.querySelector("td");
         if (!branchCell) continue;
         const branchName = branchCell.textContent.trim();
         if (branchName.toLowerCase() === finalBranch.toLowerCase()) {
           const qtyCell = row.querySelectorAll("td")[columnIndex];
-          quantity = qtyCell?.textContent.trim();
+          rawQtyText = qtyCell?.textContent.trim() || "";
           break;
         }
       }
 
-      if (!quantity || quantity.toLowerCase().includes("no stock")) {
-        console.log(`[LocalStock] No stock to show for PID ${pid}`);
+      // Normalize quantity text
+      // Examples we handle: "0", "12", "No Stock", "0 (On Order)"
+      const normalized = (rawQtyText || "").toLowerCase();
+      const isNoStockText = normalized.includes("no stock");
+      const numericMatch = (rawQtyText || "").replace(/,/g, "").match(/-?\d+/);
+      const qtyNumber = numericMatch ? parseInt(numericMatch[0], 10) : null;
+      const isZero = qtyNumber === 0;
+
+      // If we couldn't find a qty for the branch at all, do nothing (keeps current behavior)
+      if (rawQtyText == null) {
+        console.log(`[LocalStock] No branch qty cell found for PID ${pid}`);
         return;
+      }
+
+      // Build the display message
+      let displayHTML;
+      if (isNoStockText || isZero) {
+        // Your requested fallback message when the chosen branch shows zero
+        displayHTML = `
+          <div style="
+            text-align:center;
+            font-weight:600;
+            font-size:0.95em;
+            padding:4px 8px;
+            border-radius:8px;
+            border:1px solid #e5e7eb;
+          ">
+            Ship to your store — <span style="white-space:nowrap;">Free pickup at checkout</span>
+          </div>
+        `;
+      } else {
+        // Positive quantity
+        displayHTML = `
+          <div style="
+            text-align:center;
+            font-weight:bold;
+            color:#004080;
+            font-size:0.95em;
+            padding:4px 0;
+          ">
+            ${rawQtyText} in stock at ${finalBranch}
+          </div>
+        `;
       }
 
       // Find QuantityRow inside this card
@@ -73,17 +120,7 @@ setTimeout(() => {
 
       const td = document.createElement("td");
       td.colSpan = 1;
-      td.innerHTML = `
-        <div style="
-          text-align: center;
-          font-weight: bold;
-          color: #004080;
-          font-size: 0.95em;
-          padding: 4px 0;
-        ">
-          ${quantity} in stock at ${finalBranch}
-        </div>
-      `;
+      td.innerHTML = displayHTML;
 
       localRow.appendChild(td);
       quantityRow.parentNode.insertBefore(localRow, quantityRow.nextSibling);
@@ -94,7 +131,7 @@ setTimeout(() => {
 
     async function getSignedInBranch() {
       try {
-        const res = await fetch("https://webtrack.woodsonlumber.com/AccountSettings.aspx?cms=1");
+        const res = await fetch("https://webtrack.woodsonlumber.com/AccountSettings.aspx?cms=1", { credentials: "include" });
         const text = await res.text();
         const temp = document.createElement("div");
         temp.innerHTML = text;
@@ -136,10 +173,11 @@ setTimeout(() => {
 
     function haversine(lat1, lon1, lat2, lon2) {
       const toRad = deg => (deg * Math.PI) / 180;
-      const R = 3958.8;
+      const R = 3958.8; // miles
       const dLat = toRad(lat2 - lat1);
       const dLon = toRad(lon2 - lon1);
-      const a = Math.sin(dLat / 2) ** 2 +
+      const a =
+        Math.sin(dLat / 2) ** 2 +
         Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
         Math.sin(dLon / 2) ** 2;
       return R * 2 * Math.asin(Math.sqrt(a));
