@@ -23,6 +23,12 @@
       /* Hide original cells (we'll extract content and render our own) */
       .wl-cardify tr.rgRow>td, .wl-cardify tr.rgAltRow>td{ display:none !important; }
 
+      /* Hide original grid header (we render card heads instead) */
+.wl-cardify thead { 
+  display: none !important;
+}
+
+
       /* Card header */
       .wl-row-head{
         display:grid; gap:8px; padding:14px 14px 10px 14px; align-items:center
@@ -147,7 +153,7 @@
         </div>
       </div>
       <div class="wl-head-right">
-        <button class="wl-btn wl-btn--primary" data-action="toggle-details">View details</button>
+        <button class="wl-btn wl-btn--primary" type="button" data-action="toggle-details">View details</button>
         <a class="wl-btn wl-btn--ghost" href="${href}">Open full order</a>
       </div>
     `;
@@ -161,13 +167,16 @@
 
     // Toggle + lazy load
     const btn = head.querySelector('[data-action="toggle-details"]');
-    btn.addEventListener('click', async () => {
-      if (details.dataset.state === 'idle') {
-        await loadDetails(details, href, oid, btn);
-      }
-      details.classList.toggle('show');
-      btn.textContent = details.classList.contains('show') ? 'Hide details' : 'View details';
-    });
+btn.addEventListener('click', async (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  if (details.dataset.state === 'idle') {
+    await loadDetails(details, href, oid, btn);
+  }
+  details.classList.toggle('show');
+  btn.textContent = details.classList.contains('show') ? 'Hide details' : 'View details';
+});
+
   }
 
   // Fetch & render the order lines from the details page
