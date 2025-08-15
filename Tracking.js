@@ -448,15 +448,18 @@ btn.addEventListener('click', async (e) => {
 
 
 /* ===== 3) Order Details page enhancer (per-line Add, share/download, Need help) ===== */
+/* ===== 3) Order Details page enhancer (with verbose logs) ===== */
 (function(){
   const isDetails = /OrderDetails_r\.aspx/i.test(location.pathname);
-  if (!isDetails) return;
-  if (window.__WL_ORDERDETAILS_ENHANCED__) return;
+  if (!isDetails) { console.debug('WL3: not on OrderDetails page, skip'); return; }
+  if (window.__WL_ORDERDETAILS_ENHANCED__) { console.debug('WL3: already enhanced, skip'); return; }
   window.__WL_ORDERDETAILS_ENHANCED__ = true;
 
-  const start = () => {
+  function start(){
     const t0 = performance.now();
-    const log = (...a)=>console.log('%cOrderDetails UI','color:#6b0016;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
+    const log  = (...a)=>console.log('%cWL3','color:#6b0016;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
+    const warn = (...a)=>console.warn('%cWL3','color:#c2410c;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
+    const err  = (...a)=>console.error('%cWL3','color:#7f1d1d;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
 
     /* ---------- CSS ---------- */
     (function injectCSS(){
@@ -495,9 +498,7 @@ btn.addEventListener('click', async (e) => {
         .panel.panelAccountInfo .panelBodyHeader{
           font-weight:800; padding:10px 14px; background:#f8fafc; border-bottom:1px solid #eef0f3;
         }
-        .panel.panelAccountInfo .panelBody{
-          padding:12px 14px;
-        }
+        .panel.panelAccountInfo .panelBody{ padding:12px 14px; }
         .panelAccountInfoSubtitle{ background:#f8fafc !important; }
 
         #ctl00_PageBody_ctl00_OrderDetailsGrid .rgMasterTable{
@@ -539,6 +540,7 @@ btn.addEventListener('click', async (e) => {
         }
       `;
       document.head.appendChild(css);
+      log('CSS injected');
     })();
 
     /* ---------- Helpers ---------- */
@@ -561,7 +563,6 @@ btn.addEventListener('click', async (e) => {
       return null;
     };
 
-    // robust doc/pdf URL picker
     function pickPdfUrl() {
       const imgLink  = document.getElementById('ctl00_PageBody_ctl00_ShowOrderImageLink')
                      || document.getElementById('ctl00_PageBody_ctl00_ShowOrderImageDropDown');
@@ -572,15 +573,22 @@ btn.addEventListener('click', async (e) => {
       const docHref = docLink && docLink.getAttribute('href');
 
       const prefer = (imgHref && /toPdf=1/i.test(imgHref)) ? imgHref : (docHref || imgHref);
-      if (!prefer) { console.warn('WL: No PDF/document URL found for share/download'); return null; }
-      try { return new URL(prefer, location.origin).toString(); } catch { return prefer; }
+      if (!prefer) { warn('No PDF/document URL found'); return null; }
+      try { 
+        const abs = new URL(prefer, location.origin).toString();
+        log('pickPdfUrl ->', abs);
+        return abs;
+      } catch {
+        log('pickPdfUrl (raw) ->', prefer);
+        return prefer;
+      }
     }
 
-    // read grid once
+    // read grid/table
     const grid = document.querySelector('#ctl00_PageBody_ctl00_OrderDetailsGrid');
     const table = grid && grid.querySelector('.rgMasterTable');
+    log('Grid present:', !!grid, 'Table present:', !!table);
 
-    // parse UPS numbers
     function parseUPS(){
       const list = [];
       if (!table) return list;
@@ -596,17 +604,19 @@ btn.addEventListener('click', async (e) => {
       return list;
     }
     const UPS_LIST = parseUPS();
+    log('UPS numbers:', UPS_LIST);
 
-    /* ---------- Build header (incl. Need help) ---------- */
+    /* ---------- Build header (incl. Need help / Share / Download / Copy Lines) ---------- */
     (function buildHeader(){
       const container = document.querySelector('.bodyFlexContainer');
-      if (!container) return;
+      if (!container) { warn('No .bodyFlexContainer'); return; }
 
       const oldHeader = document.querySelector('.listPageHeader');
       const orderText = oldHeader ? oldHeader.children?.[0]?.textContent?.trim() : '';
       const statusText = oldHeader ? oldHeader.children?.[1]?.textContent?.trim() : '';
       const orderNo = (orderText || '').replace(/[^\d]/g,'');
       const statusOnly = (statusText || '').replace(/^Status:\s*/i,'');
+      log('Header parsed:', { orderNo, statusOnly, orderText, statusText });
 
       const backLink = document.getElementById('ctl00_PageBody_ctl00_BackButton');
       const imgLink  = document.getElementById('ctl00_PageBody_ctl00_ShowOrderImageLink')
@@ -615,6 +625,9 @@ btn.addEventListener('click', async (e) => {
                      || document.getElementById('ctl00_PageBody_ctl00_ShowOrderDocumentDropDown');
       const copyLink = document.getElementById('ctl00_PageBody_ctl00_AddToCart')
                      || document.getElementById('ctl00_PageBody_ctl00_AddToCartDropDown');
+      log('Native links:', {
+        back: !!backLink, img: !!imgLink, doc: !!docLink, copy: !!copyLink
+      });
 
       const head = document.createElement('div');
       head.className = 'wl-od-header';
@@ -624,9 +637,9 @@ btn.addEventListener('click', async (e) => {
           ${statusOnly ? `<span class="wl-chip wl-chip--${statusColor(statusOnly)}">${statusOnly}</span>` : ``}
         </div>
         <div class="wl-od-actions">
-          ${backLink ? `<a class="wl-btn wl-btn--ghost" href="${backLink.getAttribute('href')||'/OpenOrders_r.aspx'}">← Back</a>` : ``}
-          ${imgLink  ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${imgLink.getAttribute('href')||'#'}">View Image</a>` : ``}
-          ${docLink  ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${docLink.getAttribute('href')||'#'}">View Document</a>` : ``}
+          ${backLink ? `<a class="wl-btn wl-btn--ghost" href="${backLink.getAttribute('href')||'/OpenOrders_r.aspx'}" data-log="back">← Back</a>` : ``}
+          ${imgLink  ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${imgLink.getAttribute('href')||'#'}" data-log="view-image">View Image</a>` : ``}
+          ${docLink  ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${docLink.getAttribute('href')||'#'}" data-log="view-document">View Document</a>` : ``}
           ${docLink || imgLink ? `<button class="wl-btn wl-btn--ghost" type="button" id="wl-share-doc">Share</button>` : ``}
           ${docLink || imgLink ? `<button class="wl-btn wl-btn--ghost" type="button" id="wl-download-doc">Download PDF</button>` : ``}
           ${copyLink ? `<button class="wl-btn wl-btn--primary" type="button" id="wl-copy-lines">Copy Lines to Cart</button>` : ``}
@@ -634,6 +647,12 @@ btn.addEventListener('click', async (e) => {
         </div>
       `;
       container.insertAdjacentElement('afterbegin', head);
+      log('Header injected');
+
+      // Anchor click logging only (do NOT prevent)
+      head.querySelectorAll('a.wl-btn').forEach(a=>{
+        a.addEventListener('click', ()=>log('Anchor click:', a.getAttribute('data-log') || a.textContent));
+      });
 
       // Copy Lines to Cart (invoke native)
       const copyBtn = head.querySelector('#wl-copy-lines');
@@ -641,9 +660,18 @@ btn.addEventListener('click', async (e) => {
         copyBtn.addEventListener('click', (e)=>{
           e.preventDefault(); e.stopPropagation();
           const href = copyLink.getAttribute('href')||'';
-          if (href.startsWith('javascript:')) { try { eval(href.replace(/^javascript:/,'')); } catch(e){ console.warn('WL: copy postback failed', e); } }
-          else { location.href = href; }
-        }, { passive:false });
+          log('Copy Lines click ->', href);
+          try {
+            if (href.startsWith('javascript:')) {
+              // eslint-disable-next-line no-eval
+              eval(href.replace(/^javascript:/,''));
+            } else {
+              location.href = new URL(href, location.origin).toString();
+            }
+          } catch(ex){ err('Copy Lines failed', ex); }
+        });
+      } else {
+        log('Copy Lines not available');
       }
 
       // Share
@@ -651,17 +679,26 @@ btn.addEventListener('click', async (e) => {
       if (shareBtn){
         shareBtn.addEventListener('click', async (e)=>{
           e.preventDefault(); e.stopPropagation();
-          const url = pickPdfUrl(); if (!url) { alert('Document not available yet.'); return; }
+          const url = pickPdfUrl(); 
+          log('Share clicked, url:', url);
+          if (!url) { alert('Document not available yet.'); return; }
           const title = `Order #${orderNo} Document`;
           const text  = `Document for Order #${orderNo}`;
-          if (navigator.share) {
-            try { await navigator.share({ title, text, url }); } catch(_) {}
-          } else {
-            const subj = encodeURIComponent(title);
-            const body = encodeURIComponent(`${text}:\n\n${url}`);
-            location.href = `mailto:?subject=${subj}&body=${body}`;
-          }
+          try {
+            if (navigator.share) {
+              await navigator.share({ title, text, url });
+              log('Web Share success');
+            } else {
+              const subj = encodeURIComponent(title);
+              const body = encodeURIComponent(`${text}:\n\n${url}`);
+              const mailto = `mailto:?subject=${subj}&body=${body}`;
+              log('Mailto fallback ->', mailto);
+              location.href = mailto;
+            }
+          } catch(ex){ err('Share failed', ex); }
         });
+      } else {
+        log('Share not rendered (no doc/image link)');
       }
 
       // Download
@@ -669,20 +706,25 @@ btn.addEventListener('click', async (e) => {
       if (dlBtn){
         dlBtn.addEventListener('click', (e)=>{
           e.preventDefault(); e.stopPropagation();
-          const url = pickPdfUrl(); if (!url) { alert('Document not available yet.'); return; }
+          const url = pickPdfUrl(); 
+          log('Download clicked, url:', url);
+          if (!url) { alert('Document not available yet.'); return; }
           const a = document.createElement('a');
           a.href = url; a.download = `Order-${orderNo||'document'}.pdf`;
           document.body.appendChild(a); a.click(); requestAnimationFrame(()=>a.remove());
+          log('Download attempted via anchor');
         });
+      } else {
+        log('Download not rendered (no doc/image link)');
       }
 
-      // Need help -> open Tawk with context
+      // Need help -> Tawk
       const helpBtn = head.querySelector('#wl-need-help');
       if (helpBtn){
         helpBtn.addEventListener('click', (e)=>{
           e.preventDefault(); e.stopPropagation();
+          log('Need help clicked');
 
-          // pull context
           const getCellText = (label) => {
             const tds = Array.from(document.querySelectorAll('.panel.panelAccountInfo td'));
             for (let i=0;i<tds.length-1;i++){
@@ -714,59 +756,70 @@ btn.addEventListener('click', async (e) => {
 
           window.Tawk_API = window.Tawk_API || {};
           const apply = () => {
-            try { window.Tawk_API.setAttributes && window.Tawk_API.setAttributes(attrs, function(){}); } catch{}
-            try { window.Tawk_API.addTags && window.Tawk_API.addTags(tags, function(){}); } catch{}
-            if (window.Tawk_API.maximize) window.Tawk_API.maximize();
-            else if (window.Tawk_API.toggle) window.Tawk_API.toggle();
-            else if (window.Tawk_API.popup)  window.Tawk_API.popup();
-            else console.warn('WL: Tawk widget not found on page');
+            log('Tawk apply start', { attrs, tags });
+            try { window.Tawk_API.setAttributes && window.Tawk_API.setAttributes(attrs, function(){ log('Tawk setAttributes OK'); }); } catch(ex){ err('Tawk setAttributes failed', ex); }
+            try { window.Tawk_API.addTags && window.Tawk_API.addTags(tags, function(){ log('Tawk addTags OK'); }); } catch(ex){ err('Tawk addTags failed', ex); }
+            if (window.Tawk_API.maximize) { window.Tawk_API.maximize(); log('Tawk maximize'); }
+            else if (window.Tawk_API.toggle) { window.Tawk_API.toggle(); log('Tawk toggle'); }
+            else if (window.Tawk_API.popup)  { window.Tawk_API.popup();  log('Tawk popup'); }
+            else warn('Tawk widget API not available on page');
           };
 
-          if (window.Tawk_API.onLoad && !window.__WL_TAWK_HOOKED__) {
+          if (window.Tawk_API.onLoad && !window.__WL_TAWK_HOOKED__){
             window.__WL_TAWK_HOOKED__ = true;
             const prev = window.Tawk_API.onLoad;
-            window.Tawk_API.onLoad = function(){ try { prev && prev(); } catch{} apply(); };
+            window.Tawk_API.onLoad = function(){
+              try { prev && prev(); } catch(ex){ err('Tawk onLoad prev failed', ex); }
+              apply();
+            };
+            log('Tawk onLoad hook set');
           }
-          apply(); // try immediately too
+          // Try immediately too
+          apply();
         });
+      } else {
+        warn('Need help button missing');
       }
     })();
 
-    /* ---------- UPS pills ---------- */
+    /* ---------- UPS pills (above grid) ---------- */
     (function upsPills(){
       const grid = document.querySelector('#ctl00_PageBody_ctl00_OrderDetailsGrid');
       const table = grid && grid.querySelector('.rgMasterTable');
-      if (!grid || !table) return;
-      const UPS_LIST = (function parse(){
-        const list = [];
-        table.querySelectorAll('tr').forEach(tr=>{
-          const codeEl = tr.querySelector('td[data-title="Product Code"]') || tr.children[0];
-          const descEl = tr.querySelector('td[data-title="Description"]') || tr.children[1];
-          if (!codeEl || !descEl) return;
-          if ((codeEl.textContent||'').trim().toUpperCase() !== 'UPS') return;
-          const raw = (descEl.textContent||'').trim().replace(/\s+/g,'').toUpperCase();
-          if (!raw) return;
-          if (UPS_RX.test(raw) || raw.length >= 8) list.push(raw);
-        });
-        return list;
-      })();
-      if (!UPS_LIST.length) return;
+      if (!grid || !table) { warn('UPS pills: grid/table missing'); return; }
+
+      const list = [];
+      table.querySelectorAll('tr').forEach(tr=>{
+        const codeEl = tr.querySelector('td[data-title="Product Code"]') || tr.children[0];
+        const descEl = tr.querySelector('td[data-title="Description"]') || tr.children[1];
+        if (!codeEl || !descEl) return;
+        if ((codeEl.textContent||'').trim().toUpperCase() !== 'UPS') return;
+        const raw = (descEl.textContent||'').trim().replace(/\s+/g,'').toUpperCase();
+        if (!raw) return;
+        if (UPS_RX.test(raw) || raw.length >= 8) list.push(raw);
+      });
+
+      log('UPS pills found:', list);
+      if (!list.length) return;
+
       const wrap = document.createElement('div');
       wrap.className = 'wl-od-tracking';
-      wrap.innerHTML = UPS_LIST.map(n=>`
+      wrap.innerHTML = list.map(n=>`
         <a class="wl-pill wl-pill--ups" href="${toUPS(n)}" target="_blank" rel="noopener" title="UPS ${n}">
           UPS · ${n}
         </a>
       `).join('');
       grid.insertAdjacentElement('beforebegin', wrap);
+      log('UPS pills injected');
     })();
 
     /* ---------- Per-line Add to Cart ---------- */
     (function lineAddButtons(){
       const grid = document.querySelector('#ctl00_PageBody_ctl00_OrderDetailsGrid');
       const table = grid && grid.querySelector('.rgMasterTable');
-      if (!grid || !table) return;
+      if (!grid || !table) { warn('Line add: grid/table missing'); return; }
 
+      let added = 0;
       table.querySelectorAll('tr').forEach(tr=>{
         const codeEl = tr.querySelector('td[data-title="Product Code"]') || tr.children[0];
         const descEl = tr.querySelector('td[data-title="Description"]') || tr.children[1];
@@ -788,27 +841,31 @@ btn.addEventListener('click', async (e) => {
         btn.addEventListener('click', (e)=>{
           e.preventDefault(); e.stopPropagation();
           const target = new URL(`/ShoppingCart.aspx?products=${encodeURIComponent(code)}:${qty}&cart_origin=reorder`, location.origin);
-          console.log('WL: add to cart', target.toString());
-          location.href = target.toString();
+          log('Add-to-cart click ->', { code, qty, url: target.toString() });
+          try { location.href = target.toString(); }
+          catch(ex){ err('Add-to-cart navigation failed', ex); }
         });
 
         actionCell.appendChild(btn);
+        added++;
       });
+      log('Per-line Add buttons injected:', added);
     })();
 
-    /* ---------- Global guard: prevent our buttons from posting back ---------- */
+    /* ---------- Global guard: only BUTTONS (not anchors) ---------- */
     document.addEventListener('click', (e)=>{
-      const btn = e.target.closest('.wl-btn, .wl-line-add');
+      const btn = e.target.closest('button.wl-btn, button.wl-line-add');
       if (!btn) return;
-      if (btn.tagName === 'BUTTON' && !btn.getAttribute('type')){
-        btn.setAttribute('type','button');
-      }
+      // Ensure type and block form submit/postback
+      if (!btn.getAttribute('type')) btn.setAttribute('type','button');
       e.preventDefault();
       e.stopPropagation();
+      log('Global guard intercepted BUTTON click:', btn.id || btn.textContent);
+      // Note: we DO NOT intercept <a.wl-btn> to keep normal link behavior
     }, { capture:true });
 
-    log('Order Details enhanced (per-line add, share/download, Need help)');
-  };
+    log('Order Details enhanced: ready');
+  }
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', start, { once:true });
@@ -816,3 +873,4 @@ btn.addEventListener('click', async (e) => {
     start();
   }
 })();
+
