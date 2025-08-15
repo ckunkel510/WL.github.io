@@ -447,7 +447,7 @@ btn.addEventListener('click', async (e) => {
 
 
 
-/* ===== 3) Order Details page enhancer (no global guard, verbose logs) ===== */
+/* ===== 3) Order Details page enhancer (robust download, tawk start, verbose logs) ===== */
 (function(){
   const isDetails = /OrderDetails_r\.aspx/i.test(location.pathname);
   if (!isDetails) { console.debug('WL3: not on OrderDetails page, skip'); return; }
@@ -562,7 +562,8 @@ btn.addEventListener('click', async (e) => {
       return null;
     };
 
-    function pickPdfUrl() {
+    // Prefer a real PDF link; fallback to doc link
+    function pickPdfUrlAbs() {
       const imgLink  = document.getElementById('ctl00_PageBody_ctl00_ShowOrderImageLink')
                      || document.getElementById('ctl00_PageBody_ctl00_ShowOrderImageDropDown');
       const docLink  = document.getElementById('ctl00_PageBody_ctl00_ShowOrderDocumentLink')
@@ -570,9 +571,22 @@ btn.addEventListener('click', async (e) => {
       const imgHref = imgLink && imgLink.getAttribute('href');
       const docHref = docLink && docLink.getAttribute('href');
       const prefer = (imgHref && /toPdf=1/i.test(imgHref)) ? imgHref : (docHref || imgHref);
-      if (!prefer) { log('pickPdfUrl: none'); return null; }
-      try { const abs = new URL(prefer, location.origin).toString(); log('pickPdfUrl ->', abs); return abs; }
-      catch { log('pickPdfUrl (raw) ->', prefer); return prefer; }
+      if (!prefer) { log('pickPdfUrlAbs: none'); return { pdf:null, doc:null }; }
+      const abs = (u)=>{ try { return new URL(u, location.origin).toString(); } catch { return u; } };
+      const res = { pdf: abs(prefer), doc: docHref ? abs(docHref) : null };
+      log('pickPdfUrlAbs ->', res);
+      return res;
+    }
+
+    async function tryFetchOk(url){
+      try{
+        const r = await fetch(url, { credentials:'same-origin', cache:'no-cache' });
+        log('HEAD/GET check', url, '->', r.status, r.ok);
+        return r.ok;
+      }catch(ex){
+        warn('Fetch check failed', url, ex);
+        return false;
+      }
     }
 
     // read grid/table
@@ -607,7 +621,7 @@ btn.addEventListener('click', async (e) => {
       const statusText = oldHeader ? oldHeader.children?.[1]?.textContent?.trim() : '';
       const orderNo = (orderText || '').replace(/[^\d]/g,'');
       const statusOnly = (statusText || '').replace(/^Status:\s*/i,'');
-      log('Header parsed:', { orderNo, statusOnly });
+      log('Header parsed:', { orderNo, statusOnly, orderText, statusText });
 
       const backLink = document.getElementById('ctl00_PageBody_ctl00_BackButton');
       const imgLink  = document.getElementById('ctl00_PageBody_ctl00_ShowOrderImageLink')
@@ -638,9 +652,9 @@ btn.addEventListener('click', async (e) => {
       container.insertAdjacentElement('afterbegin', head);
       log('Header injected');
 
-      // Simple anchor logging (don’t block navigation)
+      // Anchor click logging (don’t block navigation)
       head.querySelectorAll('a.wl-btn').forEach(a=>{
-        a.addEventListener('click', ()=>log('Anchor click:', a.getAttribute('data-log')||a.textContent));
+        a.addEventListener('click', ()=>log('Anchor click:', a.getAttribute('data-log') || a.textContent));
       });
 
       // Copy Lines to Cart (invoke native)
@@ -659,6 +673,8 @@ btn.addEventListener('click', async (e) => {
             }
           } catch(ex){ err('Copy Lines failed', ex); }
         });
+      } else {
+        log('Copy Lines not available');
       }
 
       // Share
@@ -666,7 +682,8 @@ btn.addEventListener('click', async (e) => {
       if (shareBtn){
         shareBtn.addEventListener('click', async (e)=>{
           e.preventDefault();
-          const url = pickPdfUrl(); 
+          const { pdf, doc } = pickPdfUrlAbs();
+          const url = pdf || doc; 
           log('Share clicked, url:', url);
           if (!url) { alert('Document not available yet.'); return; }
           const title = `Order #${orderNo} Document`;
@@ -684,27 +701,59 @@ btn.addEventListener('click', async (e) => {
             }
           } catch(ex){ err('Share failed', ex); }
         });
+      } else {
+        log('Share not rendered (no doc/image link)');
       }
 
-      // Download
+      // Download (generate if needed)
       const dlBtn = head.querySelector('#wl-download-doc');
       if (dlBtn){
-        dlBtn.addEventListener('click', (e)=>{
+        dlBtn.addEventListener('click', async (e)=>{
           e.preventDefault();
-          const url = pickPdfUrl(); 
-          log('Download clicked, url:', url);
-          if (!url) { alert('Document not available yet.'); return; }
-          const a = document.createElement('a');
-          a.href = url; a.download = `Order-${orderNo||'document'}.pdf`;
-          document.body.appendChild(a); a.click(); requestAnimationFrame(()=>a.remove());
-          log('Download attempted via anchor');
+          const { pdf, doc } = pickPdfUrlAbs();
+          log('Download clicked; pdf:', pdf, 'doc:', doc);
+          if (!pdf && !doc) { alert('Document not available yet.'); return; }
+
+          // 1) If direct PDF works, download it
+          if (pdf && await tryFetchOk(pdf)) {
+            log('PDF available, downloading');
+            const a = document.createElement('a'); a.href = pdf; a.download = ''; document.body.appendChild(a); a.click(); requestAnimationFrame(()=>a.remove());
+            return;
+          }
+
+          // 2) Kick the generator in a hidden iframe, then retry pdf
+          if (doc) {
+            log('PDF not ready, calling generator:', doc);
+            const iframe = document.createElement('iframe');
+            iframe.style.display = 'none';
+            iframe.src = doc;
+            document.body.appendChild(iframe);
+
+            // wait a moment for generation, then retry
+            setTimeout(async ()=>{
+              if (pdf && await tryFetchOk(pdf)) {
+                log('PDF ready after generation, downloading');
+                const a = document.createElement('a'); a.href = pdf; a.download = ''; document.body.appendChild(a); a.click(); requestAnimationFrame(()=>a.remove());
+              } else {
+                log('PDF still not available; opening generator page for user');
+                window.open(doc, '_blank', 'noopener');
+              }
+              requestAnimationFrame(()=>iframe.remove());
+            }, 900); // tweak if needed
+          } else {
+            // no generator link; open whatever we have
+            log('No generator link; opening fallback');
+            window.open(pdf, '_blank', 'noopener');
+          }
         });
+      } else {
+        log('Download not rendered (no doc/image link)');
       }
 
-      // Need help -> Tawk
+      // Need help -> Tawk with explicit start+maximize
       const helpBtn = head.querySelector('#wl-need-help');
       if (helpBtn){
-        helpBtn.addEventListener('click', (e)=>{
+        helpBtn.addEventListener('click', async (e)=>{
           e.preventDefault();
           log('Need help clicked');
 
@@ -738,14 +787,23 @@ btn.addEventListener('click', async (e) => {
           const tags = ['order-help']; if (orderNo) tags.push(`order-${orderNo}`);
 
           window.Tawk_API = window.Tawk_API || {};
+          // 1) Make sure the widget connection is started & visible
+          try {
+            if (window.Tawk_API.start) {
+              window.Tawk_API.start({ showWidget: true }); // ensure socket + show
+              log('Tawk start(showWidget:true)');
+            }
+          } catch(ex){ warn('Tawk start failed', ex); }
+
           const apply = () => {
             log('Tawk apply start', { attrs, tags });
             try { window.Tawk_API.setAttributes && window.Tawk_API.setAttributes(attrs, function(){ log('Tawk setAttributes OK'); }); } catch(ex){ err('Tawk setAttributes failed', ex); }
             try { window.Tawk_API.addTags && window.Tawk_API.addTags(tags, function(){ log('Tawk addTags OK'); }); } catch(ex){ err('Tawk addTags failed', ex); }
-            if (window.Tawk_API.maximize) { window.Tawk_API.maximize(); log('Tawk maximize'); }
-            else if (window.Tawk_API.toggle) { window.Tawk_API.toggle(); log('Tawk toggle'); }
-            else if (window.Tawk_API.popup)  { window.Tawk_API.popup();  log('Tawk popup'); }
-            else warn('Tawk widget API not available on page');
+            try {
+              if (window.Tawk_API.maximize) { window.Tawk_API.maximize(); log('Tawk maximize'); }
+              else if (window.Tawk_API.toggle) { window.Tawk_API.toggle(); log('Tawk toggle'); }
+              else if (window.Tawk_API.popup)  { window.Tawk_API.popup();  log('Tawk popup'); }
+            } catch(ex){ warn('Tawk open failed', ex); }
           };
 
           if (window.Tawk_API.onLoad && !window.__WL_TAWK_HOOKED__){
@@ -757,8 +815,10 @@ btn.addEventListener('click', async (e) => {
             };
             log('Tawk onLoad hook set');
           }
-          apply(); // try immediately too
+          apply();
         });
+      } else {
+        warn('Need help button missing');
       }
     })();
 
@@ -793,7 +853,7 @@ btn.addEventListener('click', async (e) => {
       log('UPS pills injected');
     })();
 
-    /* ---------- Per-line Add to Cart ---------- */
+    /* ---------- Per-line Add to Cart (placeholder until productId resolver exists) ---------- */
     (function lineAddButtons(){
       const grid = document.querySelector('#ctl00_PageBody_ctl00_OrderDetailsGrid');
       const table = grid && grid.querySelector('.rgMasterTable');
@@ -820,10 +880,11 @@ btn.addEventListener('click', async (e) => {
         btn.textContent = `Add to cart${qty>1?` (${qty})`:''}`;
         btn.addEventListener('click', (e)=>{
           e.preventDefault();
-          const target = new URL(`/ShoppingCart.aspx?products=${encodeURIComponent(code)}:${qty}&cart_origin=reorder`, location.origin);
-          log('Add-to-cart click ->', { code, qty, url: target.toString() });
-          try { location.assign(target.toString()); }
-          catch(ex){ err('Add-to-cart navigation failed', ex); }
+          // NOTE: Your cart needs productId, not productCode. Leaving placeholder URL here:
+          const placeholder = new URL(`/ShoppingCart.aspx?products=${encodeURIComponent(code)}:${qty}&cart_origin=reorder`, location.origin);
+          warn('Add-to-cart uses productCode; needs productId resolver. Placeholder URL:', placeholder.toString());
+          // For now, navigate to the cart placeholder so user sees intent (you can change this behavior):
+          location.assign(placeholder.toString());
         });
 
         actionCell.appendChild(btn);
