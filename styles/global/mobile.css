@@ -297,9 +297,9 @@ div#barcode-scanner-container {
 
 
 a.wl-pill.wl-pill--ups{
-    color: white;
+    color: white !important;
 }
 a.wl-btn.wl-btn--primary{
-    color: white;
+    color: white !important;
 }
  
