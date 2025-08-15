@@ -122,62 +122,65 @@
 
   // Build a full card UI per row
   function enhanceRow(tr){
-    const a = findAnchor(tr);
-    if (!a) return;
+  const a = findAnchor(tr);
+  if (!a) return;
 
-    const href = new URL(a.getAttribute('href')||'', location.origin).toString();
-    const oid  = getOid(href);
-    if (!oid) return;
+  const href = new URL(a.getAttribute('href')||'', location.origin).toString();
+  const oid  = getOid(href);
+  if (!oid) return;
 
-    // Gather fields from the original cells
-    const status  = grab(tr, 'td[data-title="Status"]');
-    const created = grab(tr, 'td[data-title="Created"]');
-    const branch  = grab(tr, 'td[data-title="Branch"]');
-    const total   = grab(tr, 'td[data-title="Total Amount"], td[data-title="Goods Total"]');
+  // ✅ Use the human-facing order number from the link text (fallback to oid)
+  const orderNo = (a.textContent || '').trim() || oid;
 
-    // Hide the original link but keep for fallback/postback
-    a.style.position='absolute'; a.style.width='1px'; a.style.height='1px';
-    a.style.overflow='hidden'; a.style.clip='rect(1px,1px,1px,1px)'; a.setAttribute('aria-hidden','true');
+  // Gather fields from the original cells
+  const status  = grab(tr, 'td[data-title="Status"]');
+  const created = grab(tr, 'td[data-title="Created"]');
+  const branch  = grab(tr, 'td[data-title="Branch"]');
+  const total   = grab(tr, 'td[data-title="Total Amount"], td[data-title="Goods Total"]');
 
-    // Header
-    const head = document.createElement('div');
-    head.className = 'wl-row-head';
-    head.innerHTML = `
-      <div class="wl-head-left">
-        <span class="wl-order-id">Order #${oid}</span>
-        <span class="wl-chip wl-chip--${statusColor(status)}">${status || 'Status'}</span>
-        <div class="wl-meta">
-          ${created ? `<span>Created: ${created}</span>` : ``}
-          ${branch ? `<span>Branch: ${branch}</span>` : ``}
-          ${total  ? `<span>Total: ${total}</span>` : ``}
-        </div>
+  // Hide the original link but keep for fallback/postback
+  a.style.position='absolute'; a.style.width='1px'; a.style.height='1px';
+  a.style.overflow='hidden'; a.style.clip='rect(1px,1px,1px,1px)'; a.setAttribute('aria-hidden','true');
+
+  // Header (✅ show the real order number, not the oid)
+  const head = document.createElement('div');
+  head.className = 'wl-row-head';
+  head.innerHTML = `
+    <div class="wl-head-left">
+      <span class="wl-order-id">Order #${orderNo}</span>
+      <span class="wl-chip wl-chip--${statusColor(status)}">${status || 'Status'}</span>
+      <div class="wl-meta">
+        ${created ? `<span>Created: ${created}</span>` : ``}
+        ${branch ? `<span>Branch: ${branch}</span>` : ``}
+        ${total  ? `<span>Total: ${total}</span>` : ``}
       </div>
-      <div class="wl-head-right">
-        <button class="wl-btn wl-btn--primary" type="button" data-action="toggle-details">View details</button>
-        <a class="wl-btn wl-btn--ghost" href="${href}">Open full order</a>
-      </div>
-    `;
-    tr.insertAdjacentElement('afterbegin', head);
+    </div>
+    <div class="wl-head-right">
+      <button class="wl-btn wl-btn--primary" type="button" data-action="toggle-details">View details</button>
+      <a class="wl-btn wl-btn--ghost" href="${href}">Open full order</a>
+    </div>
+  `;
+  tr.insertAdjacentElement('afterbegin', head);
 
-    // Details container
-    const details = document.createElement('div');
-    details.className = 'wl-details';
-    details.dataset.state = 'idle';
-    tr.appendChild(details);
+  // Details container
+  const details = document.createElement('div');
+  details.className = 'wl-details';
+  details.dataset.state = 'idle';
+  tr.appendChild(details);
 
-    // Toggle + lazy load
-    const btn = head.querySelector('[data-action="toggle-details"]');
-btn.addEventListener('click', async (e) => {
-  e.preventDefault();
-  e.stopPropagation();
-  if (details.dataset.state === 'idle') {
-    await loadDetails(details, href, oid, btn);
-  }
-  details.classList.toggle('show');
-  btn.textContent = details.classList.contains('show') ? 'Hide details' : 'View details';
-});
+  // Toggle + lazy load
+  const btn = head.querySelector('[data-action="toggle-details"]');
+  btn.addEventListener('click', async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (details.dataset.state === 'idle') {
+      await loadDetails(details, href, oid, btn);
+    }
+    details.classList.toggle('show');
+    btn.textContent = details.classList.contains('show') ? 'Hide details' : 'View details';
+  });
+}
 
-  }
 
   // Fetch & render the order lines from the details page
   async function loadDetails(container, href, oid, btn){
