@@ -447,7 +447,7 @@ btn.addEventListener('click', async (e) => {
 
 
 
-/* ===== 3) Order Details page enhancer (OpenOrders -> "Open full order") ===== */
+/* ===== 3) Order Details page enhancer (with per-line Add to Cart, share & download) ===== */
 (function(){
   // Only run on the details page
   const isDetails = /OrderDetails_r\.aspx/i.test(location.pathname);
@@ -464,7 +464,7 @@ btn.addEventListener('click', async (e) => {
     css.textContent = `
       /* Page shell cleanup */
       .bodyFlexContainer{ gap:14px; }
-      .listPageHeader{ display:none !important; } /* we’ll replace this with wl-od-header */
+      .listPageHeader{ display:none !important; } /* replaced by wl-od-header */
 
       /* Header */
       .wl-od-header{
@@ -513,14 +513,22 @@ btn.addEventListener('click', async (e) => {
         background:#fff; border:1px solid #eef0f3; border-radius:12px;
       }
       #ctl00_PageBody_ctl00_OrderDetailsGrid td{
-        padding:10px; border:none !important;
+        padding:10px; border:none !important; vertical-align:top;
       }
       #ctl00_PageBody_ctl00_OrderDetailsGrid td[data-title="Product Code"]{
         font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:800; min-width:86px;
       }
-      #ctl00_PageBody_ctl00_OrderDetailsGrid td[data-title="Description"]{
-        width:100%;
+      #ctl00_PageBody_ctl00_OrderDetailsGrid td[data-title="Description"]{ width:100%; }
+
+      /* Per-line add button */
+      .wl-line-add{
+        display:inline-flex; align-items:center; gap:6px;
+        padding:6px 10px; border-radius:999px; font-weight:800; font-size:12px;
+        border:1px solid #e5e7eb; background:#f8fafc; color:#111827; cursor:pointer;
+        text-decoration:none;
       }
+      .wl-line-add:hover{ filter:brightness(0.98); }
+
       /* UPS pills area */
       .wl-od-tracking{
         display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; margin-bottom:4px;
@@ -578,6 +586,14 @@ btn.addEventListener('click', async (e) => {
     const copyLink = document.getElementById('ctl00_PageBody_ctl00_AddToCart')
                    || document.getElementById('ctl00_PageBody_ctl00_AddToCartDropDown');
 
+    // Choose a best PDF URL (prefer the image link with toPdf=1)
+    function pickPdfUrl(){
+      const imgHref = imgLink && imgLink.getAttribute('href');
+      const docHref = docLink && docLink.getAttribute('href');
+      if (imgHref && /toPdf=1/i.test(imgHref)) return imgHref;
+      return docHref || imgHref || null;
+    }
+
     // Header node
     const head = document.createElement('div');
     head.className = 'wl-od-header';
@@ -588,9 +604,11 @@ btn.addEventListener('click', async (e) => {
       </div>
       <div class="wl-od-actions">
         ${backLink ? `<a class="wl-btn wl-btn--ghost" href="${backLink.getAttribute('href')||'/OpenOrders_r.aspx'}">← Back</a>` : ``}
-        ${imgLink  ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${imgLink.getAttribute('href')||'#'}">Show Image</a>` : ``}
-        ${docLink  ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${docLink.getAttribute('href')||'#'}">Show Document</a>` : ``}
+        ${imgLink  ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${imgLink.getAttribute('href')||'#'}">View Image</a>` : ``}
+        ${docLink  ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${docLink.getAttribute('href')||'#'}">View Document</a>` : ``}
         ${copyLink ? `<button class="wl-btn wl-btn--primary" type="button" id="wl-copy-lines">Copy Lines to Cart</button>` : ``}
+        ${docLink || imgLink ? `<button class="wl-btn wl-btn--ghost" type="button" id="wl-share-doc">Share</button>` : ``}
+        ${docLink || imgLink ? `<button class="wl-btn wl-btn--ghost" type="button" id="wl-download-doc">Download PDF</button>` : ``}
       </div>
     `;
     container.insertAdjacentElement('afterbegin', head);
@@ -609,6 +627,45 @@ btn.addEventListener('click', async (e) => {
           location.href = href;
         }
       }, { passive:false });
+    }
+
+    // Share (Web Share API if available; else mailto)
+    const shareBtn = head.querySelector('#wl-share-doc');
+    if (shareBtn){
+      shareBtn.addEventListener('click', async (e)=>{
+        e.preventDefault(); e.stopPropagation();
+        const url = pickPdfUrl();
+        if (!url) return;
+        const shareData = {
+          title: `Order #${orderNo} Document`,
+          text: `Sharing the document for Order #${orderNo}.`,
+          url
+        };
+        if (navigator.share) {
+          try { await navigator.share(shareData); } catch(_) {}
+        } else {
+          // Fallback to email (mailto)
+          const subj = encodeURIComponent(`Order #${orderNo} document`);
+          const body = encodeURIComponent(`Here is the document link for Order #${orderNo}:\n\n${url}`);
+          location.href = `mailto:?subject=${subj}&body=${body}`;
+        }
+      });
+    }
+
+    // Download PDF (trigger browser download)
+    const dlBtn = head.querySelector('#wl-download-doc');
+    if (dlBtn){
+      dlBtn.addEventListener('click', (e)=>{
+        e.preventDefault(); e.stopPropagation();
+        const url = pickPdfUrl();
+        if (!url) return;
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Order-${orderNo||'document'}.pdf`; // browsers will honor if same-origin/headers allow
+        document.body.appendChild(a);
+        a.click();
+        requestAnimationFrame(()=>a.remove());
+      });
     }
   })();
 
@@ -629,7 +686,7 @@ btn.addEventListener('click', async (e) => {
       if (!raw) return;
       if (UPS_RX.test(raw) || raw.length >= 8) pills.push(raw);
 
-      // optional: you can hide the UPS line row to avoid duplicate info
+      // Optional: hide the UPS row so pills are the single source of truth
       // tr.style.display = 'none';
     });
 
@@ -645,9 +702,49 @@ btn.addEventListener('click', async (e) => {
     }
   })();
 
+  // ---------- Per-line Add to Cart (one-click reorder) ----------
+  (function lineAddButtons(){
+    const grid = document.querySelector('#ctl00_PageBody_ctl00_OrderDetailsGrid');
+    const table = grid && grid.querySelector('.rgMasterTable');
+    if (!table) return;
+
+    table.querySelectorAll('tr').forEach(tr=>{
+      const codeEl = tr.querySelector('td[data-title="Product Code"]') || tr.children[0];
+      const descEl = tr.querySelector('td[data-title="Description"]') || tr.children[1];
+      const qtyEl  = tr.querySelector('td[data-title="Qty"]') || tr.querySelector('td[data-title="Quantity"]') || tr.children[3];
+      const actionCell = tr.querySelector('td:last-child') || tr.children[tr.children.length-1];
+      if (!codeEl || !descEl || !actionCell) return;
+
+      const code = (codeEl.textContent||'').trim().toUpperCase();
+      if (!code || code === 'UPS') return; // skip tracking rows
+
+      const qtyRaw = (qtyEl && qtyEl.textContent||'').trim();
+      // Qty may be formatted like "2.0000" → parse as float and round up to at least 1
+      let qty = Math.max(1, Math.round(parseFloat(qtyRaw || '1')));
+      if (!isFinite(qty)) qty = 1;
+
+      // Build the button
+      const btn = document.createElement('button');
+      btn.className = 'wl-line-add';
+      btn.type = 'button';
+      btn.textContent = `Add to cart${qty>1?` (${qty})`:''}`;
+
+      // Click => simulate add using ShoppingCart products param (your meta_shops handler supports this)
+      // Ex: /ShoppingCart.aspx?products=9475526:2&cart_origin=reorder
+      btn.addEventListener('click', (e)=>{
+        e.preventDefault(); e.stopPropagation();
+        const url = `/ShoppingCart.aspx?products=${encodeURIComponent(code)}:${qty}&cart_origin=reorder`;
+        location.href = url;
+      });
+
+      // Insert into last cell
+      actionCell.appendChild(btn);
+    });
+  })();
+
   // ---------- Guard: prevent our buttons from causing postbacks ----------
   document.addEventListener('click', (e)=>{
-    const btn = e.target.closest('.wl-btn');
+    const btn = e.target.closest('.wl-btn, .wl-line-add');
     if (!btn) return;
     if (btn.tagName === 'BUTTON' && !btn.getAttribute('type')){
       btn.setAttribute('type','button');
@@ -655,6 +752,5 @@ btn.addEventListener('click', async (e) => {
     e.stopPropagation();
   }, { capture:true });
 
-  log('Order Details enhanced');
+  log('Order Details enhanced (per-line add, share, download)');
 })();
-
