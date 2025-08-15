@@ -449,359 +449,370 @@ btn.addEventListener('click', async (e) => {
 
 /* ===== 3) Order Details page enhancer (per-line Add, share/download, Need help) ===== */
 (function(){
-  // Only on the details page
   const isDetails = /OrderDetails_r\.aspx/i.test(location.pathname);
   if (!isDetails) return;
   if (window.__WL_ORDERDETAILS_ENHANCED__) return;
   window.__WL_ORDERDETAILS_ENHANCED__ = true;
 
-  const t0 = performance.now();
-  const log = (...a)=>console.log('%cOrderDetails UI','color:#6b0016;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
+  const start = () => {
+    const t0 = performance.now();
+    const log = (...a)=>console.log('%cOrderDetails UI','color:#6b0016;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
 
-  // ---------- CSS ----------
-  (function injectCSS(){
-    const css = document.createElement('style');
-    css.textContent = `
-      .bodyFlexContainer{ gap:14px; }
-      .listPageHeader{ display:none !important; }
+    /* ---------- CSS ---------- */
+    (function injectCSS(){
+      const css = document.createElement('style');
+      css.textContent = `
+        .bodyFlexContainer{ gap:14px; }
+        .listPageHeader{ display:none !important; }
 
-      .wl-od-header{
-        display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between;
-        background:#fff; border:1px solid #e5e7eb; border-radius:16px; padding:14px 16px;
-        box-shadow:0 6px 18px rgba(0,0,0,.05);
-      }
-      .wl-od-title{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
-      .wl-od-title .wl-order-no{ font-weight:900; font-size:20px; letter-spacing:.2px; }
-      .wl-chip{ display:inline-flex; align-items:center; gap:6px; font-weight:800; border-radius:999px; padding:6px 10px; font-size:12px; text-transform:capitalize; }
-      .wl-chip--slate{ background:#e2e8f0; color:#0f172a }
-      .wl-chip--green{ background:#dcfce7; color:#065f46 }
-      .wl-chip--blue{ background:#dbeafe; color:#1e3a8a }
-      .wl-chip--amber{ background:#fef3c7; color:#92400e }
-      .wl-chip--orange{ background:#ffedd5; color:#9a3412 }
-      .wl-chip--red{ background:#fee2e2; color:#7f1d1d }
-      .wl-chip--maroon{ background:#f2e6ea; color:#6b0016 }
+        .wl-od-header{
+          display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between;
+          background:#fff; border:1px solid #e5e7eb; border-radius:16px; padding:14px 16px;
+          box-shadow:0 6px 18px rgba(0,0,0,.05);
+        }
+        .wl-od-title{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+        .wl-od-title .wl-order-no{ font-weight:900; font-size:20px; letter-spacing:.2px; }
+        .wl-chip{ display:inline-flex; align-items:center; gap:6px; font-weight:800; border-radius:999px; padding:6px 10px; font-size:12px; text-transform:capitalize; }
+        .wl-chip--slate{ background:#e2e8f0; color:#0f172a }
+        .wl-chip--green{ background:#dcfce7; color:#065f46 }
+        .wl-chip--blue{ background:#dbeafe; color:#1e3a8a }
+        .wl-chip--amber{ background:#fef3c7; color:#92400e }
+        .wl-chip--orange{ background:#ffedd5; color:#9a3412 }
+        .wl-chip--red{ background:#fee2e2; color:#7f1d1d }
+        .wl-chip--maroon{ background:#f2e6ea; color:#6b0016 }
 
-      .wl-od-actions{ display:flex; gap:8px; flex-wrap:wrap; }
-      .wl-btn{ appearance:none; border:none; border-radius:12px; font-weight:900; padding:10px 14px; text-decoration:none; cursor:pointer; }
-      .wl-btn:disabled{ opacity:.6; cursor:default }
-      .wl-btn--primary{ background:#6b0016; color:#fff }
-      .wl-btn--ghost{ background:#f8fafc; color:#111827; border:1px solid #e5e7eb }
-      .wl-btn--link{ background:transparent; color:#0f172a; text-decoration:underline; }
+        .wl-od-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+        .wl-btn{ appearance:none; border:none; border-radius:12px; font-weight:900; padding:10px 14px; text-decoration:none; cursor:pointer; }
+        .wl-btn:disabled{ opacity:.6; cursor:default }
+        .wl-btn--primary{ background:#6b0016; color:#fff }
+        .wl-btn--ghost{ background:#f8fafc; color:#111827; border:1px solid #e5e7eb }
+        .wl-btn--link{ background:transparent; color:#0f172a; text-decoration:underline; }
 
-      .panel.panelAccountInfo{
-        width:100%; border:1px solid #e5e7eb; border-radius:16px; overflow:hidden;
-        box-shadow:0 6px 18px rgba(0,0,0,.05); background:#fff;
-      }
-      .panel.panelAccountInfo .panelBodyHeader{
-        font-weight:800; padding:10px 14px; background:#f8fafc; border-bottom:1px solid #eef0f3;
-      }
-      .panel.panelAccountInfo .panelBody{
-        padding:12px 14px;
-      }
-      .panelAccountInfoSubtitle{ background:#f8fafc !important; }
+        .panel.panelAccountInfo{
+          width:100%; border:1px solid #e5e7eb; border-radius:16px; overflow:hidden;
+          box-shadow:0 6px 18px rgba(0,0,0,.05); background:#fff;
+        }
+        .panel.panelAccountInfo .panelBodyHeader{
+          font-weight:800; padding:10px 14px; background:#f8fafc; border-bottom:1px solid #eef0f3;
+        }
+        .panel.panelAccountInfo .panelBody{
+          padding:12px 14px;
+        }
+        .panelAccountInfoSubtitle{ background:#f8fafc !important; }
 
-      #ctl00_PageBody_ctl00_OrderDetailsGrid .rgMasterTable{
-        border-collapse:separate !important; border-spacing:0 10px; table-layout:auto;
-      }
-      #ctl00_PageBody_ctl00_OrderDetailsGrid thead{ display:none !important; }
-      #ctl00_PageBody_ctl00_OrderDetailsGrid .rgRow,
-      #ctl00_PageBody_ctl00_OrderDetailsGrid .rgAltRow{
-        background:#fff; border:1px solid #eef0f3; border-radius:12px;
-      }
-      #ctl00_PageBody_ctl00_OrderDetailsGrid td{
-        padding:10px; border:none !important; vertical-align:top;
-      }
-      #ctl00_PageBody_ctl00_OrderDetailsGrid td[data-title="Product Code"]{
-        font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:800; min-width:86px;
-      }
-      #ctl00_PageBody_ctl00_OrderDetailsGrid td[data-title="Description"]{ width:100%; }
+        #ctl00_PageBody_ctl00_OrderDetailsGrid .rgMasterTable{
+          border-collapse:separate !important; border-spacing:0 10px; table-layout:auto;
+        }
+        #ctl00_PageBody_ctl00_OrderDetailsGrid thead{ display:none !important; }
+        #ctl00_PageBody_ctl00_OrderDetailsGrid .rgRow,
+        #ctl00_PageBody_ctl00_OrderDetailsGrid .rgAltRow{
+          background:#fff; border:1px solid #eef0f3; border-radius:12px;
+        }
+        #ctl00_PageBody_ctl00_OrderDetailsGrid td{
+          padding:10px; border:none !important; vertical-align:top;
+        }
+        #ctl00_PageBody_ctl00_OrderDetailsGrid td[data-title="Product Code"]{
+          font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:800; min-width:86px;
+        }
+        #ctl00_PageBody_ctl00_OrderDetailsGrid td[data-title="Description"]{ width:100%; }
 
-      .wl-line-add{
-        display:inline-flex; align-items:center; gap:6px;
-        padding:6px 10px; border-radius:999px; font-weight:800; font-size:12px;
-        border:1px solid #e5e7eb; background:#f8fafc; color:#111827; cursor:pointer; text-decoration:none;
-      }
-      .wl-line-add:hover{ filter:brightness(0.98); }
+        .wl-line-add{
+          display:inline-flex; align-items:center; gap:6px;
+          padding:6px 10px; border-radius:999px; font-weight:800; font-size:12px;
+          border:1px solid #e5e7eb; background:#f8fafc; color:#111827; cursor:pointer; text-decoration:none;
+        }
+        .wl-line-add:hover{ filter:brightness(0.98); }
 
-      .wl-od-tracking{
-        display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; margin-bottom:4px;
-      }
-      .wl-pill{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; font-weight:800; font-size:12px; text-decoration:none; }
-      .wl-pill--ups{ background:#111827; color:#fff; }
-      .wl-pill--ups:hover{ opacity:.92; }
+        .wl-od-tracking{
+          display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; margin-bottom:4px;
+        }
+        .wl-pill{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; font-weight:800; font-size:12px; text-decoration:none; }
+        .wl-pill--ups{ background:#111827; color:#fff; }
+        .wl-pill--ups:hover{ opacity:.92; }
 
-      .bodyFlexItem.wide-only .epi-action{ display:none !important; }
-      #accountlinkdiv{ display:none !important; }
+        .bodyFlexItem.wide-only .epi-action{ display:none !important; }
+        #accountlinkdiv{ display:none !important; }
 
-      @media (max-width: 640px){
-        .wl-od-title .wl-order-no{ font-size:18px; }
-        .panel.panelAccountInfo .panelBody{ padding:10px 12px; }
-      }
-    `;
-    document.head.appendChild(css);
-  })();
+        @media (max-width: 640px){
+          .wl-od-title .wl-order-no{ font-size:18px; }
+          .panel.panelAccountInfo .panelBody{ padding:10px 12px; }
+        }
+      `;
+      document.head.appendChild(css);
+    })();
 
-  // ---------- Helpers ----------
-  const toUPS = n => `https://www.ups.com/track?tracknum=${encodeURIComponent(n)}`;
-  const UPS_RX = /^1Z[0-9A-Z]{16}$/i;
-  function statusColor(status){
-    const s = (status||'').toLowerCase();
-    if (s.includes('cancel')) return 'red';
-    if (s.includes('backorder')) return 'orange';
-    if (s.includes('invoice') || s.includes('billed') || s.includes('invoiced')) return 'slate';
-    if (s.includes('delivered') || s.includes('shipped') || s.includes('complete')) return 'green';
-    if (s.includes('ready') || s.includes('awaiting pickup')) return 'blue';
-    if (s.includes('pick') || s.includes('picking') || s.includes('processing')) return 'amber';
-    return 'slate';
-  }
-  const fmtUSPhoneE164 = v => {
-    const d = (v||'').replace(/[^\d]/g,'');
-    if (d.length === 11 && d.startsWith('1')) return '+'+d;
-    if (d.length === 10) return '+1'+d;
-    return null;
-  };
+    /* ---------- Helpers ---------- */
+    const toUPS = n => `https://www.ups.com/track?tracknum=${encodeURIComponent(n)}`;
+    const UPS_RX = /^1Z[0-9A-Z]{16}$/i;
+    function statusColor(status){
+      const s = (status||'').toLowerCase();
+      if (s.includes('cancel')) return 'red';
+      if (s.includes('backorder')) return 'orange';
+      if (s.includes('invoice') || s.includes('billed') || s.includes('invoiced')) return 'slate';
+      if (s.includes('delivered') || s.includes('shipped') || s.includes('complete')) return 'green';
+      if (s.includes('ready') || s.includes('awaiting pickup')) return 'blue';
+      if (s.includes('pick') || s.includes('picking') || s.includes('processing')) return 'amber';
+      return 'slate';
+    }
+    const fmtUSPhoneE164 = v => {
+      const d = (v||'').replace(/[^\d]/g,'');
+      if (d.length === 11 && d.startsWith('1')) return '+'+d;
+      if (d.length === 10) return '+1'+d;
+      return null;
+    };
 
-  // Grab grid/table once
-  const grid = document.querySelector('#ctl00_PageBody_ctl00_OrderDetailsGrid');
-  const table = grid && grid.querySelector('.rgMasterTable');
+    // robust doc/pdf URL picker
+    function pickPdfUrl() {
+      const imgLink  = document.getElementById('ctl00_PageBody_ctl00_ShowOrderImageLink')
+                     || document.getElementById('ctl00_PageBody_ctl00_ShowOrderImageDropDown');
+      const docLink  = document.getElementById('ctl00_PageBody_ctl00_ShowOrderDocumentLink')
+                     || document.getElementById('ctl00_PageBody_ctl00_ShowOrderDocumentDropDown');
 
-  // Parse UPS numbers once (for header + pills)
-  function parseUPS(){
-    const list = [];
-    if (!table) return list;
-    table.querySelectorAll('tr').forEach(tr=>{
-      const codeEl = tr.querySelector('td[data-title="Product Code"]') || tr.children[0];
-      const descEl = tr.querySelector('td[data-title="Description"]') || tr.children[1];
-      if (!codeEl || !descEl) return;
-      if ((codeEl.textContent||'').trim().toUpperCase() !== 'UPS') return;
-      const raw = (descEl.textContent||'').trim().replace(/\s+/g,'').toUpperCase();
-      if (!raw) return;
-      if (UPS_RX.test(raw) || raw.length >= 8) list.push(raw);
-    });
-    return list;
-  }
-  const UPS_LIST = parseUPS();
-
-  // ---------- Build header (adds Need help) ----------
-  (function buildHeader(){
-    const container = document.querySelector('.bodyFlexContainer');
-    if (!container) return;
-
-    const oldHeader = document.querySelector('.listPageHeader');
-    const orderText = oldHeader ? oldHeader.children?.[0]?.textContent?.trim() : '';
-    const statusText = oldHeader ? oldHeader.children?.[1]?.textContent?.trim() : '';
-    const orderNo = (orderText || '').replace(/[^\d]/g,'');
-    const statusOnly = (statusText || '').replace(/^Status:\s*/i,'');
-
-    const backLink = document.getElementById('ctl00_PageBody_ctl00_BackButton');
-    const imgLink  = document.getElementById('ctl00_PageBody_ctl00_ShowOrderImageLink')
-                   || document.getElementById('ctl00_PageBody_ctl00_ShowOrderImageDropDown');
-    const docLink  = document.getElementById('ctl00_PageBody_ctl00_ShowOrderDocumentLink')
-                   || document.getElementById('ctl00_PageBody_ctl00_ShowOrderDocumentDropDown');
-    const copyLink = document.getElementById('ctl00_PageBody_ctl00_AddToCart')
-                   || document.getElementById('ctl00_PageBody_ctl00_AddToCartDropDown');
-
-    function pickPdfUrl(){
       const imgHref = imgLink && imgLink.getAttribute('href');
       const docHref = docLink && docLink.getAttribute('href');
-      if (imgHref && /toPdf=1/i.test(imgHref)) return imgHref;
-      return docHref || imgHref || null;
+
+      const prefer = (imgHref && /toPdf=1/i.test(imgHref)) ? imgHref : (docHref || imgHref);
+      if (!prefer) { console.warn('WL: No PDF/document URL found for share/download'); return null; }
+      try { return new URL(prefer, location.origin).toString(); } catch { return prefer; }
     }
 
-    const head = document.createElement('div');
-    head.className = 'wl-od-header';
-    head.innerHTML = `
-      <div class="wl-od-title">
-        <div class="wl-order-no">Order #${orderNo || ''}</div>
-        ${statusOnly ? `<span class="wl-chip wl-chip--${statusColor(statusOnly)}">${statusOnly}</span>` : ``}
-      </div>
-      <div class="wl-od-actions">
-        ${backLink ? `<a class="wl-btn wl-btn--ghost" href="${backLink.getAttribute('href')||'/OpenOrders_r.aspx'}">← Back</a>` : ``}
-        ${imgLink  ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${imgLink.getAttribute('href')||'#'}">View Image</a>` : ``}
-        ${docLink  ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${docLink.getAttribute('href')||'#'}">View Document</a>` : ``}
-        ${docLink || imgLink ? `<button class="wl-btn wl-btn--ghost" type="button" id="wl-share-doc">Share</button>` : ``}
-        ${docLink || imgLink ? `<button class="wl-btn wl-btn--ghost" type="button" id="wl-download-doc">Download PDF</button>` : ``}
-        ${copyLink ? `<button class="wl-btn wl-btn--primary" type="button" id="wl-copy-lines">Copy Lines to Cart</button>` : ``}
-        <button class="wl-btn wl-btn--primary" type="button" id="wl-need-help">Need help</button>
-      </div>
-    `;
-    container.insertAdjacentElement('afterbegin', head);
+    // read grid once
+    const grid = document.querySelector('#ctl00_PageBody_ctl00_OrderDetailsGrid');
+    const table = grid && grid.querySelector('.rgMasterTable');
 
-    // Copy Lines to Cart (invoke native)
-    const copyBtn = head.querySelector('#wl-copy-lines');
-    if (copyBtn && copyLink){
-      copyBtn.addEventListener('click', (e)=>{
-        e.preventDefault(); e.stopPropagation();
-        const href = copyLink.getAttribute('href')||'';
-        if (href.startsWith('javascript:')) {
-          // eslint-disable-next-line no-eval
-          eval(href.replace(/^javascript:/,''));
-        } else {
-          location.href = href;
-        }
-      }, { passive:false });
-    }
-
-    // Share
-    const shareBtn = head.querySelector('#wl-share-doc');
-    if (shareBtn){
-      shareBtn.addEventListener('click', async (e)=>{
-        e.preventDefault(); e.stopPropagation();
-        const url = pickPdfUrl(); if (!url) return;
-        const shareData = { title:`Order #${orderNo} Document`, text:`Document for Order #${orderNo}`, url };
-        if (navigator.share) { try { await navigator.share(shareData); } catch(_){} }
-        else {
-          const subj = encodeURIComponent(`Order #${orderNo} document`);
-          const body = encodeURIComponent(`Here is the document link for Order #${orderNo}:\n\n${url}`);
-          location.href = `mailto:?subject=${subj}&body=${body}`;
-        }
+    // parse UPS numbers
+    function parseUPS(){
+      const list = [];
+      if (!table) return list;
+      table.querySelectorAll('tr').forEach(tr=>{
+        const codeEl = tr.querySelector('td[data-title="Product Code"]') || tr.children[0];
+        const descEl = tr.querySelector('td[data-title="Description"]') || tr.children[1];
+        if (!codeEl || !descEl) return;
+        if ((codeEl.textContent||'').trim().toUpperCase() !== 'UPS') return;
+        const raw = (descEl.textContent||'').trim().replace(/\s+/g,'').toUpperCase();
+        if (!raw) return;
+        if (UPS_RX.test(raw) || raw.length >= 8) list.push(raw);
       });
+      return list;
     }
+    const UPS_LIST = parseUPS();
 
-    // Download
-    const dlBtn = head.querySelector('#wl-download-doc');
-    if (dlBtn){
-      dlBtn.addEventListener('click', (e)=>{
-        e.preventDefault(); e.stopPropagation();
-        const url = pickPdfUrl(); if (!url) return;
-        const a = document.createElement('a');
-        a.href = url; a.download = `Order-${orderNo||'document'}.pdf`;
-        document.body.appendChild(a); a.click(); requestAnimationFrame(()=>a.remove());
-      });
-    }
+    /* ---------- Build header (incl. Need help) ---------- */
+    (function buildHeader(){
+      const container = document.querySelector('.bodyFlexContainer');
+      if (!container) return;
 
-    // Need help -> open chat with context (Tawk API)
-    const helpBtn = head.querySelector('#wl-need-help');
-    if (helpBtn){
-      helpBtn.addEventListener('click', (e)=>{
-        e.preventDefault(); e.stopPropagation();
+      const oldHeader = document.querySelector('.listPageHeader');
+      const orderText = oldHeader ? oldHeader.children?.[0]?.textContent?.trim() : '';
+      const statusText = oldHeader ? oldHeader.children?.[1]?.textContent?.trim() : '';
+      const orderNo = (orderText || '').replace(/[^\d]/g,'');
+      const statusOnly = (statusText || '').replace(/^Status:\s*/i,'');
 
-        // Gather context from visible panels
-        const getCellText = (label) => {
-          // Find <td>Label:</td><td>Value</td> pairs
-          const tds = Array.from(document.querySelectorAll('.panel.panelAccountInfo td'));
-          for (let i=0;i<tds.length-1;i++){
-            const lhs = (tds[i].textContent||'').trim().replace(/\u00a0/g,' ');
-            if (lhs.toLowerCase().startsWith(label.toLowerCase())) {
-              return (tds[i+1].textContent||'').trim();
-            }
+      const backLink = document.getElementById('ctl00_PageBody_ctl00_BackButton');
+      const imgLink  = document.getElementById('ctl00_PageBody_ctl00_ShowOrderImageLink')
+                     || document.getElementById('ctl00_PageBody_ctl00_ShowOrderImageDropDown');
+      const docLink  = document.getElementById('ctl00_PageBody_ctl00_ShowOrderDocumentLink')
+                     || document.getElementById('ctl00_PageBody_ctl00_ShowOrderDocumentDropDown');
+      const copyLink = document.getElementById('ctl00_PageBody_ctl00_AddToCart')
+                     || document.getElementById('ctl00_PageBody_ctl00_AddToCartDropDown');
+
+      const head = document.createElement('div');
+      head.className = 'wl-od-header';
+      head.innerHTML = `
+        <div class="wl-od-title">
+          <div class="wl-order-no">Order #${orderNo || ''}</div>
+          ${statusOnly ? `<span class="wl-chip wl-chip--${statusColor(statusOnly)}">${statusOnly}</span>` : ``}
+        </div>
+        <div class="wl-od-actions">
+          ${backLink ? `<a class="wl-btn wl-btn--ghost" href="${backLink.getAttribute('href')||'/OpenOrders_r.aspx'}">← Back</a>` : ``}
+          ${imgLink  ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${imgLink.getAttribute('href')||'#'}">View Image</a>` : ``}
+          ${docLink  ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${docLink.getAttribute('href')||'#'}">View Document</a>` : ``}
+          ${docLink || imgLink ? `<button class="wl-btn wl-btn--ghost" type="button" id="wl-share-doc">Share</button>` : ``}
+          ${docLink || imgLink ? `<button class="wl-btn wl-btn--ghost" type="button" id="wl-download-doc">Download PDF</button>` : ``}
+          ${copyLink ? `<button class="wl-btn wl-btn--primary" type="button" id="wl-copy-lines">Copy Lines to Cart</button>` : ``}
+          <button class="wl-btn wl-btn--primary" type="button" id="wl-need-help">Need help</button>
+        </div>
+      `;
+      container.insertAdjacentElement('afterbegin', head);
+
+      // Copy Lines to Cart (invoke native)
+      const copyBtn = head.querySelector('#wl-copy-lines');
+      if (copyBtn && copyLink){
+        copyBtn.addEventListener('click', (e)=>{
+          e.preventDefault(); e.stopPropagation();
+          const href = copyLink.getAttribute('href')||'';
+          if (href.startsWith('javascript:')) { try { eval(href.replace(/^javascript:/,'')); } catch(e){ console.warn('WL: copy postback failed', e); } }
+          else { location.href = href; }
+        }, { passive:false });
+      }
+
+      // Share
+      const shareBtn = head.querySelector('#wl-share-doc');
+      if (shareBtn){
+        shareBtn.addEventListener('click', async (e)=>{
+          e.preventDefault(); e.stopPropagation();
+          const url = pickPdfUrl(); if (!url) { alert('Document not available yet.'); return; }
+          const title = `Order #${orderNo} Document`;
+          const text  = `Document for Order #${orderNo}`;
+          if (navigator.share) {
+            try { await navigator.share({ title, text, url }); } catch(_) {}
+          } else {
+            const subj = encodeURIComponent(title);
+            const body = encodeURIComponent(`${text}:\n\n${url}`);
+            location.href = `mailto:?subject=${subj}&body=${body}`;
           }
-          return '';
-        };
-        const contactName = getCellText('Contact:') || '';
-        const telRaw = getCellText('Tel:') || '';
-        const phoneE164 = fmtUSPhoneE164(telRaw);
+        });
+      }
 
-        // Build attributes & tags for tawk
-        const attrs = {
-          'order-id': orderNo || '',
-          'status'  : statusOnly || '',
-          'url'     : location.href,
-          'branch'  : getCellText('Sales Address') ? 'Pickup' : (getCellText('Invoice Address') ? 'Delivery' : ''), // heuristic
-          'tracking': UPS_LIST.join(', ') || ''
-        };
-        if (contactName) attrs['contact-name'] = contactName;
-        if (phoneE164)  attrs['phone'] = phoneE164; // Tawk expects E.164 if you include phone
+      // Download
+      const dlBtn = head.querySelector('#wl-download-doc');
+      if (dlBtn){
+        dlBtn.addEventListener('click', (e)=>{
+          e.preventDefault(); e.stopPropagation();
+          const url = pickPdfUrl(); if (!url) { alert('Document not available yet.'); return; }
+          const a = document.createElement('a');
+          a.href = url; a.download = `Order-${orderNo||'document'}.pdf`;
+          document.body.appendChild(a); a.click(); requestAnimationFrame(()=>a.remove());
+        });
+      }
 
-        const tags = ['order-help'];
-        if (orderNo) tags.push(`order-${orderNo}`);
+      // Need help -> open Tawk with context
+      const helpBtn = head.querySelector('#wl-need-help');
+      if (helpBtn){
+        helpBtn.addEventListener('click', (e)=>{
+          e.preventDefault(); e.stopPropagation();
 
-        // Ensure Tawk API object exists
-        window.Tawk_API = window.Tawk_API || {};
-
-        // If widget already loaded, set immediately; else run onLoad
-        const applyAndOpen = () => {
-          try {
-            if (window.Tawk_API.setAttributes) {
-              window.Tawk_API.setAttributes(attrs, function(){});
+          // pull context
+          const getCellText = (label) => {
+            const tds = Array.from(document.querySelectorAll('.panel.panelAccountInfo td'));
+            for (let i=0;i<tds.length-1;i++){
+              const lhs = (tds[i].textContent||'').trim().replace(/\u00a0/g,' ');
+              if (lhs.toLowerCase().startsWith(label.toLowerCase())) {
+                return (tds[i+1].textContent||'').trim();
+              }
             }
-            if (window.Tawk_API.addTags) {
-              window.Tawk_API.addTags(tags, function(){});
-            }
-          } catch(_) {}
-          // Open widget
-          if (window.Tawk_API.maximize) window.Tawk_API.maximize();
-          else if (window.Tawk_API.toggle) window.Tawk_API.toggle();
-          else if (window.Tawk_API.popup) window.Tawk_API.popup();
-          // Optional: log event for agents
-          if (window.Tawk_API.addEvent) {
-            window.Tawk_API.addEvent('order-help-opened', { 'order-id': orderNo||'' }, function(){});
-          }
-        };
-
-        if (typeof window.Tawk_API.onLoad === 'function') {
-          // If not yet loaded, queue the actions
-          const prev = window.Tawk_API.onLoad;
-          window.Tawk_API.onLoad = function(){
-            try { prev(); } catch(_){}
-            applyAndOpen();
+            return '';
           };
-        } else {
-          // Try now; if widget not ready, set onLoad handler
-          let applied = false;
-          try { applyAndOpen(); applied = true; } catch(_){}
-          if (!applied) {
-            window.Tawk_API.onLoad = applyAndOpen;
+          const contactName = getCellText('Contact:') || '';
+          const telRaw = getCellText('Tel:') || '';
+          const phoneE164 = fmtUSPhoneE164(telRaw);
+          const branchHeuristic =
+            getCellText('Sales Address') ? 'Pickup' :
+            (getCellText('Invoice Address') ? 'Delivery' : '');
+
+          const attrs = {
+            'order-id': orderNo || '',
+            'status'  : statusOnly || '',
+            'url'     : location.href,
+            'branch'  : branchHeuristic,
+            'tracking': (UPS_LIST||[]).join(', ')
+          };
+          if (contactName) attrs['contact-name'] = contactName;
+          if (phoneE164)  attrs['phone'] = phoneE164;
+
+          const tags = ['order-help']; if (orderNo) tags.push(`order-${orderNo}`);
+
+          window.Tawk_API = window.Tawk_API || {};
+          const apply = () => {
+            try { window.Tawk_API.setAttributes && window.Tawk_API.setAttributes(attrs, function(){}); } catch{}
+            try { window.Tawk_API.addTags && window.Tawk_API.addTags(tags, function(){}); } catch{}
+            if (window.Tawk_API.maximize) window.Tawk_API.maximize();
+            else if (window.Tawk_API.toggle) window.Tawk_API.toggle();
+            else if (window.Tawk_API.popup)  window.Tawk_API.popup();
+            else console.warn('WL: Tawk widget not found on page');
+          };
+
+          if (window.Tawk_API.onLoad && !window.__WL_TAWK_HOOKED__) {
+            window.__WL_TAWK_HOOKED__ = true;
+            const prev = window.Tawk_API.onLoad;
+            window.Tawk_API.onLoad = function(){ try { prev && prev(); } catch{} apply(); };
           }
-        }
+          apply(); // try immediately too
+        });
+      }
+    })();
+
+    /* ---------- UPS pills ---------- */
+    (function upsPills(){
+      const grid = document.querySelector('#ctl00_PageBody_ctl00_OrderDetailsGrid');
+      const table = grid && grid.querySelector('.rgMasterTable');
+      if (!grid || !table) return;
+      const UPS_LIST = (function parse(){
+        const list = [];
+        table.querySelectorAll('tr').forEach(tr=>{
+          const codeEl = tr.querySelector('td[data-title="Product Code"]') || tr.children[0];
+          const descEl = tr.querySelector('td[data-title="Description"]') || tr.children[1];
+          if (!codeEl || !descEl) return;
+          if ((codeEl.textContent||'').trim().toUpperCase() !== 'UPS') return;
+          const raw = (descEl.textContent||'').trim().replace(/\s+/g,'').toUpperCase();
+          if (!raw) return;
+          if (UPS_RX.test(raw) || raw.length >= 8) list.push(raw);
+        });
+        return list;
+      })();
+      if (!UPS_LIST.length) return;
+      const wrap = document.createElement('div');
+      wrap.className = 'wl-od-tracking';
+      wrap.innerHTML = UPS_LIST.map(n=>`
+        <a class="wl-pill wl-pill--ups" href="${toUPS(n)}" target="_blank" rel="noopener" title="UPS ${n}">
+          UPS · ${n}
+        </a>
+      `).join('');
+      grid.insertAdjacentElement('beforebegin', wrap);
+    })();
+
+    /* ---------- Per-line Add to Cart ---------- */
+    (function lineAddButtons(){
+      const grid = document.querySelector('#ctl00_PageBody_ctl00_OrderDetailsGrid');
+      const table = grid && grid.querySelector('.rgMasterTable');
+      if (!grid || !table) return;
+
+      table.querySelectorAll('tr').forEach(tr=>{
+        const codeEl = tr.querySelector('td[data-title="Product Code"]') || tr.children[0];
+        const descEl = tr.querySelector('td[data-title="Description"]') || tr.children[1];
+        const qtyEl  = tr.querySelector('td[data-title="Qty"]') || tr.querySelector('td[data-title="Quantity"]') || tr.children[3];
+        const actionCell = tr.querySelector('td:last-child') || tr.children[tr.children.length-1];
+        if (!codeEl || !descEl || !actionCell) return;
+
+        const code = (codeEl.textContent||'').trim().toUpperCase();
+        if (!code || code === 'UPS') return;
+
+        const qtyRaw = (qtyEl && qtyEl.textContent||'').trim();
+        let qty = Math.max(1, Math.round(parseFloat(qtyRaw || '1')));
+        if (!isFinite(qty)) qty = 1;
+
+        const btn = document.createElement('button');
+        btn.className = 'wl-line-add';
+        btn.type = 'button';
+        btn.textContent = `Add to cart${qty>1?` (${qty})`:''}`;
+        btn.addEventListener('click', (e)=>{
+          e.preventDefault(); e.stopPropagation();
+          const target = new URL(`/ShoppingCart.aspx?products=${encodeURIComponent(code)}:${qty}&cart_origin=reorder`, location.origin);
+          console.log('WL: add to cart', target.toString());
+          location.href = target.toString();
+        });
+
+        actionCell.appendChild(btn);
       });
-    }
-  })();
+    })();
 
-  // ---------- UPS pills ----------
-  (function upsPills(){
-    if (!grid || !table) return;
-    if (!UPS_LIST.length) return;
-    const wrap = document.createElement('div');
-    wrap.className = 'wl-od-tracking';
-    wrap.innerHTML = UPS_LIST.map(n=>`
-      <a class="wl-pill wl-pill--ups" href="${toUPS(n)}" target="_blank" rel="noopener" title="UPS ${n}">
-        UPS · ${n}
-      </a>
-    `).join('');
-    grid.insertAdjacentElement('beforebegin', wrap);
-  })();
+    /* ---------- Global guard: prevent our buttons from posting back ---------- */
+    document.addEventListener('click', (e)=>{
+      const btn = e.target.closest('.wl-btn, .wl-line-add');
+      if (!btn) return;
+      if (btn.tagName === 'BUTTON' && !btn.getAttribute('type')){
+        btn.setAttribute('type','button');
+      }
+      e.preventDefault();
+      e.stopPropagation();
+    }, { capture:true });
 
-  // ---------- Per-line Add to Cart ----------
-  (function lineAddButtons(){
-    if (!grid || !table) return;
-    table.querySelectorAll('tr').forEach(tr=>{
-      const codeEl = tr.querySelector('td[data-title="Product Code"]') || tr.children[0];
-      const descEl = tr.querySelector('td[data-title="Description"]') || tr.children[1];
-      const qtyEl  = tr.querySelector('td[data-title="Qty"]') || tr.querySelector('td[data-title="Quantity"]') || tr.children[3];
-      const actionCell = tr.querySelector('td:last-child') || tr.children[tr.children.length-1];
-      if (!codeEl || !descEl || !actionCell) return;
+    log('Order Details enhanced (per-line add, share/download, Need help)');
+  };
 
-      const code = (codeEl.textContent||'').trim().toUpperCase();
-      if (!code || code === 'UPS') return;
-
-      const qtyRaw = (qtyEl && qtyEl.textContent||'').trim();
-      let qty = Math.max(1, Math.round(parseFloat(qtyRaw || '1')));
-      if (!isFinite(qty)) qty = 1;
-
-      const btn = document.createElement('button');
-      btn.className = 'wl-line-add';
-      btn.type = 'button';
-      btn.textContent = `Add to cart${qty>1?` (${qty})`:''}`;
-      btn.addEventListener('click', (e)=>{
-        e.preventDefault(); e.stopPropagation();
-        const url = `/ShoppingCart.aspx?products=${encodeURIComponent(code)}:${qty}&cart_origin=reorder`;
-        location.href = url;
-      });
-
-      actionCell.appendChild(btn);
-    });
-  })();
-
-  // Block accidental postbacks from our custom buttons
-  document.addEventListener('click', (e)=>{
-    const btn = e.target.closest('.wl-btn, .wl-line-add');
-    if (!btn) return;
-    if (btn.tagName === 'BUTTON' && !btn.getAttribute('type')){
-      btn.setAttribute('type','button');
-    }
-    e.stopPropagation();
-  }, { capture:true });
-
-  log('Order Details enhanced (per-line add, share/download, Need help)');
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start, { once:true });
+  } else {
+    start();
+  }
 })();
