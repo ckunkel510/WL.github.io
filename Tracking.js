@@ -447,8 +447,7 @@ btn.addEventListener('click', async (e) => {
 
 
 
-/* ===== 3) Order Details page enhancer (per-line Add, share/download, Need help) ===== */
-/* ===== 3) Order Details page enhancer (with verbose logs) ===== */
+/* ===== 3) Order Details page enhancer (no global guard, verbose logs) ===== */
 (function(){
   const isDetails = /OrderDetails_r\.aspx/i.test(location.pathname);
   if (!isDetails) { console.debug('WL3: not on OrderDetails page, skip'); return; }
@@ -568,20 +567,12 @@ btn.addEventListener('click', async (e) => {
                      || document.getElementById('ctl00_PageBody_ctl00_ShowOrderImageDropDown');
       const docLink  = document.getElementById('ctl00_PageBody_ctl00_ShowOrderDocumentLink')
                      || document.getElementById('ctl00_PageBody_ctl00_ShowOrderDocumentDropDown');
-
       const imgHref = imgLink && imgLink.getAttribute('href');
       const docHref = docLink && docLink.getAttribute('href');
-
       const prefer = (imgHref && /toPdf=1/i.test(imgHref)) ? imgHref : (docHref || imgHref);
-      if (!prefer) { warn('No PDF/document URL found'); return null; }
-      try { 
-        const abs = new URL(prefer, location.origin).toString();
-        log('pickPdfUrl ->', abs);
-        return abs;
-      } catch {
-        log('pickPdfUrl (raw) ->', prefer);
-        return prefer;
-      }
+      if (!prefer) { log('pickPdfUrl: none'); return null; }
+      try { const abs = new URL(prefer, location.origin).toString(); log('pickPdfUrl ->', abs); return abs; }
+      catch { log('pickPdfUrl (raw) ->', prefer); return prefer; }
     }
 
     // read grid/table
@@ -616,7 +607,7 @@ btn.addEventListener('click', async (e) => {
       const statusText = oldHeader ? oldHeader.children?.[1]?.textContent?.trim() : '';
       const orderNo = (orderText || '').replace(/[^\d]/g,'');
       const statusOnly = (statusText || '').replace(/^Status:\s*/i,'');
-      log('Header parsed:', { orderNo, statusOnly, orderText, statusText });
+      log('Header parsed:', { orderNo, statusOnly });
 
       const backLink = document.getElementById('ctl00_PageBody_ctl00_BackButton');
       const imgLink  = document.getElementById('ctl00_PageBody_ctl00_ShowOrderImageLink')
@@ -625,9 +616,7 @@ btn.addEventListener('click', async (e) => {
                      || document.getElementById('ctl00_PageBody_ctl00_ShowOrderDocumentDropDown');
       const copyLink = document.getElementById('ctl00_PageBody_ctl00_AddToCart')
                      || document.getElementById('ctl00_PageBody_ctl00_AddToCartDropDown');
-      log('Native links:', {
-        back: !!backLink, img: !!imgLink, doc: !!docLink, copy: !!copyLink
-      });
+      log('Native links:', { back:!!backLink, img:!!imgLink, doc:!!docLink, copy:!!copyLink });
 
       const head = document.createElement('div');
       head.className = 'wl-od-header';
@@ -649,16 +638,16 @@ btn.addEventListener('click', async (e) => {
       container.insertAdjacentElement('afterbegin', head);
       log('Header injected');
 
-      // Anchor click logging only (do NOT prevent)
+      // Simple anchor logging (don’t block navigation)
       head.querySelectorAll('a.wl-btn').forEach(a=>{
-        a.addEventListener('click', ()=>log('Anchor click:', a.getAttribute('data-log') || a.textContent));
+        a.addEventListener('click', ()=>log('Anchor click:', a.getAttribute('data-log')||a.textContent));
       });
 
       // Copy Lines to Cart (invoke native)
       const copyBtn = head.querySelector('#wl-copy-lines');
       if (copyBtn && copyLink){
         copyBtn.addEventListener('click', (e)=>{
-          e.preventDefault(); e.stopPropagation();
+          e.preventDefault();
           const href = copyLink.getAttribute('href')||'';
           log('Copy Lines click ->', href);
           try {
@@ -666,19 +655,17 @@ btn.addEventListener('click', async (e) => {
               // eslint-disable-next-line no-eval
               eval(href.replace(/^javascript:/,''));
             } else {
-              location.href = new URL(href, location.origin).toString();
+              location.assign(new URL(href, location.origin).toString());
             }
           } catch(ex){ err('Copy Lines failed', ex); }
         });
-      } else {
-        log('Copy Lines not available');
       }
 
       // Share
       const shareBtn = head.querySelector('#wl-share-doc');
       if (shareBtn){
         shareBtn.addEventListener('click', async (e)=>{
-          e.preventDefault(); e.stopPropagation();
+          e.preventDefault();
           const url = pickPdfUrl(); 
           log('Share clicked, url:', url);
           if (!url) { alert('Document not available yet.'); return; }
@@ -697,15 +684,13 @@ btn.addEventListener('click', async (e) => {
             }
           } catch(ex){ err('Share failed', ex); }
         });
-      } else {
-        log('Share not rendered (no doc/image link)');
       }
 
       // Download
       const dlBtn = head.querySelector('#wl-download-doc');
       if (dlBtn){
         dlBtn.addEventListener('click', (e)=>{
-          e.preventDefault(); e.stopPropagation();
+          e.preventDefault();
           const url = pickPdfUrl(); 
           log('Download clicked, url:', url);
           if (!url) { alert('Document not available yet.'); return; }
@@ -714,15 +699,13 @@ btn.addEventListener('click', async (e) => {
           document.body.appendChild(a); a.click(); requestAnimationFrame(()=>a.remove());
           log('Download attempted via anchor');
         });
-      } else {
-        log('Download not rendered (no doc/image link)');
       }
 
       // Need help -> Tawk
       const helpBtn = head.querySelector('#wl-need-help');
       if (helpBtn){
         helpBtn.addEventListener('click', (e)=>{
-          e.preventDefault(); e.stopPropagation();
+          e.preventDefault();
           log('Need help clicked');
 
           const getCellText = (label) => {
@@ -774,11 +757,8 @@ btn.addEventListener('click', async (e) => {
             };
             log('Tawk onLoad hook set');
           }
-          // Try immediately too
-          apply();
+          apply(); // try immediately too
         });
-      } else {
-        warn('Need help button missing');
       }
     })();
 
@@ -839,10 +819,10 @@ btn.addEventListener('click', async (e) => {
         btn.type = 'button';
         btn.textContent = `Add to cart${qty>1?` (${qty})`:''}`;
         btn.addEventListener('click', (e)=>{
-          e.preventDefault(); e.stopPropagation();
+          e.preventDefault();
           const target = new URL(`/ShoppingCart.aspx?products=${encodeURIComponent(code)}:${qty}&cart_origin=reorder`, location.origin);
           log('Add-to-cart click ->', { code, qty, url: target.toString() });
-          try { location.href = target.toString(); }
+          try { location.assign(target.toString()); }
           catch(ex){ err('Add-to-cart navigation failed', ex); }
         });
 
@@ -851,18 +831,6 @@ btn.addEventListener('click', async (e) => {
       });
       log('Per-line Add buttons injected:', added);
     })();
-
-    /* ---------- Global guard: only BUTTONS (not anchors) ---------- */
-    document.addEventListener('click', (e)=>{
-      const btn = e.target.closest('button.wl-btn, button.wl-line-add');
-      if (!btn) return;
-      // Ensure type and block form submit/postback
-      if (!btn.getAttribute('type')) btn.setAttribute('type','button');
-      e.preventDefault();
-      e.stopPropagation();
-      log('Global guard intercepted BUTTON click:', btn.id || btn.textContent);
-      // Note: we DO NOT intercept <a.wl-btn> to keep normal link behavior
-    }, { capture:true });
 
     log('Order Details enhanced: ready');
   }
@@ -873,4 +841,5 @@ btn.addEventListener('click', async (e) => {
     start();
   }
 })();
+
 
