@@ -447,7 +447,6 @@ btn.addEventListener('click', async (e) => {
 
 
 
-/* ===== 3) Order Details page enhancer (prefer ProcessDocument, mobile pickup barcode) ===== */
 /* ===========================
    1) OPEN ORDERS (LIST) ENHANCER
    =========================== */
@@ -459,18 +458,16 @@ btn.addEventListener('click', async (e) => {
   const log  = (...a)=>console.log('%cWL1','color:#6b0016;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
   const warn = (...a)=>console.warn('%cWL1','color:#c2410c;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
 
-  // Only run on OpenOrders list
   if (!/OpenOrders_r\.aspx/i.test(location.pathname)) { log('Not on OpenOrders list'); return; }
 
-  // CSS (light touch; your theme does the rest)
+  // CSS
   (function css(){
     const style = document.createElement('style');
     style.textContent = `
-      /* Hide the legacy table header since each row shows labels already / or we're using cards */
+      /* Hide legacy table header since we render card-like rows */
       #ctl00_PageBody_OrdersGrid thead,
       .RadGrid[id*="OrdersGrid"] thead { display:none !important; }
 
-      /* Tiny boost for our track button */
       .wl-track-btn{
         display:inline-block;padding:6px 10px;border-radius:8px;font-weight:800;
         text-decoration:none;background:#6b0016;color:#fff;white-space:nowrap;margin-left:6px
@@ -498,7 +495,6 @@ btn.addEventListener('click', async (e) => {
   };
   const inject = (tr, oid) => {
     if (!oid || tr.querySelector('.wl-track-btn')) return;
-    // Prefer the "Vehicle Tracking" cell, else last cell
     const vt = tr.querySelector('td[data-title="Vehicle Tracking"] span[id*="VehicleTracking"]');
     const target = vt || tr.lastElementChild || tr;
     const a = document.createElement('a');
@@ -525,14 +521,11 @@ btn.addEventListener('click', async (e) => {
 
   const t0 = performance.now();
   const log  = (...a)=>console.log('%cWL2','color:#6b0016;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
-  const warn = (...a)=>console.warn('%cWL2','color:#c2410c;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
-
   const ORDER_ID = qs.get('oid') || '';
   const explicitNumber = trackingParam && trackingParam.toLowerCase() !== 'yes'
     ? trackingParam.trim()
     : null;
 
-  const UPS_REGEX = /^1Z[0-9A-Z]{16}$/i;
   const toUPS = n => `https://www.ups.com/track?tracknum=${encodeURIComponent(n)}`;
 
   function hideMainContent() {
@@ -609,7 +602,6 @@ btn.addEventListener('click', async (e) => {
 
   function findUPSNumbers() {
     if (explicitNumber) return [explicitNumber];
-
     const candidates = [];
     const table =
       document.querySelector('#ctl00_PageBody_ctl02_OrderDetailsGrid_ctl00') ||
@@ -626,7 +618,7 @@ btn.addEventListener('click', async (e) => {
         if (raw) candidates.push(raw);
       }
     });
-    return candidates; // lenient; could filter by UPS_REGEX if desired
+    return candidates;
   }
 
   hideMainContent();
@@ -650,7 +642,7 @@ btn.addEventListener('click', async (e) => {
    - Need help (tawk.to) with attributes/tags
    - UPS pills
    - Per-line Add to Cart (placeholder; productId resolver TBD)
-   - Mobile pickup barcode (SO;{ORDERNO})
+   - INLINE mobile pickup barcode (SO;{ORDERNO})
    =========================== */
 (function(){
   const isDetails = /OrderDetails_r\.aspx/i.test(location.pathname);
@@ -672,9 +664,15 @@ btn.addEventListener('click', async (e) => {
         .listPageHeader{ display:none !important; }
 
         .wl-od-header{
-          display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between;
+          display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between;
           background:#fff; border:1px solid #e5e7eb; border-radius:16px; padding:14px 16px;
           box-shadow:0 6px 18px rgba(0,0,0,.05);
+        }
+        .wl-od-header-inner{
+          display:flex; flex-direction:column; gap:8px; width:100%;
+        }
+        .wl-od-top{
+          display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between;
         }
         .wl-od-title{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
         .wl-od-title .wl-order-no{ font-weight:900; font-size:20px; letter-spacing:.2px; }
@@ -689,7 +687,6 @@ btn.addEventListener('click', async (e) => {
 
         .wl-od-actions{ display:flex; gap:8px; flex-wrap:wrap; }
         .wl-btn{ appearance:none; border:none; border-radius:12px; font-weight:900; padding:10px 14px; text-decoration:none; cursor:pointer; }
-        .wl-btn:disabled{ opacity:.6; cursor:default }
         .wl-btn--primary{ background:#6b0016; color:#fff }
         .wl-btn--ghost{ background:#f8fafc; color:#111827; border:1px solid #e5e7eb }
 
@@ -730,17 +727,18 @@ btn.addEventListener('click', async (e) => {
         .wl-pill{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; font-weight:800; font-size:12px; text-decoration:none; }
         .wl-pill--ups{ background:#111827; color:#fff; }
 
-        /* Barcode overlay */
-        .wl-barcode-overlay{
-          position:fixed; inset:0; background:#fff; z-index:10000;
-          display:none; flex-direction:column; align-items:center; justify-content:center; gap:16px; padding:24px;
+        /* INLINE barcode */
+        .wl-barcode-inline{
+          display:flex; align-items:center; gap:12px; background:#fff; border:1px solid #e5e7eb;
+          border-radius:12px; padding:8px 10px; width:100%;
         }
-        .wl-barcode-overlay.show{ display:flex; }
-        .wl-barcode-title{ font-weight:900; font-size:18px; }
-        .wl-barcode-box{ background:#fff; border:1px solid #e5e7eb; border-radius:16px; padding:16px; }
-        .wl-barcode-box svg{ display:block; }
-        .wl-barcode-text{ font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:800; }
-        .wl-barcode-close{ position:absolute; top:12px; right:12px; }
+        .wl-barcode-inline svg{ display:block; height:56px; width:auto; }
+        .wl-barcode-caption{ display:flex; flex-direction:column; line-height:1.2; }
+        .wl-barcode-caption .lbl{ font-weight:800; font-size:12px; color:#334155; }
+        .wl-barcode-caption .val{ font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:800; font-size:14px; }
+        @media (min-width:769px){
+          .wl-barcode-inline{ display:none; } /* mobile-only inline barcode */
+        }
       `;
       document.head.appendChild(css);
       log('CSS injected');
@@ -786,7 +784,7 @@ btn.addEventListener('click', async (e) => {
       }catch(ex){ warn('Fetch failed', url, ex); return false; }
     }
 
-    // Minimal Code128B encoder to SVG (supports needed chars)
+    // Code128B -> SVG (supports needed chars, incl. ';')
     function code128B_SVG(data, opts={}){
       const CHART = (()=>{ const map={};
         const rows = [
@@ -867,7 +865,7 @@ btn.addEventListener('click', async (e) => {
     const UPS_LIST = parseUPS();
     log('UPS numbers:', UPS_LIST);
 
-    /* ---------- Build header (Share / Download / Copy / Help / Mobile Barcode) ---------- */
+    /* ---------- Build header (Share / Download / Copy / Help / INLINE Mobile Barcode) ---------- */
     (function buildHeader(){
       const container = document.querySelector('.bodyFlexContainer');
       if (!container) { warn('No .bodyFlexContainer'); return; }
@@ -887,30 +885,52 @@ btn.addEventListener('click', async (e) => {
       const copyLink = document.getElementById('ctl00_PageBody_ctl00_AddToCart')
                      || document.getElementById('ctl00_PageBody_ctl00_AddToCartDropDown');
 
-      // Heuristic: pickup if Sales Address card is present (mobile/desktop tolerant)
-      const hasSalesAddr = /Sales Address/i.test(document.body.innerText||'');
-      const isPickup = hasSalesAddr;
+      // Pickup heuristic
+      const isPickup = /Sales Address/i.test(document.body.innerText||'');
 
+      // Header scaffolding with INLINE barcode container slot
       const head = document.createElement('div');
       head.className = 'wl-od-header';
       head.innerHTML = `
-        <div class="wl-od-title">
-          <div class="wl-order-no">Order #${orderNo || ''}</div>
-          ${statusOnly ? `<span class="wl-chip wl-chip--${statusColor(statusOnly)}">${statusOnly}</span>` : ``}
-        </div>
-        <div class="wl-od-actions">
-          ${backLink ? `<a class="wl-btn wl-btn--ghost" href="${backLink.getAttribute('href')||'/OpenOrders_r.aspx'}">← Back</a>` : ``}
-          ${imgLink  ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${imgLink.getAttribute('href')||'#'}">View Image</a>` : ``}
-          ${docLink  ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${docLink.getAttribute('href')||'#'}">View Document</a>` : ``}
-          ${docLink || imgLink ? `<button class="wl-btn wl-btn--ghost" type="button" id="wl-share-doc">Share</button>` : ``}
-          ${docLink || imgLink ? `<button class="wl-btn wl-btn--ghost" type="button" id="wl-download-doc">Download PDF</button>` : ``}
-          ${copyLink ? `<button class="wl-btn wl-btn--primary" type="button" id="wl-copy-lines">Copy Lines to Cart</button>` : ``}
-          ${(isPickup && isMobile()) ? `<button class="wl-btn wl-btn--primary" type="button" id="wl-show-barcode">Pickup barcode</button>` : ``}
-          <button class="wl-btn wl-btn--primary" type="button" id="wl-need-help">Need help</button>
+        <div class="wl-od-header-inner">
+          <div class="wl-od-top">
+            <div class="wl-od-title">
+              <div class="wl-order-no">Order #${orderNo || ''}</div>
+              ${statusOnly ? `<span class="wl-chip wl-chip--${statusColor(statusOnly)}">${statusOnly}</span>` : ``}
+            </div>
+            <div class="wl-od-actions">
+              ${backLink ? `<a class="wl-btn wl-btn--ghost" href="${backLink.getAttribute('href')||'/OpenOrders_r.aspx'}">← Back</a>` : ``}
+              ${imgLink  ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${imgLink.getAttribute('href')||'#'}">View Image</a>` : ``}
+              ${docLink  ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${docLink.getAttribute('href')||'#'}">View Document</a>` : ``}
+              ${docLink || imgLink ? `<button class="wl-btn wl-btn--ghost" type="button" id="wl-share-doc">Share</button>` : ``}
+              ${docLink || imgLink ? `<button class="wl-btn wl-btn--ghost" type="button" id="wl-download-doc">Download PDF</button>` : ``}
+              ${copyLink ? `<button class="wl-btn wl-btn--primary" type="button" id="wl-copy-lines">Copy Lines to Cart</button>` : ``}
+              <button class="wl-btn wl-btn--primary" type="button" id="wl-need-help">Need help</button>
+            </div>
+          </div>
+
+          ${ (isPickup && isMobile()) ? `
+            <div class="wl-barcode-inline" aria-label="Pickup barcode">
+              <div id="wl-barcode-inline-svg" aria-hidden="true"></div>
+              <div class="wl-barcode-caption">
+                <div class="lbl">Show this at pickup</div>
+                <div class="val">SO;${orderNo}</div>
+              </div>
+            </div>
+          ` : ``}
         </div>
       `;
       container.insertAdjacentElement('afterbegin', head);
       log('Header injected; pickup?', isPickup, 'mobile?', isMobile());
+
+      // Render INLINE barcode if present
+      const inlineSvgHost = head.querySelector('#wl-barcode-inline-svg');
+      if (inlineSvgHost){
+        try{
+          inlineSvgHost.innerHTML = code128B_SVG(`SO;${orderNo}`, { module: 2, height: 80 });
+          log('Inline barcode rendered: SO;', orderNo);
+        }catch(ex){ err('Inline barcode render failed', ex); }
+      }
 
       // Share
       const shareBtn = head.querySelector('#wl-share-doc');
@@ -1028,30 +1048,6 @@ btn.addEventListener('click', async (e) => {
           }
           apply();
         });
-      }
-
-      // Mobile pickup barcode overlay (SO;{ORDERNO})
-      const pickupBtn = head.querySelector('#wl-show-barcode');
-      if (pickupBtn){
-        const overlay = document.createElement('div');
-        overlay.className = 'wl-barcode-overlay';
-        overlay.innerHTML = `
-          <button class="wl-btn wl-btn--ghost wl-barcode-close" type="button">Close ✕</button>
-          <div class="wl-barcode-title">Show this at pickup</div>
-          <div class="wl-barcode-box"><div id="wl-barcode-svg"></div></div>
-          <div class="wl-barcode-text">SO;${orderNo}</div>
-        `;
-        document.body.appendChild(overlay);
-        try{
-          const svg = code128B_SVG(`SO;${orderNo}`, { module: 3, height: 160 });
-          overlay.querySelector('#wl-barcode-svg').innerHTML = svg;
-          log('Barcode rendered: SO;', orderNo);
-        }catch(ex){ err('Barcode render failed', ex); }
-
-        const close = () => overlay.classList.remove('show');
-        overlay.querySelector('.wl-barcode-close').addEventListener('click', close);
-        overlay.addEventListener('click', (e)=>{ if (e.target === overlay) close(); });
-        pickupBtn.addEventListener('click', (e)=>{ e.preventDefault(); overlay.classList.add('show'); });
       }
     })();
 
