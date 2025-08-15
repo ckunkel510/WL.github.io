@@ -44,6 +44,7 @@ max-width: 100%;
     position: relative;
     float: left;
     left: 25px;
+    width: 100%;
 }
 
 #ctl00_PageBody_productDetail_productDescription{

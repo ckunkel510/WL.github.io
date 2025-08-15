@@ -21,3 +21,7 @@ display: none !important;
   #ctl00_PageBody_productDetail_productDescription{
     width:100% !important;
   }
+
+  #stock-widget{
+    width: 100%;
+  }

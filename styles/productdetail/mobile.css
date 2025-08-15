@@ -35,3 +35,6 @@ background-color: #f0f0f0;
   #product-main {
     order: 3;
   }
+  #stock-widget{
+    width: 100%;
+  }
