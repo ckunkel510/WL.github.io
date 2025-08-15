@@ -4,7 +4,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const cartOrigin = params.get("cart_origin");
   const productsParam = params.get("products");
 
-  const acceptedOrigins = ["meta_shops", "facebook", "instagram", "whatsapp"];
+  const acceptedOrigins = ["meta_shops", "facebook", "instagram", "whatsapp","reorder"];
 if (!acceptedOrigins.includes(cartOrigin) || !productsParam) return;
 
   if (sessionStorage.getItem("metaCartBuilt")) return;
