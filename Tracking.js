@@ -448,10 +448,214 @@ btn.addEventListener('click', async (e) => {
 
 
 /* ===== 3) Order Details page enhancer (prefer ProcessDocument, mobile pickup barcode) ===== */
+/* ===========================
+   1) OPEN ORDERS (LIST) ENHANCER
+   =========================== */
+(function(){
+  if (window.__WL_OPENORDERS_ENHANCED__) return;
+  window.__WL_OPENORDERS_ENHANCED__ = true;
+
+  const t0 = performance.now();
+  const log  = (...a)=>console.log('%cWL1','color:#6b0016;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
+  const warn = (...a)=>console.warn('%cWL1','color:#c2410c;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
+
+  // Only run on OpenOrders list
+  if (!/OpenOrders_r\.aspx/i.test(location.pathname)) { log('Not on OpenOrders list'); return; }
+
+  // CSS (light touch; your theme does the rest)
+  (function css(){
+    const style = document.createElement('style');
+    style.textContent = `
+      /* Hide the legacy table header since each row shows labels already / or we're using cards */
+      #ctl00_PageBody_OrdersGrid thead,
+      .RadGrid[id*="OrdersGrid"] thead { display:none !important; }
+
+      /* Tiny boost for our track button */
+      .wl-track-btn{
+        display:inline-block;padding:6px 10px;border-radius:8px;font-weight:800;
+        text-decoration:none;background:#6b0016;color:#fff;white-space:nowrap;margin-left:6px
+      }
+      .wl-track-btn:hover{ opacity:.92 }
+      @media (max-width:640px){
+        .wl-track-btn{ margin-left:0; margin-top:6px; display:inline-flex }
+      }
+    `;
+    document.head.appendChild(style);
+    log('List CSS injected');
+  })();
+
+  const host = document.querySelector('#ctl00_PageBody_OrdersGrid, .RadGrid[id*="OrdersGrid"]');
+  if (!host) { warn('Orders grid host not found'); return; }
+  const master = host.querySelector('#ctl00_PageBody_OrdersGrid_ctl00, .rgMasterTable');
+  if (!master) { warn('Master table not found'); return; }
+
+  const rows = Array.from(master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow'));
+  const oids = [];
+  const getOid = (tr) => {
+    const a = tr.querySelector('td.wide-only a[href*="oid="], td.narrow-only a[href*="oid="], a[href*="OrderDetails_r.aspx?oid="]');
+    const m = a && /[?&]oid=(\d+)/.exec(a.getAttribute('href')||'');
+    return m ? m[1] : null;
+  };
+  const inject = (tr, oid) => {
+    if (!oid || tr.querySelector('.wl-track-btn')) return;
+    // Prefer the "Vehicle Tracking" cell, else last cell
+    const vt = tr.querySelector('td[data-title="Vehicle Tracking"] span[id*="VehicleTracking"]');
+    const target = vt || tr.lastElementChild || tr;
+    const a = document.createElement('a');
+    a.className = 'wl-track-btn';
+    a.href = `/OpenOrders_r.aspx?oid=${encodeURIComponent(oid)}&tracking=yes#detailsAnchor`;
+    a.textContent = 'Track order';
+    target.appendChild(a);
+  };
+
+  rows.forEach(tr => { const oid = getOid(tr); if (oid) { oids.push(oid); inject(tr, oid); } });
+  log('Buttons injected for OIDs:', oids.join(', ') || '(none)');
+})();
+
+/* ===========================
+   2) TRACKING OVERLAY (on list page with ?tracking=...)
+   =========================== */
+(function () {
+  const qs = new URLSearchParams(location.search);
+  const trackingParam = qs.get('tracking');
+  if (!/OpenOrders_r\.aspx/i.test(location.pathname)) return;
+  if (!trackingParam) return;
+  if (window.__WL_TRACKING_VIEW__) return;
+  window.__WL_TRACKING_VIEW__ = true;
+
+  const t0 = performance.now();
+  const log  = (...a)=>console.log('%cWL2','color:#6b0016;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
+  const warn = (...a)=>console.warn('%cWL2','color:#c2410c;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
+
+  const ORDER_ID = qs.get('oid') || '';
+  const explicitNumber = trackingParam && trackingParam.toLowerCase() !== 'yes'
+    ? trackingParam.trim()
+    : null;
+
+  const UPS_REGEX = /^1Z[0-9A-Z]{16}$/i;
+  const toUPS = n => `https://www.ups.com/track?tracknum=${encodeURIComponent(n)}`;
+
+  function hideMainContent() {
+    document.querySelectorAll('.bodyFlexContainer, #ctl00_PageBody_OrdersGrid, .paging-control')
+      .forEach(el => { el.style.display = 'none'; });
+  }
+
+  function renderView(numbers, state) {
+    const overlay = document.createElement('div');
+    overlay.className = 'wl-tracking-overlay';
+    overlay.innerHTML = `
+      <div class="wl-track-card">
+        <div class="wl-track-header">
+          <div class="wl-track-title">Track your shipment</div>
+          ${ORDER_ID ? `<div class="wl-track-sub">Order #${ORDER_ID}</div>` : ``}
+        </div>
+
+        ${state === 'loading' ? `
+          <div class="wl-track-loading">Looking for tracking on your order…</div>
+        ` : numbers.length ? `
+          <div class="wl-track-list">
+            ${numbers.map((n)=>`
+              <div class="wl-track-line">
+                <div class="wl-track-num">UPS ${n}</div>
+                <a class="wl-track-btn" target="_blank" rel="noopener" href="${toUPS(n)}">View status on UPS</a>
+              </div>
+            `).join('')}
+          </div>
+        ` : `
+          <div class="wl-track-empty">
+            We don’t see a tracking number on this order yet.
+            If you just received this link, give it a little time or contact us and we’ll check for you.
+          </div>
+        `}
+
+        <div class="wl-actions">
+          <a class="wl-back" href="/OpenOrders_r.aspx">← Back to Orders</a>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const css = document.createElement('style');
+    css.textContent = `
+      .wl-tracking-overlay {
+        position: fixed; inset: 0; display: grid; place-items: center; padding: 24px;
+        background: rgba(255,255,255,0.98); z-index: 9999;
+      }
+      .wl-track-card {
+        width: min(760px, 92vw); background: #fff; border: 1px solid #e5e7eb; border-radius: 16px;
+        box-shadow: 0 12px 36px rgba(0,0,0,.08); padding: 20px; font-family: inherit;
+      }
+      .wl-track-header { margin-bottom: 10px; }
+      .wl-track-title { font-size: 22px; font-weight: 800; }
+      .wl-track-sub { color: #64748b; margin-top: 2px; }
+      .wl-track-loading, .wl-track-empty { color: #475569; padding: 12px 0; }
+      .wl-track-list { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
+      .wl-track-line { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
+        border: 1px solid #eef0f3; border-radius: 12px; padding: 12px; }
+      .wl-track-num { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 700; }
+      .wl-track-btn {
+        text-decoration: none; background: #6b0016; color: #fff; padding: 10px 14px; border-radius: 10px; font-weight: 700;
+      }
+      .wl-track-btn:hover { opacity: .92; }
+      .wl-actions { display: flex; justify-content: flex-start; margin-top: 16px; }
+      .wl-back { text-decoration: none; color: #0f172a; border-bottom: 1px dashed #cbd5e1; padding-bottom: 2px; }
+      @media (max-width: 480px) {
+        .wl-track-line { align-items: flex-start; }
+        .wl-track-btn { width: 100%; text-align: center; }
+      }
+    `;
+    document.head.appendChild(css);
+  }
+
+  function findUPSNumbers() {
+    if (explicitNumber) return [explicitNumber];
+
+    const candidates = [];
+    const table =
+      document.querySelector('#ctl00_PageBody_ctl02_OrderDetailsGrid_ctl00') ||
+      document.querySelector('#ctl00_PageBody_ctl02_OrderDetailsGrid .rgMasterTable') ||
+      document.querySelector('.rgMasterTable');
+    if (!table) return candidates;
+
+    table.querySelectorAll('tr').forEach(tr => {
+      const code = tr.querySelector('td[data-title="Product Code"]') || tr.querySelector('td:nth-child(1)');
+      const desc = tr.querySelector('td[data-title="Description"]') || tr.querySelector('td:nth-child(2)');
+      if (!code || !desc) return;
+      if (code.textContent.trim().toUpperCase() === 'UPS') {
+        const raw = desc.textContent.trim().replace(/\s+/g,'');
+        if (raw) candidates.push(raw);
+      }
+    });
+    return candidates; // lenient; could filter by UPS_REGEX if desired
+  }
+
+  hideMainContent();
+  renderView([], 'loading');
+
+  function updateOnce() {
+    const nums = findUPSNumbers();
+    const overlay = document.querySelector('.wl-tracking-overlay');
+    if (overlay) overlay.remove();
+    renderView(nums, nums.length ? 'ready' : 'empty');
+    log('Overlay updated; numbers:', nums);
+  }
+
+  setTimeout(updateOnce, 150);
+  setTimeout(updateOnce, 1200);
+})();
+
+/* ===========================
+   3) ORDER DETAILS ENHANCER (WL3)
+   - Share, Download PDF (generator-first)
+   - Need help (tawk.to) with attributes/tags
+   - UPS pills
+   - Per-line Add to Cart (placeholder; productId resolver TBD)
+   - Mobile pickup barcode (SO;{ORDERNO})
+   =========================== */
 (function(){
   const isDetails = /OrderDetails_r\.aspx/i.test(location.pathname);
-  if (!isDetails) return;
-  if (window.__WL_ORDERDETAILS_ENHANCED__) return;
+  if (!isDetails) { console.debug('WL3: not on OrderDetails page, skip'); return; }
+  if (window.__WL_ORDERDETAILS_ENHANCED__) { console.debug('WL3: already enhanced, skip'); return; }
   window.__WL_ORDERDETAILS_ENHANCED__ = true;
 
   function start(){
@@ -537,7 +741,6 @@ btn.addEventListener('click', async (e) => {
         .wl-barcode-box svg{ display:block; }
         .wl-barcode-text{ font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:800; }
         .wl-barcode-close{ position:absolute; top:12px; right:12px; }
-        @media (max-width:640px){ .wl-od-title .wl-order-no{ font-size:18px; } }
       `;
       document.head.appendChild(css);
       log('CSS injected');
@@ -559,7 +762,6 @@ btn.addEventListener('click', async (e) => {
       return 'slate';
     }
 
-    // Prefer ProcessDocument (generator) first; then download PDF (GetDocument … toPdf=1)
     function pickDocLinks(){
       const imgLink = document.getElementById('ctl00_PageBody_ctl00_ShowOrderImageLink')
                    || document.getElementById('ctl00_PageBody_ctl00_ShowOrderImageDropDown');
@@ -584,81 +786,67 @@ btn.addEventListener('click', async (e) => {
       }catch(ex){ warn('Fetch failed', url, ex); return false; }
     }
 
-    // ---------- Minimal Code 128B encoder -> SVG ----------
+    // Minimal Code128B encoder to SVG (supports needed chars)
     function code128B_SVG(data, opts={}){
-      // Tables (subset sufficient for ASCII 32–126 and punctuation like ';')
-      const CODE128B_CHART = (()=>{ const map={};
+      const CHART = (()=>{ const map={};
         const rows = [
           [0," ","212222"],[1,"!","222122"],[2,'"',"222221"],[3,"#","121223"],[4,"$","121322"],[5,"%","131222"],
           [6,"&","122213"],[7,"'","122312"],[8,"(","132212"],[9,")","221213"],[10,"*","221312"],[11,"+","231212"],
           [12,",","112232"],[13,"-","122132"],[14,".","122231"],[15,"/","113222"],[16,"0","123122"],[17,"1","123221"],
           [18,"2","223211"],[19,"3","221132"],[20,"4","221231"],[21,"5","213212"],[22,"6","223112"],[23,"7","312131"],
-          [24,"8","311222"],[25,"9","321122"],[26,":","321221"],[27,";","312212"],[28,"<","322112"],[29,"=","322211"],
-          [30,">","212123"],[31,"?","212321"],[32,"@","232121"],[33,"A","111323"],[34,"B","131123"],[35,"C","131321"],
-          [36,"D","112313"],[37,"E","132113"],[38,"F","132311"],[39,"G","211313"],[40,"H","231113"],[41,"I","231311"],
-          [42,"J","112133"],[43,"K","112331"],[44,"L","132131"],[45,"M","113123"],[46,"N","113321"],[47,"O","133121"],
-          [48,"P","313121"],[49,"Q","211331"],[50,"R","231131"],[51,"S","213113"],[52,"T","213311"],[53,"U","213131"],
-          [54,"V","311123"],[55,"W","311321"],[56,"X","331121"],[57,"Y","312113"],[58,"Z","312311"],[59,"[","332111"],
-          [60,"\\","314111"],[61,"]","221411"],[62,"^","431111"],[63,"_","111224"],[64,"`","111422"],[65,"a","121124"],
-          [66,"b","121421"],[67,"c","141122"],[68,"d","141221"],[69,"e","112214"],[70,"f","112412"],[71,"g","122114"],
-          [72,"h","122411"],[73,"i","142112"],[74,"j","142211"],[75,"k","241211"],[76,"l","221114"],[77,"m","413111"],
-          [78,"n","241112"],[79,"o","134111"],[80,"p","111242"],[81,"q","121142"],[82,"r","121241"],[83,"s","114212"],
-          [84,"t","124112"],[85,"u","124211"],[86,"v","411212"],[87,"w","421112"],[88,"x","421211"],[89,"y","212141"],
-          [90,"z","214121"],[91,"{","412121"],[92,"|","111143"],[93,"}","111341"],[94,"~","131141"],[95,"DEL","114113"],
-          [96,"FNC3","114311"],[97,"FNC2","411113"],[98,"ShiftA","411311"],[99,"CodeC","113141"],[100,"FNC4","114131"],
-          [101,"CodeA","311141"],[102,"FNC1","411131"],[103,"StartA","211412"],[104,"StartB","211214"],[105,"StartC","211232"],
-          [106,"Stop","2331112"]
+          [24,"8","311222"],[25,"9","321122"],[26,":","321221"],[27,";","312212"],[29,"=","322211"],[33,"A","111323"],
+          [34,"B","131123"],[35,"C","131321"],[36,"D","112313"],[37,"E","132113"],[38,"F","132311"],[39,"G","211313"],
+          [40,"H","231113"],[41,"I","231311"],[42,"J","112133"],[43,"K","112331"],[44,"L","132131"],[45,"M","113123"],
+          [46,"N","113321"],[47,"O","133121"],[48,"P","313121"],[49,"Q","211331"],[50,"R","231131"],[51,"S","213113"],
+          [52,"T","213311"],[53,"U","213131"],[54,"V","311123"],[55,"W","311321"],[56,"X","331121"],[57,"Y","312113"],
+          [58,"Z","312311"],[59,"[","332111"],[60,"\\","314111"],[61,"]","221411"],[62,"^","431111"],[63,"_","111224"],
+          [64,"`","111422"],[65,"a","121124"],[66,"b","121421"],[67,"c","141122"],[68,"d","141221"],[69,"e","112214"],
+          [70,"f","112412"],[71,"g","122114"],[72,"h","122411"],[73,"i","142112"],[74,"j","142211"],[75,"k","241211"],
+          [76,"l","221114"],[77,"m","413111"],[78,"n","241112"],[79,"o","134111"],[80,"p","111242"],[81,"q","121142"],
+          [82,"r","121241"],[83,"s","114212"],[84,"t","124112"],[85,"u","124211"],[86,"v","411212"],[87,"w","421112"],
+          [88,"x","421211"],[89,"y","212141"],[90,"z","214121"],[91,"{","412121"],[92,"|","111143"],[93,"}","111341"],
+          [94,"~","131141"],[103,"StartA","211412"],[104,"StartB","211214"],[105,"StartC","211232"],[106,"Stop","2331112"]
         ];
         rows.forEach(([v,ch,p])=>{ if (typeof ch==='string' && ch.length===1) map[ch]=[v,p]; });
         return map;
       })();
-
       const START_B = { val:104, pattern:"211214" };
       const STOP    = { val:106, pattern:"2331112" };
 
-      // build codes
       const codes = [START_B];
       let checksum = START_B.val;
       for (let i=0;i<data.length;i++){
         const ch = data[i];
-        const entry = CODE128B_CHART[ch];
+        const entry = CHART[ch];
         if (!entry){ throw new Error("Code128B unsupported char: "+ch); }
         const [val, pattern] = entry;
         codes.push({ val, pattern });
         checksum += val * (i+1);
       }
       const checkVal = checksum % 103;
-      // Find pattern for checksum value (reverse lookup)
       function patternForValue(v){
-        // tiny reverse: walk table
-        for (const k in CODE128B_CHART){ if (Object.prototype.hasOwnProperty.call(CODE128B_CHART,k)){
-          if (CODE128B_CHART[k][0] === v) return CODE128B_CHART[k][1];
+        for (const k in CHART){ if (Object.prototype.hasOwnProperty.call(CHART,k)){
+          if (CHART[k][0] === v) return CHART[k][1];
         }}
-        // fallbacks for specials we didn't map as literal chars
         const specials = { 100:"114131",101:"311141",102:"411131" };
-        return specials[v] || "111111"; // shouldn't happen
+        return specials[v] || "111111";
       }
       const checksumPattern = patternForValue(checkVal);
-
       const allPatterns = [START_B.pattern, ...codes.slice(1).map(c=>c.pattern), checksumPattern, STOP.pattern];
 
-      // pattern -> SVG bars (each digit = module width; alternating bar/space)
-      const module = opts.module || 2; // px per module
+      const module = opts.module || 2;
       const height = opts.height || 120;
-      let x = 0;
+      let x = 0, bar = true;
       const rects = [];
-      let bar = true;
       allPatterns.join('').split('').forEach(d=>{
         const w = parseInt(d,10) * module;
         if (bar) rects.push(`<rect x="${x}" y="0" width="${w}" height="${height}" />`);
-        x += w;
-        bar = !bar;
+        x += w; bar = !bar;
       });
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${x}" height="${height}" viewBox="0 0 ${x} ${height}" fill="#000">${rects.join('')}</svg>`;
-      return svg;
+      return `<svg xmlns="http://www.w3.org/2000/svg" width="${x}" height="${height}" viewBox="0 0 ${x} ${height}" fill="#000">${rects.join('')}</svg>`;
     }
 
-    // read grid/table + UPS for pills
+    // read grid/table
     const grid = document.querySelector('#ctl00_PageBody_ctl00_OrderDetailsGrid');
     const table = grid && grid.querySelector('.rgMasterTable');
     log('Grid present:', !!grid, 'Table present:', !!table);
@@ -672,15 +860,14 @@ btn.addEventListener('click', async (e) => {
         if (!codeEl || !descEl) return;
         if ((codeEl.textContent||'').trim().toUpperCase() !== 'UPS') return;
         const raw = (descEl.textContent||'').trim().replace(/\s+/g,'').toUpperCase();
-        if (!raw) return;
-        if (UPS_RX.test(raw) || raw.length >= 8) list.push(raw);
+        if (raw && (UPS_RX.test(raw) || raw.length>=8)) list.push(raw);
       });
       return list;
     }
     const UPS_LIST = parseUPS();
     log('UPS numbers:', UPS_LIST);
 
-    /* ---------- Build header (incl. Share/Download/Copy/Help + mobile barcode) ---------- */
+    /* ---------- Build header (Share / Download / Copy / Help / Mobile Barcode) ---------- */
     (function buildHeader(){
       const container = document.querySelector('.bodyFlexContainer');
       if (!container) { warn('No .bodyFlexContainer'); return; }
@@ -700,10 +887,9 @@ btn.addEventListener('click', async (e) => {
       const copyLink = document.getElementById('ctl00_PageBody_ctl00_AddToCart')
                      || document.getElementById('ctl00_PageBody_ctl00_AddToCartDropDown');
 
-      // Pickup heuristic (same as before)
-      const hasSalesAddr = !!document.querySelector('.panel.panelAccountInfo .panelBodyHeader:contains("Sales Address")') ||
-                           /Sales Address/i.test(document.body.innerText||'');
-      const branchHeuristic = hasSalesAddr ? 'Pickup' : 'Delivery';
+      // Heuristic: pickup if Sales Address card is present (mobile/desktop tolerant)
+      const hasSalesAddr = /Sales Address/i.test(document.body.innerText||'');
+      const isPickup = hasSalesAddr;
 
       const head = document.createElement('div');
       head.className = 'wl-od-header';
@@ -719,14 +905,14 @@ btn.addEventListener('click', async (e) => {
           ${docLink || imgLink ? `<button class="wl-btn wl-btn--ghost" type="button" id="wl-share-doc">Share</button>` : ``}
           ${docLink || imgLink ? `<button class="wl-btn wl-btn--ghost" type="button" id="wl-download-doc">Download PDF</button>` : ``}
           ${copyLink ? `<button class="wl-btn wl-btn--primary" type="button" id="wl-copy-lines">Copy Lines to Cart</button>` : ``}
-          ${(branchHeuristic==='Pickup' && isMobile()) ? `<button class="wl-btn wl-btn--primary" type="button" id="wl-show-barcode">Pickup barcode</button>` : ``}
+          ${(isPickup && isMobile()) ? `<button class="wl-btn wl-btn--primary" type="button" id="wl-show-barcode">Pickup barcode</button>` : ``}
           <button class="wl-btn wl-btn--primary" type="button" id="wl-need-help">Need help</button>
         </div>
       `;
       container.insertAdjacentElement('afterbegin', head);
-      log('Header injected; pickup?', branchHeuristic, 'mobile?', isMobile());
+      log('Header injected; pickup?', isPickup, 'mobile?', isMobile());
 
-      // ----- Share -----
+      // Share
       const shareBtn = head.querySelector('#wl-share-doc');
       if (shareBtn){
         shareBtn.addEventListener('click', async (e)=>{
@@ -747,7 +933,7 @@ btn.addEventListener('click', async (e) => {
         });
       }
 
-      // ----- Download (generator-first) -----
+      // Download (generator-first)
       const dlBtn = head.querySelector('#wl-download-doc');
       if (dlBtn){
         dlBtn.addEventListener('click', async (e)=>{
@@ -756,14 +942,11 @@ btn.addEventListener('click', async (e) => {
           log('Download click (generator first):', { generator, pdf });
           if (!generator && !pdf) { alert('Document not available yet.'); return; }
 
-          // 1) If direct PDF already works, download now.
           if (pdf && await tryFetchOk(pdf)) {
             const a = document.createElement('a'); a.href = pdf; a.download = ''; document.body.appendChild(a); a.click(); requestAnimationFrame(()=>a.remove());
-            log('Downloaded existing PDF');
-            return;
+            log('Downloaded existing PDF'); return;
           }
 
-          // 2) Trigger generator invisibly, then poll once for the PDF.
           if (generator){
             const iframe = document.createElement('iframe');
             iframe.style.display = 'none'; iframe.src = generator; document.body.appendChild(iframe);
@@ -773,7 +956,6 @@ btn.addEventListener('click', async (e) => {
                 const a = document.createElement('a'); a.href = pdf; a.download = ''; document.body.appendChild(a); a.click(); requestAnimationFrame(()=>a.remove());
                 log('Downloaded PDF after gen');
               } else {
-                // If still no PDF, just open the generator tab for the user.
                 window.open(generator, '_blank', 'noopener');
                 log('Opened generator tab (fallback)');
               }
@@ -786,7 +968,7 @@ btn.addEventListener('click', async (e) => {
         });
       }
 
-      // ----- Copy Lines (invoke native link or __doPostBack) -----
+      // Copy Lines to Cart
       const copyBtn = head.querySelector('#wl-copy-lines');
       if (copyBtn && copyLink){
         copyBtn.addEventListener('click', (e)=>{
@@ -800,7 +982,7 @@ btn.addEventListener('click', async (e) => {
         });
       }
 
-      // ----- Need help (Tawk: set attrs/tags + open) -----
+      // Need help (Tawk)
       const helpBtn = head.querySelector('#wl-need-help');
       if (helpBtn){
         helpBtn.addEventListener('click', (e)=>{
@@ -816,13 +998,11 @@ btn.addEventListener('click', async (e) => {
           const contactName = getCellText('Contact:') || '';
           const telRaw = getCellText('Tel:') || '';
           const phone = telRaw.replace(/[^\d+]/g,'');
-          const branch = hasSalesAddr ? 'Pickup' : 'Delivery';
-
           const attrs = {
             'order-id': orderNo || '',
             'status'  : statusOnly || '',
             'url'     : location.href,
-            'branch'  : branch,
+            'branch'  : isPickup ? 'Pickup' : 'Delivery',
             'tracking': (UPS_LIST||[]).join(', ')
           };
           if (contactName) attrs['contact-name'] = contactName;
@@ -850,10 +1030,9 @@ btn.addEventListener('click', async (e) => {
         });
       }
 
-      // ----- Mobile pickup barcode modal -----
+      // Mobile pickup barcode overlay (SO;{ORDERNO})
       const pickupBtn = head.querySelector('#wl-show-barcode');
       if (pickupBtn){
-        // Build overlay once
         const overlay = document.createElement('div');
         overlay.className = 'wl-barcode-overlay';
         overlay.innerHTML = `
@@ -863,8 +1042,6 @@ btn.addEventListener('click', async (e) => {
           <div class="wl-barcode-text">SO;${orderNo}</div>
         `;
         document.body.appendChild(overlay);
-
-        // Render Code128B
         try{
           const svg = code128B_SVG(`SO;${orderNo}`, { module: 3, height: 160 });
           overlay.querySelector('#wl-barcode-svg').innerHTML = svg;
@@ -874,12 +1051,11 @@ btn.addEventListener('click', async (e) => {
         const close = () => overlay.classList.remove('show');
         overlay.querySelector('.wl-barcode-close').addEventListener('click', close);
         overlay.addEventListener('click', (e)=>{ if (e.target === overlay) close(); });
-
         pickupBtn.addEventListener('click', (e)=>{ e.preventDefault(); overlay.classList.add('show'); });
       }
     })();
 
-    /* ---------- UPS pills ---------- */
+    /* ---------- UPS pills (above grid) ---------- */
     (function upsPills(){
       const grid = document.querySelector('#ctl00_PageBody_ctl00_OrderDetailsGrid');
       const table = grid && grid.querySelector('.rgMasterTable');
