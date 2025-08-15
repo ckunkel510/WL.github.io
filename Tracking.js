@@ -447,9 +447,9 @@ btn.addEventListener('click', async (e) => {
 
 
 
-/* ===== 3) Order Details page enhancer (with per-line Add to Cart, share & download) ===== */
+/* ===== 3) Order Details page enhancer (per-line Add, share/download, Need help) ===== */
 (function(){
-  // Only run on the details page
+  // Only on the details page
   const isDetails = /OrderDetails_r\.aspx/i.test(location.pathname);
   if (!isDetails) return;
   if (window.__WL_ORDERDETAILS_ENHANCED__) return;
@@ -462,11 +462,9 @@ btn.addEventListener('click', async (e) => {
   (function injectCSS(){
     const css = document.createElement('style');
     css.textContent = `
-      /* Page shell cleanup */
       .bodyFlexContainer{ gap:14px; }
-      .listPageHeader{ display:none !important; } /* replaced by wl-od-header */
+      .listPageHeader{ display:none !important; }
 
-      /* Header */
       .wl-od-header{
         display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between;
         background:#fff; border:1px solid #e5e7eb; border-radius:16px; padding:14px 16px;
@@ -490,7 +488,6 @@ btn.addEventListener('click', async (e) => {
       .wl-btn--ghost{ background:#f8fafc; color:#111827; border:1px solid #e5e7eb }
       .wl-btn--link{ background:transparent; color:#0f172a; text-decoration:underline; }
 
-      /* Info panels to cards */
       .panel.panelAccountInfo{
         width:100%; border:1px solid #e5e7eb; border-radius:16px; overflow:hidden;
         box-shadow:0 6px 18px rgba(0,0,0,.05); background:#fff;
@@ -503,7 +500,6 @@ btn.addEventListener('click', async (e) => {
       }
       .panelAccountInfoSubtitle{ background:#f8fafc !important; }
 
-      /* Line items grid polish */
       #ctl00_PageBody_ctl00_OrderDetailsGrid .rgMasterTable{
         border-collapse:separate !important; border-spacing:0 10px; table-layout:auto;
       }
@@ -520,16 +516,13 @@ btn.addEventListener('click', async (e) => {
       }
       #ctl00_PageBody_ctl00_OrderDetailsGrid td[data-title="Description"]{ width:100%; }
 
-      /* Per-line add button */
       .wl-line-add{
         display:inline-flex; align-items:center; gap:6px;
         padding:6px 10px; border-radius:999px; font-weight:800; font-size:12px;
-        border:1px solid #e5e7eb; background:#f8fafc; color:#111827; cursor:pointer;
-        text-decoration:none;
+        border:1px solid #e5e7eb; background:#f8fafc; color:#111827; cursor:pointer; text-decoration:none;
       }
       .wl-line-add:hover{ filter:brightness(0.98); }
 
-      /* UPS pills area */
       .wl-od-tracking{
         display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; margin-bottom:4px;
       }
@@ -537,10 +530,7 @@ btn.addEventListener('click', async (e) => {
       .wl-pill--ups{ background:#111827; color:#fff; }
       .wl-pill--ups:hover{ opacity:.92; }
 
-      /* Hide old “wide-only” actions row; we bring them into header */
       .bodyFlexItem.wide-only .epi-action{ display:none !important; }
-
-      /* Tighten the side mini app-links block if visible */
       #accountlinkdiv{ display:none !important; }
 
       @media (max-width: 640px){
@@ -564,21 +554,46 @@ btn.addEventListener('click', async (e) => {
     if (s.includes('pick') || s.includes('picking') || s.includes('processing')) return 'amber';
     return 'slate';
   }
+  const fmtUSPhoneE164 = v => {
+    const d = (v||'').replace(/[^\d]/g,'');
+    if (d.length === 11 && d.startsWith('1')) return '+'+d;
+    if (d.length === 10) return '+1'+d;
+    return null;
+  };
 
-  // ---------- Build header ----------
+  // Grab grid/table once
+  const grid = document.querySelector('#ctl00_PageBody_ctl00_OrderDetailsGrid');
+  const table = grid && grid.querySelector('.rgMasterTable');
+
+  // Parse UPS numbers once (for header + pills)
+  function parseUPS(){
+    const list = [];
+    if (!table) return list;
+    table.querySelectorAll('tr').forEach(tr=>{
+      const codeEl = tr.querySelector('td[data-title="Product Code"]') || tr.children[0];
+      const descEl = tr.querySelector('td[data-title="Description"]') || tr.children[1];
+      if (!codeEl || !descEl) return;
+      if ((codeEl.textContent||'').trim().toUpperCase() !== 'UPS') return;
+      const raw = (descEl.textContent||'').trim().replace(/\s+/g,'').toUpperCase();
+      if (!raw) return;
+      if (UPS_RX.test(raw) || raw.length >= 8) list.push(raw);
+    });
+    return list;
+  }
+  const UPS_LIST = parseUPS();
+
+  // ---------- Build header (adds Need help) ----------
   (function buildHeader(){
     const container = document.querySelector('.bodyFlexContainer');
     if (!container) return;
 
-    // Pull “Details for Order ####” + Status from original header
     const oldHeader = document.querySelector('.listPageHeader');
     const orderText = oldHeader ? oldHeader.children?.[0]?.textContent?.trim() : '';
     const statusText = oldHeader ? oldHeader.children?.[1]?.textContent?.trim() : '';
-    const orderNo = (orderText || '').replace(/[^\d]/g,''); // 15513815
+    const orderNo = (orderText || '').replace(/[^\d]/g,'');
     const statusOnly = (statusText || '').replace(/^Status:\s*/i,'');
 
-    // Get native action links
-    const backLink = document.getElementById('ctl00_PageBody_ctl00_BackButton'); // back
+    const backLink = document.getElementById('ctl00_PageBody_ctl00_BackButton');
     const imgLink  = document.getElementById('ctl00_PageBody_ctl00_ShowOrderImageLink')
                    || document.getElementById('ctl00_PageBody_ctl00_ShowOrderImageDropDown');
     const docLink  = document.getElementById('ctl00_PageBody_ctl00_ShowOrderDocumentLink')
@@ -586,7 +601,6 @@ btn.addEventListener('click', async (e) => {
     const copyLink = document.getElementById('ctl00_PageBody_ctl00_AddToCart')
                    || document.getElementById('ctl00_PageBody_ctl00_AddToCartDropDown');
 
-    // Choose a best PDF URL (prefer the image link with toPdf=1)
     function pickPdfUrl(){
       const imgHref = imgLink && imgLink.getAttribute('href');
       const docHref = docLink && docLink.getAttribute('href');
@@ -594,7 +608,6 @@ btn.addEventListener('click', async (e) => {
       return docHref || imgHref || null;
     }
 
-    // Header node
     const head = document.createElement('div');
     head.className = 'wl-od-header';
     head.innerHTML = `
@@ -606,21 +619,21 @@ btn.addEventListener('click', async (e) => {
         ${backLink ? `<a class="wl-btn wl-btn--ghost" href="${backLink.getAttribute('href')||'/OpenOrders_r.aspx'}">← Back</a>` : ``}
         ${imgLink  ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${imgLink.getAttribute('href')||'#'}">View Image</a>` : ``}
         ${docLink  ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${docLink.getAttribute('href')||'#'}">View Document</a>` : ``}
-        ${copyLink ? `<button class="wl-btn wl-btn--primary" type="button" id="wl-copy-lines">Copy Lines to Cart</button>` : ``}
         ${docLink || imgLink ? `<button class="wl-btn wl-btn--ghost" type="button" id="wl-share-doc">Share</button>` : ``}
         ${docLink || imgLink ? `<button class="wl-btn wl-btn--ghost" type="button" id="wl-download-doc">Download PDF</button>` : ``}
+        ${copyLink ? `<button class="wl-btn wl-btn--primary" type="button" id="wl-copy-lines">Copy Lines to Cart</button>` : ``}
+        <button class="wl-btn wl-btn--primary" type="button" id="wl-need-help">Need help</button>
       </div>
     `;
     container.insertAdjacentElement('afterbegin', head);
 
-    // Wire “Copy Lines to Cart” to the native postback link
+    // Copy Lines to Cart (invoke native)
     const copyBtn = head.querySelector('#wl-copy-lines');
     if (copyBtn && copyLink){
       copyBtn.addEventListener('click', (e)=>{
         e.preventDefault(); e.stopPropagation();
         const href = copyLink.getAttribute('href')||'';
         if (href.startsWith('javascript:')) {
-          // invoke the original __doPostBack javascript
           // eslint-disable-next-line no-eval
           eval(href.replace(/^javascript:/,''));
         } else {
@@ -629,22 +642,15 @@ btn.addEventListener('click', async (e) => {
       }, { passive:false });
     }
 
-    // Share (Web Share API if available; else mailto)
+    // Share
     const shareBtn = head.querySelector('#wl-share-doc');
     if (shareBtn){
       shareBtn.addEventListener('click', async (e)=>{
         e.preventDefault(); e.stopPropagation();
-        const url = pickPdfUrl();
-        if (!url) return;
-        const shareData = {
-          title: `Order #${orderNo} Document`,
-          text: `Sharing the document for Order #${orderNo}.`,
-          url
-        };
-        if (navigator.share) {
-          try { await navigator.share(shareData); } catch(_) {}
-        } else {
-          // Fallback to email (mailto)
+        const url = pickPdfUrl(); if (!url) return;
+        const shareData = { title:`Order #${orderNo} Document`, text:`Document for Order #${orderNo}`, url };
+        if (navigator.share) { try { await navigator.share(shareData); } catch(_){} }
+        else {
           const subj = encodeURIComponent(`Order #${orderNo} document`);
           const body = encodeURIComponent(`Here is the document link for Order #${orderNo}:\n\n${url}`);
           location.href = `mailto:?subject=${subj}&body=${body}`;
@@ -652,62 +658,113 @@ btn.addEventListener('click', async (e) => {
       });
     }
 
-    // Download PDF (trigger browser download)
+    // Download
     const dlBtn = head.querySelector('#wl-download-doc');
     if (dlBtn){
       dlBtn.addEventListener('click', (e)=>{
         e.preventDefault(); e.stopPropagation();
-        const url = pickPdfUrl();
-        if (!url) return;
+        const url = pickPdfUrl(); if (!url) return;
         const a = document.createElement('a');
-        a.href = url;
-        a.download = `Order-${orderNo||'document'}.pdf`; // browsers will honor if same-origin/headers allow
-        document.body.appendChild(a);
-        a.click();
-        requestAnimationFrame(()=>a.remove());
+        a.href = url; a.download = `Order-${orderNo||'document'}.pdf`;
+        document.body.appendChild(a); a.click(); requestAnimationFrame(()=>a.remove());
+      });
+    }
+
+    // Need help -> open chat with context (Tawk API)
+    const helpBtn = head.querySelector('#wl-need-help');
+    if (helpBtn){
+      helpBtn.addEventListener('click', (e)=>{
+        e.preventDefault(); e.stopPropagation();
+
+        // Gather context from visible panels
+        const getCellText = (label) => {
+          // Find <td>Label:</td><td>Value</td> pairs
+          const tds = Array.from(document.querySelectorAll('.panel.panelAccountInfo td'));
+          for (let i=0;i<tds.length-1;i++){
+            const lhs = (tds[i].textContent||'').trim().replace(/\u00a0/g,' ');
+            if (lhs.toLowerCase().startsWith(label.toLowerCase())) {
+              return (tds[i+1].textContent||'').trim();
+            }
+          }
+          return '';
+        };
+        const contactName = getCellText('Contact:') || '';
+        const telRaw = getCellText('Tel:') || '';
+        const phoneE164 = fmtUSPhoneE164(telRaw);
+
+        // Build attributes & tags for tawk
+        const attrs = {
+          'order-id': orderNo || '',
+          'status'  : statusOnly || '',
+          'url'     : location.href,
+          'branch'  : getCellText('Sales Address') ? 'Pickup' : (getCellText('Invoice Address') ? 'Delivery' : ''), // heuristic
+          'tracking': UPS_LIST.join(', ') || ''
+        };
+        if (contactName) attrs['contact-name'] = contactName;
+        if (phoneE164)  attrs['phone'] = phoneE164; // Tawk expects E.164 if you include phone
+
+        const tags = ['order-help'];
+        if (orderNo) tags.push(`order-${orderNo}`);
+
+        // Ensure Tawk API object exists
+        window.Tawk_API = window.Tawk_API || {};
+
+        // If widget already loaded, set immediately; else run onLoad
+        const applyAndOpen = () => {
+          try {
+            if (window.Tawk_API.setAttributes) {
+              window.Tawk_API.setAttributes(attrs, function(){});
+            }
+            if (window.Tawk_API.addTags) {
+              window.Tawk_API.addTags(tags, function(){});
+            }
+          } catch(_) {}
+          // Open widget
+          if (window.Tawk_API.maximize) window.Tawk_API.maximize();
+          else if (window.Tawk_API.toggle) window.Tawk_API.toggle();
+          else if (window.Tawk_API.popup) window.Tawk_API.popup();
+          // Optional: log event for agents
+          if (window.Tawk_API.addEvent) {
+            window.Tawk_API.addEvent('order-help-opened', { 'order-id': orderNo||'' }, function(){});
+          }
+        };
+
+        if (typeof window.Tawk_API.onLoad === 'function') {
+          // If not yet loaded, queue the actions
+          const prev = window.Tawk_API.onLoad;
+          window.Tawk_API.onLoad = function(){
+            try { prev(); } catch(_){}
+            applyAndOpen();
+          };
+        } else {
+          // Try now; if widget not ready, set onLoad handler
+          let applied = false;
+          try { applyAndOpen(); applied = true; } catch(_){}
+          if (!applied) {
+            window.Tawk_API.onLoad = applyAndOpen;
+          }
+        }
       });
     }
   })();
 
-  // ---------- Convert UPS rows to pills ----------
+  // ---------- UPS pills ----------
   (function upsPills(){
-    const grid = document.querySelector('#ctl00_PageBody_ctl00_OrderDetailsGrid');
-    const table = grid && grid.querySelector('.rgMasterTable');
-    if (!table) return;
-
-    const pills = [];
-    table.querySelectorAll('tr').forEach(tr=>{
-      const codeEl = tr.querySelector('td[data-title="Product Code"]') || tr.children[0];
-      const descEl = tr.querySelector('td[data-title="Description"]') || tr.children[1];
-      if (!codeEl || !descEl) return;
-      const code = (codeEl.textContent||'').trim().toUpperCase();
-      if (code !== 'UPS') return;
-      const raw = (descEl.textContent||'').trim().replace(/\s+/g,'').toUpperCase();
-      if (!raw) return;
-      if (UPS_RX.test(raw) || raw.length >= 8) pills.push(raw);
-
-      // Optional: hide the UPS row so pills are the single source of truth
-      // tr.style.display = 'none';
-    });
-
-    if (pills.length){
-      const wrap = document.createElement('div');
-      wrap.className = 'wl-od-tracking';
-      wrap.innerHTML = pills.map(n=>`
-        <a class="wl-pill wl-pill--ups" href="${toUPS(n)}" target="_blank" rel="noopener" title="UPS ${n}">
-          UPS · ${n}
-        </a>
-      `).join('');
-      grid.insertAdjacentElement('beforebegin', wrap);
-    }
+    if (!grid || !table) return;
+    if (!UPS_LIST.length) return;
+    const wrap = document.createElement('div');
+    wrap.className = 'wl-od-tracking';
+    wrap.innerHTML = UPS_LIST.map(n=>`
+      <a class="wl-pill wl-pill--ups" href="${toUPS(n)}" target="_blank" rel="noopener" title="UPS ${n}">
+        UPS · ${n}
+      </a>
+    `).join('');
+    grid.insertAdjacentElement('beforebegin', wrap);
   })();
 
-  // ---------- Per-line Add to Cart (one-click reorder) ----------
+  // ---------- Per-line Add to Cart ----------
   (function lineAddButtons(){
-    const grid = document.querySelector('#ctl00_PageBody_ctl00_OrderDetailsGrid');
-    const table = grid && grid.querySelector('.rgMasterTable');
-    if (!table) return;
-
+    if (!grid || !table) return;
     table.querySelectorAll('tr').forEach(tr=>{
       const codeEl = tr.querySelector('td[data-title="Product Code"]') || tr.children[0];
       const descEl = tr.querySelector('td[data-title="Description"]') || tr.children[1];
@@ -716,33 +773,27 @@ btn.addEventListener('click', async (e) => {
       if (!codeEl || !descEl || !actionCell) return;
 
       const code = (codeEl.textContent||'').trim().toUpperCase();
-      if (!code || code === 'UPS') return; // skip tracking rows
+      if (!code || code === 'UPS') return;
 
       const qtyRaw = (qtyEl && qtyEl.textContent||'').trim();
-      // Qty may be formatted like "2.0000" → parse as float and round up to at least 1
       let qty = Math.max(1, Math.round(parseFloat(qtyRaw || '1')));
       if (!isFinite(qty)) qty = 1;
 
-      // Build the button
       const btn = document.createElement('button');
       btn.className = 'wl-line-add';
       btn.type = 'button';
       btn.textContent = `Add to cart${qty>1?` (${qty})`:''}`;
-
-      // Click => simulate add using ShoppingCart products param (your meta_shops handler supports this)
-      // Ex: /ShoppingCart.aspx?products=9475526:2&cart_origin=reorder
       btn.addEventListener('click', (e)=>{
         e.preventDefault(); e.stopPropagation();
         const url = `/ShoppingCart.aspx?products=${encodeURIComponent(code)}:${qty}&cart_origin=reorder`;
         location.href = url;
       });
 
-      // Insert into last cell
       actionCell.appendChild(btn);
     });
   })();
 
-  // ---------- Guard: prevent our buttons from causing postbacks ----------
+  // Block accidental postbacks from our custom buttons
   document.addEventListener('click', (e)=>{
     const btn = e.target.closest('.wl-btn, .wl-line-add');
     if (!btn) return;
@@ -752,5 +803,5 @@ btn.addEventListener('click', async (e) => {
     e.stopPropagation();
   }, { capture:true });
 
-  log('Order Details enhanced (per-line add, share, download)');
+  log('Order Details enhanced (per-line add, share/download, Need help)');
 })();
