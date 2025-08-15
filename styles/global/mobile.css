@@ -294,3 +294,12 @@ div#barcode-scanner-container {
     display: inline-flex !important;
     float: right;
 }
+
+
+a.wl-pill.wl-pill--ups{
+    color: white;
+}
+a.wl-btn.wl-btn--primary{
+    color: white;
+}
+ 
