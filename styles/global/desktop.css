@@ -214,7 +214,7 @@ text-decoration: underline;
 .Dropdown{
 position: relative;
 display: inline-block;
-float: left;
+
 font-weight: bold;
 }
 
@@ -280,7 +280,7 @@ width: 50% !important;
 display:none;
 }
 .row.border-bottom.border-secondary{
-float: left;
+
 width: 300px;
 height: auto;
 display: inline-block;
@@ -294,7 +294,6 @@ border-radius: 15px;
 }
 
 .relatedProductsScrollingDiv{
-float: left;
 width: 100%;
 display: inline-block;
 margin: auto;
@@ -425,8 +424,6 @@ display:inline;
 z-index: 9999;
 
     }
-
-
 
     .wl-track-btn{
         color: white !important;
