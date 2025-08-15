@@ -399,3 +399,262 @@ btn.addEventListener('click', async (e) => {
   setTimeout(updateOnce, 150);
   setTimeout(updateOnce, 1200);
 })();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ===== 3) Order Details page enhancer (OpenOrders -> "Open full order") ===== */
+(function(){
+  // Only run on the details page
+  const isDetails = /OrderDetails_r\.aspx/i.test(location.pathname);
+  if (!isDetails) return;
+  if (window.__WL_ORDERDETAILS_ENHANCED__) return;
+  window.__WL_ORDERDETAILS_ENHANCED__ = true;
+
+  const t0 = performance.now();
+  const log = (...a)=>console.log('%cOrderDetails UI','color:#6b0016;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
+
+  // ---------- CSS ----------
+  (function injectCSS(){
+    const css = document.createElement('style');
+    css.textContent = `
+      /* Page shell cleanup */
+      .bodyFlexContainer{ gap:14px; }
+      .listPageHeader{ display:none !important; } /* we’ll replace this with wl-od-header */
+
+      /* Header */
+      .wl-od-header{
+        display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between;
+        background:#fff; border:1px solid #e5e7eb; border-radius:16px; padding:14px 16px;
+        box-shadow:0 6px 18px rgba(0,0,0,.05);
+      }
+      .wl-od-title{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+      .wl-od-title .wl-order-no{ font-weight:900; font-size:20px; letter-spacing:.2px; }
+      .wl-chip{ display:inline-flex; align-items:center; gap:6px; font-weight:800; border-radius:999px; padding:6px 10px; font-size:12px; text-transform:capitalize; }
+      .wl-chip--slate{ background:#e2e8f0; color:#0f172a }
+      .wl-chip--green{ background:#dcfce7; color:#065f46 }
+      .wl-chip--blue{ background:#dbeafe; color:#1e3a8a }
+      .wl-chip--amber{ background:#fef3c7; color:#92400e }
+      .wl-chip--orange{ background:#ffedd5; color:#9a3412 }
+      .wl-chip--red{ background:#fee2e2; color:#7f1d1d }
+      .wl-chip--maroon{ background:#f2e6ea; color:#6b0016 }
+
+      .wl-od-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+      .wl-btn{ appearance:none; border:none; border-radius:12px; font-weight:900; padding:10px 14px; text-decoration:none; cursor:pointer; }
+      .wl-btn:disabled{ opacity:.6; cursor:default }
+      .wl-btn--primary{ background:#6b0016; color:#fff }
+      .wl-btn--ghost{ background:#f8fafc; color:#111827; border:1px solid #e5e7eb }
+      .wl-btn--link{ background:transparent; color:#0f172a; text-decoration:underline; }
+
+      /* Info panels to cards */
+      .panel.panelAccountInfo{
+        width:100%; border:1px solid #e5e7eb; border-radius:16px; overflow:hidden;
+        box-shadow:0 6px 18px rgba(0,0,0,.05); background:#fff;
+      }
+      .panel.panelAccountInfo .panelBodyHeader{
+        font-weight:800; padding:10px 14px; background:#f8fafc; border-bottom:1px solid #eef0f3;
+      }
+      .panel.panelAccountInfo .panelBody{
+        padding:12px 14px;
+      }
+      .panelAccountInfoSubtitle{ background:#f8fafc !important; }
+
+      /* Line items grid polish */
+      #ctl00_PageBody_ctl00_OrderDetailsGrid .rgMasterTable{
+        border-collapse:separate !important; border-spacing:0 10px; table-layout:auto;
+      }
+      #ctl00_PageBody_ctl00_OrderDetailsGrid thead{ display:none !important; }
+      #ctl00_PageBody_ctl00_OrderDetailsGrid .rgRow,
+      #ctl00_PageBody_ctl00_OrderDetailsGrid .rgAltRow{
+        background:#fff; border:1px solid #eef0f3; border-radius:12px;
+      }
+      #ctl00_PageBody_ctl00_OrderDetailsGrid td{
+        padding:10px; border:none !important;
+      }
+      #ctl00_PageBody_ctl00_OrderDetailsGrid td[data-title="Product Code"]{
+        font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:800; min-width:86px;
+      }
+      #ctl00_PageBody_ctl00_OrderDetailsGrid td[data-title="Description"]{
+        width:100%;
+      }
+      /* UPS pills area */
+      .wl-od-tracking{
+        display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; margin-bottom:4px;
+      }
+      .wl-pill{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; font-weight:800; font-size:12px; text-decoration:none; }
+      .wl-pill--ups{ background:#111827; color:#fff; }
+      .wl-pill--ups:hover{ opacity:.92; }
+
+      /* Hide old “wide-only” actions row; we bring them into header */
+      .bodyFlexItem.wide-only .epi-action{ display:none !important; }
+
+      /* Tighten the side mini app-links block if visible */
+      #accountlinkdiv{ display:none !important; }
+
+      @media (max-width: 640px){
+        .wl-od-title .wl-order-no{ font-size:18px; }
+        .panel.panelAccountInfo .panelBody{ padding:10px 12px; }
+      }
+    `;
+    document.head.appendChild(css);
+  })();
+
+  // ---------- Helpers ----------
+  const toUPS = n => `https://www.ups.com/track?tracknum=${encodeURIComponent(n)}`;
+  const UPS_RX = /^1Z[0-9A-Z]{16}$/i;
+  function statusColor(status){
+    const s = (status||'').toLowerCase();
+    if (s.includes('cancel')) return 'red';
+    if (s.includes('backorder')) return 'orange';
+    if (s.includes('invoice') || s.includes('billed') || s.includes('invoiced')) return 'slate';
+    if (s.includes('delivered') || s.includes('shipped') || s.includes('complete')) return 'green';
+    if (s.includes('ready') || s.includes('awaiting pickup')) return 'blue';
+    if (s.includes('pick') || s.includes('picking') || s.includes('processing')) return 'amber';
+    return 'slate';
+  }
+
+  // ---------- Build header ----------
+  (function buildHeader(){
+    const container = document.querySelector('.bodyFlexContainer');
+    if (!container) return;
+
+    // Pull “Details for Order ####” + Status from original header
+    const oldHeader = document.querySelector('.listPageHeader');
+    const orderText = oldHeader ? oldHeader.children?.[0]?.textContent?.trim() : '';
+    const statusText = oldHeader ? oldHeader.children?.[1]?.textContent?.trim() : '';
+    const orderNo = (orderText || '').replace(/[^\d]/g,''); // 15513815
+    const statusOnly = (statusText || '').replace(/^Status:\s*/i,'');
+
+    // Get native action links
+    const backLink = document.getElementById('ctl00_PageBody_ctl00_BackButton'); // back
+    const imgLink  = document.getElementById('ctl00_PageBody_ctl00_ShowOrderImageLink')
+                   || document.getElementById('ctl00_PageBody_ctl00_ShowOrderImageDropDown');
+    const docLink  = document.getElementById('ctl00_PageBody_ctl00_ShowOrderDocumentLink')
+                   || document.getElementById('ctl00_PageBody_ctl00_ShowOrderDocumentDropDown');
+    const copyLink = document.getElementById('ctl00_PageBody_ctl00_AddToCart')
+                   || document.getElementById('ctl00_PageBody_ctl00_AddToCartDropDown');
+
+    // Header node
+    const head = document.createElement('div');
+    head.className = 'wl-od-header';
+    head.innerHTML = `
+      <div class="wl-od-title">
+        <div class="wl-order-no">Order #${orderNo || ''}</div>
+        ${statusOnly ? `<span class="wl-chip wl-chip--${statusColor(statusOnly)}">${statusOnly}</span>` : ``}
+      </div>
+      <div class="wl-od-actions">
+        ${backLink ? `<a class="wl-btn wl-btn--ghost" href="${backLink.getAttribute('href')||'/OpenOrders_r.aspx'}">← Back</a>` : ``}
+        ${imgLink  ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${imgLink.getAttribute('href')||'#'}">Show Image</a>` : ``}
+        ${docLink  ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${docLink.getAttribute('href')||'#'}">Show Document</a>` : ``}
+        ${copyLink ? `<button class="wl-btn wl-btn--primary" type="button" id="wl-copy-lines">Copy Lines to Cart</button>` : ``}
+      </div>
+    `;
+    container.insertAdjacentElement('afterbegin', head);
+
+    // Wire “Copy Lines to Cart” to the native postback link
+    const copyBtn = head.querySelector('#wl-copy-lines');
+    if (copyBtn && copyLink){
+      copyBtn.addEventListener('click', (e)=>{
+        e.preventDefault(); e.stopPropagation();
+        const href = copyLink.getAttribute('href')||'';
+        if (href.startsWith('javascript:')) {
+          // invoke the original __doPostBack javascript
+          // eslint-disable-next-line no-eval
+          eval(href.replace(/^javascript:/,''));
+        } else {
+          location.href = href;
+        }
+      }, { passive:false });
+    }
+  })();
+
+  // ---------- Convert UPS rows to pills ----------
+  (function upsPills(){
+    const grid = document.querySelector('#ctl00_PageBody_ctl00_OrderDetailsGrid');
+    const table = grid && grid.querySelector('.rgMasterTable');
+    if (!table) return;
+
+    const pills = [];
+    table.querySelectorAll('tr').forEach(tr=>{
+      const codeEl = tr.querySelector('td[data-title="Product Code"]') || tr.children[0];
+      const descEl = tr.querySelector('td[data-title="Description"]') || tr.children[1];
+      if (!codeEl || !descEl) return;
+      const code = (codeEl.textContent||'').trim().toUpperCase();
+      if (code !== 'UPS') return;
+      const raw = (descEl.textContent||'').trim().replace(/\s+/g,'').toUpperCase();
+      if (!raw) return;
+      if (UPS_RX.test(raw) || raw.length >= 8) pills.push(raw);
+
+      // optional: you can hide the UPS line row to avoid duplicate info
+      // tr.style.display = 'none';
+    });
+
+    if (pills.length){
+      const wrap = document.createElement('div');
+      wrap.className = 'wl-od-tracking';
+      wrap.innerHTML = pills.map(n=>`
+        <a class="wl-pill wl-pill--ups" href="${toUPS(n)}" target="_blank" rel="noopener" title="UPS ${n}">
+          UPS · ${n}
+        </a>
+      `).join('');
+      grid.insertAdjacentElement('beforebegin', wrap);
+    }
+  })();
+
+  // ---------- Guard: prevent our buttons from causing postbacks ----------
+  document.addEventListener('click', (e)=>{
+    const btn = e.target.closest('.wl-btn');
+    if (!btn) return;
+    if (btn.tagName === 'BUTTON' && !btn.getAttribute('type')){
+      btn.setAttribute('type','button');
+    }
+    e.stopPropagation();
+  }, { capture:true });
+
+  log('Order Details enhanced');
+})();
+
