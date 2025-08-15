@@ -199,31 +199,64 @@ $(document).ready(function () {
         return R * c;
     }
 
-    function displayWidget(branch, quantity, showSignInButton) {
-        // Ensure only one widget exists
-        $('#stock-widget').remove();
+    function filterAndDisplayStockData(stockData, branch, useActualColumn) {
+    const columnIndex = useActualColumn ? 4 : 2; // Signed-in = col 4, guest = col 3
+    console.log(`Using column index: ${columnIndex} for quantity`);
 
-        let buttonHtml = '';
+    const filteredRow = stockData.find('tr').filter((_, row) => {
+        const branchCell = $(row).find('td').eq(0).text().trim();
+        console.log(`Checking branch: "${branchCell}" against "${branch}"`);
+        return branchCell.toLowerCase().trim() === branch.toLowerCase().trim();
+    });
 
-        if (showSignInButton) {
-            buttonHtml = `
-                <a href="${SIGN_IN_URL}" style="display: inline-block; padding: 10px 20px; background: #6b0016; color: white; text-decoration: none; border: 1px solid transparent; border-radius: 4px; font-weight: bold; text-align: center; margin-top: 10px;">
-                    Check Your Local Store Inventory
-                </a>
-            `;
+    if (filteredRow.length) {
+        console.log('Matched row for branch:', filteredRow.html());
+        const rawStockValue = filteredRow.find(`td:eq(${columnIndex})`).text().trim();
+        console.log(`Raw stock value for "${branch}": "${rawStockValue}"`);
+
+        // Normalize and evaluate quantity
+        const normalized = rawStockValue.toLowerCase();
+        const isNoStockText = normalized.includes("no stock");
+        const numericMatch = rawStockValue.replace(/,/g, "").match(/-?\d+/);
+        const qtyNumber = numericMatch ? parseInt(numericMatch[0], 10) : null;
+        const isZero = qtyNumber === 0;
+
+        if (isNoStockText || isZero) {
+            displayWidget(branch, "Ship to your store — Free pickup at checkout", false);
+        } else {
+            displayWidget(branch, rawStockValue, false);
         }
-
-        const widgetHtml = `
-            <div id="stock-widget" style="display: table; border: 1px solid #ccc; padding: 10px; margin: 20px 0; background: #f9f9f9; text-align: center;">
-                <h3>Stock Information</h3>
-                <p><strong>Branch:</strong> ${branch}</p>
-                <p><strong>Available Quantity:</strong> ${quantity}</p>
-                ${buttonHtml}
-            </div>
-        `;
-
-        $('#ctl00_PageBody_productDetail_productDescription').before(widgetHtml);
+    } else {
+        console.error(`Branch "${branch}" not found in stock table.`);
+        displayWidget(branch, 'No stock available', true);
     }
+}
+
+function displayWidget(branch, quantityMessage, showSignInButton) {
+    // Ensure only one widget exists
+    $('#stock-widget').remove();
+
+    let buttonHtml = '';
+    if (showSignInButton) {
+        buttonHtml = `
+            <a href="${SIGN_IN_URL}" style="display: inline-block; padding: 10px 20px; background: #6b0016; color: white; text-decoration: none; border-radius: 4px; font-weight: bold; margin-top: 10px;">
+                Check Your Local Store Inventory
+            </a>
+        `;
+    }
+
+    const widgetHtml = `
+        <div id="stock-widget" style="display: table; border: 1px solid #ccc; padding: 10px; margin: 20px 0; background: #f9f9f9; text-align: center;">
+            <h3>Stock Information</h3>
+            <p><strong>Branch:</strong> ${branch}</p>
+            <p><strong>Available Quantity:</strong> ${quantityMessage}</p>
+            ${buttonHtml}
+        </div>
+    `;
+
+    $('#ctl00_PageBody_productDetail_productDescription').before(widgetHtml);
+}
+
 
     function updatePickupDeliveryDisplay() {
   console.log("Running updatePickupDeliveryDisplay...");
