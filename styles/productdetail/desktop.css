@@ -41,7 +41,6 @@ max-height: 450px;
 max-width: 100%;
 }
 #stock-widget{
-    position: relative;
     float: left;
     left: 25px;
     width: 100%;
