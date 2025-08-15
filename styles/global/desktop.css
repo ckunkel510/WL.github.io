@@ -429,4 +429,9 @@ z-index: 9999;
         color: white !important;
     }
 
-    
+    a.wl-pill.wl-pill--ups{
+    color: white !important;
+}
+a.wl-btn.wl-btn--primary{
+    color: white !important;
+}
