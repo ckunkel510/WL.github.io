@@ -1,10 +1,10 @@
 /* =========================================================================
-   Woodson — Invoices Card UI (v3.5)
-   - Working logic (date-range AP crawl + badging + filters)
+   Woodson — Invoices Card UI (v3.7)
+   - Working logic (AP crawl + date-range + badges + filters)
    - Card UI formatting
    - SURFACES ORIGINAL PER-ROW chkSelect CHECKBOXES (and decorators) IN EACH CARD
-   - Keeps header Select-All checkbox functional
-   - Deep logging; MutationObserver re-applies after Telerik partial postbacks
+   - Caps background re-runs: debounced observer + 2-pass limit per grid state
+   - MS AJAX hooks: reset only after partial postbacks
    ========================================================================== */
 
 (function () {
@@ -17,76 +17,78 @@
   let LOG_LEVEL = (() => {
     const ls = (localStorage.getItem(LS_KEY) || '').toLowerCase();
     if (ls in LVL) return LVL[ls];
-    return LVL.debug; // default verbose while we dial this in
+    return LVL.debug; // verbose until we finalize
   })();
-
   const prefix = (lvl) => [`%cINV`, `color:#005d6e;font-weight:700;`, `[${lvl.toUpperCase()}]`];
   const log = {
     setLevel(l){
       if (typeof l === 'string' && l.toLowerCase() in LVL) LOG_LEVEL = LVL[l.toLowerCase()];
       else if (typeof l === 'number') LOG_LEVEL = l|0;
       try { localStorage.setItem(LS_KEY, Object.keys(LVL).find(k=>LVL[k]===LOG_LEVEL) || 'debug'); }catch{}
-      console.log(...prefix('info'), 'Log level set to', LOG_LEVEL, '(0=error,1=warn,2=info,3=debug,4=trace)');
+      console.log(...prefix('info'), 'Log level set to', LOG_LEVEL);
     },
     error(...a){ if (LOG_LEVEL >= LVL.error) console.error(...prefix('error'), ...a); },
     warn (...a){ if (LOG_LEVEL >= LVL.warn ) console.warn (...prefix('warn' ), ...a); },
     info (...a){ if (LOG_LEVEL >= LVL.info ) console.log  (...prefix('info' ), ...a); },
     debug(...a){ if (LOG_LEVEL >= LVL.debug) console.log  (...prefix('debug'), ...a); },
     trace(...a){ if (LOG_LEVEL >= LVL.trace) console.log  (...prefix('trace'), ...a); },
-    group(label, collapsed=true){
-      if (LOG_LEVEL < LVL.debug) return { end(){} };
-      (collapsed?console.groupCollapsed:console.group)(...prefix('debug'), label);
-      return { end(){ try{ console.groupEnd(); }catch{} } };
-    }
   };
 
-  const VERSION = '3.5';
+  const VERSION = '3.7';
   const t0 = performance.now();
   log.info(`Version ${VERSION} booting… (+${(performance.now()-t0).toFixed(1)}ms)`);
 
-  // ---- CSS (card UI + checkbox surfacing + visibility fallbacks) ----------
+  // ---- CSS (card UI + checkbox surfacing + custom checkbox fallback) ------
   (function injectCSS(){
     const css = `
       /* Keep Select-All visible, hide other headers for a clean card grid */
       #ctl00_PageBody_InvoicesGrid thead th:not(:first-child),
       .RadGrid[id*="InvoicesGrid"] thead th:not(:first-child){ display:none !important; }
 
-      /* Cardify body rows; make rows positioning context for overlays */
+      /* Cardify body rows */
       .wl-inv-cardify tr.rgRow, .wl-inv-cardify tr.rgAltRow{
         display:block; background:#fff; border:1px solid #e5e7eb; border-radius:16px;
         margin:12px 0; box-shadow:0 6px 18px rgba(15,23,42,.06); overflow:hidden; position:relative;
       }
       .wl-inv-cardify tr.rgRow > td, .wl-inv-cardify tr.rgAltRow > td{ display:none !important; }
 
-      /* Keep first cell present as our anchor area (for the checkbox overlay) */
+      /* First cell stays as our anchor overlay */
       .wl-inv-cardify tr.rgRow > td:first-child,
       .wl-inv-cardify tr.rgAltRow > td:first-child{
         display:block !important; position:absolute; left:0; top:0;
         border:none !important; background:transparent; padding:0; margin:0;
         width:auto !important; min-width:40px;
-        z-index:100; /* sits above card head content */
+        z-index:100;
       }
 
-      /* Visible selection wrap that holds the ORIGINAL chkSelect and its decorator */
+      /* Selection wrap (holds real input + decorator or custom UI) */
       .wl-select-wrap{
         position:absolute; left:10px; top:10px;
         display:flex; align-items:center; gap:8px;
         z-index:101; background:transparent;
       }
-
-      /* If a decorator hides the input, force the native checkbox visible as fallback */
-      .wl-select-wrap input[type="checkbox"]{
-        display: inline-block !important;
-        opacity: 1 !important;
-        visibility: visible !important;
-        width: 16px !important;
-        height: 16px !important;
-        pointer-events: auto !important;
-        position: static !important;
-        appearance: auto !important;
+      /* Optional visual outline (enable via localStorage WL_INV_DEBUG_WRAP=1) */
+      .wl-select-wrap[data-debug="1"]{
+        outline: 2px dashed #ef4444;
+        outline-offset: 2px;
+        background: rgba(239,68,68,.06);
+        border-radius: 8px;
+        padding: 4px 6px;
       }
 
-      /* Common decorator classes — ensure they show if we moved them */
+      /* If Telerik hides the input, our fallback will still work, but make sure
+         a visible input (if present) is actually visible. */
+      .wl-select-wrap input[type="checkbox"]{
+        display:inline-block !important;
+        opacity:1 !important;
+        visibility:visible !important;
+        width:16px !important;
+        height:16px !important;
+        pointer-events:auto !important;
+        position:static !important;
+        appearance:auto !important;
+      }
+      /* Known decorator classes: keep them visible if we moved them */
       .wl-select-wrap label,
       .wl-select-wrap .rfdCheckbox,
       .wl-select-wrap .rfdSkinnedCheckbox,
@@ -94,17 +96,29 @@
       .wl-select-wrap .RadCheckBox,
       .wl-select-wrap .checkbox,
       .wl-select-wrap .chk{
-        display: inline-flex !important;
-        align-items: center;
+        display:inline-flex !important;
+        align-items:center;
       }
 
-      /* Optional: debug outline on the selection cluster (toggle via localStorage) */
-      .wl-select-wrap[data-debug="1"]{
-        outline: 2px dashed #ef4444;
-        outline-offset: 2px;
-        background: rgba(239,68,68,.06);
-        border-radius: 8px;
-        padding: 4px 6px;
+      /* Custom checkbox fallback (used only if no decorator found) */
+      .wl-check{ position:relative; width:20px; height:20px; display:inline-block; }
+      .wl-check input[type="checkbox"]{
+        position:absolute; inset:0; width:100%; height:100%;
+        opacity:0 !important; /* invisible but fully clickable */
+        cursor:pointer;
+      }
+      .wl-check .wl-check-ui{
+        position:relative; display:inline-block; width:18px; height:18px;
+        border:2px solid #cbd5e1; border-radius:4px; box-sizing:border-box;
+        transition: box-shadow .15s ease, border-color .15s ease, background .15s ease;
+      }
+      .wl-check:focus-within .wl-check-ui{ box-shadow:0 0 0 2px #93c5fd; }
+      .wl-check input[type="checkbox"]:checked + .wl-check-ui{
+        border-color:#0ea5e9; background:#e0f2fe;
+      }
+      .wl-check input[type="checkbox"]:checked + .wl-check-ui::after{
+        content:""; position:absolute; left:4px; top:0px; width:6px; height:12px;
+        border:2px solid #0369a1; border-top:0; border-left:0; transform:rotate(45deg);
       }
 
       .wl-row-head{
@@ -133,11 +147,6 @@
 
       .wl-details{ display:none; border-top:1px solid #eef0f3; padding:12px 14px 14px 46px; }
       .wl-details.show{ display:block; }
-
-      .wl-badge-skel{
-        background:repeating-linear-gradient(90deg,#f1f5f9,#f1f5f9 8px,#e2e8f0 8px,#e2e8f0 16px);
-        color:transparent
-      }
 
       /* Toolbar */
       .wl-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin: 8px 0 10px; }
@@ -316,29 +325,22 @@
   const grab = (tr, sel) => { const el = tr.querySelector(sel); return el ? el.textContent.trim() : ''; };
   const abs  = (u)=>{ try{ return new URL(u, location.origin).toString(); }catch{ return u; } };
 
-  // ---- Checkbox surfacing (MOVE input + decorator; force visible if needed)
+  // ---- Checkbox surfacing --------------------------------------------------
   function findCheckboxDecorator(cb, tr){
     if (!cb || !tr) return null;
-    // <label for="...">
-    let deco = tr.querySelector(`label[for="${cb.id}"]`);
-    if (deco) return deco;
-    // input wrapped by <label>
+    let deco = tr.querySelector(`label[for="${cb.id}"]`); if (deco) return deco;
     if (cb.parentElement && cb.parentElement.tagName === 'LABEL') return cb.parentElement;
-    // common RFD sibling
     const sib = cb.nextElementSibling;
     if (sib && /(rfd|chk|checkbox|rgCheck|RadCheck)/i.test(sib.className || '')) return sib;
-    // guess any known decorator in the row
     const guess = tr.querySelector(`.rfdCheckbox, .rfdSkinnedCheckbox, .rgCheckBox, .RadCheckBox, .checkbox, .chk`);
     return guess || null;
   }
-
   function getRowCheckbox(tr){
     const first = tr.cells && tr.cells[0];
     let cb = first ? first.querySelector('input[type="checkbox"][name*="chkSelect"]') : null;
     if (!cb) cb = tr.querySelector('input[type="checkbox"][name*="chkSelect"]');
     return cb;
   }
-
   function surfaceCheckboxInCard(tr, rowIndex){
     if (!tr || !(tr.classList.contains('rgRow') || tr.classList.contains('rgAltRow'))) return;
     const firstCell = tr.cells && tr.cells[0];
@@ -350,7 +352,6 @@
       return;
     }
 
-    // Create/ensure the visible wrap (optionally debug outline)
     let wrap = firstCell.querySelector('.wl-select-wrap');
     if (!wrap){
       wrap = document.createElement('div');
@@ -366,46 +367,47 @@
       log.info('Moved checkbox into card', { rowIndex, id: cb.id, name: cb.name });
     }
 
-    // Move visual decorator if any (label / span / anchor etc.)
+    // Try decorator first
     const deco = findCheckboxDecorator(cb, tr);
     if (deco && deco.closest('.wl-select-wrap') !== wrap){
       wrap.appendChild(deco);
       log.info('Moved decorator with checkbox', { rowIndex, decoTag: deco.tagName, decoClass: deco.className });
     }
 
-    // If still hidden, force native input visible as fallback
-    const cs = getComputedStyle(cb);
-    if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0){
-      cb.style.display = 'inline-block';
-      cb.style.opacity = '1';
-      cb.style.visibility = 'visible';
-      cb.style.position = 'static';
-      log.debug('Forced native checkbox visible (no/hidden decorator)', { rowIndex });
+    // If no decorator, create a custom visible UI but keep real input driving it
+    if (!deco && !wrap.querySelector('.wl-check')){
+      const label = document.createElement('label');
+      label.className = 'wl-check';
+      // Put the input inside the label to guarantee click -> input click
+      label.appendChild(cb); // move inside label
+      const ui = document.createElement('span');
+      ui.className = 'wl-check-ui';
+      label.appendChild(ui);
+      wrap.appendChild(label);
+      // Ensure the now-wrapped input is fully clickable
+      cb.style.opacity = '0';
+      cb.style.position = 'absolute';
+      cb.style.inset = '0';
+      cb.style.width = '100%';
+      cb.style.height = '100%';
+      log.debug('Applied custom checkbox UI fallback', { rowIndex });
+    } else {
+      // If decorator exists, keep input visible (in case decorator depends on it)
+      const cs = getComputedStyle(cb);
+      if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0){
+        cb.style.display = 'inline-block';
+        cb.style.opacity = '1';
+        cb.style.visibility = 'visible';
+        cb.style.position = 'static';
+        log.debug('Forced native checkbox visible (decorator present but hidden input)', { rowIndex });
+      }
     }
 
-    // Big click target: clicking empty part of the wrap toggles the checkbox
     if (!wrap.__wlClickBound){
       wrap.addEventListener('click', (e)=>{ if (e.target === wrap) cb.click(); }, { passive:true });
       wrap.__wlClickBound = true;
     }
-
-    // Visibility diagnostics
-    try{
-      const r1 = wrap.getBoundingClientRect();
-      const r2 = cb.getBoundingClientRect();
-      const csFirst = getComputedStyle(firstCell);
-      const csWrap  = getComputedStyle(wrap);
-      log.trace('Checkbox visibility', {
-        rowIndex,
-        firstCell: { display: csFirst.display, position: csFirst.position, zIndex: csFirst.zIndex },
-        wrap: { display: csWrap.display, position: csWrap.position, zIndex: csWrap.zIndex },
-        wrapRect: { x: r1.x|0, y: r1.y|0, w: r1.width|0, h: r1.height|0 },
-        cbRect:   { x: r2.x|0, y: r2.y|0, w: r2.width|0, h: r2.height|0 },
-        cbStyles: { display: cs.display, visibility: cs.visibility, opacity: cs.opacity }
-      });
-    }catch{}
   }
-
   function surfaceAllCheckboxes(master){
     const rows = master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow');
     log.info('Surfacing checkboxes for rows', rows.length);
@@ -452,9 +454,7 @@
       tr.dataset.overdue = overdue ? '1' : '0';
 
       if (LOG_LEVEL >= LVL.debug){
-        const g = log.group(`Row ${idx} badge ${invNo || '(no #)'} → ${status}${overdue?' (overdue)':''}`);
-        log.debug('calc', { invNo, outLeft, due: dueTxt, overdue, total: grab(tr,'td[data-title="Total Amount"]') });
-        g.end();
+        log.debug(`Row ${idx} badge ${invNo||'(no #)'} → ${status}${overdue?' (overdue)':''}`);
       }
 
       // Keep legacy table-badge updated (harmless if hidden)
@@ -571,7 +571,6 @@
     log.debug('Card built', { idx, invNo });
     updateCardBadge(tr);
   }
-
   function updateCardBadge(tr){
     const chip = tr.querySelector('.wl-card-badge'); if (!chip) return;
     const status = tr.dataset.status || 'unknown';
@@ -585,7 +584,6 @@
       chip.textContent += ' · Overdue';
     }
   }
-
   function cardify(master){
     const host = master.closest('#ctl00_PageBody_InvoicesGrid, .RadGrid[id*="InvoicesGrid"]');
     if (!host) { log.warn('cardify: host not found'); return; }
@@ -631,7 +629,6 @@
     });
     return bar;
   }
-
   function applyFilter(filter){
     const master = document.querySelector('#ctl00_PageBody_InvoicesGrid .rgMasterTable'); if (!master) return;
     const rows = master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow');
@@ -644,7 +641,6 @@
     });
     log.info('Filter applied', { filter, shown, hidden });
   }
-
   function selectFilteredOnPage(){
     const root = document.getElementById('ctl00_PageBody_InvoicesGrid'); if (!root) return;
     const boxes = root.querySelectorAll('tbody input[type="checkbox"][name*="chkSelect"]');
@@ -656,30 +652,69 @@
     log.info('Select filtered - clicked', clicks, 'checkboxes');
   }
 
-  // ---- Observer ------------------------------------------------------------
+  // ---- Mutation Observer (debounced + capped) ------------------------------
+  let observer, observeSuspended = false;
+  let debounceId = null;
+  let lastKey = '';
+  let runsForKey = 0;
+  const MAX_RUNS_PER_KEY = 2;     // <= request
+
+  function computeGridKey(master){
+    const rows = master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow');
+    const n = rows.length;
+    const firstInv = (findInvoiceAnchor(rows[0])?.textContent||'').trim();
+    const lastInv  = (findInvoiceAnchor(rows[n-1])?.textContent||'').trim();
+    return `${n}:${firstInv}-${lastInv}`;
+  }
+
+  async function enhanceOnce(master, reason){
+    if (!master) return;
+    // cap runs per static grid key
+    const key = computeGridKey(master);
+    if (key === lastKey && runsForKey >= MAX_RUNS_PER_KEY){
+      log.info('Enhance skipped (cap reached)', { key, runsForKey, reason });
+      return;
+    }
+    if (key !== lastKey){ lastKey = key; runsForKey = 0; }
+    runsForKey++;
+
+    log.debug('Enhance run', { reason, key, run: runsForKey });
+    await applyBadges(master);
+    cardify(master);
+    surfaceAllCheckboxes(master);
+  }
+
   function attachGridObserver(){
     const gridRoot = document.getElementById('ctl00_PageBody_InvoicesGrid'); if (!gridRoot) { log.warn('Observer: grid root not found'); return; }
-    if (gridRoot.__wlObserved) return; gridRoot.__wlObserved = true;
+    if (observer) return;
 
-    const mo = new MutationObserver((mutList)=>{
-      let add=0, rem=0, sub=0;
-      mutList.forEach(m=>{ add += m.addedNodes?.length||0; rem += m.removedNodes?.length||0; if (m.type==='childList') sub++; });
-      const g = log.group(`MutationObserver fire: ${sub} childList, +${add}/-${rem}`, true);
-      const master = gridRoot.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00') || gridRoot.querySelector('.rgMasterTable');
-      if (master){
-        requestAnimationFrame(async ()=>{
-          log.debug('Observer: reapply enhancements…');
-          await applyBadges(master);
-          cardify(master);
-          surfaceAllCheckboxes(master);
-        });
-      } else {
-        log.warn('Observer: master table not found on mutation');
-      }
-      g.end();
+    observer = new MutationObserver(()=>{
+      if (observeSuspended) return;
+      if (debounceId) clearTimeout(debounceId);
+      debounceId = setTimeout(async ()=>{
+        const master = gridRoot.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00') || gridRoot.querySelector('.rgMasterTable');
+        if (master) await enhanceOnce(master, 'mutation');
+      }, 120);
     });
-    mo.observe(gridRoot, { childList:true, subtree:true });
+    observer.observe(gridRoot, { childList:true, subtree:true });
     log.info('Grid observer attached');
+  }
+
+  // ---- MS AJAX hooks (reset cap on partial postback) -----------------------
+  function attachAjaxHooks(){
+    try{
+      if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
+        const prm = Sys.WebForms.PageRequestManager.getInstance();
+        prm.add_initializeRequest(()=>{ observeSuspended = true; log.debug('AJAX initializeRequest → suspend observer'); });
+        prm.add_endRequest(()=> {
+          observeSuspended = false;
+          lastKey = ''; runsForKey = 0; // reset cap
+          log.debug('AJAX endRequest → resume observer & reset cap');
+          const master = document.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00, #ctl00_PageBody_InvoicesGrid .rgMasterTable, .RadGrid[id*="InvoicesGrid"] .rgMasterTable');
+          if (master) enhanceOnce(master, 'ajax-endRequest');
+        });
+      }
+    }catch(e){ log.warn('AJAX hook attach failed', e); }
   }
 
   // ---- Boot ----------------------------------------------------------------
@@ -693,9 +728,9 @@
 
     try{ await ensureApIndex(); }catch(e){ log.warn('AP index error', e); }
 
-    await applyBadges(master);
-    cardify(master);
+    await enhanceOnce(master, 'boot');
 
+    attachAjaxHooks();
     attachGridObserver();
 
     log.info('Boot complete', { rows: master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow').length, version: VERSION });
@@ -723,7 +758,7 @@
       const rows = master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow');
       const out = [];
       rows.forEach((tr,i)=>{
-        const cb = getRowCheckbox(tr);
+        const cb = tr.querySelector('input[type="checkbox"][name*="chkSelect"]');
         const a  = findInvoiceAnchor(tr);
         out.push({
           i, hasCb: !!cb, cbId: cb?.id, cbName: cb?.name,
