@@ -1,3 +1,7 @@
 .epi-action{
     display: none !important;
 }
+
+a#ctl00_PageBody_ctl00_BackButton{
+    display: none !important;
+}
