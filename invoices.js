@@ -856,3 +856,112 @@
   };
 })();
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* =========================================================================
+   Patch — surface the built-in row checkbox & add our radio beside it
+   - Reparents existing chkSelect into a visible wrap in the first cell
+   - Appends a wlInvPick radio (value = invoice #)
+   - Re-applies after Telerik partial postbacks
+   ========================================================================== */
+(function(){
+  if (!/Invoices_r\.aspx/i.test(location.pathname)) return;
+
+  // Minimal CSS to ensure the selection cluster is visible over the card
+  const css = `
+    .wl-select-wrap{
+      position:absolute; left:10px; top:10px;
+      display:flex; align-items:center; gap:8px;
+      z-index:20; background:transparent;
+    }
+    /* first cell stays visible/clickable in card mode */
+    .wl-inv-cardify tr.rgRow > td:first-child,
+    .wl-inv-cardify tr.rgAltRow > td:first-child{
+      display:block !important; position:absolute; left:0; top:0;
+      border:none !important; background:transparent; padding:0 6px;
+    }
+    .wl-inv-cardify input[type="checkbox"], .wl-inv-cardify input.wl-radio { cursor:pointer; }
+  `;
+  const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
+
+  const findMaster = ()=>(
+    document.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00') ||
+    document.querySelector('#ctl00_PageBody_InvoicesGrid .rgMasterTable') ||
+    document.querySelector('.RadGrid[id*="InvoicesGrid"] .rgMasterTable')
+  );
+
+  function moveAndAttachSelection(tr){
+    const first = tr.cells && tr.cells[0];
+    if (!first) return;
+
+    // Ensure a visible wrap inside the first cell
+    let wrap = first.querySelector('.wl-select-wrap');
+    if (!wrap){
+      wrap = document.createElement('div');
+      wrap.className = 'wl-select-wrap';
+      first.appendChild(wrap);
+    }
+
+    // 1) MOVE the existing Telerik checkbox into our wrap (do NOT clone)
+    //    Example input: id/name ends with chkSelect (dynamic indices)
+    let cb = tr.querySelector('input[type="checkbox"][name*="InvoicesGrid"][name*="chkSelect"]') ||
+             tr.querySelector('input[type="checkbox"][name*="chkSelect"]');
+    if (cb && cb.closest('.wl-select-wrap') !== wrap){
+      wrap.appendChild(cb);
+    }
+
+    // 2) Add our single-select radio (if you want it)
+    //    It's independent — keeps Telerik checkbox behavior intact.
+    const invAnchor = tr.querySelector('td[data-title="Invoice #"] a');
+    const invNo = invAnchor ? invAnchor.textContent.trim() : '';
+    if (invNo && !wrap.querySelector('input.wl-radio')){
+      const radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.className = 'wl-radio';
+      radio.name = 'wlInvPick';
+      radio.value = invNo;
+      radio.setAttribute('aria-label', `Select invoice ${invNo}`);
+      wrap.appendChild(radio);
+
+      // Clicking empty card space selects this radio (not links/buttons/inputs)
+      tr.addEventListener('click', (e)=>{
+        if (!e.target.closest('a,button,input,label')) radio.checked = true;
+      });
+    }
+  }
+
+  function applyAll(){
+    const master = findMaster(); if (!master) return;
+    master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow').forEach(moveAndAttachSelection);
+  }
+
+  // Initial pass
+  applyAll();
+
+  // Re-apply on partial postbacks / paging
+  const gridRoot = document.getElementById('ctl00_PageBody_InvoicesGrid');
+  if (gridRoot && !gridRoot.__wlSelObs){
+    gridRoot.__wlSelObs = true;
+    new MutationObserver(()=>applyAll()).observe(gridRoot, { childList:true, subtree:true });
+  }
+
+  // Expose helper (merged with your existing WLInvoices if present)
+  window.WLInvoices = Object.assign({}, window.WLInvoices, {
+    getSelectedInvoice(){ const r = document.querySelector('input.wl-radio:checked'); return r ? r.value : null; }
+  });
+})();
