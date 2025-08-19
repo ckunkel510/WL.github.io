@@ -1,109 +1,57 @@
 /* =========================================================================
-   Woodson — Invoices Card UI (v3.8)
-   - Working logic (AP crawl + date-range + badges + filters)
+   Woodson — Invoices Card UI (v3.9)
+   - Same working logic (AP crawl + date-range + badges + filters)
    - Card UI formatting
-   - ALWAYS-SHOWN per-row selection: wraps the real chkSelect in a visible UI
-   - Hides Telerik decorators, keeps native input for postbacks
-   - Caps re-runs: 2 passes per grid state; proper MS AJAX reset; no double boot
+   - NEW: Always-visible custom checkbox in each card header
+     • Clicking it calls the REAL chkSelect.click() (keeps Telerik postbacks)
+     • Stays in sync with header Select-All and any programmatic changes
+   - Run cap: at most 2 enhance passes per grid state; reset on MS AJAX postback
    ========================================================================== */
 
 (function () {
   'use strict';
   if (!/Invoices_r\.aspx/i.test(location.pathname)) return;
-  if (window.__WL_INVOICES_BOOTED__) return; // prevent double boot
+  if (window.__WL_INVOICES_BOOTED__) return;
   window.__WL_INVOICES_BOOTED__ = true;
 
-  /* ---------- logger ---------- */
-  const LVL = { error:0, warn:1, info:2, debug:3, trace:4 };
-  const LS_KEY = 'WL_INV_LOG';
-  let LOG_LEVEL = (() => {
-    const ls = (localStorage.getItem(LS_KEY) || '').toLowerCase();
-    if (ls in LVL) return LVL[ls];
-    return LVL.info; // default calmer; switch to 'debug' if needed
-  })();
-  const prefix = (lvl) => [`%cINV`, `color:#005d6e;font-weight:700;`, `[${lvl.toUpperCase()}]`];
+  /* ---------- logger (quiet by default) ---------- */
+  const LVL = { error:0, warn:1, info:2, debug:3 };
+  let LOG = LVL.info; // set to LVL.debug if you want more noise
   const log = {
-    setLevel(l){
-      if (typeof l === 'string' && l.toLowerCase() in LVL) LOG_LEVEL = LVL[l.toLowerCase()];
-      else if (typeof l === 'number') LOG_LEVEL = l|0;
-      try { localStorage.setItem(LS_KEY, Object.keys(LVL).find(k=>LVL[k]===LOG_LEVEL) || 'info'); }catch{}
-      console.log(...prefix('info'), 'Log level set to', LOG_LEVEL);
-    },
-    error(...a){ if (LOG_LEVEL >= LVL.error) console.error(...prefix('error'), ...a); },
-    warn (...a){ if (LOG_LEVEL >= LVL.warn ) console.warn (...prefix('warn' ), ...a); },
-    info (...a){ if (LOG_LEVEL >= LVL.info ) console.log  (...prefix('info' ), ...a); },
-    debug(...a){ if (LOG_LEVEL >= LVL.debug) console.log  (...prefix('debug'), ...a); },
-    trace(...a){ if (LOG_LEVEL >= LVL.trace) console.log  (...prefix('trace'), ...a); },
+    info (...a){ if (LOG>=LVL.info ) console.log('[INV]',...a); },
+    warn (...a){ if (LOG>=LVL.warn ) console.warn('[INV]',...a); },
+    debug(...a){ if (LOG>=LVL.debug) console.log('[INV]',...a); },
   };
 
-  const VERSION = '3.8';
-  const t0 = performance.now();
-  log.info(`Version ${VERSION} booting… (+${(performance.now()-t0).toFixed(1)}ms)`);
+  const VERSION = '3.9';
+  log.info('Version', VERSION, 'booting…');
 
   /* ---------- CSS ---------- */
   (function injectCSS(){
     const css = `
-      /* Keep Select-All visible, hide other headers for a clean card grid */
+      /* Hide all header th except first (Select-All) */
       #ctl00_PageBody_InvoicesGrid thead th:not(:first-child),
       .RadGrid[id*="InvoicesGrid"] thead th:not(:first-child){ display:none !important; }
 
-      /* Cardify body rows */
+      /* Card rows */
       .wl-inv-cardify tr.rgRow, .wl-inv-cardify tr.rgAltRow{
         display:block; background:#fff; border:1px solid #e5e7eb; border-radius:16px;
         margin:12px 0; box-shadow:0 6px 18px rgba(15,23,42,.06); overflow:hidden; position:relative;
       }
       .wl-inv-cardify tr.rgRow > td, .wl-inv-cardify tr.rgAltRow > td{ display:none !important; }
 
-      /* First cell stays as our anchor overlay */
+      /* Keep first cell present (positioned) for legacy checkbox, but tiny/invisible */
       .wl-inv-cardify tr.rgRow > td:first-child,
       .wl-inv-cardify tr.rgAltRow > td:first-child{
-        display:block !important; position:absolute; left:0; top:0;
-        border:none !important; background:transparent; padding:0; margin:0;
-        width:auto !important; min-width:40px;
-        z-index:100;
+        display:block !important; position:absolute; left:0; top:0; border:none !important;
+        background:transparent; padding:0; margin:0; width:1px !important; min-width:1px !important; height:1px;
+        z-index:1; overflow:hidden;
       }
 
-      /* Selection wrap (holds our visible UI + the real input) */
-      .wl-select-wrap{
-        position:absolute; left:10px; top:10px;
-        display:flex; align-items:center; gap:8px;
-        z-index:101; background:transparent;
-      }
-      .wl-select-wrap[data-debug="1"]{
-        outline: 2px dashed #ef4444;
-        outline-offset: 2px;
-        background: rgba(239,68,68,.06);
-        border-radius: 8px;
-        padding: 4px 6px;
-      }
-
-      /* Hide Telerik/RFD decorators we may have moved */
-      .wl-select-wrap .rfdCheckbox,
-      .wl-select-wrap .rfdSkinnedCheckbox,
-      .wl-select-wrap .rgCheckBox,
-      .wl-select-wrap .RadCheckBox,
-      .wl-select-wrap .checkbox,
-      .wl-select-wrap .chk{ display:none !important; }
-
-      /* Our always-visible custom checkbox */
-      .wl-check{ position:relative; width:20px; height:20px; display:inline-block; }
-      .wl-check input[type="checkbox"]{
-        position:absolute; inset:0; width:100%; height:100%;
-        opacity:0 !important; /* invisible but fully clickable */
-        cursor:pointer; margin:0; padding:0; pointer-events:auto;
-      }
-      .wl-check .wl-check-ui{
-        position:relative; display:inline-block; width:18px; height:18px;
-        border:2px solid #cbd5e1; background:#fff; border-radius:4px; box-sizing:border-box;
-        transition: box-shadow .15s ease, border-color .15s ease, background .15s ease;
-      }
-      .wl-check:focus-within .wl-check-ui{ box-shadow:0 0 0 2px #93c5fd; }
-      .wl-check input[type="checkbox"]:checked + .wl-check-ui{
-        border-color:#0ea5e9; background:#e0f2fe;
-      }
-      .wl-check input[type="checkbox"]:checked + .wl-check-ui::after{
-        content:""; position:absolute; left:4px; top:0px; width:6px; height:12px;
-        border:2px solid #0369a1; border-top:0; border-left:0; transform:rotate(45deg);
+      /* Ensure the REAL checkbox never shows/overlaps; keep it clickable for postback only if needed */
+      .wl-hide-native{
+        position:absolute !important; left:-9999px !important; top:auto !important; width:1px !important;
+        height:1px !important; overflow:hidden !important; opacity:0 !important; pointer-events:none !important;
       }
 
       .wl-row-head{
@@ -112,6 +60,17 @@
       }
       .wl-head-left{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
       .wl-head-right{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+
+      /* Our always-visible card checkbox */
+      .wl-card-check{
+        width:20px; height:20px; border:2px solid #cbd5e1; border-radius:4px; background:#fff;
+        display:inline-flex; align-items:center; justify-content:center; cursor:pointer;
+        transition: border-color .15s ease, background .15s ease, box-shadow .15s ease;
+      }
+      .wl-card-check:focus-visible{ outline:0; box-shadow:0 0 0 3px #93c5fd; }
+      .wl-card-check[data-checked="true"]{ border-color:#0ea5e9; background:#e0f2fe; }
+      .wl-card-check svg{ width:12px; height:12px; display:none; }
+      .wl-card-check[data-checked="true"] svg{ display:block; }
 
       .wl-inv-no{ font-weight:900; font-size:16px; letter-spacing:.2px; }
       @media (min-width:1024px){ .wl-inv-no{ font-size:18px; } }
@@ -143,7 +102,6 @@
       .wl-act { border:1px solid #e5e7eb; border-radius:10px; padding:6px 10px; font-weight:700; background:#f8fafc; font-size:12px; cursor:pointer; }
     `;
     const el = document.createElement('style'); el.textContent = css; document.head.appendChild(el);
-    log.debug('CSS injected', el);
   })();
 
   /* ---------- utils ---------- */
@@ -177,45 +135,27 @@
 
     const startISO = toISO(startState, 'ctl00_PageBody_dtDateEntryStart_RadDatePicker1_dateInput');
     const endISO   = toISO(endState,   'ctl00_PageBody_dtDateEntryEnd_RadDatePicker1_dateInput');
-    log.info('Date range', { startISO, endISO, startState, endState });
     return { startISO, endISO };
   }
 
-  /* ---------- AccountPayment crawler ---------- */
+  /* ---------- AP crawl & cache ---------- */
   function apCacheKey(startISO, endISO){ return `wl_ap_index_v3_${startISO || 'na'}_${endISO || 'na'}`; }
-
   async function buildAccountPaymentIndex(startISO, endISO){
     const key = apCacheKey(startISO, endISO);
     try{
       const raw = sessionStorage.getItem(key);
       if (raw){
         const { at, data } = JSON.parse(raw);
-        if (Date.now() - at < 10*60*1000){
-          const map = new Map(data);
-          log.info('AP index cache HIT', { key, size: map.size, ageSec: ((Date.now()-at)/1000)|0 });
-          return map;
-        }
-        log.info('AP index cache STALE', { key });
-      } else {
-        log.debug('AP index cache MISS', { key });
+        if (Date.now() - at < 10*60*1000) return new Map(data);
       }
-    }catch(e){ log.warn('AP cache parse error', e); }
-
+    }catch{}
     const base = new URL('/AccountPayment_r.aspx', location.origin);
     base.searchParams.set('searchType','TransactionDate');
     if (startISO) base.searchParams.set('startDate', `${startISO}T00:00:00`);
     if (endISO)   base.searchParams.set('endDate',   `${endISO}T23:59:59`);
-    log.info('AP crawl base URL', base.toString());
 
     const parser = new DOMParser();
-    const fetchText = async (url) => {
-      log.debug('AP fetch', url);
-      const res = await fetch(url, { credentials:'same-origin', cache:'no-cache' });
-      log.debug('AP fetch status', url, res.status);
-      if (!res.ok) throw new Error('HTTP '+res.status);
-      return res.text();
-    };
-
+    const fetchText = (url)=> fetch(url, { credentials:'same-origin', cache:'no-cache' }).then(r=>r.text());
     const normalizePagerUrl = (href)=>{
       const u = new URL(href, base.toString());
       if (startISO && !u.searchParams.get('startDate')) u.searchParams.set('startDate', `${startISO}T00:00:00`);
@@ -226,12 +166,10 @@
     };
 
     const index = new Map();
-
     const parseRows = (doc)=>{
       const host = doc.querySelector('#ctl00_PageBody_InvoicesGrid') || doc;
       const tbl  = host.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00') || host.querySelector('.rgMasterTable');
-      if (!tbl) { log.warn('AP parse: table not found'); return 0; }
-      let count = 0;
+      if (!tbl) return 0;
       const rows = tbl.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow');
       rows.forEach(tr=>{
         const type = txt(tr.querySelector('td[data-title="Type"]')) || txt(tr.children[1]);
@@ -242,64 +180,43 @@
         const outVal = parseMoney(outTxt);
         if (docNo && (type||'').toLowerCase() === 'invoice'){
           index.set(docNo, { outstanding: outVal });
-          count++;
         }
       });
-      log.debug('AP parse: rows found', rows.length, 'invoices indexed', count);
-      return count;
-    };
-
-    const collectPager = (doc)=>{
-      const set = new Set([base.toString()]);
-      doc.querySelectorAll('ul.pagination a.page-link[href]').forEach(a=>{
-        const href = a.getAttribute('href');
-        if (href && /pageIndex=\d+/.test(href)) set.add(normalizePagerUrl(href));
-      });
-      const list = Array.from(set);
-      log.debug('AP pager links', list);
-      return list;
     };
 
     try{
       const firstHTML = await fetchText(base.toString());
       const firstDoc  = parser.parseFromString(firstHTML, 'text/html');
       parseRows(firstDoc);
-      const hrefs = collectPager(firstDoc).filter(u => u !== base.toString());
+      const hrefs = Array.from(new Set(
+        [base.toString()].concat(
+          Array.from(firstDoc.querySelectorAll('ul.pagination a.page-link[href]'))
+            .map(a=>a.getAttribute('href'))
+            .filter(h=>/pageIndex=\d+/.test(h||''))
+            .map(normalizePagerUrl)
+        )
+      )).filter(u => u !== base.toString());
       if (hrefs.length){
         const results = await Promise.allSettled(hrefs.map(h=>fetchText(h)));
-        results.forEach((r,i)=>{
-          if (r.status === 'fulfilled'){
-            const d = parser.parseFromString(r.value, 'text/html');
-            parseRows(d);
-          } else {
-            log.warn('AP page fetch failed', hrefs[i], r.reason);
-          }
-        });
+        results.forEach(r=>{ if (r.status==='fulfilled'){ parseRows(parser.parseFromString(r.value, 'text/html')); }});
       }
-    }catch(err){ log.warn('AP crawl failed:', err); }
+    }catch{}
 
-    try{
-      sessionStorage.setItem(key, JSON.stringify({at: Date.now(), data: Array.from(index.entries())}));
-      log.info('AP index stored', { key, size: index.size });
-    }catch(e){ log.warn('AP cache store failed', e); }
-
+    try{ sessionStorage.setItem(key, JSON.stringify({at: Date.now(), data: Array.from(index.entries())})); }catch{}
     return index;
   }
-
   let __AP_PROMISE__ = null;
   async function ensureApIndex(){
     const { startISO, endISO } = readInvoiceDateRange();
-    if (!__AP_PROMISE__) { __AP_PROMISE__ = buildAccountPaymentIndex(startISO, endISO); }
+    if (!__AP_PROMISE__) __AP_PROMISE__ = buildAccountPaymentIndex(startISO, endISO);
     return __AP_PROMISE__;
   }
 
   /* ---------- grid helpers ---------- */
   async function getMasterTable(){
     const root = await waitFor('#ctl00_PageBody_InvoicesGrid');
-    if (!root) { log.error('Grid host not found'); return null; }
-    const master = root.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00') || root.querySelector('.rgMasterTable');
-    log.info('Master table', master);
-    return master;
+    if (!root) return null;
+    return root.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00') || root.querySelector('.rgMasterTable');
   }
   function todayAtMidnight(){ const d = new Date(); d.setHours(0,0,0,0); return d; }
   function findInvoiceAnchor(tr){
@@ -308,100 +225,81 @@
   const grab = (tr, sel) => { const el = tr.querySelector(sel); return el ? el.textContent.trim() : ''; };
   const abs  = (u)=>{ try{ return new URL(u, location.origin).toString(); }catch{ return u; } };
 
-  /* ---------- checkbox surfacing (ALWAYS visible UI) ---------- */
-  function getRowCheckbox(tr){
-    const first = tr.cells && tr.cells[0];
-    let cb = first ? first.querySelector('input[type="checkbox"][name*="chkSelect"]') : null;
-    if (!cb) cb = tr.querySelector('input[type="checkbox"][name*="chkSelect"]');
-    return cb;
+  /* ---------- NEW: Custom card checkbox (proxy to REAL chkSelect) ---------- */
+  function findRealCheckbox(tr){
+    return tr.querySelector('input[type="checkbox"][name*="chkSelect"]');
   }
-  function findAnyDecorator(cb, tr){
-    if (!cb || !tr) return null;
-    let deco = tr.querySelector(`label[for="${cb.id}"]`); if (deco) return deco;
-    if (cb.parentElement && cb.parentElement.tagName === 'LABEL') return cb.parentElement;
-    const sib = cb.nextElementSibling;
-    if (sib && /(rfd|chk|checkbox|rgCheck|RadCheck)/i.test(sib.className || '')) return sib;
-    const guess = tr.querySelector(`.rfdCheckbox, .rfdSkinnedCheckbox, .rgCheckBox, .RadCheckBox, .checkbox, .chk`);
-    return guess || null;
+  function ensureCardCheckbox(tr){
+    // Create the visible control in the card header (left side)
+    const headLeft = tr.querySelector('.wl-row-head .wl-head-left');
+    if (!headLeft) return null;
+
+    let btn = headLeft.querySelector('.wl-card-check');
+    if (!btn){
+      btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'wl-card-check';
+      btn.setAttribute('role','checkbox');
+      btn.setAttribute('aria-checked','false');
+      btn.innerHTML = `<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6.5 11.2L3.3 8l1.4-1.4 1.8 1.8 4.8-4.8L12.7 5 6.5 11.2z"/></svg>`;
+      headLeft.insertBefore(btn, headLeft.firstChild);
+    }
+    return btn;
   }
-  function surfaceCheckboxInCard(tr, rowIndex){
-    if (!tr || !(tr.classList.contains('rgRow') || tr.classList.contains('rgAltRow'))) return;
-    const firstCell = tr.cells && tr.cells[0];
-    if (!firstCell) { log.warn('Row has no first cell', { rowIndex }); return; }
+  function syncCardCheckboxFromReal(tr){
+    const real = findRealCheckbox(tr); if (!real) return;
+    const btn  = ensureCardCheckbox(tr); if (!btn) return;
 
-    const cb = getRowCheckbox(tr);
-    if (!cb){ log.warn('Row checkbox not found', { rowIndex }); return; }
+    // Make sure the real one is hidden from view but kept in DOM
+    real.classList.add('wl-hide-native');
 
-    let wrap = firstCell.querySelector('.wl-select-wrap');
-    if (!wrap){
-      wrap = document.createElement('div');
-      wrap.className = 'wl-select-wrap';
-      if (localStorage.getItem('WL_INV_DEBUG_WRAP') === '1') wrap.dataset.debug = '1';
-      firstCell.appendChild(wrap);
-      log.debug('Created .wl-select-wrap', { rowIndex });
-    }
+    const checked = !!real.checked;
+    btn.dataset.checked = checked ? 'true' : 'false';
+    btn.setAttribute('aria-checked', checked ? 'true' : 'false');
+    btn.disabled = !!real.disabled;
+  }
+  function bindCardCheckboxInteractions(tr){
+    const real = findRealCheckbox(tr); if (!real) return;
+    const btn  = ensureCardCheckbox(tr); if (!btn) return;
 
-    // Move any Telerik/RFD decorator into the wrap then hide it.
-    const deco = findAnyDecorator(cb, tr);
-    if (deco && deco.closest('.wl-select-wrap') !== wrap){
-      wrap.appendChild(deco);
-    }
-    if (deco){
-      deco.style.display = 'none';
-      deco.setAttribute('aria-hidden','true');
-    }
-
-    // Build our ALWAYS-visible checkbox UI and place the REAL input inside it.
-    let label = wrap.querySelector('label.wl-check');
-    if (!label){
-      label = document.createElement('label');
-      label.className = 'wl-check';
-      wrap.appendChild(label);
-    }
-    if (cb.closest('label.wl-check') !== label){
-      label.appendChild(cb); // reparent REAL input
-    }
-    let ui = label.querySelector('.wl-check-ui');
-    if (!ui){
-      ui = document.createElement('span');
-      ui.className = 'wl-check-ui';
-      label.appendChild(ui);
-      log.debug('Applied custom checkbox UI', { rowIndex });
+    // Clicking the visible button proxies to the real checkbox (fires Telerik handlers)
+    if (!btn.__wlBound){
+      btn.addEventListener('click', (e)=>{
+        e.preventDefault(); e.stopPropagation();
+        // Let Telerik do its thing via native click
+        real.click();
+        // After the real click, reflect UI state
+        setTimeout(()=> syncCardCheckboxFromReal(tr), 0);
+      });
+      btn.__wlBound = true;
     }
 
-    // Ensure the real input is clickable across the whole square
-    Object.assign(cb.style, {
-      position:'absolute', inset:'0', width:'100%', height:'100%',
-      opacity:'0', visibility:'visible', display:'block'
+    // If something else toggles the real one (Select-All, scripts), reflect UI
+    if (!real.__wlBound){
+      real.addEventListener('change', ()=> syncCardCheckboxFromReal(tr));
+      real.__wlBound = true;
+    }
+
+    // Initial sync
+    syncCardCheckboxFromReal(tr);
+  }
+  function syncAllCardChecks(master){
+    master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow').forEach(tr=>{
+      syncCardCheckboxFromReal(tr);
     });
-
-    // Clicks on the wrap empty area should also toggle
-    if (!wrap.__wlClickBound){
-      wrap.addEventListener('click', (e)=>{ if (e.target === wrap) cb.click(); }, { passive:true });
-      wrap.__wlClickBound = true;
-    }
-  }
-  function surfaceAllCheckboxes(master){
-    const rows = master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow');
-    log.info('Surfacing checkboxes for rows', rows.length);
-    let i=0; rows.forEach(tr=>surfaceCheckboxInCard(tr, i++));
   }
 
   /* ---------- badging ---------- */
   async function applyBadges(master){
     const rows = Array.from(master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow'));
-    log.info('applyBadges on rows', rows.length);
     if (!rows.length) return;
 
-    const apIndex = await ensureApIndex().catch((e)=>{ log.warn('ensureApIndex failed', e); return null; });
+    const apIndex = await ensureApIndex().catch(()=>null);
     const today = todayAtMidnight();
 
-    rows.forEach((tr, idx)=>{
+    rows.forEach((tr)=>{
       const a = findInvoiceAnchor(tr);
       const invNo = a ? (a.textContent||'').trim() : '';
-
-      // make sure checkbox is visible ASAP
-      surfaceCheckboxInCard(tr, idx);
 
       let status = 'unknown';
       let outLeft = 0;
@@ -410,7 +308,7 @@
         const info = apIndex.get(invNo);
         const total = parseMoney(grab(tr,'td[data-title="Total Amount"]'));
         if (!info || nearlyZero(info.outstanding)){
-          status = 'paid'; outLeft = 0;
+          status = 'paid';
         }else{
           const out = Number(info.outstanding) || 0;
           if (Number.isFinite(total) && out < total - 0.009){ status = 'partial'; outLeft = out; }
@@ -426,11 +324,7 @@
       tr.dataset.outstanding = String(outLeft || 0);
       tr.dataset.overdue = overdue ? '1' : '0';
 
-      if (LOG_LEVEL >= LVL.debug){
-        log.debug(`Row ${idx} badge ${invNo||'(no #)'} → ${status}${overdue?' (overdue)':''}`);
-      }
-
-      // Legacy cell badge (harmless if hidden by card UI)
+      // Legacy badge (kept harmless)
       const invCells = tr.querySelectorAll('td[data-title="Invoice #"]');
       invCells.forEach(cell=>{
         let badge = cell.querySelector('.wl-badge');
@@ -446,7 +340,7 @@
   }
 
   /* ---------- card rendering ---------- */
-  function buildCardForRow(tr, idx){
+  function buildCardForRow(tr){
     if (tr.__wlCard) return;
     const a = findInvoiceAnchor(tr);
     const invNo = a ? (a.textContent||'').trim() : '';
@@ -467,13 +361,11 @@
       a.style.overflow='hidden'; a.style.clip='rect(1px,1px,1px,1px)'; a.setAttribute('aria-hidden','true');
     }
 
-    // ensure checkbox UI exists even before statuses
-    surfaceCheckboxInCard(tr, idx);
-
     const head = document.createElement('div');
     head.className = 'wl-row-head';
     head.innerHTML = `
       <div class="wl-head-left">
+        <!-- custom card checkbox gets inserted here -->
         <span class="wl-inv-no">${invNo ? `Invoice #${invNo}` : `Invoice`}</span>
         <span class="wl-chip wl-chip--slate wl-card-badge"><span class="wl-badge-skel">checking…</span></span>
         <div class="wl-meta">
@@ -493,6 +385,9 @@
       </div>
     `;
     tr.insertAdjacentElement('afterbegin', head);
+
+    // Build and bind the visible card checkbox (proxy to real)
+    bindCardCheckboxInteractions(tr);
 
     const details = document.createElement('div');
     details.className = 'wl-details';
@@ -525,9 +420,9 @@
               </div>
             `).join('') || `<div style="color:#475569;">No line items found.</div>`;
           } else {
-            details.innerHTML = `<div style="color:#475569;">Couldn’t read details.${invHref!=='#' ? ` <a href="${invHref}">Open invoice page</a>.` : ''}</div>`;
+            details.innerHTML = `<div style="color:#475569;">Couldn’t read details. <a href="${invHref}">Open invoice page</a>.</div>`;
           }
-        }catch(ex){
+        }catch{
           details.innerHTML = `<div style="color:#7f1d1d;background:#fee2e2;border:1px solid #fecaca;border-radius:10px;padding:10px;">
             Sorry, we couldn’t load details.${invHref!=='#' ? ` You can still <a href="${invHref}">open the invoice page</a>.` : ``}
           </div>`;
@@ -538,7 +433,6 @@
     });
 
     tr.__wlCard = true;
-    log.debug('Card built', { idx, invNo });
     updateCardBadge(tr);
   }
   function updateCardBadge(tr){
@@ -556,19 +450,20 @@
   }
   function cardify(master){
     const host = master.closest('#ctl00_PageBody_InvoicesGrid, .RadGrid[id*="InvoicesGrid"]');
-    if (!host) { log.warn('cardify: host not found'); return; }
+    if (!host) return;
     master.classList.add('wl-inv-cardify');
     const rows = Array.from(master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow'));
-    log.info('cardify on rows', rows.length);
-    rows.forEach((tr,i)=>{ try{ buildCardForRow(tr,i); }catch(e){ log.warn('Cardify row fail', i, e); } });
-    surfaceAllCheckboxes(master); // belt & suspenders
+    rows.forEach(tr=>{ try{ buildCardForRow(tr); }catch(e){ log.warn('Cardify row fail', e); } });
+
+    // After cards exist, sync all custom checkboxes from real ones
+    syncAllCardChecks(master);
   }
 
   /* ---------- toolbar ---------- */
   function ensureToolbar(){
     const grid = document.getElementById('ctl00_PageBody_InvoicesGrid');
     const flex = grid?.closest('.bodyFlexItem') || grid;
-    if (!flex) { log.warn('Toolbar: container not found'); return null; }
+    if (!flex) return null;
     if (flex.querySelector('.wl-toolbar')) return flex.querySelector('.wl-toolbar');
 
     const bar = document.createElement('div');
@@ -582,7 +477,6 @@
       <button class="wl-act" data-action="select-filtered">Select filtered</button>
     `;
     flex.insertBefore(bar, flex.firstChild);
-    log.info('Toolbar added');
 
     bar.addEventListener('click',(e)=>{
       const chip = e.target.closest('.wl-chipbtn');
@@ -600,58 +494,48 @@
   function applyFilter(filter){
     const master = document.querySelector('#ctl00_PageBody_InvoicesGrid .rgMasterTable'); if (!master) return;
     const rows = master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow');
-    let shown=0, hidden=0;
     rows.forEach(tr=>{
       const status = tr.dataset.status || 'unknown';
       const show = (filter === 'all') ? true : (status === filter);
       tr.style.display = show ? '' : 'none';
-      show ? shown++ : hidden++;
     });
-    log.info('Filter applied', { filter, shown, hidden });
   }
   function selectFilteredOnPage(){
     const root = document.getElementById('ctl00_PageBody_InvoicesGrid'); if (!root) return;
     const boxes = root.querySelectorAll('tbody input[type="checkbox"][name*="chkSelect"]');
-    let clicks = 0;
     boxes.forEach(cb=>{
       const tr = cb.closest('tr');
-      if (tr && tr.style.display !== 'none' && !cb.checked){ cb.click(); clicks++; }
+      if (tr && tr.style.display !== 'none' && !cb.checked){
+        cb.click(); // let Telerik wire run
+        const btn = tr.querySelector('.wl-card-check'); if (btn) syncCardCheckboxFromReal(tr);
+      }
     });
-    log.info('Select filtered - clicked', clicks, 'checkboxes');
   }
 
   /* ---------- observer (debounced + capped) ---------- */
-  let observer, observeSuspended = false;
-  let debounceId = null;
-  let lastKey = '';
-  let runsForKey = 0;
+  let observer, observeSuspended = false, debounceId = null, lastKey = '', runsForKey = 0;
   const MAX_RUNS_PER_KEY = 2;
 
   function computeGridKey(master){
     const rows = master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow');
-    const n = rows.length;
-    const firstInv = (findInvoiceAnchor(rows[0])?.textContent||'').trim();
-    const lastInv  = (findInvoiceAnchor(rows[n-1])?.textContent||'').trim();
+    const n = rows.length || 0;
+    const firstInv = n ? (findInvoiceAnchor(rows[0])?.textContent||'').trim() : '';
+    const lastInv  = n ? (findInvoiceAnchor(rows[n-1])?.textContent||'').trim() : '';
     return `${n}:${firstInv}-${lastInv}`;
   }
-
   async function enhanceOnce(master, reason){
     if (!master) return;
     const key = computeGridKey(master);
-    if (key === lastKey && runsForKey >= MAX_RUNS_PER_KEY){
-      log.info('Enhance skipped (cap reached)', { key, runsForKey, reason });
-      return;
-    }
+    if (key === lastKey && runsForKey >= MAX_RUNS_PER_KEY){ log.info('Enhance skipped', {key, reason}); return; }
     if (key !== lastKey){ lastKey = key; runsForKey = 0; }
     runsForKey++;
-    log.debug('Enhance run', { reason, key, run: runsForKey });
     await applyBadges(master);
     cardify(master);
-    surfaceAllCheckboxes(master);
+    // keep card checks synced in case of select-all changes
+    syncAllCardChecks(master);
   }
-
   function attachGridObserver(){
-    const gridRoot = document.getElementById('ctl00_PageBody_InvoicesGrid'); if (!gridRoot) { log.warn('Observer: grid root not found'); return; }
+    const gridRoot = document.getElementById('ctl00_PageBody_InvoicesGrid'); if (!gridRoot) return;
     if (observer) return;
 
     observer = new MutationObserver(()=>{
@@ -663,7 +547,6 @@
       }, 120);
     });
     observer.observe(gridRoot, { childList:true, subtree:true });
-    log.info('Grid observer attached');
   }
 
   /* ---------- MS AJAX hooks ---------- */
@@ -671,71 +554,48 @@
     try{
       if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
         const prm = Sys.WebForms.PageRequestManager.getInstance();
-        prm.add_initializeRequest(()=>{ observeSuspended = true; log.debug('AJAX initializeRequest → suspend observer'); });
+        prm.add_initializeRequest(()=>{ observeSuspended = true; });
         prm.add_endRequest(()=> {
-          observeSuspended = false;
-          lastKey = ''; runsForKey = 0; // reset cap after real partial postback
-          log.debug('AJAX endRequest → resume observer & reset cap');
+          observeSuspended = false; lastKey = ''; runsForKey = 0;
           const master = document.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00, #ctl00_PageBody_InvoicesGrid .rgMasterTable, .RadGrid[id*="InvoicesGrid"] .rgMasterTable');
           if (master) enhanceOnce(master, 'ajax-endRequest');
         });
       }
-    }catch(e){ log.warn('AJAX hook attach failed', e); }
+    }catch{}
+  }
+
+  /* ---------- keep Select-All in sync with our card checks ---------- */
+  function hookSelectAllSync(){
+    const headCb = document.querySelector('#ctl00_PageBody_InvoicesGrid thead input[type="checkbox"], .RadGrid[id*="InvoicesGrid"] thead input[type="checkbox"]');
+    if (!headCb || headCb.__wlHeadBound) return;
+    headCb.addEventListener('change', ()=>{
+      const master = document.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00, #ctl00_PageBody_InvoicesGrid .rgMasterTable, .RadGrid[id*="InvoicesGrid"] .rgMasterTable');
+      if (master) syncAllCardChecks(master);
+    });
+    headCb.__wlHeadBound = true;
   }
 
   /* ---------- boot ---------- */
   async function boot(){
-    log.info('Boot start');
-    const headerSelectAll = document.querySelector('#ctl00_PageBody_InvoicesGrid thead input[type="checkbox"], .RadGrid[id*="InvoicesGrid"] thead input[type="checkbox"]');
-    log.info('Header Select-All present?', !!headerSelectAll, headerSelectAll ? { id: headerSelectAll.id, name: headerSelectAll.name } : null);
-
-    const master = await getMasterTable(); if (!master){ log.error('No master table — aborting'); return; }
+    const master = await getMasterTable(); if (!master) return;
     ensureToolbar();
-
-    try{ await ensureApIndex(); }catch(e){ log.warn('AP index error', e); }
-
+    try{ await ensureApIndex(); }catch{}
     await enhanceOnce(master, 'boot');
-
     attachAjaxHooks();
     attachGridObserver();
-
+    hookSelectAllSync();
     log.info('Boot complete', { rows: master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow').length, version: VERSION });
   }
 
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', boot, { once:true });
-  } else {
-    boot();
-  }
-  // no extra window.load boot—avoids double run
+  if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', boot, { once:true }); }
+  else { boot(); }
 
-  /* ---------- debug helpers ---------- */
+  /* ---------- export minimal debug helpers ---------- */
   window.WLInvoices = {
     version: VERSION,
-    setLogLevel: log.setLevel,
-    resurface(){
+    sync(){
       const master = document.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00, #ctl00_PageBody_InvoicesGrid .rgMasterTable, .RadGrid[id*="InvoicesGrid"] .rgMasterTable');
-      if (!master) return log.warn('resurface: no master');
-      surfaceAllCheckboxes(master);
-    },
-    scanRows(){
-      const master = document.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00, #ctl00_PageBody_InvoicesGrid .rgMasterTable, .RadGrid[id*="InvoicesGrid"] .rgMasterTable');
-      if (!master) return log.warn('scanRows: no master');
-      const rows = master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow');
-      const out = [];
-      rows.forEach((tr,i)=>{
-        const cb = tr.querySelector('input[type="checkbox"][name*="chkSelect"]');
-        const a  = findInvoiceAnchor(tr);
-        out.push({
-          i, hasCb: !!cb, cbId: cb?.id, cbName: cb?.name,
-          inv: a ? (a.textContent||'').trim() : null,
-          status: tr.dataset.status, overdue: tr.dataset.overdue
-        });
-      });
-      console.table(out);
-      return out;
+      if (master) syncAllCardChecks(master);
     }
   };
-
-  log.info(`Version ${VERSION} ready (+${(performance.now()-t0).toFixed(1)}ms)`);
 })();
