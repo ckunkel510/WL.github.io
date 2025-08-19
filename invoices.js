@@ -1,417 +1,505 @@
 
 /* =========================================================
-   INVOICES — Card UI (List) + Details Enhancer
-   Mirrors the OpenOrders experience you shipped
+   Woodson — Invoices UI Enhancer
+   - Invoices_r.aspx (list): card UI + keep checkboxes
+   - Paid/Open badge via AccountPayment_r.aspx (all pages)
+   - Lazy inline details preview
+   - Invoice details page header actions
+   - Back-to-My-Account button
    ========================================================= */
 
-/* ============================
-   A) INVOICES LIST ENHANCER
-   ============================ */
 (function(){
-  if (!/Invoices_r\.aspx/i.test(location.pathname)) return;
-  if (window.__WL_INVOICES_LIST__) return;
-  window.__WL_INVOICES_LIST__ = true;
-
   const t0 = performance.now();
-  const log = (...a)=>console.log('%cWL:INV-L','color:#6b0016;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
+  const log  = (...a)=>console.log('%cINV','color:#005d6e;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
+  const warn = (...a)=>console.warn('%cINV','color:#b45309;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
 
-  // ---------- CSS ----------
-  (function injectCSS(){
-    const style = document.createElement('style');
-    style.textContent = `
-      /* Hide the grid header – we render cards */
-      #ctl00_PageBody_InvoicesGrid thead,
-      .RadGrid[id*="InvoicesGrid"] thead { display:none !important; }
-
-      /* Cardify */
-      .wl-inv-cardify tr.rgRow, .wl-inv-cardify tr.rgAltRow{
-        display:block; background:#fff; border:1px solid #e5e7eb; border-radius:16px;
-        margin:12px 0; box-shadow:0 6px 18px rgba(0,0,0,.05); overflow:hidden; position:relative
-      }
-      .wl-inv-cardify tr.rgRow>td, .wl-inv-cardify tr.rgAltRow>td{ display:none !important; }
-
-      .wl-row-head{
-        display:grid; gap:8px; padding:14px; align-items:center
-      }
-      @media (min-width: 1024px){
-        .wl-row-head{ grid-template-columns: 1fr auto; }
-        .wl-head-left{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-        .wl-head-right{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
-      }
-      @media (max-width: 1023.98px){
-        .wl-head-left{ display:flex; flex-wrap:wrap; gap:10px; }
-        .wl-head-right{ display:flex; flex-wrap:wrap; gap:8px; }
-      }
-
-      .wl-inv-id{ font-weight:900; font-size:16px; letter-spacing:.2px; }
-      @media (min-width:1024px){ .wl-inv-id{ font-size:18px; } }
-
-      .wl-chip{ display:inline-flex; align-items:center; gap:6px; font-weight:800; border-radius:999px; padding:6px 10px; font-size:12px; text-transform:capitalize; }
-      .wl-chip--green{ background:#dcfce7; color:#065f46; }
-      .wl-chip--amber{ background:#fef3c7; color:#92400e; }
-      .wl-chip--red{ background:#fee2e2; color:#7f1d1d; }
-      .wl-chip--slate{ background:#e2e8f0; color:#0f172a; }
-
-      .wl-meta{ display:flex; gap:12px; flex-wrap:wrap; font-size:12px; color:#475569; }
-      .wl-meta span{ white-space:nowrap; }
-
-      .wl-btn{ appearance:none; border:none; border-radius:12px; font-weight:900; padding:10px 14px; text-decoration:none; cursor:pointer; }
-      .wl-btn--primary{ background:#6b0016; color:#fff; }
-      .wl-btn--ghost{ background:#f8fafc; color:#111827; border:1px solid #e5e7eb; }
-      .wl-btn:disabled{ opacity:.6; cursor:default; }
-
-      .wl-details{ display:none; border-top:1px solid #eef0f3; padding:12px 14px 16px; }
-      .wl-details.show{ display:block; }
-
-      .wl-lines{ display:flex; flex-direction:column; gap:10px; }
-      .wl-line{ display:flex; gap:12px; align-items:flex-start; justify-content:space-between; border:1px solid #eef0f3; border-radius:12px; padding:10px; }
-      .wl-sku{ font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:800; min-width:86px; }
-      .wl-desc{ flex:1; min-width:160px; }
-      .wl-qty{ white-space:nowrap; font-weight:700; }
-
-      .wl-foot-actions{ margin-top:12px; display:flex; gap:8px; flex-wrap:wrap; }
-    `;
-    document.head.appendChild(style);
+  /* ---------------------------
+     Back to My Account button
+     --------------------------- */
+  (function backBtn(){
+    if (window.__WL_BACKBTN_DONE__) return;
+    window.__WL_BACKBTN_DONE__ = true;
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', backBtn, { once:true });
+      return;
+    }
+    const panel = document.getElementById("ctl00_PageBody_Panel1");
+    if (!panel) return;
+    const back = document.createElement('a');
+    back.href = "https://webtrack.woodsonlumber.com/AccountInfo_R.aspx";
+    back.textContent = "← Back to My Account";
+    Object.assign(back.style, {
+      display: "inline-block", marginBottom: "12px", padding: "8px 14px",
+      background: "#6b0016", color: "#fff", borderRadius: "6px",
+      textDecoration: "none", fontWeight: "bold"
+    });
+    back.addEventListener('mouseover', ()=> back.style.background="#8d8d8d");
+    back.addEventListener('mouseout',  ()=> back.style.background="#6b0016");
+    panel.parentNode.insertBefore(back, panel);
   })();
 
-  // ---------- DOM ----------
-  const host = document.querySelector('#ctl00_PageBody_InvoicesGrid, .RadGrid[id*="InvoicesGrid"]');
-  if (!host) { log('Grid host not found'); return; }
-  const table = host.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00, .rgMasterTable');
-  if (!table) { log('Master table not found'); return; }
-  table.classList.add('wl-inv-cardify');
+  /* --------------------------------------------------------
+     Shared: Build AccountPayment index (Doc# -> status)
+     -------------------------------------------------------- */
+  if (!window.__WL_AP_INDEX_PROMISE__){
+    window.__WL_AP_INDEX_PROMISE__ = (async function buildAccountsIndex(){
+      try{
+        const index = new Map(); // docNo -> { outstanding:number, type:string }
+        const base = '/AccountPayment_r.aspx';
+        const fetchText = (u)=>fetch(u, { credentials:'same-origin' }).then(r=>r.text());
 
-  const rows = Array.from(table.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow'));
+        const parsePage = (html) => {
+          const doc = new DOMParser().parseFromString(html, 'text/html');
+          const tbl = doc.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00, .rgMasterTable');
+          const items = [];
+          if (tbl){
+            tbl.querySelectorAll('tbody > tr').forEach(tr=>{
+              const grab = (sel)=>{ const el = tr.querySelector(sel); return el ? el.textContent.trim() : ''; };
+              const type = grab('td[data-title="Type"]');
+              const docNo = grab('span[id*="_DocumentNumber"]');
+              const outstandingTxt = grab('td[data-title="Amount Outstanding"]');
+              const outVal = parseFloat((outstandingTxt||'').replace(/[^0-9.\-]/g,''));
+              if (docNo) items.push({ type, docNo, outstanding: isFinite(outVal)? outVal : 0 });
+            });
+            items.forEach(x=> index.set(x.docNo, { outstanding:x.outstanding, type:x.type }));
+          }
+          return { doc, index };
+        };
 
-  // Helpers
-  const grab = (tr, sel) => (tr.querySelector(sel)?.textContent || '').trim();
-  const findInvoiceAnchor = (tr) =>
-    tr.querySelector('td[data-title="Invoice #"] a[href*="InvoiceDetails_r.aspx"]') ||
-    tr.querySelector('td[data-title="Invoice #"] a[href*="/Invoices_r.aspx?oid="]');
+        const firstHTML = await fetchText(base).catch(()=>null);
+        if (!firstHTML) return index;
+        const firstParsed = parsePage(firstHTML);
 
-  function parseDuePill(dueStr){
-    // dueStr like "09/10/2025"
-    const pill = { class:'slate', text:'Invoice' };
-    if (!dueStr) return pill;
-    const today = new Date(); today.setHours(0,0,0,0);
-    const [m,d,y] = (dueStr||'').split('/').map(x=>parseInt(x,10));
-    if (!y) return pill;
-    const due = new Date(y, m-1, d);
-    const diff = Math.floor((due - today)/(1000*60*60*24));
-    if (diff < 0) { pill.class='red'; pill.text='Past due'; }
-    else if (diff <= 5) { pill.class='amber'; pill.text=`Due in ${diff}d`; }
-    else { pill.class='green'; pill.text='Current'; }
-    return pill;
-  }
-
-  function enhanceRow(tr){
-    const invIdSpan = tr.querySelector('span[invoiceid]');
-    const internalId = invIdSpan?.getAttribute('invoiceid') || '';
-    const a = findInvoiceAnchor(tr);
-    if (!a) return;
-
-    const invoiceNo = (a.textContent||'').trim();
-    const orderNo   = grab(tr, 'td[data-title="Order #"]');
-    const invDate   = grab(tr, 'td[data-title="Invoice Date"]');
-    const dueDate   = grab(tr, 'td[data-title="Due Date"]');
-    const total     = grab(tr, 'td[data-title="Total Amount"]');
-    const branch    = grab(tr, 'td[data-title="Branch"]');
-
-    const pill = parseDuePill(dueDate);
-
-    // Hide the original anchor but keep for fallback
-    a.style.position='absolute'; a.style.width='1px'; a.style.height='1px';
-    a.style.overflow='hidden'; a.style.clip='rect(1px,1px,1px,1px)'; a.setAttribute('aria-hidden','true');
-
-    // Header
-    const head = document.createElement('div');
-    head.className = 'wl-row-head';
-    head.innerHTML = `
-      <div class="wl-head-left">
-        <span class="wl-inv-id">Invoice #${invoiceNo}</span>
-        <span class="wl-chip wl-chip--${pill.class}">${pill.text}</span>
-        <div class="wl-meta">
-          ${orderNo ? `<span>Order: ${orderNo}</span>`:''}
-          ${invDate ? `<span>Date: ${invDate}</span>`:''}
-          ${dueDate ? `<span>Due: ${dueDate}</span>`:''}
-          ${branch  ? `<span>Branch: ${branch}</span>`:''}
-          ${total   ? `<span>Total: ${total}</span>`:''}
-        </div>
-      </div>
-      <div class="wl-head-right">
-        <button class="wl-btn wl-btn--primary" type="button" data-action="toggle-details">View details</button>
-        <a class="wl-btn wl-btn--ghost" href="${a.getAttribute('href')}">Open full invoice</a>
-      </div>
-    `;
-    tr.insertAdjacentElement('afterbegin', head);
-
-    // Details container
-    const details = document.createElement('div');
-    details.className = 'wl-details';
-    details.dataset.state = 'idle';
-    tr.appendChild(details);
-
-    const btn = head.querySelector('[data-action="toggle-details"]');
-    btn.addEventListener('click', async (e)=>{
-      e.preventDefault();
-      e.stopPropagation();
-      if (details.dataset.state === 'idle') {
-        await loadInvoiceDetails(details, internalId, a.getAttribute('href')||'#', btn);
-      }
-      details.classList.toggle('show');
-      btn.textContent = details.classList.contains('show') ? 'Hide details' : 'View details';
-    });
-  }
-
-  async function loadInvoiceDetails(container, internalId, fallbackHref, btn){
-    try{
-      container.dataset.state='loading';
-      btn.disabled = true; btn.textContent='Loading…';
-
-      // Prefer the explicit InvoiceDetails_r.aspx?id= link if present on the row
-      let detailsUrl = fallbackHref;
-      const m = /InvoiceDetails_r\.aspx\?id=\d+/i.exec(fallbackHref||'');
-      if (!m) {
-        // build one from internalId (found on the checkbox span[invoiceid])
-        if (internalId) detailsUrl = `/InvoiceDetails_r.aspx?id=${encodeURIComponent(internalId)}&returnUrl=%7e%2fInvoices_r.aspx`;
-      }
-
-      const html = await fetch(detailsUrl, { credentials:'same-origin' }).then(r=>r.text());
-      const doc  = new DOMParser().parseFromString(html, 'text/html');
-
-      // Lines grid in details page
-      const linesTable =
-        doc.querySelector('#ctl00_PageBody_ctl02_InvoiceDetailsGrid_ctl00') ||
-        doc.querySelector('#ctl00_PageBody_ctl02_InvoiceDetailsGrid .rgMasterTable');
-
-      const lines = [];
-      if (linesTable){
-        linesTable.querySelectorAll('tbody tr').forEach(tr=>{
-          const code = (tr.querySelector('td[data-title="Product Code"]')?.textContent||'').trim();
-          const desc = (tr.querySelector('td[data-title="Description"]')?.textContent||'').trim().replace(/\s+/g,' ');
-          const qty  = (tr.querySelector('td[data-title="Qty"]')?.textContent||'').trim();
-          if (code || desc) lines.push({code, desc, qty});
+        // find pager links with pageIndex=...
+        const pager = firstParsed.doc && firstParsed.doc.querySelector('ul.pagination');
+        const hrefs = new Set();
+        if (pager){
+          pager.querySelectorAll('a.page-link[href*="pageIndex="]').forEach(a=>{
+            try{
+              const u = new URL(a.getAttribute('href'), location.origin);
+              hrefs.add(u.pathname + '?' + u.searchParams.toString());
+            }catch{}
+          });
+        }
+        // fetch unique pages other than the landing page
+        const tasks = [];
+        for (const h of hrefs){
+          if (h === '/AccountPayment_r.aspx') continue;
+          tasks.push(fetchText(h).then(html=>parsePage(html)).catch(()=>null));
+        }
+        const results = await Promise.allSettled(tasks);
+        results.forEach(r=>{
+          if (r.status==='fulfilled' && r.value && r.value.index){
+            r.value.index.forEach((v,k)=> index.set(k,v));
+          }
         });
+
+        log('AccountPayment index size:', index.size);
+        return index;
+      }catch(ex){
+        warn('AccountPayment crawl failed', ex);
+        return new Map();
       }
+    })();
+  }
+  const getAccountIndex = ()=>window.__WL_AP_INDEX_PROMISE__;
 
-      // Action links from details page (generator-first)
-      const showInv = doc.querySelector('#ctl00_PageBody_ctl02_ShowInvoiceLink, #ctl00_PageBody_ctl02_ShowInvoiceDropDown');
-      const showImg = doc.querySelector('#ctl00_PageBody_ctl02_ShowOrderImageLink, #ctl00_PageBody_ctl02_ShowOrderImageDropDown');
-      const showDoc = doc.querySelector('#ctl00_PageBody_ctl02_ShowOrderDocumentLink, #ctl00_PageBody_ctl02_ShowOrderDocumentDropDown');
-      const addCart = doc.querySelector('#ctl00_PageBody_ctl02_AddToCart, #ctl00_PageBody_ctl02_AddToCartDropDown');
+  /* ============================================
+     PART A — Invoices_r.aspx (LIST ENHANCER)
+     ============================================ */
+  (function listEnhancer(){
+    if (!/Invoices_r\.aspx/i.test(location.pathname)) return;
+    if (window.__WL_INVOICES_LIST__) return;
+    window.__WL_INVOICES_LIST__ = true;
 
-      function abs(u){ try{ return new URL(u, location.origin).toString(); }catch{ return u; } }
-      const generator = showInv ? abs(showInv.getAttribute('href')||'') : null;          // ProcessDocument invoice
-      const pdf       = showImg && /toPdf=1/i.test(showImg.getAttribute('href')||'')
-                        ? abs(showImg.getAttribute('href')||'') : null;                  // GetDocument.aspx …toPdf=1
+    // CSS
+    (function injectCSS(){
+      const css = document.createElement('style');
+      css.textContent = `
+        /* Keep first header (Select All), hide others */
+        #ctl00_PageBody_InvoicesGrid thead th:not(:first-child),
+        .RadGrid[id*="InvoicesGrid"] thead th:not(:first-child){ display:none !important; }
 
-      container.innerHTML = `
-        ${lines.length ? `
-          <div class="wl-lines">
-            ${lines.map(l=>`
-              <div class="wl-line">
-                <div class="wl-sku">${l.code||'-'}</div>
-                <div class="wl-desc">${l.desc||''}</div>
-                <div class="wl-qty">${l.qty?`Qty: ${l.qty}`:''}</div>
-              </div>
-            `).join('')}
+        /* Cardify rows but keep first td (checkbox) visible and clickable */
+        .wl-inv-cardify tr.rgRow, .wl-inv-cardify tr.rgAltRow{
+          display:block; background:#fff; border:1px solid #e5e7eb; border-radius:16px;
+          margin:12px 0; box-shadow:0 6px 18px rgba(0,0,0,.05); overflow:hidden; position:relative
+        }
+        .wl-inv-cardify tr.rgRow > td, .wl-inv-cardify tr.rgAltRow > td{
+          display:none !important;
+        }
+        .wl-inv-cardify tr.rgRow > td:first-child,
+        .wl-inv-cardify tr.rgAltRow > td:first-child{
+          display:block !important; position:absolute; left:10px; top:12px;
+          background:transparent; border:none !important; padding:0 0 0 0 !important;
+        }
+
+        .wl-row-head{
+          display:grid; gap:8px; padding:14px 14px 12px 46px; align-items:center;
+          grid-template-columns: 1fr auto;
+        }
+        .wl-head-left{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+        .wl-head-right{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+
+        .wl-inv-no{ font-weight:900; font-size:16px; letter-spacing:.2px; }
+        @media (min-width:1024px){ .wl-inv-no{ font-size:18px; } }
+
+        .wl-chip{ display:inline-flex; align-items:center; gap:6px; font-weight:800; border-radius:999px; padding:6px 10px; font-size:12px; }
+        .wl-chip--slate{ background:#e2e8f0; color:#0f172a; }
+        .wl-chip--green{ background:#dcfce7; color:#065f46; }
+        .wl-chip--amber{ background:#fef3c7; color:#92400e; }
+
+        .wl-meta{ display:flex; gap:12px; flex-wrap:wrap; font-size:12px; color:#475569; }
+        .wl-meta span{ white-space:nowrap; }
+
+        .wl-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+        .wl-btn{ appearance:none; border:none; border-radius:12px; font-weight:900; padding:10px 14px; text-decoration:none; cursor:pointer; }
+        .wl-btn--primary{ background:#6b0016; color:#fff; }
+        .wl-btn--ghost{ background:#f8fafc; color:#111827; border:1px solid #e5e7eb; }
+
+        .wl-details{ display:none; border-top:1px solid #eef0f3; padding:12px 14px 14px 46px; }
+        .wl-details.show{ display:block; }
+
+        .wl-badge-skel{ background:repeating-linear-gradient(90deg,#f1f5f9,#f1f5f9 8px,#e2e8f0 8px,#e2e8f0 16px); color:transparent }
+      `;
+      document.head.appendChild(css);
+    })();
+
+    const host = document.querySelector('#ctl00_PageBody_InvoicesGrid, .RadGrid[id*="InvoicesGrid"]');
+    if (!host) { warn('Invoices grid host not found'); return; }
+    const master = host.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00, .rgMasterTable');
+    if (!master) { warn('Invoices master table not found'); return; }
+    master.classList.add('wl-inv-cardify');
+
+    const rows = Array.from(master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow'));
+    const grab = (tr, sel)=>{ const el = tr.querySelector(sel); return el ? el.textContent.trim() : ''; };
+    const findInvoiceAnchor = (tr) =>
+      tr.querySelector('td[data-title="Invoice #"] a[href*="InvoiceDetails_r.aspx"], td[data-title="Invoice #"] a[href*="/Invoices_r.aspx"]');
+    const abs = (u)=>{ try{ return new URL(u, location.origin).toString(); }catch{ return u; } };
+
+    async function annotateBadge(invNo, badgeEl){
+      try{
+        const idx = await getAccountIndex();
+        let info = idx.get(invNo);
+        if (info && (info.type||'').toLowerCase() !== 'invoice') info = null; // ignore Credit Notes
+        if (!info){
+          badgeEl.className = 'wl-chip wl-chip--green wl-badge';
+          badgeEl.textContent = 'Paid';
+        }else{
+          const amt = info.outstanding || 0;
+          if (amt > 0.009){
+            badgeEl.className = 'wl-chip wl-chip--amber wl-badge';
+            badgeEl.textContent = `Open · ${amt.toLocaleString(undefined,{style:'currency',currency:'USD'})}`;
+            badgeEl.title = 'Amount Outstanding (Account Payment)';
+          }else{
+            badgeEl.className = 'wl-chip wl-chip--green wl-badge';
+            badgeEl.textContent = 'Paid';
+          }
+        }
+      }catch{
+        badgeEl.className = 'wl-chip wl-chip--slate wl-badge';
+        badgeEl.textContent = 'Status unavailable';
+      }
+    }
+
+    function enhanceRow(tr){
+      const a = findInvoiceAnchor(tr);
+      if (!a) return;
+
+      const invNo  = (a.textContent||'').trim();
+      const invHref = abs(a.getAttribute('href')||'#');
+
+      const orderNo = grab(tr, 'td[data-title="Order #"]');
+      const yourRef = grab(tr, 'td[data-title="Your Ref"]');
+      const jobRef  = grab(tr, 'td[data-title="Job Ref"]');
+      const invDate = grab(tr, 'td[data-title="Invoice Date"]');
+      const dueDate = grab(tr, 'td[data-title="Due Date"]');
+      const goods   = grab(tr, 'td[data-title="Goods Total"]');
+      const tax     = grab(tr, 'td[data-title="Tax"]');
+      const total   = grab(tr, 'td[data-title="Total Amount"]');
+      const lines   = grab(tr, 'td[data-title="Lines"]');
+      const branch  = grab(tr, 'td[data-title="Branch"]');
+
+      // hide original anchor but keep it
+      a.style.position='absolute'; a.style.width='1px'; a.style.height='1px';
+      a.style.overflow='hidden'; a.style.clip='rect(1px,1px,1px,1px)'; a.setAttribute('aria-hidden','true');
+
+      const head = document.createElement('div');
+      head.className = 'wl-row-head';
+      head.innerHTML = `
+        <div class="wl-head-left">
+          <span class="wl-inv-no">Invoice #${invNo}</span>
+          <span class="wl-chip wl-chip--slate wl-badge"><span class="wl-badge-skel">checking…</span></span>
+          <div class="wl-meta">
+            ${invDate ? `<span>Inv: ${invDate}</span>` : ``}
+            ${dueDate ? `<span>Due: ${dueDate}</span>` : ``}
+            ${orderNo ? `<span>Order: ${orderNo}</span>` : ``}
+            ${branch  ? `<span>Branch: ${branch}</span>` : ``}
+            ${lines   ? `<span>Lines: ${lines}</span>` : ``}
+            ${yourRef && yourRef!=='-' ? `<span>Your Ref: ${yourRef}</span>` : ``}
+            ${jobRef  && jobRef!=='-'  ? `<span>Job: ${jobRef}</span>` : ``}
+            ${(total||goods||tax) ? `<span>Total: ${total||goods}</span>` : ``}
           </div>
-        ` : `<div style="color:#475569;padding:8px 0;">No line items found.</div>`}
-
-        <div class="wl-foot-actions">
-          <a class="wl-btn wl-btn--ghost" href="/Invoices_r.aspx">← Back to Invoices</a>
-          ${generator ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${generator}">Show Invoice</a>`:''}
-          ${showDoc ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${abs(showDoc.getAttribute('href')||'#')}">Order Doc</a>`:''}
-          ${showImg ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${abs(showImg.getAttribute('href')||'#')}">Order Image</a>`:''}
-          ${pdf ? `<a class="wl-btn wl-btn--primary" target="_blank" rel="noopener" href="${pdf}">Download PDF</a>`:''}
-          ${addCart ? `<button class="wl-btn wl-btn--primary" type="button" data-action="copy-lines">Copy lines to cart</button>`:''}
+        </div>
+        <div class="wl-head-right">
+          <a class="wl-btn wl-btn--ghost" href="${invHref}">Open</a>
+          <button class="wl-btn wl-btn--primary" type="button" data-act="toggle">View details</button>
         </div>
       `;
+      tr.insertAdjacentElement('afterbegin', head);
 
-      // Copy lines button (executes the postback href from details page)
-      const copyBtn = container.querySelector('[data-action="copy-lines"]');
-      if (copyBtn && addCart){
-        copyBtn.addEventListener('click', (e)=>{
-          e.preventDefault();
-          const href = addCart.getAttribute('href')||'';
-          if (href.startsWith('javascript:')) { /* eslint-disable-next-line no-eval */ eval(href.replace(/^javascript:/,'')); }
-        });
-      }
+      annotateBadge(invNo, head.querySelector('.wl-badge'));
 
-      container.dataset.state='ready';
-    } catch(ex){
-      console.error(ex);
-      container.innerHTML = `<div style="color:#7f1d1d;background:#fee2e2;border:1px solid #fecaca;border-radius:10px;padding:10px;">
-        Sorry, we couldn’t load invoice details. You can still <a href="${fallbackHref}">open the full invoice</a>.
-      </div>`;
-      container.dataset.state='error';
-    } finally {
-      btn.disabled = false;
-      if (container.classList.contains('show')) btn.textContent = 'Hide details';
-      else btn.textContent = 'View details';
+      const details = document.createElement('div');
+      details.className = 'wl-details';
+      tr.appendChild(details);
+
+      head.querySelector('[data-act="toggle"]').addEventListener('click', async (e)=>{
+        e.preventDefault();
+        const btn = e.currentTarget;
+        if (!details.dataset.loaded){
+          details.dataset.loaded = '1';
+          details.innerHTML = `<div style="color:#475569;">Loading…</div>`;
+          try{
+            const html = await fetch(invHref, { credentials:'same-origin' }).then(r=>r.text());
+            const doc  = new DOMParser().parseFromString(html, 'text/html');
+            const table = doc.querySelector('#ctl00_PageBody_ctl02_InvoiceDetailsGrid_ctl00, .rgMasterTable');
+            if (table){
+              const lines = [];
+              table.querySelectorAll('tbody > tr').forEach(tr2=>{
+                const code = (tr2.querySelector('td[data-title="Product Code"]')||{}).textContent||'';
+                const desc = (tr2.querySelector('td[data-title="Description"]')||{}).textContent||'';
+                const qty  = (tr2.querySelector('td[data-title="Qty"]')||{}).textContent||'';
+                const tot  = (tr2.querySelector('td[data-title="Total"]')||{}).textContent||'';
+                if ((code+desc).trim()) lines.push({code:code.trim(),desc:desc.trim(),qty:qty.trim(),tot:tot.trim()});
+              });
+              details.innerHTML = lines.slice(0,6).map(l=>`
+                <div style="display:flex;gap:12px;justify-content:space-between;border:1px solid #eef0f3;border-radius:12px;padding:10px;">
+                  <div style="font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:800;min-width:86px">${l.code||'-'}</div>
+                  <div style="flex:1;min-width:160px">${l.desc||''}</div>
+                  <div style="white-space:nowrap;font-weight:700">${l.qty?`Qty: ${l.qty}`:''}${l.tot?` · ${l.tot}`:''}</div>
+                </div>
+              `).join('') || `<div style="color:#475569;">No line items found.</div>`;
+            } else {
+              details.innerHTML = `<div style="color:#475569;">Couldn’t read details. <a href="${invHref}">Open invoice page</a>.</div>`;
+            }
+          }catch{
+            details.innerHTML = `<div style="color:#7f1d1d;background:#fee2e2;border:1px solid #fecaca;border-radius:10px;padding:10px;">
+              Sorry, we couldn’t load details. You can still <a href="${invHref}">open the invoice page</a>.
+            </div>`;
+          }
+        }
+        details.classList.toggle('show');
+        btn.textContent = details.classList.contains('show') ? 'Hide details' : 'View details';
+      });
     }
-  }
 
-  rows.forEach(tr=>{ try{ enhanceRow(tr); }catch(e){ console.warn('INV row enhance failed', e); } });
-  log('List enhanced, rows:', rows.length);
-})();
-
-/* ==================================
-   B) INVOICE DETAILS ENHANCER (UI)
-   ================================== */
-(function(){
-  if (!/InvoiceDetails_r\.aspx/i.test(location.pathname)) return;
-  if (window.__WL_INVOICE_DETAILS__) return;
-  window.__WL_INVOICE_DETAILS__ = true;
-
-  const t0 = performance.now();
-  const log  = (...a)=>console.log('%cWL:INV-D','color:#6b0016;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
-  const warn = (...a)=>console.warn('%cWL:INV-D','color:#c2410c;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
-
-  // CSS
-  (function injectCSS(){
-    const css = document.createElement('style');
-    css.textContent = `
-      .listPageHeader{ display:none !important; }
-      .wl-od-header{
-        display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between;
-        background:#fff; border:1px solid #e5e7eb; border-radius:16px; padding:14px 16px;
-        box-shadow:0 6px 18px rgba(0,0,0,.05);
-      }
-      .wl-od-header-inner{ display:flex; flex-direction:column; gap:8px; width:100%; }
-      .wl-od-top{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; }
-      .wl-od-title{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
-      .wl-od-title .wl-invoice-no{ font-weight:900; font-size:20px; letter-spacing:.2px; }
-      .wl-chip{ display:inline-flex; align-items:center; gap:6px; font-weight:800; border-radius:999px; padding:6px 10px; font-size:12px; text-transform:capitalize; }
-      .wl-chip--slate{ background:#e2e8f0; color:#0f172a }
-      .wl-btn{ appearance:none; border:none; border-radius:12px; font-weight:900; padding:10px 14px; text-decoration:none; cursor:pointer; }
-      .wl-btn--primary{ background:#6b0016; color:#fff }
-      .wl-btn--ghost{ background:#f8fafc; color:#111827; border:1px solid #e5e7eb }
-      .panel.panelAccountInfo{
-        width:100%; border:1px solid #e5e7eb; border-radius:16px; overflow:hidden;
-        box-shadow:0 6px 18px rgba(0,0,0,.05); background:#fff;
-      }
-      .panel.panelAccountInfo .panelBodyHeader{
-        font-weight:800; padding:10px 14px; background:#f8fafc; border-bottom:1px solid #eef0f3;
-      }
-      .panel.panelAccountInfo .panelBody{ padding:12px 14px; }
-      #ctl00_PageBody_ctl02_InvoiceDetailsGrid .rgMasterTable{
-        border-collapse:separate !important; border-spacing:0 10px; table-layout:auto;
-      }
-      #ctl00_PageBody_ctl02_InvoiceDetailsGrid thead{ display:none !important; }
-      #ctl00_PageBody_ctl02_InvoiceDetailsGrid .rgRow,
-      #ctl00_PageBody_ctl02_InvoiceDetailsGrid .rgAltRow{
-        background:#fff; border:1px solid #eef0f3; border-radius:12px;
-      }
-      #ctl00_PageBody_ctl02_InvoiceDetailsGrid td{
-        padding:10px; border:none !important; vertical-align:top;
-      }
-      #ctl00_PageBody_ctl02_InvoiceDetailsGrid td[data-title="Product Code"]{
-        font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:800; min-width:86px;
-      }
-      #ctl00_PageBody_ctl02_InvoiceDetailsGrid td[data-title="Description"]{ width:100%; }
-    `;
-    document.head.appendChild(css);
+    rows.forEach(tr=>{ try{ enhanceRow(tr); }catch(e){ warn('Row enhance fail', e); }});
+    log('List enhanced:', rows.length);
   })();
 
-  // Parse invoice header bits
-  const oldHeader = document.querySelector('.bodyFlexItem.listPageHeader');
-  const invText = (oldHeader?.textContent||'').replace(/\s+/g,' ').trim();
-  const invMatch = invText.match(/Details for Invoice\s+(\d+)/i);
-  const invoiceNo = invMatch ? invMatch[1] : '';
+  /* ==========================================================
+     PART B — Invoice Details header (both locations)
+     - /InvoiceDetails_r.aspx
+     - or Invoices_r.aspx (when details section is present)
+     ========================================================== */
+  (function detailsEnhancer(){
+    const onInvoiceDetailsStandalone = /InvoiceDetails_r\.aspx/i.test(location.pathname);
+    const onInvoicesPage = /Invoices_r\.aspx/i.test(location.pathname);
+    const gridPresentOnList = document.querySelector('#ctl00_PageBody_ctl02_InvoiceDetailsGrid'); // details section on list page
+    if (!onInvoiceDetailsStandalone && !(onInvoicesPage && gridPresentOnList)) return;
+    if (window.__WL_INVOICE_DETAILS__) return;
+    window.__WL_INVOICE_DETAILS__ = true;
 
-  // Links
-  const backLink = '/Invoices_r.aspx';
-  const showInv  = document.querySelector('#ctl00_PageBody_ctl02_ShowInvoiceLink, #ctl00_PageBody_ctl02_ShowInvoiceDropDown');
-  const showImg  = document.querySelector('#ctl00_PageBody_ctl02_ShowOrderImageLink, #ctl00_PageBody_ctl02_ShowOrderImageDropDown');
-  const showDoc  = document.querySelector('#ctl00_PageBody_ctl02_ShowOrderDocumentLink, #ctl00_PageBody_ctl02_ShowOrderDocumentDropDown');
-  const copyLink = document.querySelector('#ctl00_PageBody_ctl02_AddToCart, #ctl00_PageBody_ctl02_AddToCartDropDown');
+    // CSS
+    (function css(){
+      const style = document.createElement('style');
+      style.textContent = `
+        .listPageHeader{ display:none !important; }
 
-  function abs(u){ try{ return new URL(u, location.origin).toString(); }catch{ return u; } }
-  const generator = showInv ? abs(showInv.getAttribute('href')||'') : null;
-  const pdf       = showImg && /toPdf=1/i.test(showImg.getAttribute('href')||'')
-                    ? abs(showImg.getAttribute('href')||'') : null;
+        .wl-od-header{
+          display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between;
+          background:#fff; border:1px solid #e5e7eb; border-radius:16px; padding:14px 16px;
+          box-shadow:0 6px 18px rgba(0,0,0,.05);
+        }
+        .wl-od-header-inner{ display:flex; flex-direction:column; gap:8px; width:100%; }
+        .wl-od-top{ display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between; }
+        .wl-od-title{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+        .wl-order-no{ font-weight:900; font-size:20px; letter-spacing:.2px; }
 
-  // Insert modern header
-  (function buildHeader(){
+        .wl-chip{ display:inline-flex; align-items:center; gap:6px; font-weight:800; border-radius:999px; padding:6px 10px; font-size:12px; }
+        .wl-chip--slate{ background:#e2e8f0; color:#0f172a }
+        .wl-chip--green{ background:#dcfce7; color:#065f46 }
+        .wl-chip--amber{ background:#fef3c7; color:#92400e }
+
+        .wl-od-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+        .wl-btn{ appearance:none; border:none; border-radius:12px; font-weight:900; padding:10px 14px; text-decoration:none; cursor:pointer; }
+        .wl-btn--primary{ background:#6b0016; color:#fff }
+        .wl-btn--ghost{ background:#f8fafc; color:#111827; border:1px solid #e5e7eb }
+
+        /* Beautify the details grid a bit */
+        #ctl00_PageBody_ctl02_InvoiceDetailsGrid thead{ display:none !important; }
+        #ctl00_PageBody_ctl02_InvoiceDetailsGrid .rgMasterTable{
+          border-collapse:separate !important; border-spacing:0 10px; table-layout:auto;
+        }
+        #ctl00_PageBody_ctl02_InvoiceDetailsGrid .rgRow,
+        #ctl00_PageBody_ctl02_InvoiceDetailsGrid .rgAltRow{
+          background:#fff; border:1px solid #eef0f3; border-radius:12px;
+        }
+        #ctl00_PageBody_ctl02_InvoiceDetailsGrid td{
+          padding:10px; border:none !important; vertical-align:top;
+        }
+        #ctl00_PageBody_ctl02_InvoiceDetailsGrid td[data-title="Product Code"]{
+          font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:800; min-width:86px;
+        }
+      `;
+      document.head.appendChild(style);
+    })();
+
     const container = document.querySelector('.bodyFlexContainer');
-    if (!container) { warn('No .bodyFlexContainer'); return; }
+    if (!container) { warn('details: no .bodyFlexContainer'); return; }
 
+    // Parse invoice number from header text ("Details for Invoice XXXXX")
+    let invNo = '';
+    const hdr = document.querySelector('.bodyFlexItem.listPageHeader');
+    if (hdr){
+      const txt = hdr.textContent||'';
+      const m = txt.match(/\b(\d{4,})\b/);
+      if (m) invNo = m[1];
+    }
+
+    // Links
+    const backLink = document.querySelector('#ctl00_PageBody_ctl02_BackButton, #ctl00_PageBody_ctl00_BackButton');
+    const showInvoice = document.getElementById('ctl00_PageBody_ctl02_ShowInvoiceLink')
+                      || document.getElementById('ctl00_PageBody_ctl02_ShowInvoiceDropDown');
+    const orderImg   = document.getElementById('ctl00_PageBody_ctl02_ShowOrderImageLink')
+                      || document.getElementById('ctl00_PageBody_ctl02_ShowOrderImageDropDown');
+    const orderDoc   = document.getElementById('ctl00_PageBody_ctl02_ShowOrderDocumentLink')
+                      || document.getElementById('ctl00_PageBody_ctl02_ShowOrderDocumentDropDown');
+    const copyLink   = document.getElementById('ctl00_PageBody_ctl02_AddToCart')
+                      || document.getElementById('ctl00_PageBody_ctl02_AddToCartDropDown');
+
+    const abs = (u)=>{ try{ return new URL(u, location.origin).toString(); }catch{ return u; } };
+    const pickDocLinks = ()=>{
+      const imgHref = orderImg && orderImg.getAttribute('href');
+      const invGen  = showInvoice && showInvoice.getAttribute('href'); // ProcessDocument.aspx (documentType=6)
+      const docHref = orderDoc && orderDoc.getAttribute('href'); // ProcessDocument.aspx for order
+      return {
+        pdf: (imgHref && /toPdf=1/i.test(imgHref)) ? abs(imgHref) : null, // have a direct pdf (order image)
+        generator: invGen ? abs(invGen) : (docHref ? abs(docHref) : null)
+      };
+    };
+
+    async function tryFetchOk(url){
+      try{
+        const r = await fetch(url, { credentials:'same-origin', cache:'no-cache' });
+        return r.ok;
+      }catch{ return false; }
+    }
+
+    // Build header
     const head = document.createElement('div');
     head.className = 'wl-od-header';
     head.innerHTML = `
       <div class="wl-od-header-inner">
         <div class="wl-od-top">
           <div class="wl-od-title">
-            <div class="wl-invoice-no">Invoice #${invoiceNo || ''}</div>
-            <span class="wl-chip wl-chip--slate">Invoice</span>
+            <div class="wl-order-no">Invoice #${invNo||''}</div>
+            <span class="wl-chip wl-chip--slate wl-badge"><span class="wl-badge-skel">checking…</span></span>
           </div>
           <div class="wl-od-actions">
-            <a class="wl-btn wl-btn--ghost" href="${backLink}">← Back</a>
-            ${generator ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${generator}">Show Invoice</a>`:''}
-            ${showDoc ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${abs(showDoc.getAttribute('href')||'#')}">Order Doc</a>`:''}
-            ${showImg ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${abs(showImg.getAttribute('href')||'#')}">Order Image</a>`:''}
-            ${ (generator || pdf) ? `<button class="wl-btn wl-btn--ghost" type="button" id="wl-share-doc">Share</button>`:''}
-            ${ pdf ? `<a class="wl-btn wl-btn--primary" target="_blank" rel="noopener" href="${pdf}">Download PDF</a>`:''}
-            ${ copyLink ? `<button class="wl-btn wl-btn--primary" type="button" id="wl-copy-lines">Copy Lines to Cart</button>`:''}
+            ${backLink ? `<a class="wl-btn wl-btn--ghost" href="${backLink.getAttribute('href')||'/Invoices_r.aspx'}">← Back</a>` : ``}
+            ${showInvoice ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${showInvoice.getAttribute('href')||'#'}">Show Invoice</a>` : ``}
+            ${orderImg   ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${orderImg.getAttribute('href')||'#'}">Show Order Image</a>` : ``}
+            ${orderDoc   ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${orderDoc.getAttribute('href')||'#'}">Show Order Doc</a>` : ``}
+            ${(showInvoice || orderImg || orderDoc) ? `<button class="wl-btn wl-btn--ghost" type="button" id="wl-share-doc">Share</button>` : ``}
+            ${(showInvoice || orderImg || orderDoc) ? `<button class="wl-btn wl-btn--ghost" type="button" id="wl-download-doc">Download PDF</button>` : ``}
+            ${copyLink ? `<button class="wl-btn wl-btn--primary" type="button" id="wl-copy-lines">Copy Lines to Cart</button>` : ``}
           </div>
         </div>
       </div>
     `;
     container.insertAdjacentElement('afterbegin', head);
 
-    // Share
-    const shareBtn = head.querySelector('#wl-share-doc');
-    if (shareBtn){
-      shareBtn.addEventListener('click', async (e)=>{
-        e.preventDefault();
-        const url = pdf || generator;
-        if (!url) { alert('Document not available yet.'); return; }
-        const title = `Invoice #${invoiceNo}`;
-        const text  = `Invoice #${invoiceNo}`;
-        try{
-          if (navigator.share) { await navigator.share({ title, text, url }); }
-          else { location.href = `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(text+':\n\n'+url)}`; }
-        }catch(ex){ /* ignore */ }
-      });
-    }
+    // Badge (Paid/Open) using the shared index
+    (async ()=>{
+      const badge = head.querySelector('.wl-badge');
+      try{
+        const idx = await getAccountIndex();
+        let info = invNo ? idx.get(invNo) : null;
+        if (info && (info.type||'').toLowerCase() !== 'invoice') info = null;
+        if (!info){
+          badge.className = 'wl-chip wl-chip--green wl-badge';
+          badge.textContent = 'Paid';
+        }else{
+          const amt = info.outstanding || 0;
+          if (amt > 0.009){
+            badge.className = 'wl-chip wl-chip--amber wl-badge';
+            badge.textContent = `Open · ${amt.toLocaleString(undefined,{style:'currency',currency:'USD'})}`;
+            badge.title = 'Amount Outstanding (Account Payment)';
+          }else{
+            badge.className = 'wl-chip wl-chip--green wl-badge';
+            badge.textContent = 'Paid';
+          }
+        }
+      }catch{
+        badge.className = 'wl-chip wl-chip--slate wl-badge';
+        badge.textContent = 'Status unavailable';
+      }
+    })();
 
-    // Copy lines to cart (postback)
-    const copyBtn = head.querySelector('#wl-copy-lines');
-    if (copyBtn && copyLink){
-      copyBtn.addEventListener('click', (e)=>{
-        e.preventDefault();
-        const href = copyLink.getAttribute('href')||'';
+    // Share
+    head.querySelector('#wl-share-doc')?.addEventListener('click', async (e)=>{
+      e.preventDefault();
+      const { generator, pdf } = pickDocLinks();
+      const url = pdf || generator;
+      if (!url) { alert('Document not available yet.'); return; }
+      const title = `Invoice #${invNo||''}`;
+      const text  = `Document for Invoice #${invNo||''}`;
+      try{
+        if (navigator.share){ await navigator.share({ title, text, url }); }
+        else { location.href = `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(text+':\n\n'+url)}`; }
+      }catch{}
+    });
+
+    // Download (generator-first)
+    head.querySelector('#wl-download-doc')?.addEventListener('click', async (e)=>{
+      e.preventDefault();
+      const { generator, pdf } = pickDocLinks();
+      if (!generator && !pdf) { alert('Document not available yet.'); return; }
+
+      if (pdf && await tryFetchOk(pdf)){
+        const a = document.createElement('a'); a.href = pdf; a.download=''; document.body.appendChild(a); a.click(); requestAnimationFrame(()=>a.remove());
+        return;
+      }
+      if (generator){
+        const iframe = document.createElement('iframe');
+        iframe.style.display='none'; iframe.src = generator; document.body.appendChild(iframe);
+        setTimeout(async ()=>{
+          if (pdf && await tryFetchOk(pdf)){
+            const a = document.createElement('a'); a.href = pdf; a.download=''; document.body.appendChild(a); a.click(); requestAnimationFrame(()=>a.remove());
+          }else{
+            window.open(generator, '_blank', 'noopener');
+          }
+          requestAnimationFrame(()=>iframe.remove());
+        }, 900);
+      }else if (pdf){
+        window.open(pdf, '_blank', 'noopener');
+      }
+    });
+
+    // Copy Lines to Cart (invoke existing postback/JS)
+    head.querySelector('#wl-copy-lines')?.addEventListener('click', (e)=>{
+      e.preventDefault();
+      const href = copyLink.getAttribute('href')||'';
+      try{
         if (href.startsWith('javascript:')) { /* eslint-disable-next-line no-eval */ eval(href.replace(/^javascript:/,'')); }
-      });
-    }
+        else { location.assign(new URL(href, location.origin).toString()); }
+      }catch(ex){ warn('Copy Lines failed', ex); }
+    });
+
+    log('Details enhanced (header/actions)');
   })();
 
-  log('Invoice details enhanced');
 })();
-
-/* ============================================
-   C) Back-to-Account button above the filter
-   (same as your OpenOrders insertion)
-   ============================================ */
-document.addEventListener('DOMContentLoaded', function(){
-  const panel = document.getElementById('ctl00_PageBody_Panel1');
-  if (panel && !document.getElementById('wl-back-to-account')){
-    const backBtn = document.createElement('a');
-    backBtn.id = 'wl-back-to-account';
-    backBtn.href = 'https://webtrack.woodsonlumber.com/AccountInfo_R.aspx';
-    backBtn.textContent = '← Back to My Account';
-    backBtn.style.display = 'inline-block';
-    backBtn.style.marginBottom = '12px';
-    backBtn.style.padding = '8px 14px';
-    backBtn.style.background = '#6b0016';
-    backBtn.style.color = '#fff';
-    backBtn.style.borderRadius = '6px';
-    backBtn.style.textDecoration = 'none';
-    backBtn.style.fontWeight = 'bold';
-    backBtn.onmouseover = ()=> backBtn.style.background = '#8d8d8d';
-    backBtn.onmouseout  = ()=> backBtn.style.background = '#6b0016';
-    panel.parentNode.insertBefore(backBtn, panel);
-  }
-});
 
