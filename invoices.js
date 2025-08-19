@@ -1,46 +1,68 @@
 
 /* =========================================================================
-   Woodson — Invoices Card UI (v3.3)
-   - Working logic (date-range AP crawl + badging + filters)
-   - Card UI formatting
-   - SURFACES ORIGINAL PER-ROW chkSelect CHECKBOXES IN EACH CARD
-   - Keeps header Select-All checkbox functional
-   - Reapplies after Telerik partial postbacks
+   Woodson — Invoices Card UI (v3.4 DEBUG)
+   - Same logic/styling as v3.3
+   - DEEP LOGGING: AP crawl, grid wiring, cardify, checkbox surfacing
+   - Select-All + per-row checkboxes preserved (we MOVE existing inputs)
    ========================================================================== */
 
 (function () {
   'use strict';
   if (!/Invoices_r\.aspx/i.test(location.pathname)) return;
-  if (window.__WL_INVOICES_ENHANCED__) return;
-  window.__WL_INVOICES_ENHANCED__ = true;
 
-  const VERSION = '3.3';
+  // ---- Log system ----------------------------------------------------------
+  const LVL = { error:0, warn:1, info:2, debug:3, trace:4 };
+  const LS_KEY = 'WL_INV_LOG';
+  let LOG_LEVEL = (() => {
+    const ls = (localStorage.getItem(LS_KEY) || '').toLowerCase();
+    if (ls in LVL) return LVL[ls];
+    return LVL.debug; // default verbose for debugging
+  })();
+
+  const prefix = (lvl) => [`%cINV`, `color:#005d6e;font-weight:700;`, `[${lvl.toUpperCase()}]`];
+
+  const log = {
+    setLevel(l){
+      if (typeof l === 'string' && l.toLowerCase() in LVL) LOG_LEVEL = LVL[l.toLowerCase()];
+      else if (typeof l === 'number') LOG_LEVEL = l|0;
+      try { localStorage.setItem(LS_KEY, Object.keys(LVL).find(k=>LVL[k]===LOG_LEVEL) || 'debug'); }catch{}
+      console.log(...prefix('info'), 'Log level set to', LOG_LEVEL, '(0=error,1=warn,2=info,3=debug,4=trace)');
+    },
+    error(...a){ if (LOG_LEVEL >= LVL.error) console.error(...prefix('error'), ...a); },
+    warn (...a){ if (LOG_LEVEL >= LVL.warn ) console.warn (...prefix('warn' ), ...a); },
+    info (...a){ if (LOG_LEVEL >= LVL.info ) console.log  (...prefix('info' ), ...a); },
+    debug(...a){ if (LOG_LEVEL >= LVL.debug) console.log  (...prefix('debug'), ...a); },
+    trace(...a){ if (LOG_LEVEL >= LVL.trace) console.log  (...prefix('trace'), ...a); },
+    group(label, collapsed=true){
+      if (LOG_LEVEL < LVL.debug) return { end(){} };
+      (collapsed?console.groupCollapsed:console.group)(...prefix('debug'), label);
+      return { end(){ try{ console.groupEnd(); }catch{} } };
+    }
+  };
+
+  const VERSION = '3.4-debug';
   const t0 = performance.now();
-  const log  = (...a)=>console.log('%cINV','color:#005d6e;font-weight:700;',`v${VERSION} [+${(performance.now()-t0).toFixed(1)}ms]`,...a);
-  const warn = (...a)=>console.warn('%cINV','color:#b45309;font-weight:700;',`v${VERSION} [+${(performance.now()-t0).toFixed(1)}ms]`,...a);
+  log.info(`Version ${VERSION} booting… (+${(performance.now()-t0).toFixed(1)}ms)`);
 
-  /* -------------------- CSS (card UI + checkbox surfacing) -------------------- */
+  // ---- CSS (card UI + checkbox surfacing) ---------------------------------
   (function injectCSS(){
     const css = `
-      /* Keep Select-All visible, hide other headers for a clean card grid */
       #ctl00_PageBody_InvoicesGrid thead th:not(:first-child),
       .RadGrid[id*="InvoicesGrid"] thead th:not(:first-child){ display:none !important; }
 
-      /* Cardify body rows; make rows positioning context for overlays */
       .wl-inv-cardify tr.rgRow, .wl-inv-cardify tr.rgAltRow{
         display:block; background:#fff; border:1px solid #e5e7eb; border-radius:16px;
         margin:12px 0; box-shadow:0 6px 18px rgba(15,23,42,.06); overflow:hidden; position:relative;
       }
       .wl-inv-cardify tr.rgRow > td, .wl-inv-cardify tr.rgAltRow > td{ display:none !important; }
 
-      /* Keep first cell present as our anchor area (for the checkbox overlay) */
       .wl-inv-cardify tr.rgRow > td:first-child,
       .wl-inv-cardify tr.rgAltRow > td:first-child{
         display:block !important; position:absolute; left:0; top:0;
         border:none !important; background:transparent; padding:0; margin:0; z-index:1;
+        width:auto !important; min-width:40px;
       }
 
-      /* Visible selection wrap that holds the ORIGINAL chkSelect checkbox */
       .wl-select-wrap{
         position:absolute; left:10px; top:10px;
         display:flex; align-items:center; gap:8px;
@@ -68,7 +90,6 @@
       .wl-meta{ display:flex; gap:12px; flex-wrap:wrap; font-size:12px; color:#475569; }
       .wl-meta span{ white-space:nowrap; }
 
-      .wl-actions{ display:flex; gap:8px; flex-wrap:wrap; }
       .wl-btn{ appearance:none; border:none; border-radius:12px; font-weight:900; padding:10px 14px; text-decoration:none; cursor:pointer; }
       .wl-btn--primary{ background:#6b0016; color:#fff; }
       .wl-btn--ghost{ background:#f8fafc; color:#111827; border:1px solid #e5e7eb; }
@@ -81,7 +102,6 @@
         color:transparent
       }
 
-      /* Toolbar */
       .wl-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin: 8px 0 10px; }
       .wl-chipbtn {
         border:1px solid #e5e7eb; border-radius:999px; padding:6px 10px; font-weight:700;
@@ -92,9 +112,10 @@
       .wl-act { border:1px solid #e5e7eb; border-radius:10px; padding:6px 10px; font-weight:700; background:#f8fafc; font-size:12px; cursor:pointer; }
     `;
     const el = document.createElement('style'); el.textContent = css; document.head.appendChild(el);
+    log.debug('CSS injected', el);
   })();
 
-  /* -------------------- Utils -------------------- */
+  // ---- Utils ---------------------------------------------------------------
   const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
   const txt = (el)=> (el?.textContent || '').trim();
   const toUSD = (n)=> Number(n).toLocaleString(undefined,{style:'currency',currency:'USD'});
@@ -102,11 +123,15 @@
   const nearlyZero = (n)=> Math.abs(n) < 0.009;
 
   async function waitFor(selector, {root=document, tries=60, interval=120} = {}){
-    for (let i=0;i<tries;i++){ const el = root.querySelector(selector); if (el) return el; await sleep(interval); }
+    for (let i=0;i<tries;i++){
+      const el = root.querySelector(selector);
+      if (el) return el;
+      await sleep(interval);
+    }
     return null;
   }
 
-  /* -------------------- Date range -------------------- */
+  // ---- Date range ----------------------------------------------------------
   function readInvoiceDateRange(){
     const getClientState = (id)=>{
       const inp = document.getElementById(id); if (!inp) return null;
@@ -126,10 +151,12 @@
 
     const startISO = toISO(startState, 'ctl00_PageBody_dtDateEntryStart_RadDatePicker1_dateInput');
     const endISO   = toISO(endState,   'ctl00_PageBody_dtDateEntryEnd_RadDatePicker1_dateInput');
+
+    log.info('Date range', { startISO, endISO, startState, endState });
     return { startISO, endISO };
   }
 
-  /* -------------------- AccountPayment crawler -------------------- */
+  // ---- AccountPayment crawler ---------------------------------------------
   function apCacheKey(startISO, endISO){ return `wl_ap_index_v3_${startISO || 'na'}_${endISO || 'na'}`; }
 
   async function buildAccountPaymentIndex(startISO, endISO){
@@ -138,18 +165,28 @@
       const raw = sessionStorage.getItem(key);
       if (raw){
         const { at, data } = JSON.parse(raw);
-        if (Date.now() - at < 10*60*1000){ return new Map(data); }
+        if (Date.now() - at < 10*60*1000){
+          const map = new Map(data);
+          log.info('AP index cache HIT', { key, size: map.size, ageSec: ((Date.now()-at)/1000)|0 });
+          return map;
+        }
+        log.info('AP index cache STALE', { key });
+      } else {
+        log.debug('AP index cache MISS', { key });
       }
-    }catch{}
+    }catch(e){ log.warn('AP cache parse error', e); }
 
     const base = new URL('/AccountPayment_r.aspx', location.origin);
     base.searchParams.set('searchType','TransactionDate');
     if (startISO) base.searchParams.set('startDate', `${startISO}T00:00:00`);
     if (endISO)   base.searchParams.set('endDate',   `${endISO}T23:59:59`);
+    log.info('AP crawl base URL', base.toString());
 
     const parser = new DOMParser();
     const fetchText = async (url) => {
+      log.debug('AP fetch', url);
       const res = await fetch(url, { credentials:'same-origin', cache:'no-cache' });
+      log.debug('AP fetch status', url, res.status);
       if (!res.ok) throw new Error('HTTP '+res.status);
       return res.text();
     };
@@ -168,7 +205,7 @@
     const parseRows = (doc)=>{
       const host = doc.querySelector('#ctl00_PageBody_InvoicesGrid') || doc;
       const tbl  = host.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00') || host.querySelector('.rgMasterTable');
-      if (!tbl) return 0;
+      if (!tbl) { log.warn('AP parse: table not found'); return 0; }
       let count = 0;
       const rows = tbl.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow');
       rows.forEach(tr=>{
@@ -183,6 +220,7 @@
           count++;
         }
       });
+      log.debug('AP parse: rows found', rows.length, 'invoices indexed', count);
       return count;
     };
 
@@ -192,7 +230,9 @@
         const href = a.getAttribute('href');
         if (href && /pageIndex=\d+/.test(href)) set.add(normalizePagerUrl(href));
       });
-      return Array.from(set);
+      const list = Array.from(set);
+      log.debug('AP pager links', list);
+      return list;
     };
 
     try{
@@ -202,16 +242,22 @@
       const hrefs = collectPager(firstDoc).filter(u => u !== base.toString());
       if (hrefs.length){
         const results = await Promise.allSettled(hrefs.map(h=>fetchText(h)));
-        results.forEach(r=>{
+        results.forEach((r,i)=>{
           if (r.status === 'fulfilled'){
             const d = parser.parseFromString(r.value, 'text/html');
             parseRows(d);
+          } else {
+            log.warn('AP page fetch failed', hrefs[i], r.reason);
           }
         });
       }
-    }catch(err){ warn('AP crawl failed:', err); }
+    }catch(err){ log.warn('AP crawl failed:', err); }
 
-    try{ sessionStorage.setItem(key, JSON.stringify({at: Date.now(), data: Array.from(index.entries())})); }catch{}
+    try{
+      sessionStorage.setItem(key, JSON.stringify({at: Date.now(), data: Array.from(index.entries())}));
+      log.info('AP index stored', { key, size: index.size });
+    }catch(e){ log.warn('AP cache store failed', e); }
+
     return index;
   }
 
@@ -222,10 +268,13 @@
     return __AP_PROMISE__;
   }
 
-  /* -------------------- Grid + row helpers -------------------- */
+  // ---- Grid helpers --------------------------------------------------------
   async function getMasterTable(){
-    const root = await waitFor('#ctl00_PageBody_InvoicesGrid'); if (!root) return null;
-    return root.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00') || root.querySelector('.rgMasterTable');
+    const root = await waitFor('#ctl00_PageBody_InvoicesGrid');
+    if (!root) { log.error('Grid host not found'); return null; }
+    const master = root.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00') || root.querySelector('.rgMasterTable');
+    log.info('Master table', master);
+    return master;
   }
   function todayAtMidnight(){ const d = new Date(); d.setHours(0,0,0,0); return d; }
 
@@ -235,47 +284,73 @@
   const grab = (tr, sel) => { const el = tr.querySelector(sel); return el ? el.textContent.trim() : ''; };
   const abs  = (u)=>{ try{ return new URL(u, location.origin).toString(); }catch{ return u; } };
 
-  /* -------------------- Checkbox surfacing (MOVE, don’t clone) -------------------- */
-  function surfaceCheckboxInCard(tr){
+  // ---- Checkbox surfacing --------------------------------------------------
+  function getRowCheckbox(tr){
+    // Prefer first-cell scan, then whole row (to be robust to templates)
+    const first = tr.cells && tr.cells[0];
+    let cb = first ? first.querySelector('input[type="checkbox"][name*="chkSelect"]') : null;
+    if (!cb) cb = tr.querySelector('input[type="checkbox"][name*="chkSelect"]');
+    return cb;
+  }
+
+  function surfaceCheckboxInCard(tr, rowIndex){
     if (!tr || !(tr.classList.contains('rgRow') || tr.classList.contains('rgAltRow'))) return;
-    const firstCell = tr.cells && tr.cells[0]; if (!firstCell) return;
+    const firstCell = tr.cells && tr.cells[0]; if (!firstCell) { log.warn('Row has no first cell', { rowIndex, tr }); return; }
 
-    // Find the existing per-row checkbox (dynamic id/name, ends with chkSelect)
-    const cb = tr.querySelector('input[type="checkbox"][name*="chkSelect"]');
-    if (!cb) return;
+    const cb = getRowCheckbox(tr);
+    if (!cb){
+      log.warn('Row checkbox not found', { rowIndex, html: firstCell.innerHTML.slice(0,200) });
+      return;
+    }
 
-    // Create/ensure the visible wrap and MOVE the checkbox into it
     let wrap = firstCell.querySelector('.wl-select-wrap');
     if (!wrap){
       wrap = document.createElement('div');
       wrap.className = 'wl-select-wrap';
       firstCell.appendChild(wrap);
+      log.debug('Created .wl-select-wrap', { rowIndex });
     }
     if (cb.closest('.wl-select-wrap') !== wrap){
-      wrap.appendChild(cb); // reparent (keeps postback wiring intact)
+      wrap.appendChild(cb);
+      log.info('Moved checkbox into card', { rowIndex, id: cb.id, name: cb.name });
+    } else {
+      log.trace('Checkbox already in wrap', { rowIndex, id: cb.id });
     }
+
+    // Visibility diagnostics
+    try{
+      const csFirst = getComputedStyle(firstCell);
+      const csWrap  = getComputedStyle(wrap);
+      log.trace('Styles', {
+        rowIndex,
+        firstCell: { display: csFirst.display, position: csFirst.position, zIndex: csFirst.zIndex },
+        wrap: { display: csWrap.display, position: csWrap.position, zIndex: csWrap.zIndex }
+      });
+    }catch{}
   }
 
   function surfaceAllCheckboxes(master){
     const rows = master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow');
-    rows.forEach(surfaceCheckboxInCard);
+    log.info('Surfacing checkboxes for rows', rows.length);
+    let i=0; rows.forEach(tr=>surfaceCheckboxInCard(tr, i++));
   }
 
-  /* -------------------- Badging (sets data-* used by card) -------------------- */
+  // ---- Badging -------------------------------------------------------------
   async function applyBadges(master){
     const rows = Array.from(master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow'));
+    log.info('applyBadges on rows', rows.length);
     if (!rows.length) return;
 
-    const apIndex = await ensureApIndex().catch(()=>null);
+    const apIndex = await ensureApIndex().catch((e)=>{ log.warn('ensureApIndex failed', e); return null; });
     const today = todayAtMidnight();
 
-    rows.forEach(tr=>{
+    rows.forEach((tr, idx)=>{
       const a = findInvoiceAnchor(tr);
       const invNo = a ? (a.textContent||'').trim() : '';
-      if (!invNo) { surfaceCheckboxInCard(tr); return; } // still show checkbox
+      if (!invNo) { surfaceCheckboxInCard(tr, idx); return; }
 
-      // Make sure checkbox is visible in the card
-      surfaceCheckboxInCard(tr);
+      // ensure checkbox visible even before status
+      surfaceCheckboxInCard(tr, idx);
 
       let status = 'unknown';
       let outLeft = 0;
@@ -302,7 +377,13 @@
       tr.dataset.outstanding = String(outLeft || 0);
       tr.dataset.overdue = overdue ? '1' : '0';
 
-      // Keep legacy table-badge updated too (harmless in card mode)
+      if (LOG_LEVEL >= LVL.debug){
+        const g = log.group(`Row ${idx} badge ${invNo || '(no #)'} → ${status}${overdue?' (overdue)':''}`);
+        log.debug('calc', { invNo, outLeft, due: dueTxt, overdue, total: grab(tr,'td[data-title="Total Amount"]') });
+        g.end();
+      }
+
+      // Keep legacy badge (harmless if hidden)
       const invCells = tr.querySelectorAll('td[data-title="Invoice #"]');
       invCells.forEach(cell=>{
         let badge = cell.querySelector('.wl-badge');
@@ -317,10 +398,10 @@
     });
   }
 
-  /* -------------------- Card rendering -------------------- */
-  function buildCardForRow(tr){
-    if (tr.__wlCard) return; // idempotent
-    const a = findInvoiceAnchor(tr); // may be null on odd rows, still render shell
+  // ---- Card rendering ------------------------------------------------------
+  function buildCardForRow(tr, idx){
+    if (tr.__wlCard) return;
+    const a = findInvoiceAnchor(tr);
     const invNo = a ? (a.textContent||'').trim() : '';
     const invHref = a ? abs(a.getAttribute('href')||'#') : '#';
     const orderNo = grab(tr, 'td[data-title="Order #"]');
@@ -334,14 +415,12 @@
     const lines   = grab(tr, 'td[data-title="Lines"]');
     const branch  = grab(tr, 'td[data-title="Branch"]');
 
-    // Hide original anchor but keep it for keyboard/fallback if present
     if (a){
       a.style.position='absolute'; a.style.width='1px'; a.style.height='1px';
       a.style.overflow='hidden'; a.style.clip='rect(1px,1px,1px,1px)'; a.setAttribute('aria-hidden','true');
     }
 
-    // Make sure checkbox is visible even before badges compute
-    surfaceCheckboxInCard(tr);
+    surfaceCheckboxInCard(tr, idx);
 
     const head = document.createElement('div');
     head.className = 'wl-row-head';
@@ -382,25 +461,28 @@
           const doc  = new DOMParser().parseFromString(html, 'text/html');
           const table = doc.querySelector('#ctl00_PageBody_ctl02_InvoiceDetailsGrid_ctl00, .rgMasterTable');
           if (table){
-            const lines = [];
+            const items = [];
             table.querySelectorAll('tbody > tr').forEach(tr2=>{
               const code = (tr2.querySelector('td[data-title="Product Code"]')||{}).textContent||'';
               const desc = (tr2.querySelector('td[data-title="Description"]')||{}).textContent||'';
               const qty  = (tr2.querySelector('td[data-title="Qty"]')||{}).textContent||'';
               const tot  = (tr2.querySelector('td[data-title="Total"]')||{}).textContent||'';
-              if ((code+desc).trim()) lines.push({code:code.trim(),desc:desc.trim(),qty:qty.trim(),tot:tot.trim()});
+              if ((code+desc).trim()) items.push({code:code.trim(),desc:desc.trim(),qty:qty.trim(),tot:tot.trim()});
             });
-            details.innerHTML = lines.slice(0,6).map(l=>`
+            details.innerHTML = items.slice(0,6).map(l=>`
               <div style="display:flex;gap:12px;justify-content:space-between;border:1px solid #eef0f3;border-radius:12px;padding:10px;">
                 <div style="font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:800;min-width:86px">${l.code||'-'}</div>
                 <div style="flex:1;min-width:160px">${l.desc||''}</div>
                 <div style="white-space:nowrap;font-weight:700">${l.qty?`Qty: ${l.qty}`:''}${l.tot?` · ${l.tot}`:''}</div>
               </div>
             `).join('') || `<div style="color:#475569;">No line items found.</div>`;
+            log.debug('Details loaded for', invNo, 'items:', items.length);
           } else {
             details.innerHTML = `<div style="color:#475569;">Couldn’t read details.${invHref!=='#' ? ` <a href="${invHref}">Open invoice page</a>.` : ''}</div>`;
+            log.warn('Details table not found for', invNo);
           }
         }catch(ex){
+          log.warn('Details fetch failed', invNo, ex);
           details.innerHTML = `<div style="color:#7f1d1d;background:#fee2e2;border:1px solid #fecaca;border-radius:10px;padding:10px;">
             Sorry, we couldn’t load details.${invHref!=='#' ? ` You can still <a href="${invHref}">open the invoice page</a>.` : ``}
           </div>`;
@@ -411,7 +493,8 @@
     });
 
     tr.__wlCard = true;
-    updateCardBadge(tr); // reflect current dataset status
+    log.debug('Card built', { idx, invNo });
+    updateCardBadge(tr);
   }
 
   function updateCardBadge(tr){
@@ -430,19 +513,19 @@
 
   function cardify(master){
     const host = master.closest('#ctl00_PageBody_InvoicesGrid, .RadGrid[id*="InvoicesGrid"]');
-    if (!host) return;
+    if (!host) { log.warn('cardify: host not found'); return; }
     master.classList.add('wl-inv-cardify');
     const rows = Array.from(master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow'));
-    rows.forEach(tr=>{ try{ buildCardForRow(tr); }catch(e){ warn('Cardify row fail', e); } });
-    // Make absolutely sure checkboxes are surfaced
+    log.info('cardify on rows', rows.length);
+    rows.forEach((tr,i)=>{ try{ buildCardForRow(tr,i); }catch(e){ log.warn('Cardify row fail', i, e); } });
     surfaceAllCheckboxes(master);
   }
 
-  /* -------------------- Toolbar (status filter + Select filtered) -------------------- */
+  // ---- Toolbar -------------------------------------------------------------
   function ensureToolbar(){
     const grid = document.getElementById('ctl00_PageBody_InvoicesGrid');
     const flex = grid?.closest('.bodyFlexItem') || grid;
-    if (!flex) return null;
+    if (!flex) { log.warn('Toolbar: container not found'); return null; }
     if (flex.querySelector('.wl-toolbar')) return flex.querySelector('.wl-toolbar');
 
     const bar = document.createElement('div');
@@ -456,6 +539,7 @@
       <button class="wl-act" data-action="select-filtered">Select filtered</button>
     `;
     flex.insertBefore(bar, flex.firstChild);
+    log.info('Toolbar added');
 
     bar.addEventListener('click',(e)=>{
       const chip = e.target.closest('.wl-chipbtn');
@@ -463,8 +547,10 @@
       if (chip){
         bar.querySelectorAll('.wl-chipbtn').forEach(b=>b.dataset.active='false');
         chip.dataset.active='true';
+        log.debug('Filter click', chip.dataset.filter);
         applyFilter(chip.dataset.filter);
       }else if (act && act.dataset.action==='select-filtered'){
+        log.debug('Select filtered clicked');
         selectFilteredOnPage();
       }
     });
@@ -474,50 +560,69 @@
   function applyFilter(filter){
     const master = document.querySelector('#ctl00_PageBody_InvoicesGrid .rgMasterTable'); if (!master) return;
     const rows = master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow');
+    let shown=0, hidden=0;
     rows.forEach(tr=>{
       const status = tr.dataset.status || 'unknown';
       const show = (filter === 'all') ? true : (status === filter);
       tr.style.display = show ? '' : 'none';
+      show ? shown++ : hidden++;
     });
+    log.info('Filter applied', { filter, shown, hidden });
   }
 
   function selectFilteredOnPage(){
     const root = document.getElementById('ctl00_PageBody_InvoicesGrid'); if (!root) return;
     const boxes = root.querySelectorAll('tbody input[type="checkbox"][name*="chkSelect"]');
+    let clicks = 0;
     boxes.forEach(cb=>{
       const tr = cb.closest('tr');
-      if (tr && tr.style.display !== 'none' && !cb.checked){ cb.click(); }
+      if (tr && tr.style.display !== 'none' && !cb.checked){ cb.click(); clicks++; }
     });
+    log.info('Select filtered - clicked', clicks, 'checkboxes');
   }
 
-  /* -------------------- Observer for partial postbacks -------------------- */
+  // ---- Observer ------------------------------------------------------------
   function attachGridObserver(){
-    const gridRoot = document.getElementById('ctl00_PageBody_InvoicesGrid'); if (!gridRoot) return;
+    const gridRoot = document.getElementById('ctl00_PageBody_InvoicesGrid'); if (!gridRoot) { log.warn('Observer: grid root not found'); return; }
     if (gridRoot.__wlObserved) return; gridRoot.__wlObserved = true;
 
-    const mo = new MutationObserver(()=>{
+    const mo = new MutationObserver((mutList)=>{
+      let add=0, rem=0, sub=0;
+      mutList.forEach(m=>{ add += m.addedNodes?.length||0; rem += m.removedNodes?.length||0; if (m.type==='childList') sub++; });
+      const g = log.group(`MutationObserver fire: ${sub} childList, +${add}/-${rem}`, true);
       const master = gridRoot.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00') || gridRoot.querySelector('.rgMasterTable');
       if (master){
         requestAnimationFrame(async ()=>{
+          log.debug('Observer: reapply enhancements…');
           await applyBadges(master);
-          cardify(master);            // also resurfaces checkboxes
-          surfaceAllCheckboxes(master);
+          cardify(master);
         });
+      } else {
+        log.warn('Observer: master table not found on mutation');
       }
+      g.end();
     });
     mo.observe(gridRoot, { childList:true, subtree:true });
-    log('Grid observer attached');
+    log.info('Grid observer attached');
   }
 
-  /* -------------------- Boot -------------------- */
+  // ---- Boot ----------------------------------------------------------------
   async function boot(){
-    const master = await getMasterTable(); if (!master){ log('No invoices grid found'); return; }
+    log.info('Boot start');
+    const headerSelectAll = document.querySelector('#ctl00_PageBody_InvoicesGrid thead input[type="checkbox"], .RadGrid[id*="InvoicesGrid"] thead input[type="checkbox"]');
+    log.info('Header Select-All present?', !!headerSelectAll, headerSelectAll ? { id: headerSelectAll.id, name: headerSelectAll.name } : null);
+
+    const master = await getMasterTable(); if (!master){ log.error('No master table — aborting'); return; }
     ensureToolbar();
-    try{ await ensureApIndex(); }catch(e){ warn('AP index error', e); }
+
+    try{ await ensureApIndex(); }catch(e){ log.warn('AP index error', e); }
+
     await applyBadges(master);
-    cardify(master);            // renders cards + moves checkboxes
+    cardify(master);
+
     attachGridObserver();
-    log('Invoices enhanced (card UI + original checkboxes surfaced)');
+
+    log.info('Boot complete', { rows: master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow').length, version: VERSION });
   }
 
   if (document.readyState === 'loading'){
@@ -527,7 +632,34 @@
   }
   window.addEventListener('load', ()=>boot(), { once:true });
 
-  // Debug
-  window.WLInvoices = { run: boot, version: VERSION };
+  // ---- Debug helpers -------------------------------------------------------
+  window.WLInvoices = {
+    version: VERSION,
+    setLogLevel: log.setLevel,
+    resurface(){
+      const master = document.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00, #ctl00_PageBody_InvoicesGrid .rgMasterTable, .RadGrid[id*="InvoicesGrid"] .rgMasterTable');
+      if (!master) return log.warn('resurface: no master');
+      surfaceAllCheckboxes(master);
+    },
+    scanRows(){
+      const master = document.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00, #ctl00_PageBody_InvoicesGrid .rgMasterTable, .RadGrid[id*="InvoicesGrid"] .rgMasterTable');
+      if (!master) return log.warn('scanRows: no master');
+      const rows = master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow');
+      const out = [];
+      rows.forEach((tr,i)=>{
+        const cb = getRowCheckbox(tr);
+        const a  = findInvoiceAnchor(tr);
+        out.push({
+          i, hasCb: !!cb, cbId: cb?.id, cbName: cb?.name,
+          inv: a ? (a.textContent||'').trim() : null,
+          status: tr.dataset.status, overdue: tr.dataset.overdue
+        });
+      });
+      console.table(out);
+      return out;
+    }
+  };
+
+  log.info(`Version ${VERSION} ready (+${(performance.now()-t0).toFixed(1)}ms)`);
 })();
 
