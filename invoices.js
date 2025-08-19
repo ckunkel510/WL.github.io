@@ -1,130 +1,102 @@
 
-/* ========================================================= 
-   Woodson — Invoices Enhancer for Invoices_r.aspx (v4.1)
-   - Modern UI (Open Orders parity): chips, search, density toggle
-   - Visible-rows badging (IntersectionObserver)
-   - Progressive AP crawl w/ throttled batches + live updates
-   - Quick summary (page scope) + Select Filtered
-   - Reapplies after Telerik partial postbacks
-   ========================================================= */
+/* =========================================================================
+   Woodson — Invoices Card UI (v3.1)  ✅ working logic + modern card styling
+   - Uses your original AP crawl & badging logic (date-range aware + cache)
+   - Renders each row as a card while preserving the first-cell checkbox
+   - Status chip reflects the same open/partial/paid logic as before
+   - “Select filtered” kept; headers hidden except select-all
+   - Reapplies after Telerik partial postbacks (observer)
+   ========================================================================== */
+
 (function () {
   'use strict';
+  if (!/Invoices_r\.aspx/i.test(location.pathname)) return;
   if (window.__WL_INVOICES_ENHANCED__) return;
   window.__WL_INVOICES_ENHANCED__ = true;
 
-  const VERSION = '4.1';
+  const VERSION = '3.1';
   const t0 = performance.now();
   const log  = (...a)=>console.log('%cINV','color:#005d6e;font-weight:700;',`v${VERSION} [+${(performance.now()-t0).toFixed(1)}ms]`,...a);
   const warn = (...a)=>console.warn('%cINV','color:#b45309;font-weight:700;',`v${VERSION} [+${(performance.now()-t0).toFixed(1)}ms]`,...a);
 
-  /* -------------------- CSS -------------------- */
+  /* -------------------- CSS (card UI) -------------------- */
   (function injectCSS(){
     const css = `
-      /* Container */
-      #ctl00_PageBody_InvoicesGrid {
-        border-radius: 14px;
-        box-shadow: 0 8px 24px rgba(15,23,42,.06);
-        overflow: hidden;
-        background: #fff;
-      }
-      .wl-toprow { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin: 10px 0 8px; }
-      .wl-summary { display:flex; gap:8px; align-items:center; font-weight:800; font-size:12px; color:#0f172a; }
-      .wl-pill { padding:4px 10px; border-radius:999px; background:#f1f5f9; border:1px solid #e5e7eb; }
-      .wl-pill--over { background:#fee2e2; border-color:#fecaca; color:#7f1d1d; }
+      /* Keep select-all visible, hide other headers for a cleaner card grid */
+      #ctl00_PageBody_InvoicesGrid thead th:not(:first-child),
+      .RadGrid[id*="InvoicesGrid"] thead th:not(:first-child){ display:none !important; }
 
-      /* Toolbar */
-      .wl-toolbar {
-        display:flex; align-items:center; gap:10px; flex-wrap:wrap;
-        margin: 4px 0 12px 0;
+      /* Cardify rows but keep first td (checkbox) visible & clickable */
+      .wl-inv-cardify tr.rgRow, .wl-inv-cardify tr.rgAltRow{
+        display:block; background:#fff; border:1px solid #e5e7eb; border-radius:16px;
+        margin:12px 0; box-shadow:0 6px 18px rgba(15,23,42,.06); overflow:hidden; position:relative;
       }
-      .wl-chip {
+      .wl-inv-cardify tr.rgRow > td, .wl-inv-cardify tr.rgAltRow > td{ display:none !important; }
+      .wl-inv-cardify tr.rgRow > td:first-child,
+      .wl-inv-cardify tr.rgAltRow > td:first-child{
+        display:block !important; position:absolute; left:10px; top:12px;
+        background:transparent; border:none !important; z-index:2;
+      }
+
+      .wl-row-head{
+        display:grid; gap:8px; padding:14px 14px 12px 46px; align-items:center;
+        grid-template-columns: 1fr auto;
+      }
+      .wl-head-left{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+      .wl-head-right{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
+
+      .wl-inv-no{ font-weight:900; font-size:16px; letter-spacing:.2px; }
+      @media (min-width:1024px){ .wl-inv-no{ font-size:18px; } }
+
+      .wl-chip{ display:inline-flex; align-items:center; gap:6px; font-weight:800; border-radius:999px; padding:6px 10px; font-size:12px; }
+      .wl-chip--slate{ background:#e2e8f0; color:#0f172a; }
+      .wl-chip--green{ background:#dcfce7; color:#065f46; }
+      .wl-chip--amber{ background:#fef3c7; color:#92400e; }
+      .wl-chip--red{   background:#fee2e2; color:#7f1d1d; }
+      .wl-chip--blue{  background:#dbeafe; color:#1e3a8a; }
+
+      .wl-meta{ display:flex; gap:12px; flex-wrap:wrap; font-size:12px; color:#475569; }
+      .wl-meta span{ white-space:nowrap; }
+
+      .wl-actions{ display:flex; gap:8px; flex-wrap:wrap; }
+      .wl-btn{ appearance:none; border:none; border-radius:12px; font-weight:900; padding:10px 14px; text-decoration:none; cursor:pointer; }
+      .wl-btn--primary{ background:#6b0016; color:#fff; }
+      .wl-btn--ghost{ background:#f8fafc; color:#111827; border:1px solid #e5e7eb; }
+
+      .wl-details{ display:none; border-top:1px solid #eef0f3; padding:12px 14px 14px 46px; }
+      .wl-details.show{ display:block; }
+
+      .wl-badge-skel{
+        background:repeating-linear-gradient(90deg,#f1f5f9,#f1f5f9 8px,#e2e8f0 8px,#e2e8f0 16px);
+        color:transparent
+      }
+
+      /* Simple toolbar (kept from your working logic) */
+      .wl-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin: 8px 0 10px; }
+      .wl-chipbtn {
         border:1px solid #e5e7eb; border-radius:999px; padding:6px 10px; font-weight:700;
         background:#fff; color:#0f172a; font-size:12px; cursor:pointer; user-select:none;
-        transition: background .15s ease, border-color .15s ease;
       }
-      .wl-chip[data-active="true"] { border-color:#0ea5e9; background:#e0f2fe; color:#075985; }
-      .wl-chip[data-filter="overdue"] { background:#fff7f7; }
+      .wl-chipbtn[data-active="true"] { border-color:#0ea5e9; background:#e0f2fe; color:#075985; }
       .wl-spacer { flex:1 1 auto; }
-      .wl-btn {
-        border:1px solid #e5e7eb; border-radius:10px; padding:6px 10px; font-weight:700;
-        background:#f8fafc; color:#0f172a; font-size:12px; cursor:pointer;
-      }
-      .wl-btn:active { transform: translateY(1px); }
-      .wl-input {
-        display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:10px;
-        border:1px solid #e5e7eb; background:#fff; font-size:12px; min-width:220px;
-      }
-      .wl-input input { border:none; outline:none; flex:1; font-size:12px; }
-
-      /* Badges */
-      .wl-badge{display:inline-flex;align-items:center;gap:6px;font-weight:800;border-radius:999px;padding:2px 8px;font-size:11px;margin-left:8px;vertical-align:middle;line-height:1.6}
-      .wl-badge--green{background:#dcfce7;color:#065f46}
-      .wl-badge--amber{background:#fef3c7;color:#92400e}
-      .wl-badge--slate{background:#e2e8f0;color:#0f172a}
-      .wl-skel{background:repeating-linear-gradient(90deg,#f1f5f9,#f1f5f9 8px,#e2e8f0 8px,#e2e8f0 16px);color:transparent}
-
-      /* Modern table look */
-      .RadGrid .rgMasterTable { border-collapse: separate; border-spacing: 0; }
-      .RadGrid .rgMasterTable thead th.rgHeader {
-        position: sticky; top: 0; z-index: 2;
-        background: #f8fafc; color:#0f172a; font-weight:800; font-size:12px;
-        border-bottom: 1px solid #e5e7eb;
-      }
-      /* Compact / Comfortable density */
-      .wl-density-compact .RadGrid .rgMasterTable td, 
-      .wl-density-compact .RadGrid .rgMasterTable th { padding: 8px 10px !important; }
-      .RadGrid .rgMasterTable td, .RadGrid .rgMasterTable th {
-        padding: 12px 14px !important; vertical-align: middle;
-      }
-      /* Zebra + hover + left status bar */
-      .RadGrid .rgMasterTable tbody tr.rgRow    { background:#ffffff; }
-      .RadGrid .rgMasterTable tbody tr.rgAltRow { background:#fbfdff; }
-      .RadGrid .rgMasterTable tbody tr:hover { background:#f1f5f9; }
-      .RadGrid .rgMasterTable tbody td { border-bottom: 1px dashed #e5e7eb; }
-      .RadGrid .rgMasterTable tbody tr:last-child td { border-bottom: none; }
-      .wl-statusbar { position:absolute; left:0; top:0; bottom:0; width:3px; border-top-left-radius:8px; border-bottom-left-radius:8px; }
-      tr[data-status="paid"]    .wl-statusbar { background:#22c55e; opacity:.7; }
-      tr[data-status="open"]    .wl-statusbar { background:#f59e0b; opacity:.7; }
-      tr[data-status="partial"] .wl-statusbar { background:#fbbf24; opacity:.7; }
-      /* row container for statusbar */
-      .wl-rowwrap { position:relative; }
-
-      /* Sticky first column (selector) */
-      .rgMasterTable td:first-child, .rgMasterTable th:first-child {
-        position: sticky; left: 0; z-index: 3; background: inherit;
-      }
-
-      /* Number alignment */
-      td[data-title="Goods Total"], td[data-title="Tax"], td[data-title="Total Amount"] { 
-        text-align: right !important; font-variant-numeric: tabular-nums; 
-      }
-
-      /* Overdue dot */
-      .wl-overdue-dot {
-        display:inline-block; width:8px; height:8px; border-radius:999px; background:#ef4444; margin-left:6px;
-      }
-
-      /* Scrollable area for sticky header */
-      .wl-grid-wrap {
-        max-height: 68vh; overflow:auto; border-radius:12px; background:#fff;
-      }
+      .wl-act { border:1px solid #e5e7eb; border-radius:10px; padding:6px 10px; font-weight:700; background:#f8fafc; font-size:12px; cursor:pointer; }
     `;
     const el = document.createElement('style'); el.textContent = css; document.head.appendChild(el);
   })();
 
-  /* -------------------- Utils -------------------- */
+  /* -------------------- Utils (from your working build) -------------------- */
   const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
-  async function waitFor(selector, {root=document, tries=60, interval=120} = {}){
-    for (let i=0;i<tries;i++){ const el = root.querySelector(selector); if (el) return el; await sleep(interval); }
-    return null;
-  }
   const txt = (el)=> (el?.textContent || '').trim();
   const toUSD = (n)=> Number(n).toLocaleString(undefined,{style:'currency',currency:'USD'});
   const parseMoney = (s)=> { const v = parseFloat(String(s||'').replace(/[^0-9.\-]/g,'') || '0'); return Number.isFinite(v) ? v : 0; };
   const nearlyZero = (n)=> Math.abs(n) < 0.009;
-  const raf = (fn)=> new Promise(r=>requestAnimationFrame(()=>{ fn(); r(); }));
 
-  /* -------------------- Date range (Invoices page) -------------------- */
+  async function waitFor(selector, {root=document, tries=60, interval=120} = {}){
+    for (let i=0;i<tries;i++){ const el = root.querySelector(selector); if (el) return el; await sleep(interval); }
+    return null;
+  }
+
+  /* -------------------- Date range (same as your v3) -------------------- */
   function readInvoiceDateRange(){
     const getClientState = (id)=>{
       const inp = document.getElementById(id); if (!inp) return null;
@@ -147,25 +119,16 @@
     return { startISO, endISO };
   }
 
-  /* -------------------- AP crawler (progressive) -------------------- */
-  const AP_EVENTS = new EventTarget();           // emits 'ap:item' {docNo, outstanding}
-  function apCacheKey(startISO, endISO){ return `wl_ap_index_v4_${startISO || 'na'}_${endISO || 'na'}`; }
+  /* -------------------- AccountPayment crawler (your working logic) -------------------- */
+  function apCacheKey(startISO, endISO){ return `wl_ap_index_v3_${startISO || 'na'}_${endISO || 'na'}`; }
 
   async function buildAccountPaymentIndex(startISO, endISO){
     const key = apCacheKey(startISO, endISO);
-    // Try cache (10 min)
     try{
       const raw = sessionStorage.getItem(key);
       if (raw){
         const { at, data } = JSON.parse(raw);
-        if (Date.now() - at < 10*60*1000){
-          const map = new Map(data);
-          // hydrate existing map to the UI (so rows resolve immediately)
-          for (const [docNo, v] of map.entries()){
-            AP_EVENTS.dispatchEvent(new CustomEvent('ap:item', { detail:{ docNo, outstanding: v.outstanding }}));
-          }
-          return map;
-        }
+        if (Date.now() - at < 10*60*1000){ return new Map(data); }
       }
     }catch{}
 
@@ -180,6 +143,7 @@
       if (!res.ok) throw new Error('HTTP '+res.status);
       return res.text();
     };
+
     const normalizePagerUrl = (href)=>{
       const u = new URL(href, base.toString());
       if (startISO && !u.searchParams.get('startDate')) u.searchParams.set('startDate', `${startISO}T00:00:00`);
@@ -206,8 +170,6 @@
         const outVal = parseMoney(outTxt);
         if (docNo && (type||'').toLowerCase() === 'invoice'){
           index.set(docNo, { outstanding: outVal });
-          // live-update visible rows as we discover items
-          AP_EVENTS.dispatchEvent(new CustomEvent('ap:item', { detail:{ docNo, outstanding: outVal }}));
           count++;
         }
       });
@@ -224,35 +186,22 @@
     };
 
     try{
-      // First page fast
       const firstHTML = await fetchText(base.toString());
       const firstDoc  = parser.parseFromString(firstHTML, 'text/html');
       parseRows(firstDoc);
-
-      // Remaining pages in throttled batches (keeps UI responsive)
       const hrefs = collectPager(firstDoc).filter(u => u !== base.toString());
-      const queue = hrefs.slice();
-      const CONCURRENCY = 2;
-
-      async function worker(){
-        while (queue.length){
-          const url = queue.shift();
-          try{
-            const html = await fetchText(url);
-            const d = parser.parseFromString(html, 'text/html');
+      if (hrefs.length){
+        const results = await Promise.allSettled(hrefs.map(h=>fetchText(h)));
+        results.forEach(r=>{
+          if (r.status === 'fulfilled'){
+            const d = parser.parseFromString(r.value, 'text/html');
             parseRows(d);
-          }catch(e){ /* ignore individual page errors */ }
-          // Tiny pause between pages to yield main thread
-          await sleep(50);
-        }
+          }
+        });
       }
-      await Promise.all(new Array(Math.min(CONCURRENCY, queue.length||0)).fill(0).map(worker));
-
     }catch(err){ warn('AP crawl failed:', err); }
 
-    try{
-      sessionStorage.setItem(key, JSON.stringify({at: Date.now(), data: Array.from(index.entries())}));
-    }catch{}
+    try{ sessionStorage.setItem(key, JSON.stringify({at: Date.now(), data: Array.from(index.entries())})); }catch{}
     return index;
   }
 
@@ -263,165 +212,226 @@
     return __AP_PROMISE__;
   }
 
-  /* -------------------- Grid helpers -------------------- */
-  async function getGridRoot(){ return await waitFor('#ctl00_PageBody_InvoicesGrid',{tries:60,interval:150}); }
+  /* -------------------- Grid + row helpers -------------------- */
   async function getMasterTable(){
-    const root = await getGridRoot(); if (!root) return null;
+    const root = await waitFor('#ctl00_PageBody_InvoicesGrid'); if (!root) return null;
     return root.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00') || root.querySelector('.rgMasterTable');
   }
   function todayAtMidnight(){ const d = new Date(); d.setHours(0,0,0,0); return d; }
 
-  function getInvoiceNumberFromRow(tr){
-    const cellWide   = tr.querySelector('td.wide-only[data-title="Invoice #"]');
-    const cellNarrow = tr.querySelector('td.narrow-only[data-title="Invoice #"]');
-    const aWide = cellWide ? cellWide.querySelector('a') : null;
-    const aNarrow = cellNarrow ? cellNarrow.querySelector('a') : null;
-    return txt(aWide) || txt(aNarrow) || '';
+  function findInvoiceAnchor(tr){
+    return tr.querySelector('td[data-title="Invoice #"] a[href*="InvoiceDetails_r.aspx"], td[data-title="Invoice #"] a[href*="/Invoices_r.aspx"]');
   }
-  function getTotalAmountFromRow(tr){
-    const td = tr.querySelector('td[data-title="Total Amount"]');
-    return parseMoney(td ? td.textContent : '0');
-  }
-  function getDueDateFromRow(tr){
-    const td = tr.querySelector('td[data-title="Due Date"]'); const s = td ? txt(td) : '';
-    if (!s) return null; const d = new Date(s); return isNaN(d) ? null : d;
-  }
-  function ensureRowWrap(tr){
-    if (!tr.__wlWrapped){
-      const wrap = document.createElement('div');
-      wrap.className='wl-rowwrap';
-      const firstCell = tr.cells && tr.cells[0];
-      if (firstCell){
-        // Insert an absolutely positioned color bar along the left
-        const bar = document.createElement('div'); bar.className='wl-statusbar';
-        // Put the bar into the first cell so it scrolls with the row
-        firstCell.style.position='relative';
-        firstCell.prepend(bar);
-      }
-      tr.__wlWrapped = true;
-    }
-  }
+  const grab = (tr, sel) => { const el = tr.querySelector(sel); return el ? el.textContent.trim() : ''; };
+  const abs  = (u)=>{ try{ return new URL(u, location.origin).toString(); }catch{ return u; } };
 
-  function placeBadgeIntoInvoiceCells(tr){
-    const targets = [];
-    const cellWide   = tr.querySelector('td.wide-only[data-title="Invoice #"]');
-    const cellNarrow = tr.querySelector('td.narrow-only[data-title="Invoice #"]');
-    if (cellWide) targets.push(cellWide);
-    if (cellNarrow) targets.push(cellNarrow);
+  /* -------------------- Badging (keeps your logic; now also stores data-* for card) -------------------- */
+  async function applyBadges(master){
+    const rows = Array.from(master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow'));
+    if (!rows.length) return;
 
-    targets.forEach(cell=>{
-      let badge = cell.querySelector('.wl-badge');
-      if (!badge){
-        badge = document.createElement('span');
-        badge.className = 'wl-badge wl-badge--slate';
-        badge.innerHTML = '<span class="wl-skel">checking…</span>';
-        cell.appendChild(badge);
-      }
-    });
-  }
-  function setBadge(cell, cls, text){
-    const badge = cell.querySelector('.wl-badge'); if (!badge) return;
-    badge.className = `wl-badge ${cls}`; badge.textContent = text;
-  }
-
-  /* -------------------- Visible-rows tracking -------------------- */
-  const visibleRows = new Set();
-  let gridWrap = null;
-  function buildRowObserver(){
-    if (!gridWrap) gridWrap = document.querySelector('#ctl00_PageBody_InvoicesGrid .wl-grid-wrap');
-    if (!gridWrap) return null;
-    const io = new IntersectionObserver((entries)=>{
-      for (const e of entries){
-        const tr = e.target;
-        if (e.isIntersecting){ visibleRows.add(tr); ensureRowWrap(tr); ensureBadgingForRows([tr]); }
-        else { visibleRows.delete(tr); }
-      }
-    }, { root: gridWrap, threshold: 0 });
-    return io;
-  }
-  let rowIO = null;
-  function observeRows(master){
-    if (!rowIO) rowIO = buildRowObserver();
-    if (!rowIO) return;
-    const rows = master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow');
-    rows.forEach(tr=>rowIO.observe(tr));
-  }
-
-  /* -------------------- Badging + Status tagging (visible only) -------------------- */
-  async function ensureBadgingForRows(rows){
-    if (!rows || !rows.length) return;
     const apIndex = await ensureApIndex().catch(()=>null);
     const today = todayAtMidnight();
 
     rows.forEach(tr=>{
-      const invNo = getInvoiceNumberFromRow(tr);
+      const a = findInvoiceAnchor(tr);
+      const invNo = a ? (a.textContent||'').trim() : '';
       if (!invNo) return;
 
-      placeBadgeIntoInvoiceCells(tr);
-      const invCells = tr.querySelectorAll('td[data-title="Invoice #"].wide-only, td[data-title="Invoice #"].narrow-only');
-
       let status = 'unknown';
+      let outLeft = 0;
+
       if (!apIndex){
-        invCells.forEach(cell=> setBadge(cell, 'wl-badge--slate', 'Status N/A'));
         status = 'unknown';
       }else{
         const info = apIndex.get(invNo);
-        const total = getTotalAmountFromRow(tr);
-        if (info && nearlyZero(info.outstanding)){
-          invCells.forEach(cell=> setBadge(cell, 'wl-badge--green', 'Paid'));
-          status = 'paid';
-        }else if (info){
-          const out = Number(info.outstanding) || 0;
-          if (Number.isFinite(total) && out < total - 0.009){
-            invCells.forEach(cell=> setBadge(cell, 'wl-badge--amber', `Partial · ${toUSD(out)} left`));
-            status = 'partial';
-          }else{
-            invCells.forEach(cell=> setBadge(cell, 'wl-badge--amber', `Open · ${toUSD(out)}`));
-            status = 'open';
-          }
+        const total = parseMoney(grab(tr,'td[data-title="Total Amount"]'));
+        if (!info || nearlyZero(info.outstanding)){
+          status = 'paid'; outLeft = 0;
         }else{
-          // Not in map yet (progressive crawl) — keep skeleton, will resolve on AP_EVENTS
+          const out = Number(info.outstanding) || 0;
+          if (Number.isFinite(total) && out < total - 0.009){ status = 'partial'; outLeft = out; }
+          else { status = 'open'; outLeft = out; }
         }
       }
 
-      // Overdue marker
-      const due = getDueDateFromRow(tr);
+      const dueTxt = grab(tr,'td[data-title="Due Date"]');
+      const due = dueTxt ? new Date(dueTxt) : null;
       const overdue = (status === 'open' || status === 'partial') && due && due < today;
+
       tr.dataset.status = status;
+      tr.dataset.outstanding = String(outLeft || 0);
       tr.dataset.overdue = overdue ? '1' : '0';
 
-      // add/remove overdue dot
-      if (overdue){
-        invCells.forEach(cell=>{
-          if (!cell.querySelector('.wl-overdue-dot')){
-            const dot = document.createElement('span'); dot.className = 'wl-overdue-dot'; dot.title = 'Overdue';
-            cell.appendChild(dot);
-          }
-        });
-      }else{
-        invCells.forEach(cell=>{ const dot = cell.querySelector('.wl-overdue-dot'); if (dot) dot.remove(); });
-      }
-    });
+      // If legacy table-badge exists (pre-card), keep it updated too:
+      const invCells = tr.querySelectorAll('td[data-title="Invoice #"]');
+      invCells.forEach(cell=>{
+        let badge = cell.querySelector('.wl-badge');
+        if (!badge){ badge = document.createElement('span'); badge.className='wl-badge'; cell.appendChild(badge); }
+        if (status === 'paid'){ badge.className='wl-badge wl-chip wl-chip--green'; badge.textContent='Paid'; }
+        else if (status === 'partial'){ badge.className='wl-badge wl-chip wl-chip--amber'; badge.textContent=`Partial · ${toUSD(outLeft)}`; }
+        else if (status === 'open'){ badge.className='wl-badge wl-chip wl-chip--amber'; badge.textContent=`Open · ${toUSD(outLeft)}`; }
+        else { badge.className='wl-badge wl-chip wl-chip--slate'; badge.textContent='Status N/A'; }
+      });
 
-    updateSummary(); // recalc page summary
+      // Update card chip if card is already built
+      updateCardBadge(tr);
+    });
   }
 
-  function applyFilter(filter, searchTerm){
+  /* -------------------- Card rendering -------------------- */
+  function buildCardForRow(tr){
+    if (tr.__wlCard) return; // idempotent
+    const a = findInvoiceAnchor(tr); if (!a) return;
+
+    const invNo = (a.textContent||'').trim();
+    const invHref = abs(a.getAttribute('href')||'#');
+    const orderNo = grab(tr, 'td[data-title="Order #"]');
+    const yourRef = grab(tr, 'td[data-title="Your Ref"]');
+    const jobRef  = grab(tr, 'td[data-title="Job Ref"]');
+    const invDate = grab(tr, 'td[data-title="Invoice Date"]');
+    const dueDate = grab(tr, 'td[data-title="Due Date"]');
+    const goods   = grab(tr, 'td[data-title="Goods Total"]');
+    const tax     = grab(tr, 'td[data-title="Tax"]');
+    const total   = grab(tr, 'td[data-title="Total Amount"]');
+    const lines   = grab(tr, 'td[data-title="Lines"]');
+    const branch  = grab(tr, 'td[data-title="Branch"]');
+
+    // Hide original anchor but keep it for keyboard/fallback
+    a.style.position='absolute'; a.style.width='1px'; a.style.height='1px';
+    a.style.overflow='hidden'; a.style.clip='rect(1px,1px,1px,1px)'; a.setAttribute('aria-hidden','true');
+
+    const head = document.createElement('div');
+    head.className = 'wl-row-head';
+    head.innerHTML = `
+      <div class="wl-head-left">
+        <span class="wl-inv-no">Invoice #${invNo}</span>
+        <span class="wl-chip wl-chip--slate wl-card-badge"><span class="wl-badge-skel">checking…</span></span>
+        <div class="wl-meta">
+          ${invDate ? `<span>Inv: ${invDate}</span>` : ``}
+          ${dueDate ? `<span>Due: ${dueDate}</span>` : ``}
+          ${orderNo ? `<span>Order: ${orderNo}</span>` : ``}
+          ${branch  ? `<span>Branch: ${branch}</span>` : ``}
+          ${lines   ? `<span>Lines: ${lines}</span>` : ``}
+          ${yourRef && yourRef!=='-' ? `<span>Your Ref: ${yourRef}</span>` : ``}
+          ${jobRef  && jobRef!=='-'  ? `<span>Job: ${jobRef}</span>` : ``}
+          ${(total||goods||tax) ? `<span>Total: ${total||goods}</span>` : ``}
+        </div>
+      </div>
+      <div class="wl-head-right">
+        <a class="wl-btn wl-btn--ghost" href="${invHref}">Open</a>
+        <button class="wl-btn wl-btn--primary" type="button" data-act="toggle">View details</button>
+      </div>
+    `;
+    tr.insertAdjacentElement('afterbegin', head);
+
+    const details = document.createElement('div');
+    details.className = 'wl-details';
+    tr.appendChild(details);
+
+    head.querySelector('[data-act="toggle"]').addEventListener('click', async (e)=>{
+      e.preventDefault();
+      if (!details.dataset.loaded){
+        details.dataset.loaded = '1';
+        details.innerHTML = `<div style="color:#475569;">Loading…</div>`;
+        try{
+          const html = await fetch(invHref, { credentials:'same-origin' }).then(r=>r.text());
+          const doc  = new DOMParser().parseFromString(html, 'text/html');
+          const table = doc.querySelector('#ctl00_PageBody_ctl02_InvoiceDetailsGrid_ctl00, .rgMasterTable');
+          if (table){
+            const lines = [];
+            table.querySelectorAll('tbody > tr').forEach(tr2=>{
+              const code = (tr2.querySelector('td[data-title="Product Code"]')||{}).textContent||'';
+              const desc = (tr2.querySelector('td[data-title="Description"]')||{}).textContent||'';
+              const qty  = (tr2.querySelector('td[data-title="Qty"]')||{}).textContent||'';
+              const tot  = (tr2.querySelector('td[data-title="Total"]')||{}).textContent||'';
+              if ((code+desc).trim()) lines.push({code:code.trim(),desc:desc.trim(),qty:qty.trim(),tot:tot.trim()});
+            });
+            details.innerHTML = lines.slice(0,6).map(l=>`
+              <div style="display:flex;gap:12px;justify-content:space-between;border:1px solid #eef0f3;border-radius:12px;padding:10px;">
+                <div style="font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:800;min-width:86px">${l.code||'-'}</div>
+                <div style="flex:1;min-width:160px">${l.desc||''}</div>
+                <div style="white-space:nowrap;font-weight:700">${l.qty?`Qty: ${l.qty}`:''}${l.tot?` · ${l.tot}`:''}</div>
+              </div>
+            `).join('') || `<div style="color:#475569;">No line items found.</div>`;
+          }else{
+            details.innerHTML = `<div style="color:#475569;">Couldn’t read details. <a href="${invHref}">Open invoice page</a>.</div>`;
+          }
+        }catch(ex){
+          details.innerHTML = `<div style="color:#7f1d1d;background:#fee2e2;border:1px solid #fecaca;border-radius:10px;padding:10px;">
+            Sorry, we couldn’t load details. You can still <a href="${invHref}">open the invoice page</a>.
+          </div>`;
+        }
+      }
+      details.classList.toggle('show');
+      e.currentTarget.textContent = details.classList.contains('show') ? 'Hide details' : 'View details';
+    });
+
+    tr.__wlCard = true;
+    updateCardBadge(tr); // reflect current dataset status
+  }
+
+  function updateCardBadge(tr){
+    const chip = tr.querySelector('.wl-card-badge'); if (!chip) return;
+    const status = tr.dataset.status || 'unknown';
+    const out = Number(tr.dataset.outstanding || 0);
+    if (status === 'paid'){ chip.className='wl-chip wl-chip--green wl-card-badge'; chip.textContent='Paid'; }
+    else if (status === 'partial'){ chip.className='wl-chip wl-chip--amber wl-card-badge'; chip.textContent=`Partial · ${toUSD(out)}`; }
+    else if (status === 'open'){ chip.className='wl-chip wl-chip--amber wl-card-badge'; chip.textContent=`Open · ${toUSD(out)}`; }
+    else { chip.className='wl-chip wl-chip--slate wl-card-badge'; chip.textContent='Status N/A'; }
+    if (tr.dataset.overdue === '1' && (status==='open'||status==='partial')){
+      chip.className = chip.className.replace('wl-chip--amber','wl-chip--red'); // red for overdue
+      chip.textContent += ' · Overdue';
+    }
+  }
+
+  function cardify(master){
+    const host = master.closest('#ctl00_PageBody_InvoicesGrid, .RadGrid[id*="InvoicesGrid"]');
+    if (!host) return;
+    master.classList.add('wl-inv-cardify');
+    const rows = Array.from(master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow'));
+    rows.forEach(tr=>{ try{ buildCardForRow(tr); }catch(e){ warn('Cardify row fail', e); } });
+  }
+
+  /* -------------------- Toolbar (keep select filtered + simple status filter) -------------------- */
+  function ensureToolbar(){
+    const grid = document.getElementById('ctl00_PageBody_InvoicesGrid');
+    const flex = grid?.closest('.bodyFlexItem') || grid;
+    if (!flex) return null;
+    if (flex.querySelector('.wl-toolbar')) return flex.querySelector('.wl-toolbar');
+
+    const bar = document.createElement('div');
+    bar.className = 'wl-toolbar';
+    bar.innerHTML = `
+      <button class="wl-chipbtn" data-filter="all" data-active="true">All</button>
+      <button class="wl-chipbtn" data-filter="open">Open</button>
+      <button class="wl-chipbtn" data-filter="partial">Partial</button>
+      <button class="wl-chipbtn" data-filter="paid">Paid</button>
+      <div class="wl-spacer"></div>
+      <button class="wl-act" data-action="select-filtered">Select filtered</button>
+    `;
+    flex.insertBefore(bar, flex.firstChild);
+
+    bar.addEventListener('click',(e)=>{
+      const chip = e.target.closest('.wl-chipbtn');
+      const act  = e.target.closest('.wl-act');
+      if (chip){
+        bar.querySelectorAll('.wl-chipbtn').forEach(b=>b.dataset.active='false');
+        chip.dataset.active='true';
+        applyFilter(chip.dataset.filter);
+      }else if (act && act.dataset.action==='select-filtered'){
+        selectFilteredOnPage();
+      }
+    });
+    return bar;
+  }
+
+  function applyFilter(filter){
     const master = document.querySelector('#ctl00_PageBody_InvoicesGrid .rgMasterTable'); if (!master) return;
-    const term = (searchTerm||'').toLowerCase();
     const rows = master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow');
     rows.forEach(tr=>{
       const status = tr.dataset.status || 'unknown';
-      const over = tr.dataset.overdue === '1';
-      let show = (filter === 'all');
-      if (!show){
-        if (filter === 'overdue') show = over;
-        else show = (status === filter);
-      }
-      if (show && term){
-        const hay = (tr.textContent || '').toLowerCase();
-        show = hay.includes(term);
-      }
+      const show = (filter === 'all') ? true : (status === filter);
       tr.style.display = show ? '' : 'none';
     });
   }
@@ -435,99 +445,7 @@
     });
   }
 
-  /* -------------------- Wrapper, toolbar & summary -------------------- */
-  function ensureGridWrapper(){
-    const root = document.getElementById('ctl00_PageBody_InvoicesGrid'); if (!root) return null;
-    if (root.__wlWrapped) return root.__wlWrapped;
-    const table = root.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00') || root.querySelector('.rgMasterTable'); if (!table) return null;
-    const wrap = document.createElement('div'); wrap.className = 'wl-grid-wrap';
-    table.parentNode.insertBefore(wrap, table); wrap.appendChild(table);
-    root.__wlWrapped = wrap; return wrap;
-  }
-
-  function ensureTopRow(){
-    const gridFlexItem = document.getElementById('ctl00_PageBody_InvoicesGrid')?.closest('.bodyFlexItem') || document.getElementById('ctl00_PageBody_InvoicesGrid');
-    if (!gridFlexItem) return null;
-    if (gridFlexItem.querySelector('.wl-toprow')) return gridFlexItem.querySelector('.wl-toprow');
-
-    const top = document.createElement('div'); top.className = 'wl-toprow';
-    top.innerHTML = `
-      <div class="wl-summary">
-        <span class="wl-pill" data-sum="open">Open: 0</span>
-        <span class="wl-pill" data-sum="partial">Partial: 0</span>
-        <span class="wl-pill" data-sum="paid">Paid: 0</span>
-        <span class="wl-pill wl-pill--over" data-sum="overdue">Overdue: 0</span>
-      </div>
-    `;
-    gridFlexItem.insertBefore(top, gridFlexItem.firstChild);
-    return top;
-  }
-
-  function ensureToolbar(){
-    const gridFlexItem = document.getElementById('ctl00_PageBody_InvoicesGrid')?.closest('.bodyFlexItem') || document.getElementById('ctl00_PageBody_InvoicesGrid');
-    if (!gridFlexItem) return null;
-    if (gridFlexItem.querySelector('.wl-toolbar')) return gridFlexItem.querySelector('.wl-toolbar');
-
-    const bar = document.createElement('div');
-    bar.className = 'wl-toolbar';
-    bar.innerHTML = `
-      <button class="wl-chip" data-filter="all" data-active="true">All</button>
-      <button class="wl-chip" data-filter="open">Open</button>
-      <button class="wl-chip" data-filter="partial">Partial</button>
-      <button class="wl-chip" data-filter="paid">Paid</button>
-      <button class="wl-chip" data-filter="overdue">Overdue</button>
-      <div class="wl-input"><span>🔎</span><input type="text" placeholder="Search invoice, ref, branch…" aria-label="Search invoices"></div>
-      <div class="wl-spacer"></div>
-      <button class="wl-btn" data-action="density">Toggle density</button>
-      <button class="wl-btn" data-action="select-filtered">Select filtered</button>
-    `;
-    gridFlexItem.insertBefore(bar, gridFlexItem.querySelector('.wl-grid-wrap') || gridFlexItem.lastChild);
-    return bar;
-  }
-
-  function wireToolbar(bar){
-    if (!bar || bar.__wired) return; bar.__wired = true;
-    const root = document.getElementById('ctl00_PageBody_InvoicesGrid')?.closest('.bodyFlexItem') || document.body;
-
-    const setActive = (btn)=>{ bar.querySelectorAll('.wl-chip').forEach(b=>b.dataset.active='false'); btn.dataset.active='true'; };
-    let filter = 'all'; let term = '';
-
-    const apply = ()=> applyFilter(filter, term);
-    bar.addEventListener('click', (e)=>{
-      const chip = e.target.closest('.wl-chip');
-      const btn  = e.target.closest('.wl-btn');
-      if (chip){ filter = chip.dataset.filter; setActive(chip); apply(); }
-      else if (btn && btn.dataset.action === 'select-filtered'){ selectFilteredOnPage(); }
-      else if (btn && btn.dataset.action === 'density'){
-        root.classList.toggle('wl-density-compact');
-      }
-    });
-
-    const input = bar.querySelector('input'); let tId = 0;
-    input.addEventListener('input', ()=>{
-      clearTimeout(tId);
-      tId = setTimeout(()=>{ term = input.value||''; apply(); }, 120);
-    });
-  }
-
-  function updateSummary(){
-    const master = document.querySelector('#ctl00_PageBody_InvoicesGrid .rgMasterTable'); if (!master) return;
-    const rows = master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow');
-    let open=0, partial=0, paid=0, overdue=0;
-    rows.forEach(tr=>{
-      if (tr.style.display === 'none') return; // page scope & current filter
-      const s = tr.dataset.status; const o = tr.dataset.overdue === '1';
-      if (s === 'open') open++;
-      else if (s === 'partial') partial++;
-      else if (s === 'paid') paid++;
-      if (o) overdue++;
-    });
-    const top = document.querySelector('.wl-toprow'); if (!top) return;
-    const set = (k,v)=>{ const el = top.querySelector(`[data-sum="${k}"]`); if (el) el.textContent = `${k[0].toUpperCase()+k.slice(1)}: ${v}`; };
-    set('open',open); set('partial',partial); set('paid',paid); set('overdue',overdue);
-  }
-
-  /* -------------------- Observer (partial postbacks) -------------------- */
+  /* -------------------- Observer for partial postbacks -------------------- */
   function attachGridObserver(){
     const gridRoot = document.getElementById('ctl00_PageBody_InvoicesGrid'); if (!gridRoot) return;
     if (gridRoot.__wlObserved) return; gridRoot.__wlObserved = true;
@@ -536,8 +454,8 @@
       const master = gridRoot.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00') || gridRoot.querySelector('.rgMasterTable');
       if (master){
         requestAnimationFrame(async ()=>{
-          observeRows(master); // re-observe new page rows
-          // on page change, visible set recalculates automatically via IO
+          await applyBadges(master);
+          cardify(master);
         });
       }
     });
@@ -545,29 +463,15 @@
     log('Grid observer attached');
   }
 
-  /* -------------------- AP live updates → badge visible rows -------------------- */
-  AP_EVENTS.addEventListener('ap:item', ()=>{
-    // when AP map gets new data, just refresh currently visible rows
-    if (!visibleRows.size) return;
-    ensureBadgingForRows(Array.from(visibleRows));
-  });
-
   /* -------------------- Boot -------------------- */
   async function boot(){
     const master = await getMasterTable(); if (!master){ log('No invoices grid found'); return; }
-    ensureGridWrapper(); gridWrap = document.querySelector('#ctl00_PageBody_InvoicesGrid .wl-grid-wrap');
-    const top = ensureTopRow(); const toolbar = ensureToolbar(); wireToolbar(toolbar);
-
-    // Build AP index (progressive) & start observing rows
+    ensureToolbar();
     try{ await ensureApIndex(); }catch(e){ warn('AP index error', e); }
-    observeRows(master);
-
-    // Initial visible rows badging (after layout)
-    await raf(()=>{ /* nop: let IO fire */ });
-
-    // Observer for partial page refreshes
+    await applyBadges(master);
+    cardify(master);
     attachGridObserver();
-    log('Invoices grid enhanced');
+    log('Invoices enhanced (card UI + working logic)');
   }
 
   if (document.readyState === 'loading'){
@@ -577,8 +481,7 @@
   }
   window.addEventListener('load', ()=>boot(), { once:true });
 
-  // Manual debug hook
+  // Debug
   window.WLInvoices = { run: boot, version: VERSION };
-
 })();
 
