@@ -1,11 +1,11 @@
 
 /* =========================================================================
-   Woodson — Invoices Card UI (v3.1)  ✅ working logic + modern card styling
-   - Uses your original AP crawl & badging logic (date-range aware + cache)
-   - Renders each row as a card while preserving the first-cell checkbox
-   - Status chip reflects the same open/partial/paid logic as before
-   - “Select filtered” kept; headers hidden except select-all
-   - Reapplies after Telerik partial postbacks (observer)
+   Woodson — Invoices Card UI (v3.3)
+   - Working logic (date-range AP crawl + badging + filters)
+   - Card UI formatting
+   - SURFACES ORIGINAL PER-ROW chkSelect CHECKBOXES IN EACH CARD
+   - Keeps header Select-All checkbox functional
+   - Reapplies after Telerik partial postbacks
    ========================================================================== */
 
 (function () {
@@ -14,29 +14,39 @@
   if (window.__WL_INVOICES_ENHANCED__) return;
   window.__WL_INVOICES_ENHANCED__ = true;
 
-  const VERSION = '3.1';
+  const VERSION = '3.3';
   const t0 = performance.now();
   const log  = (...a)=>console.log('%cINV','color:#005d6e;font-weight:700;',`v${VERSION} [+${(performance.now()-t0).toFixed(1)}ms]`,...a);
   const warn = (...a)=>console.warn('%cINV','color:#b45309;font-weight:700;',`v${VERSION} [+${(performance.now()-t0).toFixed(1)}ms]`,...a);
 
-  /* -------------------- CSS (card UI) -------------------- */
+  /* -------------------- CSS (card UI + checkbox surfacing) -------------------- */
   (function injectCSS(){
     const css = `
-      /* Keep select-all visible, hide other headers for a cleaner card grid */
+      /* Keep Select-All visible, hide other headers for a clean card grid */
       #ctl00_PageBody_InvoicesGrid thead th:not(:first-child),
       .RadGrid[id*="InvoicesGrid"] thead th:not(:first-child){ display:none !important; }
 
-      /* Cardify rows but keep first td (checkbox) visible & clickable */
+      /* Cardify body rows; make rows positioning context for overlays */
       .wl-inv-cardify tr.rgRow, .wl-inv-cardify tr.rgAltRow{
         display:block; background:#fff; border:1px solid #e5e7eb; border-radius:16px;
         margin:12px 0; box-shadow:0 6px 18px rgba(15,23,42,.06); overflow:hidden; position:relative;
       }
       .wl-inv-cardify tr.rgRow > td, .wl-inv-cardify tr.rgAltRow > td{ display:none !important; }
+
+      /* Keep first cell present as our anchor area (for the checkbox overlay) */
       .wl-inv-cardify tr.rgRow > td:first-child,
       .wl-inv-cardify tr.rgAltRow > td:first-child{
-        display:block !important; position:absolute; left:10px; top:12px;
-        background:transparent; border:none !important; z-index:2;
+        display:block !important; position:absolute; left:0; top:0;
+        border:none !important; background:transparent; padding:0; margin:0; z-index:1;
       }
+
+      /* Visible selection wrap that holds the ORIGINAL chkSelect checkbox */
+      .wl-select-wrap{
+        position:absolute; left:10px; top:10px;
+        display:flex; align-items:center; gap:8px;
+        z-index:30; background:transparent;
+      }
+      .wl-select-wrap input[type="checkbox"]{ cursor:pointer; }
 
       .wl-row-head{
         display:grid; gap:8px; padding:14px 14px 12px 46px; align-items:center;
@@ -71,7 +81,7 @@
         color:transparent
       }
 
-      /* Simple toolbar (kept from your working logic) */
+      /* Toolbar */
       .wl-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin: 8px 0 10px; }
       .wl-chipbtn {
         border:1px solid #e5e7eb; border-radius:999px; padding:6px 10px; font-weight:700;
@@ -84,7 +94,7 @@
     const el = document.createElement('style'); el.textContent = css; document.head.appendChild(el);
   })();
 
-  /* -------------------- Utils (from your working build) -------------------- */
+  /* -------------------- Utils -------------------- */
   const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
   const txt = (el)=> (el?.textContent || '').trim();
   const toUSD = (n)=> Number(n).toLocaleString(undefined,{style:'currency',currency:'USD'});
@@ -96,7 +106,7 @@
     return null;
   }
 
-  /* -------------------- Date range (same as your v3) -------------------- */
+  /* -------------------- Date range -------------------- */
   function readInvoiceDateRange(){
     const getClientState = (id)=>{
       const inp = document.getElementById(id); if (!inp) return null;
@@ -119,7 +129,7 @@
     return { startISO, endISO };
   }
 
-  /* -------------------- AccountPayment crawler (your working logic) -------------------- */
+  /* -------------------- AccountPayment crawler -------------------- */
   function apCacheKey(startISO, endISO){ return `wl_ap_index_v3_${startISO || 'na'}_${endISO || 'na'}`; }
 
   async function buildAccountPaymentIndex(startISO, endISO){
@@ -225,7 +235,33 @@
   const grab = (tr, sel) => { const el = tr.querySelector(sel); return el ? el.textContent.trim() : ''; };
   const abs  = (u)=>{ try{ return new URL(u, location.origin).toString(); }catch{ return u; } };
 
-  /* -------------------- Badging (keeps your logic; now also stores data-* for card) -------------------- */
+  /* -------------------- Checkbox surfacing (MOVE, don’t clone) -------------------- */
+  function surfaceCheckboxInCard(tr){
+    if (!tr || !(tr.classList.contains('rgRow') || tr.classList.contains('rgAltRow'))) return;
+    const firstCell = tr.cells && tr.cells[0]; if (!firstCell) return;
+
+    // Find the existing per-row checkbox (dynamic id/name, ends with chkSelect)
+    const cb = tr.querySelector('input[type="checkbox"][name*="chkSelect"]');
+    if (!cb) return;
+
+    // Create/ensure the visible wrap and MOVE the checkbox into it
+    let wrap = firstCell.querySelector('.wl-select-wrap');
+    if (!wrap){
+      wrap = document.createElement('div');
+      wrap.className = 'wl-select-wrap';
+      firstCell.appendChild(wrap);
+    }
+    if (cb.closest('.wl-select-wrap') !== wrap){
+      wrap.appendChild(cb); // reparent (keeps postback wiring intact)
+    }
+  }
+
+  function surfaceAllCheckboxes(master){
+    const rows = master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow');
+    rows.forEach(surfaceCheckboxInCard);
+  }
+
+  /* -------------------- Badging (sets data-* used by card) -------------------- */
   async function applyBadges(master){
     const rows = Array.from(master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow'));
     if (!rows.length) return;
@@ -236,7 +272,10 @@
     rows.forEach(tr=>{
       const a = findInvoiceAnchor(tr);
       const invNo = a ? (a.textContent||'').trim() : '';
-      if (!invNo) return;
+      if (!invNo) { surfaceCheckboxInCard(tr); return; } // still show checkbox
+
+      // Make sure checkbox is visible in the card
+      surfaceCheckboxInCard(tr);
 
       let status = 'unknown';
       let outLeft = 0;
@@ -263,7 +302,7 @@
       tr.dataset.outstanding = String(outLeft || 0);
       tr.dataset.overdue = overdue ? '1' : '0';
 
-      // If legacy table-badge exists (pre-card), keep it updated too:
+      // Keep legacy table-badge updated too (harmless in card mode)
       const invCells = tr.querySelectorAll('td[data-title="Invoice #"]');
       invCells.forEach(cell=>{
         let badge = cell.querySelector('.wl-badge');
@@ -274,7 +313,6 @@
         else { badge.className='wl-badge wl-chip wl-chip--slate'; badge.textContent='Status N/A'; }
       });
 
-      // Update card chip if card is already built
       updateCardBadge(tr);
     });
   }
@@ -282,10 +320,9 @@
   /* -------------------- Card rendering -------------------- */
   function buildCardForRow(tr){
     if (tr.__wlCard) return; // idempotent
-    const a = findInvoiceAnchor(tr); if (!a) return;
-
-    const invNo = (a.textContent||'').trim();
-    const invHref = abs(a.getAttribute('href')||'#');
+    const a = findInvoiceAnchor(tr); // may be null on odd rows, still render shell
+    const invNo = a ? (a.textContent||'').trim() : '';
+    const invHref = a ? abs(a.getAttribute('href')||'#') : '#';
     const orderNo = grab(tr, 'td[data-title="Order #"]');
     const yourRef = grab(tr, 'td[data-title="Your Ref"]');
     const jobRef  = grab(tr, 'td[data-title="Job Ref"]');
@@ -297,15 +334,20 @@
     const lines   = grab(tr, 'td[data-title="Lines"]');
     const branch  = grab(tr, 'td[data-title="Branch"]');
 
-    // Hide original anchor but keep it for keyboard/fallback
-    a.style.position='absolute'; a.style.width='1px'; a.style.height='1px';
-    a.style.overflow='hidden'; a.style.clip='rect(1px,1px,1px,1px)'; a.setAttribute('aria-hidden','true');
+    // Hide original anchor but keep it for keyboard/fallback if present
+    if (a){
+      a.style.position='absolute'; a.style.width='1px'; a.style.height='1px';
+      a.style.overflow='hidden'; a.style.clip='rect(1px,1px,1px,1px)'; a.setAttribute('aria-hidden','true');
+    }
+
+    // Make sure checkbox is visible even before badges compute
+    surfaceCheckboxInCard(tr);
 
     const head = document.createElement('div');
     head.className = 'wl-row-head';
     head.innerHTML = `
       <div class="wl-head-left">
-        <span class="wl-inv-no">Invoice #${invNo}</span>
+        <span class="wl-inv-no">${invNo ? `Invoice #${invNo}` : `Invoice`}</span>
         <span class="wl-chip wl-chip--slate wl-card-badge"><span class="wl-badge-skel">checking…</span></span>
         <div class="wl-meta">
           ${invDate ? `<span>Inv: ${invDate}</span>` : ``}
@@ -319,7 +361,7 @@
         </div>
       </div>
       <div class="wl-head-right">
-        <a class="wl-btn wl-btn--ghost" href="${invHref}">Open</a>
+        ${invHref !== '#' ? `<a class="wl-btn wl-btn--ghost" href="${invHref}">Open</a>` : ``}
         <button class="wl-btn wl-btn--primary" type="button" data-act="toggle">View details</button>
       </div>
     `;
@@ -335,6 +377,7 @@
         details.dataset.loaded = '1';
         details.innerHTML = `<div style="color:#475569;">Loading…</div>`;
         try{
+          if (invHref === '#') throw new Error('No invoice href');
           const html = await fetch(invHref, { credentials:'same-origin' }).then(r=>r.text());
           const doc  = new DOMParser().parseFromString(html, 'text/html');
           const table = doc.querySelector('#ctl00_PageBody_ctl02_InvoiceDetailsGrid_ctl00, .rgMasterTable');
@@ -354,12 +397,12 @@
                 <div style="white-space:nowrap;font-weight:700">${l.qty?`Qty: ${l.qty}`:''}${l.tot?` · ${l.tot}`:''}</div>
               </div>
             `).join('') || `<div style="color:#475569;">No line items found.</div>`;
-          }else{
-            details.innerHTML = `<div style="color:#475569;">Couldn’t read details. <a href="${invHref}">Open invoice page</a>.</div>`;
+          } else {
+            details.innerHTML = `<div style="color:#475569;">Couldn’t read details.${invHref!=='#' ? ` <a href="${invHref}">Open invoice page</a>.` : ''}</div>`;
           }
         }catch(ex){
           details.innerHTML = `<div style="color:#7f1d1d;background:#fee2e2;border:1px solid #fecaca;border-radius:10px;padding:10px;">
-            Sorry, we couldn’t load details. You can still <a href="${invHref}">open the invoice page</a>.
+            Sorry, we couldn’t load details.${invHref!=='#' ? ` You can still <a href="${invHref}">open the invoice page</a>.` : ``}
           </div>`;
         }
       }
@@ -380,7 +423,7 @@
     else if (status === 'open'){ chip.className='wl-chip wl-chip--amber wl-card-badge'; chip.textContent=`Open · ${toUSD(out)}`; }
     else { chip.className='wl-chip wl-chip--slate wl-card-badge'; chip.textContent='Status N/A'; }
     if (tr.dataset.overdue === '1' && (status==='open'||status==='partial')){
-      chip.className = chip.className.replace('wl-chip--amber','wl-chip--red'); // red for overdue
+      chip.className = chip.className.replace('wl-chip--amber','wl-chip--red');
       chip.textContent += ' · Overdue';
     }
   }
@@ -391,9 +434,11 @@
     master.classList.add('wl-inv-cardify');
     const rows = Array.from(master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow'));
     rows.forEach(tr=>{ try{ buildCardForRow(tr); }catch(e){ warn('Cardify row fail', e); } });
+    // Make absolutely sure checkboxes are surfaced
+    surfaceAllCheckboxes(master);
   }
 
-  /* -------------------- Toolbar (keep select filtered + simple status filter) -------------------- */
+  /* -------------------- Toolbar (status filter + Select filtered) -------------------- */
   function ensureToolbar(){
     const grid = document.getElementById('ctl00_PageBody_InvoicesGrid');
     const flex = grid?.closest('.bodyFlexItem') || grid;
@@ -455,7 +500,8 @@
       if (master){
         requestAnimationFrame(async ()=>{
           await applyBadges(master);
-          cardify(master);
+          cardify(master);            // also resurfaces checkboxes
+          surfaceAllCheckboxes(master);
         });
       }
     });
@@ -469,9 +515,9 @@
     ensureToolbar();
     try{ await ensureApIndex(); }catch(e){ warn('AP index error', e); }
     await applyBadges(master);
-    cardify(master);
+    cardify(master);            // renders cards + moves checkboxes
     attachGridObserver();
-    log('Invoices enhanced (card UI + working logic)');
+    log('Invoices enhanced (card UI + original checkboxes surfaced)');
   }
 
   if (document.readyState === 'loading'){
@@ -483,103 +529,5 @@
 
   // Debug
   window.WLInvoices = { run: boot, version: VERSION };
-})();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/* =========================================================
-   Patch: show the built-in per-row checkbox inside each card
-   - Reparents the existing chkSelect input into a visible corner
-   - No radios, no clones, preserves Telerik postback behavior
-   - Reapplies on partial postbacks/paging
-   ========================================================= */
-(function(){
-  if (!/Invoices_r\.aspx/i.test(location.pathname)) return;
-
-  // CSS: visible selection cluster in the card corner
-  const css = `
-    .wl-inv-cardify tr.rgRow > td:first-child,
-    .wl-inv-cardify tr.rgAltRow > td:first-child{
-      display:block !important;
-      position:absolute; left:0; top:0;
-      border:none !important; background:transparent;
-      padding:0; margin:0;
-      z-index: 1;
-    }
-    .wl-select-wrap{
-      position:absolute; left:10px; top:10px;
-      display:flex; align-items:center; gap:8px;
-      z-index: 30;           /* float above the card header */
-      background:transparent;
-    }
-    .wl-select-wrap input[type="checkbox"]{ cursor:pointer; }
-  `;
-  const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
-
-  // Find the grid's master table (supports different skins/IDs)
-  function findMaster(){
-    return document.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00') ||
-           document.querySelector('#ctl00_PageBody_InvoicesGrid .rgMasterTable') ||
-           document.querySelector('.RadGrid[id*="InvoicesGrid"] .rgMasterTable');
-  }
-
-  // For one row: ensure a wrap and MOVE the existing chkSelect into it
-  function surfaceCheckbox(tr){
-    // Only body rows
-    if (!tr || !(tr.classList.contains('rgRow') || tr.classList.contains('rgAltRow'))) return;
-
-    const firstCell = tr.cells && tr.cells[0];
-    if (!firstCell) return;
-
-    // Find the existing per-row checkbox (dynamic id/name, but ends with chkSelect)
-    // Skip header select-all because we only run on tbody rows.
-    let cb = tr.querySelector('input[type="checkbox"][name*="chkSelect"]');
-    if (!cb) return; // some rows might be templates, etc.
-
-    // Make a visible corner wrap, if needed
-    let wrap = firstCell.querySelector('.wl-select-wrap');
-    if (!wrap){
-      wrap = document.createElement('div');
-      wrap.className = 'wl-select-wrap';
-      firstCell.appendChild(wrap);
-    }
-
-    // If the checkbox isn't already inside, MOVE it (do not clone)
-    if (cb.closest('.wl-select-wrap') !== wrap){
-      wrap.appendChild(cb);
-    }
-  }
-
-  function applyAll(){
-    const master = findMaster(); if (!master) return;
-    master.classList.add('wl-inv-cardify'); // ensures card styles are active
-    master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow').forEach(surfaceCheckbox);
-  }
-
-  // Initial run
-  applyAll();
-
-  // Re-apply when the grid updates (paging, filtering, partial postbacks)
-  const gridRoot = document.getElementById('ctl00_PageBody_InvoicesGrid');
-  if (gridRoot && !gridRoot.__wlChkObs){
-    gridRoot.__wlChkObs = true;
-    new MutationObserver(()=>applyAll()).observe(gridRoot, { childList:true, subtree:true });
-  }
 })();
 
