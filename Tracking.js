@@ -1127,3 +1127,98 @@
 })();
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+document.addEventListener("DOMContentLoaded", function() {
+  const panel = document.getElementById("ctl00_PageBody_Panel1");
+  if (panel) {
+    const backBtn = document.createElement("a");
+    backBtn.href = "https://webtrack.woodsonlumber.com/AccountInfo_R.aspx";
+    backBtn.textContent = "← Back to My Account";
+    backBtn.style.display = "inline-block";
+    backBtn.style.marginBottom = "12px";
+    backBtn.style.padding = "8px 14px";
+    backBtn.style.background = "#6b0016";
+    backBtn.style.color = "#fff";
+    backBtn.style.borderRadius = "6px";
+    backBtn.style.textDecoration = "none";
+    backBtn.style.fontWeight = "bold";
+    backBtn.onmouseover = function() {
+      backBtn.style.background = "#8d8d8d";
+    };
+    backBtn.onmouseout = function() {
+      backBtn.style.background = "#6b0016";
+    };
+
+    // Insert before Panel1
+    panel.parentNode.insertBefore(backBtn, panel);
+  }
+});
