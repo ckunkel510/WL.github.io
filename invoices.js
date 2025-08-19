@@ -1,10 +1,9 @@
 /* =========================================================
-   Woodson — Invoices Enhancer for Invoices_r.aspx (v2.2)
+   Woodson — Invoices Enhancer for Invoices_r.aspx (v3.0)
    - Preserves Select-All + per-row checkboxes
-   - Adds Paid/Open/Partial badge to Invoice # cells
-   - Crawls AccountPayment_r.aspx across all pages
-   - Honors the same From/To date range as invoices page
-   - Reapplies after Telerik postbacks
+   - Paid/Open/Partial badge (AP crawl across pages)
+   - Modern UI styling + toolbar filters
+   - Reapplies after Telerik postbacks (MutationObserver)
    ========================================================= */
 
 (function () {
@@ -12,24 +11,91 @@
   if (window.__WL_INVOICES_ENHANCED__) return;
   window.__WL_INVOICES_ENHANCED__ = true;
 
-  const VERSION = '2.2';
+  const VERSION = '3.0';
   const t0 = performance.now();
   const log  = (...a)=>console.log('%cINV','color:#005d6e;font-weight:700;',`v${VERSION} [+${(performance.now()-t0).toFixed(1)}ms]`,...a);
   const warn = (...a)=>console.warn('%cINV','color:#b45309;font-weight:700;',`v${VERSION} [+${(performance.now()-t0).toFixed(1)}ms]`,...a);
 
-  // ---------- Light CSS (no layout overrides)
+  /* -------------------- CSS -------------------- */
   (function injectCSS(){
     const css = `
+      /* Container polish */
+      #ctl00_PageBody_InvoicesGrid {
+        border-radius: 12px;
+        box-shadow: 0 6px 18px rgba(15,23,42,.06);
+        overflow: hidden; /* keeps sticky headers clean on scroll */
+        background: #fff;
+      }
+
+      /* Toolbar */
+      .wl-toolbar {
+        display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+        margin: 12px 0 10px 0;
+      }
+      .wl-chip {
+        border:1px solid #e5e7eb; border-radius:999px; padding:6px 10px; font-weight:700;
+        background:#fff; color:#0f172a; font-size:12px; cursor:pointer; user-select:none;
+      }
+      .wl-chip[data-active="true"] {
+        border-color:#0ea5e9; background:#e0f2fe; color:#075985;
+      }
+      .wl-spacer { flex:1 1 auto; }
+      .wl-btn {
+        border:1px solid #e5e7eb; border-radius:10px; padding:6px 10px; font-weight:700;
+        background:#f8fafc; color:#0f172a; font-size:12px; cursor:pointer;
+      }
+      .wl-btn:active { transform: translateY(1px); }
+
+      /* Badges from v2, tweaked */
       .wl-badge{display:inline-flex;align-items:center;gap:6px;font-weight:800;border-radius:999px;padding:2px 8px;font-size:11px;margin-left:8px;vertical-align:middle;line-height:1.6}
       .wl-badge--green{background:#dcfce7;color:#065f46}
       .wl-badge--amber{background:#fef3c7;color:#92400e}
       .wl-badge--slate{background:#e2e8f0;color:#0f172a}
       .wl-skel{background:repeating-linear-gradient(90deg,#f1f5f9,#f1f5f9 8px,#e2e8f0 8px,#e2e8f0 16px);color:transparent}
+
+      /* Modern table look */
+      .RadGrid .rgMasterTable { border-collapse: separate; border-spacing: 0; }
+      .RadGrid .rgMasterTable thead th.rgHeader {
+        position: sticky; top: 0; z-index: 2;
+        background: #f8fafc; color:#0f172a; font-weight:800; font-size:12px;
+        border-bottom: 1px solid #e5e7eb;
+      }
+      /* Compact rows */
+      .RadGrid .rgMasterTable td, .RadGrid .rgMasterTable th {
+        padding: 10px 12px !important;
+        vertical-align: middle;
+      }
+      /* Zebra + hover */
+      .RadGrid .rgMasterTable tbody tr.rgRow    { background:#ffffff; }
+      .RadGrid .rgMasterTable tbody tr.rgAltRow { background:#fbfdff; }
+      .RadGrid .rgMasterTable tbody tr:hover { background:#f1f5f9; }
+      /* Subtle row separators */
+      .RadGrid .rgMasterTable tbody td { border-bottom: 1px dashed #e5e7eb; }
+      .RadGrid .rgMasterTable tbody tr:last-child td { border-bottom: none; }
+
+      /* Sticky first column (selector) */
+      .rgMasterTable td:first-child, .rgMasterTable th:first-child {
+        position: sticky; left: 0; z-index: 3; background: inherit;
+      }
+      /* Better number alignment */
+      td[data-title="Goods Total"], td[data-title="Tax"], td[data-title="Total Amount"] { text-align: right !important; font-variant-numeric: tabular-nums; }
+
+      /* Overdue marker */
+      .wl-overdue-dot {
+        display:inline-block; width:8px; height:8px; border-radius:999px; background:#ef4444; margin-left:6px;
+      }
+
+      /* Make grid area scrollable if tall; header remains sticky */
+      .wl-grid-wrap {
+        max-height: 68vh; overflow:auto; border-radius:12px; background:#fff;
+      }
     `;
-    const el = document.createElement('style'); el.textContent = css; document.head.appendChild(el);
+    const el = document.createElement('style');
+    el.textContent = css;
+    document.head.appendChild(el);
   })();
 
-  // ---------- Utils
+  /* -------------------- Utils -------------------- */
   const sleep = (ms)=>new Promise(r=>setTimeout(r,ms));
   async function waitFor(selector, {root=document, tries=60, interval=120} = {}){
     for (let i=0;i<tries;i++){
@@ -47,9 +113,8 @@
   };
   const nearlyZero = (n)=> Math.abs(n) < 0.009;
 
-  // ---------- Read Invoices page date range (used for AP query)
+  /* -------------------- Date range (Invoices page) -------------------- */
   function readInvoiceDateRange(){
-    // Hidden JSON-rich inputs are most reliable
     const getClientState = (id)=>{
       const inp = document.getElementById(id);
       if (!inp) return null;
@@ -62,11 +127,10 @@
     const endState   = getClientState('ctl00_PageBody_dtDateEntryEnd_RadDatePicker1_dateInput_ClientState');
 
     const toISO = (state, fallbackInputId)=>{
-      if (state?.valueAsString){ // e.g. "2025-08-19-00-00-00"
+      if (state?.valueAsString){
         const m = state.valueAsString.match(/^(\d{4}-\d{2}-\d{2})-/);
         if (m) return m[1];
       }
-      // Fallback: visible textbox "M/D/YYYY"
       const vis = document.getElementById(fallbackInputId);
       if (vis && vis.value){
         const d = new Date(vis.value);
@@ -80,7 +144,7 @@
     return { startISO, endISO };
   }
 
-  // ---------- AccountPayment crawler (per date-range cache)
+  /* -------------------- AccountPayment crawler -------------------- */
   function apCacheKey(startISO, endISO){
     return `wl_ap_index_v3_${startISO || 'na'}_${endISO || 'na'}`;
   }
@@ -88,20 +152,17 @@
   async function buildAccountPaymentIndex(startISO, endISO){
     const key = apCacheKey(startISO, endISO);
 
-    // Try cache (10 minutes)
+    // Cache 10 minutes
     try{
       const raw = sessionStorage.getItem(key);
       if (raw){
         const { at, data } = JSON.parse(raw);
         if (Date.now() - at < 10*60*1000){
-          const map = new Map(data);
-          log('AP index from cache:', map.size, {startISO, endISO});
-          return map;
+          return new Map(data);
         }
       }
     }catch{}
 
-    // Base URL with date range
     const base = new URL('/AccountPayment_r.aspx', location.origin);
     base.searchParams.set('searchType','TransactionDate');
     if (startISO) base.searchParams.set('startDate', `${startISO}T00:00:00`);
@@ -116,7 +177,6 @@
 
     const normalizePagerUrl = (href)=>{
       const u = new URL(href, base.toString());
-      // Ensure date params persist even if pager omits them
       if (startISO && !u.searchParams.get('startDate')) u.searchParams.set('startDate', `${startISO}T00:00:00`);
       if (endISO && !u.searchParams.get('endDate'))     u.searchParams.set('endDate',   `${endISO}T23:59:59`);
       if (!u.searchParams.get('searchType'))            u.searchParams.set('searchType','TransactionDate');
@@ -130,12 +190,10 @@
       const host = doc.querySelector('#ctl00_PageBody_InvoicesGrid') || doc;
       const tbl  = host.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00') || host.querySelector('.rgMasterTable');
       if (!tbl) return 0;
-
       let count = 0;
       const rows = tbl.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow');
       rows.forEach(tr=>{
         const type = txt(tr.querySelector('td[data-title="Type"]')) || txt(tr.children[1]);
-        // Doc # span is reliable on AP page
         let docNo = txt(tr.querySelector('span[id*="_DocumentNumber"]')) ||
                     txt(tr.querySelector('td[data-title="Doc. #"] span')) ||
                     txt(tr.querySelector('td[data-title="Document #"] span'));
@@ -159,12 +217,10 @@
     };
 
     try{
-      // First page
       const firstHTML = await fetchText(base.toString());
       const firstDoc  = parser.parseFromString(firstHTML, 'text/html');
       parseRows(firstDoc);
 
-      // All pages via pager links
       const hrefs = collectPager(firstDoc).filter(u => u !== base.toString());
       if (hrefs.length){
         const results = await Promise.allSettled(hrefs.map(h=>fetchText(h)));
@@ -175,10 +231,7 @@
           }
         });
       }
-      log('AP index built:', index.size, {startISO, endISO});
-    }catch(err){
-      warn('AP crawl failed:', err);
-    }
+    }catch(err){ warn('AP crawl failed:', err); }
 
     try{
       sessionStorage.setItem(key, JSON.stringify({at: Date.now(), data: Array.from(index.entries())}));
@@ -196,28 +249,35 @@
     return __AP_PROMISE__;
   }
 
-  // ---------- Invoices grid detection
-  async function findInvoicesMasterTable(){
-    const gridRoot = await waitFor('#ctl00_PageBody_InvoicesGrid', {tries:60, interval:150});
-    if (!gridRoot) return null;
-    const table = gridRoot.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00') || gridRoot.querySelector('.rgMasterTable');
-    return table || null;
+  /* -------------------- Invoices grid detection -------------------- */
+  async function getGridRoot(){ return await waitFor('#ctl00_PageBody_InvoicesGrid',{tries:60,interval:150}); }
+  async function getMasterTable(){
+    const root = await getGridRoot();
+    if (!root) return null;
+    return root.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00') || root.querySelector('.rgMasterTable');
   }
 
-  // ---------- Helpers for row parsing
+  /* -------------------- Row helpers -------------------- */
   function getInvoiceNumberFromRow(tr){
-    // Prefer the display invoice number (anchor text), not "invoiceid"
     const cellWide   = tr.querySelector('td.wide-only[data-title="Invoice #"]');
     const cellNarrow = tr.querySelector('td.narrow-only[data-title="Invoice #"]');
     const aWide = cellWide ? cellWide.querySelector('a') : null;
     const aNarrow = cellNarrow ? cellNarrow.querySelector('a') : null;
-    const num = txt(aWide) || txt(aNarrow);
-    return num || '';
+    return txt(aWide) || txt(aNarrow) || '';
   }
-
   function getTotalAmountFromRow(tr){
     const td = tr.querySelector('td[data-title="Total Amount"]');
     return parseMoney(td ? td.textContent : '0');
+  }
+  function getDueDateFromRow(tr){
+    const td = tr.querySelector('td[data-title="Due Date"]');
+    const s = td ? txt(td) : '';
+    if (!s) return null;
+    const d = new Date(s);
+    return isNaN(d) ? null : d;
+  }
+  function todayAtMidnight(){
+    const d = new Date(); d.setHours(0,0,0,0); return d;
   }
 
   function placeBadgeIntoInvoiceCells(tr){
@@ -237,7 +297,6 @@
       }
     });
   }
-
   function setBadge(cell, cls, text){
     const badge = cell.querySelector('.wl-badge');
     if (!badge) return;
@@ -245,93 +304,198 @@
     badge.textContent = text;
   }
 
-  // ---------- Apply badges to all visible rows (idempotent)
-  async function applyBadges(masterTable){
-    const rows = Array.from(masterTable.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow'));
-    if (!rows.length){ log('No invoice rows found'); return; }
+  /* -------------------- Badging + Status tagging -------------------- */
+  async function applyBadges(master){
+    const rows = Array.from(master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow'));
+    if (!rows.length){ return; }
 
     const apIndex = await ensureApIndex().catch(()=>null);
+    const today = todayAtMidnight();
 
     rows.forEach(tr=>{
       const invNo = getInvoiceNumberFromRow(tr);
       if (!invNo) return;
 
-      // Insert badge placeholders in both invoice cells
       placeBadgeIntoInvoiceCells(tr);
-
       const invCells = tr.querySelectorAll('td[data-title="Invoice #"].wide-only, td[data-title="Invoice #"].narrow-only');
-      if (!apIndex){ // fallback if AP fetch failed
+
+      let status = 'unknown';
+      if (!apIndex){
         invCells.forEach(cell=> setBadge(cell, 'wl-badge--slate', 'Status N/A'));
-        return;
-      }
-
-      const info = apIndex.get(invNo); // Doc.# on AP equals the visible invoice number here
-      const total = getTotalAmountFromRow(tr);
-
-      if (!info){
-        // Not on AccountPayment table → treated as fully applied/paid
-        invCells.forEach(cell=> setBadge(cell, 'wl-badge--green', 'Paid'));
+        status = 'unknown';
       }else{
-        const out = Number(info.outstanding) || 0;
-        if (nearlyZero(out)){
+        const info = apIndex.get(invNo);
+        const total = getTotalAmountFromRow(tr);
+        if (!info || nearlyZero(info.outstanding)){
           invCells.forEach(cell=> setBadge(cell, 'wl-badge--green', 'Paid'));
+          status = 'paid';
         }else{
-          // Distinguish Open vs Partial using invoice "Total Amount" on this grid
+          const out = Number(info.outstanding) || 0;
           if (Number.isFinite(total) && out < total - 0.009){
             invCells.forEach(cell=> setBadge(cell, 'wl-badge--amber', `Partial · ${toUSD(out)} left`));
+            status = 'partial';
           }else{
             invCells.forEach(cell=> setBadge(cell, 'wl-badge--amber', `Open · ${toUSD(out)}`));
+            status = 'open';
           }
         }
       }
-    });
 
-    log('Badges applied to invoice rows:', rows.length);
+      // Add overdue dot for open/partial & past due date
+      const due = getDueDateFromRow(tr);
+      const overdue = (status === 'open' || status === 'partial') && due && due < today;
+      tr.dataset.status = status;
+      tr.dataset.overdue = overdue ? '1' : '0';
+
+      if (overdue){
+        invCells.forEach(cell=>{
+          if (!cell.querySelector('.wl-overdue-dot')){
+            const dot = document.createElement('span');
+            dot.className = 'wl-overdue-dot';
+            dot.title = 'Overdue';
+            cell.appendChild(dot);
+          }
+        });
+      }else{
+        invCells.forEach(cell=>{
+          const dot = cell.querySelector('.wl-overdue-dot');
+          if (dot) dot.remove();
+        });
+      }
+    });
   }
 
-  // ---------- Re-apply after Telerik updates
+  /* -------------------- Modernize grid: wrapper + toolbar -------------------- */
+  function ensureGridWrapper(){
+    const root = document.getElementById('ctl00_PageBody_InvoicesGrid');
+    if (!root) return null;
+    if (root.__wlWrapped) return root.__wlWrapped;
+
+    // Wrap the table in a scroll container for sticky header to shine
+    const table = root.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00') || root.querySelector('.rgMasterTable');
+    if (!table) return null;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'wl-grid-wrap';
+    table.parentNode.insertBefore(wrap, table);
+    wrap.appendChild(table);
+    root.__wlWrapped = wrap;
+    return wrap;
+  }
+
+  function ensureToolbar(){
+    // Insert just above the grid container (inside same bodyFlexItem)
+    const gridFlexItem = document.getElementById('ctl00_PageBody_InvoicesGrid')?.closest('.bodyFlexItem') || document.getElementById('ctl00_PageBody_InvoicesGrid');
+    if (!gridFlexItem) return null;
+    if (gridFlexItem.querySelector('.wl-toolbar')) return gridFlexItem.querySelector('.wl-toolbar');
+
+    const bar = document.createElement('div');
+    bar.className = 'wl-toolbar';
+    bar.innerHTML = `
+      <button class="wl-chip" data-filter="all" data-active="true">All</button>
+      <button class="wl-chip" data-filter="open">Open</button>
+      <button class="wl-chip" data-filter="partial">Partial</button>
+      <button class="wl-chip" data-filter="paid">Paid</button>
+      <div class="wl-spacer"></div>
+      <button class="wl-btn" data-action="select-filtered">Select filtered</button>
+    `;
+    gridFlexItem.insertBefore(bar, gridFlexItem.firstChild);
+    return bar;
+  }
+
+  function applyFilter(filter){
+    const master = document.querySelector('#ctl00_PageBody_InvoicesGrid .rgMasterTable');
+    if (!master) return;
+    const rows = master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow');
+    rows.forEach(tr=>{
+      const status = tr.dataset.status || 'unknown';
+      const show = (filter === 'all') ? true : (status === filter);
+      tr.style.display = show ? '' : 'none';
+    });
+  }
+
+  function selectFilteredOnPage(){
+    // Only touch row checkboxes that are visible
+    const root = document.getElementById('ctl00_PageBody_InvoicesGrid');
+    if (!root) return;
+    const boxes = root.querySelectorAll('tbody input[type="checkbox"][name*="chkSelect"]');
+    boxes.forEach(cb=>{
+      const tr = cb.closest('tr');
+      if (tr && tr.style.display !== 'none'){
+        if (!cb.checked){
+          cb.click(); // triggers Telerik postback handler if any
+        }
+      }
+    });
+  }
+
+  function wireToolbar(bar){
+    if (!bar || bar.__wired) return;
+    bar.__wired = true;
+
+    const setActive = (btn)=>{
+      bar.querySelectorAll('.wl-chip').forEach(b=>b.dataset.active='false');
+      btn.dataset.active='true';
+    };
+
+    bar.addEventListener('click', (e)=>{
+      const chip = e.target.closest('.wl-chip');
+      const btn  = e.target.closest('.wl-btn');
+      if (chip){
+        setActive(chip);
+        applyFilter(chip.dataset.filter);
+      }else if (btn && btn.dataset.action === 'select-filtered'){
+        selectFilteredOnPage();
+      }
+    });
+  }
+
+  /* -------------------- Observer -------------------- */
   function attachGridObserver(){
     const gridRoot = document.getElementById('ctl00_PageBody_InvoicesGrid');
     if (!gridRoot) return;
+    if (gridRoot.__wlObserved) return;
+    gridRoot.__wlObserved = true;
+
     const mo = new MutationObserver(()=>{
       const master = gridRoot.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00') || gridRoot.querySelector('.rgMasterTable');
       if (master){
-        // Debounce a frame so DOM settles
-        requestAnimationFrame(()=>applyBadges(master));
+        requestAnimationFrame(async ()=>{
+          await applyBadges(master);
+        });
       }
     });
     mo.observe(gridRoot, { childList:true, subtree:true });
     log('Grid observer attached');
   }
 
-  // ---------- Boot
+  /* -------------------- Boot -------------------- */
   async function boot(){
-    // Only act when the invoices grid exists (path-agnostic)
-    const master = await findInvoicesMasterTable();
-    if (!master){
-      log('No invoices grid found on this page');
-      return;
-    }
+    const master = await getMasterTable();
+    if (!master){ log('No invoices grid found'); return; }
 
-    // Build/ensure AP index for current date range, then apply
-    try{
-      await ensureApIndex();
-    }catch(e){
-      warn('AP index build error', e);
-    }
+    // Modern wrapper + toolbar (once)
+    ensureGridWrapper();
+    const toolbar = ensureToolbar(); wireToolbar(toolbar);
+
+    // Build AP index and badge rows
+    try{ await ensureApIndex(); }catch(e){ warn('AP index error', e); }
     await applyBadges(master);
+
+    // Observer for partial page refreshes
     attachGridObserver();
+
+    log('Invoices grid enhanced');
   }
 
   if (document.readyState === 'loading'){
     document.addEventListener('DOMContentLoaded', boot, { once:true });
-  }else{
+  } else {
     boot();
   }
-  // Safety rerun after full load (in case Telerik finishes late)
   window.addEventListener('load', ()=>boot(), { once:true });
 
-  // Expose manual trigger for debugging
+  // Manual debug hook
   window.WLInvoices = { run: boot, version: VERSION };
 
 })();
