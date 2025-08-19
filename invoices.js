@@ -1,9 +1,10 @@
-
 /* =========================================================================
-   Woodson — Invoices Card UI (v3.4 DEBUG)
-   - Same logic/styling as v3.3
-   - DEEP LOGGING: AP crawl, grid wiring, cardify, checkbox surfacing
-   - Select-All + per-row checkboxes preserved (we MOVE existing inputs)
+   Woodson — Invoices Card UI (v3.5)
+   - Working logic (date-range AP crawl + badging + filters)
+   - Card UI formatting
+   - SURFACES ORIGINAL PER-ROW chkSelect CHECKBOXES (and decorators) IN EACH CARD
+   - Keeps header Select-All checkbox functional
+   - Deep logging; MutationObserver re-applies after Telerik partial postbacks
    ========================================================================== */
 
 (function () {
@@ -16,11 +17,10 @@
   let LOG_LEVEL = (() => {
     const ls = (localStorage.getItem(LS_KEY) || '').toLowerCase();
     if (ls in LVL) return LVL[ls];
-    return LVL.debug; // default verbose for debugging
+    return LVL.debug; // default verbose while we dial this in
   })();
 
   const prefix = (lvl) => [`%cINV`, `color:#005d6e;font-weight:700;`, `[${lvl.toUpperCase()}]`];
-
   const log = {
     setLevel(l){
       if (typeof l === 'string' && l.toLowerCase() in LVL) LOG_LEVEL = LVL[l.toLowerCase()];
@@ -40,35 +40,72 @@
     }
   };
 
-  const VERSION = '3.4-debug';
+  const VERSION = '3.5';
   const t0 = performance.now();
   log.info(`Version ${VERSION} booting… (+${(performance.now()-t0).toFixed(1)}ms)`);
 
-  // ---- CSS (card UI + checkbox surfacing) ---------------------------------
+  // ---- CSS (card UI + checkbox surfacing + visibility fallbacks) ----------
   (function injectCSS(){
     const css = `
+      /* Keep Select-All visible, hide other headers for a clean card grid */
       #ctl00_PageBody_InvoicesGrid thead th:not(:first-child),
       .RadGrid[id*="InvoicesGrid"] thead th:not(:first-child){ display:none !important; }
 
+      /* Cardify body rows; make rows positioning context for overlays */
       .wl-inv-cardify tr.rgRow, .wl-inv-cardify tr.rgAltRow{
         display:block; background:#fff; border:1px solid #e5e7eb; border-radius:16px;
         margin:12px 0; box-shadow:0 6px 18px rgba(15,23,42,.06); overflow:hidden; position:relative;
       }
       .wl-inv-cardify tr.rgRow > td, .wl-inv-cardify tr.rgAltRow > td{ display:none !important; }
 
+      /* Keep first cell present as our anchor area (for the checkbox overlay) */
       .wl-inv-cardify tr.rgRow > td:first-child,
       .wl-inv-cardify tr.rgAltRow > td:first-child{
         display:block !important; position:absolute; left:0; top:0;
-        border:none !important; background:transparent; padding:0; margin:0; z-index:1;
+        border:none !important; background:transparent; padding:0; margin:0;
         width:auto !important; min-width:40px;
+        z-index:100; /* sits above card head content */
       }
 
+      /* Visible selection wrap that holds the ORIGINAL chkSelect and its decorator */
       .wl-select-wrap{
         position:absolute; left:10px; top:10px;
         display:flex; align-items:center; gap:8px;
-        z-index:30; background:transparent;
+        z-index:101; background:transparent;
       }
-      .wl-select-wrap input[type="checkbox"]{ cursor:pointer; }
+
+      /* If a decorator hides the input, force the native checkbox visible as fallback */
+      .wl-select-wrap input[type="checkbox"]{
+        display: inline-block !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+        width: 16px !important;
+        height: 16px !important;
+        pointer-events: auto !important;
+        position: static !important;
+        appearance: auto !important;
+      }
+
+      /* Common decorator classes — ensure they show if we moved them */
+      .wl-select-wrap label,
+      .wl-select-wrap .rfdCheckbox,
+      .wl-select-wrap .rfdSkinnedCheckbox,
+      .wl-select-wrap .rgCheckBox,
+      .wl-select-wrap .RadCheckBox,
+      .wl-select-wrap .checkbox,
+      .wl-select-wrap .chk{
+        display: inline-flex !important;
+        align-items: center;
+      }
+
+      /* Optional: debug outline on the selection cluster (toggle via localStorage) */
+      .wl-select-wrap[data-debug="1"]{
+        outline: 2px dashed #ef4444;
+        outline-offset: 2px;
+        background: rgba(239,68,68,.06);
+        border-radius: 8px;
+        padding: 4px 6px;
+      }
 
       .wl-row-head{
         display:grid; gap:8px; padding:14px 14px 12px 46px; align-items:center;
@@ -102,6 +139,7 @@
         color:transparent
       }
 
+      /* Toolbar */
       .wl-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin: 8px 0 10px; }
       .wl-chipbtn {
         border:1px solid #e5e7eb; border-radius:999px; padding:6px 10px; font-weight:700;
@@ -121,13 +159,8 @@
   const toUSD = (n)=> Number(n).toLocaleString(undefined,{style:'currency',currency:'USD'});
   const parseMoney = (s)=> { const v = parseFloat(String(s||'').replace(/[^0-9.\-]/g,'') || '0'); return Number.isFinite(v) ? v : 0; };
   const nearlyZero = (n)=> Math.abs(n) < 0.009;
-
   async function waitFor(selector, {root=document, tries=60, interval=120} = {}){
-    for (let i=0;i<tries;i++){
-      const el = root.querySelector(selector);
-      if (el) return el;
-      await sleep(interval);
-    }
+    for (let i=0;i<tries;i++){ const el = root.querySelector(selector); if (el) return el; await sleep(interval); }
     return null;
   }
 
@@ -151,7 +184,6 @@
 
     const startISO = toISO(startState, 'ctl00_PageBody_dtDateEntryStart_RadDatePicker1_dateInput');
     const endISO   = toISO(endState,   'ctl00_PageBody_dtDateEntryEnd_RadDatePicker1_dateInput');
-
     log.info('Date range', { startISO, endISO, startState, endState });
     return { startISO, endISO };
   }
@@ -284,9 +316,23 @@
   const grab = (tr, sel) => { const el = tr.querySelector(sel); return el ? el.textContent.trim() : ''; };
   const abs  = (u)=>{ try{ return new URL(u, location.origin).toString(); }catch{ return u; } };
 
-  // ---- Checkbox surfacing --------------------------------------------------
+  // ---- Checkbox surfacing (MOVE input + decorator; force visible if needed)
+  function findCheckboxDecorator(cb, tr){
+    if (!cb || !tr) return null;
+    // <label for="...">
+    let deco = tr.querySelector(`label[for="${cb.id}"]`);
+    if (deco) return deco;
+    // input wrapped by <label>
+    if (cb.parentElement && cb.parentElement.tagName === 'LABEL') return cb.parentElement;
+    // common RFD sibling
+    const sib = cb.nextElementSibling;
+    if (sib && /(rfd|chk|checkbox|rgCheck|RadCheck)/i.test(sib.className || '')) return sib;
+    // guess any known decorator in the row
+    const guess = tr.querySelector(`.rfdCheckbox, .rfdSkinnedCheckbox, .rgCheckBox, .RadCheckBox, .checkbox, .chk`);
+    return guess || null;
+  }
+
   function getRowCheckbox(tr){
-    // Prefer first-cell scan, then whole row (to be robust to templates)
     const first = tr.cells && tr.cells[0];
     let cb = first ? first.querySelector('input[type="checkbox"][name*="chkSelect"]') : null;
     if (!cb) cb = tr.querySelector('input[type="checkbox"][name*="chkSelect"]');
@@ -295,7 +341,8 @@
 
   function surfaceCheckboxInCard(tr, rowIndex){
     if (!tr || !(tr.classList.contains('rgRow') || tr.classList.contains('rgAltRow'))) return;
-    const firstCell = tr.cells && tr.cells[0]; if (!firstCell) { log.warn('Row has no first cell', { rowIndex, tr }); return; }
+    const firstCell = tr.cells && tr.cells[0];
+    if (!firstCell) { log.warn('Row has no first cell', { rowIndex, tr }); return; }
 
     const cb = getRowCheckbox(tr);
     if (!cb){
@@ -303,28 +350,58 @@
       return;
     }
 
+    // Create/ensure the visible wrap (optionally debug outline)
     let wrap = firstCell.querySelector('.wl-select-wrap');
     if (!wrap){
       wrap = document.createElement('div');
       wrap.className = 'wl-select-wrap';
+      if (localStorage.getItem('WL_INV_DEBUG_WRAP') === '1') wrap.dataset.debug = '1';
       firstCell.appendChild(wrap);
       log.debug('Created .wl-select-wrap', { rowIndex });
     }
+
+    // Move native checkbox
     if (cb.closest('.wl-select-wrap') !== wrap){
       wrap.appendChild(cb);
       log.info('Moved checkbox into card', { rowIndex, id: cb.id, name: cb.name });
-    } else {
-      log.trace('Checkbox already in wrap', { rowIndex, id: cb.id });
+    }
+
+    // Move visual decorator if any (label / span / anchor etc.)
+    const deco = findCheckboxDecorator(cb, tr);
+    if (deco && deco.closest('.wl-select-wrap') !== wrap){
+      wrap.appendChild(deco);
+      log.info('Moved decorator with checkbox', { rowIndex, decoTag: deco.tagName, decoClass: deco.className });
+    }
+
+    // If still hidden, force native input visible as fallback
+    const cs = getComputedStyle(cb);
+    if (cs.display === 'none' || cs.visibility === 'hidden' || Number(cs.opacity) === 0){
+      cb.style.display = 'inline-block';
+      cb.style.opacity = '1';
+      cb.style.visibility = 'visible';
+      cb.style.position = 'static';
+      log.debug('Forced native checkbox visible (no/hidden decorator)', { rowIndex });
+    }
+
+    // Big click target: clicking empty part of the wrap toggles the checkbox
+    if (!wrap.__wlClickBound){
+      wrap.addEventListener('click', (e)=>{ if (e.target === wrap) cb.click(); }, { passive:true });
+      wrap.__wlClickBound = true;
     }
 
     // Visibility diagnostics
     try{
+      const r1 = wrap.getBoundingClientRect();
+      const r2 = cb.getBoundingClientRect();
       const csFirst = getComputedStyle(firstCell);
       const csWrap  = getComputedStyle(wrap);
-      log.trace('Styles', {
+      log.trace('Checkbox visibility', {
         rowIndex,
         firstCell: { display: csFirst.display, position: csFirst.position, zIndex: csFirst.zIndex },
-        wrap: { display: csWrap.display, position: csWrap.position, zIndex: csWrap.zIndex }
+        wrap: { display: csWrap.display, position: csWrap.position, zIndex: csWrap.zIndex },
+        wrapRect: { x: r1.x|0, y: r1.y|0, w: r1.width|0, h: r1.height|0 },
+        cbRect:   { x: r2.x|0, y: r2.y|0, w: r2.width|0, h: r2.height|0 },
+        cbStyles: { display: cs.display, visibility: cs.visibility, opacity: cs.opacity }
       });
     }catch{}
   }
@@ -347,17 +424,14 @@
     rows.forEach((tr, idx)=>{
       const a = findInvoiceAnchor(tr);
       const invNo = a ? (a.textContent||'').trim() : '';
-      if (!invNo) { surfaceCheckboxInCard(tr, idx); return; }
 
-      // ensure checkbox visible even before status
+      // ensure checkbox visible early
       surfaceCheckboxInCard(tr, idx);
 
       let status = 'unknown';
       let outLeft = 0;
 
-      if (!apIndex){
-        status = 'unknown';
-      }else{
+      if (invNo && apIndex){
         const info = apIndex.get(invNo);
         const total = parseMoney(grab(tr,'td[data-title="Total Amount"]'));
         if (!info || nearlyZero(info.outstanding)){
@@ -383,7 +457,7 @@
         g.end();
       }
 
-      // Keep legacy badge (harmless if hidden)
+      // Keep legacy table-badge updated (harmless if hidden)
       const invCells = tr.querySelectorAll('td[data-title="Invoice #"]');
       invCells.forEach(cell=>{
         let badge = cell.querySelector('.wl-badge');
@@ -420,6 +494,7 @@
       a.style.overflow='hidden'; a.style.clip='rect(1px,1px,1px,1px)'; a.setAttribute('aria-hidden','true');
     }
 
+    // Make sure checkbox is visible even before badges compute
     surfaceCheckboxInCard(tr, idx);
 
     const head = document.createElement('div');
@@ -518,7 +593,7 @@
     const rows = Array.from(master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow'));
     log.info('cardify on rows', rows.length);
     rows.forEach((tr,i)=>{ try{ buildCardForRow(tr,i); }catch(e){ log.warn('Cardify row fail', i, e); } });
-    surfaceAllCheckboxes(master);
+    surfaceAllCheckboxes(master); // belt & suspenders
   }
 
   // ---- Toolbar -------------------------------------------------------------
@@ -596,6 +671,7 @@
           log.debug('Observer: reapply enhancements…');
           await applyBadges(master);
           cardify(master);
+          surfaceAllCheckboxes(master);
         });
       } else {
         log.warn('Observer: master table not found on mutation');
@@ -662,4 +738,3 @@
 
   log.info(`Version ${VERSION} ready (+${(performance.now()-t0).toFixed(1)}ms)`);
 })();
-
