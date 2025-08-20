@@ -664,3 +664,102 @@
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+(function(){
+  'use strict';
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+
+  /* Hide the pay-method radios/labels immediately (no flicker) */
+  (function injectHideCSS(){
+    if (document.getElementById('wl-hide-pay-css')) return;
+    const css = `
+      #ctl00_PageBody_RadioButton_PayByCredit,
+      #ctl00_PageBody_RadioButton_PayByCheck,
+      label[for="ctl00_PageBody_RadioButton_PayByCredit"],
+      label[for="ctl00_PageBody_RadioButton_PayByCheck"]{
+        display:none !important;
+      }
+    `;
+    const s = document.createElement('style'); s.id='wl-hide-pay-css'; s.textContent = css; document.head.appendChild(s);
+  })();
+
+  function hidePayGroup(){
+    // The radio group is the form group just BEFORE MakePaymentPanel
+    const grp = document.getElementById('ctl00_PageBody_MakePaymentPanel')?.previousElementSibling;
+    if (grp) grp.style.display = 'none';
+  }
+
+  function ensurePayByCheck(){
+    const rbCheck  = document.getElementById('ctl00_PageBody_RadioButton_PayByCheck');
+    const rbCredit = document.getElementById('ctl00_PageBody_RadioButton_PayByCredit');
+    if (!rbCheck) return;
+
+    hidePayGroup();
+
+    // If already selected, we're done
+    if (rbCheck.checked) return;
+
+    // Prevent loops: only force once per lifecycle
+    if (window.__wlForcedPayByCheck) return;
+    window.__wlForcedPayByCheck = true;
+
+    // Click the REAL radio so its onclick (__doPostBack) fires
+    setTimeout(()=> rbCheck.click(), 0);
+  }
+
+  // Run on initial load
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', ensurePayByCheck, { once:true });
+  } else {
+    ensurePayByCheck();
+  }
+
+  // Re-assert after any MS AJAX partial postback (address/zip/etc.)
+  try{
+    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
+      const prm = Sys.WebForms.PageRequestManager.getInstance();
+      if (!prm.__wlForceCheckBound){
+        prm.add_endRequest(()=>{
+          // Allow one more force after each refresh
+          window.__wlForcedPayByCheck = false;
+          ensurePayByCheck();
+        });
+        prm.__wlForceCheckBound = true;
+      }
+    }
+  }catch{}
+})();
+
