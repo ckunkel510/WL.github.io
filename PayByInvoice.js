@@ -227,6 +227,7 @@
 
 
 
+
 (function(){
   'use strict';
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
@@ -278,15 +279,13 @@
       .wl-cta:focus-visible{ outline:0; box-shadow:0 0 0 3px var(--wl-focus); }
       .wl-link{ background:none; border:none; padding:0; color:#0ea5e9; font-weight:800; cursor:pointer; }
 
-      /* When we must force Billing Address visible */
+      /* Force Billing Address visible when server tries to hide */
       #ctl00_PageBody_BillingAddressContainer.wl-force-show{ display:block !important; visibility:visible !important; }
-      /* If the container id isn't present, fall back to the group wrapper */
       .epi-form-group-acctPayment.wl-force-show{ display:block !important; visibility:visible !important; }
 
-      /* Trim verbose blurbs a bit */
-      .wl-compact .descriptionMessage{ display:none !important; }
-
-      /* Recent transactions: once embedded, we keep all internal content (no removals) */
+      /* Ensure native Pay-By-Check radio + label are visible */
+      #ctl00_PageBody_RadioButton_PayByCheck{ display:inline-block !important; }
+      label[for="ctl00_PageBody_RadioButton_PayByCheck"]{ display:inline-block !important; }
     `;
     const el = document.createElement('style'); el.id='wl-ap-polish-css'; el.textContent = css; document.head.appendChild(el);
   })();
@@ -297,7 +296,6 @@
   const byId = (id)=> document.getElementById(id);
   function parseMoney(s){ const v=parseFloat(String(s||'').replace(/[^0-9.\-]/g,'')); return Number.isFinite(v)?v:0; }
   function formatUSD(n){ return Number(n||0).toLocaleString(undefined,{style:'currency',currency:'USD'}); }
-  function normalizeInvoices(str){ return String(str||'').split(/[,\n\r\t ]+/).map(x=>x.trim()).filter(Boolean).map(x=>`INV${x.replace(/^INV\s*/i,'')}`).join(','); }
 
   function waitFor(sel, {tries=30, interval=120}={}){
     return new Promise(resolve=>{
@@ -310,6 +308,38 @@
     });
   }
 
+  /* Keep native Pay-By-Check visible + selected (no custom toggle) */
+  function ensurePayByCheckVisibleAndSelected(){
+    const wrap = byId('ctl00_PageBody_MakePaymentPanel')?.previousElementSibling;
+    if (wrap){
+      wrap.style.removeProperty('display');
+      wrap.classList.add('wl-item','wl-span-2');
+    }
+    const rbCheck  = byId('ctl00_PageBody_RadioButton_PayByCheck');
+    const lblCheck = document.querySelector('label[for="ctl00_PageBody_RadioButton_PayByCheck"]');
+    if (rbCheck){
+      rbCheck.style.removeProperty('display');
+      rbCheck.checked = true; // select silently
+    }
+    if (lblCheck){
+      lblCheck.style.removeProperty('display');
+      lblCheck.style.visibility = 'visible';
+    }
+  }
+
+  function ensureBillingVisible(){
+    const grid = byId('wlFormGrid') || document;
+    const billContainer = byId('ctl00_PageBody_BillingAddressContainer') ||
+                          byId('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment');
+    if (billContainer){
+      billContainer.classList.add('wl-force-show');
+      billContainer.style.removeProperty('display');
+      if (grid && !grid.contains(billContainer)) grid.appendChild(billContainer);
+      return true;
+    }
+    return false;
+  }
+
   /* =============== build layout =============== */
   async function upgradeLayout(){
     const page = $('.bodyFlexContainer'); if (!page) return;
@@ -318,7 +348,7 @@
     let shell = $('.wl-shell');
     if (!shell){
       const firstLeft = $('.bodyFlexItem > .float-left') || $('.bodyFlexItem');
-      shell = document.createElement('div'); shell.className='wl-shell wl-compact';
+      shell = document.createElement('div'); shell.className='wl-shell';
       firstLeft?.parentNode?.insertBefore(shell, firstLeft);
       if (firstLeft) firstLeft.style.display='none';
     }
@@ -363,7 +393,7 @@
       shell.appendChild(txCard);
     }
 
-    // Grab legacy groups (re-find every time)
+    // Grab legacy groups
     const grp = {
       owing: byId('ctl00_PageBody_AmountOwingLiteral')?.closest('.epi-form-group-acctPayment') || null,
       amount: byId('ctl00_PageBody_PaymentAmountTextBox')?.closest('.epi-form-group-acctPayment') || null,
@@ -377,7 +407,7 @@
       payWrap: byId('ctl00_PageBody_MakePaymentPanel')?.previousElementSibling || null
     };
 
-    // Tidy groups (label+control)
+    // Tidy groups (label+control), keep native radios intact
     Object.values(grp).filter(Boolean).forEach(group=>{
       if (!group.__wlTidy){
         const blocks = $$(':scope > div', group);
@@ -391,14 +421,16 @@
         $$('p.descriptionMessage', group).forEach(p=> p.classList.add('wl-help'));
         group.__wlTidy = true; group.classList.add('wl-item');
       }
-      // If server hid it with inline style, force show
-      group.classList.add('wl-force-show');
       group.style.removeProperty('display');
     });
 
-    // Place fields in left grid (idempotent)
+    // Place fields
     [grp.owing, grp.amount, grp.addrDDL, grp.billAddr, grp.zip, grp.email, grp.notes, grp.remit, grp.payWrap]
       .filter(Boolean).forEach(el=>{ if (!grid.contains(el)) grid.appendChild(el); });
+    if (grp.payWrap) grp.payWrap.classList.add('wl-span-2');
+
+    // Make sure native Pay-By-Check radio + label are visible and selected
+    ensurePayByCheckVisibleAndSelected();
 
     // Amount quick chips
     const amountInput = byId('ctl00_PageBody_PaymentAmountTextBox');
@@ -435,25 +467,18 @@
       if (real) real.click();
     });
 
-    // ✅ Robust: wait for tx panel, then embed whole panel in the tx card
+    // Embed full tx panel
     const txBody = byId('wlTxBody');
     if (txBody){
       const txPanel = byId('ctl00_PageBody_accountsTransactionsPanel') || await waitFor('#ctl00_PageBody_accountsTransactionsPanel', {tries:25, interval:120});
       if (txPanel && txPanel.parentNode !== txBody){
-        txBody.innerHTML = '';            // clear body
-        txBody.appendChild(txPanel);      // move entire native panel inside
-        // do NOT remove headers; let native content render intact
+        txBody.innerHTML = '';
+        txBody.appendChild(txPanel);
       }
     }
 
-    // Ensure Billing Address is visible (server sometimes hides on amount change)
-    const billContainer = byId('ctl00_PageBody_BillingAddressContainer') ||
-                          byId('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment');
-    if (billContainer){
-      billContainer.classList.add('wl-force-show');
-      billContainer.style.removeProperty('display');
-      if (!grid.contains(billContainer)) grid.appendChild(billContainer);
-    }
+    // Ensure Billing is present/visible
+    ensureBillingVisible();
 
     // Summary
     wireSummaryBindings();
@@ -475,8 +500,8 @@
     const zip = (zipEl?.value||'').trim();
     const email = (emailEl?.value||'').trim();
 
-    const remRaw = (remEl?.value||'').trim();
-    const invs = normalizeInvoices(remRaw).split(',').filter(Boolean);
+    const invs = String((remEl?.value||'').trim())
+      .split(/[,\n\r\t ]+/).map(x=>x.trim()).filter(Boolean);
 
     return { total: totalStr ? formatUSD(parseMoney(totalStr)) : '', addrSelText, billing, zip, email, invCount: invs.length, invs };
   }
@@ -535,7 +560,8 @@
       if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
         const prm = Sys.WebForms.PageRequestManager.getInstance();
         if (!prm.__wlPolishBound){
-          prm.add_endRequest(()=>{ upgradeLayout(); });  // re-run after every partial update
+          prm.add_initializeRequest(()=>{ ensurePayByCheckVisibleAndSelected(); }); // BEFORE request: keep PayByCheck selected
+          prm.add_endRequest(()=>{ upgradeLayout(); ensurePayByCheckVisibleAndSelected(); ensureBillingVisible(); }); // AFTER update
           prm.__wlPolishBound = true;
         }
       }
@@ -544,11 +570,13 @@
 
   /* =============== Boot =============== */
   if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', ()=>{ upgradeLayout(); wireAjax(); }, {once:true});
+    document.addEventListener('DOMContentLoaded', ()=>{ upgradeLayout(); ensurePayByCheckVisibleAndSelected(); wireAjax(); }, {once:true});
   } else {
-    upgradeLayout(); wireAjax();
+    upgradeLayout(); ensurePayByCheckVisibleAndSelected(); wireAjax();
   }
 })();
+
+
 
 
 
