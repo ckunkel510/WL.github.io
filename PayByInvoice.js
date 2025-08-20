@@ -985,3 +985,133 @@
   }
 })();
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* =========================
+   Woodson — AP UI overrides
+   - Back to My Account button
+   - Card header colors (Left/Right cards)
+   - Hide left sidebar nav
+   - 80% width fields on desktop
+   ========================= */
+(function(){
+  'use strict';
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+
+  const log = (window.WLPayDiag ? {
+    info: (...a)=> WLPayDiag.getLevel()>=WLPayDiag.LVL.info && console.log('[AP:UX]', ...a),
+    debug:(...a)=> WLPayDiag.getLevel()>=WLPayDiag.LVL.debug&& console.log('[AP:UX]', ...a),
+  } : console);
+
+  /* ---------- CSS overrides ---------- */
+  (function injectOverrides(){
+    if (document.getElementById('wl-ap-overrides-css')) return;
+    const s = document.createElement('style'); s.id = 'wl-ap-overrides-css';
+    s.textContent = `
+      /* Back button */
+      .wl-topbar{ display:flex; justify-content:flex-end; gap:12px; margin:10px 0 6px; }
+      .wl-backbtn{
+        appearance:none; border:1px solid #6b0016; border-radius:10px;
+        padding:8px 12px; background:#6b0016; color:#fff; font-weight:800; cursor:pointer;
+        text-decoration:none; line-height:1;
+      }
+      .wl-backbtn:focus-visible{ outline:0; box-shadow:0 0 0 3px rgba(107,0,22,.25); }
+
+      /* Only color the two card headers you mentioned */
+      #wlLeftCard  .wl-card-head,
+      #wlRightCard .wl-card-head{
+        background:#6b0016 !important;
+        color:#fff !important;
+      }
+
+      /* Hide the left sidebar nav */
+      #ctl00_LeftSidebarContents_MainNav_NavigationMenu{
+        display:none !important;
+      }
+
+      /* Make form rows 80% width on desktop (>=768px) */
+      @media (min-width:768px){
+        .wl-form-grid .wl-item .wl-field{
+          width:80%;
+        }
+      }
+    `;
+    document.head.appendChild(s);
+    log.info('Overrides CSS injected');
+  })();
+
+  /* ---------- Top "Back to My Account" button ---------- */
+  function addBackButton(){
+    if (document.getElementById('wlTopBar')) return;
+
+    // Prefer placing right under the existing page header; fallback to top of body container
+    const header = document.querySelector('.bodyFlexItem.listPageHeader');
+    const host   = header?.parentNode || document.querySelector('.bodyFlexContainer') || document.body;
+
+    const bar = document.createElement('div');
+    bar.id = 'wlTopBar';
+    bar.className = 'wl-topbar';
+
+    const a = document.createElement('a');
+    a.href = 'https://webtrack.woodsonlumber.com/AccountInfo_R.aspx';
+    a.className = 'wl-backbtn';
+    a.textContent = 'Back to My Account';
+
+    bar.appendChild(a);
+
+    if (header && header.nextSibling){
+      host.insertBefore(bar, header.nextSibling);
+    } else {
+      host.insertBefore(bar, host.firstChild);
+    }
+
+    log.info('Back to My Account button added');
+  }
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', addBackButton, { once:true });
+  } else {
+    addBackButton();
+  }
+})();
+
