@@ -838,3 +838,150 @@
   if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', boot, {once:true}); }
   else { boot(); }
 })();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+(function(){
+  'use strict';
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+
+  const log = (window.WLPayDiag ? {
+    info: (...a)=> WLPayDiag.getLevel()>=WLPayDiag.LVL.info && console.log('[AP:BRIDGE]', ...a),
+    warn: (...a)=> WLPayDiag.getLevel()>=WLPayDiag.LVL.warn && console.warn('[AP:BRIDGE]', ...a),
+    error:(...a)=> WLPayDiag.getLevel()>=WLPayDiag.LVL.error&& console.error('[AP:BRIDGE]', ...a),
+    debug:(...a)=> WLPayDiag.getLevel()>=WLPayDiag.LVL.debug&& console.log('[AP:BRIDGE]', ...a),
+  } : console);
+
+  // Off-screen (NOT display:none) so gateway hooks still see it
+  (function css(){
+    if (document.getElementById('wl-submit-bridge-css')) return;
+    const s=document.createElement('style'); s.id='wl-submit-bridge-css';
+    s.textContent = `.wl-hidden-native{position:absolute!important;left:-20000px!important;top:auto!important;width:1px!important;height:1px!important;overflow:hidden!important;}`;
+    document.head.appendChild(s);
+  })();
+
+  function restoreSubmitPanel(){
+    const nativeCtl = document.querySelector('#ctl00_PageBody_MakePaymentPanel .epi-form-group-acctPayment > div:nth-child(2)');
+    const moved = document.querySelector('#wlSubmitMount .submit-button-panel');
+    if (nativeCtl && moved && moved.parentNode !== nativeCtl){
+      nativeCtl.appendChild(moved);
+      log.info('submit panel restored to native container');
+    }
+    const native = document.querySelector('#ctl00_PageBody_MakePaymentPanel .submit-button-panel');
+    if (native && !native.classList.contains('wl-hidden-native')){
+      native.classList.add('wl-hidden-native'); // keep in DOM for Forte
+      log.debug('native submit panel visually hidden (kept in DOM)');
+    }
+  }
+
+  function findNativeTrigger(){
+    let real = document.querySelector('#ctl00_PageBody_MakePaymentPanel .submit-button-panel button');
+    if (!real) real = document.querySelector('#ctl00_PageBody_MakePaymentPanel .submit-button-panel input[type="submit"], #ctl00_PageBody_MakePaymentPanel .submit-button-panel input[type="button"]');
+    if (!real) real = document.querySelector('#ctl00_PageBody_MakePaymentPanel .submit-button-panel a');
+    return real;
+  }
+
+  function proxyFire(){
+    try{ window.ensurePayByCheckVisibleAndSelected?.(); }catch{}
+    const real = findNativeTrigger();
+    if (real){
+      log.info('proxy firing native trigger', { tag: real.tagName, id: real.id, name: real.name, value: real.value });
+      real.click();
+      return true;
+    }
+    // Fallback to __doPostBack if present
+    const pb = document.querySelector('#ctl00_PageBody_MakePaymentPanel .submit-button-panel [onclick*="__doPostBack"]');
+    if (pb){
+      const m = (pb.getAttribute('onclick')||'').match(/__doPostBack\(['"]([^'"]+)['"],\s*['"]([^'"]*)['"]\)/);
+      if (m && window.__doPostBack){
+        log.info('proxy using __doPostBack', { target: m[1], arg: m[2] });
+        window.__doPostBack(m[1], m[2]||'');
+        return true;
+      }
+    }
+    // Last resort: submit the form
+    const form = document.forms[0];
+    if (form){
+      log.warn('proxy falling back to form.submit()');
+      const ev = new Event('submit', { bubbles:true, cancelable:true });
+      form.dispatchEvent(ev);
+      if (!ev.defaultPrevented){ form.submit(); }
+      return true;
+    }
+    log.error('proxy could not find any submit mechanism');
+    return false;
+  }
+
+  function wireProxy(){
+    const btn = document.getElementById('wlProxySubmit');
+    if (!btn || btn.__wlBridgeBound) return;
+    btn.addEventListener('click', proxyFire);
+    btn.__wlBridgeBound = true;
+    log.info('proxy wired to native submit');
+  }
+
+  function afterAjax(){
+    restoreSubmitPanel();
+    wireProxy();
+  }
+
+  function boot(){
+    afterAjax();
+    try{
+      if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
+        const prm = Sys.WebForms.PageRequestManager.getInstance();
+        if (!prm.__wlBridgeBound){
+          prm.add_endRequest(()=>{ log.info('bridge endRequest rewire'); afterAjax(); });
+          prm.__wlBridgeBound = true;
+        }
+      }
+    }catch(e){ log.warn('bridge: PageRequestManager not available', e); }
+  }
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', boot, { once:true });
+  } else {
+    boot();
+  }
+})();
+
