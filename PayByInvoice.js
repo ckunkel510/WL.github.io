@@ -1399,7 +1399,7 @@
 
 /* ==========================================================
    Woodson — Quick Payment Actions (+ Pay by Invoice & Pay by Job modals)
-   Runs only on AccountPayment_r.aspx
+   FIX: Keep transactions panel inside the ASP.NET form for proper postback/state
    ========================================================== */
 (function () {
   'use strict';
@@ -1471,10 +1471,23 @@
       .wl-job-line { display:flex; align-items:center; gap:10px; }
       .wl-job-line input { transform:translateY(1px); }
 
-      /* Slightly tighter spacing on desktop */
+      /* Modernize transactions grid when inside modal */
+      .wl-modern-grid table { border-collapse:separate; border-spacing:0; width:100%; font-size:14px; }
+      .wl-modern-grid thead th {
+        position:sticky; top:0; background:#f8fafc; z-index:1;
+        font-weight:800; text-transform:none; letter-spacing:.01em;
+        border-bottom:1px solid #e5e7eb; padding:10px 12px;
+      }
+      .wl-modern-grid tbody tr { transition:background .15s ease, box-shadow .15s ease; }
+      .wl-modern-grid tbody tr:hover { background:#f9fafb; }
+      .wl-modern-grid td { border-bottom:1px solid #eef2f7; padding:10px 12px; }
+      .wl-modern-grid .rgPager, .wl-modern-grid .paging-control { border-top:1px solid #e5e7eb; padding-top:8px; margin-top:8px; }
+      .wl-modern-grid .rgHeader, .wl-modern-grid .panelHeaderMidProductInfo1, .wl-modern-grid .ViewHeader { display:none !important; }
+
+      /* Tighter vertical rhythm on desktop */
       @media (min-width:768px){
-        .wl-form-grid{ gap:14px 18px; }
-        .wl-field{ gap:6px; width:80%; }
+        .wl-form-grid{ gap:14px 16px; }
+        .wl-field{ gap:6px; width:80%; } /* already applied elsewhere */
       }
     `;
     const s = document.createElement('style'); s.id='wl-quick-widget-css'; s.textContent = css;
@@ -1539,9 +1552,11 @@
     }catch(e){ console.warn(e); alert('Error fetching data.'); }
   }
 
-  /* ---------- Pay by Invoice (existing) ---------- */
+  /* ---------- Pay by Invoice (FIXED: keep inside form) ---------- */
   const TX_PANEL_ID = 'ctl00_PageBody_accountsTransactionsPanel';
   const SESS_TX_OPEN = '__WL_TxModalOpen';
+
+  function formEl(){ return document.forms && document.forms[0] ? document.forms[0] : document.body; }
 
   function ensureTxModalDOM(){
     if ($id('wlTxModal')) return;
@@ -1555,40 +1570,66 @@
             <button type="button" class="wl-btn wl-btn-ghost" id="wlTxCloseX" aria-label="Close">✕</button>
           </div>
         </div>
-        <div class="wl-modal-body" id="wlTxModalBody"></div>
+        <div class="wl-modal-body wl-modern-grid" id="wlTxModalBody"></div>
         <div class="wl-modal-foot">
           <button type="button" class="wl-btn" id="wlTxCancelBtn">Cancel</button>
           <button type="button" class="wl-btn wl-btn-primary" id="wlTxDoneBtn">Done</button>
         </div>
       </div>`;
-    document.body.appendChild(back);
-    document.body.appendChild(shell);
+
+    // APPEND INSIDE FORM (IMPORTANT FOR WEBFORMS POSTBACK)
+    const f = formEl();
+    f.appendChild(back);
+    f.appendChild(shell);
 
     back.addEventListener('click', closeTxModal);
     $id('wlTxCloseX').addEventListener('click', closeTxModal);
     $id('wlTxCancelBtn').addEventListener('click', closeTxModal);
     $id('wlTxDoneBtn').addEventListener('click', closeTxModal);
-    document.addEventListener('keydown', (e)=>{ if (e.key==='Escape' && sessionStorage.getItem(SESS_TX_OPEN)==='1') closeTxModal(); });
+
+    // Guard: if user clicks anything that will trigger a postback inside the panel,
+    // keep the modal open across the refresh so they can keep selecting.
+    f.addEventListener('click', (e)=>{
+      const host = $id('wlTxModalBody');
+      if (!host || !host.contains(e.target)) return;
+      // Persist "open" before the postback occurs
+      sessionStorage.setItem(SESS_TX_OPEN,'1');
+    }, true);
   }
+
   function moveTxPanelToModal(){
     const panel = $id(TX_PANEL_ID);
     const host  = $id('wlTxModalBody');
     if (!panel || !host) return false;
+
+    // placeholder lives in ORIGINAL parent (also inside form)
     let ph = $id('wlTxReturn');
-    if (!ph){ ph = document.createElement('div'); ph.id='wlTxReturn'; panel.parentNode?.insertBefore(ph, panel); }
+    if (!ph){
+      ph = document.createElement('div'); ph.id='wlTxReturn';
+      panel.parentNode?.insertBefore(ph, panel);
+    }
     host.appendChild(panel);
+    panel.classList.add('wl-modern-grid'); // style only while in modal
     return true;
   }
   function restoreTxPanel(){
     const panel = $id(TX_PANEL_ID), ph = $id('wlTxReturn');
-    if (panel && ph && ph.parentNode){ ph.parentNode.insertBefore(panel, ph); ph.remove(); }
-    else {
+    if (panel && ph && ph.parentNode){
+      panel.classList.remove('wl-modern-grid');
+      ph.parentNode.insertBefore(panel, ph);
+      ph.remove();
+    } else {
+      // fallback to card body if placeholder missing
       const body = $id('wlTxBody') || $1('#wlTxCard .wl-card-body');
-      if (panel && body) body.appendChild(panel);
+      if (panel && body){
+        panel.classList.remove('wl-modern-grid');
+        body.appendChild(panel);
+      }
     }
   }
   function showTxChrome(){ $id('wlTxModalBackdrop').style.display='block'; $id('wlTxModal').style.display='block'; document.body.style.overflow='hidden'; }
   function hideTxChrome(){ const b=$id('wlTxModalBackdrop'), m=$id('wlTxModal'); if(b)b.style.display='none'; if(m)m.style.display='none'; document.body.style.overflow=''; }
+
   function openTxModal(){
     ensureTxModalDOM();
     if (sessionStorage.getItem(SESS_TX_OPEN)==='1'){ showTxChrome(); return; }
@@ -1619,10 +1660,9 @@
     }
   }
 
-  /* ---------- Pay by Job (NEW modal) ---------- */
+  /* ---------- Pay by Job (unchanged from your working version) ---------- */
   const SESS_JOBS_OPEN = '__WL_JobsModalOpen';
-  const SESS_JOBS_SEL  = '__WL_JobsSelection'; // { job: amount, ... }
-
+  const SESS_JOBS_SEL  = '__WL_JobsSelection';
   function ensureJobsModalDOM(){
     if ($id('wlJobsModal')) return;
     const back = document.createElement('div'); back.id='wlJobsModalBackdrop'; back.className='wl-modal-backdrop';
@@ -1646,9 +1686,9 @@
           <button type="button" class="wl-btn wl-btn-primary" id="wlJobsDoneBtn">Done</button>
         </div>
       </div>`;
+    // Jobs modal can live under body; it doesn't post back
     document.body.appendChild(back);
     document.body.appendChild(shell);
-
     back.addEventListener('click', closeJobsModal);
     $id('wlJobsCloseX').addEventListener('click', closeJobsModal);
     $id('wlJobsCancelBtn').addEventListener('click', closeJobsModal);
@@ -1657,7 +1697,6 @@
     $id('wlJobsClearBtn').addEventListener('click', ()=> jobsSelectAll(false));
     document.addEventListener('keydown', (e)=>{ if (e.key==='Escape' && sessionStorage.getItem(SESS_JOBS_OPEN)==='1') closeJobsModal(); });
   }
-
   async function fetchJobBalances(){
     try{
       const res = await fetch('https://webtrack.woodsonlumber.com/JobBalances_R.aspx',{ credentials:'include' });
@@ -1674,7 +1713,6 @@
       return out;
     }catch(e){ console.warn('fetchJobBalances error', e); return []; }
   }
-
   function jobsUpdateSummary(){
     const list = $id('wlJobsList'); if (!list) return;
     const checks = Array.from(list.querySelectorAll('input[type="checkbox"]'));
@@ -1682,16 +1720,13 @@
     const total = sel.reduce((s,c)=> s + parseMoney(c.value), 0);
     const pill = $id('wlJobsSummary'); if (pill) pill.textContent = `Selected: $${format2(total)} (${sel.length})`;
   }
-
   function jobsSelectAll(state){
     const list = $id('wlJobsList'); if (!list) return;
     list.querySelectorAll('input[type="checkbox"]').forEach(cb=> cb.checked = !!state);
     jobsUpdateSummary();
   }
-
   async function openJobsModal(){
     ensureJobsModalDOM();
-    // Populate list if empty or we want to refresh
     const list = $id('wlJobsList');
     if (!list.dataset.loaded){
       const jobs = await fetchJobBalances();
@@ -1710,7 +1745,6 @@
         list.appendChild(frag);
         list.dataset.loaded = '1';
       }
-      // Pre-check from session
       const prevSel = JSON.parse(sessionStorage.getItem(SESS_JOBS_SEL) || '{}');
       if (prevSel && Object.keys(prevSel).length){
         list.querySelectorAll('input[type="checkbox"]').forEach(cb=>{
@@ -1720,14 +1754,12 @@
       list.addEventListener('change', jobsUpdateSummary, { passive:true });
     }
     jobsUpdateSummary();
-    // Open chrome
     $id('wlJobsModalBackdrop').style.display='block';
     $id('wlJobsModal').style.display='block';
     document.body.style.overflow='hidden';
     sessionStorage.setItem(SESS_JOBS_OPEN,'1');
     const btn = $id('wlOpenJobsModalBtn'); if (btn){ btn.disabled = true; btn.setAttribute('aria-disabled','true'); }
   }
-
   function closeJobsModal(){
     $id('wlJobsModalBackdrop').style.display='none';
     $id('wlJobsModal').style.display='none';
@@ -1735,7 +1767,6 @@
     sessionStorage.removeItem(SESS_JOBS_OPEN);
     const btn = $id('wlOpenJobsModalBtn'); if (btn){ btn.disabled = false; btn.removeAttribute('aria-disabled'); btn.focus?.(); }
   }
-
   function ensureJobsModalState(){
     ensureJobsModalDOM();
     const open = sessionStorage.getItem(SESS_JOBS_OPEN)==='1';
@@ -1749,38 +1780,26 @@
       closeJobsModal();
     }
   }
-
   function commitJobsSelection(){
     const list = $id('wlJobsList'); if (!list){ closeJobsModal(); return; }
     const checks = Array.from(list.querySelectorAll('input[type="checkbox"]'));
     const sel = checks.filter(c=>c.checked);
-    // Build selection map
     const newSel = {}; sel.forEach(c=> newSel[c.dataset.job] = parseMoney(c.value));
     const prevSel = JSON.parse(sessionStorage.getItem(SESS_JOBS_SEL) || '{}');
-
     const prevTotal = Object.values(prevSel).reduce((s,v)=> s + Number(v||0), 0);
     const newTotal  = Object.values(newSel).reduce((s,v)=> s + Number(v||0), 0);
-
-    // Update amount (replace previous job contribution with new)
     const a = amtEl(); if (a){
       const base = parseMoney(a.value);
       const next = Math.max(0, base - prevTotal + newTotal);
       a.value = format2(next);
       triggerChange(a);
     }
-
-    // Update remittance (remove previous JOB lines, add new JOB lines)
     const r = remEl(); if (r){
       const lines = (r.value||'').split('\n');
-      const kept = lines.filter(line=>{
-        // remove only lines matching previous jobs we added
-        return !Object.keys(prevSel).some(job => line.trim().startsWith(`JOB ${job}:`));
-      }).filter(Boolean);
+      const kept = lines.filter(line=> !Object.keys(prevSel).some(job => line.trim().startsWith(`JOB ${job}:`))).filter(Boolean);
       const add = Object.entries(newSel).map(([job,amt])=> `JOB ${job}: $${format2(amt)}`);
       r.value = [...kept, ...add].join('\n');
     }
-
-    // Persist new selection
     sessionStorage.setItem(SESS_JOBS_SEL, JSON.stringify(newSel));
     closeJobsModal();
   }
@@ -1824,7 +1843,7 @@
     if (/Load Cash Account Balance/i.test(hdrText)){
       lastWrap.style.display = 'none';
     }
-    (lastRadio).addEventListener('change', ()=> onLastStatementChecked(lastRadio, lastText));
+    lastRadio.addEventListener('change', ()=> onLastStatementChecked(lastRadio, lastText));
 
     /* Fill/Clear */
     $id('wlFillOwingBtn').addEventListener('click', ()=>{
@@ -1833,7 +1852,7 @@
     });
     $id('wlClearAmtBtn').addEventListener('click', ()=>{ const a = amtEl(); if (!a) return; a.value=''; triggerChange(a); });
 
-    /* Invoices modal */
+    /* Invoices modal (inside form) */
     ensureTxModalDOM();
     $id('wlOpenTxModalBtn').addEventListener('click', openTxModal);
     ensureTxModalState();
@@ -1843,7 +1862,7 @@
     $id('wlOpenJobsModalBtn').addEventListener('click', openJobsModal);
     ensureJobsModalState();
 
-    log.info('Quick Payment Actions mounted (with Invoice & Jobs modals)');
+    log.info('Quick Payment Actions mounted (Invoice modal inside form + Jobs modal)');
   }
 
   /* ---------- Boot + MS AJAX handling ---------- */
