@@ -1397,7 +1397,6 @@
 
 
 
-
 /* ==========================================================
    Woodson — Quick Payment Actions (+ Pay by Invoice & Pay by Job modals)
    Runs only on AccountPayment_r.aspx
