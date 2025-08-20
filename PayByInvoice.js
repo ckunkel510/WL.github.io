@@ -2059,6 +2059,7 @@
       .wl-type-inv       { background:#eef6ff; color:#1e40af; border:1px solid #c7ddff; }
       .wl-type-cr        { background:#fff7ed; color:#9a3412; border:1px solid #fde1c7; }
       .wl-foot-left      { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+      .wl-btn.wl-btn-ghost{color:#6b0016;}
     `;
     document.head.appendChild(s);
   })();
