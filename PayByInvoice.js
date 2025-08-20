@@ -1397,19 +1397,12 @@
 
 
 
-/* ==========================================================
-   Woodson — Quick Payment Actions (v2)
-   - Pay by Invoice modal (robust host detection, inside <form>, persists across postbacks)
-   - Pay My Last Statement button -> writes structured Remittance line
-   - Fill Owing button
-   - Pay by Job modal (unchanged from your working version)
-   ========================================================== */
 
 /* ==========================================================
-   Woodson — Actions & Modals (Invoices + Jobs)  v2.2
+   Woodson — Actions & Modals (Invoices + Jobs)  v2.3
    - Robust wiring (event delegation)
-   - Invoices modal reads on-page Recent Transactions
-   - Optional "Load all" background pager
+   - Invoices modal reads on-page Recent Transactions (Invoices grid)
+   - GET-based pagination (?pageIndex=…) for "Load all"
    - Jobs modal adjusts amount by delta vs previous selection
    - "Pay My Last Statement" button (amount + remittance)
    ========================================================== */
@@ -1482,7 +1475,6 @@
   function ensureQuickBar(){
     let bar = $('#wlQuickBar');
     if (!bar){
-      // Prefer placing above Amount group if we can find it
       const amountGroup = $('#ctl00_PageBody_PaymentAmountTextBox')?.closest('.epi-form-group-acctPayment');
       const mount = amountGroup?.parentElement || $('#wlLeftCard .wl-card-body') || $('.bodyFlexContainer');
       if (!mount) return;
@@ -1510,7 +1502,7 @@
   /* ==========================================================
      INVOICE MODAL (reads Recent Transactions panel)
      ========================================================== */
-  const TX_PANEL_SEL = '#ctl00_PageBody_accountsTransactionsPanel'; // we moved the node but ID persists
+  const TX_PANEL_SEL = '#ctl00_PageBody_accountsTransactionsPanel'; // container panel
   const stateInv = {
     rows: [], selected: new Map(), open:false, nextPost:null, pageCount:1, maxPages:25
   };
@@ -1588,36 +1580,55 @@
     if (/credit/.test(t)) return true;
     return parseMoney(amountText) < 0;
   }
+
+  /* ---------- helpers for robust cell picking ---------- */
+  function norm(s){ return String(s||'').toLowerCase().replace(/[^a-z0-9]/g,''); }
+  function pickCell(tr, names, nthFallback=null){
+    const wants = new Set(names.map(n=>norm(n)));
+    let td = Array.from(tr.querySelectorAll('td')).find(td=>{
+      const key = norm(td.getAttribute('data-title')||'');
+      return key && Array.from(wants).some(w => key.includes(w));
+    });
+    if (!td && nthFallback!=null) td = tr.querySelector(`td:nth-child(${nthFallback})`);
+    return td?.textContent.trim() || '';
+  }
+
+  /* ---------- keep server’s doc tokens as-is ---------- */
   function invNormalizeDoc(s){
     const str = String(s||'').trim();
     if (!str) return '';
-    const m = str.match(/^(INV)?\s*([A-Za-z0-9\-]+)/i);
-    return (m && !/^INV/i.test(str)) ? ('INV'+m[2]) : str;
+    return str.replace(/\s+/g,''); // collapse spaces, no INV prefixing
   }
 
+  /* ---------- extract ONLY from the invoices grid inside the panel ---------- */
   function invExtractFrom(root){
-    const out=[]; const panel = $(TX_PANEL_SEL, root); if (!panel) return out;
-    const rows = panel.querySelectorAll('table tr');
+    const out=[]; 
+    const panel = $(TX_PANEL_SEL, root); if (!panel) return out;
+
+    // Target the RadGrid's master table, avoid date-picker tables in the same panel.
+    const grid = panel.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00') 
+              || panel.querySelector('#ctl00_PageBody_InvoicesGrid .rgMasterTable');
+    if (!grid) return out;
+
+    const rows = grid.querySelectorAll('tbody tr');
     rows.forEach(tr=>{
-      if (tr.querySelector('th')) return;
-      const pick = (name, nth=null)=>{
-        const td = tr.querySelector(`td[data-title="${name}"]`) ||
-                   Array.from(tr.querySelectorAll('td')).find(td=> (td.getAttribute('data-title')||'').toLowerCase().includes(name.toLowerCase()));
-        if (td) return td.textContent.trim();
-        if (nth!=null) return tr.querySelector(`td:nth-child(${nth})`)?.textContent.trim() || '';
-        return '';
-      };
-      const doc   = pick('Document #') || pick('Doc #') || pick('Invoice #') || pick('Invoice') || pick('Document',1);
-      const type  = pick('Type') || pick('Document Type',2);
-      const tDate = pick('Transaction Date') || pick('Trans Date') || pick('Date',3);
-      const dDate = pick('Due Date',4);
-      const job   = pick('Job Ref') || pick('Job') || pick('Project',5);
-      const desc  = pick('Description') || pick('Customer PO') || pick('Notes') || pick('Reference',6);
-      const amt   = pick('Amount') || pick('Doc Amount') || pick('Amount With Tax', -2) || '0';
-      const outst = pick('Amount Outstanding') || pick('Outstanding') || pick('Balance', -1) || amt;
+      if (!tr.querySelector('td')) return;
+
+      const doc   = pickCell(tr, ['Doc. #','Doc #','Document #','Document No','Document Number','Invoice #','Invoice','Document'], 5);
+      const type  = pickCell(tr, ['Type','Document Type'], 2);
+      const tDate = pickCell(tr, ['Transaction Date','Document Date','Date'], 4);
+      const dDate = pickCell(tr, ['Due Date'], 10);
+      const job   = pickCell(tr, ['Job Ref','Job','Project'], 6);
+      const desc  = pickCell(tr, ['Customer Ref','Description','Reference','Your Ref','Notes','Customer PO'], 7);
+      const amt   = pickCell(tr, ['Amount','Doc Amount','Amount With Tax'], 8);
+      const outst = pickCell(tr, ['Amount Outstanding','Outstanding','Balance'], 9) || amt;
 
       const docN = invNormalizeDoc(doc); if (!docN) return;
-      out.push({ key:docN, doc:docN, type:type||'', tDate, dDate, job:job||'', desc:desc||'', amount:amt||'0', outstanding:outst||amt||'0' });
+      out.push({
+        key: docN, doc: docN, type: type||'',
+        tDate, dDate, job: job||'', desc: desc||'',
+        amount: amt||'0', outstanding: outst||amt||'0'
+      });
     });
     return out;
   }
@@ -1627,56 +1638,49 @@
     let panel = $(TX_PANEL_SEL) || await waitFor(TX_PANEL_SEL,{tries:24,interval:120});
     if (!panel){ invBadge('Recent Transactions panel not found.'); log.warn('inv: panel not found'); return; }
     stateInv.rows = invExtractFrom(document);
-    stateInv.selected.clear(); // keep previous selections if you prefer; for now clear to avoid stale keys
+    stateInv.selected.clear();
     stateInv.pageCount=1;
     stateInv.nextPost = invParseNext(document);
     invRenderRows(); invBadge(`Loaded ${stateInv.rows.length} row(s) from current page${stateInv.nextPost?' · more available':''}`);
     invSeedFromRemittance();
   }
 
-  // emulate pager
-  function invHiddenMap(doc){
-    const hid={}; doc.querySelectorAll('input[type="hidden"]').forEach(i=>{ if(i.name) hid[i.name]=i.value||''; });
-    return hid;
-  }
+  /* ---------- GET pagination inside the panel (e.g., ?pageIndex=12) ---------- */
   function invParseNext(root){
     const panel = $(TX_PANEL_SEL, root); if (!panel) return null;
-    let a = panel.querySelector('a.rgPageNext') ||
-            Array.from(panel.querySelectorAll('a[href*="__doPostBack"]')).find(x=> /Next|›|>>/i.test(x.textContent||''));
-    if (!a) return null;
-    const src = a.getAttribute('href') || a.getAttribute('onclick') || '';
-    const m = src.match(/__doPostBack\(\s*'([^']+)'\s*,\s*'([^']*)'\s*\)/);
-    if (!m) return null;
-    return { hidden: invHiddenMap(document), evtTarget:m[1], evtArg:m[2]||'' };
-  }
-  async function invFetchNext(current){
-    const data = new URLSearchParams();
-    Object.entries(current.hidden||{}).forEach(([k,v])=> data.set(k,v));
-    data.set('__EVENTTARGET', current.evtTarget); data.set('__EVENTARGUMENT', current.evtArg);
-    const res = await fetch(location.pathname+location.search, {
-      method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8'}, credentials:'include', body:data.toString()
-    });
-    const html = await res.text(); const doc = new DOMParser().parseFromString(html,'text/html');
-    const rows = invExtractFrom(doc);
-    let next = null; const p=$(TX_PANEL_SEL, doc);
-    if (p){
-      let a = p.querySelector('a.rgPageNext') ||
-              Array.from(p.querySelectorAll('a[href*="__doPostBack"]')).find(x=> /Next|›|>>/i.test(x.textContent||''));
-      if (a){
-        const src=a.getAttribute('href')||a.getAttribute('onclick')||''; const m=src.match(/__doPostBack\('([^']+)','([^']*)'\)/);
-        if (m) next = { hidden: invHiddenMap(doc), evtTarget:m[1], evtArg:m[2]||'' };
+    const pagers = panel.querySelectorAll('.paging-control ul.pagination');
+    for (const ul of pagers){
+      const active = ul.querySelector('li.page-item.active');
+      const nextLi = active?.nextElementSibling;
+      // Prefer the next numbered page; fallback to caret-right
+      let a = nextLi?.querySelector('a.page-link');
+      if (!a){
+        const caret = ul.querySelector('a.page-link i.fa-caret-right');
+        a = caret ? caret.closest('a') : null;
       }
+      const href = a?.getAttribute('href');
+      if (href && !/^\s*#/.test(href)) return href; // may be relative
     }
-    return { rows, next };
+    return null;
   }
+
+  async function invFetchNext(nextHref){
+    const url = new URL(nextHref, location.href).toString();
+    const res = await fetch(url, { credentials:'include' });
+    const html = await res.text();
+    const doc = new DOMParser().parseFromString(html,'text/html');
+    return { rows: invExtractFrom(doc), next: invParseNext(doc) };
+  }
+
   async function invLoadAllPages(){
     if (!stateInv.nextPost){ invBadge('No more pages.'); return; }
     $('#wlTxLoadAllBtn').disabled = true;
-    let pages=0, added=0; try{
+    let pages=0;
+    try{
       while (stateInv.nextPost && pages < stateInv.maxPages){
         const {rows, next} = await invFetchNext(stateInv.nextPost);
         const known = new Set(stateInv.rows.map(r=> r.key));
-        rows.forEach(r=> { if (!known.has(r.key)) { stateInv.rows.push(r); added++; } });
+        rows.forEach(r=> { if (!known.has(r.key)) stateInv.rows.push(r); });
         pages++; stateInv.pageCount++; stateInv.nextPost = next;
         invBadge(`Loaded ${stateInv.rows.length} rows · page ${stateInv.pageCount}${stateInv.nextPost?'…':''}`);
         invRenderRows();
@@ -1741,8 +1745,7 @@
     const rem = $('#ctl00_PageBody_RemittanceAdviceTextBox');
     if (rem){
       const lines = String(rem.value||'').split('\n').filter(Boolean);
-      // remove any prior INV tokens line(s)
-      const kept = lines.filter(l=> !/INV/i.test(l));
+      const kept = lines.filter(l=> !/INV/i.test(l)); // strips previous invoice-token lines
       kept.push(docs.join(','));
       rem.value = kept.join('\n');
       fire(rem);
@@ -1828,7 +1831,6 @@
         if (job && amtTxt) rows.push({ key: job, job, amount: parseMoney(amtTxt) });
       });
       stateJob.rows = rows;
-      // keep any previous selections
       jobRenderRows();
     }catch(e){
       log.error('jobLoad error', e);
@@ -1874,7 +1876,6 @@
     const rem = $('#ctl00_PageBody_RemittanceAdviceTextBox'); if (!rem) return;
     const lines = String(rem.value||'').split('\n');
     const keep = lines.filter(l=> !/^JOB:/i.test(l));
-    // add current selection lines
     Array.from(stateJob.selected.entries()).forEach(([job, amount])=>{
       keep.push(`JOB: ${job} $${fmt2(amount)}`);
     });
@@ -1883,13 +1884,11 @@
   }
 
   function jobCommit(){
-    // compute delta vs previously committed selection
     const sum = (m)=> Array.from(m.values()).reduce((s,v)=> s+v, 0);
     const prev = sum(stateJob.committed);
     const next = sum(stateJob.selected);
     const delta = next - prev;
 
-    // update amount by delta
     const amt = $('#ctl00_PageBody_PaymentAmountTextBox');
     if (amt){
       const cur = parseMoney(amt.value);
@@ -1897,12 +1896,8 @@
       amt.value = fmt2(newVal);
       fire(amt);
     }
-    // write remittance lines
     jobWriteRemittance();
-
-    // persist as new baseline
     stateJob.committed = new Map(stateJob.selected);
-
     try{ window.renderSummary?.(); }catch{}
     jobClose();
   }
