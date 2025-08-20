@@ -1115,3 +1115,193 @@
   }
 })();
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ===============================
+   Woodson — AP inline amount UX
+   - Inline "last statement" + chips
+   - Slightly tighter desktop spacing
+   - Back button text color = white
+   =============================== */
+(function(){
+  'use strict';
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+
+  /* ---- CSS overrides ---- */
+  (function injectCSS(){
+    if (document.getElementById('wl-ap-amount-inline-css')) return;
+    const s = document.createElement('style'); s.id = 'wl-ap-amount-inline-css';
+    s.textContent = `
+      /* Inline actions row below amount input */
+      .wl-amt-actions{
+        display:flex; align-items:center; flex-wrap:wrap;
+        gap:8px; margin-top:6px;
+      }
+      .wl-amt-actions .wl-chipbtn{
+        border:1px solid #e5e7eb; border-radius:999px; padding:6px 10px;
+        background:#fff; font-weight:800; font-size:12px; cursor:pointer;
+      }
+      .wl-amt-actions .wl-inlineradio{
+        display:inline-flex; align-items:center; gap:6px; font-weight:800;
+      }
+      .wl-amt-actions .wl-inlineradio input{ transform:translateY(1px); }
+
+      /* Slightly reduce vertical density on desktop */
+      @media (min-width:768px){
+        .wl-form-grid{ gap:14px 18px !important; }         /* was 18px 18px */
+        .wl-card-body{ padding:12px 16px !important; }     /* was 16px 18px */
+        .wl-field{ gap:6px !important; }                   /* was 8px */
+      }
+
+      /* Ensure back button text is white in all states */
+      #wlTopBar .wl-backbtn,
+      #wlTopBar .wl-backbtn:visited,
+      #wlTopBar .wl-backbtn:hover,
+      #wlTopBar .wl-backbtn:active,
+      #wlTopBar .wl-backbtn:focus{
+        color:#fff !important;
+      }
+    `;
+    document.head.appendChild(s);
+  })();
+
+  /* ---- JS to inline amount actions ---- */
+  function placeAmountActions(){
+    const amtInput = document.getElementById('ctl00_PageBody_PaymentAmountTextBox');
+    if (!amtInput) return;
+
+    // Amount group container (legacy form group we reflowed earlier)
+    const amtGroup = amtInput.closest('.epi-form-group-acctPayment') || amtInput.parentElement;
+    if (!amtGroup) return;
+
+    // Create a single, idempotent actions row
+    let actions = amtGroup.querySelector('#wlAmtActions');
+    if (!actions){
+      actions = document.createElement('div');
+      actions.id = 'wlAmtActions';
+      actions.className = 'wl-amt-actions';
+      // Insert actions AFTER the first ".wl-field" row if present, else at end of group
+      const firstField = amtGroup.querySelector('.wl-field');
+      (firstField?.parentNode || amtGroup).insertBefore(actions, firstField ? firstField.nextSibling : null);
+    } else {
+      actions.innerHTML = ''; // reset (idempotent)
+    }
+
+    /* --- Move native "Pay My Last Statement" inline --- */
+    const lastRadio  = document.getElementById('lastStatementRadio');
+    const lastLabel  = document.getElementById('lastStatementRadioLabel');
+    if (lastRadio && lastLabel){
+      // Keep their original behavior; just re-home them
+      const wrap = document.createElement('label');
+      wrap.className = 'wl-inlineradio';
+      wrap.setAttribute('for', 'lastStatementRadio');
+      wrap.appendChild(lastRadio);     // move input node
+      wrap.appendChild(document.createTextNode(lastLabel.textContent || 'Pay My Last Statement'));
+      actions.appendChild(wrap);
+      // Hide the original label (now redundant) if it still occupies space
+      lastLabel.style.display = 'none';
+    }
+
+    /* --- Chips: Fill owing / Clear --- */
+    // Compute "Amount Owing" from literal
+    const owingEl = document.getElementById('ctl00_PageBody_AmountOwingLiteral');
+    const owingVal = (function(){
+      const s = (owingEl?.value || owingEl?.textContent || '').replace(/[^0-9.\-]/g,'');
+      const n = parseFloat(s); return Number.isFinite(n) ? n : 0;
+    })();
+
+    // Create fresh chip buttons (we replace any previous .wl-chips block)
+    const makeChip = (label, act) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'wl-chipbtn';
+      b.dataset.act = act;
+      b.textContent = label;
+      return b;
+    };
+    const fillBtn  = makeChip('Fill owing', 'fill-owing');
+    const clearBtn = makeChip('Clear', 'clear-amt');
+    actions.appendChild(fillBtn);
+    actions.appendChild(clearBtn);
+
+    // Wire behavior
+    fillBtn.addEventListener('click', function(){
+      if (!amtInput) return;
+      if (Number.isFinite(owingVal) && owingVal > 0){
+        amtInput.value = owingVal.toFixed(2);
+        // Trigger server-side onchange (WebForms) if needed
+        setTimeout(()=> amtInput.dispatchEvent(new Event('change', { bubbles:true })), 0);
+      }
+    });
+    clearBtn.addEventListener('click', function(){
+      if (!amtInput) return;
+      amtInput.value = '';
+      setTimeout(()=> amtInput.dispatchEvent(new Event('change', { bubbles:true })), 0);
+    });
+
+    // Remove any old chips block we previously appended (to avoid duplication)
+    const legacyChips = amtGroup.querySelector('.wl-chips');
+    if (legacyChips) legacyChips.remove();
+  }
+
+  /* ---- boot + (optional) re-apply after WebForms async updates ---- */
+  function boot(){
+    placeAmountActions();
+    // If MS AJAX is present, re-apply after partial postbacks
+    try{
+      if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
+        const prm = Sys.WebForms.PageRequestManager.getInstance();
+        if (!prm.__wlAmtInlineBound){
+          prm.add_endRequest(()=> placeAmountActions());
+          prm.__wlAmtInlineBound = true;
+        }
+      }
+    }catch{}
+  }
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', boot, { once:true });
+  } else {
+    boot();
+  }
+})();
+
+
