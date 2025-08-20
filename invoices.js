@@ -469,32 +469,37 @@
     const bar = document.createElement('div');
     bar.className = 'wl-toolbar';
     bar.innerHTML = `
-  <button class="wl-chipbtn" data-filter="all" data-active="true">All</button>
-  <button class="wl-chipbtn" data-filter="open">Open</button>
-  <button class="wl-chipbtn" data-filter="partial">Partial</button>
-  <button class="wl-chipbtn" data-filter="paid">Paid</button>
+  <button type="button" class="wl-chipbtn" data-filter="all" data-active="true">All</button>
+  <button type="button" class="wl-chipbtn" data-filter="open">Open</button>
+  <button type="button" class="wl-chipbtn" data-filter="partial">Partial</button>
+  <button type="button" class="wl-chipbtn" data-filter="paid">Paid</button>
   <div class="wl-spacer"></div>
-  <button class="wl-act" data-action="select-filtered">Select filtered</button>
-  <button class="wl-act" data-action="pay-selected" title="Go to Account Payment with selected invoices prefilled">Pay selected</button>
+  <button type="button" class="wl-act" data-action="select-filtered">Select filtered</button>
+  <button type="button" class="wl-act" data-action="pay-selected" title="Go to Account Payment with selected invoices prefilled">Pay selected</button>
 `;
+
 
     flex.insertBefore(bar, flex.firstChild);
 
     bar.addEventListener('click',(e)=>{
-      const chip = e.target.closest('.wl-chipbtn');
-      const act  = e.target.closest('.wl-act');
-      if (chip){
-        bar.querySelectorAll('.wl-chipbtn').forEach(b=>b.dataset.active='false');
-        chip.dataset.active='true';
-        applyFilter(chip.dataset.filter);
-      }else if (act && act.dataset.action==='select-filtered'){
-        selectFilteredOnPage();
-      }
-       else if (act && act.dataset.action === 'pay-selected') {
-  paySelected();
-}
+  const chip = e.target.closest('.wl-chipbtn');
+  const act  = e.target.closest('.wl-act');
 
-    });
+  if (chip){
+    e.preventDefault(); e.stopPropagation();
+    bar.querySelectorAll('.wl-chipbtn').forEach(b=>b.dataset.active='false');
+    chip.dataset.active='true';
+    applyFilter(chip.dataset.filter);
+  } else if (act){
+    e.preventDefault(); e.stopPropagation();
+    if (act.dataset.action==='select-filtered'){
+      selectFilteredOnPage();
+    } else if (act.dataset.action==='pay-selected'){
+      paySelected();
+    }
+  }
+});
+
     return bar;
   }
   function applyFilter(filter){
