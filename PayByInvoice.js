@@ -226,18 +226,17 @@
 
 
 
+
 (function(){
   'use strict';
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
-  /* ================= CSS (unchanged except minor utility) ================= */
+  /* =============== CSS =============== */
   (function injectCSS(){
     if (document.getElementById('wl-ap-polish-css')) return;
     const css = `
-      :root{
-        --wl-bg:#f6f7fb; --wl-card:#fff; --wl-border:#e5e7eb;
-        --wl-text:#0f172a; --wl-sub:#475569; --wl-brand:#6b0016; --wl-focus:#93c5fd;
-      }
+      :root{ --wl-bg:#f6f7fb; --wl-card:#fff; --wl-border:#e5e7eb;
+             --wl-text:#0f172a; --wl-sub:#475569; --wl-brand:#6b0016; --wl-focus:#93c5fd; }
       .bodyFlexContainer{ background:var(--wl-bg); }
 
       .wl-shell{ display:grid; gap:18px; grid-template-areas:"left right" "tx tx"; }
@@ -245,11 +244,10 @@
       @media(min-width:1024px) and (max-width:1199px){ .wl-shell{ grid-template-columns: 1fr 360px; } }
       @media(max-width:1023px){ .wl-shell{ grid-template-areas:"left" "right" "tx"; grid-template-columns: 1fr; } }
 
-      #wlLeftCard{ grid-area:left; }
-      #wlRightCard{ grid-area:right; }
-      #wlTxCard{ grid-area:tx; }
+      #wlLeftCard{ grid-area:left; }  #wlRightCard{ grid-area:right; }  #wlTxCard{ grid-area:tx; }
 
-      .wl-card{ background:var(--wl-card); border:1px solid var(--wl-border); border-radius:16px; box-shadow:0 6px 18px rgba(15,23,42,.06); }
+      .wl-card{ background:var(--wl-card); border:1px solid var(--wl-border);
+                border-radius:16px; box-shadow:0 6px 18px rgba(15,23,42,.06); }
       .wl-card-head{ padding:14px 18px; border-bottom:1px solid var(--wl-border); font-weight:900; }
       .wl-card-body{ padding:16px 18px; }
 
@@ -259,10 +257,8 @@
       .wl-span-2{ grid-column: 1 / -1; }
 
       .wl-field{ display:grid; gap:8px; }
-      @media(min-width:640px){
-        .wl-field{ grid-template-columns: 200px 1fr; align-items:center; }
-        .wl-lab{ text-align:right; padding-right:14px; }
-      }
+      @media(min-width:640px){ .wl-field{ grid-template-columns: 200px 1fr; align-items:center; }
+                                .wl-lab{ text-align:right; padding-right:14px; } }
       .wl-lab{ color:var(--wl-sub); font-weight:800; }
       .wl-ctl input.form-control, .wl-ctl select.form-control, .wl-ctl textarea.form-control{
         border:1px solid var(--wl-border); border-radius:12px; padding:12px 14px; min-height:42px;
@@ -272,43 +268,50 @@
       .wl-chips{ display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
       .wl-chipbtn{ border:1px solid var(--wl-border); border-radius:999px; padding:7px 12px; background:#fff; font-weight:800; font-size:12px; cursor:pointer; }
 
-      .wl-paytoggle{ display:flex; gap:10px; flex-wrap:wrap; }
-      .wl-paytoggle .opt{ border:1px solid var(--wl-border); border-radius:12px; padding:9px 12px; background:#fff; font-weight:800; cursor:pointer; }
-      .wl-paytoggle .opt[data-active="true"]{ border-color:var(--wl-brand); box-shadow:0 0 0 3px rgba(107,0,22,.08); }
-
       .wl-summary{ display:flex; flex-direction:column; gap:12px; }
       .wl-pillrow{ display:flex; gap:8px; flex-wrap:wrap; }
       .wl-pill{ border:1px solid var(--wl-border); background:#fff; border-radius:999px; padding:6px 10px; font-weight:800; font-size:12px; }
       .wl-summarylist{ display:grid; gap:8px; }
       .wl-row{ display:grid; grid-template-columns: 120px 1fr; gap:8px; }
-      .wl-key{ color:#334155; font-weight:800; }
-      .wl-val{ color:#0f172a; }
-      .wl-val small{ color:#475569; }
+      .wl-key{ color:#334155; font-weight:800; } .wl-val{ color:#0f172a; } .wl-val small{ color:#475569; }
       .wl-cta{ appearance:none; border:none; border-radius:12px; padding:12px 16px; background:var(--wl-brand); color:#fff; font-weight:900; cursor:pointer; width:100%; }
       .wl-cta:focus-visible{ outline:0; box-shadow:0 0 0 3px var(--wl-focus); }
       .wl-link{ background:none; border:none; padding:0; color:#0ea5e9; font-weight:800; cursor:pointer; }
 
-      /* tx panel cleanup once embedded */
-      .wl-tx-embedded .panelHeaderMidProductInfo1, .wl-tx-embedded .ViewHeader{ display:none !important; }
+      /* When we must force Billing Address visible */
+      #ctl00_PageBody_BillingAddressContainer.wl-force-show{ display:block !important; visibility:visible !important; }
+      /* If the container id isn't present, fall back to the group wrapper */
+      .epi-form-group-acctPayment.wl-force-show{ display:block !important; visibility:visible !important; }
 
+      /* Trim verbose blurbs a bit */
       .wl-compact .descriptionMessage{ display:none !important; }
-      #ctl00_PageBody_RemittanceAdviceTextBox::placeholder{ color:#98a5b1; }
+
+      /* Recent transactions: once embedded, we keep all internal content (no removals) */
     `;
     const el = document.createElement('style'); el.id='wl-ap-polish-css'; el.textContent = css; document.head.appendChild(el);
   })();
 
-  /* ================= helpers ================= */
-  const $  = (sel,root=document)=> root.querySelector(sel);
-  const $$ = (sel,root=document)=> Array.from(root.querySelectorAll(sel));
+  /* =============== helpers =============== */
+  const $  = (sel, root=document)=> root.querySelector(sel);
+  const $$ = (sel, root=document)=> Array.from(root.querySelectorAll(sel));
   const byId = (id)=> document.getElementById(id);
   function parseMoney(s){ const v=parseFloat(String(s||'').replace(/[^0-9.\-]/g,'')); return Number.isFinite(v)?v:0; }
-  function formatUSD(n){ const num = Number(n||0); return num.toLocaleString(undefined,{style:'currency',currency:'USD'}); }
-  function normalizeInvoices(str){
-    return String(str||'').split(/[,\n\r\t ]+/).map(x=>x.trim()).filter(Boolean).map(x=>`INV${x.replace(/^INV\s*/i,'')}`).join(',');
+  function formatUSD(n){ return Number(n||0).toLocaleString(undefined,{style:'currency',currency:'USD'}); }
+  function normalizeInvoices(str){ return String(str||'').split(/[,\n\r\t ]+/).map(x=>x.trim()).filter(Boolean).map(x=>`INV${x.replace(/^INV\s*/i,'')}`).join(','); }
+
+  function waitFor(sel, {tries=30, interval=120}={}){
+    return new Promise(resolve=>{
+      let n=0; (function tick(){
+        const el = document.querySelector(sel);
+        if (el) return resolve(el);
+        if (++n>=tries) return resolve(null);
+        setTimeout(tick, interval);
+      })();
+    });
   }
 
-  /* ================= build layout ================= */
-  function upgradeLayout(){
+  /* =============== build layout =============== */
+  async function upgradeLayout(){
     const page = $('.bodyFlexContainer'); if (!page) return;
 
     // Shell
@@ -360,12 +363,13 @@
       shell.appendChild(txCard);
     }
 
-    // Grab legacy groups
+    // Grab legacy groups (re-find every time)
     const grp = {
       owing: byId('ctl00_PageBody_AmountOwingLiteral')?.closest('.epi-form-group-acctPayment') || null,
       amount: byId('ctl00_PageBody_PaymentAmountTextBox')?.closest('.epi-form-group-acctPayment') || null,
       addrDDL: byId('ctl00_PageBody_AddressDropdownList')?.closest('.epi-form-group-acctPayment') || null,
-      billAddr: byId('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment') || byId('ctl00_PageBody_BillingAddressContainer') || null,
+      billAddr: byId('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment')
+                || byId('ctl00_PageBody_BillingAddressContainer') || null,
       zip: byId('ctl00_PageBody_PostalCodeTextBox')?.closest('.epi-form-group-acctPayment') || null,
       email: byId('ctl00_PageBody_EmailAddressTextBox')?.closest('.epi-form-group-acctPayment') || null,
       notes: byId('ctl00_PageBody_NotesTextBox')?.closest('.epi-form-group-acctPayment') || null,
@@ -373,7 +377,7 @@
       payWrap: byId('ctl00_PageBody_MakePaymentPanel')?.previousElementSibling || null
     };
 
-    // Tidy groups (label + control)
+    // Tidy groups (label+control)
     Object.values(grp).filter(Boolean).forEach(group=>{
       if (!group.__wlTidy){
         const blocks = $$(':scope > div', group);
@@ -387,36 +391,16 @@
         $$('p.descriptionMessage', group).forEach(p=> p.classList.add('wl-help'));
         group.__wlTidy = true; group.classList.add('wl-item');
       }
-      // If some server logic hid it, unhide (esp. billing container)
+      // If server hid it with inline style, force show
+      group.classList.add('wl-force-show');
       group.style.removeProperty('display');
     });
 
-    // Place fields (left card grid) — redo every time so newly-rendered groups get placed
-    const order = [ grp.owing, grp.amount, grp.addrDDL, grp.billAddr, grp.zip, grp.email, grp.notes, grp.remit, grp.payWrap ].filter(Boolean);
-    order.forEach(el=>{ if (!grid.contains(el)) grid.appendChild(el); });
+    // Place fields in left grid (idempotent)
+    [grp.owing, grp.amount, grp.addrDDL, grp.billAddr, grp.zip, grp.email, grp.notes, grp.remit, grp.payWrap]
+      .filter(Boolean).forEach(el=>{ if (!grid.contains(el)) grid.appendChild(el); });
 
-    // Pay method toggle (still functional, even if you hide the actual radios elsewhere)
-    if (grp.payWrap && !grp.payWrap.__wlToggle){
-      const credit = byId('ctl00_PageBody_RadioButton_PayByCredit');
-      const check  = byId('ctl00_PageBody_RadioButton_PayByCheck');
-      const ctlDiv = $$(':scope > div', grp.payWrap)[1];
-      if (ctlDiv){
-        const toggle = document.createElement('div');
-        toggle.className = 'wl-paytoggle';
-        const opt1 = document.createElement('button'); opt1.type='button'; opt1.className='opt'; opt1.textContent='Pay by credit';
-        const opt2 = document.createElement('button'); opt2.type='button'; opt2.className='opt'; opt2.textContent='Pay by check';
-        ctlDiv.innerHTML=''; ctlDiv.appendChild(toggle); toggle.appendChild(opt1); toggle.appendChild(opt2);
-        const refresh=()=>{ opt1.dataset.active=credit?.checked?'true':'false'; opt2.dataset.active=check?.checked?'true':'false'; };
-        opt1.addEventListener('click',()=>{ credit?.click(); refresh(); });
-        opt2.addEventListener('click',()=>{ check?.click();  refresh(); });
-        [credit,check].forEach(r=> r && r.addEventListener('change', refresh));
-        refresh();
-      }
-      grp.payWrap.__wlToggle = true;
-      grp.payWrap.classList.add('wl-span-2');
-    }
-
-    // Amount quick actions
+    // Amount quick chips
     const amountInput = byId('ctl00_PageBody_PaymentAmountTextBox');
     const owingVal = (function(){ const el = byId('ctl00_PageBody_AmountOwingLiteral'); return el ? parseMoney(el.value || el.textContent) : 0; })();
     if (grp.amount && !grp.amount.querySelector('.wl-chips')){
@@ -451,31 +435,32 @@
       if (real) real.click();
     });
 
-    // ✅ Embed the entire transactions panel into the tx card (no child juggling)
-    const txPanel = byId('ctl00_PageBody_accountsTransactionsPanel');
-    const txBody  = byId('wlTxBody');
-    if (txPanel && txBody && !txPanel.__wlEmbedded){
-      txBody.innerHTML = '';               // clear card body
-      txBody.appendChild(txPanel);         // move native panel inside
-      txPanel.classList.add('wl-tx-embedded');
-      // hide duplicate internal headers/pagers (we already have our card head)
-      $$('.panelHeaderMidProductInfo1, .ViewHeader', txPanel).forEach(h=> h.remove?.());
-      txPanel.__wlEmbedded = true;
+    // ✅ Robust: wait for tx panel, then embed whole panel in the tx card
+    const txBody = byId('wlTxBody');
+    if (txBody){
+      const txPanel = byId('ctl00_PageBody_accountsTransactionsPanel') || await waitFor('#ctl00_PageBody_accountsTransactionsPanel', {tries:25, interval:120});
+      if (txPanel && txPanel.parentNode !== txBody){
+        txBody.innerHTML = '';            // clear body
+        txBody.appendChild(txPanel);      // move entire native panel inside
+        // do NOT remove headers; let native content render intact
+      }
     }
 
-    // Make sure Billing Address is visible if server toggled it (after PayByCheck)
-    const billContainer = byId('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment') || byId('ctl00_PageBody_BillingAddressContainer');
+    // Ensure Billing Address is visible (server sometimes hides on amount change)
+    const billContainer = byId('ctl00_PageBody_BillingAddressContainer') ||
+                          byId('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment');
     if (billContainer){
+      billContainer.classList.add('wl-force-show');
       billContainer.style.removeProperty('display');
-      if (!grid.contains(billContainer)) grid.appendChild(billContainer); // ensure it’s in the grid
+      if (!grid.contains(billContainer)) grid.appendChild(billContainer);
     }
 
-    // Summary bindings + render
+    // Summary
     wireSummaryBindings();
     renderSummary();
   }
 
-  /* ================= summary (right card) ================= */
+  /* =============== summary (right card) =============== */
   function getSummaryData(){
     const amtEl = byId('ctl00_PageBody_PaymentAmountTextBox');
     const addrDDL = byId('ctl00_PageBody_AddressDropdownList');
@@ -544,26 +529,28 @@
     });
   }
 
-  /* ================= WebForms AJAX re-apply ================= */
+  /* =============== MS AJAX re-apply =============== */
   function wireAjax(){
     try{
       if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
         const prm = Sys.WebForms.PageRequestManager.getInstance();
         if (!prm.__wlPolishBound){
-          prm.add_endRequest(()=>{ upgradeLayout(); });
+          prm.add_endRequest(()=>{ upgradeLayout(); });  // re-run after every partial update
           prm.__wlPolishBound = true;
         }
       }
     }catch{}
   }
 
-  /* ================= Boot ================= */
+  /* =============== Boot =============== */
   if (document.readyState === 'loading'){
     document.addEventListener('DOMContentLoaded', ()=>{ upgradeLayout(); wireAjax(); }, {once:true});
   } else {
     upgradeLayout(); wireAjax();
   }
 })();
+
+
 
 
 
