@@ -228,13 +228,88 @@
 
 
 
+/* ===========================================
+   Woodson — AccountPayment instrumentation
+   Levels: 0=error,1=warn,2=info,3=debug
+   Console prefix: [AP]
+   =========================================== */
 (function(){
   'use strict';
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
+  /* ---------- logger (shared) ---------- */
+  const LVL = { error:0, warn:1, info:2, debug:3 };
+  const stored = sessionStorage.getItem('__WL_AP_LOG_LVL');
+  let LOG = (stored !== null ? Number(stored) : LVL.info);
+  const S = (v)=> (v===undefined||v===null) ? '(nil)' : v;
+
+  function gcs(el){ try{ return el ? getComputedStyle(el) : null; }catch{ return null; } }
+  function nodeInfo(el){
+    const cs = gcs(el) || {};
+    return {
+      present: !!el,
+      id: el?.id || '',
+      tag: el?.tagName || '',
+      display: el ? (el.style?.display || '(inline)') + ` / comp:${cs.display||''}` : '(n/a)',
+      visibility: el ? (el.style?.visibility || '(auto)') + ` / comp:${cs.visibility||''}` : '(n/a)',
+      inDOM: !!(el && el.isConnected),
+      offsetParent: !!(el && el.offsetParent),
+      offsetH: el?.offsetHeight || 0,
+      classes: el?.className || ''
+    };
+  }
+
+  const log = {
+    error(...a){ if (LOG>=LVL.error) console.error('[AP]', ...a); },
+    warn (...a){ if (LOG>=LVL.warn ) console.warn ('[AP]', ...a); },
+    info (...a){ if (LOG>=LVL.info ) console.log  ('[AP]', ...a); },
+    debug(...a){ if (LOG>=LVL.debug) console.log  ('[AP]', ...a); },
+  };
+
+  function setLevel(n){ LOG = Number(n)||0; sessionStorage.setItem('__WL_AP_LOG_LVL', String(LOG)); log.info('Log level set to', LOG); }
+  function snap(){
+    const ids = {
+      rbCheck: 'ctl00_PageBody_RadioButton_PayByCheck',
+      rbCredit:'ctl00_PageBody_RadioButton_PayByCredit',
+      amount:  'ctl00_PageBody_PaymentAmountTextBox',
+      billBox: 'ctl00_PageBody_BillingAddressTextBox',
+      billWrap:'ctl00_PageBody_BillingAddressContainer',
+      submit:  'ctl00_PageBody_MakePaymentPanel'
+    };
+    const r = {};
+    for (const k in ids){ r[k] = nodeInfo(document.getElementById(ids[k])); }
+    const grid = document.getElementById('wlFormGrid');
+    r.wlFormGrid = nodeInfo(grid);
+    r.billWrapParent = (function(){
+      const bw = document.getElementById(ids.billWrap) || document.getElementById(ids.billBox)?.closest('.epi-form-group-acctPayment');
+      return { parentId: bw?.parentElement?.id || '(none)', parentClasses: bw?.parentElement?.className || '' };
+    })();
+    console.log('[AP] SNAPSHOT', r);
+    return r;
+  }
+  window.WLPayDiag = { setLevel, snap, getLevel:()=>LOG, LVL };
+
+  log.info('AP logger ready. Level:', LOG);
+})();
+
+/* =========================================================
+   POLISH / LAYOUT MODULE  (with detailed instrumentation)
+   ========================================================= */
+(function(){
+  'use strict';
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+  const LOG = window.WLPayDiag?.getLevel?.() ?? 2;
+  const LVL = window.WLPayDiag?.LVL;
+  const log = {
+    error(...a){ if (LOG>=LVL.error) console.error('[AP:LAY]', ...a); },
+    warn (...a){ if (LOG>=LVL.warn ) console.warn ('[AP:LAY]', ...a); },
+    info (...a){ if (LOG>=LVL.info ) console.log  ('[AP:LAY]', ...a); },
+    debug(...a){ if (LOG>=LVL.debug) console.log  ('[AP:LAY]', ...a); },
+  };
+
   /* =============== CSS =============== */
   (function injectCSS(){
-    if (document.getElementById('wl-ap-polish-css')) return;
+    if (document.getElementById('wl-ap-polish-css')) { log.debug('injectCSS: already present'); return; }
     const css = `
       :root{ --wl-bg:#f6f7fb; --wl-card:#fff; --wl-border:#e5e7eb;
              --wl-text:#0f172a; --wl-sub:#475569; --wl-brand:#6b0016; --wl-focus:#93c5fd; }
@@ -279,15 +354,14 @@
       .wl-cta:focus-visible{ outline:0; box-shadow:0 0 0 3px var(--wl-focus); }
       .wl-link{ background:none; border:none; padding:0; color:#0ea5e9; font-weight:800; cursor:pointer; }
 
-      /* Force Billing Address visible when server tries to hide */
       #ctl00_PageBody_BillingAddressContainer.wl-force-show{ display:block !important; visibility:visible !important; }
       .epi-form-group-acctPayment.wl-force-show{ display:block !important; visibility:visible !important; }
 
-      /* Ensure native Pay-By-Check radio + label are visible */
       #ctl00_PageBody_RadioButton_PayByCheck{ display:inline-block !important; }
       label[for="ctl00_PageBody_RadioButton_PayByCheck"]{ display:inline-block !important; }
     `;
     const el = document.createElement('style'); el.id='wl-ap-polish-css'; el.textContent = css; document.head.appendChild(el);
+    log.info('injectCSS: styles injected');
   })();
 
   /* =============== helpers =============== */
@@ -301,14 +375,13 @@
     return new Promise(resolve=>{
       let n=0; (function tick(){
         const el = document.querySelector(sel);
-        if (el) return resolve(el);
-        if (++n>=tries) return resolve(null);
-        setTimeout(tick, interval);
+        if (el) { resolve(el); }
+        else if (++n>=tries) { resolve(null); }
+        else { setTimeout(tick, interval); }
       })();
     });
   }
 
-  /* Keep native Pay-By-Check visible + selected (no custom toggle) */
   function ensurePayByCheckVisibleAndSelected(){
     const wrap = byId('ctl00_PageBody_MakePaymentPanel')?.previousElementSibling;
     if (wrap){
@@ -319,7 +392,10 @@
     const lblCheck = document.querySelector('label[for="ctl00_PageBody_RadioButton_PayByCheck"]');
     if (rbCheck){
       rbCheck.style.removeProperty('display');
-      rbCheck.checked = true; // select silently
+      rbCheck.checked = true;
+      log.debug('ensurePayByCheckVisibleAndSelected: check=true', { id: rbCheck.id });
+    } else {
+      log.warn('ensurePayByCheckVisibleAndSelected: rbCheck not found');
     }
     if (lblCheck){
       lblCheck.style.removeProperty('display');
@@ -332,17 +408,23 @@
     const billContainer = byId('ctl00_PageBody_BillingAddressContainer') ||
                           byId('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment');
     if (billContainer){
+      const before = { parent: billContainer.parentElement?.id || '(none)' };
       billContainer.classList.add('wl-force-show');
       billContainer.style.removeProperty('display');
       if (grid && !grid.contains(billContainer)) grid.appendChild(billContainer);
+      const after  = { parent: billContainer.parentElement?.id || '(none)' };
+      log.info('ensureBillingVisible: ensured', { before, after, id: billContainer.id });
       return true;
     }
+    log.warn('ensureBillingVisible: NOT FOUND');
     return false;
   }
 
   /* =============== build layout =============== */
   async function upgradeLayout(){
-    const page = $('.bodyFlexContainer'); if (!page) return;
+    log.info('upgradeLayout: start');
+
+    const page = $('.bodyFlexContainer'); if (!page) { log.warn('upgradeLayout: page container missing'); return; }
 
     // Shell
     let shell = $('.wl-shell');
@@ -351,6 +433,9 @@
       shell = document.createElement('div'); shell.className='wl-shell';
       firstLeft?.parentNode?.insertBefore(shell, firstLeft);
       if (firstLeft) firstLeft.style.display='none';
+      log.debug('shell: created');
+    } else {
+      log.debug('shell: exists');
     }
 
     // Left card
@@ -361,7 +446,9 @@
       leftCard.className = 'wl-card';
       leftCard.innerHTML = `<div class="wl-card-head">Payment details</div><div class="wl-card-body"><div id="wlFormGrid" class="wl-form-grid"></div></div>`;
       shell.appendChild(leftCard);
+      log.debug('leftCard: created');
     }
+
     const grid = byId('wlFormGrid');
 
     // Right card
@@ -381,6 +468,7 @@
           </div>
         </div>`;
       shell.appendChild(rightCard);
+      log.debug('rightCard: created');
     }
 
     // Full-width transactions card
@@ -391,6 +479,7 @@
       txCard.className = 'wl-card';
       txCard.innerHTML = `<div class="wl-card-head">Recent transactions</div><div class="wl-card-body" id="wlTxBody"></div>`;
       shell.appendChild(txCard);
+      log.debug('txCard: created');
     }
 
     // Grab legacy groups
@@ -406,9 +495,10 @@
       remit: byId('ctl00_PageBody_RemittanceAdviceTextBox')?.closest('.epi-form-group-acctPayment') || null,
       payWrap: byId('ctl00_PageBody_MakePaymentPanel')?.previousElementSibling || null
     };
+    log.debug('groups found', Object.fromEntries(Object.entries(grp).map(([k,v])=>[k, !!v])));
 
     // Tidy groups (label+control), keep native radios intact
-    Object.values(grp).filter(Boolean).forEach(group=>{
+    Object.entries(grp).filter(([,v])=>!!v).forEach(([k,group])=>{
       if (!group.__wlTidy){
         const blocks = $$(':scope > div', group);
         if (blocks.length >= 2){
@@ -420,16 +510,17 @@
         }
         $$('p.descriptionMessage', group).forEach(p=> p.classList.add('wl-help'));
         group.__wlTidy = true; group.classList.add('wl-item');
+        log.debug('tidy group', k);
       }
       group.style.removeProperty('display');
     });
 
     // Place fields
     [grp.owing, grp.amount, grp.addrDDL, grp.billAddr, grp.zip, grp.email, grp.notes, grp.remit, grp.payWrap]
-      .filter(Boolean).forEach(el=>{ if (!grid.contains(el)) grid.appendChild(el); });
+      .filter(Boolean).forEach(el=>{ if (!grid.contains(el)) { grid.appendChild(el); log.debug('moved to grid', el.id||'(no-id)'); }});
     if (grp.payWrap) grp.payWrap.classList.add('wl-span-2');
 
-    // Make sure native Pay-By-Check radio + label are visible and selected
+    // Radios visible + selected
     ensurePayByCheckVisibleAndSelected();
 
     // Amount quick chips
@@ -441,6 +532,7 @@
       grp.amount.appendChild(chips);
       chips.addEventListener('click',(e)=>{
         const b = e.target.closest('button[data-act]'); if (!b) return;
+        log.info('amount chip click', b.dataset.act);
         if (b.dataset.act==='fill-owing' && Number.isFinite(owingVal) && amountInput){
           amountInput.value = owingVal.toFixed(2);
           setTimeout(()=> amountInput.dispatchEvent(new Event('change',{bubbles:true})), 0);
@@ -454,16 +546,17 @@
 
     // Remittance placeholder
     const rem = byId('ctl00_PageBody_RemittanceAdviceTextBox');
-    if (rem && !rem.getAttribute('placeholder')) rem.setAttribute('placeholder','Comma separated · e.g. INV12345,INV67890');
+    if (rem && !rem.getAttribute('placeholder')) { rem.setAttribute('placeholder','Comma separated · e.g. INV12345,INV67890'); }
 
     // Move submit panel into right card (idempotent)
     const submitMount = byId('wlSubmitMount');
     if (submitMount && !submitMount.__wlMoved){
       const realSubmitPanel = $('#ctl00_PageBody_MakePaymentPanel .submit-button-panel');
-      if (realSubmitPanel){ submitMount.appendChild(realSubmitPanel); submitMount.__wlMoved = true; }
+      if (realSubmitPanel){ submitMount.appendChild(realSubmitPanel); submitMount.__wlMoved = true; log.debug('submit panel moved'); }
     }
     byId('wlProxySubmit')?.addEventListener('click', ()=>{
       const real = $('#wlSubmitMount .submit-button-panel button, #wlSubmitMount .submit-button-panel input[type="submit"], #wlSubmitMount .submit-button-panel input[type="button"]');
+      log.info('proxy submit click; found real?', !!real);
       if (real) real.click();
     });
 
@@ -474,6 +567,9 @@
       if (txPanel && txPanel.parentNode !== txBody){
         txBody.innerHTML = '';
         txBody.appendChild(txPanel);
+        log.info('transactions panel embedded');
+      } else {
+        log.warn('transactions panel not found or already placed');
       }
     }
 
@@ -483,10 +579,13 @@
     // Summary
     wireSummaryBindings();
     renderSummary();
+
+    log.info('upgradeLayout: end');
   }
 
   /* =============== summary (right card) =============== */
   function getSummaryData(){
+    const byId = (id)=> document.getElementById(id);
     const amtEl = byId('ctl00_PageBody_PaymentAmountTextBox');
     const addrDDL = byId('ctl00_PageBody_AddressDropdownList');
     const billEl = byId('ctl00_PageBody_BillingAddressTextBox');
@@ -507,9 +606,10 @@
   }
 
   function renderSummary(){
+    const byId = (id)=> document.getElementById(id);
     const pills = byId('wlSummaryPills');
     const list  = byId('wlSummaryList');
-    if (!pills || !list) return;
+    if (!pills || !list) { log.warn('renderSummary: mounts missing'); return; }
     const d = getSummaryData();
     pills.innerHTML = `
       <span class="wl-pill">${d.invCount} invoice${d.invCount===1?'':'s'}</span>
@@ -533,6 +633,7 @@
         else { el.textContent = d.invs.join(', '); el.dataset.expanded='1'; btn.textContent='Collapse'; }
       });
     }
+    log.debug('renderSummary: data', d);
   }
 
   function wireSummaryBindings(){
@@ -546,81 +647,80 @@
       'ctl00_PageBody_EmailAddressTextBox',
       'ctl00_PageBody_RemittanceAdviceTextBox'
     ].forEach(id=>{
-      const el = byId(id);
+      const el = document.getElementById(id);
       if (!el || el.__wlSumBound) return;
       el.addEventListener('input', renderSummary);
       el.addEventListener('change', renderSummary);
       el.__wlSumBound = true;
+      log.debug('wireSummaryBindings: bound', id);
     });
   }
 
   /* =============== MS AJAX re-apply =============== */
-  function wireAjax(){
+  (function wireAjax(){
     try{
       if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
         const prm = Sys.WebForms.PageRequestManager.getInstance();
         if (!prm.__wlPolishBound){
-          prm.add_initializeRequest(()=>{ ensurePayByCheckVisibleAndSelected(); }); // BEFORE request: keep PayByCheck selected
-          prm.add_endRequest(()=>{ upgradeLayout(); ensurePayByCheckVisibleAndSelected(); ensureBillingVisible(); }); // AFTER update
+          let seq = 0;
+          prm.add_initializeRequest(function(sender, args){
+            seq++; const src = args?.get_postBackElement?.();
+            log.info(`MSAjax init #${seq}`, { srcId: src?.id || '(unknown)', srcName: src?.name || '' });
+            // radios must be selected BEFORE request (guard module also does this)
+          });
+          prm.add_endRequest(function(sender, args){
+            const err = args?.get_error?.() || null;
+            if (err){ log.error('MSAjax end error:', err); if (args?.set_errorHandled) args.set_errorHandled(true); }
+            log.info('MSAjax end   #' + seq + ' — re-applying layout');
+            upgradeLayout();
+            ensurePayByCheckVisibleAndSelected();
+            ensureBillingVisible();
+            window.WLPayDiag?.snap?.();
+          });
           prm.__wlPolishBound = true;
+          log.info('wireAjax: hooks attached');
+        } else {
+          log.debug('wireAjax: already bound');
         }
+      } else {
+        log.warn('wireAjax: PageRequestManager not available');
       }
-    }catch{}
-  }
+    }catch(e){ log.error('wireAjax exception', e); }
+  })();
 
   /* =============== Boot =============== */
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', ()=>{ upgradeLayout(); ensurePayByCheckVisibleAndSelected(); wireAjax(); }, {once:true});
-  } else {
-    upgradeLayout(); ensurePayByCheckVisibleAndSelected(); wireAjax();
-  }
+  (function boot(){
+    if (document.readyState === 'loading'){
+      document.addEventListener('DOMContentLoaded', ()=>{ 
+        log.info('BOOT (DOMContentLoaded)');
+        upgradeLayout(); 
+        ensurePayByCheckVisibleAndSelected(); 
+        // wireAjax is self-running above
+        window.WLPayDiag?.snap?.();
+      }, {once:true});
+    } else {
+      log.info('BOOT (immediate)');
+      upgradeLayout(); 
+      ensurePayByCheckVisibleAndSelected();
+      window.WLPayDiag?.snap?.();
+    }
+  })();
 })();
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/* ======================================================
+   GUARDS MODULE (force PayBy=Check + keep Billing alive)
+   ====================================================== */
 (function(){
   'use strict';
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+  const LOG = window.WLPayDiag?.getLevel?.() ?? 2;
+  const LVL = window.WLPayDiag?.LVL;
+  const log = {
+    error(...a){ if (LOG>=LVL.error) console.error('[AP:GRD]', ...a); },
+    warn (...a){ if (LOG>=LVL.warn ) console.warn ('[AP:GRD]', ...a); },
+    info (...a){ if (LOG>=LVL.info ) console.log  ('[AP:GRD]', ...a); },
+    debug(...a){ if (LOG>=LVL.debug) console.log  ('[AP:GRD]', ...a); },
+  };
 
   const IDS = {
     rbCheck: 'ctl00_PageBody_RadioButton_PayByCheck',
@@ -630,22 +730,23 @@
     billWrap:'ctl00_PageBody_BillingAddressContainer'
   };
 
-  /* --- Make sure server receives PayBy=Check even if radios are hidden/re-rendered --- */
-  function setPayByCheckSilent(){
+  function setPayByCheckSilent(evtLabel){
     const chk = document.getElementById(IDS.rbCheck);
     const cr  = document.getElementById(IDS.rbCredit);
     if (chk){
+      const changed = !chk.checked;
       chk.checked = true;
       if (cr) cr.checked = false;
-      ensureShadowPayBy();   // hidden field fallback for the POST body
+      ensureShadowPayBy();
+      log.info('setPayByCheckSilent:', evtLabel || '(manual)', { changed });
       return true;
     }
+    log.warn('setPayByCheckSilent: rbCheck not found');
     return false;
   }
 
-  // Hidden input that forces PayBy=Check into the form post (no visual change, no extra postback)
   function ensureShadowPayBy(){
-    const form = document.forms[0]; if (!form) return;
+    const form = document.forms[0]; if (!form) { log.warn('ensureShadowPayBy: no form'); return; }
     let h = document.getElementById('wlPayByShadow');
     if (!h){
       h = document.createElement('input');
@@ -653,67 +754,87 @@
       h.id   = 'wlPayByShadow';
       h.name = 'ctl00$PageBody$PayBy';
       form.appendChild(h);
+      log.debug('ensureShadowPayBy: created');
     }
     h.value = 'RadioButton_PayByCheck';
   }
   function removeShadowPayBy(){
-    document.getElementById('wlPayByShadow')?.remove();
+    const h = document.getElementById('wlPayByShadow');
+    if (h){ h.remove(); log.debug('removeShadowPayBy: removed'); }
   }
 
-  /* --- Keep Billing Address visible and in the layout --- */
   function showBilling(){
     const wrap = document.getElementById(IDS.billWrap) ||
                  document.getElementById(IDS.billBox)?.closest('.epi-form-group-acctPayment');
     if (wrap){
+      const before = { parent: wrap.parentElement?.id || '(none)' };
       wrap.style.removeProperty('display');
-      wrap.classList.add('wl-force-show'); // your CSS already sets display:block !important for this class
-      // If you’re using the left-grid container, put it back there:
+      wrap.classList.add('wl-force-show');
       const grid = document.getElementById('wlFormGrid');
       if (grid && !grid.contains(wrap)) grid.appendChild(wrap);
+      const after  = { parent: wrap.parentElement?.id || '(none)' };
+      log.info('showBilling: ensured', { before, after, id: wrap.id });
       return true;
     }
+    log.warn('showBilling: NOT FOUND');
     return false;
   }
 
-  /* --- Wire guards in ALL the right places --- */
   function wireGuards(){
     const amt = document.getElementById(IDS.amount);
     if (amt && !amt.__wlPayGuard){
-      // Capture phase so this runs BEFORE inline onchange triggers WebForm_DoPostBack...
-      amt.addEventListener('input',  setPayByCheckSilent, true);
-      amt.addEventListener('change', setPayByCheckSilent, true);
+      amt.addEventListener('input',  ()=> setPayByCheckSilent('amount:input(capture)'), true);
+      amt.addEventListener('change', ()=> setPayByCheckSilent('amount:change(capture)'), true);
       amt.__wlPayGuard = true;
+      log.info('wireGuards: amount capture listeners attached');
+    } else {
+      log.debug('wireGuards: amount already bound or missing');
     }
 
-    // Fallback: regular form submit
     const form = document.forms[0];
     if (form && !form.__wlPayGuard){
-      form.addEventListener('submit', ()=>{ setPayByCheckSilent(); showBilling(); });
+      form.addEventListener('submit', ()=>{ log.info('form submit: guard'); setPayByCheckSilent('form:submit'); showBilling(); });
       form.__wlPayGuard = true;
+      log.info('wireGuards: form submit guard attached');
     }
 
-    // MS AJAX async postbacks
     try{
       if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
         const prm = Sys.WebForms.PageRequestManager.getInstance();
         if (!prm.__wlPayGuard){
-          prm.add_initializeRequest(()=>{ setPayByCheckSilent(); });
-          prm.add_endRequest(()=>{ setPayByCheckSilent(); showBilling(); removeShadowPayBy(); });
+          let seq = 0;
+          prm.add_initializeRequest((sender, args)=>{
+            seq++; const src = args?.get_postBackElement?.();
+            log.info(`GRD init #${seq}`, { srcId: src?.id || '(unknown)', srcName: src?.name || '' });
+            setPayByCheckSilent('MSAjax:init');
+          });
+          prm.add_endRequest((sender, args)=>{
+            const err = args?.get_error?.() || null;
+            if (err){ log.error('GRD end error:', err); if (args?.set_errorHandled) args.set_errorHandled(true); }
+            log.info(`GRD end  #${seq} — re-ensure check + billing`);
+            setPayByCheckSilent('MSAjax:end');
+            showBilling();
+            removeShadowPayBy();
+            window.WLPayDiag?.snap?.();
+          });
           prm.__wlPayGuard = true;
+          log.info('wireGuards: MSAjax guards attached');
+        } else {
+          log.debug('wireGuards: MSAjax already bound');
         }
+      } else {
+        log.warn('wireGuards: PageRequestManager not available');
       }
-    }catch{}
+    }catch(e){ log.error('wireGuards exception', e); }
   }
 
-  /* --- Boot --- */
   function boot(){
-    setPayByCheckSilent();
+    log.info('GRD BOOT');
+    setPayByCheckSilent('boot');
     showBilling();
     wireGuards();
+    window.WLPayDiag?.snap?.();
   }
   if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', boot, {once:true}); }
   else { boot(); }
 })();
-
-
-
