@@ -596,64 +596,81 @@
   'use strict';
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
-  /* Hide the pay-method radios/labels immediately (no flicker) */
-  (function injectHideCSS(){
-    if (document.getElementById('wl-hide-pay-css')) return;
-    const css = `
-      #ctl00_PageBody_RadioButton_PayByCredit,
-      #ctl00_PageBody_RadioButton_PayByCheck,
-      label[for="ctl00_PageBody_RadioButton_PayByCredit"],
-      label[for="ctl00_PageBody_RadioButton_PayByCheck"]{
-        display:none !important;
-      }
-    `;
-    const s = document.createElement('style'); s.id='wl-hide-pay-css'; s.textContent = css; document.head.appendChild(s);
-  })();
-
-  function hidePayGroup(){
-    // The radio group is the form group just BEFORE MakePaymentPanel
-    const grp = document.getElementById('ctl00_PageBody_MakePaymentPanel')?.previousElementSibling;
-    if (grp) grp.style.display = 'none';
-  }
-
-  function ensurePayByCheck(){
+  /** Silently ensure Pay-By-Check is selected, without triggering a new postback */
+  function markPayByCheck(silent = true){
     const rbCheck  = document.getElementById('ctl00_PageBody_RadioButton_PayByCheck');
     const rbCredit = document.getElementById('ctl00_PageBody_RadioButton_PayByCredit');
-    if (!rbCheck) return;
+    if (!rbCheck) return false;
 
-    hidePayGroup();
-
-    // If already selected, we're done
-    if (rbCheck.checked) return;
-
-    // Prevent loops: only force once per lifecycle
-    if (window.__wlForcedPayByCheck) return;
-    window.__wlForcedPayByCheck = true;
-
-    // Click the REAL radio so its onclick (__doPostBack) fires
-    setTimeout(()=> rbCheck.click(), 0);
+    if (!rbCheck.checked){
+      if (silent){
+        rbCheck.checked = true;
+        if (rbCredit) rbCredit.checked = false;
+      } else {
+        // Fallback path only (see rescueIfMissing) — triggers its own postback
+        rbCheck.click();
+      }
+      return true;
+    }
+    return false;
   }
 
-  // Run on initial load
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', ensurePayByCheck, { once:true });
+  /** Put the Billing Address group into the left grid and force it visible */
+  function ensureBillingVisible(){
+    const grid = document.getElementById('wlFormGrid') || document;
+    const billContainer =
+      document.getElementById('ctl00_PageBody_BillingAddressContainer') ||
+      document.getElementById('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment');
+
+    if (billContainer){
+      billContainer.style.removeProperty('display');
+      billContainer.classList.add('wl-force-show'); // CSS should set display:block !important
+      if (grid && !grid.contains(billContainer)) grid.appendChild(billContainer);
+      return true;
+    }
+    return false;
+  }
+
+  /** If billing still didn't render this cycle, do a ONE-TIME radio click to fetch it from server */
+  function rescueIfMissing(){
+    if (ensureBillingVisible()) return;           // already there
+    if (window.__wlRescuedBilling) return;        // prevent loops
+    const rbCheck = document.getElementById('ctl00_PageBody_RadioButton_PayByCheck');
+    if (rbCheck){
+      window.__wlRescuedBilling = true;
+      setTimeout(()=> rbCheck.click(), 0);        // triggers server to re-render with billing block
+    }
+  }
+
+  // Early selection on first paint
+  markPayByCheck(true);
+
+  // On DOM ready, try to show billing once more
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', ensureBillingVisible, { once:true });
   } else {
-    ensurePayByCheck();
+    ensureBillingVisible();
   }
 
-  // Re-assert after any MS AJAX partial postback (address/zip/etc.)
+  // Hook MS AJAX so we set the radio BEFORE every async postback, then restore UI AFTER
   try{
     if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
       const prm = Sys.WebForms.PageRequestManager.getInstance();
-      if (!prm.__wlForceCheckBound){
-        prm.add_endRequest(()=>{
-          // Allow one more force after each refresh
-          window.__wlForcedPayByCheck = false;
-          ensurePayByCheck();
+      if (!prm.__wlBillingGuard){
+        prm.add_initializeRequest(() => {
+          // Critical: mark as checked BEFORE the request goes out, no extra postback
+          markPayByCheck(true);
         });
-        prm.__wlForceCheckBound = true;
+        prm.add_endRequest(() => {
+          // Try to place/show it; if missing, one-time rescue by clicking the radio (server-side toggle)
+          markPayByCheck(true);
+          ensureBillingVisible() || rescueIfMissing();
+        });
+        prm.__wlBillingGuard = true;
       }
     }
   }catch{}
 })();
+
+
 
