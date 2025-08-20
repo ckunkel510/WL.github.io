@@ -585,26 +585,35 @@
 
   /* =============== summary (right card) =============== */
   function getSummaryData(){
-    const byId = (id)=> document.getElementById(id);
-    const amtEl = byId('ctl00_PageBody_PaymentAmountTextBox');
-    const addrDDL = byId('ctl00_PageBody_AddressDropdownList');
-    const billEl = byId('ctl00_PageBody_BillingAddressTextBox');
-    const zipEl = byId('ctl00_PageBody_PostalCodeTextBox');
-    const emailEl = byId('ctl00_PageBody_EmailAddressTextBox');
-    const remEl = byId('ctl00_PageBody_RemittanceAdviceTextBox');
+  const byId = (id)=> document.getElementById(id);
+  const amtEl   = byId('ctl00_PageBody_PaymentAmountTextBox');
+  const addrDDL = byId('ctl00_PageBody_AddressDropdownList');
+  const billEl  = byId('ctl00_PageBody_BillingAddressTextBox');
+  const zipEl   = byId('ctl00_PageBody_PostalCodeTextBox');
+  const emailEl = byId('ctl00_PageBody_EmailAddressTextBox');
+  const remEl   = byId('ctl00_PageBody_RemittanceAdviceTextBox');
 
-    const totalStr = (amtEl?.value||'').trim();
-    const addrSelText = (addrDDL && addrDDL.value !== '-1') ? (addrDDL.options[addrDDL.selectedIndex]?.text || '') : '';
-    theBilling:
-    const billing = (billEl?.value||'').trim();
-    const zip = (zipEl?.value||'').trim();
-    const email = (emailEl?.value||'').trim();
+  const totalStr = (amtEl?.value || '').trim();
+  const addrSelText = (addrDDL && addrDDL.value !== '-1')
+    ? (addrDDL.options[addrDDL.selectedIndex]?.text || '')
+    : '';
+  const billing = (billEl?.value || '').trim();
+  const zip     = (zipEl?.value || '').trim();
+  const email   = (emailEl?.value || '').trim();
 
-    const invs = String((remEl?.value||'').trim())
-      .split(/[,\n\r\t ]+/).map(x=>x.trim()).filter(Boolean);
+  const invs = String((remEl?.value || '').trim())
+    .split(/[,\n\r\t ]+/)
+    .map(x => x.trim())
+    .filter(Boolean);
 
-    return { total: totalStr ? formatUSD(parseMoney(totalStr)) : '', addrSelText, billing, zip, email, invCount: invs.length, invs };
-  }
+  return {
+    total: totalStr ? formatUSD(parseMoney(totalStr)) : '',
+    addrSelText, billing, zip, email,
+    invCount: invs.length,
+    invs
+  };
+}
+
 
   function renderSummary(){
     const byId = (id)=> document.getElementById(id);
