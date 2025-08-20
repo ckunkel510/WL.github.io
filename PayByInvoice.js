@@ -227,7 +227,6 @@
 
 
 
-
 /* ===========================================
    Woodson — AccountPayment instrumentation
    Levels: 0=error,1=warn,2=info,3=debug
@@ -382,6 +381,7 @@
     });
   }
 
+  // Visible radios only; do NOT force a selection here (guards handle defaults)
   function ensurePayByCheckVisibleAndSelected(){
     const wrap = byId('ctl00_PageBody_MakePaymentPanel')?.previousElementSibling;
     if (wrap){
@@ -392,8 +392,8 @@
     const lblCheck = document.querySelector('label[for="ctl00_PageBody_RadioButton_PayByCheck"]');
     if (rbCheck){
       rbCheck.style.removeProperty('display');
-      rbCheck.checked = true;
-      log.debug('ensurePayByCheckVisibleAndSelected: check=true', { id: rbCheck.id });
+      // NOTE: do not set checked here
+      log.debug('ensurePayByCheckVisibleAndSelected: radios visible');
     } else {
       log.warn('ensurePayByCheckVisibleAndSelected: rbCheck not found');
     }
@@ -520,7 +520,7 @@
       .filter(Boolean).forEach(el=>{ if (!grid.contains(el)) { grid.appendChild(el); log.debug('moved to grid', el.id||'(no-id)'); }});
     if (grp.payWrap) grp.payWrap.classList.add('wl-span-2');
 
-    // Radios visible + selected
+    // Radios: ensure visible only (selection handled in guards)
     ensurePayByCheckVisibleAndSelected();
 
     // Amount quick chips
@@ -595,6 +595,7 @@
 
     const totalStr = (amtEl?.value||'').trim();
     const addrSelText = (addrDDL && addrDDL.value !== '-1') ? (addrDDL.options[addrDDL.selectedIndex]?.text || '') : '';
+    theBilling:
     const billing = (billEl?.value||'').trim();
     const zip = (zipEl?.value||'').trim();
     const email = (emailEl?.value||'').trim();
@@ -666,14 +667,13 @@
           prm.add_initializeRequest(function(sender, args){
             seq++; const src = args?.get_postBackElement?.();
             log.info(`MSAjax init #${seq}`, { srcId: src?.id || '(unknown)', srcName: src?.name || '' });
-            // radios must be selected BEFORE request (guard module also does this)
           });
           prm.add_endRequest(function(sender, args){
             const err = args?.get_error?.() || null;
             if (err){ log.error('MSAjax end error:', err); if (args?.set_errorHandled) args.set_errorHandled(true); }
             log.info('MSAjax end   #' + seq + ' — re-applying layout');
             upgradeLayout();
-            ensurePayByCheckVisibleAndSelected();
+            ensurePayByCheckVisibleAndSelected(); // visibility only
             ensureBillingVisible();
             window.WLPayDiag?.snap?.();
           });
@@ -691,24 +691,23 @@
   /* =============== Boot =============== */
   (function boot(){
     if (document.readyState === 'loading'){
-      document.addEventListener('DOMContentLoaded', ()=>{ 
+      document.addEventListener('DOMContentLoaded', ()=>{
         log.info('BOOT (DOMContentLoaded)');
-        upgradeLayout(); 
-        ensurePayByCheckVisibleAndSelected(); 
-        // wireAjax is self-running above
+        upgradeLayout();
+        ensurePayByCheckVisibleAndSelected(); // visibility only
         window.WLPayDiag?.snap?.();
       }, {once:true});
     } else {
       log.info('BOOT (immediate)');
-      upgradeLayout(); 
-      ensurePayByCheckVisibleAndSelected();
+      upgradeLayout();
+      ensurePayByCheckVisibleAndSelected(); // visibility only
       window.WLPayDiag?.snap?.();
     }
   })();
 })();
 
 /* ======================================================
-   GUARDS MODULE (force PayBy=Check + keep Billing alive)
+   GUARDS MODULE (respect user choice, keep Billing alive)
    ====================================================== */
 (function(){
   'use strict';
@@ -730,22 +729,39 @@
     billWrap:'ctl00_PageBody_BillingAddressContainer'
   };
 
-  function setPayByCheckSilent(evtLabel){
+  function readPayMode(){
+    const cr  = document.getElementById(IDS.rbCredit);
+    return (cr && cr.checked) ? 'credit' : 'check';
+  }
+
+  // Default to check only if neither selected; otherwise honor user choice
+  function setPayByCheckDefaultIfUnset(evtLabel){
     const chk = document.getElementById(IDS.rbCheck);
     const cr  = document.getElementById(IDS.rbCredit);
-    if (chk){
-      const changed = !chk.checked;
-      chk.checked = true;
-      if (cr) cr.checked = false;
-      ensureShadowPayBy();
-      log.info('setPayByCheckSilent:', evtLabel || '(manual)', { changed });
+    if (!chk && !cr){ log.warn('setPayByCheckDefaultIfUnset: radios missing'); return false; }
+
+    if (cr && cr.checked){
+      ensureShadowPayBy('credit');
+      log.info('setPayByCheckDefaultIfUnset:', evtLabel||'(boot)', { honored:'credit' });
       return true;
     }
-    log.warn('setPayByCheckSilent: rbCheck not found');
+    if (chk && chk.checked){
+      ensureShadowPayBy('check');
+      log.info('setPayByCheckDefaultIfUnset:', evtLabel||'(boot)', { honored:'check' });
+      return true;
+    }
+    if (chk){
+      chk.checked = true;
+      if (cr) cr.checked = false;
+      ensureShadowPayBy('check');
+      log.info('setPayByCheckDefaultIfUnset:', evtLabel||'(boot)', { set:'check' });
+      return true;
+    }
     return false;
   }
 
-  function ensureShadowPayBy(){
+  // Hidden input mirrors the CURRENT pay mode (does not force a mode)
+  function ensureShadowPayBy(mode){
     const form = document.forms[0]; if (!form) { log.warn('ensureShadowPayBy: no form'); return; }
     let h = document.getElementById('wlPayByShadow');
     if (!h){
@@ -756,12 +772,17 @@
       form.appendChild(h);
       log.debug('ensureShadowPayBy: created');
     }
-    h.value = 'RadioButton_PayByCheck';
+    const m = mode || readPayMode();
+    h.value = (m === 'credit') ? 'RadioButton_PayByCredit' : 'RadioButton_PayByCheck';
+    log.debug('ensureShadowPayBy: value set', h.value);
   }
   function removeShadowPayBy(){
     const h = document.getElementById('wlPayByShadow');
     if (h){ h.remove(); log.debug('removeShadowPayBy: removed'); }
   }
+  // expose for bridge
+  window.ensureShadowPayBy = ensureShadowPayBy;
+  window.WLPayMode = { readPayMode, ensureShadowPayBy };
 
   function showBilling(){
     const wrap = document.getElementById(IDS.billWrap) ||
@@ -783,8 +804,9 @@
   function wireGuards(){
     const amt = document.getElementById(IDS.amount);
     if (amt && !amt.__wlPayGuard){
-      amt.addEventListener('input',  ()=> setPayByCheckSilent('amount:input(capture)'), true);
-      amt.addEventListener('change', ()=> setPayByCheckSilent('amount:change(capture)'), true);
+      // keep shadow in sync (capture phase, before WebForms handlers)
+      amt.addEventListener('input',  ()=> ensureShadowPayBy(), true);
+      amt.addEventListener('change', ()=> ensureShadowPayBy(), true);
       amt.__wlPayGuard = true;
       log.info('wireGuards: amount capture listeners attached');
     } else {
@@ -793,7 +815,7 @@
 
     const form = document.forms[0];
     if (form && !form.__wlPayGuard){
-      form.addEventListener('submit', ()=>{ log.info('form submit: guard'); setPayByCheckSilent('form:submit'); showBilling(); });
+      form.addEventListener('submit', ()=>{ log.info('form submit: syncing pay mode'); ensureShadowPayBy(); showBilling(); });
       form.__wlPayGuard = true;
       log.info('wireGuards: form submit guard attached');
     }
@@ -806,13 +828,13 @@
           prm.add_initializeRequest((sender, args)=>{
             seq++; const src = args?.get_postBackElement?.();
             log.info(`GRD init #${seq}`, { srcId: src?.id || '(unknown)', srcName: src?.name || '' });
-            setPayByCheckSilent('MSAjax:init');
+            ensureShadowPayBy(); // mirror current selection
           });
           prm.add_endRequest((sender, args)=>{
             const err = args?.get_error?.() || null;
             if (err){ log.error('GRD end error:', err); if (args?.set_errorHandled) args.set_errorHandled(true); }
-            log.info(`GRD end  #${seq} — re-ensure check + billing`);
-            setPayByCheckSilent('MSAjax:end');
+            log.info(`GRD end  #${seq} — re-ensure billing + shadow`);
+            ensureShadowPayBy(); // keep mirrored
             showBilling();
             removeShadowPayBy();
             window.WLPayDiag?.snap?.();
@@ -830,7 +852,8 @@
 
   function boot(){
     log.info('GRD BOOT');
-    setPayByCheckSilent('boot');
+    setPayByCheckDefaultIfUnset('boot'); // default only if unset
+    ensureShadowPayBy();                 // mirror whatever is selected
     showBilling();
     wireGuards();
     window.WLPayDiag?.snap?.();
@@ -839,48 +862,9 @@
   else { boot(); }
 })();
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+/* ======================================================
+   SUBMIT BRIDGE (proxy to native, respect pay mode)
+   ====================================================== */
 (function(){
   'use strict';
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
@@ -915,18 +899,25 @@
   }
 
   function findNativeTrigger(){
-    let real = document.querySelector('#ctl00_PageBody_MakePaymentPanel .submit-button-panel button');
-    if (!real) real = document.querySelector('#ctl00_PageBody_MakePaymentPanel .submit-button-panel input[type="submit"], #ctl00_PageBody_MakePaymentPanel .submit-button-panel input[type="button"]');
-    if (!real) real = document.querySelector('#ctl00_PageBody_MakePaymentPanel .submit-button-panel a');
+    // primary: anything inside the native submit container
+    let real = document.querySelector('#ctl00_PageBody_MakePaymentPanel .submit-button-panel button, #ctl00_PageBody_MakePaymentPanel .submit-button-panel input[type="submit"], #ctl00_PageBody_MakePaymentPanel .submit-button-panel input[type="button"], #ctl00_PageBody_MakePaymentPanel .submit-button-panel a');
+    // fallback: any likely gateway trigger
+    if (!real) real = document.querySelector('[data-gateway="shift4"], [id*="Shift4"], .shift4-button, button[name*="MakePayment"], input[type="submit"][name*="MakePayment"]');
     return real;
   }
 
+  function currentPayMode(){
+    const cr = document.getElementById('ctl00_PageBody_RadioButton_PayByCredit');
+    return (cr && cr.checked) ? 'credit' : 'check';
+  }
+
   function proxyFire(){
-    try{ window.ensurePayByCheckVisibleAndSelected?.(); }catch{}
+    const mode = currentPayMode();
+    try{ window.ensureShadowPayBy?.(); }catch{}
     const real = findNativeTrigger();
     if (real){
-      log.info('proxy firing native trigger', { tag: real.tagName, id: real.id, name: real.name, value: real.value });
-      real.click();
+      log.info('proxy firing native trigger', { mode, tag: real.tagName, id: real.id, name: real.name, value: real.value });
+      real.click(); // Credit → Forte modal; Check → normal postback hooked to this control
       return true;
     }
     // Fallback to __doPostBack if present
@@ -934,7 +925,7 @@
     if (pb){
       const m = (pb.getAttribute('onclick')||'').match(/__doPostBack\(['"]([^'"]+)['"],\s*['"]([^'"]*)['"]\)/);
       if (m && window.__doPostBack){
-        log.info('proxy using __doPostBack', { target: m[1], arg: m[2] });
+        log.info('proxy using __doPostBack', { mode, target: m[1], arg: m[2] });
         window.__doPostBack(m[1], m[2]||'');
         return true;
       }
@@ -942,7 +933,7 @@
     // Last resort: submit the form
     const form = document.forms[0];
     if (form){
-      log.warn('proxy falling back to form.submit()');
+      log.warn('proxy fallback form.submit()', { mode });
       const ev = new Event('submit', { bubbles:true, cancelable:true });
       form.dispatchEvent(ev);
       if (!ev.defaultPrevented){ form.submit(); }
