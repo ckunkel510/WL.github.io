@@ -618,4 +618,102 @@
 
 
 
+(function(){
+  'use strict';
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+
+  const IDS = {
+    rbCheck: 'ctl00_PageBody_RadioButton_PayByCheck',
+    rbCredit:'ctl00_PageBody_RadioButton_PayByCredit',
+    amount:  'ctl00_PageBody_PaymentAmountTextBox',
+    billBox: 'ctl00_PageBody_BillingAddressTextBox',
+    billWrap:'ctl00_PageBody_BillingAddressContainer'
+  };
+
+  /* --- Make sure server receives PayBy=Check even if radios are hidden/re-rendered --- */
+  function setPayByCheckSilent(){
+    const chk = document.getElementById(IDS.rbCheck);
+    const cr  = document.getElementById(IDS.rbCredit);
+    if (chk){
+      chk.checked = true;
+      if (cr) cr.checked = false;
+      ensureShadowPayBy();   // hidden field fallback for the POST body
+      return true;
+    }
+    return false;
+  }
+
+  // Hidden input that forces PayBy=Check into the form post (no visual change, no extra postback)
+  function ensureShadowPayBy(){
+    const form = document.forms[0]; if (!form) return;
+    let h = document.getElementById('wlPayByShadow');
+    if (!h){
+      h = document.createElement('input');
+      h.type = 'hidden';
+      h.id   = 'wlPayByShadow';
+      h.name = 'ctl00$PageBody$PayBy';
+      form.appendChild(h);
+    }
+    h.value = 'RadioButton_PayByCheck';
+  }
+  function removeShadowPayBy(){
+    document.getElementById('wlPayByShadow')?.remove();
+  }
+
+  /* --- Keep Billing Address visible and in the layout --- */
+  function showBilling(){
+    const wrap = document.getElementById(IDS.billWrap) ||
+                 document.getElementById(IDS.billBox)?.closest('.epi-form-group-acctPayment');
+    if (wrap){
+      wrap.style.removeProperty('display');
+      wrap.classList.add('wl-force-show'); // your CSS already sets display:block !important for this class
+      // If you’re using the left-grid container, put it back there:
+      const grid = document.getElementById('wlFormGrid');
+      if (grid && !grid.contains(wrap)) grid.appendChild(wrap);
+      return true;
+    }
+    return false;
+  }
+
+  /* --- Wire guards in ALL the right places --- */
+  function wireGuards(){
+    const amt = document.getElementById(IDS.amount);
+    if (amt && !amt.__wlPayGuard){
+      // Capture phase so this runs BEFORE inline onchange triggers WebForm_DoPostBack...
+      amt.addEventListener('input',  setPayByCheckSilent, true);
+      amt.addEventListener('change', setPayByCheckSilent, true);
+      amt.__wlPayGuard = true;
+    }
+
+    // Fallback: regular form submit
+    const form = document.forms[0];
+    if (form && !form.__wlPayGuard){
+      form.addEventListener('submit', ()=>{ setPayByCheckSilent(); showBilling(); });
+      form.__wlPayGuard = true;
+    }
+
+    // MS AJAX async postbacks
+    try{
+      if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
+        const prm = Sys.WebForms.PageRequestManager.getInstance();
+        if (!prm.__wlPayGuard){
+          prm.add_initializeRequest(()=>{ setPayByCheckSilent(); });
+          prm.add_endRequest(()=>{ setPayByCheckSilent(); showBilling(); removeShadowPayBy(); });
+          prm.__wlPayGuard = true;
+        }
+      }
+    }catch{}
+  }
+
+  /* --- Boot --- */
+  function boot(){
+    setPayByCheckSilent();
+    showBilling();
+    wireGuards();
+  }
+  if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', boot, {once:true}); }
+  else { boot(); }
+})();
+
+
 
