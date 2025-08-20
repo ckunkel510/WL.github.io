@@ -469,13 +469,15 @@
     const bar = document.createElement('div');
     bar.className = 'wl-toolbar';
     bar.innerHTML = `
-      <button class="wl-chipbtn" data-filter="all" data-active="true">All</button>
-      <button class="wl-chipbtn" data-filter="open">Open</button>
-      <button class="wl-chipbtn" data-filter="partial">Partial</button>
-      <button class="wl-chipbtn" data-filter="paid">Paid</button>
-      <div class="wl-spacer"></div>
-      <button class="wl-act" data-action="select-filtered">Select filtered</button>
-    `;
+  <button class="wl-chipbtn" data-filter="all" data-active="true">All</button>
+  <button class="wl-chipbtn" data-filter="open">Open</button>
+  <button class="wl-chipbtn" data-filter="partial">Partial</button>
+  <button class="wl-chipbtn" data-filter="paid">Paid</button>
+  <div class="wl-spacer"></div>
+  <button class="wl-act" data-action="select-filtered">Select filtered</button>
+  <button class="wl-act" data-action="pay-selected" title="Go to Account Payment with selected invoices prefilled">Pay selected</button>
+`;
+
     flex.insertBefore(bar, flex.firstChild);
 
     bar.addEventListener('click',(e)=>{
@@ -488,6 +490,10 @@
       }else if (act && act.dataset.action==='select-filtered'){
         selectFilteredOnPage();
       }
+       else if (act && act.dataset.action === 'pay-selected') {
+  paySelected();
+}
+
     });
     return bar;
   }
@@ -549,6 +555,61 @@
     observer.observe(gridRoot, { childList:true, subtree:true });
   }
 
+  function paySelected(){
+  const root = document.getElementById('ctl00_PageBody_InvoicesGrid');
+  if (!root) return;
+
+  // All checked native checkboxes (we proxy UI, but these still carry Telerik behavior)
+  const checked = Array.from(root.querySelectorAll('tbody input[type="checkbox"][name*="chkSelect"]:checked'));
+  if (!checked.length){
+    alert('Select at least one invoice to pay.');
+    return;
+  }
+
+  // Build list of invoice numbers + compute payable total (prefers Outstanding if present)
+  const items = [];
+  let sumCents = 0;
+
+  checked.forEach(cb=>{
+    const tr = cb.closest('tr');
+    if (!tr) return;
+
+    // Invoice #
+    const a = (tr.querySelector('td[data-title="Invoice #"] a[href]') || {});
+    const invNo = (a.textContent || '').trim();
+    if (!invNo) return;
+
+    // Amount to pay: prefer outstanding dataset (set earlier by badges), else fall back to Total Amount cell
+    let amt = parseFloat(tr.dataset.outstanding || 'NaN');
+    if (!Number.isFinite(amt)){
+      const totTxt = grab(tr, 'td[data-title="Total Amount"], td[data-title="Goods Total"]');
+      amt = parseMoney(totTxt);
+    }
+
+    // Ignore if effectively zero (already paid)
+    if (nearlyZero(amt)) return;
+
+    items.push({ invNo, amt });
+    sumCents += Math.round(amt * 100); // integer cents to avoid FP wobble
+  });
+
+  if (!items.length){
+    alert('All selected invoices appear paid (no outstanding balance). Choose open/partial invoices.');
+    return;
+  }
+
+  const invoiceList = items.map(x=>x.invNo).join(',');
+  const total = (sumCents/100).toFixed(2);
+
+  const u = new URL('/AccountPayment_r.aspx', location.origin);
+  // "utm parameters" per your request — name them however you like:
+  u.searchParams.set('utm_invoices', invoiceList);
+  u.searchParams.set('utm_total', total);
+
+  // Go!
+  location.assign(u.toString());
+}
+
   /* ---------- MS AJAX hooks ---------- */
   function attachAjaxHooks(){
     try{
@@ -599,3 +660,5 @@
     }
   };
 })();
+
+
