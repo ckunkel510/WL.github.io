@@ -1305,3 +1305,427 @@
 })();
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ==========================================================
+   Woodson — Quick Payment Actions widget
+   Wraps:
+     • Pay My Last Statement (AJAX to Statements_R.aspx)
+     • Fill Owing / Clear buttons
+     • Pay by Job (NEW) checklist (fetch JobBalances_R.aspx)
+   Notes:
+     • Runs only on AccountPayment_r.aspx
+     • Spans both columns in the left card grid
+     • Removes older inline amount actions if present
+   ========================================================== */
+(function () {
+  'use strict';
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+
+  /* ---------- logging (reuses WLPayDiag if present) ---------- */
+  const LOG = (window.WLPayDiag?.getLevel?.() ?? 2);
+  const LVL = window.WLPayDiag?.LVL || { error:0, warn:1, info:2, debug:3 };
+  const log = {
+    error: (...a)=> { if (LOG >= LVL.error) console.error('[AP:WID]', ...a); },
+    warn:  (...a)=> { if (LOG >= LVL.warn ) console.warn ('[AP:WID]', ...a); },
+    info:  (...a)=> { if (LOG >= LVL.info ) console.log  ('[AP:WID]', ...a); },
+    debug: (...a)=> { if (LOG >= LVL.debug) console.log  ('[AP:WID]', ...a); },
+  };
+
+  /* ---------- CSS ---------- */
+  (function injectCSS(){
+    if (document.getElementById('wl-quick-widget-css')) return;
+    const css = `
+      /* Container card */
+      #wlQuickWidget { grid-column: 1 / -1; }
+      .wl-quick {
+        border:1px solid #e5e7eb; border-radius:14px; background:#fff;
+        padding:12px 14px; box-shadow:0 4px 14px rgba(15,23,42,.06);
+      }
+      .wl-quick-title {
+        font-weight:900; margin:0 0 8px 0; font-size:14px; color:#0f172a;
+      }
+      .wl-quick-row {
+        display:flex; align-items:center; flex-wrap:wrap; gap:10px;
+        margin-bottom:10px;
+      }
+
+      /* Radio + label */
+      .wl-inlineradio { display:inline-flex; align-items:center; gap:8px; font-weight:800; }
+      .wl-inlineradio input { transform:translateY(1px); }
+
+      /* Chip buttons */
+      .wl-chipbtn{
+        border:1px solid #e5e7eb; border-radius:999px; padding:6px 12px;
+        background:#fff; font-weight:800; font-size:12px; cursor:pointer;
+      }
+
+      /* Jobs section */
+      .wl-jobs-head { font-weight:900; margin:6px 0 6px; }
+      .wl-jobs-list { display:grid; gap:6px; max-height:260px; overflow:auto; padding-right:4px; }
+      .wl-job-line { display:flex; align-items:center; gap:8px; }
+      .wl-job-line input { transform:translateY(1px); }
+
+      /* Slightly tighter spacing on desktop so more fits above the fold */
+      @media (min-width:768px){
+        .wl-form-grid{ gap:14px 18px; }
+        .wl-field{ gap:6px; }
+      }
+    `;
+    const s = document.createElement('style'); s.id='wl-quick-widget-css'; s.textContent = css;
+    document.head.appendChild(s);
+  })();
+
+  /* ---------- helpers ---------- */
+  const $id = (x)=> document.getElementById(x);
+  const $1  = (sel,root=document)=> root.querySelector(sel);
+  function parseMoney(s){
+    const v = parseFloat(String(s||'').replace(/[^0-9.\-]/g,''));
+    return Number.isFinite(v) ? v : 0;
+  }
+  function format2(n){
+    const v = Number(n||0);
+    return v.toLocaleString(undefined, { minimumFractionDigits:2, maximumFractionDigits:2 });
+  }
+  function amtEl(){ return $id('ctl00_PageBody_PaymentAmountTextBox'); }
+  function remEl(){ return $id('ctl00_PageBody_RemittanceAdviceTextBox'); }
+  function owingVal(){
+    const el = $id('ctl00_PageBody_AmountOwingLiteral');
+    return el ? parseMoney(el.value || el.textContent) : 0;
+  }
+  function triggerChange(el){
+    try { el.dispatchEvent(new Event('change', { bubbles:true })); } catch{}
+  }
+
+  /* ---------- Pay My Last Statement ---------- */
+  async function fetchLastStatementAmount_jq(){
+    // jQuery path (if jQuery is available)
+    return new Promise((resolve,reject)=>{
+      try{
+        window.jQuery.ajax({
+          url: 'https://webtrack.woodsonlumber.com/Statements_R.aspx',
+          method: 'GET',
+          success: function(data){
+            try{
+              const $ = window.jQuery;
+              const closing = $(data)
+                .find('tr#ctl00_PageBody_StatementsDataGrid_ctl00__0 td[data-title="Closing Balance"]')
+                .text().trim();
+              resolve(closing || '');
+            }catch(e){ reject(e); }
+          },
+          error: function(){ reject(new Error('Ajax error')); }
+        });
+      }catch(e){ reject(e); }
+    });
+  }
+
+  async function fetchLastStatementAmount_vanilla(){
+    const res = await fetch('https://webtrack.woodsonlumber.com/Statements_R.aspx', { credentials:'include' });
+    if (!res.ok) throw new Error('HTTP '+res.status);
+    const html = await res.text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const td = doc.querySelector('tr#ctl00_PageBody_StatementsDataGrid_ctl00__0 td[data-title="Closing Balance"]');
+    return (td?.textContent || '').trim();
+  }
+
+  async function onLastStatementChecked(radio, labelSpan){
+    if (!radio.checked) return;
+    try{
+      const closingStr = (window.jQuery ? await fetchLastStatementAmount_jq() : await fetchLastStatementAmount_vanilla());
+      if (!closingStr){ alert('Could not find last statement amount.'); return; }
+      const amt = amtEl(); const rem = remEl();
+      if (labelSpan) labelSpan.textContent = `Pay My Last Statement: ${closingStr}`;
+      if (amt){
+        const n = parseMoney(closingStr);
+        amt.value = Number.isFinite(n) ? format2(n) : closingStr;
+        triggerChange(amt);
+      }
+      if (rem){
+        const msg = 'Paying last statement amount';
+        // replace or append nicely
+        const lines = (rem.value||'').split('\n').filter(Boolean);
+        if (!lines.includes(msg)) lines.push(msg);
+        rem.value = lines.join('\n');
+      }
+      log.info('Last statement applied:', closingStr);
+    }catch(e){
+      log.warn('Error fetching last statement amount', e);
+      alert('Error fetching data.');
+    }
+  }
+
+  /* ---------- Pay by Job (NEW) ---------- */
+  async function fetchJobBalances(){
+    try{
+      const res = await fetch('https://webtrack.woodsonlumber.com/JobBalances_R.aspx', { credentials:'include' });
+      if (!res.ok) throw new Error('HTTP '+res.status);
+      const html = await res.text();
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const rows = Array.from(doc.querySelectorAll('table tr'));
+      const out = [];
+      rows.forEach(row=>{
+        const jobCell = row.querySelector('td[data-title="Job"]');
+        const netCell = row.querySelector('td[data-title="Net Amount"]');
+        if (jobCell && netCell){
+          out.push({ job: jobCell.textContent.trim(), netAmount: parseMoney(netCell.textContent) });
+        }
+      });
+      return out;
+    }catch(e){
+      log.warn('fetchJobBalances error', e);
+      return [];
+    }
+  }
+
+  function onJobToggle(container, ev){
+    const target = ev.target;
+    if (!target || target.type !== 'checkbox') return;
+    const amount = parseMoney(target.value);
+    const job    = target.dataset.job || '';
+    const amtBox = amtEl(); const rem = remEl();
+    if (!amtBox || !rem) return;
+
+    let current = parseMoney(amtBox.value);
+    if (target.checked){
+      current += amount;
+      // add line
+      const line = `${job}: $${format2(amount)}`;
+      const lines = (rem.value||'').split('\n').filter(Boolean);
+      if (!lines.includes(line)) lines.push(line);
+      rem.value = lines.join('\n');
+    }else{
+      current -= amount;
+      // remove line
+      const line = `${job}: $${format2(amount)}`;
+      const lines = (rem.value||'').split('\n').filter(l => l.trim() !== line);
+      rem.value = lines.join('\n');
+    }
+    amtBox.value = format2(Math.max(current, 0));
+    triggerChange(amtBox);
+  }
+
+  /* ---------- Build the widget ---------- */
+  async function mountWidget(){
+    // Remove any old inline under-amount actions we made earlier
+    const old = $1('#wlAmtActions'); if (old) old.remove();
+
+    const grid = $id('wlFormGrid') || $1('.bodyFlexItem') || document.body;
+    if (!grid){ log.warn('No grid found for widget mount'); return; }
+
+    // Create container (idempotent)
+    let host = $id('wlQuickWidget');
+    if (!host){
+      host = document.createElement('div');
+      host.id = 'wlQuickWidget';
+      host.className = 'wl-item wl-span-2';
+      grid.insertBefore(host, grid.firstChild);
+    }else{
+      host.innerHTML = '';
+    }
+
+    // Build markup
+    host.innerHTML = `
+      <div class="wl-quick">
+        <div class="wl-quick-title">Quick Payment Actions</div>
+        <div class="wl-quick-row" id="wlQuickRow">
+          <!-- Last statement -->
+          <label class="wl-inlineradio" id="wlLastStmtWrap">
+            <input type="radio" id="lastStatementRadio" class="radiobutton" name="balanceOption" />
+            <span id="lastStatementRadioText">Pay My Last Statement</span>
+          </label>
+          <!-- Buttons -->
+          <button type="button" class="wl-chipbtn" id="wlFillOwingBtn">Fill Owing</button>
+          <button type="button" class="wl-chipbtn" id="wlClearAmtBtn">Clear</button>
+        </div>
+
+        <div id="wlJobsSection">
+          <div class="wl-jobs-head">Pay By Job <small>(NEW)</small></div>
+          <div class="wl-jobs-list" id="wlJobBalancesList"></div>
+        </div>
+      </div>
+    `;
+
+    /* --- Wire Pay My Last Statement --- */
+    const hdrText = ($1('.bodyFlexItem.listPageHeader')?.textContent || '').trim();
+    const lastWrap = $id('wlLastStmtWrap');
+    const lastRadio = $id('lastStatementRadio');
+    const lastText = $id('lastStatementRadioText');
+
+    // If this is a "Load Cash Account Balance" view, hide the option (matches your original behavior)
+    if (/Load Cash Account Balance/i.test(hdrText)){
+      lastWrap.style.display = 'none';
+    }
+
+    // If they already had #lastStatementRadio in DOM somewhere, adopt it here
+    const existingRadio = document.querySelector('input#lastStatementRadio.radiobutton');
+    const existingLabel = document.querySelector('label#lastStatementRadioLabel');
+    if (existingRadio && existingRadio !== lastRadio){
+      // Move existing into our wrap
+      lastWrap.replaceChild(existingRadio, lastRadio);
+      if (existingLabel){
+        lastText.textContent = existingLabel.textContent || 'Pay My Last Statement';
+        existingLabel.style.display = 'none';
+      }
+    }
+
+    (existingRadio || lastRadio).addEventListener('change', ()=> onLastStatementChecked((existingRadio || lastRadio), lastText));
+
+    /* --- Wire Fill Owing / Clear --- */
+    const btnFill  = $id('wlFillOwingBtn');
+    const btnClear = $id('wlClearAmtBtn');
+    btnFill.addEventListener('click', ()=>{
+      const v = owingVal();
+      const a = amtEl();
+      if (a && v > 0){
+        a.value = format2(v);
+        triggerChange(a);
+      }
+    });
+    btnClear.addEventListener('click', ()=>{
+      const a = amtEl(); if (!a) return;
+      a.value = '';
+      triggerChange(a);
+    });
+
+    /* --- Render Job Balances --- */
+    const list = $id('wlJobBalancesList');
+    const jobs = await fetchJobBalances();
+    if (!jobs || jobs.length === 0){
+      // Hide jobs section if nothing to show
+      $id('wlJobsSection').style.display = 'none';
+      log.info('No JobBalances found — jobs section hidden');
+    }else{
+      // Build checkboxes
+      const frag = document.createDocumentFragment();
+      jobs.forEach((job, i)=>{
+        const line = document.createElement('label'); line.className = 'wl-job-line';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.name = 'jobBalance'; cb.value = String(job.netAmount);
+        cb.dataset.job = job.job; cb.id = `job-${i}`;
+        const txt = document.createElement('span'); txt.textContent = `${job.job} - $${format2(job.netAmount)}`;
+        line.appendChild(cb); line.appendChild(txt);
+        frag.appendChild(line);
+      });
+      list.innerHTML = '';
+      list.appendChild(frag);
+      // Delegate change handling
+      list.addEventListener('change', (ev)=> onJobToggle(list, ev));
+      log.info(`Rendered ${jobs.length} job balance option(s)`);
+    }
+
+    log.info('Quick Payment Actions mounted');
+  }
+
+  /* ---------- Boot + (optional) re-apply after partial postbacks ---------- */
+  function boot(){
+    mountWidget();
+    try{
+      if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
+        const prm = window.Sys.WebForms.PageRequestManager.getInstance();
+        if (!prm.__wlQuickWidBound){
+          prm.add_endRequest(()=> mountWidget());
+          prm.__wlQuickWidBound = true;
+        }
+      }
+    }catch(e){ /* PageRequestManager not present on this page per logs; ignore */ }
+  }
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', boot, { once:true });
+  }else{
+    boot();
+  }
+})();
+
