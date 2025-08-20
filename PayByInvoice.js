@@ -225,11 +225,12 @@
 
 
 
+
 (function(){
   'use strict';
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
-  /* ================= CSS (more width + spacing, full-width transactions) ================= */
+  /* ================= CSS (unchanged except minor utility) ================= */
   (function injectCSS(){
     if (document.getElementById('wl-ap-polish-css')) return;
     const css = `
@@ -239,28 +240,19 @@
       }
       .bodyFlexContainer{ background:var(--wl-bg); }
 
-      /* Two-column + full-width tx row via areas */
-      .wl-shell{ display:grid; gap:18px; grid-template-areas:
-        "left right"
-        "tx   tx";
-      }
+      .wl-shell{ display:grid; gap:18px; grid-template-areas:"left right" "tx tx"; }
       @media(min-width:1200px){ .wl-shell{ grid-template-columns: 1fr 380px; } }
       @media(min-width:1024px) and (max-width:1199px){ .wl-shell{ grid-template-columns: 1fr 360px; } }
-      @media(max-width:1023px){
-        .wl-shell{ grid-template-areas: "left" "right" "tx"; grid-template-columns: 1fr; }
-      }
+      @media(max-width:1023px){ .wl-shell{ grid-template-areas:"left" "right" "tx"; grid-template-columns: 1fr; } }
+
       #wlLeftCard{ grid-area:left; }
       #wlRightCard{ grid-area:right; }
       #wlTxCard{ grid-area:tx; }
 
-      .wl-card{
-        background:var(--wl-card); border:1px solid var(--wl-border);
-        border-radius:16px; box-shadow:0 6px 18px rgba(15,23,42,.06);
-      }
+      .wl-card{ background:var(--wl-card); border:1px solid var(--wl-border); border-radius:16px; box-shadow:0 6px 18px rgba(15,23,42,.06); }
       .wl-card-head{ padding:14px 18px; border-bottom:1px solid var(--wl-border); font-weight:900; }
       .wl-card-body{ padding:16px 18px; }
 
-      /* Compact two-column form with wider label column + more vertical gap */
       .wl-form-grid{ display:grid; gap:18px 18px; }
       @media(min-width:768px){ .wl-form-grid{ grid-template-columns: 1fr 1fr; } }
       .wl-item{ margin:0; padding:0; border:none; background:transparent; }
@@ -268,51 +260,38 @@
 
       .wl-field{ display:grid; gap:8px; }
       @media(min-width:640px){
-        .wl-field{ grid-template-columns: 200px 1fr; align-items:center; } /* wider labels */
+        .wl-field{ grid-template-columns: 200px 1fr; align-items:center; }
         .wl-lab{ text-align:right; padding-right:14px; }
       }
       .wl-lab{ color:var(--wl-sub); font-weight:800; }
-      .wl-ctl input.form-control,
-      .wl-ctl select.form-control,
-      .wl-ctl textarea.form-control{
+      .wl-ctl input.form-control, .wl-ctl select.form-control, .wl-ctl textarea.form-control{
         border:1px solid var(--wl-border); border-radius:12px; padding:12px 14px; min-height:42px;
       }
       .wl-help{ color:var(--wl-sub); font-size:12px; margin-top:4px; }
 
-      /* Amount quick actions */
       .wl-chips{ display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
-      .wl-chipbtn{ border:1px solid var(--wl-border); border-radius:999px; padding:7px 12px;
-        background:#fff; font-weight:800; font-size:12px; cursor:pointer; }
+      .wl-chipbtn{ border:1px solid var(--wl-border); border-radius:999px; padding:7px 12px; background:#fff; font-weight:800; font-size:12px; cursor:pointer; }
 
-      /* Pay method toggle */
       .wl-paytoggle{ display:flex; gap:10px; flex-wrap:wrap; }
-      .wl-paytoggle .opt{ border:1px solid var(--wl-border); border-radius:12px; padding:9px 12px;
-        background:#fff; font-weight:800; cursor:pointer; }
+      .wl-paytoggle .opt{ border:1px solid var(--wl-border); border-radius:12px; padding:9px 12px; background:#fff; font-weight:800; cursor:pointer; }
       .wl-paytoggle .opt[data-active="true"]{ border-color:var(--wl-brand); box-shadow:0 0 0 3px rgba(107,0,22,.08); }
 
-      /* Right rail summary */
       .wl-summary{ display:flex; flex-direction:column; gap:12px; }
       .wl-pillrow{ display:flex; gap:8px; flex-wrap:wrap; }
-      .wl-pill{ border:1px solid var(--wl-border); background:#fff; border-radius:999px; padding:6px 10px;
-        font-weight:800; font-size:12px; }
+      .wl-pill{ border:1px solid var(--wl-border); background:#fff; border-radius:999px; padding:6px 10px; font-weight:800; font-size:12px; }
       .wl-summarylist{ display:grid; gap:8px; }
       .wl-row{ display:grid; grid-template-columns: 120px 1fr; gap:8px; }
       .wl-key{ color:#334155; font-weight:800; }
       .wl-val{ color:#0f172a; }
       .wl-val small{ color:#475569; }
-      .wl-cta{ appearance:none; border:none; border-radius:12px; padding:12px 16px;
-        background:var(--wl-brand); color:#fff; font-weight:900; cursor:pointer; width:100%; }
+      .wl-cta{ appearance:none; border:none; border-radius:12px; padding:12px 16px; background:var(--wl-brand); color:#fff; font-weight:900; cursor:pointer; width:100%; }
       .wl-cta:focus-visible{ outline:0; box-shadow:0 0 0 3px var(--wl-focus); }
       .wl-link{ background:none; border:none; padding:0; color:#0ea5e9; font-weight:800; cursor:pointer; }
 
-      /* Tx panel in full-width card */
-      #ctl00_PageBody_accountsTransactionsPanel.wl-card .panelHeaderMidProductInfo1,
-      #ctl00_PageBody_accountsTransactionsPanel.wl-card .paging-control{ border:none !important; }
+      /* tx panel cleanup once embedded */
+      .wl-tx-embedded .panelHeaderMidProductInfo1, .wl-tx-embedded .ViewHeader{ display:none !important; }
 
-      /* Trim verbose blurbs */
       .wl-compact .descriptionMessage{ display:none !important; }
-
-      /* Placeholder */
       #ctl00_PageBody_RemittanceAdviceTextBox::placeholder{ color:#98a5b1; }
     `;
     const el = document.createElement('style'); el.id='wl-ap-polish-css'; el.textContent = css; document.head.appendChild(el);
@@ -325,19 +304,14 @@
   function parseMoney(s){ const v=parseFloat(String(s||'').replace(/[^0-9.\-]/g,'')); return Number.isFinite(v)?v:0; }
   function formatUSD(n){ const num = Number(n||0); return num.toLocaleString(undefined,{style:'currency',currency:'USD'}); }
   function normalizeInvoices(str){
-    return String(str||'')
-      .split(/[,\n\r\t ]+/)
-      .map(x=>x.trim())
-      .filter(Boolean)
-      .map(x=>`INV${x.replace(/^INV\s*/i,'')}`)
-      .join(',');
+    return String(str||'').split(/[,\n\r\t ]+/).map(x=>x.trim()).filter(Boolean).map(x=>`INV${x.replace(/^INV\s*/i,'')}`).join(',');
   }
 
   /* ================= build layout ================= */
   function upgradeLayout(){
     const page = $('.bodyFlexContainer'); if (!page) return;
 
-    // Create shell
+    // Shell
     let shell = $('.wl-shell');
     if (!shell){
       const firstLeft = $('.bodyFlexItem > .float-left') || $('.bodyFlexItem');
@@ -352,10 +326,7 @@
       leftCard = document.createElement('div');
       leftCard.id = 'wlLeftCard';
       leftCard.className = 'wl-card';
-      leftCard.innerHTML = `
-        <div class="wl-card-head">Payment details</div>
-        <div class="wl-card-body"><div id="wlFormGrid" class="wl-form-grid"></div></div>
-      `;
+      leftCard.innerHTML = `<div class="wl-card-head">Payment details</div><div class="wl-card-body"><div id="wlFormGrid" class="wl-form-grid"></div></div>`;
       shell.appendChild(leftCard);
     }
     const grid = byId('wlFormGrid');
@@ -375,8 +346,7 @@
             <div id="wlSubmitMount" style="margin-top:6px;"></div>
             <button type="button" class="wl-cta" id="wlProxySubmit">Make Payment</button>
           </div>
-        </div>
-      `;
+        </div>`;
       shell.appendChild(rightCard);
     }
 
@@ -395,12 +365,12 @@
       owing: byId('ctl00_PageBody_AmountOwingLiteral')?.closest('.epi-form-group-acctPayment') || null,
       amount: byId('ctl00_PageBody_PaymentAmountTextBox')?.closest('.epi-form-group-acctPayment') || null,
       addrDDL: byId('ctl00_PageBody_AddressDropdownList')?.closest('.epi-form-group-acctPayment') || null,
-      billAddr: byId('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment') || null,
+      billAddr: byId('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment') || byId('ctl00_PageBody_BillingAddressContainer') || null,
       zip: byId('ctl00_PageBody_PostalCodeTextBox')?.closest('.epi-form-group-acctPayment') || null,
       email: byId('ctl00_PageBody_EmailAddressTextBox')?.closest('.epi-form-group-acctPayment') || null,
       notes: byId('ctl00_PageBody_NotesTextBox')?.closest('.epi-form-group-acctPayment') || null,
       remit: byId('ctl00_PageBody_RemittanceAdviceTextBox')?.closest('.epi-form-group-acctPayment') || null,
-      payWrap: byId('ctl00_PageBody_MakePaymentPanel')?.previousElementSibling || null // radios
+      payWrap: byId('ctl00_PageBody_MakePaymentPanel')?.previousElementSibling || null
     };
 
     // Tidy groups (label + control)
@@ -417,19 +387,15 @@
         $$('p.descriptionMessage', group).forEach(p=> p.classList.add('wl-help'));
         group.__wlTidy = true; group.classList.add('wl-item');
       }
+      // If some server logic hid it, unhide (esp. billing container)
+      group.style.removeProperty('display');
     });
 
-    // Place fields (left card grid)
-    const order = [
-      grp.owing, grp.amount,           // row 1
-      grp.addrDDL, grp.billAddr,       // row 2
-      grp.zip, grp.email,              // row 3
-      grp.notes, grp.remit,            // row 4
-      grp.payWrap                      // row 5
-    ].filter(Boolean);
+    // Place fields (left card grid) — redo every time so newly-rendered groups get placed
+    const order = [ grp.owing, grp.amount, grp.addrDDL, grp.billAddr, grp.zip, grp.email, grp.notes, grp.remit, grp.payWrap ].filter(Boolean);
     order.forEach(el=>{ if (!grid.contains(el)) grid.appendChild(el); });
 
-    // Pay method toggle
+    // Pay method toggle (still functional, even if you hide the actual radios elsewhere)
     if (grp.payWrap && !grp.payWrap.__wlToggle){
       const credit = byId('ctl00_PageBody_RadioButton_PayByCredit');
       const check  = byId('ctl00_PageBody_RadioButton_PayByCheck');
@@ -452,16 +418,10 @@
 
     // Amount quick actions
     const amountInput = byId('ctl00_PageBody_PaymentAmountTextBox');
-    const owingVal = (function(){
-      const el = byId('ctl00_PageBody_AmountOwingLiteral');
-      return el ? parseMoney(el.value || el.textContent) : 0;
-    })();
+    const owingVal = (function(){ const el = byId('ctl00_PageBody_AmountOwingLiteral'); return el ? parseMoney(el.value || el.textContent) : 0; })();
     if (grp.amount && !grp.amount.querySelector('.wl-chips')){
       const chips = document.createElement('div'); chips.className='wl-chips';
-      chips.innerHTML = `
-        <button type="button" class="wl-chipbtn" data-act="fill-owing">Fill: Amount Owing</button>
-        <button type="button" class="wl-chipbtn" data-act="clear-amt">Clear Amount</button>
-      `;
+      chips.innerHTML = `<button type="button" class="wl-chipbtn" data-act="fill-owing">Fill: Amount Owing</button><button type="button" class="wl-chipbtn" data-act="clear-amt">Clear Amount</button>`;
       grp.amount.appendChild(chips);
       chips.addEventListener('click',(e)=>{
         const b = e.target.closest('button[data-act]'); if (!b) return;
@@ -472,17 +432,15 @@
           amountInput.value = '';
           setTimeout(()=> amountInput.dispatchEvent(new Event('change',{bubbles:true})), 0);
         }
-        renderSummary(); // reflect immediately
+        renderSummary();
       });
     }
 
     // Remittance placeholder
     const rem = byId('ctl00_PageBody_RemittanceAdviceTextBox');
-    if (rem && !rem.getAttribute('placeholder')){
-      rem.setAttribute('placeholder','Comma separated · e.g. INV12345,INV67890');
-    }
+    if (rem && !rem.getAttribute('placeholder')) rem.setAttribute('placeholder','Comma separated · e.g. INV12345,INV67890');
 
-    // Move submit panel into right card
+    // Move submit panel into right card (idempotent)
     const submitMount = byId('wlSubmitMount');
     if (submitMount && !submitMount.__wlMoved){
       const realSubmitPanel = $('#ctl00_PageBody_MakePaymentPanel .submit-button-panel');
@@ -491,23 +449,28 @@
     byId('wlProxySubmit')?.addEventListener('click', ()=>{
       const real = $('#wlSubmitMount .submit-button-panel button, #wlSubmitMount .submit-button-panel input[type="submit"], #wlSubmitMount .submit-button-panel input[type="button"]');
       if (real) real.click();
-      else window.scrollTo({ top: (byId('wlSubmitMount')?.getBoundingClientRect().top||0)+window.scrollY-80, behavior:'smooth' });
     });
 
-    // Move transactions content into full-width card
+    // ✅ Embed the entire transactions panel into the tx card (no child juggling)
     const txPanel = byId('ctl00_PageBody_accountsTransactionsPanel');
     const txBody  = byId('wlTxBody');
-    if (txPanel && txBody && !txPanel.__wlHomed){
-      txPanel.classList.add('wl-card');
-      // Remove any prior title bars; we already have wlTxCard head
-      const headers = $$('.panelHeaderMidProductInfo1, .ViewHeader', txPanel); headers.forEach(h=> h.remove?.());
-      // Wrap remaining into txBody
-      while (txPanel.firstChild) txBody.appendChild(txPanel.firstChild);
-      txPanel.appendChild(txBody.parentNode); // keep txPanel as holder if needed
-      txPanel.__wlHomed = true;
+    if (txPanel && txBody && !txPanel.__wlEmbedded){
+      txBody.innerHTML = '';               // clear card body
+      txBody.appendChild(txPanel);         // move native panel inside
+      txPanel.classList.add('wl-tx-embedded');
+      // hide duplicate internal headers/pagers (we already have our card head)
+      $$('.panelHeaderMidProductInfo1, .ViewHeader', txPanel).forEach(h=> h.remove?.());
+      txPanel.__wlEmbedded = true;
     }
 
-    // Hook changes to update summary
+    // Make sure Billing Address is visible if server toggled it (after PayByCheck)
+    const billContainer = byId('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment') || byId('ctl00_PageBody_BillingAddressContainer');
+    if (billContainer){
+      billContainer.style.removeProperty('display');
+      if (!grid.contains(billContainer)) grid.appendChild(billContainer); // ensure it’s in the grid
+    }
+
+    // Summary bindings + render
     wireSummaryBindings();
     renderSummary();
   }
@@ -530,29 +493,19 @@
     const remRaw = (remEl?.value||'').trim();
     const invs = normalizeInvoices(remRaw).split(',').filter(Boolean);
 
-    return {
-      total: totalStr ? formatUSD(parseMoney(totalStr)) : '',
-      addrSelText, billing, zip, email,
-      invCount: invs.length,
-      invs
-    };
+    return { total: totalStr ? formatUSD(parseMoney(totalStr)) : '', addrSelText, billing, zip, email, invCount: invs.length, invs };
   }
 
   function renderSummary(){
     const pills = byId('wlSummaryPills');
     const list  = byId('wlSummaryList');
     if (!pills || !list) return;
-
     const d = getSummaryData();
-
-    // Pills (top row)
     pills.innerHTML = `
       <span class="wl-pill">${d.invCount} invoice${d.invCount===1?'':'s'}</span>
       ${d.total?`<span class="wl-pill">Total ${d.total}</span>`:''}
       ${d.invCount?`<span class="wl-pill" title="${d.invs.join(', ')}">${d.invs.slice(0,4).join(', ')}${d.invCount>4?'…':''}</span>`:''}
     `;
-
-    // Summary list
     const remShort = d.invs.slice(0,6).join(', ');
     list.innerHTML = `
       <div class="wl-row"><div class="wl-key">Invoices</div><div class="wl-val">${d.invCount} item${d.invCount===1?'':'s'} ${d.invCount>6?`<button type="button" class="wl-link" id="wlShowAllInv">View all</button>`:''}</div></div>
@@ -562,22 +515,12 @@
       <div class="wl-row"><div class="wl-key">Email</div><div class="wl-val">${d.email || '<small>—</small>'}</div></div>
       <div class="wl-row"><div class="wl-key">Remittance</div><div class="wl-val"><span id="wlRemShort">${remShort || '<small>—</small>'}</span></div></div>
     `;
-
-    // View all toggle
     const btn = byId('wlShowAllInv');
     if (btn){
       btn.addEventListener('click', ()=>{
-        const el = byId('wlRemShort');
-        if (!el) return;
-        if (el.dataset.expanded==='1'){
-          el.textContent = remShort;
-          el.dataset.expanded = '0';
-          btn.textContent = 'View all';
-        } else {
-          el.textContent = d.invs.join(', ');
-          el.dataset.expanded = '1';
-          btn.textContent = 'Collapse';
-        }
+        const el = byId('wlRemShort'); if (!el) return;
+        if (el.dataset.expanded==='1'){ el.textContent = remShort; el.dataset.expanded='0'; btn.textContent='View all'; }
+        else { el.textContent = d.invs.join(', '); el.dataset.expanded='1'; btn.textContent='Collapse'; }
       });
     }
   }
@@ -585,22 +528,19 @@
   function wireSummaryBindings(){
     if (wireSummaryBindings.__bound) return;
     wireSummaryBindings.__bound = true;
-    const ids = [
+    [
       'ctl00_PageBody_PaymentAmountTextBox',
       'ctl00_PageBody_AddressDropdownList',
       'ctl00_PageBody_BillingAddressTextBox',
       'ctl00_PageBody_PostalCodeTextBox',
       'ctl00_PageBody_EmailAddressTextBox',
       'ctl00_PageBody_RemittanceAdviceTextBox'
-    ];
-    ids.forEach(id=>{
+    ].forEach(id=>{
       const el = byId(id);
-      if (!el) return;
-      if (!el.__wlSumBound){
-        el.addEventListener('input', ()=> renderSummary());
-        el.addEventListener('change', ()=> renderSummary());
-        el.__wlSumBound = true;
-      }
+      if (!el || el.__wlSumBound) return;
+      el.addEventListener('input', renderSummary);
+      el.addEventListener('change', renderSummary);
+      el.__wlSumBound = true;
     });
   }
 
@@ -610,7 +550,7 @@
       if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
         const prm = Sys.WebForms.PageRequestManager.getInstance();
         if (!prm.__wlPolishBound){
-          prm.add_endRequest(()=> { upgradeLayout(); renderSummary(); });
+          prm.add_endRequest(()=>{ upgradeLayout(); });
           prm.__wlPolishBound = true;
         }
       }
@@ -624,6 +564,8 @@
     upgradeLayout(); wireAjax();
   }
 })();
+
+
 
 
 
