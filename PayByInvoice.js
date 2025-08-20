@@ -1398,8 +1398,11 @@
 
 
 /* ==========================================================
-   Woodson — Quick Payment Actions (+ Pay by Invoice & Pay by Job modals)
-   FIX: Keep transactions panel inside the ASP.NET form for proper postback/state
+   Woodson — Quick Payment Actions
+   - Pay by Invoice modal (inside <form>, persists across postbacks)
+   - Pay My Last Statement button
+   - Fill Owing button
+   - Pay by Job modal (unchanged)
    ========================================================== */
 (function () {
   'use strict';
@@ -1426,9 +1429,6 @@
       }
       .wl-quick-title { font-weight:900; margin:0 0 8px 0; font-size:14px; color:#0f172a; }
       .wl-quick-row { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:6px; }
-
-      .wl-inlineradio { display:inline-flex; align-items:center; gap:8px; font-weight:800; }
-      .wl-inlineradio input { transform:translateY(1px); }
 
       .wl-chipbtn{
         border:1px solid #e5e7eb; border-radius:999px; padding:6px 12px;
@@ -1484,10 +1484,10 @@
       .wl-modern-grid .rgPager, .wl-modern-grid .paging-control { border-top:1px solid #e5e7eb; padding-top:8px; margin-top:8px; }
       .wl-modern-grid .rgHeader, .wl-modern-grid .panelHeaderMidProductInfo1, .wl-modern-grid .ViewHeader { display:none !important; }
 
-      /* Tighter vertical rhythm on desktop */
+      /* Slightly tighter rhythm on desktop */
       @media (min-width:768px){
         .wl-form-grid{ gap:14px 16px; }
-        .wl-field{ gap:6px; width:80%; } /* already applied elsewhere */
+        .wl-field{ gap:6px; width:80%; }
       }
     `;
     const s = document.createElement('style'); s.id='wl-quick-widget-css'; s.textContent = css;
@@ -1504,7 +1504,7 @@
   function owingVal(){ const el = $id('ctl00_PageBody_AmountOwingLiteral'); return el ? parseMoney(el.value || el.textContent) : 0; }
   function triggerChange(el){ try{ el.dispatchEvent(new Event('change',{bubbles:true})); }catch{} }
 
-  /* ---------- Pay My Last Statement ---------- */
+  /* ---------- Pay My Last Statement (button) ---------- */
   async function fetchLastStatementAmount_jq(){
     return new Promise((resolve,reject)=>{
       try{
@@ -1531,13 +1531,15 @@
     const td = doc.querySelector('tr#ctl00_PageBody_StatementsDataGrid_ctl00__0 td[data-title="Closing Balance"]');
     return (td?.textContent || '').trim();
   }
-  async function onLastStatementChecked(radio, labelSpan){
-    if (!radio.checked) return;
+  async function handlePayLastStatement(btn){
+    if (!btn) return;
+    const orig = btn.textContent;
+    btn.textContent = 'Fetching…';
+    btn.disabled = true;
     try{
       const closingStr = (window.jQuery ? await fetchLastStatementAmount_jq() : await fetchLastStatementAmount_vanilla());
       if (!closingStr){ alert('Could not find last statement amount.'); return; }
-      const amt = amtEl(); const rem = remEl();
-      if (labelSpan) labelSpan.textContent = `Pay My Last Statement: ${closingStr}`;
+      const amt = amtEl(), rem = remEl();
       if (amt){
         const n = parseMoney(closingStr);
         amt.value = Number.isFinite(n) ? format2(n) : closingStr;
@@ -1549,10 +1551,17 @@
         if (!lines.includes(msg)) lines.push(msg);
         rem.value = lines.join('\n');
       }
-    }catch(e){ console.warn(e); alert('Error fetching data.'); }
+      btn.textContent = 'Last Statement Applied';
+      setTimeout(()=>{ btn.textContent = orig; btn.disabled = false; }, 1200);
+    }catch(e){
+      console.warn(e);
+      alert('Error fetching data.');
+      btn.textContent = orig;
+      btn.disabled = false;
+    }
   }
 
-  /* ---------- Pay by Invoice (FIXED: keep inside form) ---------- */
+  /* ---------- Pay by Invoice (modal INSIDE <form>) ---------- */
   const TX_PANEL_ID = 'ctl00_PageBody_accountsTransactionsPanel';
   const SESS_TX_OPEN = '__WL_TxModalOpen';
 
@@ -1570,31 +1579,40 @@
             <button type="button" class="wl-btn wl-btn-ghost" id="wlTxCloseX" aria-label="Close">✕</button>
           </div>
         </div>
-        <div class="wl-modal-body wl-modern-grid" id="wlTxModalBody"></div>
+        <div class="wl-modal-body wl-modern-grid" id="wlTxModalBody">
+          <div id="wlTxLoading" style="padding:8px 0;">Loading invoices…</div>
+        </div>
         <div class="wl-modal-foot">
           <button type="button" class="wl-btn" id="wlTxCancelBtn">Cancel</button>
           <button type="button" class="wl-btn wl-btn-primary" id="wlTxDoneBtn">Done</button>
         </div>
       </div>`;
-
-    // APPEND INSIDE FORM (IMPORTANT FOR WEBFORMS POSTBACK)
     const f = formEl();
     f.appendChild(back);
     f.appendChild(shell);
-
     back.addEventListener('click', closeTxModal);
     $id('wlTxCloseX').addEventListener('click', closeTxModal);
     $id('wlTxCancelBtn').addEventListener('click', closeTxModal);
     $id('wlTxDoneBtn').addEventListener('click', closeTxModal);
 
-    // Guard: if user clicks anything that will trigger a postback inside the panel,
-    // keep the modal open across the refresh so they can keep selecting.
+    // Keep "open" across postbacks when user clicks inside the grid
     f.addEventListener('click', (e)=>{
       const host = $id('wlTxModalBody');
       if (!host || !host.contains(e.target)) return;
-      // Persist "open" before the postback occurs
       sessionStorage.setItem(SESS_TX_OPEN,'1');
     }, true);
+  }
+
+  function waitForTxPanel(timeoutMs=4000, interval=120){
+    return new Promise(resolve=>{
+      const t0 = Date.now();
+      (function poll(){
+        const el = $id(TX_PANEL_ID);
+        if (el) return resolve(el);
+        if (Date.now() - t0 >= timeoutMs) return resolve(null);
+        setTimeout(poll, interval);
+      })();
+    });
   }
 
   function moveTxPanelToModal(){
@@ -1602,16 +1620,17 @@
     const host  = $id('wlTxModalBody');
     if (!panel || !host) return false;
 
-    // placeholder lives in ORIGINAL parent (also inside form)
     let ph = $id('wlTxReturn');
     if (!ph){
       ph = document.createElement('div'); ph.id='wlTxReturn';
       panel.parentNode?.insertBefore(ph, panel);
     }
     host.appendChild(panel);
-    panel.classList.add('wl-modern-grid'); // style only while in modal
+    panel.classList.add('wl-modern-grid');
+    const l = $id('wlTxLoading'); if (l) l.remove();
     return true;
   }
+
   function restoreTxPanel(){
     const panel = $id(TX_PANEL_ID), ph = $id('wlTxReturn');
     if (panel && ph && ph.parentNode){
@@ -1619,7 +1638,6 @@
       ph.parentNode.insertBefore(panel, ph);
       ph.remove();
     } else {
-      // fallback to card body if placeholder missing
       const body = $id('wlTxBody') || $1('#wlTxCard .wl-card-body');
       if (panel && body){
         panel.classList.remove('wl-modern-grid');
@@ -1627,42 +1645,52 @@
       }
     }
   }
+
   function showTxChrome(){ $id('wlTxModalBackdrop').style.display='block'; $id('wlTxModal').style.display='block'; document.body.style.overflow='hidden'; }
   function hideTxChrome(){ const b=$id('wlTxModalBackdrop'), m=$id('wlTxModal'); if(b)b.style.display='none'; if(m)m.style.display='none'; document.body.style.overflow=''; }
 
-  function openTxModal(){
+  async function openTxModal(){
     ensureTxModalDOM();
-    if (sessionStorage.getItem(SESS_TX_OPEN)==='1'){ showTxChrome(); return; }
-    if (!moveTxPanelToModal()) return;
+    const btn = $id('wlOpenTxModalBtn');
+    if (btn){ btn.disabled = true; btn.setAttribute('aria-disabled','true'); }
+
+    // Wait for the grid (handles cases where layout script hasn’t placed it yet)
+    const panel = await waitForTxPanel();
+    if (!panel){
+      alert('Transactions table not available yet.');
+      if (btn){ btn.disabled = false; btn.removeAttribute('aria-disabled'); }
+      return;
+    }
+    moveTxPanelToModal();
     showTxChrome();
     sessionStorage.setItem(SESS_TX_OPEN,'1');
-    const btn = $id('wlOpenTxModalBtn'); if (btn){ btn.disabled=true; btn.setAttribute('aria-disabled','true'); }
   }
+
   function closeTxModal(){
     restoreTxPanel();
     hideTxChrome();
     sessionStorage.removeItem(SESS_TX_OPEN);
     const btn = $id('wlOpenTxModalBtn'); if (btn){ btn.disabled=false; btn.removeAttribute('aria-disabled'); btn.focus?.(); }
   }
-  function ensureTxModalState(){
+
+  // Ensure state after a postback or full reload
+  async function ensureTxModalState(){
     ensureTxModalDOM();
     const wantOpen = sessionStorage.getItem(SESS_TX_OPEN)==='1';
-    const panel = $id(TX_PANEL_ID);
-    const host  = $id('wlTxModalBody');
     if (wantOpen){
-      if (panel && host && panel.parentNode !== host) moveTxPanelToModal();
-      showTxChrome();
-      const btn = $id('wlOpenTxModalBtn'); if (btn){ btn.disabled=true; btn.setAttribute('aria-disabled','true'); }
+      const panel = await waitForTxPanel();
+      if (panel){ moveTxPanelToModal(); showTxChrome(); const btn = $id('wlOpenTxModalBtn'); if (btn){ btn.disabled=true; btn.setAttribute('aria-disabled','true'); } }
     }else{
-      if (panel && host && panel.parentNode === host) restoreTxPanel();
+      restoreTxPanel();
       hideTxChrome();
       const btn = $id('wlOpenTxModalBtn'); if (btn){ btn.disabled=false; btn.removeAttribute('aria-disabled'); }
     }
   }
 
-  /* ---------- Pay by Job (unchanged from your working version) ---------- */
+  /* ---------- Pay by Job (same as your working one) ---------- */
   const SESS_JOBS_OPEN = '__WL_JobsModalOpen';
   const SESS_JOBS_SEL  = '__WL_JobsSelection';
+
   function ensureJobsModalDOM(){
     if ($id('wlJobsModal')) return;
     const back = document.createElement('div'); back.id='wlJobsModalBackdrop'; back.className='wl-modal-backdrop';
@@ -1686,7 +1714,6 @@
           <button type="button" class="wl-btn wl-btn-primary" id="wlJobsDoneBtn">Done</button>
         </div>
       </div>`;
-    // Jobs modal can live under body; it doesn't post back
     document.body.appendChild(back);
     document.body.appendChild(shell);
     back.addEventListener('click', closeJobsModal);
@@ -1697,6 +1724,7 @@
     $id('wlJobsClearBtn').addEventListener('click', ()=> jobsSelectAll(false));
     document.addEventListener('keydown', (e)=>{ if (e.key==='Escape' && sessionStorage.getItem(SESS_JOBS_OPEN)==='1') closeJobsModal(); });
   }
+
   async function fetchJobBalances(){
     try{
       const res = await fetch('https://webtrack.woodsonlumber.com/JobBalances_R.aspx',{ credentials:'include' });
@@ -1713,6 +1741,7 @@
       return out;
     }catch(e){ console.warn('fetchJobBalances error', e); return []; }
   }
+
   function jobsUpdateSummary(){
     const list = $id('wlJobsList'); if (!list) return;
     const checks = Array.from(list.querySelectorAll('input[type="checkbox"]'));
@@ -1805,7 +1834,7 @@
   }
 
   /* ---------- Build the widget ---------- */
-  async function mountWidget(){
+  function mountWidget(){
     const grid = $id('wlFormGrid') || $1('.bodyFlexItem') || document.body;
     if (!grid){ log.warn('No grid found for widget'); return; }
 
@@ -1823,44 +1852,34 @@
       <div class="wl-quick">
         <div class="wl-quick-title">Quick Payment Actions</div>
         <div class="wl-quick-row" id="wlQuickRow">
-          <label class="wl-inlineradio" id="wlLastStmtWrap">
-            <input type="radio" id="lastStatementRadio" class="radiobutton" name="balanceOption" />
-            <span id="lastStatementRadioText">Pay My Last Statement</span>
-          </label>
+          <button type="button" class="wl-chipbtn" id="wlLastStmtBtn">Pay My Last Statement</button>
           <button type="button" class="wl-chipbtn" id="wlFillOwingBtn">Fill Owing</button>
-          <button type="button" class="wl-chipbtn" id="wlClearAmtBtn">Clear</button>
           <button type="button" class="wl-chipbtn" id="wlOpenTxModalBtn">Pay by Invoice</button>
           <button type="button" class="wl-chipbtn" id="wlOpenJobsModalBtn">Pay by Job</button>
         </div>
       </div>
     `;
 
-    /* Pay My Last Statement (hide on "Load Cash Account Balance" pages) */
+    // Pay My Last Statement
     const hdrText = ($1('.bodyFlexItem.listPageHeader')?.textContent || '').trim();
-    const lastWrap = $id('wlLastStmtWrap');
-    const lastRadio = $id('lastStatementRadio');
-    const lastText = $id('lastStatementRadioText');
     if (/Load Cash Account Balance/i.test(hdrText)){
-      lastWrap.style.display = 'none';
+      $id('wlLastStmtBtn').style.display = 'none'; // hide when it wouldn't make sense
     }
-    lastRadio.addEventListener('change', ()=> onLastStatementChecked(lastRadio, lastText));
+    $id('wlLastStmtBtn').addEventListener('click', (e)=> handlePayLastStatement(e.currentTarget));
 
-    /* Fill/Clear */
+    // Fill Owing
     $id('wlFillOwingBtn').addEventListener('click', ()=>{
       const v = owingVal(); const a = amtEl();
       if (a && v > 0){ a.value = format2(v); triggerChange(a); }
     });
-    $id('wlClearAmtBtn').addEventListener('click', ()=>{ const a = amtEl(); if (!a) return; a.value=''; triggerChange(a); });
 
-    /* Invoices modal (inside form) */
+    // Invoices modal (inside form)
     ensureTxModalDOM();
     $id('wlOpenTxModalBtn').addEventListener('click', openTxModal);
-    ensureTxModalState();
 
-    /* Jobs modal */
+    // Jobs modal
     ensureJobsModalDOM();
     $id('wlOpenJobsModalBtn').addEventListener('click', openJobsModal);
-    ensureJobsModalState();
 
     log.info('Quick Payment Actions mounted (Invoice modal inside form + Jobs modal)');
   }
@@ -1868,15 +1887,23 @@
   /* ---------- Boot + MS AJAX handling ---------- */
   function boot(){
     mountWidget();
+    // Re-assert modal state after the page is ready (postback or first load)
+    Promise.resolve().then(()=> ensureTxModalState());
+    Promise.resolve().then(()=> ensureJobsModalState());
+
     try{
       if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
         const prm = window.Sys.WebForms.PageRequestManager.getInstance();
         if (!prm.__wlQuickWidBound){
-          prm.add_endRequest(()=> { mountWidget(); ensureTxModalState(); ensureJobsModalState(); });
+          prm.add_endRequest(()=> {
+            mountWidget();
+            // wait a tick for grid to be re-added by the layout code, then restore modal if needed
+            setTimeout(()=> { ensureTxModalState(); ensureJobsModalState(); }, 50);
+          });
           prm.__wlQuickWidBound = true;
         }
       }
-    }catch{} // ok
+    }catch{} // fine
   }
 
   if (document.readyState === 'loading'){
