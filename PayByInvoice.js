@@ -1398,11 +1398,11 @@
 
 
 /* ==========================================================
-   Woodson — Quick Payment Actions
-   - Pay by Invoice modal (inside <form>, persists across postbacks)
-   - Pay My Last Statement button
+   Woodson — Quick Payment Actions (v2)
+   - Pay by Invoice modal (robust host detection, inside <form>, persists across postbacks)
+   - Pay My Last Statement button -> writes structured Remittance line
    - Fill Owing button
-   - Pay by Job modal (unchanged)
+   - Pay by Job modal (unchanged from your working version)
    ========================================================== */
 (function () {
   'use strict';
@@ -1475,7 +1475,7 @@
       .wl-modern-grid table { border-collapse:separate; border-spacing:0; width:100%; font-size:14px; }
       .wl-modern-grid thead th {
         position:sticky; top:0; background:#f8fafc; z-index:1;
-        font-weight:800; text-transform:none; letter-spacing:.01em;
+        font-weight:800; letter-spacing:.01em;
         border-bottom:1px solid #e5e7eb; padding:10px 12px;
       }
       .wl-modern-grid tbody tr { transition:background .15s ease, box-shadow .15s ease; }
@@ -1484,7 +1484,7 @@
       .wl-modern-grid .rgPager, .wl-modern-grid .paging-control { border-top:1px solid #e5e7eb; padding-top:8px; margin-top:8px; }
       .wl-modern-grid .rgHeader, .wl-modern-grid .panelHeaderMidProductInfo1, .wl-modern-grid .ViewHeader { display:none !important; }
 
-      /* Slightly tighter rhythm on desktop */
+      /* Tighten vertical rhythm slightly on desktop */
       @media (min-width:768px){
         .wl-form-grid{ gap:14px 16px; }
         .wl-field{ gap:6px; width:80%; }
@@ -1499,13 +1499,14 @@
   const $1  = (sel,root=document)=> root.querySelector(sel);
   function parseMoney(s){ const v = parseFloat(String(s||'').replace(/[^0-9.\-]/g,'')); return Number.isFinite(v)?v:0; }
   function format2(n){ const v = Number(n||0); return v.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}); }
-  function amtEl(){ return $id('ctl00_PageBody_PaymentAmountTextBox'); }
-  function remEl(){ return $id('ctl00_PageBody_RemittanceAdviceTextBox'); }
-  function owingVal(){ const el = $id('ctl00_PageBody_AmountOwingLiteral'); return el ? parseMoney(el.value || el.textContent) : 0; }
+  const amtEl = ()=> $id('ctl00_PageBody_PaymentAmountTextBox');
+  const remEl = ()=> $id('ctl00_PageBody_RemittanceAdviceTextBox');
+  const owingVal = ()=> { const el = $id('ctl00_PageBody_AmountOwingLiteral'); return el ? parseMoney(el.value || el.textContent) : 0; };
   function triggerChange(el){ try{ el.dispatchEvent(new Event('change',{bubbles:true})); }catch{} }
+  function formEl(){ return document.forms && document.forms[0] ? document.forms[0] : document.body; }
 
   /* ---------- Pay My Last Statement (button) ---------- */
-  async function fetchLastStatementAmount_jq(){
+  async function fetchLastStatement_jq(){
     return new Promise((resolve,reject)=>{
       try{
         window.jQuery.ajax({
@@ -1514,8 +1515,12 @@
           success:(data)=> {
             try{
               const $ = window.jQuery;
-              const closing = $(data).find('tr#ctl00_PageBody_StatementsDataGrid_ctl00__0 td[data-title="Closing Balance"]').text().trim();
-              resolve(closing || '');
+              const row = $(data).find('tr#ctl00_PageBody_StatementsDataGrid_ctl00__0');
+              const closing = row.find('td[data-title="Closing Balance"]').text().trim();
+              const date = row.find('td[data-title="Statement Date"]').text().trim()
+                         || row.find('td[data-title*="Date"]').first().text().trim()
+                         || '';
+              resolve({ closing, date });
             }catch(e){ reject(e); }
           },
           error:()=>reject(new Error('Ajax error'))
@@ -1523,13 +1528,25 @@
       }catch(e){ reject(e); }
     });
   }
-  async function fetchLastStatementAmount_vanilla(){
+  async function fetchLastStatement_fetch(){
     const res = await fetch('https://webtrack.woodsonlumber.com/Statements_R.aspx', { credentials:'include' });
     if (!res.ok) throw new Error('HTTP '+res.status);
     const html = await res.text();
     const doc = new DOMParser().parseFromString(html,'text/html');
-    const td = doc.querySelector('tr#ctl00_PageBody_StatementsDataGrid_ctl00__0 td[data-title="Closing Balance"]');
-    return (td?.textContent || '').trim();
+    const row = doc.querySelector('tr#ctl00_PageBody_StatementsDataGrid_ctl00__0');
+    const closing = (row?.querySelector('td[data-title="Closing Balance"]')?.textContent || '').trim();
+    const date = (row?.querySelector('td[data-title="Statement Date"]')?.textContent
+               || row?.querySelector('td[data-title*="Date"]')?.textContent
+               || '').trim();
+    return { closing, date };
+  }
+  function upsertRemittanceStatement(dateStr, amountNum){
+    const r = remEl(); if (!r) return;
+    const lines = (r.value||'').split('\n').map(l=>l.trim()).filter(Boolean);
+    const withoutStmt = lines.filter(l=> !/^STATEMENT\b/i.test(l));
+    const tag = `STATEMENT ${dateStr || 'LAST'}`.trim();
+    const line = `${tag} — $${format2(amountNum)}`;
+    r.value = [line, ...withoutStmt].join('\n');
   }
   async function handlePayLastStatement(btn){
     if (!btn) return;
@@ -1537,35 +1554,24 @@
     btn.textContent = 'Fetching…';
     btn.disabled = true;
     try{
-      const closingStr = (window.jQuery ? await fetchLastStatementAmount_jq() : await fetchLastStatementAmount_vanilla());
-      if (!closingStr){ alert('Could not find last statement amount.'); return; }
-      const amt = amtEl(), rem = remEl();
-      if (amt){
-        const n = parseMoney(closingStr);
-        amt.value = Number.isFinite(n) ? format2(n) : closingStr;
-        triggerChange(amt);
-      }
-      if (rem){
-        const msg = 'Paying last statement amount';
-        const lines = (rem.value||'').split('\n').filter(Boolean);
-        if (!lines.includes(msg)) lines.push(msg);
-        rem.value = lines.join('\n');
-      }
+      const { closing, date } = (window.jQuery ? await fetchLastStatement_jq() : await fetchLastStatement_fetch());
+      if (!closing){ alert('Could not find last statement amount.'); return; }
+      const amtNum = parseMoney(closing);
+      const a = amtEl(); if (a){ a.value = Number.isFinite(amtNum) ? format2(amtNum) : closing; triggerChange(a); }
+      upsertRemittanceStatement(date, amtNum);
       btn.textContent = 'Last Statement Applied';
       setTimeout(()=>{ btn.textContent = orig; btn.disabled = false; }, 1200);
     }catch(e){
       console.warn(e);
       alert('Error fetching data.');
-      btn.textContent = orig;
-      btn.disabled = false;
+      btn.textContent = orig; btn.disabled = false;
     }
   }
 
   /* ---------- Pay by Invoice (modal INSIDE <form>) ---------- */
   const TX_PANEL_ID = 'ctl00_PageBody_accountsTransactionsPanel';
   const SESS_TX_OPEN = '__WL_TxModalOpen';
-
-  function formEl(){ return document.forms && document.forms[0] ? document.forms[0] : document.body; }
+  const PH_ID = 'wlTxReturnPH';
 
   function ensureTxModalDOM(){
     if ($id('wlTxModal')) return;
@@ -1595,7 +1601,7 @@
     $id('wlTxCancelBtn').addEventListener('click', closeTxModal);
     $id('wlTxDoneBtn').addEventListener('click', closeTxModal);
 
-    // Keep "open" across postbacks when user clicks inside the grid
+    // Keep "open" across postbacks when user interacts inside the grid
     f.addEventListener('click', (e)=>{
       const host = $id('wlTxModalBody');
       if (!host || !host.contains(e.target)) return;
@@ -1603,11 +1609,11 @@
     }, true);
   }
 
-  function waitForTxPanel(timeoutMs=4000, interval=120){
+  function waitForTxTarget(timeoutMs=5000, interval=120){
     return new Promise(resolve=>{
       const t0 = Date.now();
       (function poll(){
-        const el = $id(TX_PANEL_ID);
+        const el = findTxMoveTarget();
         if (el) return resolve(el);
         if (Date.now() - t0 >= timeoutMs) return resolve(null);
         setTimeout(poll, interval);
@@ -1615,35 +1621,64 @@
     });
   }
 
-  function moveTxPanelToModal(){
+  // Robustly locate the *live* grid container, regardless of where the layout moved it.
+  function findTxMoveTarget(){
+    // 1) The canonical panel, if it still wraps the grid
     const panel = $id(TX_PANEL_ID);
-    const host  = $id('wlTxModalBody');
-    if (!panel || !host) return false;
+    if (panel && (panel.querySelector('table, .rgDataDiv, input, select, a, button'))) return panel;
 
-    let ph = $id('wlTxReturn');
-    if (!ph){
-      ph = document.createElement('div'); ph.id='wlTxReturn';
-      panel.parentNode?.insertBefore(ph, panel);
+    // 2) The Tx Card body (your layout), use its first element child
+    const body = $id('wlTxBody') || $1('#wlTxCard .wl-card-body');
+    if (body){
+      const inner = body.querySelector('#' + CSS.escape(TX_PANEL_ID)) || body.firstElementChild;
+      if (inner) return inner;
     }
-    host.appendChild(panel);
-    panel.classList.add('wl-modern-grid');
-    const l = $id('wlTxLoading'); if (l) l.remove();
+
+    // 3) Last resort: any table/grid inside the AccountPayment area
+    const fallback = $1('#' + CSS.escape(TX_PANEL_ID) + ' * table') ||
+                     $1('#wlTxCard .wl-card-body table');
+    return fallback ? fallback.closest('div,section,article') || fallback : null;
+  }
+
+  function makePlaceholderFor(el){
+    // Remove any stale placeholder
+    $id(PH_ID)?.remove();
+    const ph = document.createElement('div');
+    ph.id = PH_ID;
+    el.parentNode?.insertBefore(ph, el);
+    return ph;
+  }
+
+  function moveTxTargetToModal(){
+    const host = $id('wlTxModalBody');
+    if (!host) return false;
+    const target = findTxMoveTarget();
+    if (!target) return false;
+
+    makePlaceholderFor(target);
+    host.appendChild(target);
+    target.classList.add('wl-modern-grid');
+    $id('wlTxLoading')?.remove();
     return true;
   }
 
-  function restoreTxPanel(){
-    const panel = $id(TX_PANEL_ID), ph = $id('wlTxReturn');
-    if (panel && ph && ph.parentNode){
-      panel.classList.remove('wl-modern-grid');
-      ph.parentNode.insertBefore(panel, ph);
+  function restoreTxTarget(){
+    const ph = $id(PH_ID);
+    const target = findTxMoveTarget();
+    if (ph && target){
+      ph.parentNode?.insertBefore(target, ph);
+      target.classList.remove('wl-modern-grid');
       ph.remove();
-    } else {
-      const body = $id('wlTxBody') || $1('#wlTxCard .wl-card-body');
-      if (panel && body){
-        panel.classList.remove('wl-modern-grid');
-        body.appendChild(panel);
-      }
+      return true;
     }
+    // Fallback: drop back into tx card body if placeholder missing
+    const body = $id('wlTxBody') || $1('#wlTxCard .wl-card-body');
+    if (target && body){
+      target.classList.remove('wl-modern-grid');
+      body.appendChild(target);
+      return true;
+    }
+    return false;
   }
 
   function showTxChrome(){ $id('wlTxModalBackdrop').style.display='block'; $id('wlTxModal').style.display='block'; document.body.style.overflow='hidden'; }
@@ -1653,41 +1688,38 @@
     ensureTxModalDOM();
     const btn = $id('wlOpenTxModalBtn');
     if (btn){ btn.disabled = true; btn.setAttribute('aria-disabled','true'); }
-
-    // Wait for the grid (handles cases where layout script hasn’t placed it yet)
-    const panel = await waitForTxPanel();
-    if (!panel){
+    const target = await waitForTxTarget();
+    if (!target){
       alert('Transactions table not available yet.');
       if (btn){ btn.disabled = false; btn.removeAttribute('aria-disabled'); }
       return;
     }
-    moveTxPanelToModal();
+    moveTxTargetToModal();
     showTxChrome();
     sessionStorage.setItem(SESS_TX_OPEN,'1');
   }
 
   function closeTxModal(){
-    restoreTxPanel();
+    restoreTxTarget();
     hideTxChrome();
     sessionStorage.removeItem(SESS_TX_OPEN);
     const btn = $id('wlOpenTxModalBtn'); if (btn){ btn.disabled=false; btn.removeAttribute('aria-disabled'); btn.focus?.(); }
   }
 
-  // Ensure state after a postback or full reload
   async function ensureTxModalState(){
     ensureTxModalDOM();
     const wantOpen = sessionStorage.getItem(SESS_TX_OPEN)==='1';
     if (wantOpen){
-      const panel = await waitForTxPanel();
-      if (panel){ moveTxPanelToModal(); showTxChrome(); const btn = $id('wlOpenTxModalBtn'); if (btn){ btn.disabled=true; btn.setAttribute('aria-disabled','true'); } }
+      const target = await waitForTxTarget();
+      if (target){ moveTxTargetToModal(); showTxChrome(); const btn = $id('wlOpenTxModalBtn'); if (btn){ btn.disabled=true; btn.setAttribute('aria-disabled','true'); } }
     }else{
-      restoreTxPanel();
+      restoreTxTarget();
       hideTxChrome();
       const btn = $id('wlOpenTxModalBtn'); if (btn){ btn.disabled=false; btn.removeAttribute('aria-disabled'); }
     }
   }
 
-  /* ---------- Pay by Job (same as your working one) ---------- */
+  /* ---------- Pay by Job (unchanged behavior) ---------- */
   const SESS_JOBS_OPEN = '__WL_JobsModalOpen';
   const SESS_JOBS_SEL  = '__WL_JobsSelection';
 
@@ -1860,50 +1892,41 @@
       </div>
     `;
 
-    // Pay My Last Statement
+    // Hide Last Statement on disallowed views
     const hdrText = ($1('.bodyFlexItem.listPageHeader')?.textContent || '').trim();
     if (/Load Cash Account Balance/i.test(hdrText)){
-      $id('wlLastStmtBtn').style.display = 'none'; // hide when it wouldn't make sense
+      $id('wlLastStmtBtn').style.display = 'none';
     }
+
     $id('wlLastStmtBtn').addEventListener('click', (e)=> handlePayLastStatement(e.currentTarget));
+    $id('wlFillOwingBtn').addEventListener('click', ()=>{ const v=owingVal(); const a=amtEl(); if (a && v>0){ a.value = format2(v); triggerChange(a);} });
 
-    // Fill Owing
-    $id('wlFillOwingBtn').addEventListener('click', ()=>{
-      const v = owingVal(); const a = amtEl();
-      if (a && v > 0){ a.value = format2(v); triggerChange(a); }
-    });
-
-    // Invoices modal (inside form)
+    // Modals
     ensureTxModalDOM();
     $id('wlOpenTxModalBtn').addEventListener('click', openTxModal);
-
-    // Jobs modal
     ensureJobsModalDOM();
     $id('wlOpenJobsModalBtn').addEventListener('click', openJobsModal);
 
-    log.info('Quick Payment Actions mounted (Invoice modal inside form + Jobs modal)');
+    log.info('Quick Payment Actions mounted');
   }
 
   /* ---------- Boot + MS AJAX handling ---------- */
   function boot(){
     mountWidget();
-    // Re-assert modal state after the page is ready (postback or first load)
     Promise.resolve().then(()=> ensureTxModalState());
     Promise.resolve().then(()=> ensureJobsModalState());
-
     try{
       if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
         const prm = window.Sys.WebForms.PageRequestManager.getInstance();
         if (!prm.__wlQuickWidBound){
           prm.add_endRequest(()=> {
             mountWidget();
-            // wait a tick for grid to be re-added by the layout code, then restore modal if needed
             setTimeout(()=> { ensureTxModalState(); ensureJobsModalState(); }, 50);
           });
           prm.__wlQuickWidBound = true;
         }
       }
-    }catch{} // fine
+    }catch{} 
   }
 
   if (document.readyState === 'loading'){
