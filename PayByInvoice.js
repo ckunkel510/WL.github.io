@@ -1936,3 +1936,453 @@
   }
 })();
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ==========================================================
+   Woodson — Client-side Invoice Picker (no postbacks)
+   v1.0
+   - Opens a modal with a modern table + checkboxes
+   - Scrapes Invoices_r.aspx and paginates via WebForms POST
+   - On "Done" -> redirects to this page with utm_invoices + utm_total
+   Dependencies: none (uses fetch + DOMParser)
+   ========================================================== */
+(function(){
+  'use strict';
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+
+  /* ---------- tiny logger ---------- */
+  const LOG = (window.WLPayDiag?.getLevel?.() ?? 2), LVL = window.WLPayDiag?.LVL || { error:0, warn:1, info:2, debug:3 };
+  const log = {
+    error: (...a)=> { if (LOG>=LVL.error) console.error('[AP:INV]', ...a); },
+    warn:  (...a)=> { if (LOG>=LVL.warn ) console.warn ('[AP:INV]', ...a); },
+    info:  (...a)=> { if (LOG>=LVL.info ) console.log  ('[AP:INV]', ...a); },
+    debug: (...a)=> { if (LOG>=LVL.debug) console.log  ('[AP:INV]', ...a); },
+  };
+
+  /* ---------- CSS ---------- */
+  (function css(){
+    if (document.getElementById('wl-inv-modal-css')) return;
+    const s=document.createElement('style'); s.id='wl-inv-modal-css';
+    s.textContent = `
+      .wl-modal-backdrop { position:fixed; inset:0; background:rgba(15,23,42,.5); display:none; z-index:9999; }
+      .wl-modal-shell    { position:fixed; inset:0; display:none; z-index:10000; }
+      .wl-modal-card     { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+                           background:#fff; border-radius:16px; width:min(1100px,94vw); max-height:86vh;
+                           box-shadow:0 20px 60px rgba(0,0,0,.25); display:flex; flex-direction:column; }
+      .wl-modal-head     { padding:12px 16px; background:#6b0016; color:#fff; font-weight:900; display:flex;
+                           gap:10px; align-items:center; justify-content:space-between; border-radius:16px 16px 0 0; }
+      .wl-modal-head .right { display:flex; align-items:center; gap:10px; }
+      .wl-modal-pill     { background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.25);
+                           border-radius:999px; padding:4px 8px; font-weight:800; }
+      .wl-modal-body     { padding:12px 16px; overflow:auto; }
+      .wl-modal-foot     { padding:12px 16px; display:flex; justify-content:space-between; gap:10px; border-top:1px solid #e5e7eb; }
+      .wl-btn            { border:1px solid #e5e7eb; border-radius:10px; padding:8px 12px; font-weight:800; background:#fff; cursor:pointer; }
+      .wl-btn:focus-visible { outline:0; box-shadow:0 0 0 3px #93c5fd; }
+      .wl-btn-primary    { background:#6b0016; color:#fff; border-color:#6b0016; }
+      .wl-btn-ghost      { background:transparent; color:#fff; border-color:rgba(255,255,255,.35); }
+      .wl-input          { border:1px solid #e5e7eb; border-radius:10px; padding:8px 10px; min-width:220px; }
+      .wl-table-wrap     { border:1px solid #e5e7eb; border-radius:12px; overflow:hidden; }
+      table.wl-grid      { width:100%; border-collapse:separate; border-spacing:0; font-size:14px; }
+      .wl-grid thead th  { position:sticky; top:0; background:#f8fafc; z-index:1; font-weight:800; letter-spacing:.01em;
+                           border-bottom:1px solid #e5e7eb; padding:10px 12px; text-align:left; }
+      .wl-grid tbody tr  { transition:background .15s ease; }
+      .wl-grid tbody tr:hover { background:#f9fafb; }
+      .wl-grid td        { border-bottom:1px solid #eef2f7; padding:10px 12px; }
+      .wl-grid .right    { text-align:right; }
+      .wl-grid .muted    { color:#64748b; }
+      .wl-foot-left      { display:flex; align-items:center; gap:8px; }
+    `;
+    document.head.appendChild(s);
+  })();
+
+  /* ---------- Modal DOM ---------- */
+  function ensureModal(){
+    if (document.getElementById('wlInvModal')) return;
+    const back = document.createElement('div'); back.id='wlInvBackdrop'; back.className='wl-modal-backdrop';
+    const shell = document.createElement('div'); shell.id='wlInvModal'; shell.className='wl-modal-shell';
+    shell.innerHTML = `
+      <div class="wl-modal-card" role="dialog" aria-modal="true" aria-labelledby="wlInvTitle">
+        <div class="wl-modal-head">
+          <div id="wlInvTitle">Select Invoices</div>
+          <div class="right">
+            <input id="wlInvFilter" class="wl-input" type="text" placeholder="Search invoice # or text">
+            <span class="wl-modal-pill" id="wlInvStats">0 selected · $0.00</span>
+            <button type="button" class="wl-btn wl-btn-ghost" id="wlInvCloseX" aria-label="Close">✕</button>
+          </div>
+        </div>
+        <div class="wl-modal-body">
+          <div class="wl-table-wrap">
+            <table class="wl-grid" id="wlInvTable">
+              <thead>
+                <tr>
+                  <th style="width:40px;"><input type="checkbox" id="wlInvSelectAll"></th>
+                  <th>Invoice</th>
+                  <th>Description</th>
+                  <th class="right">Amount Due</th>
+                </tr>
+              </thead>
+              <tbody id="wlInvTbody">
+                <tr><td colspan="4" class="muted" style="padding:14px;">Loading invoices…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="wl-modal-foot">
+          <div class="wl-foot-left">
+            <button type="button" class="wl-btn" id="wlInvLoadMoreBtn">Load more</button>
+            <span id="wlInvLoadedBadge" class="muted"></span>
+          </div>
+          <div class="wl-foot-right">
+            <button type="button" class="wl-btn" id="wlInvCancelBtn">Cancel</button>
+            <button type="button" class="wl-btn wl-btn-primary" id="wlInvDoneBtn">Done</button>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(back);
+    document.body.appendChild(shell);
+
+    // Close hooks
+    back.addEventListener('click', closeModal);
+    document.getElementById('wlInvCloseX').addEventListener('click', closeModal);
+    document.getElementById('wlInvCancelBtn').addEventListener('click', closeModal);
+
+    // Interactions
+    document.getElementById('wlInvSelectAll').addEventListener('change', (e)=>{
+      const c = e.currentTarget.checked;
+      document.querySelectorAll('#wlInvTbody input[type="checkbox"]').forEach(cb=>{
+        cb.checked = c; toggleSel(cb.dataset.inv, cb.dataset.amount, c);
+      });
+      renderStats();
+    });
+    document.getElementById('wlInvFilter').addEventListener('input', ()=> renderRows());
+    document.getElementById('wlInvLoadMoreBtn').addEventListener('click', loadNextPage);
+    document.getElementById('wlInvDoneBtn').addEventListener('click', commitSelection);
+    document.addEventListener('keydown', (e)=>{ if (e.key==='Escape' && state.open) closeModal(); });
+  }
+
+  function openModal(){
+    ensureModal();
+    document.getElementById('wlInvBackdrop').style.display = 'block';
+    document.getElementById('wlInvModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+    state.open = true;
+    // If no data yet, load first page
+    if (!state.loadedOnce) loadFirstPage();
+  }
+  function closeModal(){
+    document.getElementById('wlInvBackdrop').style.display = 'none';
+    document.getElementById('wlInvModal').style.display = 'none';
+    document.body.style.overflow = '';
+    state.open = false;
+  }
+
+  /* ---------- Data state ---------- */
+  const state = {
+    rows: [],                 // [{inv, desc, amount}]
+    selected: new Map(),      // inv -> amount
+    nextPost: null,           // { url, hidden: {...}, evtTarget, evtArg } or null
+    pageCount: 0,             // loaded pages count
+    open: false,
+    loadedOnce: false,
+    maxPages: 12              // safety cap
+  };
+
+  function normalizeInv(s){
+    const core = String(s||'').trim().replace(/^INV\s*/i,'').replace(/[^\w-]/g,'');
+    return core ? `INV${core}` : '';
+  }
+
+  function fmt2(n){ return Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}); }
+  function money(s){ const v=parseFloat(String(s||'').replace(/[^0-9.\-]/g,'')); return Number.isFinite(v)?v:0; }
+
+  function toggleSel(inv, amtStr, on){
+    if (!inv) return;
+    const val = money(amtStr);
+    if (on) state.selected.set(inv, val);
+    else state.selected.delete(inv);
+  }
+
+  function renderStats(){
+    const count = state.selected.size;
+    const total = Array.from(state.selected.values()).reduce((s,v)=> s+v, 0);
+    const pill = document.getElementById('wlInvStats');
+    if (pill) pill.textContent = `${count} selected · $${fmt2(total)}`;
+  }
+
+  function renderRows(){
+    const tbody = document.getElementById('wlInvTbody');
+    const q = (document.getElementById('wlInvFilter')?.value || '').trim().toLowerCase();
+    if (!tbody) return;
+    if (!state.rows.length){
+      tbody.innerHTML = `<tr><td colspan="4" class="muted" style="padding:14px;">No invoices found.</td></tr>`;
+      renderStats();
+      return;
+    }
+    const rows = state.rows.filter(r=>{
+      if (!q) return true;
+      return r.inv.toLowerCase().includes(q) || (r.desc||'').toLowerCase().includes(q);
+    });
+    const frag = document.createDocumentFragment();
+    rows.forEach(r=>{
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input type="checkbox" data-inv="${r.inv}" data-amount="${r.amount}" ${state.selected.has(r.inv)?'checked':''}></td>
+        <td>${r.inv}</td>
+        <td class="muted">${r.desc || ''}</td>
+        <td class="right">$${fmt2(money(r.amount))}</td>
+      `;
+      const cb = tr.querySelector('input[type="checkbox"]');
+      cb.addEventListener('change', (e)=>{ toggleSel(r.inv, r.amount, e.currentTarget.checked); renderStats(); });
+      frag.appendChild(tr);
+    });
+    tbody.innerHTML = '';
+    tbody.appendChild(frag);
+
+    const loadedBadge = document.getElementById('wlInvLoadedBadge');
+    if (loadedBadge) loadedBadge.textContent = `Loaded ${state.rows.length} row(s), page ${state.pageCount}${state.nextPost ? '+' : ''}`;
+    renderStats();
+  }
+
+  /* ---------- Scrape helpers (WebForms) ---------- */
+  const INVOICES_URL = 'https://webtrack.woodsonlumber.com/Invoices_r.aspx';
+
+  async function getDoc(url, opts={}){
+    const res = await fetch(url, { credentials:'include', ...opts });
+    if (!res.ok) throw new Error('HTTP '+res.status);
+    const html = await res.text();
+    return new DOMParser().parseFromString(html, 'text/html');
+  }
+
+  function squishHidden(doc){
+    const hid = {};
+    doc.querySelectorAll('input[type="hidden"]').forEach(i=>{
+      if (i.name) hid[i.name] = i.value || '';
+    });
+    return hid;
+  }
+
+  function parseNextFromDoc(doc){
+    // Try common patterns: Telerik RadGrid next, or WebForms pager
+    let a = doc.querySelector('a.rgPageNext') || doc.querySelector('a[title*="Next"]');
+    if (!a){
+      // any anchor with __doPostBack and "Next"
+      a = Array.from(doc.querySelectorAll('a[href*="__doPostBack"]')).find(x=> /Next|›|>>/i.test(x.textContent||''));
+    }
+    if (!a) return null;
+
+    const href = a.getAttribute('href') || '';
+    const oncl = a.getAttribute('onclick') || '';
+    const src = href || oncl;
+    const m = src.match(/__doPostBack\(\s*'([^']+)'\s*,\s*'([^']*)'\s*\)/);
+    if (m){
+      return { evtTarget: m[1], evtArg: m[2] || '' };
+    }
+    return null;
+  }
+
+  function extractRowsFromDoc(doc){
+    const out = [];
+    // Try rows of the grid by common patterns
+    const trList =
+      Array.from(doc.querySelectorAll('tr[id*="InvoicesDataGrid"]')) // WebForms/Telerik ids
+      .concat(Array.from(doc.querySelectorAll('table tr')));         // fallback
+    trList.forEach(tr=>{
+      // columns by data-title heuristics
+      const invTd = tr.querySelector('td[data-title*="Invoice" i]') ||
+                    tr.querySelector('td:nth-child(1)');
+      const amtTd = tr.querySelector('td[data-title*="Amount" i]') ||
+                    tr.querySelector('td[data-title*="Balance" i]') ||
+                    tr.querySelector('td:last-child');
+      if (!invTd || !amtTd) return;
+
+      const invRaw = (invTd.textContent||'').trim();
+      const inv = normalizeInv(invRaw);
+      const amt = (amtTd.textContent||'').trim();
+      if (!inv) return;
+
+      // Optional description (try some likely columns)
+      const descTd = tr.querySelector('td[data-title*="Description" i]') ||
+                     tr.querySelector('td[data-title*="Customer PO" i]');
+      const desc = (descTd?.textContent||'').trim();
+
+      // Only keep positives
+      if (money(amt) > 0){
+        out.push({ inv, amount: amt, desc });
+      }
+    });
+    // de-duplicate by invoice
+    const uniq = new Map();
+    out.forEach(r=> { if (!uniq.has(r.inv)) uniq.set(r.inv, r); });
+    return Array.from(uniq.values());
+  }
+
+  async function loadFirstPage(){
+    try{
+      document.getElementById('wlInvTbody').innerHTML = `<tr><td colspan="4" class="muted" style="padding:14px;">Loading invoices…</td></tr>`;
+      const doc = await getDoc(INVOICES_URL);
+      const rows = extractRowsFromDoc(doc);
+      const hidden = squishHidden(doc);
+      const next   = parseNextFromDoc(doc);
+      state.rows = rows;
+      state.pageCount = 1;
+      state.nextPost = next ? { url: INVOICES_URL, hidden, evtTarget: next.evtTarget, evtArg: next.evtArg } : null;
+      state.loadedOnce = true;
+      renderRows();
+      log.info('Invoices first page loaded', { rows: rows.length, hasNext: !!state.nextPost });
+    }catch(e){
+      log.error('loadFirstPage error', e);
+      document.getElementById('wlInvTbody').innerHTML = `<tr><td colspan="4" class="muted" style="padding:14px;">Failed to load invoices.</td></tr>`;
+    }
+  }
+
+  async function loadNextPage(){
+    if (!state.nextPost){ renderRows(); return; }
+    if (state.pageCount >= state.maxPages){
+      alert('Reached client-side page cap.');
+      return;
+    }
+    const { url, hidden, evtTarget, evtArg } = state.nextPost;
+
+    // Build post data: include ALL hidden fields to preserve WebForms state
+    const data = new URLSearchParams();
+    Object.entries(hidden).forEach(([k,v])=> data.append(k,v));
+    data.set('__EVENTTARGET', evtTarget);
+    data.set('__EVENTARGUMENT', evtArg);
+
+    try{
+      const doc = await getDoc(url, {
+        method:'POST',
+        headers: { 'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8' },
+        body: data.toString(),
+        credentials:'include'
+      });
+      const rows = extractRowsFromDoc(doc);
+      const next = parseNextFromDoc(doc);
+      const newHidden = squishHidden(doc);
+
+      // Merge new rows (dedupe)
+      const known = new Set(state.rows.map(r=> r.inv));
+      rows.forEach(r=> { if (!known.has(r.inv)) state.rows.push(r); });
+      state.pageCount += 1;
+      state.nextPost = next ? { url, hidden: newHidden, evtTarget: next.evtTarget, evtArg: next.evtArg } : null;
+
+      renderRows();
+      log.info('Invoices next page loaded', { added: rows.length, pageCount: state.pageCount, hasNext: !!state.nextPost });
+      if (!state.nextPost){
+        document.getElementById('wlInvLoadMoreBtn').disabled = true;
+        document.getElementById('wlInvLoadedBadge').textContent += ' · All pages loaded';
+      }
+    }catch(e){
+      log.error('loadNextPage error', e);
+      alert('Could not load more invoices.');
+    }
+  }
+
+  /* ---------- Commit selection -> redirect with UTM ---------- */
+  function commitSelection(){
+    if (state.selected.size === 0){
+      alert('Select at least one invoice.');
+      return;
+    }
+    const list = Array.from(state.selected.keys());
+    const total = Array.from(state.selected.values()).reduce((s,v)=> s+v, 0);
+    const utm_invoices = encodeURIComponent(list.join(','));
+    const utm_total = encodeURIComponent(fmt2(total));
+
+    const url = new URL(location.href);
+    url.searchParams.set('utm_invoices', list.join(','));
+    url.searchParams.set('utm_total', fmt2(total));
+
+    // Optional: clear any obsolete server query keys that might interfere
+    ['__EVENTTARGET','__EVENTARGUMENT'].forEach(k=> url.searchParams.delete(k));
+
+    location.assign(url.toString());
+  }
+
+  /* ---------- Wire the existing "Pay by Invoice" button ---------- */
+  function wire(){
+    const btn = document.getElementById('wlOpenTxModalBtn');
+    if (!btn || btn.__wlInvBound) return;
+    btn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); openModal(); });
+    btn.__wlInvBound = true;
+    log.info('Client-side Invoice Picker bound to wlOpenTxModalBtn');
+  }
+
+  function boot(){
+    wire();
+    try{
+      if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
+        const prm = window.Sys.WebForms.PageRequestManager.getInstance();
+        if (!prm.__wlInvPickerBound){
+          prm.add_endRequest(()=> setTimeout(wire, 30));
+          prm.__wlInvPickerBound = true;
+        }
+      }
+    }catch{}
+  }
+
+  if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', boot, { once:true }); }
+  else { boot(); }
+
+})();
+
