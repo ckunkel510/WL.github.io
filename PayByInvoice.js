@@ -258,305 +258,292 @@
 
 
 
+
 (function(){
   'use strict';
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
-  /* ---------------- CSS ---------------- */
+  /* ========== CSS: airy, compact, two-column ========== */
   (function injectCSS(){
-    if (document.getElementById('wl-ap-modern-css')) return;
+    if (document.getElementById('wl-ap-compact-css')) return;
     const css = `
       :root{
-        --wl-bg:#f6f7fb;
-        --wl-card:#ffffff;
-        --wl-border:#e5e7eb;
-        --wl-text:#0f172a;
-        --wl-sub:#475569;
-        --wl-brand:#6b0016;
-        --wl-brand-2:#8a1426;
-        --wl-focus:#93c5fd;
-        --wl-chip:#f1f5f9;
+        --wl-bg:#f6f7fb; --wl-card:#fff; --wl-border:#e5e7eb;
+        --wl-text:#0f172a; --wl-sub:#475569; --wl-brand:#6b0016; --wl-focus:#93c5fd;
       }
-      /* page backdrop */
       .bodyFlexContainer{ background:var(--wl-bg); }
-      /* grid shell */
-      .wl-ap-shell{
-        display:grid; gap:16px; align-items:start;
-      }
-      @media (min-width: 1024px){
-        .wl-ap-shell{ grid-template-columns: 1fr 420px; }
-      }
+      .wl-shell{ display:grid; gap:16px; }
+      @media(min-width:1024px){ .wl-shell{ grid-template-columns: 1fr 420px; } }
 
-      /* card */
-      .wl-card{
-        background:var(--wl-card); border:1px solid var(--wl-border);
-        border-radius:16px; box-shadow:0 6px 18px rgba(15,23,42,.06);
-      }
-      .wl-card .wl-card-head{
-        padding:14px 16px; border-bottom:1px solid var(--wl-border);
-        font-weight:900; letter-spacing:.2px;
-      }
-      .wl-card .wl-card-body{ padding:14px 16px; }
+      .wl-card{ background:var(--wl-card); border:1px solid var(--wl-border);
+        border-radius:16px; box-shadow:0 6px 18px rgba(15,23,42,.06); }
+      .wl-card-head{ padding:12px 14px; border-bottom:1px solid var(--wl-border);
+        font-weight:900; letter-spacing:.2px; }
+      .wl-card-body{ padding:12px 14px; }
 
-      /* tidy the legacy groups */
-      .wl-card .epi-form-group-acctPayment{
-        border:none !important; background:transparent !important;
-        padding:10px 0 !important; margin:0 0 8px !important;
-      }
-      .wl-field{ display:grid; gap:8px; }
-      @media (min-width: 640px){
-        .wl-field{ grid-template-columns: 180px 1fr; align-items:center; }
-        .wl-field > .wl-lab { text-align:right; padding-right:12px; }
+      /* Compact two-column form grid */
+      .wl-form-grid{ display:grid; gap:14px 16px; }
+      @media(min-width:768px){ .wl-form-grid{ grid-template-columns: 1fr 1fr; } }
+      .wl-item{ background:transparent; border:none; margin:0; padding:0; }
+      .wl-span-2{ grid-column: 1 / -1; }
+
+      /* Transform legacy groups into tidy rows */
+      .wl-field{ display:grid; gap:6px; }
+      @media(min-width:640px){
+        .wl-field{ grid-template-columns: 160px 1fr; align-items:center; }
+        .wl-lab{ text-align:right; padding-right:12px; }
       }
       .wl-lab{ color:var(--wl-sub); font-weight:800; }
       .wl-ctl input.form-control,
       .wl-ctl select.form-control,
       .wl-ctl textarea.form-control{
-        border:1px solid var(--wl-border); border-radius:12px; padding:10px 12px;
-        box-shadow:none;
+        border:1px solid var(--wl-border); border-radius:12px; padding:10px 12px; min-height:40px;
       }
       .wl-help{ color:var(--wl-sub); font-size:12px; margin-top:4px; }
 
-      /* chips & quick actions */
-      .wl-chiprow{ display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
-      .wl-chipbtn{
-        border:1px solid var(--wl-border); border-radius:999px; padding:6px 10px;
-        background:#fff; font-weight:800; font-size:12px; cursor:pointer; user-select:none;
-      }
+      /* Amount quick actions */
+      .wl-chips{ display:flex; gap:8px; flex-wrap:wrap; margin-top:6px; }
+      .wl-chipbtn{ border:1px solid var(--wl-border); border-radius:999px; padding:6px 10px;
+        background:#fff; font-weight:800; font-size:12px; cursor:pointer; }
 
-      /* pay method toggle (non-destructive) */
+      /* Pay method toggle (non-destructive) */
       .wl-paytoggle{ display:flex; gap:8px; flex-wrap:wrap; }
-      .wl-paytoggle .opt{
-        border:1px solid var(--wl-border); border-radius:12px; padding:8px 12px; cursor:pointer;
-        font-weight:800; display:inline-flex; align-items:center; gap:8px; background:#fff;
-      }
+      .wl-paytoggle .opt{ border:1px solid var(--wl-border); border-radius:12px; padding:8px 12px;
+        background:#fff; font-weight:800; cursor:pointer; }
       .wl-paytoggle .opt[data-active="true"]{ border-color:var(--wl-brand); box-shadow:0 0 0 3px rgba(107,0,22,.08); }
 
-      /* sticky footer action */
-      .wl-sticky{
-        position:sticky; bottom:0; z-index:40; margin-top:12px;
-        background:rgba(246,247,251,.8); backdrop-filter:saturate(1.2) blur(8px);
-        border-top:1px solid var(--wl-border);
-      }
-      .wl-sticky-inner{
-        display:flex; gap:10px; align-items:center; justify-content:space-between;
-        padding:10px 12px;
-      }
-      .wl-cta{
-        appearance:none; border:none; border-radius:12px; padding:12px 16px;
-        background:var(--wl-brand); color:#fff; font-weight:900; cursor:pointer;
-      }
-      .wl-cta:hover{ background:var(--wl-brand-2); }
+      /* Right rail summary + submit */
+      .wl-summary{ display:flex; flex-direction:column; gap:12px; }
+      .wl-pillrow{ display:flex; gap:8px; flex-wrap:wrap; }
+      .wl-pill{ border:1px solid var(--wl-border); background:#fff; border-radius:999px; padding:6px 10px;
+        font-weight:800; font-size:12px; }
+      .wl-cta{ appearance:none; border:none; border-radius:12px; padding:12px 16px;
+        background:var(--wl-brand); color:#fff; font-weight:900; cursor:pointer; width:100%; }
+      .wl-cta:focus-visible{ outline:0; box-shadow:0 0 0 3px var(--wl-focus); }
 
-      /* right column transactions panel appearance */
+      /* Make the transactions panel look like a card when moved */
       #ctl00_PageBody_accountsTransactionsPanel.wl-card .panelHeaderMidProductInfo1,
       #ctl00_PageBody_accountsTransactionsPanel.wl-card .paging-control{ border:none !important; }
 
-      /* top summary tweaks (uses your existing box if present) */
-      #wlPaySummary{ margin-bottom:12px; }
-      /* minor placeholder */
-      #ctl00_PageBody_RemittanceAdviceTextBox::placeholder{ color:#9aa6b2; }
+      /* Minimize vertical bloat from legacy description text */
+      .wl-compact .descriptionMessage{ display:none !important; }
+
+      /* Subtle placeholder */
+      #ctl00_PageBody_RemittanceAdviceTextBox::placeholder{ color:#98a5b1; }
     `;
-    const el = document.createElement('style'); el.id='wl-ap-modern-css'; el.textContent = css; document.head.appendChild(el);
+    const el = document.createElement('style'); el.id='wl-ap-compact-css'; el.textContent = css; document.head.appendChild(el);
   })();
 
-  /* ---------------- DOM helpers ---------------- */
+  /* ========== DOM helpers ========== */
   const $ = (sel,root=document)=> root.querySelector(sel);
   const $$ = (sel,root=document)=> Array.from(root.querySelectorAll(sel));
   const byId = (id)=> document.getElementById(id);
-  const once = (el,prop)=> (el[prop]=el[prop]||true) && el[prop];
-
   function parseMoney(s){ const v=parseFloat(String(s||'').replace(/[^0-9.\-]/g,'')); return Number.isFinite(v)?v:0; }
 
-  /* ---------------- upgrade pass ---------------- */
-  function upgradeUI(){
-    const page = $('.bodyFlexContainer');
-    if (!page || page.__wlUpgraded) return;
-    page.__wlUpgraded = true;
+  /* ========== Build compact layout ========== */
+  function upgradeLayout(){
+    const page = $('.bodyFlexContainer'); if (!page) return;
 
-    // Shell grid wrapping left form column + right transactions
-    const leftCol = $('.bodyFlexItem > .float-left') || $('.bodyFlexItem');
-    const rightPanel = byId('ctl00_PageBody_accountsTransactionsPanel');
-    if (!leftCol) return;
+    // Shell grid: left form + right rail
+    let shell = $('.wl-shell');
+    if (!shell){
+      const firstLeft = $('.bodyFlexItem > .float-left') || $('.bodyFlexItem');
+      shell = document.createElement('div'); shell.className='wl-shell wl-compact';
+      firstLeft?.parentNode?.insertBefore(shell, firstLeft);
+      if (firstLeft) firstLeft.style.display='none'; // hide original column; we'll move its children
+    }
 
-    const shell = document.createElement('div');
-    shell.className = 'wl-ap-shell';
-    leftCol.parentNode.insertBefore(shell, leftCol);
+    // Left card
+    let leftCard = $('#wlLeftCard');
+    if (!leftCard){
+      leftCard = document.createElement('div');
+      leftCard.id = 'wlLeftCard';
+      leftCard.className = 'wl-card';
+      leftCard.innerHTML = `<div class="wl-card-head">Payment details</div><div class="wl-card-body"><div id="wlFormGrid" class="wl-form-grid"></div></div>`;
+      shell.appendChild(leftCard);
+    }
+    const grid = byId('wlFormGrid');
 
-    // Build left card
-    const leftCard = document.createElement('div');
-    leftCard.className = 'wl-card';
-    leftCard.innerHTML = `
-      <div class="wl-card-head">Payment details</div>
-      <div class="wl-card-body" id="wlLeftBody"></div>
-    `;
-    shell.appendChild(leftCard);
+    // Right rail card
+    let rightCard = $('#wlRightCard');
+    if (!rightCard){
+      rightCard = document.createElement('div');
+      rightCard.id = 'wlRightCard';
+      rightCard.className = 'wl-card';
+      rightCard.innerHTML = `
+        <div class="wl-card-head">Make a Payment</div>
+        <div class="wl-card-body">
+          <div id="wlSummary" class="wl-summary">
+            <div class="wl-pillrow" id="wlSummaryPills"></div>
+            <div id="wlSubmitMount"></div>
+            <button type="button" class="wl-cta" id="wlProxySubmit">Make Payment</button>
+          </div>
+        </div>`;
+      shell.appendChild(rightCard);
+    }
 
-    // Move existing groups into our left card body
-    const leftBody = byId('wlLeftBody');
-    $$('.epi-form-group-acctPayment', leftCol).forEach(g=> leftBody.appendChild(g));
+    // Gather groups by control IDs
+    const grp = {
+      owing: byId('ctl00_PageBody_AmountOwingLiteral')?.closest('.epi-form-group-acctPayment') || null,
+      amount: byId('ctl00_PageBody_PaymentAmountTextBox')?.closest('.epi-form-group-acctPayment') || null,
+      addrDDL: byId('ctl00_PageBody_AddressDropdownList')?.closest('.epi-form-group-acctPayment') || null,
+      billAddr: byId('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment') || null,
+      zip: byId('ctl00_PageBody_PostalCodeTextBox')?.closest('.epi-form-group-acctPayment') || null,
+      email: byId('ctl00_PageBody_EmailAddressTextBox')?.closest('.epi-form-group-acctPayment') || null,
+      notes: byId('ctl00_PageBody_NotesTextBox')?.closest('.epi-form-group-acctPayment') || null,
+      remit: byId('ctl00_PageBody_RemittanceAdviceTextBox')?.closest('.epi-form-group-acctPayment') || null,
+      payWrap: byId('ctl00_PageBody_MakePaymentPanel')?.previousElementSibling || null // radio group container
+    };
 
-    // Make each legacy group a nice field row
-    $$('.epi-form-group-acctPayment', leftBody).forEach(group=>{
-      // Group has structure: <div><label/></div><div>[input]</div>
-      const blocks = $$(':scope > div', group);
-      if (blocks.length >= 2){
-        const lab = blocks[0]; const ctl = blocks[1];
-        lab.classList.add('wl-lab'); ctl.classList.add('wl-ctl');
-        const wrap = document.createElement('div');
-        wrap.className = 'wl-field';
-        group.appendChild(wrap);
-        wrap.appendChild(lab); wrap.appendChild(ctl);
+    // Convert each legacy group to a tidy field block (label + control)
+    Object.values(grp).filter(Boolean).forEach(group=>{
+      if (!group.__wlTidy){
+        // Each group usually has two direct divs: [label] + [control]
+        const blocks = $$(':scope > div', group);
+        if (blocks.length >= 2){
+          const lab = blocks[0]; const ctl = blocks[1];
+          lab.classList.add('wl-lab'); ctl.classList.add('wl-ctl');
+          const wrap = document.createElement('div'); wrap.className='wl-field';
+          wrap.appendChild(lab); wrap.appendChild(ctl);
+          group.appendChild(wrap);
+        }
+        // Hide verbose legacy help text
+        $$('p.descriptionMessage', group).forEach(p=> p.classList.add('wl-help'));
+        group.__wlTidy = true;
+        group.classList.add('wl-item');
       }
-      // Optional help <p> -> style
-      $$('p.descriptionMessage', group).forEach(p=>{ p.classList.add('wl-help'); });
     });
 
-    // Add quick chips under Amount
-    const amtCtl = byId('ctl00_PageBody_PaymentAmountTextBox');
-    const amountGroup = amtCtl ? amtCtl.closest('.epi-form-group-acctPayment') : null;
-    const amountOwing = parseMoney(byId('ctl00_PageBody_AmountOwingLiteral')?.value || byId('ctl00_PageBody_AmountOwingLiteral')?.textContent);
-    if (amountGroup && !amountGroup.querySelector('.wl-chiprow')){
-      const chipRow = document.createElement('div');
-      chipRow.className = 'wl-chiprow';
-      chipRow.innerHTML = `
+    // Place items in compact two-column layout
+    const order = [
+      grp.owing, grp.amount,          // row 1
+      grp.addrDDL, grp.billAddr,      // row 2
+      grp.zip, grp.email,             // row 3
+      grp.notes, grp.remit,           // row 4
+      grp.payWrap                     // row 5 (full width)
+    ].filter(Boolean);
+
+    // Clean grid & re-append in the right order (idempotent)
+    order.forEach(el => { if (!grid.contains(el)) grid.appendChild(el); });
+
+    // Pay method toggle (credit/check) — keep WebForms behavior
+    if (grp.payWrap && !grp.payWrap.__wlToggle){
+      const credit = byId('ctl00_PageBody_RadioButton_PayByCredit');
+      const check  = byId('ctl00_PageBody_RadioButton_PayByCheck');
+      const ctlDiv = $$(':scope > div', grp.payWrap)[1];
+      if (ctlDiv){
+        const toggle = document.createElement('div');
+        toggle.className = 'wl-paytoggle';
+        const opt1 = document.createElement('button'); opt1.type='button'; opt1.className='opt'; opt1.textContent='Pay by credit';
+        const opt2 = document.createElement('button'); opt2.type='button'; opt2.className='opt'; opt2.textContent='Pay by check';
+        ctlDiv.innerHTML=''; ctlDiv.appendChild(toggle); toggle.appendChild(opt1); toggle.appendChild(opt2);
+        const refresh=()=>{ opt1.dataset.active=credit?.checked?'true':'false'; opt2.dataset.active=check?.checked?'true':'false'; };
+        opt1.addEventListener('click',()=>{ credit?.click(); refresh(); });
+        opt2.addEventListener('click',()=>{ check?.click();  refresh(); });
+        [credit,check].forEach(r=> r && r.addEventListener('change', refresh));
+        refresh();
+      }
+      grp.payWrap.__wlToggle = true;
+      grp.payWrap.classList.add('wl-span-2');
+    }
+
+    // Amount quick actions under Payment Amount
+    const amountInput = byId('ctl00_PageBody_PaymentAmountTextBox');
+    const owingVal = (function(){
+      // Amount owing literal may be input[type=text][readonly] or literal
+      const el = byId('ctl00_PageBody_AmountOwingLiteral');
+      return el ? parseMoney(el.value || el.textContent) : 0;
+    })();
+    if (grp.amount && !grp.amount.querySelector('.wl-chips')){
+      const chips = document.createElement('div'); chips.className='wl-chips';
+      chips.innerHTML = `
         <button type="button" class="wl-chipbtn" data-act="fill-owing">Fill: Amount Owing</button>
         <button type="button" class="wl-chipbtn" data-act="clear-amt">Clear Amount</button>
       `;
-      amountGroup.appendChild(chipRow);
-
-      chipRow.addEventListener('click', (e)=>{
+      grp.amount.appendChild(chips);
+      chips.addEventListener('click',(e)=>{
         const b = e.target.closest('button[data-act]'); if (!b) return;
-        if (b.dataset.act==='fill-owing' && Number.isFinite(amountOwing) && amtCtl){
-          amtCtl.value = amountOwing.toFixed(2);
-          // trigger change so WebForms recalcs if needed
-          setTimeout(()=> amtCtl.dispatchEvent(new Event('change',{bubbles:true})), 0);
-        } else if (b.dataset.act==='clear-amt' && amtCtl){
-          amtCtl.value = '';
-          setTimeout(()=> amtCtl.dispatchEvent(new Event('change',{bubbles:true})), 0);
+        if (b.dataset.act==='fill-owing' && Number.isFinite(owingVal) && amountInput){
+          amountInput.value = owingVal.toFixed(2);
+          setTimeout(()=> amountInput.dispatchEvent(new Event('change',{bubbles:true})), 0);
+        }else if (b.dataset.act==='clear-amt' && amountInput){
+          amountInput.value = '';
+          setTimeout(()=> amountInput.dispatchEvent(new Event('change',{bubbles:true})), 0);
         }
       });
     }
 
-    // Remittance placeholder + live chip count in summary (if your earlier script created wlPaySummary)
+    // Remittance niceties
     const rem = byId('ctl00_PageBody_RemittanceAdviceTextBox');
     if (rem && !rem.getAttribute('placeholder')){
-      rem.setAttribute('placeholder','Comma separated, e.g. INV12345,INV67890');
-    }
-    function updateRemitCount(){
-      const box = byId('wlPaySummary');
-      if (!box) return;
-      const raw = (rem?.value || '').trim();
-      const count = raw ? raw.split(/[,\n\r\t ]+/).filter(Boolean).length : 0;
-      const pill = box.querySelector('.wl-pill');
-      if (pill) pill.textContent = `${count} invoice${count===1?'':'s'}`;
-    }
-    if (rem && !rem.__wlCountBound){
-      rem.addEventListener('input', updateRemitCount);
-      rem.__wlCountBound = true;
-      updateRemitCount();
+      rem.setAttribute('placeholder','Comma separated · e.g. INV12345,INV67890');
     }
 
-    // Pay method as toggle (non-destructive)
-    const payWrapGroup = $('#ctl00_PageBody_MakePaymentPanel')?.previousElementSibling; // group containing radios
-    if (payWrapGroup && !payWrapGroup.__wlToggle){
-      const credit = byId('ctl00_PageBody_RadioButton_PayByCredit');
-      const check  = byId('ctl00_PageBody_RadioButton_PayByCheck');
-      if (credit || check){
-        const labDiv = $$(':scope > div', payWrapGroup)[0];
-        const ctlDiv = $$(':scope > div', payWrapGroup)[1];
-        if (labDiv && ctlDiv){
-          const toggle = document.createElement('div');
-          toggle.className = 'wl-paytoggle';
-          const opt1 = document.createElement('button');
-          opt1.type='button'; opt1.className='opt'; opt1.textContent='Pay by credit';
-          const opt2 = document.createElement('button');
-          opt2.type='button'; opt2.className='opt'; opt2.textContent='Pay by check';
-          toggle.appendChild(opt1); toggle.appendChild(opt2);
-          ctlDiv.innerHTML=''; ctlDiv.appendChild(toggle);
+    // Right rail: mount summary pills + move the real submit panel into the right card
+    const pills = byId('wlSummaryPills');
+    if (pills && !pills.__wlBound){
+      pills.__wlBound = true;
+      // pull from session (prefill script uses KEY 'wl_ap_prefill_v2')
+      let pref={};
+      try{ pref = JSON.parse(sessionStorage.getItem('wl_ap_prefill_v2')||'{}'); }catch{}
+      const invoiceList = String(pref.invoices||'').split(',').filter(Boolean);
+      const total = pref.total || '';
+      pills.innerHTML = `
+        <span class="wl-pill">${invoiceList.length} invoice${invoiceList.length===1?'':'s'}</span>
+        ${total?`<span class="wl-pill">Total ${total}</span>`:''}
+        ${invoiceList.length?`<span class="wl-pill" title="${pref.invoices}">${invoiceList.slice(0,4).join(', ')}${invoiceList.length>4?'…':''}</span>`:''}
+      `;
+    }
 
-          function refresh(){
-            opt1.dataset.active = credit?.checked ? 'true':'false';
-            opt2.dataset.active = check?.checked ? 'true':'false';
-          }
-          opt1.addEventListener('click', ()=>{ credit?.click(); refresh(); });
-          opt2.addEventListener('click', ()=>{ check?.click();  refresh(); });
-          [credit,check].forEach(r=> r && r.addEventListener('change', refresh));
-          refresh();
-        }
+    const submitMount = byId('wlSubmitMount');
+    if (submitMount && !submitMount.__wlMoved){
+      const realSubmitPanel = $('#ctl00_PageBody_MakePaymentPanel .submit-button-panel');
+      if (realSubmitPanel){
+        submitMount.appendChild(realSubmitPanel);
+        submitMount.__wlMoved = true;
       }
-      payWrapGroup.__wlToggle = true;
     }
+    // Proxy button clicks to the real submit (in case gateway injects late)
+    byId('wlProxySubmit')?.addEventListener('click', ()=>{
+      const real = $('#wlSubmitMount .submit-button-panel button, #wlSubmitMount .submit-button-panel input[type="submit"], #wlSubmitMount .submit-button-panel input[type="button"]');
+      if (real) real.click();
+      else window.scrollTo({ top: (byId('wlSubmitMount')?.getBoundingClientRect().top||0)+window.scrollY-80, behavior:'smooth' });
+    });
 
-    // Right panel: make it a card + place in grid
-    if (rightPanel){
-      rightPanel.classList.add('wl-card');
+    // Make transactions panel a card & place under the submit (right rail)
+    const tx = byId('ctl00_PageBody_accountsTransactionsPanel');
+    if (tx && !tx.__wlHomed){
+      tx.classList.add('wl-card');
       const head = document.createElement('div'); head.className='wl-card-head'; head.textContent='Recent transactions';
       const body = document.createElement('div'); body.className='wl-card-body';
-      // Move existing children into body
-      while (rightPanel.firstChild) body.appendChild(rightPanel.firstChild);
-      rightPanel.appendChild(head); rightPanel.appendChild(body);
-      shell.appendChild(rightPanel);
-    }
-
-    // Sticky footer mirroring the real submit button (if/when it appears)
-    ensureStickyCTA();
-  }
-
-  /* ---------------- sticky CTA ---------------- */
-  function ensureStickyCTA(){
-    if (byId('wlSticky')) return;
-    const submitHost = $('.submit-button-panel');
-    const cta = document.createElement('div');
-    cta.id = 'wlSticky';
-    cta.className = 'wl-sticky';
-    cta.innerHTML = `
-      <div class="wl-sticky-inner">
-        <div style="font-weight:800;color:#334155;">Review details and submit your payment.</div>
-        <button type="button" class="wl-cta" id="wlCtaBtn">Make Payment</button>
-      </div>
-    `;
-    // Place after left card
-    const leftCard = $('.wl-card'); if (leftCard) leftCard.parentNode.insertBefore(cta, leftCard.nextSibling);
-
-    const proxyClick = ()=>{
-      const real = submitHost?.querySelector('button, input[type="submit"], input[type="button"]');
-      if (real){ real.click(); }
-      else { window.scrollTo({ top: (submitHost?.getBoundingClientRect().top||0)+window.scrollY-80, behavior:'smooth' }); }
-    };
-    byId('wlCtaBtn')?.addEventListener('click', proxyClick);
-
-    // Also: if a real button appears later (after gateway loads), we keep the sticky
-    if (submitHost && !submitHost.__wlObserve){
-      const mo = new MutationObserver(()=>{/* no-op; button discovery is in proxy */});
-      mo.observe(submitHost, {childList:true, subtree:true});
-      submitHost.__wlObserve = true;
+      // move existing children to body
+      while (tx.firstChild) body.appendChild(tx.firstChild);
+      tx.appendChild(head); tx.appendChild(body);
+      rightCard.appendChild(tx);
+      tx.__wlHomed = true;
     }
   }
 
-  /* ---------------- MS AJAX re-apply ---------------- */
+  /* ========== Re-apply after partial postbacks ========== */
   function wireAjax(){
     try{
       if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
         const prm = Sys.WebForms.PageRequestManager.getInstance();
-        if (!prm.__wlModernBound){
-          prm.add_endRequest(()=> {
-            // re-run after any partial update
-            // (don’t wrap the whole page again; upgradeUI guard handles it)
-            upgradeUI();
-          });
-          prm.__wlModernBound = true;
+        if (!prm.__wlCompactBound){
+          prm.add_endRequest(()=> upgradeLayout());
+          prm.__wlCompactBound = true;
         }
       }
     }catch{}
   }
 
-  /* ---------------- boot ---------------- */
-  // If DOM was already present
+  /* ========== Boot ========== */
   if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', ()=>{ upgradeUI(); wireAjax(); }, { once:true });
+    document.addEventListener('DOMContentLoaded', ()=>{ upgradeLayout(); wireAjax(); }, {once:true});
   } else {
-    upgradeUI(); wireAjax();
+    upgradeLayout(); wireAjax();
   }
 })();
+
+
 
