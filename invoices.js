@@ -603,7 +603,13 @@
     return;
   }
 
-  const invoiceList = items.map(x=>x.invNo).join(',');
+  const invoiceList = items
+  .map(x => String(x.invNo || '').trim())
+  .map(s => {
+    const core = s.replace(/^INV\s*/i,'');       // remove any existing "INV"
+    return `INV${core}`;                          // add exactly one "INV"
+  })
+  .join(',');
   const total = (sumCents/100).toFixed(2);
 
   const u = new URL('/AccountPayment_r.aspx', location.origin);
