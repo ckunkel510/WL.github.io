@@ -1155,3 +1155,1309 @@
 
 
 
+
+/* ===============================
+   Woodson — AP inline amount UX
+   - Inline "last statement" + chips
+   - Slightly tighter desktop spacing
+   - Back button text color = white
+   =============================== */
+(function(){
+  'use strict';
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+
+  /* ---- CSS overrides ---- */
+  (function injectCSS(){
+    if (document.getElementById('wl-ap-amount-inline-css')) return;
+    const s = document.createElement('style'); s.id = 'wl-ap-amount-inline-css';
+    s.textContent = `
+      /* Inline actions row below amount input */
+      .wl-amt-actions{
+        display:flex; align-items:center; flex-wrap:wrap;
+        gap:8px; margin-top:6px;
+      }
+      .wl-amt-actions .wl-chipbtn{
+        border:1px solid #e5e7eb; border-radius:999px; padding:6px 10px;
+        background:#fff; font-weight:800; font-size:12px; cursor:pointer;
+      }
+      .wl-amt-actions .wl-inlineradio{
+        display:inline-flex; align-items:center; gap:6px; font-weight:800;
+      }
+      .wl-amt-actions .wl-inlineradio input{ transform:translateY(1px); }
+
+      /* Slightly reduce vertical density on desktop */
+      @media (min-width:768px){
+        .wl-form-grid{ gap:14px 18px !important; }         /* was 18px 18px */
+        .wl-card-body{ padding:12px 16px !important; }     /* was 16px 18px */
+        .wl-field{ gap:6px !important; }                   /* was 8px */
+      }
+
+      /* Ensure back button text is white in all states */
+      #wlTopBar .wl-backbtn,
+      #wlTopBar .wl-backbtn:visited,
+      #wlTopBar .wl-backbtn:hover,
+      #wlTopBar .wl-backbtn:active,
+      #wlTopBar .wl-backbtn:focus{
+        color:#fff !important;
+      }
+    `;
+    document.head.appendChild(s);
+  })();
+
+  /* ---- JS to inline amount actions ---- */
+  function placeAmountActions(){
+    const amtInput = document.getElementById('ctl00_PageBody_PaymentAmountTextBox');
+    if (!amtInput) return;
+
+    // Amount group container (legacy form group we reflowed earlier)
+    const amtGroup = amtInput.closest('.epi-form-group-acctPayment') || amtInput.parentElement;
+    if (!amtGroup) return;
+
+    // Create a single, idempotent actions row
+    let actions = amtGroup.querySelector('#wlAmtActions');
+    if (!actions){
+      actions = document.createElement('div');
+      actions.id = 'wlAmtActions';
+      actions.className = 'wl-amt-actions';
+      // Insert actions AFTER the first ".wl-field" row if present, else at end of group
+      const firstField = amtGroup.querySelector('.wl-field');
+      (firstField?.parentNode || amtGroup).insertBefore(actions, firstField ? firstField.nextSibling : null);
+    } else {
+      actions.innerHTML = ''; // reset (idempotent)
+    }
+
+    /* --- Move native "Pay My Last Statement" inline --- */
+    const lastRadio  = document.getElementById('lastStatementRadio');
+    const lastLabel  = document.getElementById('lastStatementRadioLabel');
+    if (lastRadio && lastLabel){
+      // Keep their original behavior; just re-home them
+      const wrap = document.createElement('label');
+      wrap.className = 'wl-inlineradio';
+      wrap.setAttribute('for', 'lastStatementRadio');
+      wrap.appendChild(lastRadio);     // move input node
+      wrap.appendChild(document.createTextNode(lastLabel.textContent || 'Pay My Last Statement'));
+      actions.appendChild(wrap);
+      // Hide the original label (now redundant) if it still occupies space
+      lastLabel.style.display = 'none';
+    }
+
+    /* --- Chips: Fill owing / Clear --- */
+    // Compute "Amount Owing" from literal
+    const owingEl = document.getElementById('ctl00_PageBody_AmountOwingLiteral');
+    const owingVal = (function(){
+      const s = (owingEl?.value || owingEl?.textContent || '').replace(/[^0-9.\-]/g,'');
+      const n = parseFloat(s); return Number.isFinite(n) ? n : 0;
+    })();
+
+    // Create fresh chip buttons (we replace any previous .wl-chips block)
+    const makeChip = (label, act) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'wl-chipbtn';
+      b.dataset.act = act;
+      b.textContent = label;
+      return b;
+    };
+    const fillBtn  = makeChip('Fill owing', 'fill-owing');
+    const clearBtn = makeChip('Clear', 'clear-amt');
+    actions.appendChild(fillBtn);
+    actions.appendChild(clearBtn);
+
+    // Wire behavior
+    fillBtn.addEventListener('click', function(){
+      if (!amtInput) return;
+      if (Number.isFinite(owingVal) && owingVal > 0){
+        amtInput.value = owingVal.toFixed(2);
+        // Trigger server-side onchange (WebForms) if needed
+        setTimeout(()=> amtInput.dispatchEvent(new Event('change', { bubbles:true })), 0);
+      }
+    });
+    clearBtn.addEventListener('click', function(){
+      if (!amtInput) return;
+      amtInput.value = '';
+      setTimeout(()=> amtInput.dispatchEvent(new Event('change', { bubbles:true })), 0);
+    });
+
+    // Remove any old chips block we previously appended (to avoid duplication)
+    const legacyChips = amtGroup.querySelector('.wl-chips');
+    if (legacyChips) legacyChips.remove();
+  }
+
+  /* ---- boot + (optional) re-apply after WebForms async updates ---- */
+  function boot(){
+    placeAmountActions();
+    // If MS AJAX is present, re-apply after partial postbacks
+    try{
+      if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
+        const prm = Sys.WebForms.PageRequestManager.getInstance();
+        if (!prm.__wlAmtInlineBound){
+          prm.add_endRequest(()=> placeAmountActions());
+          prm.__wlAmtInlineBound = true;
+        }
+      }
+    }catch{}
+  }
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', boot, { once:true });
+  } else {
+    boot();
+  }
+})();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ==========================================================
+   Woodson — Quick Payment Actions (v2)
+   - Pay by Invoice modal (robust host detection, inside <form>, persists across postbacks)
+   - Pay My Last Statement button -> writes structured Remittance line
+   - Fill Owing button
+   - Pay by Job modal (unchanged from your working version)
+   ========================================================== */
+(function () {
+  'use strict';
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+
+  /* ---------- logging ---------- */
+  const LOG = (window.WLPayDiag?.getLevel?.() ?? 2);
+  const LVL = window.WLPayDiag?.LVL || { error:0, warn:1, info:2, debug:3 };
+  const log = {
+    error: (...a)=> { if (LOG >= LVL.error) console.error('[AP:WID]', ...a); },
+    warn:  (...a)=> { if (LOG >= LVL.warn ) console.warn ('[AP:WID]', ...a); },
+    info:  (...a)=> { if (LOG >= LVL.info ) console.log  ('[AP:WID]', ...a); },
+    debug: (...a)=> { if (LOG >= LVL.debug) console.log  ('[AP:WID]', ...a); },
+  };
+
+  /* ---------- CSS ---------- */
+  (function injectCSS(){
+    if (document.getElementById('wl-quick-widget-css')) return;
+    const css = `
+      #wlQuickWidget { grid-column: 1 / -1; }
+      .wl-quick {
+        border:1px solid #e5e7eb; border-radius:14px; background:#fff;
+        padding:12px 14px; box-shadow:0 4px 14px rgba(15,23,42,.06);
+      }
+      .wl-quick-title { font-weight:900; margin:0 0 8px 0; font-size:14px; color:#0f172a; }
+      .wl-quick-row { display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:6px; }
+
+      .wl-chipbtn{
+        border:1px solid #e5e7eb; border-radius:999px; padding:6px 12px;
+        background:#fff; font-weight:800; font-size:12px; cursor:pointer;
+      }
+      .wl-chipbtn[disabled]{ opacity:.6; cursor:not-allowed; }
+
+      /* Modal shared */
+      .wl-modal-backdrop {
+        position:fixed; inset:0; background:rgba(15,23,42,.5);
+        display:none; z-index:9999;
+      }
+      .wl-modal-shell {
+        position:fixed; inset:0; display:none; z-index:10000;
+      }
+      .wl-modal-card {
+        position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+        background:#fff; border-radius:16px; width:min(1100px,94vw); max-height:86vh;
+        box-shadow:0 20px 60px rgba(0,0,0,.25); display:flex; flex-direction:column;
+      }
+      .wl-modal-head {
+        padding:12px 16px; background:#6b0016; color:#fff; font-weight:900;
+        display:flex; justify-content:space-between; align-items:center;
+        border-radius:16px 16px 0 0;
+      }
+      .wl-modal-head .right { display:flex; align-items:center; gap:8px; }
+      .wl-modal-pill { background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.25); border-radius:999px; padding:4px 8px; font-weight:800; }
+      .wl-modal-body { padding:12px 16px; overflow:auto; }
+      .wl-modal-foot { padding:12px 16px; display:flex; justify-content:flex-end; gap:10px; border-top:1px solid #e5e7eb; }
+
+      .wl-btn {
+        border:1px solid #e5e7eb; border-radius:10px; padding:8px 12px; font-weight:800; background:#fff; cursor:pointer;
+      }
+      .wl-btn:focus-visible { outline:0; box-shadow:0 0 0 3px #93c5fd; }
+      .wl-btn-primary { background:#6b0016; color:#fff; border-color:#6b0016; }
+      .wl-btn-ghost { background:transparent; color:#fff; border-color:rgba(255,255,255,.35); }
+
+      /* Jobs list inside modal */
+      .wl-jobs-list { display:grid; gap:8px; }
+      .wl-job-line { display:flex; align-items:center; gap:10px; }
+      .wl-job-line input { transform:translateY(1px); }
+
+      /* Modernize transactions grid when inside modal */
+      .wl-modern-grid table { border-collapse:separate; border-spacing:0; width:100%; font-size:14px; }
+      .wl-modern-grid thead th {
+        position:sticky; top:0; background:#f8fafc; z-index:1;
+        font-weight:800; letter-spacing:.01em;
+        border-bottom:1px solid #e5e7eb; padding:10px 12px;
+      }
+      .wl-modern-grid tbody tr { transition:background .15s ease, box-shadow .15s ease; }
+      .wl-modern-grid tbody tr:hover { background:#f9fafb; }
+      .wl-modern-grid td { border-bottom:1px solid #eef2f7; padding:10px 12px; }
+      .wl-modern-grid .rgPager, .wl-modern-grid .paging-control { border-top:1px solid #e5e7eb; padding-top:8px; margin-top:8px; }
+      .wl-modern-grid .rgHeader, .wl-modern-grid .panelHeaderMidProductInfo1, .wl-modern-grid .ViewHeader { display:none !important; }
+
+      /* Tighten vertical rhythm slightly on desktop */
+      @media (min-width:768px){
+        .wl-form-grid{ gap:14px 16px; }
+        .wl-field{ gap:6px; width:80%; }
+      }
+    `;
+    const s = document.createElement('style'); s.id='wl-quick-widget-css'; s.textContent = css;
+    document.head.appendChild(s);
+  })();
+
+  /* ---------- helpers ---------- */
+  const $id = (x)=> document.getElementById(x);
+  const $1  = (sel,root=document)=> root.querySelector(sel);
+  function parseMoney(s){ const v = parseFloat(String(s||'').replace(/[^0-9.\-]/g,'')); return Number.isFinite(v)?v:0; }
+  function format2(n){ const v = Number(n||0); return v.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2}); }
+  const amtEl = ()=> $id('ctl00_PageBody_PaymentAmountTextBox');
+  const remEl = ()=> $id('ctl00_PageBody_RemittanceAdviceTextBox');
+  const owingVal = ()=> { const el = $id('ctl00_PageBody_AmountOwingLiteral'); return el ? parseMoney(el.value || el.textContent) : 0; };
+  function triggerChange(el){ try{ el.dispatchEvent(new Event('change',{bubbles:true})); }catch{} }
+  function formEl(){ return document.forms && document.forms[0] ? document.forms[0] : document.body; }
+
+  /* ---------- Pay My Last Statement (button) ---------- */
+  async function fetchLastStatement_jq(){
+    return new Promise((resolve,reject)=>{
+      try{
+        window.jQuery.ajax({
+          url:'https://webtrack.woodsonlumber.com/Statements_R.aspx',
+          method:'GET',
+          success:(data)=> {
+            try{
+              const $ = window.jQuery;
+              const row = $(data).find('tr#ctl00_PageBody_StatementsDataGrid_ctl00__0');
+              const closing = row.find('td[data-title="Closing Balance"]').text().trim();
+              const date = row.find('td[data-title="Statement Date"]').text().trim()
+                         || row.find('td[data-title*="Date"]').first().text().trim()
+                         || '';
+              resolve({ closing, date });
+            }catch(e){ reject(e); }
+          },
+          error:()=>reject(new Error('Ajax error'))
+        });
+      }catch(e){ reject(e); }
+    });
+  }
+  async function fetchLastStatement_fetch(){
+    const res = await fetch('https://webtrack.woodsonlumber.com/Statements_R.aspx', { credentials:'include' });
+    if (!res.ok) throw new Error('HTTP '+res.status);
+    const html = await res.text();
+    const doc = new DOMParser().parseFromString(html,'text/html');
+    const row = doc.querySelector('tr#ctl00_PageBody_StatementsDataGrid_ctl00__0');
+    const closing = (row?.querySelector('td[data-title="Closing Balance"]')?.textContent || '').trim();
+    const date = (row?.querySelector('td[data-title="Statement Date"]')?.textContent
+               || row?.querySelector('td[data-title*="Date"]')?.textContent
+               || '').trim();
+    return { closing, date };
+  }
+  function upsertRemittanceStatement(dateStr, amountNum){
+    const r = remEl(); if (!r) return;
+    const lines = (r.value||'').split('\n').map(l=>l.trim()).filter(Boolean);
+    const withoutStmt = lines.filter(l=> !/^STATEMENT\b/i.test(l));
+    const tag = `STATEMENT ${dateStr || 'LAST'}`.trim();
+    const line = `${tag} — $${format2(amountNum)}`;
+    r.value = [line, ...withoutStmt].join('\n');
+  }
+  async function handlePayLastStatement(btn){
+    if (!btn) return;
+    const orig = btn.textContent;
+    btn.textContent = 'Fetching…';
+    btn.disabled = true;
+    try{
+      const { closing, date } = (window.jQuery ? await fetchLastStatement_jq() : await fetchLastStatement_fetch());
+      if (!closing){ alert('Could not find last statement amount.'); return; }
+      const amtNum = parseMoney(closing);
+      const a = amtEl(); if (a){ a.value = Number.isFinite(amtNum) ? format2(amtNum) : closing; triggerChange(a); }
+      upsertRemittanceStatement(date, amtNum);
+      btn.textContent = 'Last Statement Applied';
+      setTimeout(()=>{ btn.textContent = orig; btn.disabled = false; }, 1200);
+    }catch(e){
+      console.warn(e);
+      alert('Error fetching data.');
+      btn.textContent = orig; btn.disabled = false;
+    }
+  }
+
+  /* ---------- Pay by Invoice (modal INSIDE <form>) ---------- */
+  const TX_PANEL_ID = 'ctl00_PageBody_accountsTransactionsPanel';
+  const SESS_TX_OPEN = '__WL_TxModalOpen';
+  const PH_ID = 'wlTxReturnPH';
+
+  function ensureTxModalDOM(){
+    if ($id('wlTxModal')) return;
+    const back = document.createElement('div'); back.id='wlTxModalBackdrop'; back.className='wl-modal-backdrop';
+    const shell = document.createElement('div'); shell.id='wlTxModal'; shell.className='wl-modal-shell';
+    shell.innerHTML = `
+      <div class="wl-modal-card" role="dialog" aria-modal="true" aria-labelledby="wlTxTitle">
+        <div class="wl-modal-head">
+          <div id="wlTxTitle">Select Invoices</div>
+          <div class="right">
+            <button type="button" class="wl-btn wl-btn-ghost" id="wlTxCloseX" aria-label="Close">✕</button>
+          </div>
+        </div>
+        <div class="wl-modal-body wl-modern-grid" id="wlTxModalBody">
+          <div id="wlTxLoading" style="padding:8px 0;">Loading invoices…</div>
+        </div>
+        <div class="wl-modal-foot">
+          <button type="button" class="wl-btn" id="wlTxCancelBtn">Cancel</button>
+          <button type="button" class="wl-btn wl-btn-primary" id="wlTxDoneBtn">Done</button>
+        </div>
+      </div>`;
+    const f = formEl();
+    f.appendChild(back);
+    f.appendChild(shell);
+    back.addEventListener('click', closeTxModal);
+    $id('wlTxCloseX').addEventListener('click', closeTxModal);
+    $id('wlTxCancelBtn').addEventListener('click', closeTxModal);
+    $id('wlTxDoneBtn').addEventListener('click', closeTxModal);
+
+    // Keep "open" across postbacks when user interacts inside the grid
+    f.addEventListener('click', (e)=>{
+      const host = $id('wlTxModalBody');
+      if (!host || !host.contains(e.target)) return;
+      sessionStorage.setItem(SESS_TX_OPEN,'1');
+    }, true);
+  }
+
+  function waitForTxTarget(timeoutMs=5000, interval=120){
+    return new Promise(resolve=>{
+      const t0 = Date.now();
+      (function poll(){
+        const el = findTxMoveTarget();
+        if (el) return resolve(el);
+        if (Date.now() - t0 >= timeoutMs) return resolve(null);
+        setTimeout(poll, interval);
+      })();
+    });
+  }
+
+  // Robustly locate the *live* grid container, regardless of where the layout moved it.
+  function findTxMoveTarget(){
+    // 1) The canonical panel, if it still wraps the grid
+    const panel = $id(TX_PANEL_ID);
+    if (panel && (panel.querySelector('table, .rgDataDiv, input, select, a, button'))) return panel;
+
+    // 2) The Tx Card body (your layout), use its first element child
+    const body = $id('wlTxBody') || $1('#wlTxCard .wl-card-body');
+    if (body){
+      const inner = body.querySelector('#' + CSS.escape(TX_PANEL_ID)) || body.firstElementChild;
+      if (inner) return inner;
+    }
+
+    // 3) Last resort: any table/grid inside the AccountPayment area
+    const fallback = $1('#' + CSS.escape(TX_PANEL_ID) + ' * table') ||
+                     $1('#wlTxCard .wl-card-body table');
+    return fallback ? fallback.closest('div,section,article') || fallback : null;
+  }
+
+  function makePlaceholderFor(el){
+    // Remove any stale placeholder
+    $id(PH_ID)?.remove();
+    const ph = document.createElement('div');
+    ph.id = PH_ID;
+    el.parentNode?.insertBefore(ph, el);
+    return ph;
+  }
+
+  function moveTxTargetToModal(){
+    const host = $id('wlTxModalBody');
+    if (!host) return false;
+    const target = findTxMoveTarget();
+    if (!target) return false;
+
+    makePlaceholderFor(target);
+    host.appendChild(target);
+    target.classList.add('wl-modern-grid');
+    $id('wlTxLoading')?.remove();
+    return true;
+  }
+
+  function restoreTxTarget(){
+    const ph = $id(PH_ID);
+    const target = findTxMoveTarget();
+    if (ph && target){
+      ph.parentNode?.insertBefore(target, ph);
+      target.classList.remove('wl-modern-grid');
+      ph.remove();
+      return true;
+    }
+    // Fallback: drop back into tx card body if placeholder missing
+    const body = $id('wlTxBody') || $1('#wlTxCard .wl-card-body');
+    if (target && body){
+      target.classList.remove('wl-modern-grid');
+      body.appendChild(target);
+      return true;
+    }
+    return false;
+  }
+
+  function showTxChrome(){ $id('wlTxModalBackdrop').style.display='block'; $id('wlTxModal').style.display='block'; document.body.style.overflow='hidden'; }
+  function hideTxChrome(){ const b=$id('wlTxModalBackdrop'), m=$id('wlTxModal'); if(b)b.style.display='none'; if(m)m.style.display='none'; document.body.style.overflow=''; }
+
+  async function openTxModal(){
+    ensureTxModalDOM();
+    const btn = $id('wlOpenTxModalBtn');
+    if (btn){ btn.disabled = true; btn.setAttribute('aria-disabled','true'); }
+    const target = await waitForTxTarget();
+    if (!target){
+      alert('Transactions table not available yet.');
+      if (btn){ btn.disabled = false; btn.removeAttribute('aria-disabled'); }
+      return;
+    }
+    moveTxTargetToModal();
+    showTxChrome();
+    sessionStorage.setItem(SESS_TX_OPEN,'1');
+  }
+
+  function closeTxModal(){
+    restoreTxTarget();
+    hideTxChrome();
+    sessionStorage.removeItem(SESS_TX_OPEN);
+    const btn = $id('wlOpenTxModalBtn'); if (btn){ btn.disabled=false; btn.removeAttribute('aria-disabled'); btn.focus?.(); }
+  }
+
+  async function ensureTxModalState(){
+    ensureTxModalDOM();
+    const wantOpen = sessionStorage.getItem(SESS_TX_OPEN)==='1';
+    if (wantOpen){
+      const target = await waitForTxTarget();
+      if (target){ moveTxTargetToModal(); showTxChrome(); const btn = $id('wlOpenTxModalBtn'); if (btn){ btn.disabled=true; btn.setAttribute('aria-disabled','true'); } }
+    }else{
+      restoreTxTarget();
+      hideTxChrome();
+      const btn = $id('wlOpenTxModalBtn'); if (btn){ btn.disabled=false; btn.removeAttribute('aria-disabled'); }
+    }
+  }
+
+  /* ---------- Pay by Job (unchanged behavior) ---------- */
+  const SESS_JOBS_OPEN = '__WL_JobsModalOpen';
+  const SESS_JOBS_SEL  = '__WL_JobsSelection';
+
+  function ensureJobsModalDOM(){
+    if ($id('wlJobsModal')) return;
+    const back = document.createElement('div'); back.id='wlJobsModalBackdrop'; back.className='wl-modal-backdrop';
+    const shell = document.createElement('div'); shell.id='wlJobsModal'; shell.className='wl-modal-shell';
+    shell.innerHTML = `
+      <div class="wl-modal-card" role="dialog" aria-modal="true" aria-labelledby="wlJobsTitle">
+        <div class="wl-modal-head">
+          <div id="wlJobsTitle">Select Jobs</div>
+          <div class="right">
+            <span class="wl-modal-pill" id="wlJobsSummary">Selected: $0.00 (0)</span>
+            <button type="button" class="wl-btn wl-btn-ghost" id="wlJobsSelectAllBtn">Select all</button>
+            <button type="button" class="wl-btn wl-btn-ghost" id="wlJobsClearBtn">Clear</button>
+            <button type="button" class="wl-btn wl-btn-ghost" id="wlJobsCloseX" aria-label="Close">✕</button>
+          </div>
+        </div>
+        <div class="wl-modal-body">
+          <div class="wl-jobs-list" id="wlJobsList"></div>
+        </div>
+        <div class="wl-modal-foot">
+          <button type="button" class="wl-btn" id="wlJobsCancelBtn">Cancel</button>
+          <button type="button" class="wl-btn wl-btn-primary" id="wlJobsDoneBtn">Done</button>
+        </div>
+      </div>`;
+    document.body.appendChild(back);
+    document.body.appendChild(shell);
+    back.addEventListener('click', closeJobsModal);
+    $id('wlJobsCloseX').addEventListener('click', closeJobsModal);
+    $id('wlJobsCancelBtn').addEventListener('click', closeJobsModal);
+    $id('wlJobsDoneBtn').addEventListener('click', commitJobsSelection);
+    $id('wlJobsSelectAllBtn').addEventListener('click', ()=> jobsSelectAll(true));
+    $id('wlJobsClearBtn').addEventListener('click', ()=> jobsSelectAll(false));
+    document.addEventListener('keydown', (e)=>{ if (e.key==='Escape' && sessionStorage.getItem(SESS_JOBS_OPEN)==='1') closeJobsModal(); });
+  }
+
+  async function fetchJobBalances(){
+    try{
+      const res = await fetch('https://webtrack.woodsonlumber.com/JobBalances_R.aspx',{ credentials:'include' });
+      if (!res.ok) throw new Error('HTTP '+res.status);
+      const html = await res.text();
+      const doc = new DOMParser().parseFromString(html,'text/html');
+      const rows = Array.from(doc.querySelectorAll('table tr'));
+      const out = [];
+      rows.forEach(row=>{
+        const jobCell = row.querySelector('td[data-title="Job"]');
+        const netCell = row.querySelector('td[data-title="Net Amount"]');
+        if (jobCell && netCell) out.push({ job: jobCell.textContent.trim(), netAmount: parseMoney(netCell.textContent) });
+      });
+      return out;
+    }catch(e){ console.warn('fetchJobBalances error', e); return []; }
+  }
+
+  function jobsUpdateSummary(){
+    const list = $id('wlJobsList'); if (!list) return;
+    const checks = Array.from(list.querySelectorAll('input[type="checkbox"]'));
+    const sel = checks.filter(c=>c.checked);
+    const total = sel.reduce((s,c)=> s + parseMoney(c.value), 0);
+    const pill = $id('wlJobsSummary'); if (pill) pill.textContent = `Selected: $${format2(total)} (${sel.length})`;
+  }
+  function jobsSelectAll(state){
+    const list = $id('wlJobsList'); if (!list) return;
+    list.querySelectorAll('input[type="checkbox"]').forEach(cb=> cb.checked = !!state);
+    jobsUpdateSummary();
+  }
+  async function openJobsModal(){
+    ensureJobsModalDOM();
+    const list = $id('wlJobsList');
+    if (!list.dataset.loaded){
+      const jobs = await fetchJobBalances();
+      list.innerHTML = '';
+      if (!jobs || jobs.length === 0){
+        const p = document.createElement('p'); p.textContent = 'No job balances found.'; list.appendChild(p);
+      } else {
+        const frag = document.createDocumentFragment();
+        jobs.forEach((job,i)=>{
+          const label = document.createElement('label'); label.className='wl-job-line';
+          const cb = document.createElement('input'); cb.type='checkbox'; cb.value=String(job.netAmount); cb.dataset.job=job.job; cb.id=`job-${i}`;
+          const txt = document.createElement('span'); txt.textContent = `${job.job} — $${format2(job.netAmount)}`;
+          label.appendChild(cb); label.appendChild(txt);
+          frag.appendChild(label);
+        });
+        list.appendChild(frag);
+        list.dataset.loaded = '1';
+      }
+      const prevSel = JSON.parse(sessionStorage.getItem(SESS_JOBS_SEL) || '{}');
+      if (prevSel && Object.keys(prevSel).length){
+        list.querySelectorAll('input[type="checkbox"]').forEach(cb=>{
+          if (prevSel[cb.dataset.job] != null) cb.checked = true;
+        });
+      }
+      list.addEventListener('change', jobsUpdateSummary, { passive:true });
+    }
+    jobsUpdateSummary();
+    $id('wlJobsModalBackdrop').style.display='block';
+    $id('wlJobsModal').style.display='block';
+    document.body.style.overflow='hidden';
+    sessionStorage.setItem(SESS_JOBS_OPEN,'1');
+    const btn = $id('wlOpenJobsModalBtn'); if (btn){ btn.disabled = true; btn.setAttribute('aria-disabled','true'); }
+  }
+  function closeJobsModal(){
+    $id('wlJobsModalBackdrop').style.display='none';
+    $id('wlJobsModal').style.display='none';
+    document.body.style.overflow='';
+    sessionStorage.removeItem(SESS_JOBS_OPEN);
+    const btn = $id('wlOpenJobsModalBtn'); if (btn){ btn.disabled = false; btn.removeAttribute('aria-disabled'); btn.focus?.(); }
+  }
+  function ensureJobsModalState(){
+    ensureJobsModalDOM();
+    const open = sessionStorage.getItem(SESS_JOBS_OPEN)==='1';
+    if (open){
+      $id('wlJobsModalBackdrop').style.display='block';
+      $id('wlJobsModal').style.display='block';
+      document.body.style.overflow='hidden';
+      const btn = $id('wlOpenJobsModalBtn'); if (btn){ btn.disabled = true; btn.setAttribute('aria-disabled','true'); }
+      jobsUpdateSummary();
+    } else {
+      closeJobsModal();
+    }
+  }
+  function commitJobsSelection(){
+    const list = $id('wlJobsList'); if (!list){ closeJobsModal(); return; }
+    const checks = Array.from(list.querySelectorAll('input[type="checkbox"]'));
+    const sel = checks.filter(c=>c.checked);
+    const newSel = {}; sel.forEach(c=> newSel[c.dataset.job] = parseMoney(c.value));
+    const prevSel = JSON.parse(sessionStorage.getItem(SESS_JOBS_SEL) || '{}');
+    const prevTotal = Object.values(prevSel).reduce((s,v)=> s + Number(v||0), 0);
+    const newTotal  = Object.values(newSel).reduce((s,v)=> s + Number(v||0), 0);
+    const a = amtEl(); if (a){
+      const base = parseMoney(a.value);
+      const next = Math.max(0, base - prevTotal + newTotal);
+      a.value = format2(next);
+      triggerChange(a);
+    }
+    const r = remEl(); if (r){
+      const lines = (r.value||'').split('\n');
+      const kept = lines.filter(line=> !Object.keys(prevSel).some(job => line.trim().startsWith(`JOB ${job}:`))).filter(Boolean);
+      const add = Object.entries(newSel).map(([job,amt])=> `JOB ${job}: $${format2(amt)}`);
+      r.value = [...kept, ...add].join('\n');
+    }
+    sessionStorage.setItem(SESS_JOBS_SEL, JSON.stringify(newSel));
+    closeJobsModal();
+  }
+
+  /* ---------- Build the widget ---------- */
+  function mountWidget(){
+    const grid = $id('wlFormGrid') || $1('.bodyFlexItem') || document.body;
+    if (!grid){ log.warn('No grid found for widget'); return; }
+
+    let host = $id('wlQuickWidget');
+    if (!host){
+      host = document.createElement('div');
+      host.id = 'wlQuickWidget';
+      host.className = 'wl-item wl-span-2';
+      grid.insertBefore(host, grid.firstChild);
+    } else {
+      host.innerHTML = '';
+    }
+
+    host.innerHTML = `
+      <div class="wl-quick">
+        <div class="wl-quick-title">Quick Payment Actions</div>
+        <div class="wl-quick-row" id="wlQuickRow">
+          <button type="button" class="wl-chipbtn" id="wlLastStmtBtn">Pay My Last Statement</button>
+          <button type="button" class="wl-chipbtn" id="wlFillOwingBtn">Fill Owing</button>
+          <button type="button" class="wl-chipbtn" id="wlOpenTxModalBtn">Pay by Invoice</button>
+          <button type="button" class="wl-chipbtn" id="wlOpenJobsModalBtn">Pay by Job</button>
+        </div>
+      </div>
+    `;
+
+    // Hide Last Statement on disallowed views
+    const hdrText = ($1('.bodyFlexItem.listPageHeader')?.textContent || '').trim();
+    if (/Load Cash Account Balance/i.test(hdrText)){
+      $id('wlLastStmtBtn').style.display = 'none';
+    }
+
+    $id('wlLastStmtBtn').addEventListener('click', (e)=> handlePayLastStatement(e.currentTarget));
+    $id('wlFillOwingBtn').addEventListener('click', ()=>{ const v=owingVal(); const a=amtEl(); if (a && v>0){ a.value = format2(v); triggerChange(a);} });
+
+    // Modals
+    ensureTxModalDOM();
+    $id('wlOpenTxModalBtn').addEventListener('click', openTxModal);
+    ensureJobsModalDOM();
+    $id('wlOpenJobsModalBtn').addEventListener('click', openJobsModal);
+
+    log.info('Quick Payment Actions mounted');
+  }
+
+  /* ---------- Boot + MS AJAX handling ---------- */
+  function boot(){
+    mountWidget();
+    Promise.resolve().then(()=> ensureTxModalState());
+    Promise.resolve().then(()=> ensureJobsModalState());
+    try{
+      if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
+        const prm = window.Sys.WebForms.PageRequestManager.getInstance();
+        if (!prm.__wlQuickWidBound){
+          prm.add_endRequest(()=> {
+            mountWidget();
+            setTimeout(()=> { ensureTxModalState(); ensureJobsModalState(); }, 50);
+          });
+          prm.__wlQuickWidBound = true;
+        }
+      }
+    }catch{} 
+  }
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', boot, { once:true });
+  }else{
+    boot();
+  }
+})();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ==========================================================
+   Woodson — Client-side "Pay by Invoice" from Recent Transactions
+   v2.0  (no grid postbacks; pulls from on-page table; can fetch all pages)
+   - Opens a modal with a modern table + checkboxes
+   - Scrapes the Recent Transactions grid on THIS page
+   - Optional "Load all" iterates the pager via background fetches
+   - On "Done": updates PaymentAmount + Remittance (no redirect)
+   Dependencies: none (fetch + DOMParser). Same-origin required.
+   ========================================================== */
+(function(){
+  'use strict';
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+
+  /* ---------- tiny logger ---------- */
+  const LOG = (window.WLPayDiag?.getLevel?.() ?? 2), LVL = window.WLPayDiag?.LVL || { error:0, warn:1, info:2, debug:3 };
+  const log = {
+    error: (...a)=> { if (LOG>=LVL.error) console.error('[AP:TXPICK]', ...a); },
+    warn:  (...a)=> { if (LOG>=LVL.warn ) console.warn ('[AP:TXPICK]', ...a); },
+    info:  (...a)=> { if (LOG>=LVL.info ) console.log  ('[AP:TXPICK]', ...a); },
+    debug: (...a)=> { if (LOG>=LVL.debug) console.log  ('[AP:TXPICK]', ...a); },
+  };
+
+  const TX_PANEL_SEL = '#ctl00_PageBody_accountsTransactionsPanel';
+  const IN_PAGE_URL  = location.pathname + location.search; // POST back here for pager fetches
+  const MONEY = s => { const v = parseFloat(String(s||'').replace(/[^0-9.\-]/g,'')); return Number.isFinite(v)?v:0; };
+  const FMT2  = n => Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
+
+  /* ---------- CSS ---------- */
+  (function css(){
+    if (document.getElementById('wl-inv-modal-css')) return;
+    const s=document.createElement('style'); s.id='wl-inv-modal-css';
+    s.textContent = `
+      .wl-modal-backdrop { position:fixed; inset:0; background:rgba(15,23,42,.5); display:none; z-index:9999; }
+      .wl-modal-shell    { position:fixed; inset:0; display:none; z-index:10000; }
+      .wl-modal-card     { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+                           background:#fff; border-radius:16px; width:min(1200px,94vw); max-height:86vh;
+                           box-shadow:0 20px 60px rgba(0,0,0,.25); display:flex; flex-direction:column; }
+      .wl-modal-head     { padding:12px 16px; background:#6b0016; color:#fff; font-weight:900; display:flex;
+                           gap:10px; align-items:center; justify-content:space-between; border-radius:16px 16px 0 0; }
+      .wl-modal-head .right { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+      .wl-pill           { background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25);
+                           border-radius:999px; padding:4px 8px; font-weight:800; }
+      .wl-modal-body     { padding:12px 16px; overflow:auto; }
+      .wl-modal-foot     { padding:12px 16px; display:flex; justify-content:space-between; gap:10px; border-top:1px solid #e5e7eb; }
+      .wl-btn            { border:1px solid #e5e7eb; border-radius:10px; padding:8px 12px; font-weight:800; background:#fff; cursor:pointer; }
+      .wl-btn:focus-visible { outline:0; box-shadow:0 0 0 3px #93c5fd; }
+      .wl-btn-primary    { background:#6b0016; color:#fff; border-color:#6b0016; }
+      .wl-input          { border:1px solid #e5e7eb; border-radius:10px; padding:8px 10px; min-width:220px; }
+      .wl-table-wrap     { border:1px solid #e5e7eb; border-radius:12px; overflow:hidden; }
+      table.wl-grid      { width:100%; border-collapse:separate; border-spacing:0; font-size:14px; }
+      .wl-grid thead th  { position:sticky; top:0; background:#f8fafc; z-index:1; font-weight:800; letter-spacing:.01em;
+                           border-bottom:1px solid #e5e7eb; padding:10px 12px; text-align:left; }
+      .wl-grid tbody tr  { transition:background .15s ease; }
+      .wl-grid tbody tr:hover { background:#f9fafb; }
+      .wl-grid td        { border-bottom:1px solid #eef2f7; padding:10px 12px; vertical-align:top; }
+      .wl-grid .right    { text-align:right; }
+      .wl-type-pill      { display:inline-block; border-radius:999px; padding:2px 8px; font-size:12px; font-weight:800; }
+      .wl-type-inv       { background:#eef6ff; color:#1e40af; border:1px solid #c7ddff; }
+      .wl-type-cr        { background:#fff7ed; color:#9a3412; border:1px solid #fde1c7; }
+      .wl-foot-left      { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+      .wl-btn.wl-btn-ghost{color:#6b0016;}
+    `;
+    document.head.appendChild(s);
+  })();
+
+  /* ---------- Modal DOM ---------- */
+  function ensureModal(){
+    if (document.getElementById('wlInvModal')) return;
+    const back = document.createElement('div'); back.id='wlInvBackdrop'; back.className='wl-modal-backdrop';
+    const shell = document.createElement('div'); shell.id='wlInvModal'; shell.className='wl-modal-shell';
+    shell.innerHTML = `
+      <div class="wl-modal-card" role="dialog" aria-modal="true" aria-labelledby="wlInvTitle">
+        <div class="wl-modal-head">
+          <div id="wlInvTitle">Select Invoices (Recent Transactions)</div>
+          <div class="right">
+            <input id="wlInvFilter" class="wl-input" type="text" placeholder="Search doc #, job, PO, notes">
+            <span class="wl-pill" id="wlInvStats">0 selected · $0.00</span>
+            <button type="button" class="wl-btn" id="wlTxReloadBtn" title="Reload from page">Reload</button>
+            <button type="button" class="wl-btn" id="wlTxLoadAllBtn" title="Try background-load all pages">Load all</button>
+            <button type="button" class="wl-btn wl-btn-primary" id="wlInvDoneBtn">Done</button>
+            <button type="button" class="wl-btn" id="wlInvCloseX" aria-label="Close">Close</button>
+          </div>
+        </div>
+        <div class="wl-modal-body">
+          <div class="wl-table-wrap">
+            <table class="wl-grid" id="wlInvTable" aria-describedby="wlInvLoadedBadge">
+              <thead>
+                <tr>
+                  <th style="width:40px;"><input type="checkbox" id="wlInvSelectAll"></th>
+                  <th>Doc #</th>
+                  <th>Type</th>
+                  <th>Trans Date</th>
+                  <th>Due Date</th>
+                  <th>Job Ref</th>
+                  <th>Description</th>
+                  <th class="right">Amount</th>
+                  <th class="right">Outstanding</th>
+                </tr>
+              </thead>
+              <tbody id="wlInvTbody">
+                <tr><td colspan="9" style="padding:14px;">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="wl-modal-foot">
+          <div class="wl-foot-left">
+            <span id="wlInvLoadedBadge" class="muted"></span>
+          </div>
+          <div class="wl-foot-right"></div>
+        </div>
+      </div>`;
+    document.body.appendChild(back);
+    document.body.appendChild(shell);
+
+    // Close
+    back.addEventListener('click', closeModal);
+    document.getElementById('wlInvCloseX').addEventListener('click', closeModal);
+
+    // Interactions
+    document.getElementById('wlInvFilter').addEventListener('input', renderRows);
+    document.getElementById('wlInvSelectAll').addEventListener('change', (e)=>{
+      const c = e.currentTarget.checked;
+      document.querySelectorAll('#wlInvTbody input[type="checkbox"]').forEach(cb=>{
+        cb.checked = c; toggleSel(cb.dataset.key, MONEY(cb.dataset.outstanding), c);
+      });
+      renderStats();
+    });
+    document.getElementById('wlTxReloadBtn').addEventListener('click', ()=> { loadFromCurrentDOM(); });
+    document.getElementById('wlTxLoadAllBtn').addEventListener('click', loadAllPages);
+    document.getElementById('wlInvDoneBtn').addEventListener('click', commitSelection);
+    document.addEventListener('keydown', (e)=>{ if (e.key==='Escape' && state.open) closeModal(); });
+  }
+
+  function openModal(){
+    ensureModal();
+    document.getElementById('wlInvBackdrop').style.display = 'block';
+    document.getElementById('wlInvModal').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+    state.open = true;
+    // First paint: pull what’s already rendered in the Recent Transactions panel
+    loadFromCurrentDOM();
+  }
+  function closeModal(){
+    document.getElementById('wlInvBackdrop').style.display = 'none';
+    document.getElementById('wlInvModal').style.display = 'none';
+    document.body.style.overflow = '';
+    state.open = false;
+  }
+
+  /* ---------- State ---------- */
+  const state = {
+    rows: [],               // [{key, doc, type, tDate, dDate, job, desc, amount, outstanding}]
+    selected: new Map(),    // key -> outstanding (Number)
+    open: false,
+    // for background pager
+    nextPost: null,         // { hidden, evtTarget, evtArg } or null
+    pageCount: 0,
+    maxPages: 25
+  };
+
+  function isCredit(typeText, amountText){
+    const t = String(typeText||'').toLowerCase();
+    if (/credit/.test(t)) return true;
+    return MONEY(amountText) < 0;
+  }
+
+  function normalizeDoc(s){
+    const str = String(s||'').trim();
+    // keep exactly as shown (could already be INV12345 / CR123), but standardize INV prefix if plain digits
+    const m = str.match(/^(INV)?\s*([A-Za-z0-9\-]+)/i);
+    if (m && !/^INV/i.test(str)) return 'INV'+m[2];
+    return str || '';
+  }
+
+  /* ---------- Extract rows from the CURRENT DOM panel ---------- */
+  function extractFromRoot(root){
+    const out = [];
+    const panel = root.querySelector(TX_PANEL_SEL);
+    if (!panel) return out;
+
+    // Preferred: rows with data-title attributes
+    const rows = panel.querySelectorAll('table tr');
+    rows.forEach(tr=>{
+      // Skip header rows
+      if (tr.querySelector('th')) return;
+
+      const get = (names, fallbackNth=null)=>{
+        // by data-title first
+        for (const n of names){
+          const td = tr.querySelector(`td[data-title="${n}"], td[data-title*="${n}"]`);
+          if (td) return td.textContent.trim();
+        }
+        if (fallbackNth!=null){
+          const td = tr.querySelector(`td:nth-child(${fallbackNth})`);
+          if (td) return td.textContent.trim();
+        }
+        return '';
+      };
+
+      // Try common titles/aliases used by WebTrack grids:
+      const doc   = get(['Document #','Doc #','Invoice #','Invoice'], 1);
+      const type  = get(['Type','Document Type'], 2);
+      const tDate = get(['Transaction Date','Trans Date','Date'], 3);
+      const dDate = get(['Due Date'], 4);
+      const job   = get(['Job Ref','Job','Job Name','Project'], 5);
+      const desc  = get(['Description','Customer PO','Notes','Reference'], 6);
+      const amt   = get(['Amount','Doc Amount','Amount With Tax'], -2); // near end
+      const outst = get(['Amount Outstanding','Outstanding','Balance'], -1);
+
+      const docN  = normalizeDoc(doc);
+      if (!docN) return;
+
+      out.push({
+        key: docN, doc: docN,
+        type: (type||'').trim(),
+        tDate, dDate, job: job||'',
+        desc: desc||'',
+        amount: amt||'0',
+        outstanding: outst||amt||'0'
+      });
+    });
+
+    return out;
+  }
+
+  function loadFromCurrentDOM(){
+    const tbody = document.getElementById('wlInvTbody');
+    if (tbody) tbody.innerHTML = `<tr><td colspan="9" style="padding:14px;">Reading recent transactions…</td></tr>`;
+    const rows = extractFromRoot(document);
+    state.rows = rows;
+    state.pageCount = 1;
+    // Parse "next" from CURRENT DOM
+    state.nextPost = parseNextFromRoot(document) || null;
+    renderRows();
+    badge(`Loaded ${rows.length} row(s) from current page${state.nextPost?' · more available':''}`);
+    log.info('Loaded current DOM rows', { count: rows.length, hasNext: !!state.nextPost });
+    // Preselect any docs already in remittance
+    seedSelectionFromRemittance();
+  }
+
+  function badge(t){ const b = document.getElementById('wlInvLoadedBadge'); if (b) b.textContent = t; }
+
+  /* ---------- WebForms pager emulation (on THIS page) ---------- */
+  function squishHidden(doc){
+    const hid = {};
+    doc.querySelectorAll('input[type="hidden"]').forEach(i=>{
+      if (i.name) hid[i.name] = i.value || '';
+    });
+    return hid;
+  }
+
+  function parseNextFromRoot(root){
+    const panel = root.querySelector(TX_PANEL_SEL); if (!panel) return null;
+    // Find "Next" anchor within the panel
+    let a = panel.querySelector('a.rgPageNext') ||
+            Array.from(panel.querySelectorAll('a[href*="__doPostBack"]')).find(x=> /Next|›|>>/i.test(x.textContent||''));
+    if (!a) return null;
+    const src = a.getAttribute('href') || a.getAttribute('onclick') || '';
+    const m = src.match(/__doPostBack\(\s*'([^']+)'\s*,\s*'([^']*)'\s*\)/);
+    if (!m) return null;
+
+    return {
+      hidden: squishHidden(document), // start with current page viewstate
+      evtTarget: m[1],
+      evtArg:    m[2] || ''
+    };
+  }
+
+  async function fetchNextPage(current){
+    // POST to this same page (AccountPayment_r.aspx) with the panel pager target
+    const data = new URLSearchParams();
+    Object.entries(current.hidden||{}).forEach(([k,v])=> data.append(k,v));
+    data.set('__EVENTTARGET', current.evtTarget);
+    data.set('__EVENTARGUMENT', current.evtArg);
+
+    const res = await fetch(IN_PAGE_URL, {
+      method:'POST',
+      headers: { 'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8' },
+      credentials:'include',
+      body: data.toString()
+    });
+    if (!res.ok) throw new Error('HTTP '+res.status);
+    const html = await res.text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+
+    // Extract rows + compute next
+    const rows = extractFromRoot(doc);
+    const panel = doc.querySelector(TX_PANEL_SEL);
+    let next = null;
+    if (panel){
+      const a = panel.querySelector('a.rgPageNext') ||
+                Array.from(panel.querySelectorAll('a[href*="__doPostBack"]')).find(x=> /Next|›|>>/i.test(x.textContent||''));
+      if (a){
+        const src = a.getAttribute('href') || a.getAttribute('onclick') || '';
+        const m = src.match(/__doPostBack\(\s*'([^']+)'\s*,\s*'([^']*)'\s*\)/);
+        if (m){
+          next = { hidden: squishHidden(doc), evtTarget: m[1], evtArg: m[2]||'' };
+        }
+      }
+    }
+    return { rows, next };
+  }
+
+  async function loadAllPages(){
+    if (!state.nextPost){ badge('No more pages detected.'); return; }
+    let added = 0, pages = 0;
+    document.getElementById('wlTxLoadAllBtn').disabled = true;
+    try{
+      while (state.nextPost && pages < state.maxPages){
+        const { rows, next } = await fetchNextPage(state.nextPost);
+        // merge new rows by doc key
+        const known = new Set(state.rows.map(r=> r.key));
+        rows.forEach(r=> { if (!known.has(r.key)) { state.rows.push(r); added++; } });
+        state.pageCount += 1; pages += 1; state.nextPost = next;
+        badge(`Loaded ${state.rows.length} rows · page ${state.pageCount}${state.nextPost?'…':''}`);
+        renderRows(); // live update as we load
+      }
+      if (state.nextPost) badge(`Stopped at cap (${state.maxPages} pages). Showing ${state.rows.length}.`);
+      else badge(`All pages loaded · ${state.rows.length} total`);
+      log.info('Load all complete', { total: state.rows.length, pages });
+    }catch(e){
+      log.error('loadAllPages error', e);
+      badge('Error while loading all pages. Showing what we have.');
+    }finally{
+      document.getElementById('wlTxLoadAllBtn').disabled = false;
+    }
+  }
+
+  /* ---------- Render ---------- */
+  function renderStats(){
+    const count = state.selected.size;
+    const total = Array.from(state.selected.values()).reduce((s,v)=> s+v, 0);
+    const pill = document.getElementById('wlInvStats');
+    if (pill) pill.textContent = `${count} selected · $${FMT2(total)}`;
+  }
+
+  function toggleSel(key, outstandingVal, checked){
+    if (!key) return;
+    if (checked) state.selected.set(key, Number(outstandingVal||0));
+    else state.selected.delete(key);
+  }
+
+  function renderRows(){
+    const tbody = document.getElementById('wlInvTbody');
+    if (!tbody) return;
+    const q = (document.getElementById('wlInvFilter')?.value || '').trim().toLowerCase();
+    const rows = state.rows.filter(r=>{
+      if (!q) return true;
+      return (r.doc||'').toLowerCase().includes(q) ||
+             (r.type||'').toLowerCase().includes(q) ||
+             (r.job||'').toLowerCase().includes(q) ||
+             (r.desc||'').toLowerCase().includes(q) ||
+             (r.tDate||'').toLowerCase().includes(q) ||
+             (r.dDate||'').toLowerCase().includes(q);
+    });
+
+    const frag = document.createDocumentFragment();
+    rows.forEach(r=>{
+      const credit = isCredit(r.type, r.amount);
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td><input type="checkbox" data-key="${r.key}" data-outstanding="${r.outstanding}" ${state.selected.has(r.key)?'checked':''}></td>
+        <td>${r.doc}</td>
+        <td><span class="wl-type-pill ${credit?'wl-type-cr':'wl-type-inv'}">${credit?'Credit':'Invoice'}</span></td>
+        <td>${r.tDate||''}</td>
+        <td>${r.dDate||''}</td>
+        <td>${r.job||''}</td>
+        <td>${r.desc||''}</td>
+        <td class="right">$${FMT2(MONEY(r.amount))}</td>
+        <td class="right">$${FMT2(MONEY(r.outstanding))}</td>
+      `;
+      const cb = tr.querySelector('input[type="checkbox"]');
+      cb.addEventListener('change', (e)=>{ toggleSel(r.key, MONEY(r.outstanding), e.currentTarget.checked); renderStats(); });
+      frag.appendChild(tr);
+    });
+    tbody.innerHTML = '';
+    tbody.appendChild(frag);
+
+    const all = document.getElementById('wlInvSelectAll');
+    if (all){
+      // set tri-state
+      const total = rows.length, sel = rows.filter(r=> state.selected.has(r.key)).length;
+      all.indeterminate = sel>0 && sel<total;
+      all.checked = total>0 && sel===total;
+    }
+    renderStats();
+  }
+
+  /* ---------- Seed selection from Remittance box ---------- */
+  function seedSelectionFromRemittance(){
+    const rem = document.getElementById('ctl00_PageBody_RemittanceAdviceTextBox');
+    if (!rem) return;
+    const tokens = String(rem.value||'').split(/[,\n\r\t ]+/).map(x=>x.trim()).filter(Boolean);
+    const present = new Set(state.rows.map(r=> r.key));
+    tokens.forEach(t=> { if (present.has(t)) state.selected.set(t, MONEY(state.rows.find(r=> r.key===t)?.outstanding)); });
+    renderRows();
+  }
+
+  /* ---------- Commit to form (no redirect) ---------- */
+  function commitSelection(){
+    if (state.selected.size === 0){
+      alert('Select at least one item.');
+      return;
+    }
+    const docs  = Array.from(state.selected.keys());
+    const total = Array.from(state.selected.values()).reduce((s,v)=> s+v, 0);
+
+    // Remittance: add/replace line with doc list
+    const rem = document.getElementById('ctl00_PageBody_RemittanceAdviceTextBox');
+    if (rem){
+      // Put the list on its own line (replace any prior invoice list tokens)
+      const other = String(rem.value||'').split('\n').filter(line=> !/INV/i.test(line));
+      other.push(docs.join(','));
+      rem.value = other.join('\n').trim();
+      rem.dispatchEvent(new Event('input',{bubbles:true}));
+      rem.dispatchEvent(new Event('change',{bubbles:true}));
+    }
+
+    // Amount: use sum of Outstanding
+    const amt = document.getElementById('ctl00_PageBody_PaymentAmountTextBox');
+    if (amt){
+      amt.value = FMT2(total);
+      amt.dispatchEvent(new Event('input',{bubbles:true}));
+      amt.dispatchEvent(new Event('change',{bubbles:true}));
+    }
+
+    // Re-render summary (your layout module listens to changes too)
+    try{ window.renderSummary?.(); }catch{}
+
+    closeModal();
+  }
+
+  /* ---------- Wire the existing "Pay by Invoice" button ---------- */
+  function wire(){
+    const btn = document.getElementById('wlOpenTxModalBtn');
+    if (!btn || btn.__wlTxPickBound) return;
+    btn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); openModal(); });
+    btn.__wlTxPickBound = true;
+    log.info('Invoice picker (from Recent Transactions) bound.');
+  }
+
+  /* ---------- Boot + keep wired across partial postbacks ---------- */
+  function boot(){
+    wire();
+    try{
+      if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
+        const prm = window.Sys.WebForms.PageRequestManager.getInstance();
+        if (!prm.__wlTxPickBound){
+          prm.add_endRequest(()=> setTimeout(wire, 30));
+          prm.__wlTxPickBound = true;
+        }
+      }
+    }catch{}
+  }
+
+  if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', boot, { once:true }); }
+  else { boot(); }
+
+})();
+
