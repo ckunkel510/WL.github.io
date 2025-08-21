@@ -1538,43 +1538,42 @@
     jobsUpdateSummary();
   }
   async function openJobsModal(){
-    ensureJobsModalDOM();
-    // If user arrived here via keyboard (no pointerdown), ensure clearing now.
-    clearQuickState(MODE.JOB);
+  ensureJobsModalDOM();
 
-    const list = $id('wlJobsList');
-    if (!list.dataset.loaded){
-      const jobs = await fetchJobBalances();
-      list.innerHTML = '';
-      if (!jobs || jobs.length === 0){
-        const p = document.createElement('p'); p.textContent = 'No job balances found.'; list.appendChild(p);
-      } else {
-        const frag = document.createDocumentFragment();
-        jobs.forEach((job,i)=>{
-          const label = document.createElement('label'); label.className='wl-job-line';
-          const cb = document.createElement('input'); cb.type='checkbox'; cb.value=String(job.netAmount); cb.dataset.job=job.job; cb.id=`job-${i}`;
-          const txt = document.createElement('span'); txt.textContent = `${job.job} — $${format2(job.netAmount)}`;
-          label.appendChild(cb); label.appendChild(txt);
-          frag.appendChild(label);
-        });
-        list.appendChild(frag);
-        list.dataset.loaded = '1';
-      }
-      const prevSel = JSON.parse(sessionStorage.getItem(SESS_JOBS_SEL) || '{}');
-      if (prevSel && Object.keys(prevSel).length){
-        list.querySelectorAll('input[type="checkbox"]').forEach(cb=>{
-          if (prevSel[cb.dataset.job] != null) cb.checked = true;
-        });
-      }
-      list.addEventListener('change', jobsUpdateSummary, { passive:true });
+  const list = document.getElementById('wlJobsList');
+  if (!list.dataset.loaded){
+    const jobs = await fetchJobBalances();
+    list.innerHTML = '';
+    if (!jobs || jobs.length === 0){
+      const p = document.createElement('p'); p.textContent = 'No job balances found.'; list.appendChild(p);
+    } else {
+      const frag = document.createDocumentFragment();
+      jobs.forEach((job,i)=>{
+        const label = document.createElement('label'); label.className='wl-job-line';
+        const cb = document.createElement('input'); cb.type='checkbox'; cb.value=String(job.netAmount); cb.dataset.job=job.job; cb.id=`job-${i}`;
+        const txt = document.createElement('span'); txt.textContent = `${job.job} — $${format2(job.netAmount)}`;
+        label.appendChild(cb); label.appendChild(txt);
+        frag.appendChild(label);
+      });
+      list.appendChild(frag);
+      list.dataset.loaded = '1';
     }
-    jobsUpdateSummary();
-    $id('wlJobsModalBackdrop').style.display='block';
-    $id('wlJobsModal').style.display='block';
-    document.body.style.overflow='hidden';
-    sessionStorage.setItem(SESS_JOBS_OPEN,'1');
-    const btn = $id('wlOpenJobsModalBtn'); if (btn){ btn.disabled = true; btn.setAttribute('aria-disabled','true'); }
+    const prevSel = JSON.parse(sessionStorage.getItem(SESS_JOBS_SEL) || '{}');
+    if (prevSel && Object.keys(prevSel).length){
+      list.querySelectorAll('input[type="checkbox"]').forEach(cb=>{
+        if (prevSel[cb.dataset.job] != null) cb.checked = true;
+      });
+    }
+    list.addEventListener('change', jobsUpdateSummary, { passive:true });
   }
+  jobsUpdateSummary();
+  document.getElementById('wlJobsModalBackdrop').style.display='block';
+  document.getElementById('wlJobsModal').style.display='block';
+  document.body.style.overflow='hidden';
+  sessionStorage.setItem(SESS_JOBS_OPEN,'1');
+  const btn = document.getElementById('wlOpenJobsModalBtn'); if (btn){ btn.disabled = true; btn.setAttribute('aria-disabled','true'); }
+}
+
   function closeJobsModal(){
     $id('wlJobsModalBackdrop').style.display='none';
     $id('wlJobsModal').style.display='none';
@@ -1583,35 +1582,35 @@
     const btn = $id('wlOpenJobsModalBtn'); if (btn){ btn.disabled = false; btn.removeAttribute('aria-disabled'); btn.focus?.(); }
   }
   function commitJobsSelection(){
-    const list = $id('wlJobsList'); if (!list){ closeJobsModal(); return; }
-    const checks = Array.from(list.querySelectorAll('input[type="checkbox"]'));
-    const sel = checks.filter(c=>c.checked);
-    const newSel = {}; sel.forEach(c=> newSel[c.dataset.job] = parseMoney(c.value));
-    const prevSel = JSON.parse(sessionStorage.getItem(SESS_JOBS_SEL) || '{}');
-    const prevTotal = Object.values(prevSel).reduce((s,v)=> s + Number(v||0), 0);
-    const newTotal  = Object.values(newSel).reduce((s,v)=> s + Number(v||0), 0);
+  const list = document.getElementById('wlJobsList'); if (!list){ closeJobsModal(); return; }
+  const checks = Array.from(list.querySelectorAll('input[type="checkbox"]'));
+  const sel = checks.filter(c=>c.checked);
+  const newSel = {}; sel.forEach(c=> newSel[c.dataset.job] = parseMoney(c.value));
+  const newTotal  = Object.values(newSel).reduce((s,v)=> s + Number(v||0), 0);
 
-    const a = amtEl(); const r = remEl();
-    const base = a ? parseMoney(a.value) : 0;
-    if (a){
-      const next = Math.max(0, base - prevTotal + newTotal);
-      a.value = format2(next);
-      triggerChange(a);
-    }
-    if (r){
-      const lines = (r.value||'').split('\n');
-      const kept = lines
-        .filter(line=> !Object.keys(prevSel).some(job => line.trim().startsWith(`JOB ${job}:`)))
-        .filter(line=> !/^\s*(Docs:|Documents:)\s*/i.test(line))
-        .filter(line=> !/^\s*STATEMENT\b/i.test(line))
-        .filter(Boolean);
-      const add = Object.entries(newSel).map(([job,amt])=> `JOB ${job}: $${format2(amt)}`);
-      r.value = [...kept, ...add].join('\n');
-      triggerChange(r);
-    }
-    sessionStorage.setItem(SESS_JOBS_SEL, JSON.stringify(newSel));
-    closeJobsModal();
+  // 1) Clear any Docs:/STATEMENT lines (invoice/statement modes) now that user chose Jobs
+  const r = remEl();
+  if (r){
+    const kept = (r.value||'').split(/\r?\n/)
+      .filter(Boolean)
+      .filter(l=> !/^\s*(Docs:|Documents:)\s*/i.test(l))
+      .filter(l=> !/^\s*STATEMENT\b/i.test(l));
+    const add = Object.entries(newSel).map(([job,amt])=> `JOB ${job}: $${format2(amt)}`);
+    r.value = [...kept, ...add].join('\n');
+    triggerChange(r);
   }
+
+  // 2) Amount becomes exactly the Jobs total (no stacking)
+  const a = amtEl();
+  if (a){ a.value = format2(newTotal); triggerChange(a); }
+
+  // 3) Persist and clear invoice selections (post-commit)
+  sessionStorage.setItem(SESS_JOBS_SEL, JSON.stringify(newSel));
+  try{ window.WL_AP?.invoice?.clearSelection?.(); }catch{}
+
+  closeJobsModal();
+}
+
 
   // Export clearer for cross-mode wipes
   window.WL_AP = window.WL_AP || {};
@@ -1674,12 +1673,23 @@
       const v=owingVal(); const a=amtEl(); if (a && v>0){ a.value = format2(v); triggerChange(a);}
     });
 
-    // Clear on pointerdown for Invoice/Job; open handled via delegated listeners
-    const invBtn = $id('wlOpenTxModalBtn');
-    invBtn.addEventListener('pointerdown', ()=> clearQuickState(MODE.INVOICE), { capture:true });
+ 
+    // --- inside mountWidget(), replace your Invoice/Job wiring with:
+const invBtn = document.getElementById('wlOpenTxModalBtn');
+if (invBtn){
+  // No pre-clear here. The Invoice Picker script handles opening via its own delegated listener.
+}
 
-    const jobBtn = $id('wlOpenJobsModalBtn');
-    jobBtn.addEventListener('pointerdown', ()=> clearQuickState(MODE.JOB), { capture:true });
+const jobBtn = document.getElementById('wlOpenJobsModalBtn');
+if (jobBtn){
+  // No pointerdown clear here anymore; just open the modal.
+  jobBtn.addEventListener('click', (e)=>{
+    e.preventDefault();
+    e.stopPropagation();
+    openJobsModal();
+  });
+}
+
 
     log.info('Quick Payment Actions mounted');
   }
@@ -2284,34 +2294,46 @@
 
   /* ---------- Commit to form ---------- */
   function commitSelection(){
-    if (state.selected.size === 0){
-      alert('Select at least one item.');
-      return;
-    }
-    const index = new Map(state.rows.map(r=> [r.key, MONEY(r.outstanding)]));
-    const docs  = Array.from(state.selected.keys()).filter(k=> index.has(k));
-    const total = docs.reduce((s,k)=> s + (index.get(k) || 0), 0);
-
-    // Strip prior Docs/Job/Statement lines, then add Docs:
-    const currentRem = getRemittanceText();
-    const lines = String(currentRem||'').split(/\r?\n/)
-      .filter(l=> !/^\s*(Docs:|Documents:)\s*/i.test(l))
-      .filter(l=> !/^\s*JOB\s+/i.test(l))
-      .filter(l=> !/^\s*STATEMENT\b/i.test(l));
-    lines.push('Docs: ' + docs.join(','));
-    const nextRem = lines.join('\n').trim();
-
-    const remOK = setRemittanceText(nextRem);
-    if (!remOK){ alert('Could not find the Remittance field to update.'); }
-
-    setPaymentAmount(total);
-    try{ localStorage.setItem(LS_KEY, JSON.stringify(docs)); }catch{}
-
-    // Clear job selections when invoices committed
-    try{ window.WL_AP?.jobs?.clearSelection?.(); }catch{}
-
-    closeModal();
+  if (state.selected.size === 0){
+    alert('Select at least one item.');
+    return;
   }
+  const index = new Map(state.rows.map(r=> [r.key, MONEY(r.outstanding)]));
+  const docs  = Array.from(state.selected.keys()).filter(k=> index.has(k));
+  const total = docs.reduce((s,k)=> s + (index.get(k) || 0), 0);
+
+  // 1) Build Remittance with only Docs: (strip JOB/STATEMENT lines)
+  const currentRem = getRemittanceText();
+  const lines = String(currentRem||'').split(/\r?\n/)
+    .filter(l=> !/^\s*(Docs:|Documents:)\s*/i.test(l))
+    .filter(l=> !/^\s*JOB\s+/i.test(l))
+    .filter(l=> !/^\s*STATEMENT\b/i.test(l));
+  lines.push('Docs: ' + docs.join(','));
+  const nextRem = lines.join('\n').trim();
+
+  const remOK = setRemittanceText(nextRem);
+  if (!remOK){ alert('Could not find the Remittance field to update.'); }
+
+  // 2) Amount becomes exactly the Invoices total (no stacking)
+  setPaymentAmount(total);
+
+  // 3) Persist my selection, and clear Jobs (post-commit)
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(docs)); }catch{}
+  try{ window.WL_AP?.jobs?.clearSelection?.(); }catch{}
+
+  closeModal();
+}
+
+
+  // Put this once in the Invoice Picker IIFE (near wire()):
+document.addEventListener('click', function(e){
+  const btn = e.target?.closest?.('#wlOpenTxModalBtn');
+  if (!btn) return;
+  e.preventDefault();
+  e.stopPropagation();
+  e.stopImmediatePropagation?.();
+  openModal();
+}, true);
 
   /* ---------- Wire + Delegated opener ---------- */
   function wire(){
