@@ -2340,12 +2340,14 @@ if (jobBtn){
     return;
   }
 
+  // Index for lookups
   const rowByKey = new Map(state.rows.map(r => [r.key, r]));
   const amtByKey = new Map(state.rows.map(r => [r.key, MONEY(r.outstanding)]));
 
+  // Keep only docs present in loaded rows
   const docs = Array.from(state.selected.keys()).filter(k => rowByKey.has(k));
 
-  // Build tokens: invoices = 123456$12.34 ; credits = CN12345
+  // Build tokens & compute net
   const tokens = [];
   let netTotal = 0;
 
@@ -2359,11 +2361,13 @@ if (jobBtn){
       selAmt < 0;
 
     if (isCredit) {
+      // Credit token: CN12345  (strip spaces, ensure CN prefix once)
       const raw = String(r?.doc || k).trim().replace(/\s+/g,'');
-      const token = /^CN/i.test(raw) ? raw : 'CN' + raw;
+      const token = /^CN/i.test(raw) ? raw.replace(/^cn/i,'CN') : 'CN' + raw;
       tokens.push(token);
-      netTotal += selAmt; // negative reduces
+      netTotal += selAmt; // typically negative
     } else {
+      // Invoice token: 123456$12.34 (two decimals, no thousands)
       const pay = Math.max(0, Math.abs(selAmt));
       const token = `${String(r?.doc || k).trim()}$${pay.toFixed(2)}`;
       tokens.push(token);
@@ -2371,20 +2375,67 @@ if (jobBtn){
     }
   });
 
-  // Defer writing Remittance until after the Amount postback finishes
   const remString = tokens.join(',');
-  try{ window.WL_AP?.remit?.defer(remString); }catch{}
 
-  // Set Amount to net total (credits reduce, clamp at 0) and post back
+  // Desired payment total (credits reduce; never below 0)
   const payTotal = Math.max(0, netTotal);
-  setPaymentAmount(payTotal);
-  forceAmountPostback();
 
-  try{ localStorage.setItem(LS_KEY, JSON.stringify(docs)); }catch{}
-  try{ window.WL_AP?.jobs?.clearSelection?.(); }catch{}
+  // Read current amount (numeric)
+  const aEl = document.getElementById('ctl00_PageBody_PaymentAmountTextBox');
+  const currNum = aEl ? MONEY(aEl.value) : 0;
+
+  // Helper to set amount field visually
+  function setAmountField(valNum){
+    if (!aEl) return;
+    const show = Number(valNum||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
+    // native set + events
+    try{
+      const proto = HTMLInputElement.prototype;
+      const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+      if (desc && desc.set) desc.set.call(aEl, show); else aEl.value = show;
+    }catch{ aEl.value = show; }
+    try{
+      aEl.dispatchEvent(new Event('input',  { bubbles:true }));
+      aEl.dispatchEvent(new Event('change', { bubbles:true }));
+    }catch{}
+  }
+
+  // 1) Always set the Amount field to reflect the selection
+  setAmountField(payTotal);
+
+  // 2) Decide: post back (amount changed) or apply remittance immediately (credits-only/no-change)
+  const changed = Number(currNum.toFixed(2)) !== Number(payTotal.toFixed(2));
+
+  if (changed) {
+    // Defer remittance until after async postback completes
+    try{ window.WL_AP?.remit?.defer(remString); }catch{}
+
+    // Force the Amount control to post back so server “sticks” the value
+    try{
+      if (typeof window.__doPostBack === 'function'){
+        const uniqueId = aEl.id.replace(/_/g,'$');
+        setTimeout(()=> window.__doPostBack(uniqueId, ''), 0);
+      }
+    }catch{}
+  } else {
+    // No postback will happen (e.g., credits-only net=0) → apply remittance now
+    try {
+      // Try Telerik/native write immediately without firing change (avoid spurious postback)
+      window.WL_AP?.remit?._setNow?.(remString, /*fireInputOnly*/true);
+      // Also store nothing pending
+      try{ sessionStorage.removeItem('__WL_PendingRemitV2'); }catch{}
+    } catch {}
+  }
+
+  // Persist doc ids for convenience
+  try { localStorage.setItem(LS_KEY, JSON.stringify(docs)); } catch {}
+
+  // Since this is "pay by invoice", clear any job selections to avoid stacking
+  try { window.WL_AP?.jobs?.clearSelection?.(); } catch {}
 
   closeModal();
 }
+
 
 
 
