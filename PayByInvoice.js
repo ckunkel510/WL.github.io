@@ -2001,13 +2001,15 @@
 
 
 
+
 /* ==========================================================
    Woodson — Client-side "Pay by Invoice" from Recent Transactions
-   v2.6 (anchor-pager aware; auto-loads ALL pages on open)
-   - Opens a modal with a modern table + checkboxes
-   - Scrapes the Recent Transactions grid on THIS page
-   - NEW: Crawls anchor-based pager (?pageIndex=…) and fetches all pages
-   - On "Done": updates PaymentAmount + Remittance (no redirect)
+   v2.8  (anchor pager + remittance sync + persistent selection)
+   - Modal with modern table + checkboxes
+   - Scrapes Recent Transactions grid on this page
+   - Crawls anchor pagination (?pageIndex=…) to fetch ALL rows
+   - DONE writes `Docs: <comma list>` to Remittance; updates Amount
+   - Selection persists via localStorage; also seeds from Remittance
    Dependencies: none (fetch + DOMParser). Same-origin required.
    ========================================================== */
 (function(){
@@ -2026,6 +2028,7 @@
   const TX_PANEL_SEL = '#ctl00_PageBody_accountsTransactionsPanel';
   const GRID_SEL     = '#ctl00_PageBody_InvoicesGrid .rgMasterTable, .RadGrid .rgMasterTable';
   const IN_PAGE_URL  = location.pathname + location.search;
+  const LS_KEY       = 'WL_AP_SelectedDocs'; // persisted across modal opens (same session/browser)
   const MONEY = s => { const v = parseFloat(String(s||'').replace(/[^0-9.\-]/g,'')); return Number.isFinite(v)?v:0; };
   const FMT2  = n => Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
 
@@ -2070,7 +2073,6 @@
   /* ---------- Modal DOM ---------- */
   function ensureModal(){
     if (document.getElementById('wlInvModal')) return;
-    // clean up any ghosts from older builds
     document.querySelectorAll('#wlInvBackdrop, #wlInvModal').forEach(n=>n.remove());
 
     const back = document.createElement('div'); back.id='wlInvBackdrop'; back.className='wl-modal-backdrop';
@@ -2120,17 +2122,16 @@
     document.body.appendChild(back);
     document.body.appendChild(shell);
 
-    // Close
     back.addEventListener('click', closeModal);
     document.getElementById('wlInvCloseX').addEventListener('click', closeModal);
 
-    // Interactions
     document.getElementById('wlInvFilter').addEventListener('input', renderRows);
     document.getElementById('wlInvSelectAll').addEventListener('change', (e)=>{
       const c = e.currentTarget.checked;
       document.querySelectorAll('#wlInvTbody input[type="checkbox"]').forEach(cb=>{
         cb.checked = c; toggleSel(cb.dataset.key, MONEY(cb.dataset.outstanding), c);
       });
+      persistSelection();
       renderStats();
     });
     document.getElementById('wlTxReloadBtn').addEventListener('click', ()=> { loadFromCurrentDOM(); });
@@ -2140,17 +2141,20 @@
   }
 
   function openModal(){
-    if (state.open) return; // guard against double-open
+    if (state.open) return;
     ensureModal();
     document.getElementById('wlInvBackdrop').style.display = 'block';
     document.getElementById('wlInvModal').style.display = 'block';
     document.body.style.overflow = 'hidden';
     state.open = true;
 
-    // First paint: pull what’s already rendered in the Recent Transactions panel
+    // Seed selection immediately from LS + Remittance (keys only; amounts get reconciled later)
+    seedSelectionKeys();
+
+    // First paint: rows from current DOM
     loadFromCurrentDOM();
 
-    // Then auto-fetch ALL pages found in the anchor pager
+    // Then fetch ALL pages (anchor pager) in sequence and reconcile amounts
     loadAllPages().catch(e=> log.error('auto loadAll error', e));
   }
   function closeModal(){
@@ -2158,19 +2162,19 @@
     document.getElementById('wlInvModal')?.style && (document.getElementById('wlInvModal').style.display = 'none');
     document.body.style.overflow = '';
     state.open = false;
+    // Important: do NOT clear state.selected; we want persistence on reopen
   }
 
   /* ---------- State ---------- */
   const state = {
     rows: [],               // [{key, doc, type, tDate, dDate, job, desc, amount, outstanding}]
-    selected: new Map(),    // key -> outstanding (Number)
+    selected: new Map(),    // key -> outstanding (Number; reconciled after rows load)
     open: false,
-    // for legacy WebForms pager (kept for fallback)
-    nextPost: null,         // { hidden, evtTarget, evtArg } or null
+    nextPost: null,
     pageCount: 0,
     maxPages: 50,
     fetchingAll: false,
-    fetchedPageIndexes: new Set(), // for anchor-pager
+    fetchedPageIndexes: new Set(),
   };
 
   function isCredit(typeText, amountText){
@@ -2178,13 +2182,9 @@
     if (/credit/.test(t)) return true;
     return MONEY(amountText) < 0;
   }
+  const normalizeDoc = s => String(s||'').trim();
 
-  function normalizeDoc(s){
-    // Keep exactly as shown; do NOT prefix with INV.
-    return String(s||'').trim();
-  }
-
-  /* ---------- Extract rows from the CURRENT DOM panel ---------- */
+  /* ---------- Extract from DOM ---------- */
   function extractFromRoot(root){
     const out = [];
     const panel = root.querySelector(TX_PANEL_SEL);
@@ -2202,7 +2202,6 @@
         return td ? td.textContent.trim() : '';
       };
 
-      // Titles as they appear in your HTML:
       const type  = cell('Type');
       const tDate = cell('Transaction Date') || cell('Trans Date') || cell('Date');
       const doc   = cell('Doc. #') || cell('Document #') || cell('Doc #') || cell('Invoice #') || cell('Invoice');
@@ -2212,17 +2211,10 @@
       const amt   = cell('Amount') || cell('Doc Amount') || cell('Amount With Tax');
       const outst = cell('Amount Outstanding') || cell('Outstanding') || cell('Balance');
 
-      const docN  = normalizeDoc(doc);
-      if (!docN) return;
+      const key   = normalizeDoc(doc);
+      if (!key) return;
 
-      out.push({
-        key: docN, doc: docN,
-        type: (type||'').trim(),
-        tDate, dDate, job: job||'',
-        desc: desc||'',
-        amount: amt||'0',
-        outstanding: outst||amt||'0'
-      });
+      out.push({ key, doc:key, type:(type||'').trim(), tDate, dDate, job:job||'', desc:desc||'', amount:amt||'0', outstanding:outst||amt||'0' });
     });
 
     return out;
@@ -2234,20 +2226,22 @@
     const rows = extractFromRoot(document);
     state.rows = rows;
     state.pageCount = 1;
-    // Parse legacy "next" (fallback only)
     state.nextPost = parseNextFromRoot(document) || null;
-    // Capture current pageIndex (if visible)
+
     const hereIdx = getCurrentPageIndexFromDoc(document);
     if (hereIdx != null) state.fetchedPageIndexes.add(hereIdx);
+
+    // Reconcile selected amounts based on rows we have now
+    reconcileSelectedAmounts();
     renderRows();
+
     badge(`Loaded ${rows.length} row(s) from current page${hasAnchorPager(document)?' · more available':''}`);
     log.info('Loaded current DOM rows', { count: rows.length, hasNext: !!state.nextPost });
-    seedSelectionFromRemittance();
   }
 
   function badge(t){ const b = document.getElementById('wlInvLoadedBadge'); if (b) b.textContent = t; }
 
-  /* ---------- Anchor pager discovery (your page) ---------- */
+  /* ---------- Anchor pager ---------- */
   function hasAnchorPager(root){
     const panel = root.querySelector(TX_PANEL_SEL);
     return !!panel?.querySelector('ul.pagination a[href*="pageIndex="]');
@@ -2264,7 +2258,7 @@
   function collectPageLinks(root){
     const panel = root.querySelector(TX_PANEL_SEL); if (!panel) return [];
     const as = Array.from(panel.querySelectorAll('ul.pagination a.page-link[href*="pageIndex="]'));
-    const links = new Map(); // pageIndex(int) -> absolute URL
+    const links = new Map();
     as.forEach(a=>{
       const href = a.getAttribute('href')||'';
       try{
@@ -2272,13 +2266,10 @@
         if (!u.searchParams.has('pageIndex')) return;
         const idx = parseInt(u.searchParams.get('pageIndex')||'0',10);
         if (!Number.isFinite(idx)) return;
-        // Preserve any existing query parts (itemsPerPage/groupIndex/etc.)
         links.set(idx, u.toString());
       }catch{}
     });
-    // Ensure at least the base page (0) exists even if not present
     if (!links.has(0)) links.set(0, new URL(location.href).toString());
-    // Sort by index
     return Array.from(links.entries()).sort((a,b)=> a[0]-b[0]).map(([_, url])=> url);
   }
 
@@ -2288,13 +2279,12 @@
     const html = await res.text();
     const doc  = new DOMParser().parseFromString(html, 'text/html');
     const rows = extractFromRoot(doc);
-    // Track pageIndex to avoid refetch
     const idx = getCurrentPageIndexFromDoc(doc);
     if (idx != null) state.fetchedPageIndexes.add(idx);
     return { rows };
   }
 
-  /* ---------- Legacy WebForms pager (fallback) ---------- */
+  /* ---------- Legacy WebForms fallback ---------- */
   function squishHidden(doc){
     const hid = {};
     doc.querySelectorAll('input[type="hidden"]').forEach(i=>{ if (i.name) hid[i.name] = i.value || ''; });
@@ -2325,10 +2315,10 @@
     if (!res.ok) throw new Error('HTTP '+res.status);
     const html = await res.text();
     const doc = new DOMParser().parseFromString(html, 'text/html');
-
     const rows = extractFromRoot(doc);
-    const panel = doc.querySelector(TX_PANEL_SEL);
+
     let next = null;
+    const panel = doc.querySelector(TX_PANEL_SEL);
     if (panel){
       const a = panel.querySelector('a.rgPageNext') ||
                 Array.from(panel.querySelectorAll('a[href*="__doPostBack"]')).find(x=> /Next|›|>>/i.test(x.textContent||''));
@@ -2341,7 +2331,7 @@
     return { rows, next };
   }
 
-  /* ---------- Load all pages (prefers anchor-pager; falls back to WebForms) ---------- */
+  /* ---------- Load all pages ---------- */
   async function loadAllPages(){
     if (state.fetchingAll) return;
     state.fetchingAll = true;
@@ -2351,13 +2341,12 @@
     try{
       const anchorLinks = hasAnchorPager(document) ? collectPageLinks(document) : [];
       if (anchorLinks.length > 1){
-        let added = 0, done = 0;
-        // Fetch sequentially to keep server happy
+        let done = 0;
         for (const url of anchorLinks){
           const idx = (()=>{ try{ return parseInt(new URL(url).searchParams.get('pageIndex')||'0',10);}catch{ return null; }})();
           if (idx!=null && state.fetchedPageIndexes.has(idx)) { done++; continue; }
           const { rows } = await fetchAnchorPage(url);
-          mergeRows(rows, addedRef => added += addedRef);
+          mergeRows(rows);
           done++;
           badge(`Loaded ${state.rows.length} rows · page ${done}/${anchorLinks.length}`);
           renderRows();
@@ -2365,17 +2354,16 @@
         badge(`All pages loaded · ${state.rows.length} total`);
         log.info('Anchor pager load complete', { total: state.rows.length, pages: anchorLinks.length });
       }else{
-        // Fallback: legacy WebForms "Next" loop
         if (!state.nextPost){ badge('No more pages detected.'); return; }
-        let added = 0, pages = 0;
+        let pages = 0;
         while (state.nextPost && pages < state.maxPages){
           const { rows, next } = await fetchNextPage(state.nextPost);
-          mergeRows(rows, add=> added += add);
+          mergeRows(rows);
           state.pageCount += 1; pages += 1; state.nextPost = next;
           badge(`Loaded ${state.rows.length} rows · page ${state.pageCount}${state.nextPost?'…':''}`);
           renderRows();
         }
-        if (state.nextPost) badge(`Stopped at cap (${state.maxPages} pages). Showing ${state.rows.length}.`);
+        if (state.nextPost) badge(`Stopped at cap (${state.maxPages}). Showing ${state.rows.length}.`);
         else badge(`All pages loaded · ${state.rows.length} total`);
         log.info('WebForms load all complete', { total: state.rows.length, pages });
       }
@@ -2388,11 +2376,62 @@
     }
   }
 
-  function mergeRows(newRows, onAdded){
-    const before = state.rows.length;
+  function mergeRows(newRows){
     const known = new Set(state.rows.map(r=> r.key));
-    newRows.forEach(r=> { if (r && r.key && !known.has(r.key)) { state.rows.push(r); known.add(r.key); } });
-    if (onAdded) onAdded(state.rows.length - before);
+    let added = 0;
+    newRows.forEach(r=> { if (r && r.key && !known.has(r.key)) { state.rows.push(r); known.add(r.key); added++; } });
+    if (added) reconcileSelectedAmounts();
+  }
+
+  /* ---------- Selection <-> amounts reconciliation ---------- */
+  function reconcileSelectedAmounts(){
+    // Make sure every selected key has the latest outstanding amount from state.rows
+    const index = new Map(state.rows.map(r=> [r.key, MONEY(r.outstanding)]));
+    let changed = false;
+    state.selected.forEach((val,key)=>{
+      if (index.has(key)){
+        const v = index.get(key);
+        if (val !== v){ state.selected.set(key, v); changed = true; }
+      }
+    });
+    if (changed) renderStats();
+  }
+
+  /* ---------- Persistence (seed, save) ---------- */
+  function persistSelection(){
+    try{
+      const docs = Array.from(state.selected.keys());
+      localStorage.setItem(LS_KEY, JSON.stringify(docs));
+    }catch{}
+  }
+
+  function seedSelectionKeys(){
+    // union of docs from Remittance + localStorage
+    const docs = new Set();
+
+    // From Remittance (prefer an explicit "Docs:" line; fallback to loose tokens)
+    const rem = document.getElementById('ctl00_PageBody_RemittanceAdviceTextBox');
+    if (rem){
+      const lines = String(rem.value||'').split(/\r?\n/);
+      let docLine = lines.find(line=> /^\s*(Docs:|Documents:)\s*/i.test(line)) || '';
+      let tokens = [];
+      if (docLine){
+        docLine = docLine.replace(/^\s*(Docs:|Documents:)\s*/i,'');
+        tokens = docLine.split(/[,\s]+/);
+      }else{
+        tokens = String(rem.value||'').split(/[,\n\r\t ]+/);
+      }
+      tokens.map(t=> t.trim()).filter(Boolean).forEach(t=> docs.add(t));
+    }
+
+    // From localStorage
+    try{
+      const a = JSON.parse(localStorage.getItem(LS_KEY)||'[]');
+      if (Array.isArray(a)) a.forEach(k=> docs.add(k));
+    }catch{}
+
+    // Seed keys with 0 for now; amounts reconciled after rows load
+    docs.forEach(k=> { if (!state.selected.has(k)) state.selected.set(k, 0); });
   }
 
   /* ---------- Render ---------- */
@@ -2439,7 +2478,11 @@
         <td class="right">$${FMT2(MONEY(r.outstanding))}</td>
       `;
       const cb = tr.querySelector('input[type="checkbox"]');
-      cb.addEventListener('change', (e)=>{ toggleSel(r.key, MONEY(r.outstanding), e.currentTarget.checked); renderStats(); });
+      cb.addEventListener('change', (e)=>{
+        toggleSel(r.key, MONEY(r.outstanding), e.currentTarget.checked);
+        persistSelection();
+        renderStats();
+      });
       frag.appendChild(tr);
     });
     tbody.innerHTML = '';
@@ -2454,14 +2497,20 @@
     renderStats();
   }
 
-  /* ---------- Seed selection from Remittance box ---------- */
-  function seedSelectionFromRemittance(){
+  /* ---------- Remittance helpers ---------- */
+  function writeDocsToRemittance(docs){
     const rem = document.getElementById('ctl00_PageBody_RemittanceAdviceTextBox');
     if (!rem) return;
-    const tokens = String(rem.value||'').split(/[,\n\r\t ]+/).map(x=>x.trim()).filter(Boolean);
-    const index = new Map(state.rows.map(r=> [r.key, r]));
-    tokens.forEach(t=> { if (index.has(t)) state.selected.set(t, MONEY(index.get(t).outstanding)); });
-    renderRows();
+    const lines = String(rem.value||'').split(/\r?\n/);
+    const i = lines.findIndex(line =>
+      /^\s*(Docs:|Documents:)\s*/i.test(line) ||
+      /^\s*[A-Za-z0-9\-]+(\s*,\s*[A-Za-z0-9\-]+)+\s*$/.test(line) // legacy plain list
+    );
+    const newLine = 'Docs: ' + docs.join(',');
+    if (i >= 0) lines[i] = newLine; else lines.push(newLine);
+    rem.value = lines.join('\n').trim();
+    rem.dispatchEvent(new Event('input',{bubbles:true}));
+    rem.dispatchEvent(new Event('change',{bubbles:true}));
   }
 
   /* ---------- Commit to form (no redirect) ---------- */
@@ -2470,27 +2519,22 @@
       alert('Select at least one item.');
       return;
     }
-    const docs  = Array.from(state.selected.keys());
-    const total = Array.from(state.selected.values()).reduce((s,v)=> s+v, 0);
+    // Only commit docs that exist in the current loaded rows (avoid stale LS keys)
+    const present = new Map(state.rows.map(r=> [r.key, MONEY(r.outstanding)]));
+    const docs  = Array.from(state.selected.keys()).filter(k=> present.has(k));
+    const total = docs.reduce((s,k)=> s + (present.get(k) || 0), 0);
 
-    // Remittance: add/replace line with doc list
-    const rem = document.getElementById('ctl00_PageBody_RemittanceAdviceTextBox');
-    if (rem){
-      // Put the list on its own line (replace any prior invoice list tokens)
-      const other = String(rem.value||'').split('\n').filter(line=> !/^\s*\d+(\s*,\s*\d+)*\s*$/i.test(line)); // keep non-doc lines
-      other.push(docs.join(','));
-      rem.value = other.join('\n').trim();
-      rem.dispatchEvent(new Event('input',{bubbles:true}));
-      rem.dispatchEvent(new Event('change',{bubbles:true}));
-    }
+    writeDocsToRemittance(docs);
 
-    // Amount: use sum of Outstanding
     const amt = document.getElementById('ctl00_PageBody_PaymentAmountTextBox');
     if (amt){
       amt.value = FMT2(total);
       amt.dispatchEvent(new Event('input',{bubbles:true}));
       amt.dispatchEvent(new Event('change',{bubbles:true}));
     }
+
+    // Keep selection in LS so reopening keeps boxes checked
+    persistSelection();
 
     try{ window.renderSummary?.(); }catch{}
     closeModal();
@@ -2501,9 +2545,7 @@
     const btn = document.getElementById('wlOpenTxModalBtn');
     if (!btn || btn.__wlTxPickBound) return;
     btn.addEventListener('click', (e)=>{
-      // Prevent native/modal handlers opening a second modal
-      e.preventDefault();
-      e.stopPropagation();
+      e.preventDefault(); e.stopPropagation();
       if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
       openModal();
       return false;
@@ -2512,7 +2554,7 @@
     log.info('Invoice picker (from Recent Transactions) bound.');
   }
 
-  /* ---------- Boot + keep wired across partial postbacks ---------- */
+  /* ---------- Boot + survive partial postbacks ---------- */
   function boot(){
     wire();
     try{
@@ -2530,6 +2572,4 @@
   else { boot(); }
 
 })();
-
-
 
