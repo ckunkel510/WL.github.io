@@ -1584,32 +1584,41 @@
   function commitJobsSelection(){
   const list = document.getElementById('wlJobsList'); if (!list){ closeJobsModal(); return; }
   const checks = Array.from(list.querySelectorAll('input[type="checkbox"]'));
-  const sel = checks.filter(c=>c.checked);
-  const newSel = {}; sel.forEach(c=> newSel[c.dataset.job] = parseMoney(c.value));
-  const newTotal  = Object.values(newSel).reduce((s,v)=> s + Number(v||0), 0);
+  const sel = checks.filter(c => c.checked);
 
-  // 1) Clear any Docs:/STATEMENT lines (invoice/statement modes) now that user chose Jobs
+  const newSel = {}; 
+  sel.forEach(c => newSel[c.dataset.job] = parseMoney(c.value));
+
+  // 1) Remittance = ONLY job lines (replace any invoice/statement format)
+  const jobLines = Object.entries(newSel).map(([job, amt]) => `JOB ${job}: $${format2(amt)}`);
   const r = remEl();
   if (r){
-    const kept = (r.value||'').split(/\r?\n/)
-      .filter(Boolean)
-      .filter(l=> !/^\s*(Docs:|Documents:)\s*/i.test(l))
-      .filter(l=> !/^\s*STATEMENT\b/i.test(l));
-    const add = Object.entries(newSel).map(([job,amt])=> `JOB ${job}: $${format2(amt)}`);
-    r.value = [...kept, ...add].join('\n');
-    triggerChange(r);
+    r.value = jobLines.join('\n');
+    try { r.dispatchEvent(new Event('input', { bubbles:true })); r.dispatchEvent(new Event('change', { bubbles:true })); } catch {}
   }
 
-  // 2) Amount becomes exactly the Jobs total (no stacking)
+  // 2) Amount = sum of selected jobs
+  const newTotal = Object.values(newSel).reduce((s,v)=> s + Number(v||0), 0);
   const a = amtEl();
-  if (a){ a.value = format2(newTotal); triggerChange(a); }
+  if (a){
+    a.value = format2(newTotal);
+    try { a.dispatchEvent(new Event('input', { bubbles:true })); a.dispatchEvent(new Event('change', { bubbles:true })); } catch {}
+    // Force server to keep it
+    try {
+      if (typeof window.__doPostBack === 'function'){
+        const uniqueId = a.id.replace(/_/g, '$');
+        setTimeout(()=> window.__doPostBack(uniqueId, ''), 0);
+      }
+    } catch {}
+  }
 
-  // 3) Persist and clear invoice selections (post-commit)
+  // 3) Persist and clear invoice selections (we're in Job mode now)
   sessionStorage.setItem(SESS_JOBS_SEL, JSON.stringify(newSel));
-  try{ window.WL_AP?.invoice?.clearSelection?.(); }catch{}
+  try { window.WL_AP?.invoice?.clearSelection?.(); } catch {}
 
   closeJobsModal();
 }
+
 
 
   // Export clearer for cross-mode wipes
@@ -2033,6 +2042,24 @@ if (jobBtn){
     return out;
   }
 
+  function forceAmountPostback(){
+  const a = document.getElementById('ctl00_PageBody_PaymentAmountTextBox');
+  if (!a) return;
+  // Make sure client state updates
+  try {
+    a.dispatchEvent(new Event('input', { bubbles:true }));
+    a.dispatchEvent(new Event('change', { bubbles:true }));
+  } catch {}
+  // Then nudge WebForms so the value persists server-side
+  try {
+    if (typeof window.__doPostBack === 'function'){
+      const uniqueId = a.id.replace(/_/g, '$');  // ctl00_PageBody_PaymentAmountTextBox → ctl00$PageBody$PaymentAmountTextBox
+      setTimeout(()=> window.__doPostBack(uniqueId, ''), 0);
+    }
+  } catch {}
+}
+
+
   function loadFromCurrentDOM(){
     const tbody = document.getElementById('wlInvTbody');
     if (tbody) tbody.innerHTML = `<tr><td colspan="9" style="padding:14px;">Reading recent transactions…</td></tr>`;
@@ -2298,31 +2325,63 @@ if (jobBtn){
     alert('Select at least one item.');
     return;
   }
-  const index = new Map(state.rows.map(r=> [r.key, MONEY(r.outstanding)]));
-  const docs  = Array.from(state.selected.keys()).filter(k=> index.has(k));
-  const total = docs.reduce((s,k)=> s + (index.get(k) || 0), 0);
 
-  // 1) Build Remittance with only Docs: (strip JOB/STATEMENT lines)
-  const currentRem = getRemittanceText();
-  const lines = String(currentRem||'').split(/\r?\n/)
-    .filter(l=> !/^\s*(Docs:|Documents:)\s*/i.test(l))
-    .filter(l=> !/^\s*JOB\s+/i.test(l))
-    .filter(l=> !/^\s*STATEMENT\b/i.test(l));
-  lines.push('Docs: ' + docs.join(','));
-  const nextRem = lines.join('\n').trim();
+  // Index rows by doc key
+  const rowByKey = new Map(state.rows.map(r => [r.key, r]));
+  const amtByKey = new Map(state.rows.map(r => [r.key, MONEY(r.outstanding)]));
 
-  const remOK = setRemittanceText(nextRem);
+  // Keep only docs we actually loaded
+  const docs = Array.from(state.selected.keys()).filter(k => rowByKey.has(k));
+
+  // Build remittance tokens in the format you requested:
+  //  - Invoice:  123456$12.34
+  //  - Credit:   CN12345
+  const tokens = [];
+  let netTotal = 0;  // invoices add; credits (negative) subtract
+
+  docs.forEach(k => {
+    const r = rowByKey.get(k);
+    const selAmt = Number(amtByKey.get(k) || 0);
+
+    const isCredit =
+      (String(r?.type || '').toLowerCase().includes('credit')) ||
+      MONEY(r?.amount) < 0 ||
+      selAmt < 0;
+
+    if (isCredit) {
+      // credit token = CN + doc (ensure prefix once)
+      const raw = String(r?.doc || k).trim().replace(/\s+/g, '');
+      const token = /^CN/i.test(raw) ? raw : 'CN' + raw;
+      tokens.push(token);
+      netTotal += selAmt;       // selAmt should be negative; contributes correctly to net
+    } else {
+      // invoice token = <doc>$<amount with 2 decimals, no thousands>
+      const pay = Math.max(0, Math.abs(selAmt));
+      const token = `${String(r?.doc || k).trim()}$${pay.toFixed(2)}`;
+      tokens.push(token);
+      netTotal += selAmt;       // positive
+    }
+  });
+
+  // Write remittance EXACTLY as tokens joined with commas (no "Docs:" label)
+  const remString = tokens.join(',');
+  const remOK = setRemittanceText(remString);
   if (!remOK){ alert('Could not find the Remittance field to update.'); }
 
-  // 2) Amount becomes exactly the Invoices total (no stacking)
-  setPaymentAmount(total);
+  // Amount = net of selections (credits reduce), clamped at 0
+  const payTotal = Math.max(0, netTotal);
+  setPaymentAmount(payTotal);
+  forceAmountPostback();  // make it stick
 
-  // 3) Persist my selection, and clear Jobs (post-commit)
-  try{ localStorage.setItem(LS_KEY, JSON.stringify(docs)); }catch{}
-  try{ window.WL_AP?.jobs?.clearSelection?.(); }catch{}
+  // Persist selected docs for convenience
+  try { localStorage.setItem(LS_KEY, JSON.stringify(docs)); } catch {}
+
+  // Since we're paying by invoice, clear any job selections
+  try { window.WL_AP?.jobs?.clearSelection?.(); } catch {}
 
   closeModal();
 }
+
 
 
   // Put this once in the Invoice Picker IIFE (near wire()):
