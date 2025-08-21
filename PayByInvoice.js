@@ -1581,7 +1581,7 @@
     sessionStorage.removeItem(SESS_JOBS_OPEN);
     const btn = $id('wlOpenJobsModalBtn'); if (btn){ btn.disabled = false; btn.removeAttribute('aria-disabled'); btn.focus?.(); }
   }
-  function commitJobsSelection(){
+ function commitJobsSelection(){
   const list = document.getElementById('wlJobsList'); if (!list){ closeJobsModal(); return; }
   const checks = Array.from(list.querySelectorAll('input[type="checkbox"]'));
   const sel = checks.filter(c => c.checked);
@@ -1589,35 +1589,33 @@
   const newSel = {}; 
   sel.forEach(c => newSel[c.dataset.job] = parseMoney(c.value));
 
-  // 1) Remittance = ONLY job lines (replace any invoice/statement format)
+  // Build job lines (these replace any invoice tokens/statement)
   const jobLines = Object.entries(newSel).map(([job, amt]) => `JOB ${job}: $${format2(amt)}`);
-  const r = remEl();
-  if (r){
-    r.value = jobLines.join('\n');
-    try { r.dispatchEvent(new Event('input', { bubbles:true })); r.dispatchEvent(new Event('change', { bubbles:true })); } catch {}
-  }
+  const remitVal = jobLines.join('\n');
 
-  // 2) Amount = sum of selected jobs
+  // Defer remittance write until after amount postback finishes
+  try{ window.WL_AP?.remit?.defer(remitVal); }catch{}
+
+  // Amount = sum of selected jobs
   const newTotal = Object.values(newSel).reduce((s,v)=> s + Number(v||0), 0);
   const a = amtEl();
   if (a){
     a.value = format2(newTotal);
-    try { a.dispatchEvent(new Event('input', { bubbles:true })); a.dispatchEvent(new Event('change', { bubbles:true })); } catch {}
-    // Force server to keep it
-    try {
+    try{ a.dispatchEvent(new Event('input', { bubbles:true })); a.dispatchEvent(new Event('change', { bubbles:true })); }catch{}
+    try{
       if (typeof window.__doPostBack === 'function'){
         const uniqueId = a.id.replace(/_/g, '$');
         setTimeout(()=> window.__doPostBack(uniqueId, ''), 0);
       }
-    } catch {}
+    }catch{}
   }
 
-  // 3) Persist and clear invoice selections (we're in Job mode now)
   sessionStorage.setItem(SESS_JOBS_SEL, JSON.stringify(newSel));
-  try { window.WL_AP?.invoice?.clearSelection?.(); } catch {}
+  try{ window.WL_AP?.invoice?.clearSelection?.(); }catch{}
 
   closeJobsModal();
 }
+
 
 
 
@@ -2042,21 +2040,16 @@ if (jobBtn){
     return out;
   }
 
-  function forceAmountPostback(){
+ function forceAmountPostback(){
   const a = document.getElementById('ctl00_PageBody_PaymentAmountTextBox');
   if (!a) return;
-  // Make sure client state updates
-  try {
-    a.dispatchEvent(new Event('input', { bubbles:true }));
-    a.dispatchEvent(new Event('change', { bubbles:true }));
-  } catch {}
-  // Then nudge WebForms so the value persists server-side
-  try {
+  try{ a.dispatchEvent(new Event('input', { bubbles:true })); a.dispatchEvent(new Event('change', { bubbles:true })); }catch{}
+  try{
     if (typeof window.__doPostBack === 'function'){
-      const uniqueId = a.id.replace(/_/g, '$');  // ctl00_PageBody_PaymentAmountTextBox → ctl00$PageBody$PaymentAmountTextBox
+      const uniqueId = a.id.replace(/_/g,'$');
       setTimeout(()=> window.__doPostBack(uniqueId, ''), 0);
     }
-  } catch {}
+  }catch{}
 }
 
 
@@ -2326,18 +2319,14 @@ if (jobBtn){
     return;
   }
 
-  // Index rows by doc key
   const rowByKey = new Map(state.rows.map(r => [r.key, r]));
   const amtByKey = new Map(state.rows.map(r => [r.key, MONEY(r.outstanding)]));
 
-  // Keep only docs we actually loaded
   const docs = Array.from(state.selected.keys()).filter(k => rowByKey.has(k));
 
-  // Build remittance tokens in the format you requested:
-  //  - Invoice:  123456$12.34
-  //  - Credit:   CN12345
+  // Build tokens: invoices = 123456$12.34 ; credits = CN12345
   const tokens = [];
-  let netTotal = 0;  // invoices add; credits (negative) subtract
+  let netTotal = 0;
 
   docs.forEach(k => {
     const r = rowByKey.get(k);
@@ -2349,35 +2338,29 @@ if (jobBtn){
       selAmt < 0;
 
     if (isCredit) {
-      // credit token = CN + doc (ensure prefix once)
-      const raw = String(r?.doc || k).trim().replace(/\s+/g, '');
+      const raw = String(r?.doc || k).trim().replace(/\s+/g,'');
       const token = /^CN/i.test(raw) ? raw : 'CN' + raw;
       tokens.push(token);
-      netTotal += selAmt;       // selAmt should be negative; contributes correctly to net
+      netTotal += selAmt; // negative reduces
     } else {
-      // invoice token = <doc>$<amount with 2 decimals, no thousands>
       const pay = Math.max(0, Math.abs(selAmt));
       const token = `${String(r?.doc || k).trim()}$${pay.toFixed(2)}`;
       tokens.push(token);
-      netTotal += selAmt;       // positive
+      netTotal += selAmt; // positive
     }
   });
 
-  // Write remittance EXACTLY as tokens joined with commas (no "Docs:" label)
+  // Defer writing Remittance until after the Amount postback finishes
   const remString = tokens.join(',');
-  const remOK = setRemittanceText(remString);
-  if (!remOK){ alert('Could not find the Remittance field to update.'); }
+  try{ window.WL_AP?.remit?.defer(remString); }catch{}
 
-  // Amount = net of selections (credits reduce), clamped at 0
+  // Set Amount to net total (credits reduce, clamp at 0) and post back
   const payTotal = Math.max(0, netTotal);
   setPaymentAmount(payTotal);
-  forceAmountPostback();  // make it stick
+  forceAmountPostback();
 
-  // Persist selected docs for convenience
-  try { localStorage.setItem(LS_KEY, JSON.stringify(docs)); } catch {}
-
-  // Since we're paying by invoice, clear any job selections
-  try { window.WL_AP?.jobs?.clearSelection?.(); } catch {}
+  try{ localStorage.setItem(LS_KEY, JSON.stringify(docs)); }catch{}
+  try{ window.WL_AP?.jobs?.clearSelection?.(); }catch{}
 
   closeModal();
 }
@@ -2452,3 +2435,127 @@ document.addEventListener('click', function(e){
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* --- WL_AP.remit: defer remittance writes until after postback --- */
+(function setupWlRemit(){
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+
+  window.WL_AP = window.WL_AP || {};
+  if (window.WL_AP.remit) return;   // already set up
+
+  const KEY = '__WL_PendingRemitV2';
+
+  function cssEscape(s){ return String(s).replace(/["\\]/g, '\\$&'); }
+
+  function findInnerRadInput(idOrEl){
+    const root = typeof idOrEl==='string' ? document.getElementById(idOrEl) : idOrEl;
+    if (!root) return null;
+    return root.querySelector('.riTextBox, textarea, input[type="text"], input[type="number"]');
+  }
+
+  function findRemitField(){
+    // 1) Telerik client object
+    try{
+      const idGuess = 'ctl00_PageBody_RemittanceAdviceTextBox';
+      const ctl = typeof $find==='function' ? $find(idGuess) : null;
+      if (ctl && (typeof ctl.get_value === 'function' || typeof ctl.get_text === 'function')) return { telerik: ctl };
+    }catch{}
+
+    // 2) Direct / wrapper / fuzzy
+    const id = 'ctl00_PageBody_RemittanceAdviceTextBox';
+    let el = document.getElementById(id) ||
+             findInnerRadInput(id+'_wrapper') || findInnerRadInput(id) ||
+             document.querySelector(`[name="${cssEscape(id)}"]`) ||
+             document.querySelector(`[id*="Remittance"],[name*="Remittance"]`);
+    if (!el){
+      // 3) Near a label mentioning remittance
+      const label = Array.from(document.querySelectorAll('label')).find(l => /remittance/i.test(l.textContent||''));
+      if (label){
+        const forId = label.getAttribute('for');
+        el = (forId && document.getElementById(forId)) || label.closest('div,td,th,section,fieldset')?.querySelector('textarea, input[type="text"]');
+      }
+    }
+    return el ? { el } : null;
+  }
+
+  function setRemittanceValue(val, fireInputOnly=true){
+    const ref = findRemitField();
+    if (!ref) return false;
+
+    // Telerik first
+    if (ref.telerik){
+      try{
+        if (typeof ref.telerik.set_value === 'function'){ ref.telerik.set_value(val); return true; }
+        if (typeof ref.telerik.set_text  === 'function'){ ref.telerik.set_text(val);  return true; }
+      }catch{}
+    }
+
+    // Native element
+    if (ref.el){
+      try{
+        const el = ref.el;
+        const proto = el.tagName==='INPUT' ? HTMLInputElement.prototype :
+                      el.tagName==='TEXTAREA' ? HTMLTextAreaElement.prototype : null;
+        const desc = proto && Object.getOwnPropertyDescriptor(proto, 'value');
+        if (desc && desc.set) desc.set.call(el, val); else el.value = val;
+        // Update UI without triggering a change-postback
+        if (fireInputOnly) el.dispatchEvent(new Event('input', { bubbles:true }));
+        return true;
+      }catch{}
+    }
+    return false;
+  }
+
+  function applyPending(){
+    // Try sessionStorage first; if we had a full reload, sessionStorage survives in-tab.
+    let raw = null;
+    try{ raw = sessionStorage.getItem(KEY) || localStorage.getItem(KEY); }catch{}
+    if (!raw) return;
+
+    let val = '';
+    try{ const obj = JSON.parse(raw); val = obj && obj.value != null ? String(obj.value) : String(raw); }
+    catch{ val = String(raw); }
+
+    setRemittanceValue(val, /*fireInputOnly*/true);
+
+    try{ sessionStorage.removeItem(KEY); localStorage.removeItem(KEY); }catch{}
+  }
+
+  function bindPRM(){
+    try{
+      if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
+        const prm = Sys.WebForms.PageRequestManager.getInstance();
+        if (!prm.__wlRemitBound){
+          prm.add_endRequest(()=> setTimeout(applyPending, 0));
+          prm.__wlRemitBound = true;
+        }
+      }
+    }catch{}
+  }
+
+  window.WL_AP.remit = {
+    defer(val){
+      try{ sessionStorage.setItem(KEY, JSON.stringify({ value: String(val||''), t: Date.now() })); }catch{}
+    },
+    applyNow: applyPending,
+    _setNow: setRemittanceValue
+  };
+
+  // Bind and also apply immediately on load (covers full page loads)
+  bindPRM();
+  setTimeout(applyPending, 0);
+})();
