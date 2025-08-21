@@ -1671,22 +1671,29 @@
     }
 
     // Wire actions with clear-first behavior
-    document.getElementById('wlLastStmtBtn').addEventListener('click', (e)=> handlePayLastStatement(e.currentTarget));
-    document.getElementById('wlFillOwingBtn').addEventListener('click', ()=>{
-      clearQuickState(MODE.FILL);
-      const v=owingVal(); const a=amtEl(); if (a && v>0){ a.value = format2(v); triggerChange(a);}
-    });
+    // --- wiring (REPLACE this whole block in mountWidget) ---
+document.getElementById('wlLastStmtBtn').addEventListener('click', (e)=> handlePayLastStatement(e.currentTarget));
 
-    // Ensure the *clear* happens before the newer invoice picker captures the click
-    const invBtn = document.getElementById('wlOpenTxModalBtn');
-    invBtn.addEventListener('pointerdown', ()=> clearQuickState(MODE.INVOICE), { capture:true });
+document.getElementById('wlFillOwingBtn').addEventListener('pointerdown', ()=> clearQuickState(MODE.FILL), { capture:true });
+document.getElementById('wlFillOwingBtn').addEventListener('click', ()=>{
+  const v=owingVal(); const a=amtEl(); if (a && v>0){ a.value = format2(v); triggerChange(a); }
+});
 
-    // Our (unchanged) modals
-    ensureTxModalDOM();
-    invBtn.addEventListener('click', openTxModal, { passive:false });
+// ✅ INVOICE: only clear-on-pointerdown; let the *Invoice Picker* script open the modal.
+const invBtn = document.getElementById('wlOpenTxModalBtn');
+if (invBtn){
+  invBtn.addEventListener('pointerdown', ()=> clearQuickState(MODE.INVOICE), { capture:true });
+  // Do NOT attach a click handler here (no openTxModal); the picker binds its own capture click.
+}
 
-    ensureJobsModalDOM();
-    document.getElementById('wlOpenJobsModalBtn').addEventListener('click', openJobsModal);
+// ✅ JOBS: clear then open our jobs modal
+ensureJobsModalDOM();
+const jobBtn = document.getElementById('wlOpenJobsModalBtn');
+if (jobBtn){
+  jobBtn.addEventListener('pointerdown', ()=> clearQuickState(MODE.JOB), { capture:true });
+  jobBtn.addEventListener('click', openJobsModal);
+}
+
 
     log.info('Quick Payment Actions mounted');
   }
