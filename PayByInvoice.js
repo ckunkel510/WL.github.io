@@ -2004,12 +2004,11 @@
 
 /* ==========================================================
    Woodson — Client-side "Pay by Invoice" from Recent Transactions
-   v2.8  (anchor pager + remittance sync + persistent selection)
-   - Modal with modern table + checkboxes
-   - Scrapes Recent Transactions grid on this page
-   - Crawls anchor pagination (?pageIndex=…) to fetch ALL rows
-   - DONE writes `Docs: <comma list>` to Remittance; updates Amount
-   - Selection persists via localStorage; also seeds from Remittance
+   v3.0  (robust Remittance/Amount updates + Telerik aware)
+   - Modern modal w/ search + checkboxes
+   - Scrapes the on-page grid; crawls ?pageIndex=… to load ALL
+   - "Done" writes Docs list to Remittance and updates Amount
+   - Selection persists across closes (localStorage + Remittance)
    Dependencies: none (fetch + DOMParser). Same-origin required.
    ========================================================== */
 (function(){
@@ -2028,9 +2027,126 @@
   const TX_PANEL_SEL = '#ctl00_PageBody_accountsTransactionsPanel';
   const GRID_SEL     = '#ctl00_PageBody_InvoicesGrid .rgMasterTable, .RadGrid .rgMasterTable';
   const IN_PAGE_URL  = location.pathname + location.search;
-  const LS_KEY       = 'WL_AP_SelectedDocs'; // persisted across modal opens (same session/browser)
+  const LS_KEY       = 'WL_AP_SelectedDocs';
   const MONEY = s => { const v = parseFloat(String(s||'').replace(/[^0-9.\-]/g,'')); return Number.isFinite(v)?v:0; };
   const FMT2  = n => Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
+
+  /* ---------- DOM utils: robust field setters (plain + Telerik) ---------- */
+  function nativeSet(el, val){
+    if (!el) return false;
+    const tag = (el.tagName||'').toLowerCase();
+    try{
+      if (tag==='input' || tag==='textarea'){
+        // Try to use the native value setter (helps frameworks)
+        const proto = tag==='input' ? HTMLInputElement.prototype :
+                      tag==='textarea' ? HTMLTextAreaElement.prototype : null;
+        const desc = proto && Object.getOwnPropertyDescriptor(proto, 'value');
+        if (desc && desc.set) desc.set.call(el, val); else el.value = val;
+        el.dispatchEvent(new Event('input',{bubbles:true}));
+        el.dispatchEvent(new Event('change',{bubbles:true}));
+        return true;
+      }
+      if (el.isContentEditable){
+        el.textContent = val;
+        el.dispatchEvent(new Event('input',{bubbles:true}));
+        el.dispatchEvent(new Event('change',{bubbles:true}));
+        return true;
+      }
+    }catch(e){ log.warn('nativeSet failed', e); }
+    return false;
+  }
+
+  function setViaTelerik(id, val){
+    try{
+      const ctl = typeof $find==='function' ? $find(id) : null;
+      if (ctl && typeof ctl.set_value === 'function'){ ctl.set_value(val); return true; }
+      if (ctl && typeof ctl.set_text === 'function'){ ctl.set_text(val); return true; }
+    }catch(e){ log.debug('setViaTelerik error', e); }
+    return false;
+  }
+
+  function findInnerRadInput(idOrEl){
+    const root = typeof idOrEl==='string' ? document.getElementById(idOrEl) : idOrEl;
+    if (!root) return null;
+    return root.querySelector('.riTextBox, textarea, input[type="text"], input[type="number"]');
+  }
+
+  function findFieldByHints({ id, fuzzy, altNames=[] }){
+    // 1) Exact id
+    let el = id ? document.getElementById(id) : null;
+    if (el) return el;
+
+    // 2) Telerik wrapper → inner input
+    if (id){
+      el = findInnerRadInput(id+'_wrapper') || findInnerRadInput(id);
+      if (el) return el;
+    }
+
+    // 3) By name or fuzzy id contains
+    const sels = [
+      id ? `[name="${cssEscape(id)}"]` : null,
+      fuzzy ? `[id*="${cssEscape(fuzzy)}"],[name*="${cssEscape(fuzzy)}"]` : null,
+      ...altNames.map(n => `[id*="${cssEscape(n)}"],[name*="${cssEscape(n)}"]`)
+    ].filter(Boolean).join(',');
+    if (sels){
+      el = document.querySelector(sels);
+      if (el) return el;
+      // Try inner of potential wrappers
+      const wrap = document.querySelector(sels);
+      if (wrap){
+        const inner = findInnerRadInput(wrap);
+        if (inner) return inner;
+      }
+    }
+    return null;
+  }
+
+  function cssEscape(s){ return String(s).replace(/["\\]/g, '\\$&'); }
+
+  // Public helpers for our two targets
+  function setRemittanceText(val){
+    const idGuess = 'ctl00_PageBody_RemittanceAdviceTextBox';
+    // 0) try Telerik client object
+    if (setViaTelerik(idGuess, val)) return true;
+
+    // 1) direct / wrapper / fuzzy
+    const el = findFieldByHints({
+      id: idGuess,
+      fuzzy: 'Remittance',
+      altNames: ['RemittanceAdvice','Remit','AdviceText']
+    });
+    if (el && nativeSet(el, val)) return true;
+
+    // 2) final fallback: any visible textarea near labels mentioning remittance
+    const label = Array.from(document.querySelectorAll('label')).find(l => /remittance/i.test(l.textContent||''));
+    if (label){
+      const forId = label.getAttribute('for');
+      const byFor = forId && document.getElementById(forId);
+      if (byFor && nativeSet(byFor, val)) return true;
+      const near = label.closest('div,td,th,section,fieldset')?.querySelector('textarea, input[type="text"]');
+      if (near && nativeSet(near, val)) return true;
+    }
+
+    log.warn('Remittance field not found');
+    return false;
+  }
+
+  function setPaymentAmount(valNumber){
+    const show = FMT2(valNumber);
+    const idGuess = 'ctl00_PageBody_PaymentAmountTextBox';
+    // Telerik first
+    if (setViaTelerik(idGuess, show)) return true;
+
+    const el = findFieldByHints({
+      id: idGuess,
+      fuzzy: 'PaymentAmount',
+      altNames: ['AmountTextBox','PaymentAmountText','Amount','PayAmount']
+    });
+    if (el && nativeSet(el, show)) return true;
+
+    log.warn('Payment Amount field not found');
+    return false;
+  }
 
   /* ---------- CSS ---------- */
   (function css(){
@@ -2131,8 +2247,7 @@
       document.querySelectorAll('#wlInvTbody input[type="checkbox"]').forEach(cb=>{
         cb.checked = c; toggleSel(cb.dataset.key, MONEY(cb.dataset.outstanding), c);
       });
-      persistSelection();
-      renderStats();
+      persistSelection(); renderStats();
     });
     document.getElementById('wlTxReloadBtn').addEventListener('click', ()=> { loadFromCurrentDOM(); });
     document.getElementById('wlTxLoadAllBtn').addEventListener('click', loadAllPages);
@@ -2148,27 +2263,21 @@
     document.body.style.overflow = 'hidden';
     state.open = true;
 
-    // Seed selection immediately from LS + Remittance (keys only; amounts get reconciled later)
-    seedSelectionKeys();
-
-    // First paint: rows from current DOM
-    loadFromCurrentDOM();
-
-    // Then fetch ALL pages (anchor pager) in sequence and reconcile amounts
-    loadAllPages().catch(e=> log.error('auto loadAll error', e));
+    seedSelectionKeys();     // from LS + Remittance
+    loadFromCurrentDOM();    // immediate
+    loadAllPages().catch(e=> log.error('auto loadAll error', e)); // async fill
   }
   function closeModal(){
     document.getElementById('wlInvBackdrop')?.style && (document.getElementById('wlInvBackdrop').style.display = 'none');
     document.getElementById('wlInvModal')?.style && (document.getElementById('wlInvModal').style.display = 'none');
     document.body.style.overflow = '';
     state.open = false;
-    // Important: do NOT clear state.selected; we want persistence on reopen
   }
 
   /* ---------- State ---------- */
   const state = {
     rows: [],               // [{key, doc, type, tDate, dDate, job, desc, amount, outstanding}]
-    selected: new Map(),    // key -> outstanding (Number; reconciled after rows load)
+    selected: new Map(),    // key -> outstanding (Number)
     open: false,
     nextPost: null,
     pageCount: 0,
@@ -2231,7 +2340,6 @@
     const hereIdx = getCurrentPageIndexFromDoc(document);
     if (hereIdx != null) state.fetchedPageIndexes.add(hereIdx);
 
-    // Reconcile selected amounts based on rows we have now
     reconcileSelectedAmounts();
     renderRows();
 
@@ -2365,7 +2473,6 @@
         }
         if (state.nextPost) badge(`Stopped at cap (${state.maxPages}). Showing ${state.rows.length}.`);
         else badge(`All pages loaded · ${state.rows.length} total`);
-        log.info('WebForms load all complete', { total: state.rows.length, pages });
       }
     }catch(e){
       log.error('loadAllPages error', e);
@@ -2383,9 +2490,8 @@
     if (added) reconcileSelectedAmounts();
   }
 
-  /* ---------- Selection <-> amounts reconciliation ---------- */
+  /* ---------- Selection reconciliation & persistence ---------- */
   function reconcileSelectedAmounts(){
-    // Make sure every selected key has the latest outstanding amount from state.rows
     const index = new Map(state.rows.map(r=> [r.key, MONEY(r.outstanding)]));
     let changed = false;
     state.selected.forEach((val,key)=>{
@@ -2397,7 +2503,6 @@
     if (changed) renderStats();
   }
 
-  /* ---------- Persistence (seed, save) ---------- */
   function persistSelection(){
     try{
       const docs = Array.from(state.selected.keys());
@@ -2406,22 +2511,19 @@
   }
 
   function seedSelectionKeys(){
-    // union of docs from Remittance + localStorage
     const docs = new Set();
 
-    // From Remittance (prefer an explicit "Docs:" line; fallback to loose tokens)
-    const rem = document.getElementById('ctl00_PageBody_RemittanceAdviceTextBox');
-    if (rem){
-      const lines = String(rem.value||'').split(/\r?\n/);
-      let docLine = lines.find(line=> /^\s*(Docs:|Documents:)\s*/i.test(line)) || '';
+    // From Remittance
+    const remText = getRemittanceText();
+    if (remText){
+      const line = remText.split(/\r?\n/).find(l => /^\s*(Docs:|Documents:)\s*/i.test(l));
       let tokens = [];
-      if (docLine){
-        docLine = docLine.replace(/^\s*(Docs:|Documents:)\s*/i,'');
-        tokens = docLine.split(/[,\s]+/);
+      if (line){
+        tokens = line.replace(/^\s*(Docs:|Documents:)\s*/i,'').split(/[,\s]+/);
       }else{
-        tokens = String(rem.value||'').split(/[,\n\r\t ]+/);
+        tokens = remText.split(/[,\n\r\t ]+/);
       }
-      tokens.map(t=> t.trim()).filter(Boolean).forEach(t=> docs.add(t));
+      tokens.map(t=>t.trim()).filter(Boolean).forEach(t=> docs.add(t));
     }
 
     // From localStorage
@@ -2430,8 +2532,35 @@
       if (Array.isArray(a)) a.forEach(k=> docs.add(k));
     }catch{}
 
-    // Seed keys with 0 for now; amounts reconciled after rows load
     docs.forEach(k=> { if (!state.selected.has(k)) state.selected.set(k, 0); });
+  }
+
+  function getRemittanceText(){
+    // Try Telerik first
+    try{
+      const idGuess = 'ctl00_PageBody_RemittanceAdviceTextBox';
+      const ctl = typeof $find==='function' ? $find(idGuess) : null;
+      if (ctl && typeof ctl.get_value === 'function'){
+        return String(ctl.get_value()||'');
+      }
+      if (ctl && typeof ctl.get_text === 'function'){
+        return String(ctl.get_text()||'');
+      }
+    }catch{}
+
+    // Then DOM
+    const el = findFieldByHints({
+      id: 'ctl00_PageBody_RemittanceAdviceTextBox',
+      fuzzy: 'Remittance',
+      altNames: ['RemittanceAdvice','Remit','AdviceText']
+    }) || (function(){
+      const label = Array.from(document.querySelectorAll('label')).find(l => /remittance/i.test(l.textContent||''));
+      if (!label) return null;
+      const forId = label.getAttribute('for');
+      return (forId && document.getElementById(forId)) || label.closest('div,td,th,section,fieldset')?.querySelector('textarea, input[type="text"]');
+    })();
+
+    return el ? String(el.value||'') : '';
   }
 
   /* ---------- Render ---------- */
@@ -2497,43 +2626,31 @@
     renderStats();
   }
 
-  /* ---------- Remittance helpers ---------- */
-  function writeDocsToRemittance(docs){
-    const rem = document.getElementById('ctl00_PageBody_RemittanceAdviceTextBox');
-    if (!rem) return;
-    const lines = String(rem.value||'').split(/\r?\n/);
-    const i = lines.findIndex(line =>
-      /^\s*(Docs:|Documents:)\s*/i.test(line) ||
-      /^\s*[A-Za-z0-9\-]+(\s*,\s*[A-Za-z0-9\-]+)+\s*$/.test(line) // legacy plain list
-    );
-    const newLine = 'Docs: ' + docs.join(',');
-    if (i >= 0) lines[i] = newLine; else lines.push(newLine);
-    rem.value = lines.join('\n').trim();
-    rem.dispatchEvent(new Event('input',{bubbles:true}));
-    rem.dispatchEvent(new Event('change',{bubbles:true}));
-  }
-
   /* ---------- Commit to form (no redirect) ---------- */
   function commitSelection(){
     if (state.selected.size === 0){
       alert('Select at least one item.');
       return;
     }
-    // Only commit docs that exist in the current loaded rows (avoid stale LS keys)
-    const present = new Map(state.rows.map(r=> [r.key, MONEY(r.outstanding)]));
-    const docs  = Array.from(state.selected.keys()).filter(k=> present.has(k));
-    const total = docs.reduce((s,k)=> s + (present.get(k) || 0), 0);
 
-    writeDocsToRemittance(docs);
+    // Only commit docs that exist in loaded rows
+    const index = new Map(state.rows.map(r=> [r.key, MONEY(r.outstanding)]));
+    const docs  = Array.from(state.selected.keys()).filter(k=> index.has(k));
+    const total = docs.reduce((s,k)=> s + (index.get(k) || 0), 0);
 
-    const amt = document.getElementById('ctl00_PageBody_PaymentAmountTextBox');
-    if (amt){
-      amt.value = FMT2(total);
-      amt.dispatchEvent(new Event('input',{bubbles:true}));
-      amt.dispatchEvent(new Event('change',{bubbles:true}));
+    // Write a single "Docs:" line (append or replace)
+    const currentRem = getRemittanceText();
+    const lines = String(currentRem||'').split(/\r?\n/).filter(l=>!(/^\s*(Docs:|Documents:)\s*/i.test(l)));
+    lines.push('Docs: ' + docs.join(','));
+    const nextRem = lines.join('\n').trim();
+
+    const remOK = setRemittanceText(nextRem);
+    if (!remOK){
+      // Let the user know visibly if we couldn't locate the field
+      alert('Could not find the Remittance field to update.');
     }
 
-    // Keep selection in LS so reopening keeps boxes checked
+    setPaymentAmount(total);
     persistSelection();
 
     try{ window.renderSummary?.(); }catch{}
@@ -2572,4 +2689,5 @@
   else { boot(); }
 
 })();
+
 
