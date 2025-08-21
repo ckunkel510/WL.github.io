@@ -2000,12 +2000,13 @@
 
 
 
+
 /* ==========================================================
    Woodson — Client-side "Pay by Invoice" from Recent Transactions
-   v2.0  (no grid postbacks; pulls from on-page table; can fetch all pages)
+   v2.6 (anchor-pager aware; auto-loads ALL pages on open)
    - Opens a modal with a modern table + checkboxes
    - Scrapes the Recent Transactions grid on THIS page
-   - Optional "Load all" iterates the pager via background fetches
+   - NEW: Crawls anchor-based pager (?pageIndex=…) and fetches all pages
    - On "Done": updates PaymentAmount + Remittance (no redirect)
    Dependencies: none (fetch + DOMParser). Same-origin required.
    ========================================================== */
@@ -2023,7 +2024,8 @@
   };
 
   const TX_PANEL_SEL = '#ctl00_PageBody_accountsTransactionsPanel';
-  const IN_PAGE_URL  = location.pathname + location.search; // POST back here for pager fetches
+  const GRID_SEL     = '#ctl00_PageBody_InvoicesGrid .rgMasterTable, .RadGrid .rgMasterTable';
+  const IN_PAGE_URL  = location.pathname + location.search;
   const MONEY = s => { const v = parseFloat(String(s||'').replace(/[^0-9.\-]/g,'')); return Number.isFinite(v)?v:0; };
   const FMT2  = n => Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
 
@@ -2068,6 +2070,9 @@
   /* ---------- Modal DOM ---------- */
   function ensureModal(){
     if (document.getElementById('wlInvModal')) return;
+    // clean up any ghosts from older builds
+    document.querySelectorAll('#wlInvBackdrop, #wlInvModal').forEach(n=>n.remove());
+
     const back = document.createElement('div'); back.id='wlInvBackdrop'; back.className='wl-modal-backdrop';
     const shell = document.createElement('div'); shell.id='wlInvModal'; shell.className='wl-modal-shell';
     shell.innerHTML = `
@@ -2078,7 +2083,7 @@
             <input id="wlInvFilter" class="wl-input" type="text" placeholder="Search doc #, job, PO, notes">
             <span class="wl-pill" id="wlInvStats">0 selected · $0.00</span>
             <button type="button" class="wl-btn" id="wlTxReloadBtn" title="Reload from page">Reload</button>
-            <button type="button" class="wl-btn" id="wlTxLoadAllBtn" title="Try background-load all pages">Load all</button>
+            <button type="button" class="wl-btn" id="wlTxLoadAllBtn" title="Fetch all pages">Load all</button>
             <button type="button" class="wl-btn wl-btn-primary" id="wlInvDoneBtn">Done</button>
             <button type="button" class="wl-btn" id="wlInvCloseX" aria-label="Close">Close</button>
           </div>
@@ -2135,17 +2140,22 @@
   }
 
   function openModal(){
+    if (state.open) return; // guard against double-open
     ensureModal();
     document.getElementById('wlInvBackdrop').style.display = 'block';
     document.getElementById('wlInvModal').style.display = 'block';
     document.body.style.overflow = 'hidden';
     state.open = true;
+
     // First paint: pull what’s already rendered in the Recent Transactions panel
     loadFromCurrentDOM();
+
+    // Then auto-fetch ALL pages found in the anchor pager
+    loadAllPages().catch(e=> log.error('auto loadAll error', e));
   }
   function closeModal(){
-    document.getElementById('wlInvBackdrop').style.display = 'none';
-    document.getElementById('wlInvModal').style.display = 'none';
+    document.getElementById('wlInvBackdrop')?.style && (document.getElementById('wlInvBackdrop').style.display = 'none');
+    document.getElementById('wlInvModal')?.style && (document.getElementById('wlInvModal').style.display = 'none');
     document.body.style.overflow = '';
     state.open = false;
   }
@@ -2155,10 +2165,12 @@
     rows: [],               // [{key, doc, type, tDate, dDate, job, desc, amount, outstanding}]
     selected: new Map(),    // key -> outstanding (Number)
     open: false,
-    // for background pager
+    // for legacy WebForms pager (kept for fallback)
     nextPost: null,         // { hidden, evtTarget, evtArg } or null
     pageCount: 0,
-    maxPages: 25
+    maxPages: 50,
+    fetchingAll: false,
+    fetchedPageIndexes: new Set(), // for anchor-pager
   };
 
   function isCredit(typeText, amountText){
@@ -2168,11 +2180,8 @@
   }
 
   function normalizeDoc(s){
-    const str = String(s||'').trim();
-    // keep exactly as shown (could already be INV12345 / CR123), but standardize INV prefix if plain digits
-    const m = str.match(/^(INV)?\s*([A-Za-z0-9\-]+)/i);
-    if (m && !/^INV/i.test(str)) return 'INV'+m[2];
-    return str || '';
+    // Keep exactly as shown; do NOT prefix with INV.
+    return String(s||'').trim();
   }
 
   /* ---------- Extract rows from the CURRENT DOM panel ---------- */
@@ -2181,34 +2190,27 @@
     const panel = root.querySelector(TX_PANEL_SEL);
     if (!panel) return out;
 
-    // Preferred: rows with data-title attributes
-    const rows = panel.querySelectorAll('table tr');
-    rows.forEach(tr=>{
-      // Skip header rows
+    const grid = panel.querySelector(GRID_SEL);
+    if (!grid) return out;
+
+    const bodyRows = Array.from(grid.querySelectorAll('tbody > tr'));
+    bodyRows.forEach(tr=>{
       if (tr.querySelector('th')) return;
 
-      const get = (names, fallbackNth=null)=>{
-        // by data-title first
-        for (const n of names){
-          const td = tr.querySelector(`td[data-title="${n}"], td[data-title*="${n}"]`);
-          if (td) return td.textContent.trim();
-        }
-        if (fallbackNth!=null){
-          const td = tr.querySelector(`td:nth-child(${fallbackNth})`);
-          if (td) return td.textContent.trim();
-        }
-        return '';
+      const cell = (title)=> {
+        const td = tr.querySelector(`td[data-title="${title}"]`);
+        return td ? td.textContent.trim() : '';
       };
 
-      // Try common titles/aliases used by WebTrack grids:
-      const doc   = get(['Document #','Doc #','Invoice #','Invoice'], 1);
-      const type  = get(['Type','Document Type'], 2);
-      const tDate = get(['Transaction Date','Trans Date','Date'], 3);
-      const dDate = get(['Due Date'], 4);
-      const job   = get(['Job Ref','Job','Job Name','Project'], 5);
-      const desc  = get(['Description','Customer PO','Notes','Reference'], 6);
-      const amt   = get(['Amount','Doc Amount','Amount With Tax'], -2); // near end
-      const outst = get(['Amount Outstanding','Outstanding','Balance'], -1);
+      // Titles as they appear in your HTML:
+      const type  = cell('Type');
+      const tDate = cell('Transaction Date') || cell('Trans Date') || cell('Date');
+      const doc   = cell('Doc. #') || cell('Document #') || cell('Doc #') || cell('Invoice #') || cell('Invoice');
+      const dDate = cell('Due Date');
+      const job   = cell('Job Ref') || cell('Job') || cell('Job Name') || cell('Project');
+      const desc  = cell('Customer Ref') || cell('Description') || cell('Notes') || cell('Reference');
+      const amt   = cell('Amount') || cell('Doc Amount') || cell('Amount With Tax');
+      const outst = cell('Amount Outstanding') || cell('Outstanding') || cell('Balance');
 
       const docN  = normalizeDoc(doc);
       if (!docN) return;
@@ -2232,45 +2234,83 @@
     const rows = extractFromRoot(document);
     state.rows = rows;
     state.pageCount = 1;
-    // Parse "next" from CURRENT DOM
+    // Parse legacy "next" (fallback only)
     state.nextPost = parseNextFromRoot(document) || null;
+    // Capture current pageIndex (if visible)
+    const hereIdx = getCurrentPageIndexFromDoc(document);
+    if (hereIdx != null) state.fetchedPageIndexes.add(hereIdx);
     renderRows();
-    badge(`Loaded ${rows.length} row(s) from current page${state.nextPost?' · more available':''}`);
+    badge(`Loaded ${rows.length} row(s) from current page${hasAnchorPager(document)?' · more available':''}`);
     log.info('Loaded current DOM rows', { count: rows.length, hasNext: !!state.nextPost });
-    // Preselect any docs already in remittance
     seedSelectionFromRemittance();
   }
 
   function badge(t){ const b = document.getElementById('wlInvLoadedBadge'); if (b) b.textContent = t; }
 
-  /* ---------- WebForms pager emulation (on THIS page) ---------- */
-  function squishHidden(doc){
-    const hid = {};
-    doc.querySelectorAll('input[type="hidden"]').forEach(i=>{
-      if (i.name) hid[i.name] = i.value || '';
+  /* ---------- Anchor pager discovery (your page) ---------- */
+  function hasAnchorPager(root){
+    const panel = root.querySelector(TX_PANEL_SEL);
+    return !!panel?.querySelector('ul.pagination a[href*="pageIndex="]');
+  }
+  function getCurrentPageIndexFromDoc(root){
+    const active = root.querySelector('ul.pagination li.page-item.active a.page-link[href*="pageIndex="]');
+    if (!active) return null;
+    try{
+      const u = new URL(active.getAttribute('href'), location.href);
+      const idx = parseInt(u.searchParams.get('pageIndex')||'0',10);
+      return Number.isFinite(idx) ? idx : null;
+    }catch{ return null; }
+  }
+  function collectPageLinks(root){
+    const panel = root.querySelector(TX_PANEL_SEL); if (!panel) return [];
+    const as = Array.from(panel.querySelectorAll('ul.pagination a.page-link[href*="pageIndex="]'));
+    const links = new Map(); // pageIndex(int) -> absolute URL
+    as.forEach(a=>{
+      const href = a.getAttribute('href')||'';
+      try{
+        const u = new URL(href, location.href);
+        if (!u.searchParams.has('pageIndex')) return;
+        const idx = parseInt(u.searchParams.get('pageIndex')||'0',10);
+        if (!Number.isFinite(idx)) return;
+        // Preserve any existing query parts (itemsPerPage/groupIndex/etc.)
+        links.set(idx, u.toString());
+      }catch{}
     });
-    return hid;
+    // Ensure at least the base page (0) exists even if not present
+    if (!links.has(0)) links.set(0, new URL(location.href).toString());
+    // Sort by index
+    return Array.from(links.entries()).sort((a,b)=> a[0]-b[0]).map(([_, url])=> url);
   }
 
+  async function fetchAnchorPage(url){
+    const res = await fetch(url, { credentials:'include' });
+    if (!res.ok) throw new Error('HTTP '+res.status);
+    const html = await res.text();
+    const doc  = new DOMParser().parseFromString(html, 'text/html');
+    const rows = extractFromRoot(doc);
+    // Track pageIndex to avoid refetch
+    const idx = getCurrentPageIndexFromDoc(doc);
+    if (idx != null) state.fetchedPageIndexes.add(idx);
+    return { rows };
+  }
+
+  /* ---------- Legacy WebForms pager (fallback) ---------- */
+  function squishHidden(doc){
+    const hid = {};
+    doc.querySelectorAll('input[type="hidden"]').forEach(i=>{ if (i.name) hid[i.name] = i.value || ''; });
+    return hid;
+  }
   function parseNextFromRoot(root){
     const panel = root.querySelector(TX_PANEL_SEL); if (!panel) return null;
-    // Find "Next" anchor within the panel
     let a = panel.querySelector('a.rgPageNext') ||
             Array.from(panel.querySelectorAll('a[href*="__doPostBack"]')).find(x=> /Next|›|>>/i.test(x.textContent||''));
     if (!a) return null;
     const src = a.getAttribute('href') || a.getAttribute('onclick') || '';
     const m = src.match(/__doPostBack\(\s*'([^']+)'\s*,\s*'([^']*)'\s*\)/);
     if (!m) return null;
-
-    return {
-      hidden: squishHidden(document), // start with current page viewstate
-      evtTarget: m[1],
-      evtArg:    m[2] || ''
-    };
+    return { hidden: squishHidden(document), evtTarget: m[1], evtArg: m[2] || '' };
   }
-
   async function fetchNextPage(current){
-    // POST to this same page (AccountPayment_r.aspx) with the panel pager target
     const data = new URLSearchParams();
     Object.entries(current.hidden||{}).forEach(([k,v])=> data.append(k,v));
     data.set('__EVENTTARGET', current.evtTarget);
@@ -2286,7 +2326,6 @@
     const html = await res.text();
     const doc = new DOMParser().parseFromString(html, 'text/html');
 
-    // Extract rows + compute next
     const rows = extractFromRoot(doc);
     const panel = doc.querySelector(TX_PANEL_SEL);
     let next = null;
@@ -2296,37 +2335,64 @@
       if (a){
         const src = a.getAttribute('href') || a.getAttribute('onclick') || '';
         const m = src.match(/__doPostBack\(\s*'([^']+)'\s*,\s*'([^']*)'\s*\)/);
-        if (m){
-          next = { hidden: squishHidden(doc), evtTarget: m[1], evtArg: m[2]||'' };
-        }
+        if (m){ next = { hidden: squishHidden(doc), evtTarget: m[1], evtArg: m[2]||'' }; }
       }
     }
     return { rows, next };
   }
 
+  /* ---------- Load all pages (prefers anchor-pager; falls back to WebForms) ---------- */
   async function loadAllPages(){
-    if (!state.nextPost){ badge('No more pages detected.'); return; }
-    let added = 0, pages = 0;
-    document.getElementById('wlTxLoadAllBtn').disabled = true;
+    if (state.fetchingAll) return;
+    state.fetchingAll = true;
+    const btn = document.getElementById('wlTxLoadAllBtn');
+    if (btn) btn.disabled = true;
+
     try{
-      while (state.nextPost && pages < state.maxPages){
-        const { rows, next } = await fetchNextPage(state.nextPost);
-        // merge new rows by doc key
-        const known = new Set(state.rows.map(r=> r.key));
-        rows.forEach(r=> { if (!known.has(r.key)) { state.rows.push(r); added++; } });
-        state.pageCount += 1; pages += 1; state.nextPost = next;
-        badge(`Loaded ${state.rows.length} rows · page ${state.pageCount}${state.nextPost?'…':''}`);
-        renderRows(); // live update as we load
+      const anchorLinks = hasAnchorPager(document) ? collectPageLinks(document) : [];
+      if (anchorLinks.length > 1){
+        let added = 0, done = 0;
+        // Fetch sequentially to keep server happy
+        for (const url of anchorLinks){
+          const idx = (()=>{ try{ return parseInt(new URL(url).searchParams.get('pageIndex')||'0',10);}catch{ return null; }})();
+          if (idx!=null && state.fetchedPageIndexes.has(idx)) { done++; continue; }
+          const { rows } = await fetchAnchorPage(url);
+          mergeRows(rows, addedRef => added += addedRef);
+          done++;
+          badge(`Loaded ${state.rows.length} rows · page ${done}/${anchorLinks.length}`);
+          renderRows();
+        }
+        badge(`All pages loaded · ${state.rows.length} total`);
+        log.info('Anchor pager load complete', { total: state.rows.length, pages: anchorLinks.length });
+      }else{
+        // Fallback: legacy WebForms "Next" loop
+        if (!state.nextPost){ badge('No more pages detected.'); return; }
+        let added = 0, pages = 0;
+        while (state.nextPost && pages < state.maxPages){
+          const { rows, next } = await fetchNextPage(state.nextPost);
+          mergeRows(rows, add=> added += add);
+          state.pageCount += 1; pages += 1; state.nextPost = next;
+          badge(`Loaded ${state.rows.length} rows · page ${state.pageCount}${state.nextPost?'…':''}`);
+          renderRows();
+        }
+        if (state.nextPost) badge(`Stopped at cap (${state.maxPages} pages). Showing ${state.rows.length}.`);
+        else badge(`All pages loaded · ${state.rows.length} total`);
+        log.info('WebForms load all complete', { total: state.rows.length, pages });
       }
-      if (state.nextPost) badge(`Stopped at cap (${state.maxPages} pages). Showing ${state.rows.length}.`);
-      else badge(`All pages loaded · ${state.rows.length} total`);
-      log.info('Load all complete', { total: state.rows.length, pages });
     }catch(e){
       log.error('loadAllPages error', e);
       badge('Error while loading all pages. Showing what we have.');
     }finally{
-      document.getElementById('wlTxLoadAllBtn').disabled = false;
+      if (btn) btn.disabled = false;
+      state.fetchingAll = false;
     }
+  }
+
+  function mergeRows(newRows, onAdded){
+    const before = state.rows.length;
+    const known = new Set(state.rows.map(r=> r.key));
+    newRows.forEach(r=> { if (r && r.key && !known.has(r.key)) { state.rows.push(r); known.add(r.key); } });
+    if (onAdded) onAdded(state.rows.length - before);
   }
 
   /* ---------- Render ---------- */
@@ -2381,7 +2447,6 @@
 
     const all = document.getElementById('wlInvSelectAll');
     if (all){
-      // set tri-state
       const total = rows.length, sel = rows.filter(r=> state.selected.has(r.key)).length;
       all.indeterminate = sel>0 && sel<total;
       all.checked = total>0 && sel===total;
@@ -2394,8 +2459,8 @@
     const rem = document.getElementById('ctl00_PageBody_RemittanceAdviceTextBox');
     if (!rem) return;
     const tokens = String(rem.value||'').split(/[,\n\r\t ]+/).map(x=>x.trim()).filter(Boolean);
-    const present = new Set(state.rows.map(r=> r.key));
-    tokens.forEach(t=> { if (present.has(t)) state.selected.set(t, MONEY(state.rows.find(r=> r.key===t)?.outstanding)); });
+    const index = new Map(state.rows.map(r=> [r.key, r]));
+    tokens.forEach(t=> { if (index.has(t)) state.selected.set(t, MONEY(index.get(t).outstanding)); });
     renderRows();
   }
 
@@ -2412,7 +2477,7 @@
     const rem = document.getElementById('ctl00_PageBody_RemittanceAdviceTextBox');
     if (rem){
       // Put the list on its own line (replace any prior invoice list tokens)
-      const other = String(rem.value||'').split('\n').filter(line=> !/INV/i.test(line));
+      const other = String(rem.value||'').split('\n').filter(line=> !/^\s*\d+(\s*,\s*\d+)*\s*$/i.test(line)); // keep non-doc lines
       other.push(docs.join(','));
       rem.value = other.join('\n').trim();
       rem.dispatchEvent(new Event('input',{bubbles:true}));
@@ -2427,9 +2492,7 @@
       amt.dispatchEvent(new Event('change',{bubbles:true}));
     }
 
-    // Re-render summary (your layout module listens to changes too)
     try{ window.renderSummary?.(); }catch{}
-
     closeModal();
   }
 
@@ -2437,7 +2500,14 @@
   function wire(){
     const btn = document.getElementById('wlOpenTxModalBtn');
     if (!btn || btn.__wlTxPickBound) return;
-    btn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); openModal(); });
+    btn.addEventListener('click', (e)=>{
+      // Prevent native/modal handlers opening a second modal
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
+      openModal();
+      return false;
+    }, { capture:true });
     btn.__wlTxPickBound = true;
     log.info('Invoice picker (from Recent Transactions) bound.');
   }
@@ -2460,4 +2530,6 @@
   else { boot(); }
 
 })();
+
+
 
