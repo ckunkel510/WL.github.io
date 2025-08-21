@@ -1582,39 +1582,59 @@
     const btn = $id('wlOpenJobsModalBtn'); if (btn){ btn.disabled = false; btn.removeAttribute('aria-disabled'); btn.focus?.(); }
   }
  function commitJobsSelection(){
-  const list = document.getElementById('wlJobsList'); if (!list){ closeJobsModal(); return; }
+  const list = document.getElementById('wlJobsList'); 
+  if (!list){ closeJobsModal(); return; }
+
   const checks = Array.from(list.querySelectorAll('input[type="checkbox"]'));
   const sel = checks.filter(c => c.checked);
-
-  const newSel = {}; 
-  sel.forEach(c => newSel[c.dataset.job] = parseMoney(c.value));
-
-  // Build job lines (these replace any invoice tokens/statement)
-  const jobLines = Object.entries(newSel).map(([job, amt]) => `JOB ${job}: $${format2(amt)}`);
-  const remitVal = jobLines.join('\n');
-
-  // Defer remittance write until after amount postback finishes
-  try{ window.WL_AP?.remit?.defer(remitVal); }catch{}
-
-  // Amount = sum of selected jobs
-  const newTotal = Object.values(newSel).reduce((s,v)=> s + Number(v||0), 0);
-  const a = amtEl();
-  if (a){
-    a.value = format2(newTotal);
-    try{ a.dispatchEvent(new Event('input', { bubbles:true })); a.dispatchEvent(new Event('change', { bubbles:true })); }catch{}
-    try{
-      if (typeof window.__doPostBack === 'function'){
-        const uniqueId = a.id.replace(/_/g, '$');
-        setTimeout(()=> window.__doPostBack(uniqueId, ''), 0);
-      }
-    }catch{}
+  if (sel.length === 0){
+    alert('Select at least one job.');
+    return;
   }
 
-  sessionStorage.setItem(SESS_JOBS_SEL, JSON.stringify(newSel));
-  try{ window.WL_AP?.invoice?.clearSelection?.(); }catch{}
+  // Build { job -> amount } and compute total
+  const newSel = {};
+  sel.forEach(c => newSel[c.dataset.job] = parseMoney(c.value));
+  const total = Object.values(newSel).reduce((s,v)=> s + Number(v||0), 0);
+
+  // Format: "Job name - $12.34 balance as of <Today>"
+  const dateStr = new Date().toLocaleDateString(undefined, { year:'numeric', month:'long', day:'numeric' });
+  const sanitizeJob = (name) => String(name||'').replace(/[\r\n]+/g, ' ').replace(/,+/g, ' ').trim();
+
+  const tokens = Object.entries(newSel).map(([job, amt]) => {
+    const j = sanitizeJob(job);
+    const a = Number(amt||0).toFixed(2);            // 2 decimals
+    return `${j} - $${a} balance as of ${dateStr}`;
+  });
+
+  const remitVal = tokens.join(', ');               // comma-separated on one line
+
+  // Defer remittance write until after amount postback finishes
+  try { window.WL_AP?.remit?.defer(remitVal); } catch {}
+
+  // Amount = sum of selected jobs (and make it stick server-side)
+  const a = amtEl();
+  if (a){
+    a.value = format2(total);
+    try {
+      a.dispatchEvent(new Event('input',  { bubbles:true }));
+      a.dispatchEvent(new Event('change', { bubbles:true }));
+    } catch {}
+    try {
+      if (typeof window.__doPostBack === 'function'){
+        const uniqueId = a.id.replace(/_/g, '$');
+        setTimeout(() => window.__doPostBack(uniqueId, ''), 0);
+      }
+    } catch {}
+  }
+
+  // Persist and clear invoice selections so modes don't stack
+  try { sessionStorage.setItem('__WL_JobsSelection', JSON.stringify(newSel)); } catch {}
+  try { window.WL_AP?.invoice?.clearSelection?.(); } catch {}
 
   closeJobsModal();
 }
+
 
 
 
