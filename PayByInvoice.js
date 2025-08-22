@@ -528,7 +528,7 @@
     const owingVal = (function(){ const el = byId('ctl00_PageBody_AmountOwingLiteral'); return el ? parseMoney(el.value || el.textContent) : 0; })();
     if (grp.amount && !grp.amount.querySelector('.wl-chips')){
       const chips = document.createElement('div'); chips.className='wl-chips';
-      chips.innerHTML = `<button type="button" class="wl-chipbtn" data-act="fill-owing">Fill: Amount Owing</button><button type="button" class="wl-chipbtn" data-act="clear-amt">Clear Amount</button>`;
+      chips.innerHTML = `<button type="button" class="wl-chipbtn" data-act="clear-amt">Clear Amount</button>`;
       grp.amount.appendChild(chips);
       chips.addEventListener('click',(e)=>{
         const b = e.target.closest('button[data-act]'); if (!b) return;
