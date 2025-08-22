@@ -1,7 +1,6 @@
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TTL helper for checkout step (10 minutes)
-// exposes: WLCheckout.setStep(n), WLCheckout.getStep() → number|null
+// WLCheckout: step TTL (10 minutes) + shared helpers
 // ─────────────────────────────────────────────────────────────────────────────
 (function(){
   const STEP_KEY = 'currentStep';
@@ -18,7 +17,6 @@
       const raw = localStorage.getItem(key);
       if (!raw) return null;
       const item = JSON.parse(raw);
-      // Handle legacy plain-string value by clearing it
       if (!item || typeof item !== 'object' || !('expiry' in item)) {
         localStorage.removeItem(key);
         return null;
@@ -37,34 +35,29 @@
     return v != null ? parseInt(v, 10) : null;
   }
 
-  // expose globally so later IIFEs can use it
   window.WLCheckout = { setStep, getStep, TTL_MS };
 })();
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Your existing script, with currentStep reads/writes switched to WLCheckout
+// Main: checkout wizard + UI rewires
 // ─────────────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', function() {
-  // reset wizard to step 1 on each fresh load
+  // reset wizard to step 1 on each fresh load if "same as delivery" wasn't set
   if (localStorage.sameAsDelivery !== 'true') {
-    localStorage.removeItem('currentStep'); // keep your original guard
+    localStorage.removeItem('currentStep'); // legacy cleanup
   }
 
   // Hide the original “Date Required” picker entirely
   var dateColDefault = document.getElementById('ctl00_PageBody_dtRequired_DatePicker_wrapper');
   if (dateColDefault) dateColDefault.style.display = 'none';
+
   // Hide the ASP.NET panel of default Back/Continue
   $('.submit-button-panel').hide();
 
-  // Hide the original “Date required:” label
-  $('label').filter(function(){
-    return $(this).text().trim() === 'Date required:';
-  }).hide();
-
-  // Hide the default date-picker wrapper and its form-control container
+  // Hide the original “Date required:” label + wrapper
+  $('label').filter(function(){ return $(this).text().trim() === 'Date required:'; }).hide();
   $('div.form-control').hide();
   $('#ctl00_PageBody_dtRequired_DatePicker_wrapper').hide();
-  // hide the entire epi‐form group that contains the “Date required” picker
   $('#ctl00_PageBody_dtRequired_DatePicker_wrapper')
     .closest('.epi-form-col-single-checkout.epi-form-group-checkout')
     .hide();
@@ -183,7 +176,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   })();
 
-  // 7) Prefill delivery address (unchanged)
+  // 7) Prefill delivery address
   if(!$('#ctl00_PageBody_DeliveryAddress_AddressLine1').val()){
     let $link = $('#ctl00_PageBody_CustomerAddressSelector_SelectAddressLinkButton');
     if($link.length){
@@ -214,7 +207,7 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  // 8) AJAX fetch user info (unchanged)
+  // 8) AJAX fetch user info (name/email/tel)
   $.get('https://webtrack.woodsonlumber.com/AccountSettings.aspx', data=>{
     let $acc=$(data),
         fn=$acc.find('#ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput').val()||'',
@@ -277,14 +270,14 @@ document.addEventListener('DOMContentLoaded', function() {
           upd();
           wrap.style.display='none';
           sum.style.display='';
-          WLCheckout.setStep(5); // ← TTL write
+          WLCheckout.setStep(5);
         });
       }
     });
     upd();
   })();
 
-  // 10) Billing-same + invoice summary/edit (step 6) — (unchanged except where noted)
+  // 10) Billing-same + invoice summary/edit (step 6)
   (function(){
     let pane6 = wizard.querySelector('.checkout-step[data-step="6"]');
     if(!pane6) return;
@@ -361,7 +354,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   })();
 
-  // 11) Step 7 logic … (unchanged)
+  // 11) Step 7: pickup/delivery & special instructions
   (function(){
     const p7 = wizard.querySelector('.checkout-step[data-step="7"]');
     if (!p7) return;
@@ -528,7 +521,7 @@ document.addEventListener('DOMContentLoaded', function() {
     onShip();
   })();
 
-  // 12) Step switcher + persistence (uses TTL now)
+  // 12) Step switcher + persistence (TTL)
   function showStep(n){
     wizard.querySelectorAll('.checkout-step')
       .forEach(p=>p.classList.toggle('active', +p.dataset.step===n));
@@ -537,69 +530,71 @@ document.addEventListener('DOMContentLoaded', function() {
       li.classList.toggle('active',    s===n);
       li.classList.toggle('completed', s< n);
     });
-    WLCheckout.setStep(n); // ← TTL write on every navigation
+    WLCheckout.setStep(n);
     window.scrollTo({ top: wizard.offsetTop, behavior: 'smooth' });
   }
+  // expose so other blocks can call it
+  window.WLCheckout.showStep = showStep;
 
-  const saved = (window.WLCheckout && WLCheckout.getStep && WLCheckout.getStep()) || null;
-  showStep(saved || 2); // if expired or missing, default to step 2
+  // Jump to first validation error (after server-side validation)
+  function jumpToFirstValidationError(){
+    const sel = [
+      '.validation-summary-errors',
+      '.field-validation-error',
+      '.input-validation-error',
+      '.text-danger',
+      '[aria-invalid="true"]',
+      '.is-invalid',
+      '.has-error'
+    ].join(',');
+    const err = document.querySelector(sel);
+    if (!err) return false;
+
+    const pane = err.closest('.checkout-step');
+    if (pane && pane.dataset.step) {
+      const stepNum = parseInt(pane.dataset.step, 10) || 2;
+      showStep(stepNum);
+      setTimeout(()=>{ err.scrollIntoView({behavior:'smooth', block:'center'}); }, 0);
+      return true;
+    }
+    showStep(2);
+    return false;
+  }
+  window.WLCheckout.jumpToFirstValidationError = jumpToFirstValidationError;
+
+  // Restore step (TTL) and handle "expected navigation" that didn't happen
+  const saved = (window.WLCheckout.getStep && WLCheckout.getStep()) || null;
+  showStep(saved || 2);
+  try {
+    if (sessionStorage.getItem('wl_chk_expect_nav') === '1') {
+      sessionStorage.removeItem('wl_chk_expect_nav');
+      setTimeout(()=>{ jumpToFirstValidationError(); }, 0);
+    }
+  } catch {}
 });
 
-// Validation on Continue (unchanged)
-$(document).ready(function(){
-  $('#ctl00_PageBody_ContinueButton2').on('click', function(e){
-    var valid = true;
-    var errors = [];
-
-    if ($('#deliveryDate').closest('.form-group').is(':visible')) {
-      if (!$('#deliveryDate').val()) {
-        valid = false;
-        errors.push('• Please select a Requested Delivery Date.');
-      }
-      if (!$('input[name="deliveryTime"]:checked').length) {
-        valid = false;
-        errors.push('• Please choose a Delivery Time (Morning or Afternoon).');
-      }
-    }
-
-    if ($('#pickupDate').closest('.form-group').is(':visible')) {
-      if (!$('#pickupDate').val()) {
-        valid = false;
-        errors.push('• Please select a Requested Pickup Date.');
-      }
-      if (!$('#pickupPerson').val().trim()) {
-        valid = false;
-        errors.push('• Please enter a Pickup Person.');
-      }
-    }
-
-    if (!valid) {
-      e.preventDefault();
-      alert('Hold on – we need a bit more info:\n\n' + errors.join('\n'));
-    }
-  });
-});
-
-// Place order / Back to cart override: now uses TTL writer
+// ─────────────────────────────────────────────────────────────────────────────
+// Place order / Back to cart clicks → reset step to 2 (TTL) and sameAsDelivery
+// ─────────────────────────────────────────────────────────────────────────────
 (function () {
   document.addEventListener('DOMContentLoaded', function () {
     const placeOrderBtn = document.getElementById('ctl00_PageBody_PlaceOrderButton');
     const backToCartBtn = document.getElementById('ctl00_PageBody_BackToCartButton3');
-
     function overrideSessionState() {
-      console.log('[Checkout] Overriding localStorage: sameAsDelivery = false, currentStep = 2 (TTL)');
       localStorage.setItem('sameAsDelivery', 'false');
-      if (window.WLCheckout && WLCheckout.setStep) WLCheckout.setStep(2);
-      else localStorage.removeItem('currentStep'); // fallback safety
+      if (window.WLCheckout?.setStep) WLCheckout.setStep(2);
+      else localStorage.removeItem('currentStep');
     }
-
     if (placeOrderBtn)  placeOrderBtn.addEventListener('click', overrideSessionState);
     if (backToCartBtn)  backToCartBtn.addEventListener('click', overrideSessionState);
   });
 })();
 
-// Modern selectors (unchanged logic)
+// ─────────────────────────────────────────────────────────────────────────────
+// Modern Transaction & Shipping Selectors (with gray-out on unselected)
+// ─────────────────────────────────────────────────────────────────────────────
 $(document).ready(function() {
+  // Transaction selector
   if ($("#ctl00_PageBody_TransactionTypeDiv").length) {
     $(".TransactionTypeSelector").hide();
     const txnHTML = `
@@ -610,8 +605,7 @@ $(document).ready(function() {
         <button id="btnQuote" class="btn btn-secondary" data-value="rdbQuote">
           <i class="fas fa-file-alt"></i> Request Quote
         </button>
-      </div>
-    `;
+      </div>`;
     $("#ctl00_PageBody_TransactionTypeDiv").append(txnHTML);
 
     function updateTransactionStyles(val) {
@@ -627,17 +621,15 @@ $(document).ready(function() {
         $("#btnOrder").addClass("btn-secondary").removeClass("btn-primary");
       }
     }
-
     updateTransactionStyles(
       $("#ctl00_PageBody_TransactionTypeSelector_rdbOrder").is(":checked") ? "rdbOrder" : "rdbQuote"
     );
     $(document).on("click", ".modern-transaction-selector button", function() {
       updateTransactionStyles($(this).data("value"));
     });
-  } else {
-    console.warn("Transaction type div not found.");
   }
 
+  // Shipping selector
   if ($(".SaleTypeSelector").length) {
     $(".SaleTypeSelector").hide();
     const shipHTML = `
@@ -648,24 +640,37 @@ $(document).ready(function() {
         <button id="btnPickup" class="btn btn-secondary" data-value="rbCollectLater">
           <i class="fas fa-store"></i> Pickup (Free)
         </button>
-      </div>
-    `;
+      </div>`;
     $(".epi-form-col-single-checkout:has(.SaleTypeSelector)").append(shipHTML);
 
     function updateShippingStyles(val) {
       const delRad  = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
       const pickRad = $("#ctl00_PageBody_SaleTypeSelector_rbCollectLater");
+      const $btnDelivered = $("#btnDelivered");
+      const $btnPickup    = $("#btnPickup");
 
       if (val === "rbDelivered") {
         delRad.prop("checked", true).trigger("change");
-        $("#btnDelivered").addClass("btn-primary").removeClass("btn-secondary");
-        $("#btnPickup").addClass("btn-secondary").removeClass("btn-primary");
+        $btnDelivered
+          .addClass("btn-primary")
+          .removeClass("btn-secondary disabled opacity-50")
+          .attr("aria-pressed","true").attr("aria-disabled","false");
+        $btnPickup
+          .addClass("btn-secondary disabled opacity-50")
+          .removeClass("btn-primary")
+          .attr("aria-pressed","false").attr("aria-disabled","true");
         document.cookie = "pickupSelected=false; path=/";
         document.cookie = "skipBack=false; path=/";
       } else {
         pickRad.prop("checked", true).trigger("change");
-        $("#btnPickup").addClass("btn-primary").removeClass("btn-secondary");
-        $("#btnDelivered").addClass("btn-secondary").removeClass("btn-primary");
+        $btnPickup
+          .addClass("btn-primary")
+          .removeClass("btn-secondary disabled opacity-50")
+          .attr("aria-pressed","true").attr("aria-disabled","false");
+        $btnDelivered
+          .addClass("btn-secondary disabled opacity-50")
+          .removeClass("btn-primary")
+          .attr("aria-pressed","false").attr("aria-disabled","true");
         document.cookie = "pickupSelected=true; path=/";
         document.cookie = "skipBack=true; path=/";
       }
@@ -676,19 +681,69 @@ $(document).ready(function() {
         ? "rbDelivered"
         : "rbCollectLater"
     );
-
     $(document).on("click", ".modern-shipping-selector button", function() {
       updateShippingStyles($(this).data("value"));
     });
-  } else {
-    console.warn("Shipping method selector not found.");
   }
 });
 
-// Hide "Special Instructions" header cell (unchanged)
+// ─────────────────────────────────────────────────────────────────────────────
+// Step 7 Continue: client validation → set step=2 + expect nav; if we stay,
+// jump to first error. (Covers both Continue buttons.)
+// ─────────────────────────────────────────────────────────────────────────────
+$(document).ready(function(){
+  $('#ctl00_PageBody_ContinueButton1, #ctl00_PageBody_ContinueButton2').on('click', function(e){
+    var valid = true;
+    var errors = [];
+
+    // DELIVERY validation (visible = Delivery chosen)
+    if ($('#deliveryDate').closest('.form-group').is(':visible')) {
+      if (!$('#deliveryDate').val()) {
+        valid = false; errors.push('• Please select a Requested Delivery Date.');
+      }
+      if (!$('input[name="deliveryTime"]:checked').length) {
+        valid = false; errors.push('• Please choose a Delivery Time (Morning or Afternoon).');
+      }
+    }
+
+    // PICKUP validation (visible = Pickup chosen)
+    if ($('#pickupDate').closest('.form-group').is(':visible')) {
+      if (!$('#pickupDate').val()) {
+        valid = false; errors.push('• Please select a Requested Pickup Date.');
+      }
+      if (!$('#pickupPerson').val().trim()) {
+        valid = false; errors.push('• Please enter a Pickup Person.');
+      }
+    }
+
+    if (!valid) {
+      e.preventDefault();
+      alert('Hold on – we need a bit more info:\n\n' + errors.join('\n'));
+      if (window.WLCheckout?.showStep) WLCheckout.showStep(7);
+      return;
+    }
+
+    // Passed client checks → expect server navigation; reset step to 2 (TTL)
+    if (window.WLCheckout?.setStep) WLCheckout.setStep(2);
+    try { sessionStorage.setItem('wl_chk_expect_nav', '1'); } catch {}
+
+    // Safety net: after a moment, if still on page and errors visible, jump
+    setTimeout(function(){
+      const hasErrors = document.querySelector(
+        '.validation-summary-errors, .field-validation-error, .input-validation-error, .text-danger, [aria-invalid="true"], .is-invalid, .has-error'
+      );
+      if (hasErrors && window.WLCheckout?.jumpToFirstValidationError) {
+        WLCheckout.jumpToFirstValidationError();
+      }
+    }, 2000);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hide "Special Instructions" header cell if present
+// ─────────────────────────────────────────────────────────────────────────────
 document.querySelectorAll('th').forEach(th => {
   if (th.textContent.includes('Special Instructions')) {
     th.style.display = 'none';
   }
 });
-
