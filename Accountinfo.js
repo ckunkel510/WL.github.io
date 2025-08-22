@@ -1,7 +1,8 @@
 
 /* ==========================================================
    Woodson — Account Overview (AccountInfo_R.aspx)
-   v3.0 — fixed narrow columns & wrapping, auto-fit grid, roomy modals
+   v3.3 — auto-fit grid, silent hides, Cart Snapshot placement,
+          live cart parsing with images, tidy mobile
    ========================================================== */
 (function(){
   'use strict';
@@ -26,7 +27,7 @@
   const digits=(v)=> String(v||'').replace(/\D+/g,'').slice(0,15);
   function waitFor(sel,{timeout=14000,interval=120}={}){return new Promise((res,rej)=>{const t0=Date.now();const tick=()=>{const el=$(sel);if(el) return res(el); if(Date.now()-t0>=timeout) return rej(new Error('timeout '+sel)); setTimeout(tick,interval)}; (document.readyState==='loading')?document.addEventListener('DOMContentLoaded',tick,{once:true}):tick();});}
 
-  /* ----------- styles: auto-fit grid + no wrap glitches ----------- */
+  /* ----------- styles ----------- */
   const styles = `
   .wl-acct-root, .wl-acct-root * { box-sizing: border-box; }
   .wl-acct-root{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif; width:100%}
@@ -40,7 +41,7 @@
   .wl-ham-menu a:hover{background:${BRAND.bgSoft}}
   .wl-hide{position:absolute !important;left:-9999px !important;width:1px !important;height:1px !important;overflow:hidden !important}
 
-  /* GRID ROWS — cards never collapse below the min-widths */
+  /* GRID ROWS — cards never collapse below the min width */
   .wl-row{display:grid;gap:14px;margin-bottom:14px}
   .wl-row-3{grid-template-columns:repeat(auto-fit, minmax(340px, 1fr));}
   .wl-row-2{grid-template-columns:repeat(auto-fit, minmax(420px, 1fr));}
@@ -75,7 +76,15 @@
   .wl-btn.primary:hover{background:${BRAND.primaryHover};border-color:${BRAND.primaryHover}}
   @media (max-width: 560px){ .wl-btn{flex:1 1 auto; min-width:unset} }
 
-  /* MODALS */
+  /* Cart Snapshot visuals */
+  .wl-cart-list li{gap:12px}
+  .wl-cart-left{display:flex;align-items:center;justify-content:center}
+  .wl-cart-thumb{width:64px;height:64px;object-fit:contain;border-radius:6px;background:#fff;border:1px solid #eee}
+  .wl-cart-mid{flex:1 1 auto;min-width:0}
+  .wl-cart-code{font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px}
+  .wl-cart-right{display:flex;align-items:center;gap:8px}
+
+  /* MODALS (unchanged) */
   .wl-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.35);z-index:9999}
   .wl-modal.open{display:flex}
   .wl-modal-card{width:min(780px,94vw);background:#fff;border-radius:12px;border:1px solid ${BRAND.border};box-shadow:0 10px 28px rgba(0,0,0,.18);overflow:hidden}
@@ -104,7 +113,6 @@
   input[type="checkbox"].switch-input:checked + .switch:after{left:calc(100% - var(--dot) - 3px)}
   .wl-inline{display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap}
   `;
-
   document.head.appendChild(dom(`<style>${styles}</style>`));
 
   /* -------- init -------- */
@@ -132,7 +140,6 @@
     });
 
     const links={
-      cards:$('#CustomerCardsLink') || $('#ctl00_PageBody_AccountActivity_ManageStoredCardsForNonCashCustomers') || $('#CustomerCards'),
       jobs: $('#JobBalancesButton'),
       statement: $('#GetInterimStatementLink')
     };
@@ -141,9 +148,10 @@
 
     const stmtNetAmt = mNum(last['Last Statement Net Amount']?.amount);
     const stmtDate   = parseUS(last['Last Statement Amount']?.date || last['Last Statement Net Amount']?.date);
+    const lastStmtAmtVal = mNum(last['Last Statement Amount']?.amount);
+    const hasStatements  = !!(stmtDate || stmtNetAmt>0 || lastStmtAmtVal>0);
     const stmtDue    = next10(stmtDate);
     const payStmtUrl = (()=>{ const q=new URLSearchParams(); if(stmtNetAmt>0) q.set('utm_total', stmtNetAmt.toFixed(2)); if(stmtDate) q.set('utm_note',`Statement ${stmtDate.toLocaleDateString()}`); q.set('utm_source','AccountInfo'); q.set('utm_action','PayStatement'); return `AccountPayment_r.aspx?${q.toString()}`; })();
-    const payTopUrl = 'AccountPayment_r.aspx?utm_source=AccountInfo&utm_action=MakePayment';
 
     /* mount */
     const container = dom(`
@@ -155,12 +163,12 @@
             <div id="wl-ham-menu" class="wl-ham-menu" role="menu"></div>
           </div>
           <div class="wl-actions">
-            <a class="wl-btn primary" href="${payTopUrl}">Make a Payment</a>
+            <a class="wl-btn primary" id="wl-top-pay" href="AccountPayment_r.aspx?utm_source=AccountInfo&utm_action=MakePayment">Make a Payment</a>
           </div>
         </div>
 
         <!-- Row 1 -->
-        <div class="wl-row wl-row-3">
+        <div class="wl-row wl-row-3" id="wl-row1">
           <div class="wl-card" id="wl-snapshot">
             <div class="wl-head">Account Snapshot</div>
             <div class="wl-body">
@@ -208,14 +216,14 @@
         </div>
 
         <!-- Row 2 -->
-        <div class="wl-row wl-row-2">
+        <div class="wl-row wl-row-2" id="wl-row2">
           <div class="wl-card" id="wl-activity">
             <div class="wl-head">Recent Activity</div>
             <div class="wl-body">
               <ul class="wl-list" data-empty="Loading…"></ul>
               <div class="wl-actions" style="margin-top:8px">
-                <a class="wl-btn" href="Invoices_r.aspx">View Invoices</a>
-                <a class="wl-btn" href="CreditNotes_r.aspx">View Credits</a>
+                <a class="wl-btn" id="wl-invoices-btn" href="Invoices_r.aspx">View Invoices</a>
+                <a class="wl-btn" id="wl-credits-btn" href="CreditNotes_r.aspx">View Credits</a>
               </div>
             </div>
           </div>
@@ -231,8 +239,11 @@
           </div>
         </div>
 
+        <!-- Cart Snapshot (inserted to row1 or as its own row below row2) -->
+        <div class="wl-row wl-row-1" id="wl-row-cart" style="display:none"></div>
+
         <!-- Row 3 -->
-        <div class="wl-row wl-row-1">
+        <div class="wl-row wl-row-1" id="wl-row3">
           <div class="wl-card" id="wl-purchases">
             <div class="wl-head">Recent Purchases</div>
             <div class="wl-body">
@@ -323,6 +334,36 @@
     const pageBody = $('td.pageContentBody') || document.body;
     pageBody.insertBefore(container, pageBody.firstChild);
 
+    /* place Cart card now (empty; we’ll fill it after fetch) */
+    const cartCard = dom(`
+      <div class="wl-card" id="wl-cart" style="display:none">
+        <div class="wl-head">Cart Snapshot</div>
+        <div class="wl-body">
+          <ul class="wl-list wl-cart-list"></ul>
+          <div class="wl-actions" style="margin-top:8px">
+            <a class="wl-btn primary" id="wl-cart-cta" href="Cart.aspx">Go to Cart</a>
+          </div>
+        </div>
+      </div>
+    `);
+
+    const row1 = $('#wl-row1', container);
+    const row2 = $('#wl-row2', container);
+    const rowCart = $('#wl-row-cart', container);
+    const stmtCard = $('#wl-statements', container);
+    const topPay   = $('#wl-top-pay', container);
+
+    if (hasStatements) {
+      // keep statements; show top Make Payment
+      rowCart.style.display = ''; // its own row between row2 and row3
+      rowCart.appendChild(cartCard);
+    } else {
+      // hide statements & top payment, move Cart into row1
+      if (stmtCard) stmtCard.style.display = 'none';
+      if (topPay) topPay.style.display = 'none';
+      row1.appendChild(cartCard);
+    }
+
     /* hide legacy blocks */
     const leftNav = $('#ctl00_LeftSidebarContents_MainNav_NavigationMenu');
     if (leftNav) leftNav.classList.add('wl-hide');
@@ -334,7 +375,7 @@
       const btn = $('#wl-ham-btn', container);
       const menu = $('#wl-ham-menu', container);
       if (leftNav) { $$('.rmRootGroup .rmItem a', leftNav).forEach(a=> menu.appendChild(dom(`<a role="menuitem" href="${a.href}">${a.textContent.trim()}</a>`))); }
-      else { ['Invoices_r.aspx','CreditNotes_r.aspx','OpenOrders_r.aspx','Statements_R.aspx','ProductsPurchased_R.aspx','AccountPayment_r.aspx','AccountSettings.aspx','AddressList_R.aspx','Contacts_r.aspx']
+      else { ['Invoices_r.aspx','CreditNotes_r.aspx','OpenOrders_r.aspx','Statements_R.aspx','ProductsPurchased_R.aspx','AccountPayment_r.aspx','AccountSettings.aspx','AddressList_R.aspx','Contacts_r.aspx','Cart.aspx']
         .forEach(h=> menu.appendChild(dom(`<a role="menuitem" href="${h}">${h.replace(/_r\.aspx|\.aspx/,'').replace(/_/g,' ')}</a>`))); }
       const toggle=(open)=>{ menu.classList.toggle('open', open); btn.setAttribute('aria-expanded', open?'true':'false'); };
       btn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); toggle(!menu.classList.contains('open')); return false; });
@@ -342,7 +383,7 @@
       btn.setAttribute('onclick','return false;');
     })();
 
-    /* COMM PREFS (local + optional remote) */
+    /* COMM PREFS storage */
     const COMM_KEY = (k)=> `wl_comm_prefs_v3_${k}`;
     function getLocalPrefs(){ try { return JSON.parse(localStorage.getItem(COMM_KEY(accountKey))||'{}'); } catch { return {}; } }
     function setLocalPrefs(v){ try { localStorage.setItem(COMM_KEY(accountKey), JSON.stringify(v)); } catch {} }
@@ -368,18 +409,18 @@
       modal.addEventListener('click', (e)=>{ if (e.target===modal) closeModal('#wl-comm-modal'); });
       form.addEventListener('submit', async (e)=>{
         e.preventDefault();
-        const wantsEmail = f.email_mkt.checked || f.email_billing.checked || f.email_delivery.checked;
-        const wantsSMS = f.sms_mkt.checked;
-        if (wantsEmail && !emailOK(f.email.value)) { alert('Please enter a valid email address.'); f.email.focus(); return; }
-        if (wantsSMS) { const p=digits(f.sms_phone.value); if (p.length<7) { alert('Please enter a valid phone number for SMS.'); f.sms_phone.focus(); return; } f.sms_phone.value=p; }
+        const wantsEmail = $('#comm_email_mkt').checked || $('#comm_email_billing').checked || $('#comm_email_delivery').checked;
+        const wantsSMS   = $('#comm_sms_mkt').checked;
+        if (wantsEmail && !emailOK($('#comm_email').value)) { alert('Please enter a valid email address.'); $('#comm_email').focus(); return; }
+        if (wantsSMS) { const p=digits($('#comm_sms_phone').value); if (p.length<7) { alert('Please enter a valid phone number for SMS.'); $('#comm_sms_phone').focus(); return; } $('#comm_sms_phone').value=p; }
         const payload = {
           accountKey,
-          email: (f.email.value||'').trim(),
-          emailMarketing: !!f.email_mkt.checked,
-          emailBilling: !!f.email_billing.checked,
-          emailDelivery: !!f.email_delivery.checked,
-          smsMarketing: !!f.sms_mkt.checked,
-          smsPhone: digits(f.sms_phone.value||''),
+          email: ($('#comm_email').value||'').trim(),
+          emailMarketing: $('#comm_email_mkt').checked,
+          emailBilling: $('#comm_email_billing').checked,
+          emailDelivery: $('#comm_email_delivery').checked,
+          smsMarketing: $('#comm_sms_mkt').checked,
+          smsPhone: digits($('#comm_sms_phone').value||''),
           updatedAt: new Date().toISOString()
         };
         setLocalPrefs(payload);
@@ -388,10 +429,9 @@
       });
     })();
 
-    /* REQUEST CHANGES (toggles) */
+    /* REQUEST CHANGES */
     function openModal(id){ const m=$(id); if(!m) return; m.classList.add('open'); m.setAttribute('aria-hidden','false'); }
     function closeModal(id){ const m=$(id); if(!m) return; m.classList.remove('open'); m.setAttribute('aria-hidden','true'); }
-
     (function requestModal(){
       const openBtn = $('#wl-req-open', container);
       const modal   = $('#wl-req-modal');
@@ -448,16 +488,17 @@
     })();
   }
 
-  /* -------- async lists -------- */
+  /* -------- async lists + cart -------- */
   async function loadLists(){
     const parser=new DOMParser();
     async function fetchDoc(url){ try{ const r=await fetch(url,{credentials:'same-origin'}); if(!r.ok) throw 0; return parser.parseFromString(await r.text(),'text/html'); }catch{ return null; } }
     const get=(el)=> (el?.textContent||'').trim();
     function mapRows(doc, cols){ if(!doc) return []; const t=doc.querySelector('.rgMasterTable'); if(!t) return []; return Array.from(t.querySelectorAll('tbody tr')).map(r=>{ const o={}; cols.forEach(c=> o[c]=get(r.querySelector(`td[data-title="${c}"]`))); const a=r.querySelector('a[href]'); o.link=a? new URL(a.getAttribute('href'), location.origin).toString():null; return o; }); }
-    function renderList(ul, items, builder, empty){ if(!ul) return; ul.innerHTML=''; if(!items.length){ ul.innerHTML=`<li><div class="wl-meta">${empty||'No items found.'}</div></li>`; return; } items.forEach(it=> ul.appendChild(builder(it))); }
+    function renderList(ul, items, builder, empty){ if(!ul) return; ul.innerHTML=''; if(!items.length){ ul.parentElement.parentElement.parentElement.style.display='none'; return; } items.forEach(it=> ul.appendChild(builder(it))); }
+
     const parseUS=(s)=>{ const m=String(s||'').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m? new Date(+m[3],+m[1]-1,+m[2]) : null; };
 
-    // Recent Activity
+    // Recent Activity (Invoices + Credits)
     (async ()=>{
       const invDoc=await fetchDoc('Invoices_r.aspx');
       let invs=mapRows(invDoc,['Invoice #','Date','Outstanding','Amount','Status']); if(!invs.length) invs=mapRows(invDoc,['Invoice Number','Date','Outstanding','Amount','Status']);
@@ -466,28 +507,37 @@
       let crs=mapRows(crDoc,['Credit #','Date','Amount','Status']); if(!crs.length) crs=mapRows(crDoc,['Credit Note #','Date','Amount','Status']);
       crs=crs.map(x=>({type:'Credit',id:x['Credit #']||x['Credit Note #']||'Credit',date:x['Date']||'',amount:x['Amount']||'',status:x['Status']||'',link:x.link||'CreditNotes_r.aspx'}));
       const all=invs.concat(crs).map(x=>({ ...x, _ts:(parseUS(x.date)||new Date(0)).getTime() })).sort((a,b)=> b._ts-a._ts).slice(0,6);
+
       const ul=$('#wl-activity .wl-list');
-      renderList(ul, all, it=> dom(`<li>
-        <div>
-          <div><a href="${it.link}"><strong>${it.id}</strong></a> <span class="wl-pill">${it.type}</span></div>
-          <div class="wl-meta">${it.date}${it.status?` • ${it.status}`:''}</div>
-        </div>
-        <div><span class="wl-pill">${it.amount||''}</span></div>
-      </li>`), 'No recent activity.');
+      if (!all.length){ $('#wl-activity')?.remove(); }
+      else {
+        ul.innerHTML='';
+        all.forEach(it=> ul.appendChild(dom(`<li>
+          <div>
+            <div><a href="${it.link}"><strong>${it.id}</strong></a> <span class="wl-pill">${it.type}</span></div>
+            <div class="wl-meta">${it.date}${it.status?` • ${it.status}`:''}</div>
+          </div>
+          <div><span class="wl-pill">${it.amount||''}</span></div>
+        </li>`)));
+        if (!crs.length) $('#wl-credits-btn')?.remove();
+      }
     })();
 
     // Open Orders
     (async ()=>{
       const doc=await fetchDoc('OpenOrders_r.aspx');
       const rows=mapRows(doc,['Order #','Created','Status','Total Amount','Goods Total']).slice(0,5);
+      const card=$('#wl-orders');
+      if (!rows.length){ card?.remove(); return; }
       const ul=$('#wl-orders .wl-list');
-      renderList(ul, rows, it=> dom(`<li>
+      ul.innerHTML='';
+      rows.forEach(it=> ul.appendChild(dom(`<li>
         <div>
           <div><a href="${it.link||'OpenOrders_r.aspx'}"><strong>${it['Order #']||'Order'}</strong></a></div>
           <div class="wl-meta">${it.Created||''}${it.Status?` • ${it.Status}`:''}</div>
         </div>
         <div><span class="wl-pill">${it['Total Amount']||it['Goods Total']||''}</span></div>
-      </li>`), 'No open orders.');
+      </li>`)));
     })();
 
     // Recent Purchases
@@ -496,25 +546,67 @@
       let rows=mapRows(doc,['Product','Description','Last Purchased','Qty','Price','Total','Product Code','Product #']);
       if(!rows.length) rows=mapRows(doc,['Product','Description','Date','Qty','Price','Product Code','Product #']);
       rows=rows.slice(0,10);
+      const card=$('#wl-purchases');
+      if (!rows.length){ card?.remove(); return; }
       const ul=$('#wl-purchases .wl-list');
-      renderList(ul, rows, it=>{
+      ul.innerHTML='';
+      rows.forEach(it=>{
         const sku=it['Product Code']||it['Product #']||it['Product']||'';
         const title=it['Product']||it['Product #']||sku||'Product';
-        const desc =it.Description?` — ${it.Description}`:'';
         const when=it['Last Purchased']||it['Date']||'';
         const total=it.Total||(it.Price?`@ ${it.Price}`:'');
         const view=`Products.aspx?&searchText=${encodeURIComponent(sku)}`;
-        return dom(`<li>
+        ul.appendChild(dom(`<li>
+          <div class="wl-cart-left"></div>
           <div>
-            <div><strong>${title}</strong>${desc}</div>
+            <div><strong>${title}</strong></div>
             <div class="wl-meta">${when}${it.Qty?` • Qty ${it.Qty}`:''}</div>
           </div>
           <div>
-            ${total?`<span class="wl-pill" style="margin-right:8px">${total}</span>`:''}
+            ${total?`<span class="wl-pill">${total}</span>`:''}
             <a class="wl-btn" href="${view}">View Product</a>
           </div>
-        </li>`);
-      }, 'No recent purchases.');
+        </li>`));
+      });
+    })();
+
+    // Cart Snapshot (tries multiple URLs)
+    (async ()=>{
+      const urls=['Cart.aspx','ShoppingCart.aspx','Cart_r.aspx'];
+      let doc=null;
+      for (const u of urls){ doc = await fetchDoc(u); if (doc && doc.querySelector('.shopping-cart-details')) break; }
+      const card=$('#wl-cart');
+      if (!doc){ card?.remove(); $('#wl-row-cart').style.display='none'; return; }
+
+      const cont = doc.querySelector('.shopping-cart-details');
+      const items = cont ? Array.from(cont.querySelectorAll('.shopping-cart-item .cart-item-card')).slice(0,5) : [];
+      if (!items.length){ card?.remove(); $('#wl-row-cart').style.display='none'; return; }
+
+      const ul = card.querySelector('.wl-cart-list');
+      ul.innerHTML='';
+      items.forEach(c=>{
+        const img = c.querySelector('img'); const imgSrc = img?.getAttribute('src')||'';
+        const linkImg = c.querySelector('.flex-shrink-0 a[href]')?.getAttribute('href')||'#';
+        const titleLink = c.querySelector('h6 a[href]'); const code = (titleLink?.textContent||'').trim() || 'Item';
+        const priceTxt = (c.querySelector('.flex-shrink-0.text-end .fw-bold')?.textContent||'').replace(/\s+/g,' ').trim(); // "$11.09 ea"
+        const qtyInput = c.querySelector('.qty-section input[type="text"]'); const qty = qtyInput? qtyInput.value : '';
+        ul.appendChild(dom(`<li>
+          <div class="wl-cart-left"><a href="${linkImg}"><img class="wl-cart-thumb" src="${imgSrc}" alt=""></a></div>
+          <div class="wl-cart-mid">
+            <div class="wl-cart-code"><a href="${linkImg}">${code}</a></div>
+            <div class="wl-meta">Qty ${qty || '—'}</div>
+          </div>
+          <div class="wl-cart-right">
+            <span class="wl-pill">${priceTxt||''}</span>
+          </div>
+        </li>`));
+      });
+
+      // Set CTA to the working cart URL
+      const firstUrl = doc.URL || (new URL(urls[0], location.origin)).toString();
+      card.querySelector('#wl-cart-cta')?.setAttribute('href', firstUrl);
+
+      card.style.display='';
     })();
   }
 })();
