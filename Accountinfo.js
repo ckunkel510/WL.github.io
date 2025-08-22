@@ -1,8 +1,8 @@
 
 /* ==========================================================
    Woodson — Account Overview (AccountInfo_R.aspx)
-   v3.3 — auto-fit grid, silent hides, Cart Snapshot placement,
-          live cart parsing with images, tidy mobile
+   v3.4 — Cart Snapshot from ShoppingCart.aspx (only),
+          robust parsing + silent hides
    ========================================================== */
 (function(){
   'use strict';
@@ -41,17 +41,13 @@
   .wl-ham-menu a:hover{background:${BRAND.bgSoft}}
   .wl-hide{position:absolute !important;left:-9999px !important;width:1px !important;height:1px !important;overflow:hidden !important}
 
-  /* GRID ROWS — cards never collapse below the min width */
+  /* GRID ROWS */
   .wl-row{display:grid;gap:14px;margin-bottom:14px}
   .wl-row-3{grid-template-columns:repeat(auto-fit, minmax(340px, 1fr));}
   .wl-row-2{grid-template-columns:repeat(auto-fit, minmax(420px, 1fr));}
   .wl-row-1{grid-template-columns:1fr;}
   @media (max-width: 1024px){ .wl-row-2{grid-template-columns:repeat(auto-fit, minmax(340px, 1fr));} }
-  @media (max-width: 720px){
-    .wl-row-3{grid-template-columns:1fr;}
-    .wl-row-2{grid-template-columns:1fr;}
-    .wl-top{flex-wrap:wrap; gap:10px}
-  }
+  @media (max-width: 720px){ .wl-row-3,.wl-row-2{grid-template-columns:1fr;} .wl-top{flex-wrap:wrap; gap:10px} }
 
   /* CARDS */
   .wl-card{min-width:0;background:#fff;border:1px solid ${BRAND.border};border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.05);overflow:hidden}
@@ -84,7 +80,7 @@
   .wl-cart-code{font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px}
   .wl-cart-right{display:flex;align-items:center;gap:8px}
 
-  /* MODALS (unchanged) */
+  /* MODALS (same as previous) */
   .wl-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.35);z-index:9999}
   .wl-modal.open{display:flex}
   .wl-modal-card{width:min(780px,94vw);background:#fff;border-radius:12px;border:1px solid ${BRAND.border};box-shadow:0 10px 28px rgba(0,0,0,.18);overflow:hidden}
@@ -118,10 +114,10 @@
   /* -------- init -------- */
   init().catch(()=>{});
   async function init(){
-    await waitFor('td.pageContentBody', {timeout:14000});
+    await waitFor('td.pageContentBody', {timeout:1000});
     await Promise.race([
-      waitFor('#ctl00_PageBody_AccountActivity_AccountActivityLeftColumn', {timeout:2000}),
-      waitFor('.accountActivity_r', {timeout:2000})
+      waitFor('#ctl00_PageBody_AccountActivity_AccountActivityLeftColumn', {timeout:1000}),
+      waitFor('.accountActivity_r', {timeout:1000})
     ]).catch(()=>{});
     buildUI();
     loadLists();
@@ -139,10 +135,7 @@
       if(k) last[k]={date:d,amount:a};
     });
 
-    const links={
-      jobs: $('#JobBalancesButton'),
-      statement: $('#GetInterimStatementLink')
-    };
+    const links={ jobs: $('#JobBalancesButton'), statement: $('#GetInterimStatementLink') };
     const acctName=(txt($('.panel.panelAccountInfo .listPageHeader'))||'').replace(/Account Information for/i,'').trim() || 'Your Account';
     const accountKey = acctName || 'unknown';
 
@@ -239,7 +232,7 @@
           </div>
         </div>
 
-        <!-- Cart Snapshot (inserted to row1 or as its own row below row2) -->
+        <!-- Cart Snapshot (placed top if no statements, else below row2) -->
         <div class="wl-row wl-row-1" id="wl-row-cart" style="display:none"></div>
 
         <!-- Row 3 -->
@@ -334,34 +327,31 @@
     const pageBody = $('td.pageContentBody') || document.body;
     pageBody.insertBefore(container, pageBody.firstChild);
 
-    /* place Cart card now (empty; we’ll fill it after fetch) */
+    /* Cart shell (we’ll fill it after fetch) */
     const cartCard = dom(`
       <div class="wl-card" id="wl-cart" style="display:none">
         <div class="wl-head">Cart Snapshot</div>
         <div class="wl-body">
           <ul class="wl-list wl-cart-list"></ul>
           <div class="wl-actions" style="margin-top:8px">
-            <a class="wl-btn primary" id="wl-cart-cta" href="Cart.aspx">Go to Cart</a>
+            <a class="wl-btn primary" id="wl-cart-cta" href="ShoppingCart.aspx">Go to Cart</a>
           </div>
         </div>
       </div>
     `);
 
     const row1 = $('#wl-row1', container);
-    const row2 = $('#wl-row2', container);
     const rowCart = $('#wl-row-cart', container);
     const stmtCard = $('#wl-statements', container);
     const topPay   = $('#wl-top-pay', container);
 
     if (hasStatements) {
-      // keep statements; show top Make Payment
-      rowCart.style.display = ''; // its own row between row2 and row3
+      rowCart.style.display = '';            // own row below row2
       rowCart.appendChild(cartCard);
     } else {
-      // hide statements & top payment, move Cart into row1
       if (stmtCard) stmtCard.style.display = 'none';
       if (topPay) topPay.style.display = 'none';
-      row1.appendChild(cartCard);
+      row1.appendChild(cartCard);            // take Statement’s place up top
     }
 
     /* hide legacy blocks */
@@ -375,7 +365,7 @@
       const btn = $('#wl-ham-btn', container);
       const menu = $('#wl-ham-menu', container);
       if (leftNav) { $$('.rmRootGroup .rmItem a', leftNav).forEach(a=> menu.appendChild(dom(`<a role="menuitem" href="${a.href}">${a.textContent.trim()}</a>`))); }
-      else { ['Invoices_r.aspx','CreditNotes_r.aspx','OpenOrders_r.aspx','Statements_R.aspx','ProductsPurchased_R.aspx','AccountPayment_r.aspx','AccountSettings.aspx','AddressList_R.aspx','Contacts_r.aspx','Cart.aspx']
+      else { ['Invoices_r.aspx','CreditNotes_r.aspx','OpenOrders_r.aspx','Statements_R.aspx','ProductsPurchased_R.aspx','AccountPayment_r.aspx','AccountSettings.aspx','AddressList_R.aspx','Contacts_r.aspx','ShoppingCart.aspx']
         .forEach(h=> menu.appendChild(dom(`<a role="menuitem" href="${h}">${h.replace(/_r\.aspx|\.aspx/,'').replace(/_/g,' ')}</a>`))); }
       const toggle=(open)=>{ menu.classList.toggle('open', open); btn.setAttribute('aria-expanded', open?'true':'false'); };
       btn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); toggle(!menu.classList.contains('open')); return false; });
@@ -488,17 +478,16 @@
     })();
   }
 
-  /* -------- async lists + cart -------- */
+  /* -------- async lists + CART (ShoppingCart.aspx only) -------- */
   async function loadLists(){
     const parser=new DOMParser();
-    async function fetchDoc(url){ try{ const r=await fetch(url,{credentials:'same-origin'}); if(!r.ok) throw 0; return parser.parseFromString(await r.text(),'text/html'); }catch{ return null; } }
+    async function fetchDoc(url){ try{ const r=await fetch(url,{credentials:'same-origin'}); if(!r.ok) throw 0; const text=await r.text(); return parser.parseFromString(text,'text/html'); }catch{ return null; } }
     const get=(el)=> (el?.textContent||'').trim();
     function mapRows(doc, cols){ if(!doc) return []; const t=doc.querySelector('.rgMasterTable'); if(!t) return []; return Array.from(t.querySelectorAll('tbody tr')).map(r=>{ const o={}; cols.forEach(c=> o[c]=get(r.querySelector(`td[data-title="${c}"]`))); const a=r.querySelector('a[href]'); o.link=a? new URL(a.getAttribute('href'), location.origin).toString():null; return o; }); }
-    function renderList(ul, items, builder, empty){ if(!ul) return; ul.innerHTML=''; if(!items.length){ ul.parentElement.parentElement.parentElement.style.display='none'; return; } items.forEach(it=> ul.appendChild(builder(it))); }
 
     const parseUS=(s)=>{ const m=String(s||'').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m? new Date(+m[3],+m[1]-1,+m[2]) : null; };
 
-    // Recent Activity (Invoices + Credits)
+    // Recent Activity
     (async ()=>{
       const invDoc=await fetchDoc('Invoices_r.aspx');
       let invs=mapRows(invDoc,['Invoice #','Date','Outstanding','Amount','Status']); if(!invs.length) invs=mapRows(invDoc,['Invoice Number','Date','Outstanding','Amount','Status']);
@@ -507,35 +496,22 @@
       let crs=mapRows(crDoc,['Credit #','Date','Amount','Status']); if(!crs.length) crs=mapRows(crDoc,['Credit Note #','Date','Amount','Status']);
       crs=crs.map(x=>({type:'Credit',id:x['Credit #']||x['Credit Note #']||'Credit',date:x['Date']||'',amount:x['Amount']||'',status:x['Status']||'',link:x.link||'CreditNotes_r.aspx'}));
       const all=invs.concat(crs).map(x=>({ ...x, _ts:(parseUS(x.date)||new Date(0)).getTime() })).sort((a,b)=> b._ts-a._ts).slice(0,6);
-
-      const ul=$('#wl-activity .wl-list');
-      if (!all.length){ $('#wl-activity')?.remove(); }
-      else {
-        ul.innerHTML='';
-        all.forEach(it=> ul.appendChild(dom(`<li>
-          <div>
-            <div><a href="${it.link}"><strong>${it.id}</strong></a> <span class="wl-pill">${it.type}</span></div>
-            <div class="wl-meta">${it.date}${it.status?` • ${it.status}`:''}</div>
-          </div>
-          <div><span class="wl-pill">${it.amount||''}</span></div>
-        </li>`)));
-        if (!crs.length) $('#wl-credits-btn')?.remove();
-      }
+      const card=$('#wl-activity'); const ul=card?.querySelector('.wl-list'); if(!card) return;
+      if (!all.length){ card.remove(); } else { ul.innerHTML=''; all.forEach(it=> ul.appendChild(dom(`<li>
+        <div><div><a href="${it.link}"><strong>${it.id}</strong></a> <span class="wl-pill">${it.type}</span></div><div class="wl-meta">${it.date}${it.status?` • ${it.status}`:''}</div></div>
+        <div><span class="wl-pill">${it.amount||''}</span></div>
+      </li>`))); if (!crs.length) $('#wl-credits-btn')?.remove(); }
     })();
 
     // Open Orders
     (async ()=>{
       const doc=await fetchDoc('OpenOrders_r.aspx');
       const rows=mapRows(doc,['Order #','Created','Status','Total Amount','Goods Total']).slice(0,5);
-      const card=$('#wl-orders');
-      if (!rows.length){ card?.remove(); return; }
-      const ul=$('#wl-orders .wl-list');
-      ul.innerHTML='';
+      const card=$('#wl-orders'); if (!card) return;
+      if (!rows.length){ card.remove(); return; }
+      const ul=card.querySelector('.wl-list'); ul.innerHTML='';
       rows.forEach(it=> ul.appendChild(dom(`<li>
-        <div>
-          <div><a href="${it.link||'OpenOrders_r.aspx'}"><strong>${it['Order #']||'Order'}</strong></a></div>
-          <div class="wl-meta">${it.Created||''}${it.Status?` • ${it.Status}`:''}</div>
-        </div>
+        <div><div><a href="${it.link||'OpenOrders_r.aspx'}"><strong>${it['Order #']||'Order'}</strong></a></div><div class="wl-meta">${it.Created||''}${it.Status?` • ${it.Status}`:''}</div></div>
         <div><span class="wl-pill">${it['Total Amount']||it['Goods Total']||''}</span></div>
       </li>`)));
     })();
@@ -546,10 +522,9 @@
       let rows=mapRows(doc,['Product','Description','Last Purchased','Qty','Price','Total','Product Code','Product #']);
       if(!rows.length) rows=mapRows(doc,['Product','Description','Date','Qty','Price','Product Code','Product #']);
       rows=rows.slice(0,10);
-      const card=$('#wl-purchases');
-      if (!rows.length){ card?.remove(); return; }
-      const ul=$('#wl-purchases .wl-list');
-      ul.innerHTML='';
+      const card=$('#wl-purchases'); if(!card) return;
+      if (!rows.length){ card.remove(); return; }
+      const ul=card.querySelector('.wl-list'); ul.innerHTML='';
       rows.forEach(it=>{
         const sku=it['Product Code']||it['Product #']||it['Product']||'';
         const title=it['Product']||it['Product #']||sku||'Product';
@@ -558,55 +533,51 @@
         const view=`Products.aspx?&searchText=${encodeURIComponent(sku)}`;
         ul.appendChild(dom(`<li>
           <div class="wl-cart-left"></div>
-          <div>
-            <div><strong>${title}</strong></div>
-            <div class="wl-meta">${when}${it.Qty?` • Qty ${it.Qty}`:''}</div>
-          </div>
-          <div>
-            ${total?`<span class="wl-pill">${total}</span>`:''}
-            <a class="wl-btn" href="${view}">View Product</a>
-          </div>
+          <div><div><strong>${title}</strong></div><div class="wl-meta">${when}${it.Qty?` • Qty ${it.Qty}`:''}</div></div>
+          <div>${total?`<span class="wl-pill">${total}</span>`:''}<a class="wl-btn" href="${view}">View Product</a></div>
         </li>`));
       });
     })();
 
-    // Cart Snapshot (tries multiple URLs)
+    // Cart Snapshot — ShoppingCart.aspx ONLY
     (async ()=>{
-      const urls=['Cart.aspx','ShoppingCart.aspx','Cart_r.aspx'];
-      let doc=null;
-      for (const u of urls){ doc = await fetchDoc(u); if (doc && doc.querySelector('.shopping-cart-details')) break; }
-      const card=$('#wl-cart');
-      if (!doc){ card?.remove(); $('#wl-row-cart').style.display='none'; return; }
+      const card=$('#wl-cart'); const rowCart=$('#wl-row-cart');
+      const doc = await fetchDoc('ShoppingCart.aspx');  // <— only this page
+      if (!doc){ card.remove(); rowCart.style.display='none'; return; }
 
-      const cont = doc.querySelector('.shopping-cart-details');
-      const items = cont ? Array.from(cont.querySelectorAll('.shopping-cart-item .cart-item-card')).slice(0,5) : [];
-      if (!items.length){ card?.remove(); $('#wl-row-cart').style.display='none'; return; }
+      const root = doc.querySelector('.shopping-cart-details');
+      if (!root){ card.remove(); rowCart.style.display='none'; return; }
 
-      const ul = card.querySelector('.wl-cart-list');
-      ul.innerHTML='';
-      items.forEach(c=>{
-        const img = c.querySelector('img'); const imgSrc = img?.getAttribute('src')||'';
-        const linkImg = c.querySelector('.flex-shrink-0 a[href]')?.getAttribute('href')||'#';
-        const titleLink = c.querySelector('h6 a[href]'); const code = (titleLink?.textContent||'').trim() || 'Item';
-        const priceTxt = (c.querySelector('.flex-shrink-0.text-end .fw-bold')?.textContent||'').replace(/\s+/g,' ').trim(); // "$11.09 ea"
-        const qtyInput = c.querySelector('.qty-section input[type="text"]'); const qty = qtyInput? qtyInput.value : '';
+      // Collect item cards and filter out placeholders/undefined
+      let items = Array.from(root.querySelectorAll('.shopping-cart-item .cart-item-card')).map(c=>{
+        const imgEl   = c.querySelector('img');
+        const imgSrc  = imgEl?.getAttribute('src')||'';
+        const titleA  = c.querySelector('h6 a[href]');
+        const code    = (titleA?.textContent||'').trim();
+        const hrefA   = titleA?.getAttribute('href') || c.querySelector('.flex-shrink-0 a[href]')?.getAttribute('href') || '#';
+        const qtyIn   = c.querySelector('.qty-section input[type="text"]');
+        const qty     = qtyIn ? qtyIn.value : '';
+        const unitEl  = c.querySelector('.flex-shrink-0.text-end .fw-bold') || c.querySelector('.fw-bold');
+        const unitTxt = (unitEl?.textContent||'').replace(/\s+/g,' ').trim(); // "$11.09 ea"
+        const valid   = !!code && !!imgSrc && !/undefined/i.test(imgSrc) && !/undefined/i.test(hrefA);
+        return valid ? {imgSrc, href: hrefA, code, qty, unitTxt} : null;
+      }).filter(Boolean).slice(0,5);
+
+      if (!items.length){ card.remove(); rowCart.style.display='none'; return; }
+
+      const ul = card.querySelector('.wl-cart-list'); ul.innerHTML='';
+      items.forEach(it=>{
         ul.appendChild(dom(`<li>
-          <div class="wl-cart-left"><a href="${linkImg}"><img class="wl-cart-thumb" src="${imgSrc}" alt=""></a></div>
-          <div class="wl-cart-mid">
-            <div class="wl-cart-code"><a href="${linkImg}">${code}</a></div>
-            <div class="wl-meta">Qty ${qty || '—'}</div>
-          </div>
-          <div class="wl-cart-right">
-            <span class="wl-pill">${priceTxt||''}</span>
-          </div>
+          <div class="wl-cart-left"><a href="${it.href}"><img class="wl-cart-thumb" src="${it.imgSrc}" alt=""></a></div>
+          <div class="wl-cart-mid"><div class="wl-cart-code"><a href="${it.href}">${it.code}</a></div><div class="wl-meta">Qty ${it.qty || '—'}</div></div>
+          <div class="wl-cart-right"><span class="wl-pill">${it.unitTxt||''}</span></div>
         </li>`));
       });
 
-      // Set CTA to the working cart URL
-      const firstUrl = doc.URL || (new URL(urls[0], location.origin)).toString();
-      card.querySelector('#wl-cart-cta')?.setAttribute('href', firstUrl);
-
+      // Ensure CTA targets ShoppingCart.aspx
+      card.querySelector('#wl-cart-cta')?.setAttribute('href','ShoppingCart.aspx');
       card.style.display='';
+      rowCart.style.display = ''; // ensure the row is visible if we had hidden it earlier
     })();
   }
 })();
