@@ -1885,11 +1885,12 @@ if (jobBtn){
 
 
 /* ==========================================================
-   Woodson — Client-side "Pay by Invoice" picker (v3.2)
+   Woodson — Client-side "Pay by Invoice" picker (v3.2 + TTL)
    - Mobile-friendly stacked rows (labels shown per cell)
    - Delegated click: opens modal on #wlOpenTxModalBtn reliably
    - Cross-mode friendly (exposes WL_AP.invoice.clearSelection/open)
    - Writes "Docs:" line and sets Amount; strips JOB/STATEMENT lines
+   - Persists WL_AP_SelectedDocs in localStorage with 30m TTL
    ========================================================== */
 (function(){
   'use strict';
@@ -1906,7 +1907,48 @@ if (jobBtn){
   const TX_PANEL_SEL = '#ctl00_PageBody_accountsTransactionsPanel';
   const GRID_SEL     = '#ctl00_PageBody_InvoicesGrid .rgMasterTable, .RadGrid .rgMasterTable';
   const IN_PAGE_URL  = location.pathname + location.search;
+
+  /* ---------- Persisted selection key + TTL helpers ---------- */
   const LS_KEY       = 'WL_AP_SelectedDocs';
+  const LS_TTL_MIN   = 30;
+
+  function lsSetWithExpiry(key, value, ttlMinutes = LS_TTL_MIN){
+    try{
+      const rec = { v: value, exp: Date.now() + ttlMinutes * 60 * 1000 };
+      localStorage.setItem(key, JSON.stringify(rec));
+    }catch{}
+  }
+  function lsGetWithExpiry(key){
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    try{
+      const obj = JSON.parse(raw);
+      // New format {v,exp}
+      if (obj && typeof obj === 'object' && 'exp' in obj && 'v' in obj){
+        if (Date.now() > Number(obj.exp || 0)){
+          localStorage.removeItem(key);
+          return null;
+        }
+        return obj.v;
+      }
+      // Legacy array format: migrate + return
+      lsSetWithExpiry(key, obj, LS_TTL_MIN);
+      return obj;
+    }catch{
+      localStorage.removeItem(key);
+      return null;
+    }
+  }
+  function lsRemove(key){ try{ localStorage.removeItem(key); }catch{} }
+  function lsTouch(key, ttlMinutes = LS_TTL_MIN){
+    const v = lsGetWithExpiry(key);
+    if (v == null) return false;
+    lsSetWithExpiry(key, v, ttlMinutes);
+    return true;
+  }
+  function saveSelectedDocs(docs, ttlMinutes = LS_TTL_MIN){ lsSetWithExpiry(LS_KEY, docs, ttlMinutes); }
+  function loadSelectedDocs(){ return lsGetWithExpiry(LS_KEY); }
+  function clearSelectedDocs(){ lsRemove(LS_KEY); }
 
   const MONEY = s => { const v = parseFloat(String(s||'').replace(/[^0-9.\-]/g,'')); return Number.isFinite(v)?v:0; };
   const FMT2  = n => Number(n||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
@@ -2156,6 +2198,9 @@ if (jobBtn){
     document.body.style.overflow = 'hidden';
     state.open = true;
 
+    // Refresh TTL on active use
+    lsTouch(LS_KEY);
+
     seedSelectionKeys();     // from LS + Remittance
     loadFromCurrentDOM();    // immediate
     loadAllPages().catch(e=> log.error('auto loadAll error', e)); // async fill
@@ -2194,17 +2239,17 @@ if (jobBtn){
     return out;
   }
 
- function forceAmountPostback(){
-  const a = document.getElementById('ctl00_PageBody_PaymentAmountTextBox');
-  if (!a) return;
-  try{ a.dispatchEvent(new Event('input', { bubbles:true })); a.dispatchEvent(new Event('change', { bubbles:true })); }catch{}
-  try{
-    if (typeof window.__doPostBack === 'function'){
-      const uniqueId = a.id.replace(/_/g,'$');
-      setTimeout(()=> window.__doPostBack(uniqueId, ''), 0);
-    }
-  }catch{}
-}
+  function forceAmountPostback(){
+    const a = document.getElementById('ctl00_PageBody_PaymentAmountTextBox');
+    if (!a) return;
+    try{ a.dispatchEvent(new Event('input', { bubbles:true })); a.dispatchEvent(new Event('change', { bubbles:true })); }catch{}
+    try{
+      if (typeof window.__doPostBack === 'function'){
+        const uniqueId = a.id.replace(/_/g,'$');
+        setTimeout(()=> window.__doPostBack(uniqueId, ''), 0);
+      }
+    }catch{}
+  }
 
   function loadFromCurrentDOM(){
     const tbody = document.getElementById('wlInvTbody');
@@ -2378,7 +2423,7 @@ if (jobBtn){
   function persistSelection(){
     try{
       const docs = Array.from(state.selected.keys());
-      localStorage.setItem(LS_KEY, JSON.stringify(docs));
+      saveSelectedDocs(docs); // with TTL
     }catch{}
   }
   function seedSelectionKeys(){
@@ -2397,9 +2442,9 @@ if (jobBtn){
       tokens.map(t=>t.trim()).filter(Boolean).forEach(t=> docs.add(t));
     }
 
-    // From localStorage
+    // From localStorage (with TTL)
     try{
-      const a = JSON.parse(localStorage.getItem(LS_KEY)||'[]');
+      const a = loadSelectedDocs();
       if (Array.isArray(a)) a.forEach(k=> docs.add(k));
     }catch{}
 
@@ -2544,7 +2589,8 @@ if (jobBtn){
       } catch {}
     }
 
-    try { localStorage.setItem(LS_KEY, JSON.stringify(docs)); } catch {}
+    // Save docs with TTL
+    try { saveSelectedDocs(docs); } catch {}
 
     try { window.WL_AP?.jobs?.clearSelection?.(); } catch {}
 
@@ -2578,7 +2624,7 @@ if (jobBtn){
   window.WL_AP.invoice = Object.assign(window.WL_AP.invoice || {}, {
     clearSelection(){
       state.selected.clear();
-      try{ localStorage.removeItem(LS_KEY); }catch{}
+      try{ clearSelectedDocs(); }catch{}
       renderRows(); renderStats();
       const current = getRemittanceText();
       const kept = String(current||'').split(/\r?\n/)
@@ -2606,6 +2652,7 @@ if (jobBtn){
   if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', boot, { once:true }); }
   else { boot(); }
 })();
+
 
 
 
