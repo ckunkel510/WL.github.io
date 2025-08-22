@@ -523,6 +523,7 @@
     // Radios: ensure visible only (selection handled in guards)
     ensurePayByCheckVisibleAndSelected();
 
+    
     // Amount quick chips
     const amountInput = byId('ctl00_PageBody_PaymentAmountTextBox');
     const owingVal = (function(){ const el = byId('ctl00_PageBody_AmountOwingLiteral'); return el ? parseMoney(el.value || el.textContent) : 0; })();
