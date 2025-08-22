@@ -1240,14 +1240,7 @@
     actions.appendChild(clearBtn);
 
     // Wire behavior
-    fillBtn.addEventListener('click', function(){
-      if (!amtInput) return;
-      if (Number.isFinite(owingVal) && owingVal > 0){
-        amtInput.value = owingVal.toFixed(2);
-        // Trigger server-side onchange (WebForms) if needed
-        setTimeout(()=> amtInput.dispatchEvent(new Event('change', { bubbles:true })), 0);
-      }
-    });
+    
     clearBtn.addEventListener('click', function(){
       if (!amtInput) return;
       amtInput.value = '';
