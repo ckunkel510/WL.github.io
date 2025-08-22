@@ -120,8 +120,8 @@
   async function init(){
     await waitFor('td.pageContentBody', {timeout:14000});
     await Promise.race([
-      waitFor('#ctl00_PageBody_AccountActivity_AccountActivityLeftColumn', {timeout:14000}),
-      waitFor('.accountActivity_r', {timeout:14000})
+      waitFor('#ctl00_PageBody_AccountActivity_AccountActivityLeftColumn', {timeout:2000}),
+      waitFor('.accountActivity_r', {timeout:2000})
     ]).catch(()=>{});
     buildUI();
     loadLists();
