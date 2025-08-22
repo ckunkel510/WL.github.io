@@ -341,7 +341,7 @@
       .wl-help{ color:var(--wl-sub); font-size:12px; margin-top:4px; }
 
       .wl-chips{ display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
-      .wl-chipbtn{ border:1px solid var(--wl-border); border-radius:999px; padding:7px 12px; background:#fff; font-weight:800; font-size:12px; cursor:pointer; }
+      .wl-chipbtn{ border:1px solid var(--wl-border); border-radius:999px; padding:7px 12px; background:#fff; font-weight:normal; font-size:12px; cursor:pointer; background-color:#6b0016; color:white; max-height:30px; }
 
       .wl-summary{ display:flex; flex-direction:column; gap:12px; }
       .wl-pillrow{ display:flex; gap:8px; flex-wrap:wrap; }
