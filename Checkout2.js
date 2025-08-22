@@ -7,24 +7,15 @@
   const TTL_MS   = 10 * 60 * 1000; // 10 minutes
 
   function setWithExpiry(key, value, ttlMs){
-    try {
-      const item = { value, expiry: Date.now() + ttlMs };
-      localStorage.setItem(key, JSON.stringify(item));
-    } catch {}
+    try { localStorage.setItem(key, JSON.stringify({ value, expiry: Date.now() + ttlMs })); } catch {}
   }
   function getWithExpiry(key){
     try {
       const raw = localStorage.getItem(key);
       if (!raw) return null;
       const item = JSON.parse(raw);
-      if (!item || typeof item !== 'object' || !('expiry' in item)) {
-        localStorage.removeItem(key);
-        return null;
-      }
-      if (Date.now() > item.expiry) {
-        localStorage.removeItem(key);
-        return null;
-      }
+      if (!item || typeof item !== 'object' || !('expiry' in item)) { localStorage.removeItem(key); return null; }
+      if (Date.now() > item.expiry) { localStorage.removeItem(key); return null; }
       return item.value;
     } catch { return null; }
   }
@@ -413,17 +404,15 @@ document.addEventListener('DOMContentLoaded', function() {
     const today    = new Date();
     const isoToday = formatLocal(today);
     const maxPickupD = new Date(); maxPickupD.setDate(maxPickupD.getDate() + 14);
-    const isoMaxPick = formatLocal(maxPickupD);
     const minDelD = new Date(); minDelD.setDate(minDelD.getDate() + 2);
-    const isoDel  = formatLocal(minDelD);
 
     const pickupInput   = pickupDiv.querySelector('#pickupDate');
     const pickupTimeSel = pickupDiv.querySelector('#pickupTime');
     const deliveryInput = deliveryDiv.querySelector('#deliveryDate');
 
     pickupInput.setAttribute('min', isoToday);
-    pickupInput.setAttribute('max', isoMaxPick);
-    deliveryInput.setAttribute('min', isoDel);
+    pickupInput.setAttribute('max', formatLocal(maxPickupD));
+    deliveryInput.setAttribute('min', formatLocal(minDelD));
 
     function formatTime(h,m){
       const ampm = h >= 12 ? 'PM' : 'AM';
@@ -536,41 +525,98 @@ document.addEventListener('DOMContentLoaded', function() {
   // expose so other blocks can call it
   window.WLCheckout.showStep = showStep;
 
-  // Jump to first validation error (after server-side validation)
-  function jumpToFirstValidationError(){
-    const sel = [
-      '.validation-summary-errors',
-      '.field-validation-error',
-      '.input-validation-error',
-      '.text-danger',
-      '[aria-invalid="true"]',
-      '.is-invalid',
-      '.has-error'
-    ].join(',');
-    const err = document.querySelector(sel);
-    if (!err) return false;
+  // Restore to saved step (default 2) for initial load
+  const savedInitial = (window.WLCheckout.getStep && WLCheckout.getStep()) || 2;
+  showStep(savedInitial);
+});
 
-    const pane = err.closest('.checkout-step');
-    if (pane && pane.dataset.step) {
-      const stepNum = parseInt(pane.dataset.step, 10) || 2;
-      showStep(stepNum);
-      setTimeout(()=>{ err.scrollIntoView({behavior:'smooth', block:'center'}); }, 0);
-      return true;
-    }
-    showStep(2);
-    return false;
+// ─────────────────────────────────────────────────────────────────────────────
+// Robust validation scanner → jump to the step that has the first visible error
+// (handles input flags, WebForms spans with controltovalidate, and summaries)
+// ─────────────────────────────────────────────────────────────────────────────
+(function(){
+  function isVisible(el){
+    if (!el) return false;
+    const s = window.getComputedStyle(el);
+    return s.display !== 'none' && s.visibility !== 'hidden' && el.offsetParent !== null;
   }
-  window.WLCheckout.jumpToFirstValidationError = jumpToFirstValidationError;
+  function findFirstInvalidElement(){
+    // 1) Per-input flags
+    const perInputSelectors = [
+      'input.input-validation-error',
+      'select.input-validation-error',
+      'textarea.input-validation-error',
+      'input.is-invalid',
+      'select.is-invalid',
+      'textarea.is-invalid',
+      '[aria-invalid="true"]'
+    ].join(',');
+    const badInputs = Array.from(document.querySelectorAll(perInputSelectors)).filter(isVisible);
+    if (badInputs.length) return badInputs[0];
 
-  // Restore step (TTL) and handle "expected navigation" that didn't happen
-  const saved = (window.WLCheckout.getStep && WLCheckout.getStep()) || null;
-  showStep(saved || 2);
-  try {
-    if (sessionStorage.getItem('wl_chk_expect_nav') === '1') {
-      sessionStorage.removeItem('wl_chk_expect_nav');
-      setTimeout(()=>{ jumpToFirstValidationError(); }, 0);
+    // 2) WebForms validators
+    const validators = Array.from(document.querySelectorAll(
+      'span[controltovalidate], span.validator, .field-validation-error, .text-danger'
+    )).filter(el => isVisible(el) && (el.textContent || '').trim().length >= 1);
+    if (validators.length){
+      const sp = validators[0];
+      const ctl = sp.getAttribute('controltovalidate');
+      if (ctl){
+        const target = document.getElementById(ctl) || document.querySelector('#' + CSS.escape(ctl));
+        if (target) return target;
+      }
+      const nearby = sp.closest('.epi-form-group-checkout, .form-group, .epi-form-col-single-checkout')
+                    ?.querySelector('input,select,textarea');
+      return nearby || sp;
     }
+
+    // 3) Summary fallback
+    const summary = document.querySelector('.validation-summary-errors li, .validation-summary-errors');
+    if (summary && isVisible(summary)) return summary;
+
+    return null;
+  }
+  function paneStepFor(el){
+    const pane = el && el.closest ? el.closest('.checkout-step') : null;
+    return pane && pane.dataset.step ? parseInt(pane.dataset.step, 10) : null;
+  }
+  function detectAndJumpToValidation(){
+    const culprit = findFirstInvalidElement();
+    if (!culprit) return false;
+    const stepNum = paneStepFor(culprit) || paneStepFor(
+      culprit.closest?.('.validator, .field-validation-error, .text-danger')
+    ) || 2;
+    (window.WLCheckout?.showStep || function(){})(stepNum);
+    try { culprit.scrollIntoView({behavior:'smooth', block:'center'}); } catch {}
+    return true;
+  }
+  window.WLCheckout = window.WLCheckout || {};
+  window.WLCheckout.detectAndJumpToValidation = detectAndJumpToValidation;
+})();
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Restore step (TTL) with smart validation bounce if a postback kept us here
+// ─────────────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', function(){
+  let expectedNav = false;
+  try {
+    expectedNav = sessionStorage.getItem('wl_chk_expect_nav') === '1';
+    sessionStorage.removeItem('wl_chk_expect_nav');
   } catch {}
+
+  if (expectedNav) {
+    // Try immediately and then with short retries (for late-rendered validators)
+    const tryJump = () => window.WLCheckout?.detectAndJumpToValidation?.() === true;
+    if (!tryJump()){
+      setTimeout(tryJump, 0);
+      setTimeout(tryJump, 300);
+      setTimeout(tryJump, 1200);
+      setTimeout(() => { if (!tryJump()) {
+        const saved = (window.WLCheckout.getStep && WLCheckout.getStep()) || 2;
+        window.WLCheckout.showStep(saved);
+      }}, 1500);
+    }
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -643,50 +689,33 @@ $(document).ready(function() {
       </div>`;
     $(".epi-form-col-single-checkout:has(.SaleTypeSelector)").append(shipHTML);
 
-    // DROP-IN REPLACEMENT
-function updateShippingStyles(val) {
-  const delRad  = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
-  const pickRad = $("#ctl00_PageBody_SaleTypeSelector_rbCollectLater");
-  const $btnDelivered = $("#btnDelivered");
-  const $btnPickup    = $("#btnPickup");
+    // ensure pointer events even if some CSS marks buttons disabled elsewhere
+    $('<style>.modern-shipping-selector .btn[disabled], .modern-shipping-selector .btn.disabled { pointer-events:auto; }</style>').appendTo(document.head);
 
-  // make sure nothing is actually disabled
-  $btnDelivered.removeClass("disabled").removeAttr("disabled").attr("aria-disabled","false");
-  $btnPickup   .removeClass("disabled").removeAttr("disabled").attr("aria-disabled","false");
+    function updateShippingStyles(val) {
+      const delRad  = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
+      const pickRad = $("#ctl00_PageBody_SaleTypeSelector_rbCollectLater");
+      const $btnDelivered = $("#btnDelivered");
+      const $btnPickup    = $("#btnPickup");
 
-  if (val === "rbDelivered") {
-    // switch radios (and trigger Step 7 logic)
-    delRad.prop("checked", true).trigger("change");
+      // clear any "disabled" state to keep them clickable
+      $btnDelivered.removeClass("disabled opacity-50").removeAttr("disabled").attr("aria-disabled","false");
+      $btnPickup   .removeClass("disabled opacity-50").removeAttr("disabled").attr("aria-disabled","false");
 
-    // active vs. grayed (but clickable)
-    $btnDelivered
-      .addClass("btn-primary")
-      .removeClass("btn-secondary opacity-50")
-      .attr("aria-pressed","true");
-    $btnPickup
-      .addClass("btn-secondary opacity-50")
-      .removeClass("btn-primary")
-      .attr("aria-pressed","false");
-
-    document.cookie = "pickupSelected=false; path=/";
-    document.cookie = "skipBack=false; path=/";
-  } else {
-    pickRad.prop("checked", true).trigger("change");
-
-    $btnPickup
-      .addClass("btn-primary")
-      .removeClass("btn-secondary opacity-50")
-      .attr("aria-pressed","true");
-    $btnDelivered
-      .addClass("btn-secondary opacity-50")
-      .removeClass("btn-primary")
-      .attr("aria-pressed","false");
-
-    document.cookie = "pickupSelected=true; path=/";
-    document.cookie = "skipBack=true; path=/";
-  }
-}
-
+      if (val === "rbDelivered") {
+        delRad.prop("checked", true).trigger("change");
+        $btnDelivered.addClass("btn-primary").removeClass("btn-secondary opacity-50").attr("aria-pressed","true");
+        $btnPickup   .addClass("btn-secondary opacity-50").removeClass("btn-primary").attr("aria-pressed","false");
+        document.cookie = "pickupSelected=false; path=/";
+        document.cookie = "skipBack=false; path=/";
+      } else {
+        pickRad.prop("checked", true).trigger("change");
+        $btnPickup   .addClass("btn-primary").removeClass("btn-secondary opacity-50").attr("aria-pressed","true");
+        $btnDelivered.addClass("btn-secondary opacity-50").removeClass("btn-primary").attr("aria-pressed","false");
+        document.cookie = "pickupSelected=true; path=/";
+        document.cookie = "skipBack=true; path=/";
+      }
+    }
 
     updateShippingStyles(
       $("#ctl00_PageBody_SaleTypeSelector_rbDelivered").is(":checked")
@@ -701,7 +730,7 @@ function updateShippingStyles(val) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Step 7 Continue: client validation → set step=2 + expect nav; if we stay,
-// jump to first error. (Covers both Continue buttons.)
+// jump to first error (covers both Continue buttons).
 // ─────────────────────────────────────────────────────────────────────────────
 $(document).ready(function(){
   $('#ctl00_PageBody_ContinueButton1, #ctl00_PageBody_ContinueButton2').on('click', function(e){
@@ -741,13 +770,10 @@ $(document).ready(function(){
 
     // Safety net: after a moment, if still on page and errors visible, jump
     setTimeout(function(){
-      const hasErrors = document.querySelector(
-        '.validation-summary-errors, .field-validation-error, .input-validation-error, .text-danger, [aria-invalid="true"], .is-invalid, .has-error'
-      );
-      if (hasErrors && window.WLCheckout?.jumpToFirstValidationError) {
-        WLCheckout.jumpToFirstValidationError();
+      if (window.WLCheckout?.detectAndJumpToValidation) {
+        WLCheckout.detectAndJumpToValidation();
       }
-    }, 2000);
+    }, 1200);
   });
 });
 
@@ -759,3 +785,4 @@ document.querySelectorAll('th').forEach(th => {
     th.style.display = 'none';
   }
 });
+
