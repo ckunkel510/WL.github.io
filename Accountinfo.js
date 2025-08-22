@@ -1,8 +1,8 @@
 
 /* ==========================================================
    Woodson — Account Overview Dashboard (AccountInfo_R.aspx)
-   v1.9 — rows w/ breathing space, Account Settings panel,
-           top-right Pay, robust init, brand styling
+   v2.1 — 3-up top row, 2-up second row, full-width purchases;
+          denser spacing, brand headers, robust init
    ========================================================== */
 (function(){
   'use strict';
@@ -25,7 +25,7 @@
   const next10=(d)=>{ if(!(d instanceof Date)) return '—'; const x=new Date(d.getFullYear(),d.getMonth(),d.getDate()); (x.getDate()<10)?x.setDate(10):x.setMonth(x.getMonth()+1,10); return x.toLocaleDateString(); };
 
   // Wait for important elements to exist (handles slow WebForms)
-  function waitFor(sel, {timeout=8000, interval=120}={}){
+  function waitFor(sel, {timeout=10000, interval=120}={}){
     return new Promise((resolve,reject)=>{
       const t0=Date.now();
       const tick=()=>{
@@ -40,42 +40,40 @@
     });
   }
 
-  /* ---------- styles ---------- */
+  /* ---------- styles (denser, branded) ---------- */
   const styles = `
   .wl-acct-root{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif}
-  .wl-row{display:grid;grid-template-columns:repeat(12,1fr);gap:16px;margin-bottom:24px}
-  .wl-card{background:#fff;border:1px solid ${BRAND.border};border-radius:16px;box-shadow:0 2px 6px rgba(0,0,0,.06);overflow:hidden}
-  .wl-head{background:${BRAND.primary};color:#fff;padding:12px 16px;font-weight:750;letter-spacing:.2px}
-  .wl-body{padding:16px;background:${BRAND.bgSoft}}
-  .wl-actions{display:flex;gap:10px;flex-wrap:wrap}
-  .wl-btn{display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;border-radius:10px;border:1px solid ${BRAND.border};background:#fff;text-decoration:none;color:#111;font-weight:600}
+  .wl-row{display:grid;grid-template-columns:repeat(12,1fr);gap:12px;margin-bottom:16px}
+  .wl-card{background:#fff;border:1px solid ${BRAND.border};border-radius:14px;box-shadow:0 1px 5px rgba(0,0,0,.05);overflow:hidden}
+  .wl-head{background:${BRAND.primary};color:#fff;padding:10px 14px;font-weight:750;letter-spacing:.2px}
+  .wl-body{padding:12px;background:${BRAND.bgSoft}}
+  .wl-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .wl-btn{display:inline-flex;align-items:center;justify-content:center;padding:8px 12px;border-radius:9px;border:1px solid ${BRAND.border};background:#fff;text-decoration:none;color:#111;font-weight:600;line-height:1}
   .wl-btn.primary{background:${BRAND.primary};border-color:${BRAND.primary};color:#fff}
   .wl-btn.primary:hover{background:${BRAND.primaryHover};border-color:${BRAND.primaryHover}}
   .wl-btn.disabled{opacity:.55;cursor:not-allowed;pointer-events:none}
   .wl-list{margin:0;padding:0;list-style:none}
-  .wl-list li{display:flex;justify-content:space-between;gap:12px;padding:12px;border-bottom:1px dashed #e7d6d9;background:#fff;border-radius:12px}
-  .wl-list li + li{margin-top:8px}
+  .wl-list li{display:flex;justify-content:space-between;gap:10px;padding:10px;border-bottom:1px dashed #e7d6d9;background:#fff;border-radius:10px}
+  .wl-list li + li{margin-top:6px}
   .wl-meta{font-size:.86rem;color:#5f5f5f}
   .wl-pill{display:inline-block;padding:2px 10px;border-radius:999px;background:#fff;border:1px solid #e0c7cc;font-size:.76rem;color:${BRAND.primary};font-weight:700}
-  .wl-kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
-  .wl-kpi{background:#fff;border:1px solid #ecd6db;border-radius:12px;padding:12px}
-  .wl-kpi .lbl{font-size:.82rem;color:#6e5f61}.wl-kpi .val{font-weight:800;font-size:1.1rem;margin-top:2px;color:${BRAND.primary}}
+  .wl-kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+  .wl-kpi{background:#fff;border:1px solid #ecd6db;border-radius:10px;padding:10px}
+  .wl-kpi .lbl{font-size:.82rem;color:#6e5f61}.wl-kpi .val{font-weight:800;font-size:1.05rem;margin-top:2px;color:${BRAND.primary}}
   .col-12{grid-column:span 12}.col-8{grid-column:span 8}.col-6{grid-column:span 6}.col-4{grid-column:span 4}
   @media (max-width:1200px){.col-8,.col-6,.col-4{grid-column:span 12}}
   /* Top with hamburger + primary action */
-  .wl-top{position:relative;display:flex;align-items:center;justify-content:space-between;margin:8px 0 16px}
-  .wl-ham{display:inline-flex;align-items:center;gap:12px}
-  .wl-title{font-size:1.3rem;font-weight:800;color:${BRAND.primary}}
-  .wl-ham button{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid ${BRAND.border};border-radius:10px;background:#fff;cursor:pointer;font-weight:700;color:${BRAND.primary}}
+  .wl-top{position:relative;display:flex;align-items:center;justify-content:space-between;margin:6px 0 12px}
+  .wl-ham{display:inline-flex;align-items:center;gap:10px}
+  .wl-title{font-size:1.2rem;font-weight:800;color:${BRAND.primary}}
+  .wl-ham button{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid ${BRAND.border};border-radius:9px;background:#fff;cursor:pointer;font-weight:700;color:${BRAND.primary}}
   .wl-ham button:focus{outline:2px solid ${BRAND.primary};outline-offset:2px}
-  .wl-ham-menu{position:absolute;left:8px;top:56px;z-index:1000;background:#fff;border:1px solid ${BRAND.border};border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:8px;width:min(380px,92vw);max-height:70vh;overflow:auto;transition:max-height .25s ease, opacity .2s ease; max-height:0; opacity:0; pointer-events:none}
+  .wl-ham-menu{position:absolute;left:8px;top:48px;z-index:1000;background:#fff;border:1px solid ${BRAND.border};border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:8px;width:min(380px,92vw);max-height:70vh;overflow:auto;transition:max-height .25s ease, opacity .2s ease; max-height:0; opacity:0; pointer-events:none}
   .wl-ham-menu.open{max-height:70vh; opacity:1; pointer-events:auto}
-  .wl-ham-menu a{display:block;padding:10px 12px;border-radius:8px;color:#111;text-decoration:none}
+  .wl-ham-menu a{display:block;padding:8px 10px;border-radius:8px;color:#111;text-decoration:none}
   .wl-ham-menu a:hover{background:${BRAND.bgSoft}}
   /* Hide original left nav + legacy blocks */
   .wl-hide{position:absolute !important;left:-9999px !important;width:1px !important;height:1px !important;overflow:hidden !important}
-  /* Spacers for breathing room */
-  .wl-spacer{background:transparent;border:none;box-shadow:none}
   `;
   document.head.appendChild(dom(`<style>${styles}</style>`));
 
@@ -83,12 +81,11 @@
   init().catch(()=>{});
 
   async function init(){
-    await waitFor('td.pageContentBody', {timeout:10000});
+    await waitFor('td.pageContentBody', {timeout:12000});
     await Promise.race([
-      waitFor('#ctl00_PageBody_AccountActivity_AccountActivityLeftColumn', {timeout:10000}),
-      waitFor('.accountActivity_r', {timeout:10000})
+      waitFor('#ctl00_PageBody_AccountActivity_AccountActivityLeftColumn', {timeout:12000}),
+      waitFor('.accountActivity_r', {timeout:12000})
     ]).catch(()=>{});
-
     buildUI();
     loadLists();
   }
@@ -104,13 +101,13 @@
       if(k) last[k]={date:d,amount:a};
     });
     const links={
-      cards:$('#CustomerCardsLink') || $('#ctl00_PageBody_AccountActivity_ManageStoredCardsForNonCashCustomers') || $('#CustomerCards'), // fallback
+      cards:$('#CustomerCardsLink') || $('#ctl00_PageBody_AccountActivity_ManageStoredCardsForNonCashCustomers') || $('#CustomerCards'),
       jobs: $('#JobBalancesButton'),
       statement: $('#GetInterimStatementLink')
     };
     const acctName=(txt($('.panel.panelAccountInfo .listPageHeader'))||'').replace(/Account Information for/i,'').trim() || 'Your Account';
 
-    // Pay-this-statement URL
+    // Pay-this-statement URL (prefill)
     const stmtNetAmt = mNum(last['Last Statement Net Amount']?.amount);
     const stmtDate   = parseUS(last['Last Statement Amount']?.date || last['Last Statement Net Amount']?.date);
     const stmtDue    = next10(stmtDate);
@@ -118,13 +115,17 @@
       const base = 'AccountPayment_r.aspx';
       const q = new URLSearchParams();
       if (stmtNetAmt>0) q.set('utm_total', stmtNetAmt.toFixed(2));
-      if (stmtDate)     q.set('utm_note', `Statement ${stmtDate.toLocaleDateString()}`); // optional
+      if (stmtDate)     q.set('utm_note', `Statement ${stmtDate.toLocaleDateString()}`);
       q.set('utm_source','AccountInfo'); q.set('utm_action','PayStatement');
       return `${base}?${q.toString()}`;
     })();
     const payTopUrl = 'AccountPayment_r.aspx?utm_source=AccountInfo&utm_action=MakePayment';
 
-    /* mount UI */
+    /* mount UI — EXACT LAYOUT:
+       Row 1: Snapshot (4) + Settings (4) + Statements (4)
+       Row 2: Recent Activity (6) + Open Orders (6)
+       Row 3: Recent Purchases (12)
+    */
     const container = dom(`
       <div class="wl-acct-root">
         <div class="wl-top">
@@ -138,25 +139,25 @@
           </div>
         </div>
 
-        <!-- Row 1: Snapshot (L) + Account Settings (R) -->
+        <!-- Row 1: 3-up -->
         <div class="wl-row">
-          <div class="wl-card col-6" id="wl-snapshot">
+          <div class="wl-card col-4" id="wl-snapshot">
             <div class="wl-head">Account Snapshot</div>
             <div class="wl-body">
               <div class="wl-kpis">
                 <div class="wl-kpi"><div class="lbl">Net Balance</div><div class="val">${snapshot['Net Balance'] ?? '—'}</div></div>
                 <div class="wl-kpi"><div class="lbl">On Order</div><div class="val">${snapshot['On Order'] ?? '—'}</div></div>
               </div>
-              <div class="wl-actions" style="margin-top:10px">
+              <div class="wl-actions" style="margin-top:8px">
                 <a class="wl-btn" href="${href(links.jobs)||'JobBalances_R.aspx'}">Job Balances</a>
               </div>
             </div>
           </div>
 
-          <div class="wl-card col-6" id="wl-settings">
+          <div class="wl-card col-4" id="wl-settings">
             <div class="wl-head">Account Settings</div>
             <div class="wl-body">
-              <div class="wl-actions" style="margin-bottom:8px">
+              <div class="wl-actions" style="margin-bottom:6px">
                 <a class="wl-btn" href="AccountSettings.aspx">Edit Account Settings</a>
                 <a class="wl-btn" href="CustomerCards.aspx">Manage Stored Cards</a>
                 <a class="wl-btn" href="AddressList_R.aspx">Addresses</a>
@@ -164,14 +165,11 @@
                 <a class="wl-btn" href="https://woodsonwholesaleinc.formstack.com/forms/agtimber2027" target="_blank" rel="noopener">Apply Tax Exemption</a>
                 <a class="wl-btn disabled" href="#" aria-disabled="true" title="Coming soon">Edit Communication Preferences</a>
               </div>
-              <div class="wl-meta">Update your profile (name, email, password), manage saved cards, and maintain addresses and contacts. Communication preferences will be available soon.</div>
+              <div class="wl-meta">Update your profile (name, email, password), manage cards, and maintain addresses/contacts. Communication preferences coming soon.</div>
             </div>
           </div>
-        </div>
 
-        <!-- Row 2: Statements (L) + Spacer (R) -->
-        <div class="wl-row">
-          <div class="wl-card col-6" id="wl-statements">
+          <div class="wl-card col-4" id="wl-statements">
             <div class="wl-head">Statements</div>
             <div class="wl-body">
               <div class="wl-meta">Last Statement Date: <strong>${last['Last Statement Amount']?.date || '—'}</strong></div>
@@ -179,52 +177,46 @@
               <div class="wl-meta">Net Amount: <strong>${last['Last Statement Net Amount']?.amount || '—'}</strong></div>
               <div class="wl-meta">Finance Charges: <strong>${last['Last Statement Finance Charges']?.amount || '—'}</strong></div>
               <div class="wl-meta">Due Date: <strong>${stmtDue}</strong></div>
-              <div class="wl-actions" style="margin-top:10px">
+              <div class="wl-actions" style="margin-top:8px">
                 <a class="wl-btn primary" id="wl-pay-statement" href="${payStmtUrl}">Pay This Statement</a>
                 <a class="wl-btn" href="${href(links.statement)}" target="_blank" rel="noopener">Generate Interim Statement</a>
-                <a class="wl-btn" href="Statements_R.aspx">View All Statements</a>
+                <a class="wl-btn" href="Statements_R.aspx">View All</a>
               </div>
             </div>
           </div>
-          <div class="wl-card wl-spacer col-6" aria-hidden="true"></div>
         </div>
 
-        <!-- Row 3: Recent Activity (L) + Spacer (R) -->
+        <!-- Row 2: 2-up -->
         <div class="wl-row">
           <div class="wl-card col-6" id="wl-activity">
             <div class="wl-head">Recent Activity</div>
             <div class="wl-body">
               <ul class="wl-list" data-empty="Loading…"></ul>
-              <div class="wl-actions" style="margin-top:10px">
+              <div class="wl-actions" style="margin-top:8px">
                 <a class="wl-btn" href="Invoices_r.aspx">View Invoices</a>
                 <a class="wl-btn" href="CreditNotes_r.aspx">View Credits</a>
               </div>
             </div>
           </div>
-          <div class="wl-card wl-spacer col-6" aria-hidden="true"></div>
-        </div>
 
-        <!-- Row 4: Open Orders (L) + Spacer (R) -->
-        <div class="wl-row">
           <div class="wl-card col-6" id="wl-orders">
             <div class="wl-head">Open Orders</div>
             <div class="wl-body">
               <ul class="wl-list" data-empty="Loading…"></ul>
-              <div class="wl-actions" style="margin-top:10px">
+              <div class="wl-actions" style="margin-top:8px">
                 <a class="wl-btn" href="OpenOrders_r.aspx">View All Orders</a>
               </div>
             </div>
           </div>
-          <div class="wl-card wl-spacer col-6" aria-hidden="true"></div>
         </div>
 
-        <!-- Row 5: Recent Purchases full width -->
+        <!-- Row 3: full-width purchases -->
         <div class="wl-row">
           <div class="wl-card col-12" id="wl-purchases">
             <div class="wl-head">Recent Purchases</div>
             <div class="wl-body">
               <ul class="wl-list" data-empty="Loading…"></ul>
-              <div class="wl-actions" style="margin-top:10px">
+              <div class="wl-actions" style="margin-top:8px">
                 <a class="wl-btn" href="ProductsPurchased_R.aspx">View More Purchased Products</a>
               </div>
             </div>
@@ -251,7 +243,6 @@
           menu.appendChild(dom(`<a role="menuitem" href="${a.href}">${txt(a)}</a>`));
         });
       } else {
-        // minimal fallback
         ['Invoices_r.aspx','CreditNotes_r.aspx','OpenOrders_r.aspx','Statements_R.aspx','ProductsPurchased_R.aspx','AccountPayment_r.aspx','AccountSettings.aspx','AddressList_R.aspx','Contacts_r.aspx']
           .forEach(h=> menu.appendChild(dom(`<a role="menuitem" href="${h}">${h.replace(/_r\.aspx|\.aspx/,'').replace(/_/g,' ')}</a>`)));
       }
@@ -322,7 +313,7 @@
       </li>`), 'No open orders.');
     })();
 
-    // Recent Purchases: top 10 + "View Product" to Products.aspx?searchText=SKU
+    // Recent Purchases: top 10 + link to Products.aspx?searchText=SKU
     (async ()=>{
       const doc=await fetchDoc('ProductsPurchased_R.aspx');
       let rows=mapRows(doc,['Product','Description','Last Purchased','Qty','Price','Total','Product Code','Product #']);
