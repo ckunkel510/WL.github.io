@@ -313,6 +313,9 @@
       :root{ --wl-bg:#f6f7fb; --wl-card:#fff; --wl-border:#e5e7eb;
              --wl-text:#0f172a; --wl-sub:#475569; --wl-brand:#6b0016; --wl-focus:#93c5fd; }
       .bodyFlexContainer{ background:var(--wl-bg); }
+      div#wlcheaderquicklinks{ display: none !important;}
+      div#wlcheader{height: auto !important;}
+      div@siteHeaderContent{height: 75px !important;}
 
       .wl-shell{ display:grid; gap:18px; grid-template-areas:"left right" "tx tx"; }
       @media(min-width:1200px){ .wl-shell{ grid-template-columns: 1fr 380px; } }
