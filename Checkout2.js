@@ -643,38 +643,50 @@ $(document).ready(function() {
       </div>`;
     $(".epi-form-col-single-checkout:has(.SaleTypeSelector)").append(shipHTML);
 
-    function updateShippingStyles(val) {
-      const delRad  = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
-      const pickRad = $("#ctl00_PageBody_SaleTypeSelector_rbCollectLater");
-      const $btnDelivered = $("#btnDelivered");
-      const $btnPickup    = $("#btnPickup");
+    // DROP-IN REPLACEMENT
+function updateShippingStyles(val) {
+  const delRad  = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
+  const pickRad = $("#ctl00_PageBody_SaleTypeSelector_rbCollectLater");
+  const $btnDelivered = $("#btnDelivered");
+  const $btnPickup    = $("#btnPickup");
 
-      if (val === "rbDelivered") {
-        delRad.prop("checked", true).trigger("change");
-        $btnDelivered
-          .addClass("btn-primary")
-          .removeClass("btn-secondary disabled opacity-50")
-          .attr("aria-pressed","true").attr("aria-disabled","false");
-        $btnPickup
-          .addClass("btn-secondary disabled opacity-50")
-          .removeClass("btn-primary")
-          .attr("aria-pressed","false").attr("aria-disabled","true");
-        document.cookie = "pickupSelected=false; path=/";
-        document.cookie = "skipBack=false; path=/";
-      } else {
-        pickRad.prop("checked", true).trigger("change");
-        $btnPickup
-          .addClass("btn-primary")
-          .removeClass("btn-secondary disabled opacity-50")
-          .attr("aria-pressed","true").attr("aria-disabled","false");
-        $btnDelivered
-          .addClass("btn-secondary disabled opacity-50")
-          .removeClass("btn-primary")
-          .attr("aria-pressed","false").attr("aria-disabled","true");
-        document.cookie = "pickupSelected=true; path=/";
-        document.cookie = "skipBack=true; path=/";
-      }
-    }
+  // make sure nothing is actually disabled
+  $btnDelivered.removeClass("disabled").removeAttr("disabled").attr("aria-disabled","false");
+  $btnPickup   .removeClass("disabled").removeAttr("disabled").attr("aria-disabled","false");
+
+  if (val === "rbDelivered") {
+    // switch radios (and trigger Step 7 logic)
+    delRad.prop("checked", true).trigger("change");
+
+    // active vs. grayed (but clickable)
+    $btnDelivered
+      .addClass("btn-primary")
+      .removeClass("btn-secondary opacity-50")
+      .attr("aria-pressed","true");
+    $btnPickup
+      .addClass("btn-secondary opacity-50")
+      .removeClass("btn-primary")
+      .attr("aria-pressed","false");
+
+    document.cookie = "pickupSelected=false; path=/";
+    document.cookie = "skipBack=false; path=/";
+  } else {
+    pickRad.prop("checked", true).trigger("change");
+
+    $btnPickup
+      .addClass("btn-primary")
+      .removeClass("btn-secondary opacity-50")
+      .attr("aria-pressed","true");
+    $btnDelivered
+      .addClass("btn-secondary opacity-50")
+      .removeClass("btn-primary")
+      .attr("aria-pressed","false");
+
+    document.cookie = "pickupSelected=true; path=/";
+    document.cookie = "skipBack=true; path=/";
+  }
+}
+
 
     updateShippingStyles(
       $("#ctl00_PageBody_SaleTypeSelector_rbDelivered").is(":checked")
