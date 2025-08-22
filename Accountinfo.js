@@ -1,21 +1,18 @@
 
 /* ==========================================================
    Woodson — Account Overview (AccountInfo_R.aspx)
-   v2.8 — wider cards, better breakpoints, toggle-based
-          Account Changes modal, roomy modal buttons
+   v3.0 — fixed narrow columns & wrapping, auto-fit grid, roomy modals
    ========================================================== */
 (function(){
   'use strict';
   if (!/AccountInfo_R\.aspx/i.test(location.pathname)) return;
 
-  /* ---------- OPTIONAL Google Sheet endpoints (Apps Script) ----------
-     Leave blank for local-only persistence. Enable CORS to your domain.
-  ------------------------------------------------------------------- */
-  const SHEET_API_GET  = ''; // GET  ?accountKey=...  -> JSON {prefs}
-  const SHEET_API_POST = ''; // POST {prefs}         -> 200 OK
-  const SHEET_REQ_POST = ''; // POST {request}       -> 200 OK
+  /* Optional: Google Sheet endpoints (leave blank for local only) */
+  const SHEET_API_GET  = '';
+  const SHEET_API_POST = '';
+  const SHEET_REQ_POST = '';
 
-  /* ---------- utils ---------- */
+  /* utils */
   const BRAND = { primary:'#6b0016', primaryHover:'#540011', bgSoft:'#fbf5f6', border:'#e6e6e6' };
   const $=(s,r=document)=>r.querySelector(s);
   const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
@@ -27,78 +24,61 @@
   const next10=(d)=>{ if(!(d instanceof Date)) return '—'; const x=new Date(d.getFullYear(),d.getMonth(),d.getDate()); (x.getDate()<10)?x.setDate(10):x.setMonth(x.getMonth()+1,10); return x.toLocaleDateString(); };
   const emailOK=(v)=> /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v||'').trim());
   const digits=(v)=> String(v||'').replace(/\D+/g,'').slice(0,15);
-  function waitFor(sel,{timeout=12000,interval=120}={}){return new Promise((res,rej)=>{const t0=Date.now();const tick=()=>{const el=$(sel);if(el) return res(el); if(Date.now()-t0>=timeout) return rej(new Error('timeout '+sel)); setTimeout(tick,interval)}; (document.readyState==='loading')?document.addEventListener('DOMContentLoaded',tick,{once:true}):tick();});}
+  function waitFor(sel,{timeout=14000,interval=120}={}){return new Promise((res,rej)=>{const t0=Date.now();const tick=()=>{const el=$(sel);if(el) return res(el); if(Date.now()-t0>=timeout) return rej(new Error('timeout '+sel)); setTimeout(tick,interval)}; (document.readyState==='loading')?document.addEventListener('DOMContentLoaded',tick,{once:true}):tick();});}
 
-  /* ---------- styles (wider cards + better stacking + modal width) ---------- */
+  /* ----------- styles: auto-fit grid + no wrap glitches ----------- */
   const styles = `
-  .wl-acct-root{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif}
-  /* Rows: small gutters so cards are wider */
-  .wl-row{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:8px;margin-bottom:12px}
-
-  /* Row templates by density */
-  .wl-3up{grid-template-columns:repeat(12,minmax(0,1fr))}
-  .wl-2up{grid-template-columns:repeat(12,minmax(0,1fr))}
-  .wl-1up{grid-template-columns:repeat(12,minmax(0,1fr))}
-  /* cards */
-  .wl-card{background:#fff;border:1px solid ${BRAND.border};border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.05);overflow:hidden;min-width:0}
-  .wl-head{background:${BRAND.primary};color:#fff;padding:10px 14px;font-weight:750;letter-spacing:.2px}
-  .wl-body{padding:12px;background:${BRAND.bgSoft}}
-  .wl-actions{display:flex;gap:8px;flex-wrap:wrap}
-  .wl-btn{display:inline-flex;align-items:center;justify-content:center;padding:8px 14px;border-radius:9px;border:1px solid ${BRAND.border};background:#fff;text-decoration:none;color:#111;font-weight:600;line-height:1}
-  .wl-btn.primary{background:${BRAND.primary};border-color:${BRAND.primary};color:#fff}
-  .wl-btn.primary:hover{background:${BRAND.primaryHover};border-color:${BRAND.primaryHover}}
-  .wl-btn.block{width:100%}
-
-  .wl-list{margin:0;padding:0;list-style:none}
-  .wl-list li{display:flex;justify-content:space-between;gap:10px;padding:10px;border-bottom:1px dashed #e7d6d9;background:#fff;border-radius:9px}
-  .wl-list li + li{margin-top:6px}
-  .wl-meta{font-size:.86rem;color:#5f5f5f}
-  .wl-pill{display:inline-block;padding:2px 10px;border-radius:999px;background:#fff;border:1px solid #e0c7cc;font-size:.76rem;color:${BRAND.primary};font-weight:700}
-
-  .wl-kpis{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
-  .wl-kpi{background:#fff;border:1px solid #ecd6db;border-radius:10px;padding:10px}
-  .wl-kpi .lbl{font-size:.82rem;color:#6e5f61}.wl-kpi .val{font-weight:800;font-size:1.05rem;margin-top:2px;color:${BRAND.primary}}
-
-  /* Top bar */
+  .wl-acct-root, .wl-acct-root * { box-sizing: border-box; }
+  .wl-acct-root{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif; width:100%}
   .wl-top{position:relative;display:flex;align-items:center;justify-content:space-between;margin:6px 0 12px}
   .wl-ham{display:inline-flex;align-items:center;gap:10px}
   .wl-title{font-size:1.15rem;font-weight:800;color:${BRAND.primary}}
   .wl-ham button{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid ${BRAND.border};border-radius:9px;background:#fff;cursor:pointer;font-weight:700;color:${BRAND.primary}}
-  .wl-ham button:focus{outline:2px solid ${BRAND.primary};outline-offset:2px}
   .wl-ham-menu{position:absolute;left:8px;top:44px;z-index:1000;background:#fff;border:1px solid ${BRAND.border};border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.12);padding:8px;width:min(380px,92vw);max-height:70vh;overflow:auto;transition:max-height .25s ease, opacity .2s ease; max-height:0; opacity:0; pointer-events:none}
   .wl-ham-menu.open{max-height:70vh; opacity:1; pointer-events:auto}
   .wl-ham-menu a{display:block;padding:8px 10px;border-radius:8px;color:#111;text-decoration:none}
   .wl-ham-menu a:hover{background:${BRAND.bgSoft}}
-  /* Hide legacy left nav */
   .wl-hide{position:absolute !important;left:-9999px !important;width:1px !important;height:1px !important;overflow:hidden !important}
 
-  /* Columns — make each card wider at each breakpoint */
-  /* Desktop XL (≥1280): top row 3-up (4/4/4), second row 2-up (6/6) */
-  @media (min-width:1280px){
-    .col-xl-4{grid-column:span 4}
-    .col-xl-6{grid-column:span 6}
-    .col-xl-12{grid-column:span 12}
-    .wl-row{gap:10px}
-  }
-  /* Desktop / Tablet (≥960 and <1280): turn 3-up into 2-up (6/6) and stack the third below */
-  @media (min-width:960px) and (max-width:1279.98px){
-    .col-lg-6{grid-column:span 6}
-    .col-lg-12{grid-column:span 12}
-    .wl-row{gap:10px}
-  }
-  /* Mobile (<960): single column full width */
-  @media (max-width:959.98px){
-    .col-md-12{grid-column:span 12}
-    .wl-row{gap:8px}
-    .wl-actions .wl-btn{flex:1 1 auto}              /* make row buttons share width */
-    .wl-modal-actions .wl-btn{flex:1 1 auto}        /* modal buttons fullish width */
-    .wl-btn.block{width:100%}
+  /* GRID ROWS — cards never collapse below the min-widths */
+  .wl-row{display:grid;gap:14px;margin-bottom:14px}
+  .wl-row-3{grid-template-columns:repeat(auto-fit, minmax(340px, 1fr));}
+  .wl-row-2{grid-template-columns:repeat(auto-fit, minmax(420px, 1fr));}
+  .wl-row-1{grid-template-columns:1fr;}
+  @media (max-width: 1024px){ .wl-row-2{grid-template-columns:repeat(auto-fit, minmax(340px, 1fr));} }
+  @media (max-width: 720px){
+    .wl-row-3{grid-template-columns:1fr;}
+    .wl-row-2{grid-template-columns:1fr;}
+    .wl-top{flex-wrap:wrap; gap:10px}
   }
 
-  /* ---------- Modals ---------- */
+  /* CARDS */
+  .wl-card{min-width:0;background:#fff;border:1px solid ${BRAND.border};border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.05);overflow:hidden}
+  .wl-head{background:${BRAND.primary};color:#fff;padding:10px 14px;font-weight:750;letter-spacing:.2px;white-space:nowrap}
+  .wl-body{padding:12px;background:${BRAND.bgSoft}}
+
+  /* KPIs */
+  .wl-kpis{display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:10px}
+  .wl-kpi{background:#fff;border:1px solid #ecd6db;border-radius:10px;padding:10px;min-width:0}
+  .wl-kpi .lbl{font-size:.9rem;color:#6e5f61;white-space:nowrap}
+  .wl-kpi .val{font-weight:800;font-size:1.1rem;margin-top:2px;color:${BRAND.primary};white-space:nowrap}
+
+  /* Lists & buttons */
+  .wl-list{margin:0;padding:0;list-style:none}
+  .wl-list li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px;border-bottom:1px dashed #e7d6d9;background:#fff;border-radius:9px;min-width:0}
+  .wl-meta{font-size:.9rem;color:#5f5f5f}
+  .wl-pill{display:inline-block;padding:2px 10px;border-radius:999px;background:#fff;border:1px solid #e0c7cc;font-size:.8rem;color:${BRAND.primary};font-weight:700;white-space:nowrap}
+
+  .wl-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .wl-btn{display:inline-flex;align-items:center;justify-content:center;padding:9px 14px;border-radius:9px;border:1px solid ${BRAND.border};background:#fff;text-decoration:none;color:#111;font-weight:700;line-height:1.2;white-space:nowrap;min-width:150px}
+  .wl-btn.primary{background:${BRAND.primary};border-color:${BRAND.primary};color:#fff}
+  .wl-btn.primary:hover{background:${BRAND.primaryHover};border-color:${BRAND.primaryHover}}
+  @media (max-width: 560px){ .wl-btn{flex:1 1 auto; min-width:unset} }
+
+  /* MODALS */
   .wl-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.35);z-index:9999}
   .wl-modal.open{display:flex}
-  .wl-modal-card{width:min(760px,94vw);background:#fff;border-radius:12px;border:1px solid ${BRAND.border};box-shadow:0 10px 28px rgba(0,0,0,.18);overflow:hidden}
+  .wl-modal-card{width:min(780px,94vw);background:#fff;border-radius:12px;border:1px solid ${BRAND.border};box-shadow:0 10px 28px rgba(0,0,0,.18);overflow:hidden}
   .wl-modal-head{background:${BRAND.primary};color:#fff;padding:12px 16px;font-weight:750}
   .wl-modal-body{padding:16px}
   .wl-form{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:10px}
@@ -109,28 +89,25 @@
     width:100%; padding:10px 12px; border:1px solid #ddd; border-radius:8px; background:#fff; font:inherit;
   }
   .wl-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px}
-  /* On very small screens, make action buttons stack full width */
-  @media (max-width:520px){ .wl-modal-actions{flex-wrap:wrap} .wl-modal-actions .wl-btn{flex:1 1 100%} }
+  .wl-modal-actions .wl-btn{min-width:160px}
+  @media (max-width:560px){ .wl-form .half{grid-column:span 12} .wl-modal-actions{flex-wrap:wrap} .wl-modal-actions .wl-btn{flex:1 1 100%} }
 
-  /* Switch (toggle) styling */
+  /* Switch toggles */
   .wl-switch{display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid #ddd;border-radius:10px;padding:10px}
   .wl-switch .info{display:flex;flex-direction:column;gap:4px}
   .wl-switch .title{font-weight:700}
   .wl-switch .hint{font-size:.85rem;color:#666}
-  .switch{
-    --w:44px; --h:24px; --dot:18px;
-    position:relative;width:var(--w);height:var(--h);background:#ddd;border-radius:var(--h);transition:.2s;cursor:pointer;border:1px solid #ccc
-  }
+  .switch{--w:44px; --h:24px; --dot:18px; position:relative;width:var(--w);height:var(--h);background:#ddd;border-radius:var(--h);transition:.2s;cursor:pointer;border:1px solid #ccc}
   .switch:after{content:"";position:absolute;top:50%;left:3px;transform:translateY(-50%);width:var(--dot);height:var(--dot);border-radius:50%;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.25);transition:.2s}
   input[type="checkbox"].switch-input{display:none}
   input[type="checkbox"].switch-input:checked + .switch{background:${BRAND.primary};border-color:${BRAND.primary}}
   input[type="checkbox"].switch-input:checked + .switch:after{left:calc(100% - var(--dot) - 3px)}
-  .wl-inline{display:flex;gap:10px;align-items:center;margin-top:8px}
+  .wl-inline{display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap}
   `;
 
   document.head.appendChild(dom(`<style>${styles}</style>`));
 
-  /* ---------- init ---------- */
+  /* -------- init -------- */
   init().catch(()=>{});
   async function init(){
     await waitFor('td.pageContentBody', {timeout:14000});
@@ -143,7 +120,7 @@
   }
 
   function buildUI(){
-    /* scrape essentials */
+    /* scrape */
     const snapshot={}, last={};
     $$('#ctl00_PageBody_AccountActivity_AccountActivityLeftColumn tr').forEach(tr=>{
       const k=txt(tr.querySelector('th')||{}).replace(/:$/,''); const v=txt(tr.querySelector('td')||{});
@@ -162,14 +139,13 @@
     const acctName=(txt($('.panel.panelAccountInfo .listPageHeader'))||'').replace(/Account Information for/i,'').trim() || 'Your Account';
     const accountKey = acctName || 'unknown';
 
-    // Statement / payment
     const stmtNetAmt = mNum(last['Last Statement Net Amount']?.amount);
     const stmtDate   = parseUS(last['Last Statement Amount']?.date || last['Last Statement Net Amount']?.date);
     const stmtDue    = next10(stmtDate);
     const payStmtUrl = (()=>{ const q=new URLSearchParams(); if(stmtNetAmt>0) q.set('utm_total', stmtNetAmt.toFixed(2)); if(stmtDate) q.set('utm_note',`Statement ${stmtDate.toLocaleDateString()}`); q.set('utm_source','AccountInfo'); q.set('utm_action','PayStatement'); return `AccountPayment_r.aspx?${q.toString()}`; })();
     const payTopUrl = 'AccountPayment_r.aspx?utm_source=AccountInfo&utm_action=MakePayment';
 
-    /* ---------- mount UI with wider cards & better breakpoints ---------- */
+    /* mount */
     const container = dom(`
       <div class="wl-acct-root">
         <div class="wl-top">
@@ -183,9 +159,9 @@
           </div>
         </div>
 
-        <!-- Row 1: 3-up (desktop), 2-up (lg), 1-up (mobile) -->
-        <div class="wl-row wl-3up">
-          <div class="wl-card col-xl-4 col-lg-6 col-md-12" id="wl-snapshot">
+        <!-- Row 1 -->
+        <div class="wl-row wl-row-3">
+          <div class="wl-card" id="wl-snapshot">
             <div class="wl-head">Account Snapshot</div>
             <div class="wl-body">
               <div class="wl-kpis">
@@ -198,7 +174,7 @@
             </div>
           </div>
 
-          <div class="wl-card col-xl-4 col-lg-6 col-md-12" id="wl-settings">
+          <div class="wl-card" id="wl-settings">
             <div class="wl-head">Account Settings</div>
             <div class="wl-body">
               <div class="wl-actions" style="margin-bottom:6px">
@@ -214,7 +190,7 @@
             </div>
           </div>
 
-          <div class="wl-card col-xl-4 col-lg-12 col-md-12" id="wl-statements">
+          <div class="wl-card" id="wl-statements">
             <div class="wl-head">Statements</div>
             <div class="wl-body">
               <div class="wl-meta">Last Statement Date: <strong>${last['Last Statement Amount']?.date || '—'}</strong></div>
@@ -231,9 +207,9 @@
           </div>
         </div>
 
-        <!-- Row 2: 2-up (desktop), 1-up (mobile) -->
-        <div class="wl-row wl-2up">
-          <div class="wl-card col-xl-6 col-lg-12 col-md-12" id="wl-activity">
+        <!-- Row 2 -->
+        <div class="wl-row wl-row-2">
+          <div class="wl-card" id="wl-activity">
             <div class="wl-head">Recent Activity</div>
             <div class="wl-body">
               <ul class="wl-list" data-empty="Loading…"></ul>
@@ -244,7 +220,7 @@
             </div>
           </div>
 
-          <div class="wl-card col-xl-6 col-lg-12 col-md-12" id="wl-orders">
+          <div class="wl-card" id="wl-orders">
             <div class="wl-head">Open Orders</div>
             <div class="wl-body">
               <ul class="wl-list" data-empty="Loading…"></ul>
@@ -255,9 +231,9 @@
           </div>
         </div>
 
-        <!-- Row 3: full-width purchases -->
-        <div class="wl-row wl-1up">
-          <div class="wl-card col-xl-12 col-lg-12 col-md-12" id="wl-purchases">
+        <!-- Row 3 -->
+        <div class="wl-row wl-row-1">
+          <div class="wl-card" id="wl-purchases">
             <div class="wl-head">Recent Purchases</div>
             <div class="wl-body">
               <ul class="wl-list" data-empty="Loading…"></ul>
@@ -274,29 +250,13 @@
             <div class="wl-modal-head" id="wl-comm-title">Communication Preferences</div>
             <div class="wl-modal-body">
               <form id="wl-comm-form" class="wl-form" novalidate>
-                <div class="wl-field half">
-                  <label><input type="checkbox" id="comm_email_mkt"> Email marketing</label>
-                </div>
-                <div class="wl-field half">
-                  <label><input type="checkbox" id="comm_email_billing"> Email invoices & statements</label>
-                </div>
-                <div class="wl-field half">
-                  <label><input type="checkbox" id="comm_email_delivery"> Email delivery updates</label>
-                </div>
-                <div class="wl-field half">
-                  <label for="comm_email">Email address</label>
-                  <input type="email" id="comm_email" placeholder="name@example.com">
-                </div>
-                <div class="wl-field half">
-                  <label><input type="checkbox" id="comm_sms_mkt"> SMS marketing</label>
-                </div>
-                <div class="wl-field half">
-                  <label for="comm_sms_phone">SMS phone</label>
-                  <input type="tel" id="comm_sms_phone" placeholder="(###) ###-####">
-                </div>
-                <div class="wl-field">
-                  <div class="wl-meta">We’ll remember these on this device and (optionally) in our preference store.</div>
-                </div>
+                <div class="wl-field half"><label><input type="checkbox" id="comm_email_mkt"> Email marketing</label></div>
+                <div class="wl-field half"><label><input type="checkbox" id="comm_email_billing"> Email invoices & statements</label></div>
+                <div class="wl-field half"><label><input type="checkbox" id="comm_email_delivery"> Email delivery updates</label></div>
+                <div class="wl-field half"><label for="comm_email">Email address</label><input type="email" id="comm_email" placeholder="name@example.com"></div>
+                <div class="wl-field half"><label><input type="checkbox" id="comm_sms_mkt"> SMS marketing</label></div>
+                <div class="wl-field half"><label for="comm_sms_phone">SMS phone</label><input type="tel" id="comm_sms_phone" placeholder="(###) ###-####"></div>
+                <div class="wl-field"><div class="wl-meta">We’ll remember these on this device and (optionally) in our preference store.</div></div>
                 <div class="wl-modal-actions">
                   <button type="button" class="wl-btn" id="wl-comm-cancel">Cancel</button>
                   <button type="submit" class="wl-btn primary">Save Preferences</button>
@@ -306,36 +266,24 @@
           </div>
         </div>
 
-        <!-- Account Changes (toggle-based) Modal -->
+        <!-- Account Changes (toggle) Modal -->
         <div class="wl-modal" id="wl-req-modal" aria-hidden="true">
           <div class="wl-modal-card" role="dialog" aria-modal="true" aria-labelledby="wl-req-title">
             <div class="wl-modal-head" id="wl-req-title">Request Account Changes</div>
             <div class="wl-modal-body">
               <form id="wl-req-form" class="wl-form" novalidate>
-                <!-- PO on future orders -->
                 <div class="wl-field">
                   <div class="wl-switch">
-                    <div class="info">
-                      <div class="title">Add PO to all future orders</div>
-                      <div class="hint">Set a default PO value we’ll attach to new orders.</div>
-                    </div>
-                    <input class="switch-input" type="checkbox" id="req_po_toggle" role="switch" aria-checked="false">
-                    <label class="switch" for="req_po_toggle" aria-hidden="true"></label>
+                    <div class="info"><div class="title">Add PO to all future orders</div><div class="hint">Set a default PO value we’ll attach to new orders.</div></div>
+                    <input class="switch-input" type="checkbox" id="req_po_toggle"><label class="switch" for="req_po_toggle"></label>
                   </div>
-                  <div class="wl-inline" id="req_po_wrap" style="display:none">
-                    <input type="text" id="req_po_value" placeholder="Default PO value (e.g., JOB-1234)">
-                  </div>
+                  <div class="wl-inline" id="req_po_wrap" style="display:none"><input type="text" id="req_po_value" placeholder="Default PO value (e.g., JOB-1234)"></div>
                 </div>
 
-                <!-- Default contact -->
                 <div class="wl-field">
                   <div class="wl-switch">
-                    <div class="info">
-                      <div class="title">Select a default contact for future orders</div>
-                      <div class="hint">We’ll route confirmations and updates to this contact.</div>
-                    </div>
-                    <input class="switch-input" type="checkbox" id="req_contact_toggle" role="switch" aria-checked="false">
-                    <label class="switch" for="req_contact_toggle" aria-hidden="true"></label>
+                    <div class="info"><div class="title">Select a default contact for future orders</div><div class="hint">We’ll route confirmations and updates to this contact.</div></div>
+                    <input class="switch-input" type="checkbox" id="req_contact_toggle"><label class="switch" for="req_contact_toggle"></label>
                   </div>
                   <div class="wl-inline" id="req_contact_wrap" style="display:none">
                     <input type="text" id="req_contact_name" placeholder="Contact name">
@@ -344,34 +292,20 @@
                   </div>
                 </div>
 
-                <!-- Delivery updates -->
                 <div class="wl-field">
                   <div class="wl-switch">
-                    <div class="info">
-                      <div class="title">Enable email delivery updates</div>
-                      <div class="hint">We’ll email delivery ETAs and status updates for new orders.</div>
-                    </div>
-                    <input class="switch-input" type="checkbox" id="req_delivery_toggle" role="switch" aria-checked="false">
-                    <label class="switch" for="req_delivery_toggle" aria-hidden="true"></label>
+                    <div class="info"><div class="title">Enable email delivery updates</div><div class="hint">We’ll email delivery ETAs and status updates for new orders.</div></div>
+                    <input class="switch-input" type="checkbox" id="req_delivery_toggle"><label class="switch" for="req_delivery_toggle"></label>
                   </div>
-                  <div class="wl-inline" id="req_delivery_wrap" style="display:none">
-                    <input type="email" id="req_delivery_email" placeholder="Destination email for delivery updates">
-                  </div>
+                  <div class="wl-inline" id="req_delivery_wrap" style="display:none"><input type="email" id="req_delivery_email" placeholder="Destination email for delivery updates"></div>
                 </div>
 
-                <!-- Other -->
                 <div class="wl-field">
                   <div class="wl-switch">
-                    <div class="info">
-                      <div class="title">Other account change</div>
-                      <div class="hint">Tell us what you need and we’ll follow up.</div>
-                    </div>
-                    <input class="switch-input" type="checkbox" id="req_other_toggle" role="switch" aria-checked="false">
-                    <label class="switch" for="req_other_toggle" aria-hidden="true"></label>
+                    <div class="info"><div class="title">Other account change</div><div class="hint">Tell us what you need and we’ll follow up.</div></div>
+                    <input class="switch-input" type="checkbox" id="req_other_toggle"><label class="switch" for="req_other_toggle"></label>
                   </div>
-                  <div class="wl-field" id="req_other_wrap" style="display:none">
-                    <textarea id="req_other_text" rows="3" placeholder="Describe your request…"></textarea>
-                  </div>
+                  <div class="wl-field" id="req_other_wrap" style="display:none"><textarea id="req_other_text" rows="3" placeholder="Describe your request…"></textarea></div>
                 </div>
 
                 <div class="wl-modal-actions">
@@ -389,40 +323,32 @@
     const pageBody = $('td.pageContentBody') || document.body;
     pageBody.insertBefore(container, pageBody.firstChild);
 
-    // Hide legacy left nav & aging
+    /* hide legacy blocks */
     const leftNav = $('#ctl00_LeftSidebarContents_MainNav_NavigationMenu');
     if (leftNav) leftNav.classList.add('wl-hide');
     ['.account-aging-title','#ctl00_PageBody_AgingTable_AgingGrid','.documentRequest','#WTAccountActivity','.panel.panelAccountInfo']
       .forEach(sel=> $$(sel).forEach(el=> el.classList.add('wl-hide')));
 
-    // Hamburger (safe)
+    /* menu */
     (function menu(){
       const btn = $('#wl-ham-btn', container);
       const menu = $('#wl-ham-menu', container);
-      if (leftNav) {
-        $$('.rmRootGroup .rmItem a', leftNav).forEach(a=> menu.appendChild(dom(`<a role="menuitem" href="${a.href}">${a.textContent.trim()}</a>`)));
-      } else {
-        ['Invoices_r.aspx','CreditNotes_r.aspx','OpenOrders_r.aspx','Statements_R.aspx','ProductsPurchased_R.aspx','AccountPayment_r.aspx','AccountSettings.aspx','AddressList_R.aspx','Contacts_r.aspx']
-          .forEach(h=> menu.appendChild(dom(`<a role="menuitem" href="${h}">${h.replace(/_r\.aspx|\.aspx/,'').replace(/_/g,' ')}</a>`)));
-      }
+      if (leftNav) { $$('.rmRootGroup .rmItem a', leftNav).forEach(a=> menu.appendChild(dom(`<a role="menuitem" href="${a.href}">${a.textContent.trim()}</a>`))); }
+      else { ['Invoices_r.aspx','CreditNotes_r.aspx','OpenOrders_r.aspx','Statements_R.aspx','ProductsPurchased_R.aspx','AccountPayment_r.aspx','AccountSettings.aspx','AddressList_R.aspx','Contacts_r.aspx']
+        .forEach(h=> menu.appendChild(dom(`<a role="menuitem" href="${h}">${h.replace(/_r\.aspx|\.aspx/,'').replace(/_/g,' ')}</a>`))); }
       const toggle=(open)=>{ menu.classList.toggle('open', open); btn.setAttribute('aria-expanded', open?'true':'false'); };
       btn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); toggle(!menu.classList.contains('open')); return false; });
       document.addEventListener('click', (e)=>{ if(!menu.classList.contains('open')) return; if(!menu.contains(e.target) && e.target!==btn){ toggle(false); } });
       btn.setAttribute('onclick','return false;');
     })();
 
-    /* ---------- Communication Preferences (unchanged logic, wider submit) ---------- */
-    const COMM_KEY = (k)=> `wl_comm_prefs_v2_${k}`;
+    /* COMM PREFS (local + optional remote) */
+    const COMM_KEY = (k)=> `wl_comm_prefs_v3_${k}`;
     function getLocalPrefs(){ try { return JSON.parse(localStorage.getItem(COMM_KEY(accountKey))||'{}'); } catch { return {}; } }
     function setLocalPrefs(v){ try { localStorage.setItem(COMM_KEY(accountKey), JSON.stringify(v)); } catch {} }
-    async function fetchRemotePrefs(){
-      if (!SHEET_API_GET) return null;
-      try{ const u=new URL(SHEET_API_GET); u.searchParams.set('accountKey',accountKey); const r=await fetch(u.toString(),{credentials:'omit'}); if(!r.ok) return null; return await r.json(); }catch{ return null; }
-    }
-    async function postRemotePrefs(v){
-      if (!SHEET_API_POST) return false;
-      try{ const r=await fetch(SHEET_API_POST,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)}); return r.ok; }catch{ return false; }
-    }
+    async function fetchRemotePrefs(){ if (!SHEET_API_GET) return null; try{ const u=new URL(SHEET_API_GET); u.searchParams.set('accountKey',accountKey); const r=await fetch(u.toString(),{credentials:'omit'}); if(!r.ok) return null; return await r.json(); }catch{ return null; } }
+    async function postRemotePrefs(v){ if (!SHEET_API_POST) return false; try{ const r=await fetch(SHEET_API_POST,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)}); return r.ok; }catch{ return false; } }
+
     (function commModal(){
       const openBtn = $('#wl-comm-open', container);
       const modal   = $('#wl-comm-modal');
@@ -436,45 +362,33 @@
         sms_mkt: $('#comm_sms_mkt', modal),
         sms_phone: $('#comm_sms_phone', modal)
       };
-      async function hydrate(){
-        const local = getLocalPrefs();
-        const remote = await fetchRemotePrefs();
-        const v = Object.assign({}, local, remote||{});
-        f.email_mkt.checked     = !!v.emailMarketing;
-        f.email_billing.checked = !!v.emailBilling;
-        f.email_delivery.checked= !!v.emailDelivery;
-        if (v.email) f.email.value = v.email;
-        f.sms_mkt.checked       = !!v.smsMarketing;
-        if (v.smsPhone) f.sms_phone.value = v.smsPhone;
-      }
+      async function hydrate(){ const local=getLocalPrefs(); const remote=await fetchRemotePrefs(); const v=Object.assign({}, local, remote||{}); f.email_mkt.checked=!!v.emailMarketing; f.email_billing.checked=!!v.emailBilling; f.email_delivery.checked=!!v.emailDelivery; if(v.email) f.email.value=v.email; f.sms_mkt.checked=!!v.smsMarketing; if(v.smsPhone) f.sms_phone.value=v.smsPhone; }
       openBtn.addEventListener('click', (e)=>{ e.preventDefault(); hydrate(); openModal('#wl-comm-modal'); });
       cancel.addEventListener('click', ()=> closeModal('#wl-comm-modal'));
       modal.addEventListener('click', (e)=>{ if (e.target===modal) closeModal('#wl-comm-modal'); });
-
       form.addEventListener('submit', async (e)=>{
         e.preventDefault();
-        const wantsEmail = $('#comm_email_mkt').checked || $('#comm_email_billing').checked || $('#comm_email_delivery').checked;
-        const wantsSMS = $('#comm_sms_mkt').checked;
-        if (wantsEmail && !emailOK($('#comm_email').value)) { alert('Please enter a valid email address.'); $('#comm_email').focus(); return; }
-        if (wantsSMS) { const p=digits($('#comm_sms_phone').value); if (p.length<7) { alert('Please enter a valid phone number for SMS.'); $('#comm_sms_phone').focus(); return; } $('#comm_sms_phone').value=p; }
+        const wantsEmail = f.email_mkt.checked || f.email_billing.checked || f.email_delivery.checked;
+        const wantsSMS = f.sms_mkt.checked;
+        if (wantsEmail && !emailOK(f.email.value)) { alert('Please enter a valid email address.'); f.email.focus(); return; }
+        if (wantsSMS) { const p=digits(f.sms_phone.value); if (p.length<7) { alert('Please enter a valid phone number for SMS.'); f.sms_phone.focus(); return; } f.sms_phone.value=p; }
         const payload = {
           accountKey,
-          email: ($('#comm_email').value||'').trim(),
-          emailMarketing: $('#comm_email_mkt').checked,
-          emailBilling: $('#comm_email_billing').checked,
-          emailDelivery: $('#comm_email_delivery').checked,
-          smsMarketing: $('#comm_sms_mkt').checked,
-          smsPhone: digits($('#comm_sms_phone').value||''),
+          email: (f.email.value||'').trim(),
+          emailMarketing: !!f.email_mkt.checked,
+          emailBilling: !!f.email_billing.checked,
+          emailDelivery: !!f.email_delivery.checked,
+          smsMarketing: !!f.sms_mkt.checked,
+          smsPhone: digits(f.sms_phone.value||''),
           updatedAt: new Date().toISOString()
         };
         setLocalPrefs(payload);
         if (SHEET_API_POST) await postRemotePrefs(payload);
-        closeModal('#wl-comm-modal');
-        alert('Your communication preferences have been saved.');
+        closeModal('#wl-comm-modal'); alert('Your communication preferences have been saved.');
       });
     })();
 
-    /* ---------- Account Changes (toggle-based) ---------- */
+    /* REQUEST CHANGES (toggles) */
     function openModal(id){ const m=$(id); if(!m) return; m.classList.add('open'); m.setAttribute('aria-hidden','false'); }
     function closeModal(id){ const m=$(id); if(!m) return; m.classList.remove('open'); m.setAttribute('aria-hidden','true'); }
 
@@ -496,16 +410,13 @@
         delivery: $('#req_delivery_wrap', modal),
         other: $('#req_other_wrap', modal)
       };
+      const show=()=>{ wraps.po.style.display=toggles.po.checked?'':'none';
+                       wraps.contact.style.display=toggles.contact.checked?'':'none';
+                       wraps.delivery.style.display=toggles.delivery.checked?'':'none';
+                       wraps.other.style.display=toggles.other.checked?'':'none'; };
+      Object.values(toggles).forEach(t=> t.addEventListener('change', show));
 
-      function applyVisibility(){
-        wraps.po.style.display       = toggles.po.checked      ? '' : 'none';
-        wraps.contact.style.display  = toggles.contact.checked ? '' : 'none';
-        wraps.delivery.style.display = toggles.delivery.checked? '' : 'none';
-        wraps.other.style.display    = toggles.other.checked   ? '' : 'none';
-      }
-      Object.values(toggles).forEach(t=> t.addEventListener('change', applyVisibility));
-
-      openBtn.addEventListener('click', (e)=>{ e.preventDefault(); applyVisibility(); openModal('#wl-req-modal'); });
+      openBtn.addEventListener('click', (e)=>{ e.preventDefault(); show(); openModal('#wl-req-modal'); });
       cancel.addEventListener('click', ()=> closeModal('#wl-req-modal'));
       modal.addEventListener('click', (e)=>{ if (e.target===modal) closeModal('#wl-req-modal'); });
 
@@ -527,30 +438,26 @@
           other: toggles.other.checked ? { enabled:true, text: ($('#req_other_text').value||'').trim() } : { enabled:false },
           createdAt: new Date().toISOString()
         };
-
-        // Minimal validation for enabled sections
         if (data.po.enabled && !data.po.value) { alert('Please enter a default PO value.'); return; }
         if (data.defaultContact.enabled && !data.defaultContact.name) { alert('Please enter a contact name.'); return; }
         if (data.deliveryUpdates.enabled && !emailOK(data.deliveryUpdates.email)) { alert('Please enter a valid email for delivery updates.'); return; }
-
         try { localStorage.setItem(`wl_req_settings_${accountKey}`, JSON.stringify(data)); } catch {}
-        if (SHEET_REQ_POST) {
-          try { await fetch(SHEET_REQ_POST,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}); } catch {}
-        }
-        closeModal('#wl-req-modal');
-        alert('Your account change request has been submitted.');
+        if (SHEET_REQ_POST) { try { await fetch(SHEET_REQ_POST,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)}); } catch {} }
+        closeModal('#wl-req-modal'); alert('Your account change request has been submitted.');
       });
     })();
   }
 
-  /* ---------- async lists ---------- */
+  /* -------- async lists -------- */
   async function loadLists(){
     const parser=new DOMParser();
     async function fetchDoc(url){ try{ const r=await fetch(url,{credentials:'same-origin'}); if(!r.ok) throw 0; return parser.parseFromString(await r.text(),'text/html'); }catch{ return null; } }
-    function mapRows(doc, cols){ if(!doc) return []; const t=doc.querySelector('.rgMasterTable'); if(!t) return []; return Array.from(t.querySelectorAll('tbody tr')).map(r=>{ const o={}; cols.forEach(c=> o[c]=(r.querySelector(`td[data-title="${c}"]`)?.textContent||'').trim()); const a=r.querySelector('a[href]'); o.link=a? new URL(a.getAttribute('href'), location.origin).toString():null; return o; }); }
+    const get=(el)=> (el?.textContent||'').trim();
+    function mapRows(doc, cols){ if(!doc) return []; const t=doc.querySelector('.rgMasterTable'); if(!t) return []; return Array.from(t.querySelectorAll('tbody tr')).map(r=>{ const o={}; cols.forEach(c=> o[c]=get(r.querySelector(`td[data-title="${c}"]`))); const a=r.querySelector('a[href]'); o.link=a? new URL(a.getAttribute('href'), location.origin).toString():null; return o; }); }
     function renderList(ul, items, builder, empty){ if(!ul) return; ul.innerHTML=''; if(!items.length){ ul.innerHTML=`<li><div class="wl-meta">${empty||'No items found.'}</div></li>`; return; } items.forEach(it=> ul.appendChild(builder(it))); }
+    const parseUS=(s)=>{ const m=String(s||'').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m? new Date(+m[3],+m[1]-1,+m[2]) : null; };
 
-    // Recent Activity (Invoices + Credits)
+    // Recent Activity
     (async ()=>{
       const invDoc=await fetchDoc('Invoices_r.aspx');
       let invs=mapRows(invDoc,['Invoice #','Date','Outstanding','Amount','Status']); if(!invs.length) invs=mapRows(invDoc,['Invoice Number','Date','Outstanding','Amount','Status']);
@@ -583,7 +490,7 @@
       </li>`), 'No open orders.');
     })();
 
-    // Purchases
+    // Recent Purchases
     (async ()=>{
       const doc=await fetchDoc('ProductsPurchased_R.aspx');
       let rows=mapRows(doc,['Product','Description','Last Purchased','Qty','Price','Total','Product Code','Product #']);
