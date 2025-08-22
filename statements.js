@@ -1,18 +1,20 @@
 
 /* =========================================================================
-   Woodson — Statements Card UI (v1.2)
-   - Cards show: "Statement for <Month YYYY>", Due (10th next month), Closing Balance
-   - ONLY the most recent statement has a "Pay statement" button
-   - "Open" uses the same behavior as the page's #GetStatementLink (document viewer)
-   - Removed sticky pay bar (latest row itself handles pay/open)
+   Woodson — Statements Card UI (v1.3)
+   - Cards for each statement
+   - ONLY latest has "Pay statement"
+   - "Open" uses GetStatementLink behavior
+   - Hides the left RadMenu sidebar
+   - Adds "← Back to My Account" button above the page
    ========================================================================== */
 (function(){
   'use strict';
   if (!/Statements_R\.aspx/i.test(location.pathname)) return;
-  if (window.__WL_STATEMENTS_BOOTED__) return; window.__WL_STATEMENTS_BOOTED__ = true;
+  if (window.__WL_STATEMENTS_BOOTED__) return; 
+  window.__WL_STATEMENTS_BOOTED__ = true;
 
   const log={info:(...a)=>console.log('[STM]',...a)};
-  const VERSION='1.2'; log.info('Version',VERSION,'booting…');
+  const VERSION='1.3'; log.info('Version',VERSION,'booting…');
 
   /* ---------- CSS ---------- */
   (function injectCSS(){
@@ -36,6 +38,14 @@
       .wl-btn{appearance:none;border:none;border-radius:12px;font-weight:900;padding:10px 14px;text-decoration:none;cursor:pointer;}
       .wl-btn--primary{background:#6b0016;color:#fff;}
       .wl-btn--ghost{background:#f8fafc;color:#111827;border:1px solid #e5e7eb;}
+      /* Hide sidebar menu */
+      #ctl00_LeftSidebarContents_Navigation_NavigationMenu { display:none !important; }
+      /* Back button styling */
+      .wl-backbar{margin:10px 0;}
+      .wl-backbtn{display:inline-block;background:#f8fafc;border:1px solid #e5e7eb;
+        color:#111827;border-radius:12px;font-weight:700;padding:8px 14px;
+        text-decoration:none;cursor:pointer;}
+      .wl-backbtn:hover{background:#e5e7eb;}
     `;
     const el=document.createElement('style'); el.textContent=css; document.head.appendChild(el);
   })();
@@ -119,15 +129,27 @@
     return latest;
   }
 
+  /* ---------- Add Back to My Account ---------- */
+  function ensureBackButton(){
+    const grid=document.getElementById('ctl00_PageBody_StatementsDataGrid');
+    if(!grid) return;
+    const container=grid.closest('.bodyFlexItem')||document.body;
+    if(container.querySelector('.wl-backbar')) return;
+    const bar=document.createElement('div');
+    bar.className='wl-backbar';
+    bar.innerHTML=`<a href="AccountInfo_R.aspx" class="wl-backbtn">← Back to My Account</a>`;
+    container.insertBefore(bar,container.firstChild);
+  }
+
   /* ---------- observer ---------- */
   function enhance(){
     const master=document.querySelector('#ctl00_PageBody_StatementsDataGrid_ctl00, #ctl00_PageBody_StatementsDataGrid .rgMasterTable');
     if(!master) return;
     cardify(master);
     markLatest(master);
+    ensureBackButton();
   }
   new MutationObserver(()=>setTimeout(enhance,120)).observe(document.getElementById('ctl00_PageBody_StatementsDataGrid'),{childList:true,subtree:true});
-
   if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',enhance,{once:true});}else enhance();
 
 })();
