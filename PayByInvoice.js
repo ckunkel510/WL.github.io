@@ -529,7 +529,7 @@
     const owingVal = (function(){ const el = byId('ctl00_PageBody_AmountOwingLiteral'); return el ? parseMoney(el.value || el.textContent) : 0; })();
     if (grp.amount && !grp.amount.querySelector('.wl-chips')){
       const chips = document.createElement('div'); chips.className='wl-chips';
-      chips.innerHTML = `<button type="button" class="wl-chipbtn" data-act="clear-amt">Clear Amount</button>`;
+      chips.innerHTML = `<button type="button" class="wl-chipbtn" data-act="clear-amt">Clear</button>`;
       grp.amount.appendChild(chips);
       chips.addEventListener('click',(e)=>{
         const b = e.target.closest('button[data-act]'); if (!b) return;
@@ -1217,39 +1217,6 @@
       lastLabel.style.display = 'none';
     }
 
-    /* --- Chips: Fill owing / Clear --- */
-    // Compute "Amount Owing" from literal
-    const owingEl = document.getElementById('ctl00_PageBody_AmountOwingLiteral');
-    const owingVal = (function(){
-      const s = (owingEl?.value || owingEl?.textContent || '').replace(/[^0-9.\-]/g,'');
-      const n = parseFloat(s); return Number.isFinite(n) ? n : 0;
-    })();
-
-    // Create fresh chip buttons (we replace any previous .wl-chips block)
-    const makeChip = (label, act) => {
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'wl-chipbtn';
-      b.dataset.act = act;
-      b.textContent = label;
-      return b;
-    };
-    
-    const clearBtn = makeChip('Clear', 'clear-amt');
-    
-    actions.appendChild(clearBtn);
-
-    // Wire behavior
-    
-    clearBtn.addEventListener('click', function(){
-      if (!amtInput) return;
-      amtInput.value = '';
-      setTimeout(()=> amtInput.dispatchEvent(new Event('change', { bubbles:true })), 0);
-    });
-
-    // Remove any old chips block we previously appended (to avoid duplication)
-    const legacyChips = amtGroup.querySelector('.wl-chips');
-    if (legacyChips) legacyChips.remove();
   }
 
   /* ---- boot + (optional) re-apply after WebForms async updates ---- */
