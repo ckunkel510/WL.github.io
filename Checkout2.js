@@ -198,20 +198,34 @@ document.addEventListener('DOMContentLoaded', function() {
     }
   }
 
-  // 8) AJAX fetch user info (name/email/tel)
-  $.get('https://webtrack.woodsonlumber.com/AccountSettings.aspx', data=>{
-    let $acc=$(data),
-        fn=$acc.find('#ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput').val()||'',
-        ln=$acc.find('#ctl00_PageBody_ChangeUserDetailsControl_LastNameInput').val()||'',
-        em=($acc.find('#ctl00_PageBody_ChangeUserDetailsControl_EmailAddressInput').val()||'')
-             .replace(/^\([^)]*\)\s*/,'');
-    $('#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox').val(fn);
-    $('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox').val(em);
-  });
-  $.get('https://webtrack.woodsonlumber.com/AccountInfo_R.aspx', data=>{
-    let tel=$(data).find('#ctl00_PageBody_TelephoneLink_TelephoneLink').text().trim();
-    $('#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').val(tel);
-  });
+// 8) AJAX fetch user info (name/email/tel) — fills First + Last + Email
+$.get('https://webtrack.woodsonlumber.com/AccountSettings.aspx', data=>{
+  const $acc = $(data);
+  const fn = ($acc.find('#ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput').val() || '').trim();
+  const ln = ($acc.find('#ctl00_PageBody_ChangeUserDetailsControl_LastNameInput').val()  || '').trim();
+  const em = (($acc.find('#ctl00_PageBody_ChangeUserDetailsControl_EmailAddressInput').val() || '')
+               .replace(/^\([^)]*\)\s*/, '')).trim();
+
+  // Helper to set value if the field exists
+  const setIfExists = (sel, val) => { const $el = $(sel); if ($el.length) $el.val(val).trigger('change'); };
+
+  // Delivery contact
+  setIfExists('#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox', fn);
+  setIfExists('#ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox',  ln);
+
+  // Invoice contact (if your template has these fields)
+  setIfExists('#ctl00_PageBody_InvoiceAddress_ContactFirstNameTextBox',  fn);
+  setIfExists('#ctl00_PageBody_InvoiceAddress_ContactLastNameTextBox',   ln);
+
+  // Invoice email
+  setIfExists('#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox', em);
+});
+
+// phone (unchanged)
+$.get('https://webtrack.woodsonlumber.com/AccountInfo_R.aspx', data=>{
+  let tel=$(data).find('#ctl00_PageBody_TelephoneLink_TelephoneLink').text().trim();
+  $('#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox').val(tel);
+});
 
   // 9) Delivery summary/edit (step 5)
   (function(){
