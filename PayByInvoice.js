@@ -1729,7 +1729,8 @@ if (jobBtn){
 
 
 /* ==========================================================
-   Woodson — Client-side "Pay by Invoice" picker (v3.1)
+   Woodson — Client-side "Pay by Invoice" picker (v3.2)
+   - Mobile-friendly stacked rows (labels shown per cell)
    - Delegated click: opens modal on #wlOpenTxModalBtn reliably
    - Cross-mode friendly (exposes WL_AP.invoice.clearSelection/open)
    - Writes "Docs:" line and sets Amount; strips JOB/STATEMENT lines
@@ -1893,19 +1894,31 @@ if (jobBtn){
       .wl-btn:focus-visible { outline:0; box-shadow:0 0 0 3px #93c5fd; }
       .wl-btn-primary    { background:#6b0016; color:#fff; border-color:#6b0016; }
       .wl-input          { border:1px solid #e5e7eb; border-radius:10px; padding:8px 10px; min-width:220px; }
-      .wl-table-wrap     { border:1px solid #e5e7eb; border-radius:12px; overflow:hidden; }
+      .wl-table-wrap     { border:1px solid #e5e7eb; border-radius:12px; overflow:auto; } /* was hidden */
       table.wl-grid      { width:100%; border-collapse:separate; border-spacing:0; font-size:14px; }
       .wl-grid thead th  { position:sticky; top:0; background:#f8fafc; z-index:1; font-weight:800; letter-spacing:.01em;
                            border-bottom:1px solid #e5e7eb; padding:10px 12px; text-align:left; }
       .wl-grid tbody tr  { transition:background .15s ease; }
       .wl-grid tbody tr:hover { background:#f9fafb; }
-      .wl-grid td        { border-bottom:1px solid #eef2f7; padding:10px 12px; vertical-align:top; }
+      .wl-grid td        { border-bottom:1px solid #eef2f7; padding:10px 12px; vertical-align:top; word-break:break-word; }
       .wl-grid .right    { text-align:right; }
       .wl-type-pill      { display:inline-block; border-radius:999px; padding:2px 8px; font-size:12px; font-weight:800; }
       .wl-type-inv       { background:#eef6ff; color:#1e40af; border:1px solid #c7ddff; }
       .wl-type-cr        { background:#fff7ed; color:#9a3412; border:1px solid #fde1c7; }
       .wl-foot-left      { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
       .wl-btn.wl-btn-ghost{color:#6b0016;}
+
+      /* ---------- Mobile stacked layout ---------- */
+      @media (max-width: 680px){
+        .wl-modal-card { width:96vw; max-height:92vh; }
+        .wl-modal-head .right { gap:6px; }
+        .wl-grid thead { display:none; }
+        .wl-grid tbody tr { display:block; padding:6px 0; border-bottom:1px solid #e5e7eb; }
+        .wl-grid td { display:grid; grid-template-columns: 40% 60%; gap:6px; border-bottom:0; padding:8px 12px; }
+        .wl-grid td::before { content: attr(data-label); font-weight:700; color:#374151; }
+        .wl-grid td.right { text-align:left; }
+        .wl-grid td input[type="checkbox"]{ transform: scale(1.2); }
+      }
     `;
     document.head.appendChild(s);
   })();
@@ -2036,7 +2049,6 @@ if (jobBtn){
     }
   }catch{}
 }
-
 
   function loadFromCurrentDOM(){
     const tbody = document.getElementById('wlInvTbody');
@@ -2267,15 +2279,15 @@ if (jobBtn){
       const credit = (String(r.type||'').toLowerCase().includes('credit') || MONEY(r.amount) < 0);
       const tr = document.createElement('tr');
       tr.innerHTML = `
-        <td><input type="checkbox" data-key="${r.key}" data-outstanding="${r.outstanding}" ${state.selected.has(r.key)?'checked':''}></td>
-        <td>${r.doc}</td>
-        <td><span class="wl-type-pill ${credit?'wl-type-cr':'wl-type-inv'}">${credit?'Credit':'Invoice'}</span></td>
-        <td>${r.tDate||''}</td>
-        <td>${r.dDate||''}</td>
-        <td>${r.job||''}</td>
-        <td>${r.desc||''}</td>
-        <td class="right">$${FMT2(MONEY(r.amount))}</td>
-        <td class="right">$${FMT2(MONEY(r.outstanding))}</td>
+        <td data-label="Select"><input type="checkbox" data-key="${r.key}" data-outstanding="${r.outstanding}" ${state.selected.has(r.key)?'checked':''}></td>
+        <td data-label="Doc #">${r.doc}</td>
+        <td data-label="Type"><span class="wl-type-pill ${credit?'wl-type-cr':'wl-type-inv'}">${credit?'Credit':'Invoice'}</span></td>
+        <td data-label="Trans Date">${r.tDate||''}</td>
+        <td data-label="Due Date">${r.dDate||''}</td>
+        <td data-label="Job Ref">${r.job||''}</td>
+        <td data-label="Description">${r.desc||''}</td>
+        <td data-label="Amount" class="right">$${FMT2(MONEY(r.amount))}</td>
+        <td data-label="Outstanding" class="right">$${FMT2(MONEY(r.outstanding))}</td>
       `;
       const cb = tr.querySelector('input[type="checkbox"]');
       cb.addEventListener('change', (e)=>{
@@ -2299,125 +2311,103 @@ if (jobBtn){
 
   /* ---------- Commit to form ---------- */
   function commitSelection(){
-  if (state.selected.size === 0){
-    alert('Select at least one item.');
-    return;
-  }
-
-  // Index for lookups
-  const rowByKey = new Map(state.rows.map(r => [r.key, r]));
-  const amtByKey = new Map(state.rows.map(r => [r.key, MONEY(r.outstanding)]));
-
-  // Keep only docs present in loaded rows
-  const docs = Array.from(state.selected.keys()).filter(k => rowByKey.has(k));
-
-  // Build tokens & compute net
-  const tokens = [];
-  let netTotal = 0;
-
-  docs.forEach(k => {
-    const r = rowByKey.get(k);
-    const selAmt = Number(amtByKey.get(k) || 0);
-
-    const isCredit =
-      (String(r?.type || '').toLowerCase().includes('credit')) ||
-      MONEY(r?.amount) < 0 ||
-      selAmt < 0;
-
-    if (isCredit) {
-      // Credit token: CN12345  (strip spaces, ensure CN prefix once)
-      const raw = String(r?.doc || k).trim().replace(/\s+/g,'');
-      const token = /^CN/i.test(raw) ? raw.replace(/^cn/i,'CN') : 'CN' + raw;
-      tokens.push(token);
-      netTotal += selAmt; // typically negative
-    } else {
-      // Invoice token: 123456$12.34 (two decimals, no thousands)
-      const pay = Math.max(0, Math.abs(selAmt));
-      const token = `${String(r?.doc || k).trim()}$${pay.toFixed(2)}`;
-      tokens.push(token);
-      netTotal += selAmt; // positive
+    if (state.selected.size === 0){
+      alert('Select at least one item.');
+      return;
     }
-  });
 
-  const remString = tokens.join(',');
+    // Index for lookups
+    const rowByKey = new Map(state.rows.map(r => [r.key, r]));
+    const amtByKey = new Map(state.rows.map(r => [r.key, MONEY(r.outstanding)]));
 
-  // Desired payment total (credits reduce; never below 0)
-  const payTotal = Math.max(0, netTotal);
+    // Keep only docs present in loaded rows
+    const docs = Array.from(state.selected.keys()).filter(k => rowByKey.has(k));
 
-  // Read current amount (numeric)
-  const aEl = document.getElementById('ctl00_PageBody_PaymentAmountTextBox');
-  const currNum = aEl ? MONEY(aEl.value) : 0;
+    // Build tokens & compute net
+    const tokens = [];
+    let netTotal = 0;
 
-  // Helper to set amount field visually
-  function setAmountField(valNum){
-    if (!aEl) return;
-    const show = Number(valNum||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
-    // native set + events
-    try{
-      const proto = HTMLInputElement.prototype;
-      const desc = Object.getOwnPropertyDescriptor(proto, 'value');
-      if (desc && desc.set) desc.set.call(aEl, show); else aEl.value = show;
-    }catch{ aEl.value = show; }
-    try{
-      aEl.dispatchEvent(new Event('input',  { bubbles:true }));
-      aEl.dispatchEvent(new Event('change', { bubbles:true }));
-    }catch{}
-  }
+    docs.forEach(k => {
+      const r = rowByKey.get(k);
+      const selAmt = Number(amtByKey.get(k) || 0);
 
-  // 1) Always set the Amount field to reflect the selection
-  setAmountField(payTotal);
+      const isCredit =
+        (String(r?.type || '').toLowerCase().includes('credit')) ||
+        MONEY(r?.amount) < 0 ||
+        selAmt < 0;
 
-  // 2) Decide: post back (amount changed) or apply remittance immediately (credits-only/no-change)
-  const changed = Number(currNum.toFixed(2)) !== Number(payTotal.toFixed(2));
-
-  if (changed) {
-    // Defer remittance until after async postback completes
-    try{ window.WL_AP?.remit?.defer(remString); }catch{}
-
-    // Force the Amount control to post back so server “sticks” the value
-    try{
-      if (typeof window.__doPostBack === 'function'){
-        const uniqueId = aEl.id.replace(/_/g,'$');
-        setTimeout(()=> window.__doPostBack(uniqueId, ''), 0);
+      if (isCredit) {
+        const raw = String(r?.doc || k).trim().replace(/\s+/g,'');
+        const token = /^CN/i.test(raw) ? raw.replace(/^cn/i,'CN') : 'CN' + raw;
+        tokens.push(token);
+        netTotal += selAmt; // typically negative
+      } else {
+        const pay = Math.max(0, Math.abs(selAmt));
+        const token = `${String(r?.doc || k).trim()}$${pay.toFixed(2)}`;
+        tokens.push(token);
+        netTotal += selAmt; // positive
       }
-    }catch{}
-  } else {
-    // No postback will happen (e.g., credits-only net=0) → apply remittance now
-    try {
-      // Try Telerik/native write immediately without firing change (avoid spurious postback)
-      window.WL_AP?.remit?._setNow?.(remString, /*fireInputOnly*/true);
-      // Also store nothing pending
-      try{ sessionStorage.removeItem('__WL_PendingRemitV2'); }catch{}
-    } catch {}
+    });
+
+    const remString = tokens.join(',');
+    const payTotal = Math.max(0, netTotal);
+
+    const aEl = document.getElementById('ctl00_PageBody_PaymentAmountTextBox');
+    const currNum = aEl ? MONEY(aEl.value) : 0;
+
+    function setAmountField(valNum){
+      if (!aEl) return;
+      const show = Number(valNum||0).toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
+      try{
+        const proto = HTMLInputElement.prototype;
+        const desc = Object.getOwnPropertyDescriptor(proto, 'value');
+        if (desc && desc.set) desc.set.call(aEl, show); else aEl.value = show;
+      }catch{ aEl.value = show; }
+      try{
+        aEl.dispatchEvent(new Event('input',  { bubbles:true }));
+        aEl.dispatchEvent(new Event('change', { bubbles:true }));
+      }catch{}
+    }
+
+    setAmountField(payTotal);
+
+    const changed = Number(currNum.toFixed(2)) !== Number(payTotal.toFixed(2));
+
+    if (changed) {
+      try{ window.WL_AP?.remit?.defer(remString); }catch{}
+      try{
+        if (typeof window.__doPostBack === 'function'){
+          const uniqueId = aEl.id.replace(/_/g,'$');
+          setTimeout(()=> window.__doPostBack(uniqueId, ''), 0);
+        }
+      }catch{}
+    } else {
+      try {
+        window.WL_AP?.remit?._setNow?.(remString, /*fireInputOnly*/true);
+        try{ sessionStorage.removeItem('__WL_PendingRemitV2'); }catch{}
+      } catch {}
+    }
+
+    try { localStorage.setItem(LS_KEY, JSON.stringify(docs)); } catch {}
+
+    try { window.WL_AP?.jobs?.clearSelection?.(); } catch {}
+
+    closeModal();
   }
 
-  // Persist doc ids for convenience
-  try { localStorage.setItem(LS_KEY, JSON.stringify(docs)); } catch {}
+  // Delegated opener (and direct wire for redundancy)
+  document.addEventListener('click', function(e){
+    const btn = e.target?.closest?.('#wlOpenTxModalBtn');
+    if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation?.();
+    openModal();
+  }, true);
 
-  // Since this is "pay by invoice", clear any job selections to avoid stacking
-  try { window.WL_AP?.jobs?.clearSelection?.(); } catch {}
-
-  closeModal();
-}
-
-
-
-
-  // Put this once in the Invoice Picker IIFE (near wire()):
-document.addEventListener('click', function(e){
-  const btn = e.target?.closest?.('#wlOpenTxModalBtn');
-  if (!btn) return;
-  e.preventDefault();
-  e.stopPropagation();
-  e.stopImmediatePropagation?.();
-  openModal();
-}, true);
-
-  /* ---------- Wire + Delegated opener ---------- */
   function wire(){
     const btn = document.getElementById('wlOpenTxModalBtn');
     if (!btn || btn.__wlTxPickBound) return;
-    // (We rely on delegated listener below, but keep this for redundancy.)
     btn.addEventListener('click', (e)=>{
       e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation?.();
       openModal();
@@ -2427,15 +2417,7 @@ document.addEventListener('click', function(e){
     log.info('Invoice picker bound.');
   }
 
-  // Delegated click (capture) — always open on current button instance
-  document.addEventListener('click', function(e){
-    const btn = e.target?.closest?.('#wlOpenTxModalBtn');
-    if (!btn) return;
-    e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation?.();
-    openModal();
-  }, true);
-
-  // Export helpers for cross-mode clearing & manual open
+  // Export helpers
   window.WL_AP = window.WL_AP || {};
   window.WL_AP.invoice = Object.assign(window.WL_AP.invoice || {}, {
     clearSelection(){
@@ -2468,6 +2450,8 @@ document.addEventListener('click', function(e){
   if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', boot, { once:true }); }
   else { boot(); }
 })();
+
+
 
 
 
