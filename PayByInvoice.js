@@ -3,71 +3,215 @@
   'use strict';
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
-  // ---- HARD GUARD: only run if URL has our params ----
+  /* =============================
+     URL + Session Pref Handling
+     ============================= */
   const url = new URL(location.href);
-  const HAS_PARAMS = url.searchParams.has('utm_invoices') || url.searchParams.has('utm_total');
-  if (!HAS_PARAMS) return; // <- zero overhead if not coming from Invoices
+  const HAS_PARAMS = [
+    'utm_invoices','utm_total','utm_jobs','utm_remit','utm_notes','utm_clear','utm_back','utm_docs'
+  ].some(k => url.searchParams.has(k));
+  if (!HAS_PARAMS) return;
 
   const $ = (id)=> document.getElementById(id);
-  const KEY = 'wl_ap_prefill_v2';
+  const KEY = 'wl_ap_prefill_v3';
 
-  /* ---------- helpers ---------- */
   function savePref(p){ try{ sessionStorage.setItem(KEY, JSON.stringify(p)); }catch{} }
   function loadPref(){ try{ return JSON.parse(sessionStorage.getItem(KEY) || '{}'); }catch{ return {}; } }
-  function parseMoney(s){ const v=parseFloat(String(s||'').replace(/[^0-9.\-]/g,'')); return Number.isFinite(v)?v:0; }
-  function normalizeInvoices(str){
-    return String(str||'')
+
+  /* ---------- parsing helpers ---------- */
+  function trim(s){ return String(s||'').trim(); }
+  function isTruthyFlag(v){
+    return ['1','true','yes','y','on'].includes(String(v||'').toLowerCase());
+  }
+  function toUSDateStr(d=new Date()){
+    const mm = String(d.getMonth()+1).padStart(2,'0');
+    const dd = String(d.getDate()).padStart(2,'0');
+    const yyyy = d.getFullYear();
+    return `${mm}/${dd}/${yyyy}`;
+  }
+  function normalizeMoneyStr(s){
+    // Keep the user's formatting if present; else strip junk except digits/.- and reapply
+    const raw = String(s||'').trim();
+    if (!raw) return '';
+    // Already looks like a money-ish token? keep as-is
+    if (/^\$?\-?\d+(?:\.\d{1,2})?$/.test(raw)) return raw;
+    const v = parseFloat(raw.replace(/[^0-9.\-]/g,''));
+    if (!Number.isFinite(v)) return raw;
+    // Format with 2 decimals, no currency symbol (PaymentAmount usually accepts either)
+    return v.toFixed(2);
+  }
+
+  // Accept: "123", "123$45.67", "INV123", "INV123$45.67", "cn123", "CN123$-10.00"
+  // Return canonical tokens preserving CN and any $amount; strip INV prefix.
+  function normalizeDocTokens(str){
+    const seen = new Set();
+    const out = [];
+    const raw = String(str||'')
       .split(/[,\n\r\t ]+/)
       .map(x=>x.trim())
-      .filter(Boolean)
-      .map(x=>`INV${x.replace(/^INV\s*/i,'')}`)
-      .join(',');
+      .filter(Boolean);
+
+    for (const tok of raw){
+      // CN credit?
+      let m = /^CN\s*0*(\d+)(\$(\-?\d+(?:\.\d{1,2})?)\s*)?$/i.exec(tok);
+      if (m){
+        const num = m[1];
+        const amt = m[2] ? `$${normalizeMoneyStr(m[2].slice(1))}` : '';
+        const canon = `CN${num}${amt}`;
+        if (!seen.has(canon)){ seen.add(canon); out.push(canon); }
+        continue;
+      }
+      // Regular invoice (with optional INV) possibly with $amount
+      m = /^(?:INV)?\s*0*(\d+)\s*(\$(\-?\d+(?:\.\d{1,2})?)\s*)?$/i.exec(tok);
+      if (m){
+        const num = m[1];
+        const amt = m[2] ? `$${normalizeMoneyStr(m[2].slice(1))}` : '';
+        const canon = `${num}${amt}`;
+        if (!seen.has(canon)){ seen.add(canon); out.push(canon); }
+        continue;
+      }
+      // Fallback: keep token as-is but trim
+      const canon = tok.replace(/\s+/g,'');
+      if (!seen.has(canon)){ seen.add(canon); out.push(canon); }
+    }
+    return out;
+  }
+
+  // utm_jobs accepts: "Job A$12.34,Job B$56.78" OR "Job A|12.34" OR "Job A:12.34"
+  function parseJobs(str){
+    const parts = String(str||'').split(/[,\n]+/).map(s=>s.trim()).filter(Boolean);
+    const out = [];
+    for (const p of parts){
+      // Split by $ or | or :
+      let name='', amt='';
+      if (p.includes('$')){
+        const idx = p.lastIndexOf('$');
+        name = p.slice(0, idx).trim();
+        amt  = p.slice(idx+1).trim();
+      } else if (p.includes('|')){
+        [name, amt] = p.split('|').map(s=>s.trim());
+      } else if (p.includes(':')){
+        [name, amt] = p.split(':').map(s=>s.trim());
+      } else {
+        name = p.trim();
+      }
+      if (!name) continue;
+      out.push({ name, amount: amt ? normalizeMoneyStr(amt) : '' });
+    }
+    return out;
   }
 
   /* ---------- read URL and seed session ---------- */
-  const urlInv = url.searchParams.get('utm_invoices') || '';
-  const urlTot = url.searchParams.get('utm_total')    || '';
-  if (urlInv || urlTot){
+  const urlInv   = url.searchParams.get('utm_invoices') || url.searchParams.get('utm_docs') || '';
+  const urlTot   = url.searchParams.get('utm_total')    || '';
+  const urlJobs  = url.searchParams.get('utm_jobs')     || '';
+  const urlRemit = url.searchParams.get('utm_remit')    || '';
+  const urlNotes = url.searchParams.get('utm_notes')    || '';
+  const urlBack  = url.searchParams.get('utm_back')     || '';
+  const doClear  = isTruthyFlag(url.searchParams.get('utm_clear'));
+
+  if (urlInv || urlTot || urlJobs || urlRemit || urlNotes || urlBack || doClear){
     const existing = loadPref();
+    const docs = normalizeDocTokens(urlInv).join(',');
     savePref({
-      invoices: normalizeInvoices(urlInv) || existing.invoices || '',
-      total:    (urlTot || existing.total || '')
+      docs:     docs || existing.docs || '',
+      total:    urlTot || existing.total || '',
+      jobs:     urlJobs || existing.jobs || '',
+      remit:    urlRemit || existing.remit || '',
+      notes:    urlNotes || existing.notes || '',
+      back:     urlBack || existing.back || '',
+      clear:    doClear || existing.clear || false
     });
   }
 
-  /* ---------- apply to DOM ---------- */
+  /* =============================
+     DOM Apply + Postback Safety
+     ============================= */
+  function buildRemittanceText(pref){
+    const lines = [];
+    const docs = String(pref.docs||'').trim();
+    if (docs) lines.push(docs); // docs on a single line, e.g. "123$12.34,CN456,789$5.00"
+
+    // Jobs → one line each: "Job name - $12.34 balance as of MM/DD/YYYY"
+    const jobList = parseJobs(pref.jobs);
+    const today = toUSDateStr();
+    for (const j of jobList){
+      const a = j.amount ? `$${normalizeMoneyStr(j.amount)}` : '';
+      lines.push(`${j.name} - ${a || '$0.00'} balance as of ${today}`);
+    }
+
+    if (pref.remit) lines.push(String(pref.remit).trim());
+    if (pref.notes) lines.push(String(pref.notes).trim());
+    return lines.join('\n');
+  }
+
+  function dedupeDocsInto(existingValue, newDocsCsv){
+    if (!newDocsCsv) return existingValue || '';
+    const existing = String(existingValue||'').replace(/\s+/g,'');
+    const tokens = normalizeDocTokens(newDocsCsv);
+    const fresh = [];
+    for (const t of tokens){
+      // if not already present verbatim (ignoring whitespace), append
+      if (!existing.includes(t.replace(/\s+/g,''))){
+        fresh.push(t);
+      }
+    }
+    if (!fresh.length) return existingValue || '';
+    return (existingValue ? (existingValue.replace(/\s+$/,'') + '\n') : '') + fresh.join(',');
+  }
+
   function applyPrefill(){
     const pref = loadPref(); if (!pref) return;
+
     const rem = $('ctl00_PageBody_RemittanceAdviceTextBox');
-    if (rem && pref.invoices){
-      const has = rem.value && rem.value.indexOf(pref.invoices) !== -1;
-      if (!has){
-        rem.value = rem.value ? `${rem.value.replace(/\s+$/,'')}\n${pref.invoices}` : pref.invoices;
+    const amt = $('ctl00_PageBody_PaymentAmountTextBox');
+
+    if (rem){
+      let finalText = String(rem.value||'').trim();
+      if (pref.clear){
+        finalText = ''; // explicit clear if requested
       }
+      // Insert docs on one line (dedupe), then append jobs/remit/notes
+      if (pref.docs){
+        finalText = dedupeDocsInto(finalText, pref.docs);
+      }
+      const addl = buildRemittanceText({ ...pref, docs:'' }); // jobs/remit/notes only
+      if (addl){
+        finalText = finalText ? (finalText + '\n' + addl) : addl;
+      }
+      rem.value = finalText;
       rem.defaultValue = rem.value;
     }
-    const amt = $('ctl00_PageBody_PaymentAmountTextBox');
+
     if (amt && pref.total){
-      if (amt.value !== pref.total) amt.value = pref.total;
+      const norm = normalizeMoneyStr(pref.total);
+      if (norm && amt.value !== norm) amt.value = norm;
       amt.defaultValue = amt.value;
     }
+
     renderSummary(pref);
   }
 
-  /* ---------- ensure values are in the POST before any partial postback ---------- */
+  // Ensure the values are present right before any partial postback
   function stampValuesIntoForm(){
     const pref = loadPref(); if (!pref) return;
     const rem = $('ctl00_PageBody_RemittanceAdviceTextBox');
     const amt = $('ctl00_PageBody_PaymentAmountTextBox');
-    if (rem && pref.invoices && rem.value.indexOf(pref.invoices) === -1){
-      rem.value = rem.value ? `${rem.value.replace(/\s+$/,'')}\n${pref.invoices}` : pref.invoices;
+    if (rem){
+      // rebuild expected text and ensure it's stamped
+      let finalText = String(rem.value||'').trim();
+      if (pref.clear){ finalText = ''; }
+      if (pref.docs){ finalText = dedupeDocsInto(finalText, pref.docs); }
+      const addl = buildRemittanceText({ ...pref, docs:'' });
+      if (addl){ finalText = finalText ? (finalText + '\n' + addl) : addl; }
+      rem.value = finalText;
     }
-    if (amt && pref.total && amt.value !== pref.total){
-      amt.value = pref.total;
+    if (amt && pref.total){
+      const norm = normalizeMoneyStr(pref.total);
+      if (norm && amt.value !== norm) amt.value = norm;
     }
   }
 
-  /* ---------- MS AJAX hooks (only if params present) ---------- */
   function wireAjax(){
     try{
       if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
@@ -81,7 +225,7 @@
     }catch{}
   }
 
-  /* ---------- persist on user edits too ---------- */
+  // Persist user edits too (keeps docs clean + total)
   function wireFieldPersistence(){
     const ids = [
       'ctl00_PageBody_RemittanceAdviceTextBox',
@@ -97,9 +241,22 @@
           const rem = $('ctl00_PageBody_RemittanceAdviceTextBox');
           const amt = $('ctl00_PageBody_PaymentAmountTextBox');
           const pref = loadPref();
+          // Re-extract docs only (first line with commas), leave jobs/notes/remit as-is
+          let docsLine = '';
+          if (rem && rem.value){
+            const firstLine = String(rem.value).split('\n')[0];
+            if (firstLine.includes(',')){
+              docsLine = normalizeDocTokens(firstLine).join(',');
+            }
+          }
           savePref({
-            invoices: rem ? normalizeInvoices(rem.value) : (pref.invoices||''),
-            total:    amt ? amt.value : (pref.total||'')
+            docs:  docsLine || (pref.docs||''),
+            total: amt ? amt.value : (pref.total||''),
+            jobs:  pref.jobs || '',
+            remit: pref.remit || '',
+            notes: pref.notes || '',
+            back:  pref.back || '',
+            clear: !!pref.clear
           });
         };
         el.addEventListener('input',  saveNow);
@@ -107,18 +264,10 @@
         el.__wlBound = true;
       }
     });
-    window.addEventListener('beforeunload', ()=> {
-      const rem = $('ctl00_PageBody_RemittanceAdviceTextBox');
-      const amt = $('ctl00_PageBody_PaymentAmountTextBox');
-      const pref = loadPref();
-      savePref({
-        invoices: rem ? normalizeInvoices(rem.value) : (pref.invoices||''),
-        total:    amt ? amt.value : (pref.total||'')
-      });
-    });
+    window.addEventListener('beforeunload', ()=> stampValuesIntoForm());
   }
 
-  /* ---------- optional one-time amount postback ---------- */
+  // Some pages react to amount change; nudge it once
   function triggerAmountChangeOnce(){
     const pref = loadPref(); if (!pref.total) return;
     if (window.__wlAmtPosted) return;
@@ -127,7 +276,9 @@
     setTimeout(()=> { amt.dispatchEvent(new Event('change', { bubbles:true })); }, 60);
   }
 
-  /* ---------- tiny summary bar (only when params exist) ---------- */
+  /* =============================
+     Summary UI
+     ============================= */
   function injectCSS(){
     if (document.getElementById('wl-pay-summary-css')) return;
     const css = `
@@ -152,28 +303,31 @@
       box.className = 'wl-pay-summary';
       host.parentNode.insertBefore(box, host);
     }
-    const invList = String(pref.invoices||'').split(',').filter(Boolean);
+    const invList = (String(pref.docs||'').split(',').filter(Boolean));
     const totalStr = pref.total || '';
+    const backHref = pref.back || '/Invoices_r.aspx';
     box.innerHTML = `
       <div class="left">
-        <div class="wl-pill">${invList.length} invoice${invList.length===1?'':'s'}</div>
+        <div class="wl-pill">${invList.length} doc${invList.length===1?'':'s'}</div>
         ${totalStr ? `<div class="wl-pill">Total ${totalStr}</div>` : ``}
-        ${invList.length ? `<div class="wl-pill" title="${pref.invoices}">${invList.slice(0,4).join(', ')}${invList.length>4?'…':''}</div>` : ``}
+        ${invList.length ? `<div class="wl-pill" title="${pref.docs}">${invList.slice(0,4).join(', ')}${invList.length>4?'…':''}</div>` : ``}
       </div>
       <div class="right">
-        <button type="button" class="wl-action" data-act="clear-remit">Clear list</button>
-        <a class="wl-action" href="/Invoices_r.aspx">Back to invoices</a>
+        <button type="button" class="wl-action" data-act="clear-remit">Clear</button>
+        <a class="wl-action" href="${backHref}">Back to invoices</a>
       </div>
     `;
     box.querySelector('[data-act="clear-remit"]')?.addEventListener('click', ()=>{
       const rem = $('ctl00_PageBody_RemittanceAdviceTextBox');
       if (rem){ rem.value=''; rem.defaultValue=''; }
-      const pref2 = loadPref(); savePref({ invoices:'', total: (pref2.total||'') });
+      const pref2 = loadPref(); savePref({ ...pref2, docs:'', remit:'', notes:'', jobs:'', clear:false });
       renderSummary(loadPref());
     });
   }
 
-  /* ---------- boot (only runs because HAS_PARAMS=true) ---------- */
+  /* =============================
+     Boot
+     ============================= */
   injectCSS();
   wireAjax();
   wireFieldPersistence();
@@ -184,6 +338,8 @@
     document.addEventListener('DOMContentLoaded', applyPrefill, { once:true });
   }
 })();
+
+
 
 
 
