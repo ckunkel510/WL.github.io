@@ -690,9 +690,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
       // 3) now (and only now) we dim/hide site chrome (but keep buttons)
       [...document.body.children].forEach(ch => {
-        if (ch !== root && !ch.id?.startsWith('bl-print-')) ch.setAttribute('data-bl-hide','1');
-      });
-      [...document.querySelectorAll('[data-bl-hide="1"]')].forEach(n => n.style.setProperty('display','none','important'));
+  if (ch === root) return;
+  // robust id check
+  const rawId = (ch && (ch.id ?? (ch.getAttribute && ch.getAttribute('id')))) || '';
+  const isPrintBtn = String(rawId).indexOf('bl-print-') === 0;
+  if (!isPrintBtn) ch.setAttribute('data-bl-hide','1');
+});
+[...document.querySelectorAll('[data-bl-hide="1"]')].forEach(n => n.style.setProperty('display','none','important'));
 
       // 4) features (non-blocking)
       if (cfg.showFeatures) {
@@ -738,7 +742,10 @@ document.addEventListener('DOMContentLoaded', function () {
         try {
           if (root && root.parentNode) root.parentNode.removeChild(root);
           if (styleEl && styleEl.parentNode) styleEl.parentNode.removeChild(styleEl);
-          [...document.querySelectorAll('[data-bl-hide="1"]')].forEach(n => { n.style.removeProperty('display'); n.removeAttribute('data-bl-hide'); });
+          [...document.querySelectorAll('[data-bl-hide="1"]')].forEach(n => {
+  n.style.removeProperty('display');
+  n.removeAttribute('data-bl-hide');
+});
         } catch (e) { log('cleanup error', e); }
         window.removeEventListener('afterprint', cleanup);
       };
