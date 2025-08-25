@@ -418,15 +418,13 @@ window.addEventListener('load', async function() {
 
 
 (function () {
-  // Activate only when binlabel=true
   const params = new URLSearchParams(location.search);
   if (params.get('binlabel') !== 'true') return;
 
   // ---------- helpers ----------
   const text = (el) => (el ? el.textContent.trim() : '');
-  const abs  = (src) => src && /^https?:\/\//i.test(src) ? src : (src ? new URL(src, location.origin) : null)?.toString();
+  const abs  = (src) => src && /^https?:\/\//i.test(src) ? src : (src ? new URL(src, location.origin).toString() : '');
 
-  // Build canonical (drop binlabel & utm_*)
   function canonicalizeUrl(url) {
     const u = new URL(url, location.origin);
     const sp = u.searchParams;
@@ -437,27 +435,18 @@ window.addEventListener('load', async function() {
   }
 
   // ---------- page data ----------
-  // Logo from your snippet
   const logoEl  = document.querySelector('img[src*="WebTrackImage_"]') || document.querySelector('img[src*="/images/user_content/"]');
   const logoSrc = abs(logoEl ? logoEl.getAttribute('src') : '');
 
-  // Product name
   const productName =
     text(document.querySelector('#ctl00_PageBody_productDetail_productDescription .productDescriptionOnThisPageFull')) ||
     text(document.querySelector('.productDescriptionOnThisPageFull')) ||
     text(document.querySelector('#product-main .productNameLink')) ||
     text(document.querySelector('.formPageHeader')) || 'Product';
 
-  // Features (desktop + mobile fallbacks)
-  function getFeatures() {
-    const featuresEl = document.querySelector('#product-widget #tab-content #tab-Features');
-    const mobileEl = [...document.querySelectorAll('#product-widget .mobile-section')]
-      .find(s => /Features/i.test(text(s.querySelector('.mobile-header'))));
-    const sourceHTML =
-      (featuresEl && featuresEl.innerHTML && featuresEl.innerHTML.trim()) ? featuresEl.innerHTML :
-      (mobileEl ? mobileEl.querySelector('.mobile-content')?.innerHTML || '' : '');
-    if (!sourceHTML) return [];
-    return sourceHTML
+  function extractFeaturesFrom(htmlStr) {
+    if (!htmlStr) return [];
+    return htmlStr
       .replace(/<\/?div[^>]*>/gi, '\n')
       .replace(/<br\s*\/?>/gi, '\n')
       .replace(/&nbsp;/g, ' ')
@@ -465,9 +454,34 @@ window.addEventListener('load', async function() {
       .map(s => s.replace(/\s+/g, ' ').trim())
       .filter(Boolean);
   }
-  const features = getFeatures();
 
-  // Price & UOM
+  function getFeaturesOnce() {
+    // Desktop tab
+    const featuresEl = document.querySelector('#product-widget #tab-content #tab-Features');
+    if (featuresEl && featuresEl.innerHTML.trim()) return extractFeaturesFrom(featuresEl.innerHTML);
+
+    // Mobile section
+    const mobileSec = [...document.querySelectorAll('#product-widget .mobile-section')]
+      .find(s => /Features/i.test(text(s.querySelector('.mobile-header'))));
+    if (mobileSec) {
+      const mobileHTML = mobileSec.querySelector('.mobile-content')?.innerHTML || '';
+      if (mobileHTML.trim()) return extractFeaturesFrom(mobileHTML);
+    }
+
+    // Active tab fallback when Features is selected
+    const activeTab = document.querySelector('#product-widget #tab-content .tab-section.active');
+    const tabBtn = [...document.querySelectorAll('#product-widget #tab-menu button')].find(b => b.classList.contains('active'));
+    if (activeTab && /Features/i.test(tabBtn?.getAttribute('data-header') || '')) {
+      return extractFeaturesFrom(activeTab.innerHTML);
+    }
+
+    return [];
+  }
+
+  // Try immediately, then once more after a tick (in case the widget hydrates after load)
+  let features = getFeaturesOnce();
+  setTimeout(() => { if (!features.length) features = getFeaturesOnce(); }, 150);
+
   function findPriceAndUom() {
     const priceRegex = /^\$?\s*\d[\d,]*(\.\d{2})?$/;
     let price = '', uom = '';
@@ -494,7 +508,6 @@ window.addEventListener('load', async function() {
   }
   const { price, uom } = findPriceAndUom();
 
-  // Product image
   const imgEl  = document.querySelector('#ctl00_PageBody_productDetail_ProductImage') ||
                  document.querySelector('#product-image-wrapper img') ||
                  document.querySelector('#main-block img');
@@ -502,14 +515,15 @@ window.addEventListener('load', async function() {
 
   const qrTarget = canonicalizeUrl(location.href);
 
-  // ---------- QR: robust 3-stage fallback ----------
-  const QR_SIZE = 220;
+  // ---------- QR with robust fallback ----------
+  const QR_SIZE = 180; // slightly smaller so it never crowds the footer
 
   function loadScript(src, timeoutMs = 2000) {
     return new Promise((resolve, reject) => {
       const s = document.createElement('script');
       let done = false, t;
-      s.src = src; s.async = true; s.onload = () => { if (!done) { done = true; clearTimeout(t); resolve(); } };
+      s.src = src; s.async = true;
+      s.onload = () => { if (!done) { done = true; clearTimeout(t); resolve(); } };
       s.onerror = () => { if (!done) { done = true; clearTimeout(t); reject(new Error('load error')); } };
       document.head.appendChild(s);
       t = setTimeout(() => { if (!done) { done = true; reject(new Error('timeout')); } }, timeoutMs);
@@ -517,7 +531,6 @@ window.addEventListener('load', async function() {
   }
 
   async function renderQR(el, text, size) {
-    // Stage 1: try qrcodejs from CDN (works offline once cached; small)
     try {
       if (!window.QRCode) {
         await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js', 2500);
@@ -527,9 +540,9 @@ window.addEventListener('load', async function() {
         new QRCode(el, { text, width: size, height: size, correctLevel: window.QRCode.CorrectLevel.M });
         return true;
       }
-    } catch (_) { /* fall through */ }
+    } catch (_) {}
 
-    // Stage 2: Google Chart PNG
+    // Fallback: Google Chart PNG
     try {
       const img = new Image();
       img.alt = 'QR';
@@ -543,9 +556,9 @@ window.addEventListener('load', async function() {
       });
       el.innerHTML = ''; el.appendChild(img);
       return true;
-    } catch (_) { /* fall through */ }
+    } catch (_) {}
 
-    // Stage 3: local fallback box (never fails)
+    // Last resort: URL box (never fails)
     const box = document.createElement('div');
     box.style.width = size + 'px';
     box.style.height = size + 'px';
@@ -558,14 +571,14 @@ window.addEventListener('load', async function() {
     box.style.padding = '8px';
     box.style.textAlign = 'center';
     box.innerHTML = `
-      <div style="font:700 14px/1.2 sans-serif;margin-bottom:6px;">Scan URL</div>
-      <div style="font:12px/1.2 monospace;word-break:break-all;max-width:${size-16}px">${text}</div>
+      <div style="font:700 13px/1.2 sans-serif;margin-bottom:6px;">Scan URL</div>
+      <div style="font:11px/1.2 monospace;word-break:break-all;max-width:${size-16}px">${text}</div>
     `;
     el.innerHTML = ''; el.appendChild(box);
     return false;
   }
 
-  // ---------- styles (4x6 landscape) ----------
+  // ---------- styles (4x6 landscape, safer scaling) ----------
   const BRAND_COLOR = '#6B0016';
   const style = document.createElement('style');
   style.textContent = `
@@ -573,27 +586,77 @@ window.addEventListener('load', async function() {
     @media print { html, body { width: 6in; height: 4in; } }
     body > *:not(.binlabel-root) { display: none !important; }
     html, body { background:#fff!important; margin:0!important; padding:0!important; }
-    .binlabel-root { position:relative; box-sizing:border-box; width:6in; height:4in; overflow:hidden;
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color:#111; }
-    .bl-grid { position:absolute; inset:0; display:grid;
-      grid-template-columns: 1.8in 1fr; grid-template-rows: auto 1fr auto; gap:0.1in; padding:0.25in 0.3in; }
-    .bl-header { grid-column:1 / span 2; display:flex; align-items:center; gap:0.2in; height:0.7in;
-      border-bottom:2px solid ${BRAND_COLOR}22; padding-bottom:0.05in; }
-    .bl-logo img { height:0.55in; object-fit:contain; background:#fff; padding:0.04in; border-radius:4px; }
-    .bl-title { font-weight:700; font-size:18pt; line-height:1.1; letter-spacing:0.2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-    .bl-left { grid-row:2 / span 2; align-self:end; display:flex; align-items:flex-end; justify-content:center; }
-    .bl-left .bl-image { max-width:100%; max-height:2.8in; object-fit:contain; }
-    .bl-right { grid-row:2; display:grid; grid-template-rows:auto 1fr auto; gap:0.08in; padding-right:0.2in; }
-    .bl-name { font-size:16pt; font-weight:700; line-height:1.2; }
-    .bl-features { font-size:11pt; line-height:1.2; }
-    .bl-features ul { margin:0.04in 0 0 0.16in; padding:0; }
-    .bl-features li { margin:0.02in 0; }
-    .bl-priceRow { display:flex; align-items:baseline; gap:0.1in; margin-top:0.02in; }
-    .bl-price { font-size:30pt; font-weight:800; letter-spacing:-0.5px; }
-    .bl-uom { font-size:14pt; color:#444; font-weight:600; }
-    .bl-qr { grid-column:2; grid-row:3; align-self:end; justify-self:end; width:${QR_SIZE}px; height:${QR_SIZE}px; }
+
+    .binlabel-root {
+      position:relative; box-sizing:border-box; width:6in; height:4in; overflow:hidden;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color:#111;
+    }
+    .bl-grid {
+      position:absolute; inset:0;
+      display:grid;
+      grid-template-columns: 2.0in 1fr; /* give image a hair more room but cap its max-height */
+      grid-template-rows: auto 1fr auto;
+      gap: 0.1in;
+      padding: 0.2in 0.25in; /* slightly tighter padding to keep everything inside */
+    }
+
+    .bl-header {
+      grid-column: 1 / span 2;
+      display:flex; align-items:center; gap:0.18in;
+      min-height: 0.55in;
+      border-bottom: 2px solid ${BRAND_COLOR}22;
+      padding-bottom: 0.04in;
+    }
+    .bl-logo img {
+      max-height: 0.5in; width:auto; object-fit:contain; background:#fff; padding:0.03in; border-radius:4px;
+    }
+    .bl-title {
+      font-weight:700; font-size: 15pt; line-height:1.1;
+      letter-spacing: 0.2px; max-height: 0.5in; overflow: hidden;
+      display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; /* clamp long names */
+    }
+
+    .bl-left {
+      grid-row: 2 / span 2;
+      display:flex; align-items:flex-end; justify-content:center;
+      overflow:hidden; /* prevent spillover */
+      padding: 0 0.05in 0.05in 0; /* tiny breathing room */
+    }
+    .bl-left .bl-image {
+      max-width: 100%;
+      max-height: 2.4in; /* lowered to ensure QR + footer always fit */
+      height:auto; width:auto;
+      object-fit: contain;
+      display:block;
+    }
+
+    .bl-right {
+      grid-row: 2; display:grid; grid-template-rows: auto 1fr auto; gap: 0.06in;
+      padding-right: 0.1in; min-width: 0; /* allow shrinking */
+    }
+    .bl-name { display:none; } /* moved name into header */
+    .bl-features { font-size: 10.5pt; line-height: 1.25; overflow:hidden; }
+    .bl-features ul { margin: 0.03in 0 0 0.16in; padding: 0; }
+    .bl-features li { margin: 0.01in 0; }
+
+    .bl-priceRow {
+      display:flex; align-items:baseline; gap: 0.07in; margin-top: 0.02in;
+      flex-wrap: wrap;
+    }
+    .bl-price { font-size: 26pt; font-weight: 800; letter-spacing: -0.3px; }
+    .bl-uom { font-size: 13pt; color:#444; font-weight:600; }
+
+    .bl-qr {
+      grid-column: 2; grid-row: 3;
+      align-self: end; justify-self: end;
+      width: ${QR_SIZE}px; height: ${QR_SIZE}px;
+      margin-right: 0.05in; margin-bottom: 0.05in; /* keep it inside bounds */
+      overflow:hidden;
+    }
+
+    /* Center on screen for preview */
     html, body { display:grid; place-items:center; }
-    .binlabel-root { box-shadow:0 0 0 1px #ddd, 0 4px 24px rgba(0,0,0,.12); }
+    .binlabel-root { box-shadow: 0 0 0 1px #ddd, 0 4px 24px rgba(0,0,0,.12); }
     @media print { .binlabel-root { box-shadow:none; } }
   `;
   document.head.appendChild(style);
@@ -605,29 +668,46 @@ window.addEventListener('load', async function() {
     <div class="bl-grid">
       <div class="bl-header">
         <div class="bl-logo">${logoSrc ? `<img alt="Woodson Lumber" src="${logoSrc}">` : ''}</div>
-        <div class="bl-title">Bin Label</div>
+        <div class="bl-title">${productName}</div>
       </div>
+
       <div class="bl-left">
         ${imgSrc ? `<img class="bl-image" alt="Product" src="${imgSrc}">` : ''}
       </div>
+
       <div class="bl-right">
-        <div class="bl-name">${productName}</div>
-        <div class="bl-features">
-          ${features.length ? `<ul>${features.map(f => `<li>${f}</li>`).join('')}</ul>` : '<div style="color:#888">No feature details found.</div>'}
+        <div class="bl-features" id="bl-features-slot">
+          ${features.length ? `<ul>${features.map(f => `<li>${f}</li>`).join('')}</ul>` : '<div style="color:#888">Loading features…</div>'}
         </div>
         <div class="bl-priceRow">
           <div class="bl-price">${(price || '')}</div>
           ${uom ? `<div class="bl-uom">/ ${uom}</div>` : ''}
         </div>
       </div>
+
       <div class="bl-qr" id="bl-qr"></div>
     </div>
   `;
   document.body.appendChild(root);
 
-  // Draw QR with fallbacks (never throws)
-  renderQR(document.getElementById('bl-qr'), qrTarget, QR_SIZE);
+  // second-pass fill for features after 150ms retry (if first read was empty)
+  setTimeout(() => {
+    if (!features.length) {
+      const retry = getFeaturesOnce();
+      if (retry.length) {
+        const slot = document.getElementById('bl-features-slot');
+        if (slot) slot.innerHTML = `<ul>${retry.map(f => `<li>${f}</li>`).join('')}</ul>`;
+      } else {
+        const slot = document.getElementById('bl-features-slot');
+        if (slot) slot.innerHTML = '<div style="color:#888">No feature details found.</div>';
+      }
+    }
+  }, 170);
 
-  // Optional auto-print
+  // Draw QR (will always render something, even if libraries/network fail)
+  renderQR(document.getElementById('bl-qr'), canonicalizeUrl(location.href), QR_SIZE);
+
   if (params.get('print') === 'true') setTimeout(() => window.print(), 300);
 })();
+
+
