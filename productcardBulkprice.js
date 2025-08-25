@@ -6,7 +6,6 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
 
   async function init() {
     try {
-      // 1) Only look at image/link rows so we scope per item
       const productAnchors = Array.from(
         document.querySelectorAll('tr[id*="ProductImageRow"] a[href*="pid="], a[href*="pid="][id*="ProductImageRow"]')
       );
@@ -15,7 +14,6 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
         return;
       }
 
-      // 2) Fetch the CSV once
       const sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRmHLHJE9OebjPpi7wMvOHxX6fOdarKQRRbd1W-Vf2o04kLwd9kc0jpm78WFCU4y1ErzCIWVqoUvAwn/pub?output=csv";
       const csvText = await (await fetch(sheetUrl)).text();
       const { headers, rows } = quickCSV(csvText);
@@ -27,7 +25,6 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
         return;
       }
 
-      // Build pid -> tiers
       const tiersByPid = new Map();
       for (const r of rows) {
         const pid = (r[pidIdx] || "").trim();
@@ -47,133 +44,121 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
         const tiers = tiersByPid.get(pid);
         if (!tiers || !tiers.length) continue;
 
-        // Scope to THIS item’s row and tbody
         const imgRow = a.closest('tr');
         if (!imgRow) continue;
-        if (imgRow.dataset.bulkApplied === "1") continue; // avoid duplicates on this item
+        if (imgRow.dataset.bulkApplied === "1") continue;
 
         const tbody = imgRow.closest('tbody') || imgRow.parentElement;
 
-        // Find the nearest price row for this item by scanning forward a few rows
-        const priceRow = findSiblingPriceRow(imgRow, tbody);
+        // find the "block" for this card = rows until the next ProductImageRow
+        const blockRows = collectBlockRows(imgRow);
 
-        // --- NEW: figure out the customer price from this card ---
-        const customerPrice = findCustomerPrice(imgRow, tbody, priceRow);
-        // Compute the lowest bulk price from tiers (ignore blank / non-numeric)
-        const minBulkPrice = tiers
-          .map(t => parseMoney(t.price))
-          .filter(v => Number.isFinite(v) && v > 0)
-          .reduce((min, v) => Math.min(min, v), Infinity);
+        // prefer an explicit price row if present
+        const priceRow = blockRows.find(tr =>
+          /PriceRow/i.test(tr.id || "") || tr.classList?.contains("PriceRow")
+        ) || null;
 
-        // If we have both prices and customer's price is strictly less than the lowest bulk price, skip banner
-        if (Number.isFinite(customerPrice) && Number.isFinite(minBulkPrice) && customerPrice < minBulkPrice) {
-          // Skip inserting banner for this card
+        // --- KEY: Get customer price strictly within this card block
+        const customerPrice = findCustomerPriceInBlock(blockRows, priceRow);
+
+        // If we can't find a customer price, do NOT show the banner (fail-safe)
+        if (!Number.isFinite(customerPrice) || customerPrice <= 0) {
+          console.debug("[BulkPricing] No customer price found in this card; skipping banner for pid:", pid);
           continue;
         }
 
-        // Build our bulk row
+        // Compute the lowest bulk price from tiers (sheet uses plain numbers like 26.72)
+        const minBulkPrice = tiers
+          .map(t => parseMoney(t.price))   // handles "26.72" and safety
+          .filter(v => Number.isFinite(v) && v > 0)
+          .reduce((min, v) => Math.min(min, v), Infinity);
+
+        // If customer price is cheaper or equal, don't show banner
+        if (Number.isFinite(minBulkPrice) && customerPrice <= minBulkPrice) {
+          console.debug(`[BulkPricing] Skip: customer ${customerPrice} <= min bulk ${minBulkPrice} (pid ${pid})`);
+          continue;
+        }
+
+        // Build row text
+        const line = tiers.map(t => {
+          const q = t.qty || 'Qty';
+          const p = parseMoney(t.price);
+          const pTxt = Number.isFinite(p) ? `$${p.toFixed(2)}` : '(price missing)';
+          return `${q}+ at ${pTxt} ea`;
+        }).join(' • ');
+
+        // Insert banner after priceRow if available, else after image row
+        const insertAfter = priceRow || imgRow;
         const bulkTr = document.createElement('tr');
         bulkTr.className = 'wl-bulk-pricing-row';
         const td = document.createElement('td');
-
-        // Match the colspan of the target row if possible
-        const colSpanGuess = (priceRow && priceRow.children.length) ? priceRow.children.length
-                              : (imgRow && imgRow.children.length) ? imgRow.children.length
-                              : 1;
-        td.colSpan = colSpanGuess;
-
-        const line = tiers.map(t => {
-          const q = t.qty || 'Qty';
-          const p = t.price ? `$${String(t.price).replace(/^\$/, '')}` : '(price missing)';
-          return `${q}+ at ${p} ea`;
-        }).join(' • ');
-
+        td.colSpan = (insertAfter.children?.length || imgRow.children?.length || 1);
         td.innerHTML = `
           <div style="text-align:center;font-weight:600;color:#2c3e70;font-size:1.05em;padding:4px 0;">
             Bulk Price: ${line}
-          </div>
-        `;
+          </div>`;
         bulkTr.appendChild(td);
-
-        if (priceRow && priceRow.parentNode === tbody) {
-          priceRow.after(bulkTr);
-        } else {
-          imgRow.after(bulkTr); // fallback: immediately after image row
-        }
+        insertAfter.after(bulkTr);
 
         imgRow.dataset.bulkApplied = "1";
         inserted++;
       }
 
       console.log(`[BulkPricing] Inserted bulk pricing on ${inserted} item(s).`);
-
     } catch (e) {
       console.error("[BulkPricing] Error:", e);
     }
   }
 
-  // Scan forward within the same tbody to find the row that appears to be the price row
-  function findSiblingPriceRow(startTr, tbody) {
+  /* -------- helpers -------- */
+
+  // Collect consecutive rows that belong to this product "card"
+  function collectBlockRows(startTr) {
+    const rows = [startTr];
     let tr = startTr.nextElementSibling;
-    for (let i = 0; tr && i < 8; i++, tr = tr.nextElementSibling) {
-      // Stop if we hit the next item block (another ProductImageRow)
-      if (tr.id && /ProductImageRow/i.test(tr.id)) return null;
-
-      // Prefer explicit IDs/classes first
-      if (/PriceRow/i.test(tr.id || "")) return tr;
-      if (tr.classList && tr.classList.contains('PriceRow')) return tr;
-
-      // Fallback: textual heuristic
-      const txt = (tr.textContent || "").toLowerCase();
-      if (/\bprice\b/.test(txt) || /\bunit\b/.test(txt)) return tr;
+    for (let i = 0; tr && i < 20; i++, tr = tr.nextElementSibling) {
+      if (tr.id && /ProductImageRow/i.test(tr.id)) break; // next card starts
+      rows.push(tr);
     }
-    return null;
+    return rows;
   }
 
-  // Try to find the customer's price shown in this card (e.g., span[id*="lblPrice"])
-  function findCustomerPrice(imgRow, tbody, priceRow) {
-    // 1) Look inside an obvious price row if present
+  // Find customer price inside this card’s rows only
+  function findCustomerPriceInBlock(blockRows, priceRow) {
+    // 1) If we have a known price row, try that first
     if (priceRow) {
       const v = extractMoneyFromNode(priceRow);
       if (Number.isFinite(v) && v > 0) return v;
     }
-    // 2) Search a few rows forward for a span that looks like the price
-    let tr = imgRow.nextElementSibling;
-    for (let i = 0; tr && i < 8; i++, tr = tr.nextElementSibling) {
-      if (tr.id && /ProductImageRow/i.test(tr.id)) break; // next item block
-      // direct span id pattern
+    // 2) Look for the most specific spans first
+    for (const tr of blockRows) {
       const span = tr.querySelector('span[id*="lblPrice"], span[id*="Price"]');
       if (span) {
         const v = parseMoney(span.textContent);
         if (Number.isFinite(v) && v > 0) return v;
       }
-      // fallback: parse any money-looking text in the row
-      const v2 = extractMoneyFromNode(tr);
-      if (Number.isFinite(v2) && v2 > 0) return v2;
     }
-    // 3) As a last resort, look within the same tbody section for the first price-looking element
-    if (tbody) {
-      const guess = tbody.querySelector('span[id*="lblPrice"], span[id*="Price"]');
-      if (guess) {
-        const v = parseMoney(guess.textContent);
-        if (Number.isFinite(v) && v > 0) return v;
-      }
+    // 3) Fallback: any money-looking text within block
+    for (const tr of blockRows) {
+      const v = extractMoneyFromNode(tr);
+      if (Number.isFinite(v) && v > 0) return v;
     }
-    return NaN; // unknown -> we'll allow the banner (preserves previous behavior)
+    return NaN;
   }
 
-  // Pull first $N.NN in a node's text
   function extractMoneyFromNode(node) {
-    const m = (node.textContent || "").match(/\$?\s*([0-9]+\.[0-9]{2})/);
-    return m ? parseMoney(m[0]) : NaN;
+    // Match $12.34 or 12.34 (allow comma thousands + optional $)
+    const m = (node.textContent || "").match(/\$?\s*([\d,]+\.\d{2})/);
+    if (!m) return NaN;
+    return parseMoney(m[0]);
   }
 
   function parseMoney(s) {
+    // Handles "$18.22", "26.72", "1,234.56", " $ 9.99 / EA"
     const v = parseFloat(String(s || '').replace(/[^0-9.\-]/g, ''));
     return Number.isFinite(v) ? v : NaN;
   }
 
-  // CSV parser (handles quotes/commas)
   function quickCSV(text) {
     const lines = text.replace(/\r/g, "").split("\n").filter(Boolean);
     const parseLine = (line) => {
@@ -194,8 +179,8 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
     const rows = lines.map(parseLine);
     return { headers: lower, rows };
   }
-
 })();
+
 
 
 
