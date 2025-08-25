@@ -433,7 +433,7 @@ window.addEventListener('load', async function() {
     return u.toString();
   }
 
-  // ---------- page data ----------
+  // ---------- grab page data ----------
   const logoEl  = document.querySelector('img[src*="WebTrackImage_"]') || document.querySelector('img[src*="/images/user_content/"]');
   const logoSrc = abs(logoEl ? logoEl.getAttribute('src') : '');
 
@@ -455,19 +455,17 @@ window.addEventListener('load', async function() {
   }
 
   function readFeaturesOnce() {
-    // Desktop tab content
+    // Desktop tab
     const featuresEl = document.querySelector('#product-widget #tab-content #tab-Features');
     if (featuresEl && featuresEl.innerHTML.trim()) return extractFeaturesFrom(featuresEl.innerHTML);
-
-    // Mobile section fallback
+    // Mobile
     const mobileSec = [...document.querySelectorAll('#product-widget .mobile-section')]
       .find(s => /Features/i.test(text(s.querySelector('.mobile-header'))));
     if (mobileSec) {
       const mobileHTML = mobileSec.querySelector('.mobile-content')?.innerHTML || '';
       if (mobileHTML.trim()) return extractFeaturesFrom(mobileHTML);
     }
-
-    // Active tab is Features
+    // Active tab fallback
     const tabBtn = [...document.querySelectorAll('#product-widget #tab-menu button')].find(b => b.classList.contains('active'));
     const activeTab = document.querySelector('#product-widget #tab-content .tab-section.active');
     if (activeTab && /Features/i.test(tabBtn?.getAttribute('data-header') || '')) {
@@ -502,7 +500,7 @@ window.addEventListener('load', async function() {
   }
   const { price, uom } = findPriceAndUom();
 
-  // Product image
+  // Product image (abs URL), + safe fallback
   const imgEl  = document.querySelector('#ctl00_PageBody_productDetail_ProductImage') ||
                  document.querySelector('#product-image-wrapper img') ||
                  document.querySelector('#main-block img');
@@ -510,8 +508,8 @@ window.addEventListener('load', async function() {
 
   const qrTarget = canonicalizeUrl(location.href);
 
-  // ---------- QR: robust fallback (CDN -> Google PNG -> URL box) ----------
-  const QR_SIZE = 140; // smaller so it never crowds edges
+  // ---------- QR with robust fallbacks ----------
+  const QR_SIZE = 120; // smaller to guarantee fit
 
   function loadScript(src, timeoutMs = 2000) {
     return new Promise((resolve, reject) => {
@@ -526,16 +524,21 @@ window.addEventListener('load', async function() {
   }
 
   async function renderQR(el, text, size) {
-    try {
-      if (!window.QRCode) {
-        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js', 2500);
-      }
-      if (window.QRCode) {
-        el.innerHTML = '';
-        new QRCode(el, { text, width: size, height: size, correctLevel: window.QRCode.CorrectLevel.M });
-        return true;
-      }
-    } catch (_) {}
+    // Stage 0: try your **local** copy first (drop qrcode.min.js on your server)
+    // e.g. /scripts/qrcode.min.js — change path if needed
+    if (!window.QRCode) {
+      try { await loadScript('/scripts/qrcode.min.js', 1200); } catch (_) {}
+    }
+    // Stage 1: CDN
+    if (!window.QRCode) {
+      try { await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js', 2000); } catch (_) {}
+    }
+    if (window.QRCode) {
+      el.innerHTML = '';
+      new QRCode(el, { text, width: size, height: size, correctLevel: window.QRCode.CorrectLevel.M });
+      return true;
+    }
+    // Stage 2: Google Chart PNG
     try {
       const img = new Image();
       img.alt = 'QR'; img.width = size; img.height = size; img.referrerPolicy = 'no-referrer';
@@ -548,6 +551,7 @@ window.addEventListener('load', async function() {
       el.innerHTML = ''; el.appendChild(img);
       return true;
     } catch (_) {}
+    // Stage 3: URL box (never fails)
     const box = document.createElement('div');
     box.style.width = size + 'px';
     box.style.height = size + 'px';
@@ -567,89 +571,81 @@ window.addEventListener('load', async function() {
     return false;
   }
 
-  // ---------- styles (4x6 landscape, right-side price over QR, safe scaling) ----------
+  // ---------- styles (4×6 landscape; hard caps on image/QR to prevent overflow) ----------
   const BRAND_COLOR = '#6B0016';
   const style = document.createElement('style');
   style.textContent = `
     @page { size: 6in 4in; margin: 0; }
     @media print { html, body { width: 6in; height: 4in; } }
-    body > *:not(.binlabel-root) { display: none !important; }
+    body > *:not(.binlabel-root):not(#bl-print-btn) { display: none !important; } /* hide page chrome; keep print btn toggle-able */
+
     html, body { background:#fff!important; margin:0!important; padding:0!important; }
+    html, body { display:grid; place-items:center; }
 
     .binlabel-root {
       position:relative; box-sizing:border-box; width:6in; height:4in; overflow:hidden;
       font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color:#111;
+      box-shadow: 0 0 0 1px #ddd, 0 4px 24px rgba(0,0,0,.12);
     }
+    @media print { .binlabel-root { box-shadow:none; } }
+
     .bl-grid {
       position:absolute; inset:0;
       display:grid;
-      grid-template-columns: 2.0in 1fr;
+      grid-template-columns: 1.9in 1fr;        /* slightly narrower image column */
       grid-template-rows: auto 1fr;
-      gap: 0.1in;
-      padding: 0.2in 0.25in;
+      gap: 0.08in;
+      padding: 0.18in 0.22in;                 /* tightened padding to keep everything inside */
+      overflow:hidden;
     }
 
-    /* Header: logo + product name */
+    /* Header */
     .bl-header {
       grid-column: 1 / span 2;
-      display:flex; align-items:center; gap:0.18in;
-      min-height: 0.55in;
+      display:flex; align-items:center; gap:0.16in;
+      min-height: 0.5in;
       border-bottom: 2px solid ${BRAND_COLOR}22;
       padding-bottom: 0.04in;
+      overflow:hidden;
     }
     .bl-logo img {
-      max-height: 0.5in; width:auto; object-fit:contain; background:#fff; padding:0.03in; border-radius:4px;
+      max-height: 0.48in; width:auto; object-fit:contain; background:#fff; padding:0.03in; border-radius:4px;
     }
     .bl-title {
-      font-weight:700; font-size: 15pt; line-height:1.1;
-      letter-spacing: 0.2px; max-height: 0.5in; overflow: hidden;
+      font-weight:700; font-size: 14.5pt; line-height:1.1;
+      letter-spacing: 0.2px; max-height: 0.46in; overflow: hidden;
       display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
     }
 
-    /* Left: product image pinned inside column */
+    /* Left: image (hard cap so it never overflows) */
     .bl-left {
       grid-row: 2; grid-column: 1;
       display:flex; align-items:flex-end; justify-content:center;
-      overflow:hidden; padding: 0 0.05in 0.05in 0;
+      overflow:hidden; padding: 0 0.04in 0.04in 0;
     }
     .bl-left .bl-image {
       max-width: 100%;
-      max-height: 2.7in; /* a bit taller now that the right side is stacked */
+      max-height: 2.25in;             /* <= hard cap to keep inside 4x6 */
       height:auto; width:auto; object-fit: contain; display:block;
     }
 
-    /* Right: features (top-left of right col), and a bottom-right "price+QR" block */
+    /* Right column */
     .bl-right {
       grid-row: 2; grid-column: 2;
       display:grid; grid-template-rows: 1fr auto; gap: 0.06in;
-      min-width: 0; padding-right: 0.05in;
+      min-width: 0; padding-right: 0.02in; overflow:hidden;
     }
-    .bl-features { font-size: 10.5pt; line-height: 1.25; overflow:hidden; }
+    .bl-features { font-size: 10.5pt; line-height: 1.25; overflow:auto; }
     .bl-features ul { margin: 0.03in 0 0 0.16in; padding: 0; }
     .bl-features li { margin: 0.01in 0; }
 
+    /* Price + QR block (right-bottom) */
     .bl-priceQr {
       display:grid;
       grid-template-columns: 1fr auto;
       grid-template-rows: auto auto;
       align-items: end;
-      column-gap: 0.1in;
-    }
-    .bl-price {
-      grid-column: 2; grid-row: 1;
-      font-size: 24pt; font-weight: 800; letter-spacing: -0.2px;
-      text-align: right; margin-right: 0.04in;
-    }
-    .bl-uom {
-      grid-column: 2; grid-row: 1;
-      font-size: 12pt; color:#444; font-weight:600;
-      text-align: right; margin-right: 0.04in; margin-top: 0.04in;
-    }
-    .bl-qr {
-      grid-column: 2; grid-row: 2;
-      width:${QR_SIZE}px; height:${QR_SIZE}px;
-      justify-self: end; align-self: end;
-      margin-right: 0.04in; margin-bottom: 0.02in; overflow:hidden;
+      column-gap: 0.08in;
     }
     .bl-cta {
       grid-column: 1; grid-row: 2;
@@ -657,11 +653,32 @@ window.addEventListener('load', async function() {
       font-size: 11pt; font-weight: 700; color: ${BRAND_COLOR};
       white-space: nowrap;
     }
+    .bl-price {
+      grid-column: 2; grid-row: 1;
+      font-size: 22pt; font-weight: 800; letter-spacing: -0.2px;
+      text-align: right; margin-right: 0.02in;
+    }
+    .bl-uom {
+      font-size: 11pt; color:#444; font-weight:600;
+    }
+    .bl-qr {
+      grid-column: 2; grid-row: 2;
+      width:${QR_SIZE}px; height:${QR_SIZE}px;
+      justify-self: end; align-self: end;
+      margin-right: 0.02in; margin-bottom: 0.02in; overflow:hidden;
+    }
 
-    /* Preview nicety */
-    html, body { display:grid; place-items:center; }
-    .binlabel-root { box-shadow: 0 0 0 1px #ddd, 0 4px 24px rgba(0,0,0,.12); }
-    @media print { .binlabel-root { box-shadow:none; } }
+    /* Print button */
+    #bl-print-btn {
+      position: fixed;
+      top: 10px; right: 10px;
+      z-index: 2147483647;
+      background: ${BRAND_COLOR}; color: #fff; border: 0; border-radius: 8px;
+      padding: 10px 14px; font-weight: 700; cursor: pointer;
+      box-shadow: 0 4px 14px rgba(0,0,0,.18);
+    }
+    #bl-print-btn:hover { filter: brightness(1.05); }
+    @media print { #bl-print-btn { display: none !important; } }
   `;
   document.head.appendChild(style);
 
@@ -685,16 +702,24 @@ window.addEventListener('load', async function() {
         </div>
 
         <div class="bl-priceQr">
-          <div class="bl-cta">Learn more online →</div>
           <div class="bl-price">${price || ''} ${uom ? `<span class="bl-uom">/ ${uom}</span>` : ''}</div>
           <div class="bl-qr" id="bl-qr"></div>
+          <div class="bl-cta">Learn more online →</div>
         </div>
       </div>
     </div>
   `;
   document.body.appendChild(root);
 
-  // ---------- fill features (observe & retry) ----------
+  // Print button (prints only the label area because all other elements are hidden via CSS for print)
+  const printBtn = document.createElement('button');
+  printBtn.id = 'bl-print-btn';
+  printBtn.type = 'button';
+  printBtn.textContent = 'Print Label';
+  printBtn.onclick = () => window.print();
+  document.body.appendChild(printBtn);
+
+  // ---------- fill features (observe & timed retries so we catch JS-injected content) ----------
   const featuresSlot = document.getElementById('bl-features-slot');
 
   function setFeaturesList(items) {
@@ -704,22 +729,19 @@ window.addEventListener('load', async function() {
       : '<div style="color:#888">No feature details found.</div>';
   }
 
-  // 1) immediate read
   let feats = readFeaturesOnce();
   if (feats.length) setFeaturesList(feats);
 
-  // 2) small timed retries (because your site populates via JS)
+  // retries up to ~3s
   let tries = 0;
   const retryTimer = setInterval(() => {
-    if (feats.length || tries > 12) { clearInterval(retryTimer); return; } // ~3s total
+    if (feats.length || tries > 12) { clearInterval(retryTimer); return; }
     tries++;
     const attempt = readFeaturesOnce();
-    if (attempt.length) {
-      feats = attempt; setFeaturesList(feats); clearInterval(retryTimer);
-    }
+    if (attempt.length) { feats = attempt; setFeaturesList(feats); clearInterval(retryTimer); }
   }, 250);
 
-  // 3) MutationObserver (fires when tab content updates)
+  // watch the widget for content changes
   const widget = document.querySelector('#product-widget');
   if (widget) {
     const mo = new MutationObserver(() => {
@@ -730,12 +752,14 @@ window.addEventListener('load', async function() {
     mo.observe(widget, { childList: true, subtree: true });
   }
 
-  // ---------- draw QR (always renders something) ----------
+  // ---------- draw QR (always produces *something*) ----------
   renderQR(document.getElementById('bl-qr'), qrTarget, QR_SIZE);
 
-  // Optional: auto-print
+  // Optional: auto-print on demand
   if (params.get('print') === 'true') setTimeout(() => window.print(), 300);
 })();
+
+
 
 
 
