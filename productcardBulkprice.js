@@ -14,7 +14,7 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
         return;
       }
 
-      const sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRmHLHJE9OebjPpi7wMvOHxX6fOdarKQRRbd1W-Vf2o04kLwd9kc0jpm78WFCU4y1ErzCIWVqoUvAwn/pub?output=csv";
+      const sheetUrl = "https://images-woodsonlumber.sirv.com/csv/Bulk%20Pricing%20-%20Sheet1.csv";
       const csvText = await (await fetch(sheetUrl)).text();
       const { headers, rows } = quickCSV(csvText);
 
