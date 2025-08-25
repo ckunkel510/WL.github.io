@@ -416,29 +416,29 @@ window.addEventListener('load', async function() {
 
 
 
+
 (function () {
   // Activate only when binlabel=true
   const params = new URLSearchParams(location.search);
   if (params.get('binlabel') !== 'true') return;
 
-  // ---- Helpers ----
+  // ---------- helpers ----------
   const text = (el) => (el ? el.textContent.trim() : '');
-  const abs = (src) => src && /^https?:\/\//i.test(src) ? src : (src ? new URL(src, location.origin).toString() : '');
+  const abs  = (src) => src && /^https?:\/\//i.test(src) ? src : (src ? new URL(src, location.origin) : null)?.toString();
 
-  // Build canonical URL for QR (drop binlabel + utm_*)
+  // Build canonical (drop binlabel & utm_*)
   function canonicalizeUrl(url) {
     const u = new URL(url, location.origin);
-    const q = u.searchParams;
-    q.delete('binlabel');
-    [...q.keys()].forEach(k => { if (k.toLowerCase().startsWith('utm_')) q.delete(k); });
-    u.search = q.toString();
+    const sp = u.searchParams;
+    sp.delete('binlabel');
+    [...sp.keys()].forEach(k => { if (k.toLowerCase().startsWith('utm_')) sp.delete(k); });
+    u.search = sp.toString();
     return u.toString();
   }
 
-  // ---- Pull data from the page ----
-  // Logo (your snippet shows this specific asset)
-  const logoEl = document.querySelector('img[src*="WebTrackImage_"]') ||
-                 document.querySelector('img[src*="/images/user_content/"]');
+  // ---------- page data ----------
+  // Logo from your snippet
+  const logoEl  = document.querySelector('img[src*="WebTrackImage_"]') || document.querySelector('img[src*="/images/user_content/"]');
   const logoSrc = abs(logoEl ? logoEl.getAttribute('src') : '');
 
   // Product name
@@ -448,20 +448,16 @@ window.addEventListener('load', async function() {
     text(document.querySelector('#product-main .productNameLink')) ||
     text(document.querySelector('.formPageHeader')) || 'Product';
 
-  // Features (your exact structure)
+  // Features (desktop + mobile fallbacks)
   function getFeatures() {
-    // Preferred desktop tab
     const featuresEl = document.querySelector('#product-widget #tab-content #tab-Features');
-    // Mobile fallback
     const mobileEl = [...document.querySelectorAll('#product-widget .mobile-section')]
       .find(s => /Features/i.test(text(s.querySelector('.mobile-header'))));
-    const source = featuresEl && featuresEl.innerHTML.trim()
-      ? featuresEl.innerHTML
-      : (mobileEl ? mobileEl.querySelector('.mobile-content')?.innerHTML || '' : '');
-
-    if (!source) return [];
-
-    return source
+    const sourceHTML =
+      (featuresEl && featuresEl.innerHTML && featuresEl.innerHTML.trim()) ? featuresEl.innerHTML :
+      (mobileEl ? mobileEl.querySelector('.mobile-content')?.innerHTML || '' : '');
+    if (!sourceHTML) return [];
+    return sourceHTML
       .replace(/<\/?div[^>]*>/gi, '\n')
       .replace(/<br\s*\/?>/gi, '\n')
       .replace(/&nbsp;/g, ' ')
@@ -471,11 +467,10 @@ window.addEventListener('load', async function() {
   }
   const features = getFeatures();
 
-  // Price + UOM (use buy-box first; fallbacks for table)
+  // Price & UOM
   function findPriceAndUom() {
     const priceRegex = /^\$?\s*\d[\d,]*(\.\d{2})?$/;
-    let price = '';
-    let uom = '';
+    let price = '', uom = '';
 
     const buyBox = document.querySelector('#product-sidebar .buy-box');
     if (buyBox) {
@@ -485,86 +480,93 @@ window.addEventListener('load', async function() {
       const slash = spans.find(s => /^\s*\/\s*\w+/.test(s));
       if (slash) uom = slash.replace(/[\/\s]/g, '');
     }
-
     if (!uom) {
       const perSeg = document.querySelector('.productPerSegment');
       if (perSeg) uom = perSeg.textContent.trim();
     }
-
     if (!price) {
-      const cand = [...document.querySelectorAll('#product-sidebar .buy-box span, .productPriceSegment span, span, strong')]
-        .map(el => el.textContent.trim())
-        .find(s => /^\$[\d,]+(\.\d{2})?$/.test(s));
-      if (cand) price = cand;
+      const txts = [...document.querySelectorAll('#product-sidebar .buy-box span, .productPriceSegment span, span, strong')]
+        .map(el => el.textContent.trim());
+      const p2 = txts.find(s => /^\$[\d,]+(\.\d{2})?$/.test(s));
+      if (p2) price = p2;
     }
     return { price, uom };
   }
   const { price, uom } = findPriceAndUom();
 
   // Product image
-  const imgEl = document.querySelector('#ctl00_PageBody_productDetail_ProductImage') ||
-                document.querySelector('#product-image-wrapper img') ||
-                document.querySelector('#main-block img');
+  const imgEl  = document.querySelector('#ctl00_PageBody_productDetail_ProductImage') ||
+                 document.querySelector('#product-image-wrapper img') ||
+                 document.querySelector('#main-block img');
   const imgSrc = abs(imgEl ? imgEl.getAttribute('src') : '');
 
-  // Canonical QR target
   const qrTarget = canonicalizeUrl(location.href);
 
-  // ---- Embedded QR generator (no network deps) ----
-  // Minimal QRCode implementation (qrcodejs v1.0.0 – MIT) – trimmed & inlined
-  // Source: https://github.com/davidshimjs/qrcodejs  (keep license in your codebase)
-  // BEGIN qrcodejs (minified)
-  /*! qrcodejs MIT */
-  var QR8bitByte=function(t){this.mode=1,this.data=t,this.parsedData=[];for(var e=0,o=this.data.length;e<o;e++){var n=[],r=this.data.charCodeAt(e);r>65536?(n[0]=240|(1835008&r)>>>18,n[1]=128|(258048&r)>>>12,n[2]=128|(4032&r)>>>6,n[3]=128|63&r):r>2048?(n[0]=224|(61440&r)>>>12,n[1]=128|(4032&r)>>>6,n[2]=128|63&r):r>128?(n[0]=192|(1984&r)>>>6,n[1]=128|63&r):n[0]=r,this.parsedData.push(n)}this.parsedData=this.parsedData.reduce(function(t,e){return t.concat(e)},[])};QR8bitByte.prototype={getLength:function(){return this.parsedData.length},write:function(t){for(var e=0,o=this.parsedData.length;e<o;e++)t.put(this.parsedData[e],8)}};
-  var QRUtil={PATTERN_POSITION_TABLE:[[],[6,18],[6,22],[6,26],[6,30],[6,34],[6,22,38],[6,24,42],[6,26,46],[6,28,50],[6,30,54],[6,32,58],[6,34,62],[6,26,46,66],[6,26,48,70]],G15:(1<<10)|(1<<8)|(1<<5)|(1<<4)|(1<<2)|(1<<1)|(1<<0),G18:(1<<12)|(1<<11)|(1<<10)|(1<<9)|(1<<8)|(1<<5),(function(){return 0})()};
-  // The full original minified lib is ~10KB; to keep this message short,
-  // we’ll switch to a tiny, reliable canvas-based generator below:
+  // ---------- QR: robust 3-stage fallback ----------
+  const QR_SIZE = 220;
 
-  function renderTinyQR(container, text, size){
-    // Use a super-small dependency (https://github.com/kazuhikoarase/qrcode-generator, MIT) CDN-less inline
-    // To keep the chat concise, here’s a robust fallback using the same lib via data URI technique:
-    // Create an SVG via a lightweight encoder:
-    function makeSvgPath(modules, size, margin){
-      const n = modules.length;
-      const q = margin || 0;
-      const mult = (size - q*2) / n;
-      let d = '';
-      for (let r=0; r<n; r++){
-        for (let c=0; c<n; c++){
-          if (modules[r][c]) {
-            const x = Math.round(q + c*mult);
-            const y = Math.round(q + r*mult);
-            const w = Math.ceil(mult);
-            const h = Math.ceil(mult);
-            d += `M${x} ${y}h${w}v${h}h-${w}z`;
-          }
-        }
+  function loadScript(src, timeoutMs = 2000) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      let done = false, t;
+      s.src = src; s.async = true; s.onload = () => { if (!done) { done = true; clearTimeout(t); resolve(); } };
+      s.onerror = () => { if (!done) { done = true; clearTimeout(t); reject(new Error('load error')); } };
+      document.head.appendChild(s);
+      t = setTimeout(() => { if (!done) { done = true; reject(new Error('timeout')); } }, timeoutMs);
+    });
+  }
+
+  async function renderQR(el, text, size) {
+    // Stage 1: try qrcodejs from CDN (works offline once cached; small)
+    try {
+      if (!window.QRCode) {
+        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js', 2500);
       }
-      return d;
-    }
-    // Tiny QR encoder (Alphanumeric+byte) – import at runtime via inline function:
-    function tinyEncode(str){
-      // use a small library embedded via eval to stay concise in this message:
-      // NOTE: For production, drop in the full minified qrcode.js (10KB) instead of this stub.
-      // Here we fall back to a well-known, tiny encoder implementation.
-      // ----
-      // For reliability in your site, replace renderTinyQR with qrcodejs (minified) file and:
-      // new QRCode(container, { text, width:size, height:size, correctLevel: QRCode.CorrectLevel.M })
-      // ----
-      // As a placeholder here (so label works immediately), we use the Google Charts PNG.
+      if (window.QRCode) {
+        el.innerHTML = '';
+        new QRCode(el, { text, width: size, height: size, correctLevel: window.QRCode.CorrectLevel.M });
+        return true;
+      }
+    } catch (_) { /* fall through */ }
+
+    // Stage 2: Google Chart PNG
+    try {
       const img = new Image();
       img.alt = 'QR';
       img.width = size; img.height = size;
-      img.src = 'https://chart.googleapis.com/chart?cht=qr&chs='+size+'x'+size+'&chl='+encodeURIComponent(text);
-      container.innerHTML = ''; container.appendChild(img);
-    }
-    tinyEncode(text);
-  }
-  // END embedded QR (see note above)
+      img.referrerPolicy = 'no-referrer';
+      img.src = 'https://chart.googleapis.com/chart?cht=qr&chs=' + size + 'x' + size + '&chl=' + encodeURIComponent(text);
+      await new Promise((res, rej) => {
+        img.onload = () => res(true);
+        img.onerror = () => rej(new Error('qr img fail'));
+        setTimeout(() => rej(new Error('qr img timeout')), 2500);
+      });
+      el.innerHTML = ''; el.appendChild(img);
+      return true;
+    } catch (_) { /* fall through */ }
 
-  // ---- Styles (4x6 landscape) + page takeover ----
+    // Stage 3: local fallback box (never fails)
+    const box = document.createElement('div');
+    box.style.width = size + 'px';
+    box.style.height = size + 'px';
+    box.style.border = '2px solid #111';
+    box.style.borderRadius = '6px';
+    box.style.display = 'flex';
+    box.style.flexDirection = 'column';
+    box.style.alignItems = 'center';
+    box.style.justifyContent = 'center';
+    box.style.padding = '8px';
+    box.style.textAlign = 'center';
+    box.innerHTML = `
+      <div style="font:700 14px/1.2 sans-serif;margin-bottom:6px;">Scan URL</div>
+      <div style="font:12px/1.2 monospace;word-break:break-all;max-width:${size-16}px">${text}</div>
+    `;
+    el.innerHTML = ''; el.appendChild(box);
+    return false;
+  }
+
+  // ---------- styles (4x6 landscape) ----------
   const BRAND_COLOR = '#6B0016';
-  const QR_SIZE = 220;
   const style = document.createElement('style');
   style.textContent = `
     @page { size: 6in 4in; margin: 0; }
@@ -596,7 +598,7 @@ window.addEventListener('load', async function() {
   `;
   document.head.appendChild(style);
 
-  // ---- Render label ----
+  // ---------- render ----------
   const root = document.createElement('div');
   root.className = 'binlabel-root';
   root.innerHTML = `
@@ -614,7 +616,7 @@ window.addEventListener('load', async function() {
           ${features.length ? `<ul>${features.map(f => `<li>${f}</li>`).join('')}</ul>` : '<div style="color:#888">No feature details found.</div>'}
         </div>
         <div class="bl-priceRow">
-          <div class="bl-price">${price || ''}</div>
+          <div class="bl-price">${(price || '')}</div>
           ${uom ? `<div class="bl-uom">/ ${uom}</div>` : ''}
         </div>
       </div>
@@ -623,12 +625,9 @@ window.addEventListener('load', async function() {
   `;
   document.body.appendChild(root);
 
-  // ---- Draw QR (no external dependencies) ----
-  renderTinyQR(document.getElementById('bl-qr'), qrTarget, QR_SIZE);
+  // Draw QR with fallbacks (never throws)
+  renderQR(document.getElementById('bl-qr'), qrTarget, QR_SIZE);
 
   // Optional auto-print
   if (params.get('print') === 'true') setTimeout(() => window.print(), 300);
 })();
-
-
-
