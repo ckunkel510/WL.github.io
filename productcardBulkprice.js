@@ -1,4 +1,3 @@
-
 console.log("[BulkPricing] Script loaded (per-row scope).");
 
 (function () {
@@ -34,7 +33,8 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
         const pid = (r[pidIdx] || "").trim();
         if (!pid) continue;
         const tier = { qty: (r[qtyIdx] || "").trim(), price: (r[priceIdx] || "").trim() };
-        (tiersByPid.get(pid) || tiersByPid.set(pid, []).get(pid)).push(tier);
+        if (!tiersByPid.has(pid)) tiersByPid.set(pid, []);
+        tiersByPid.get(pid).push(tier);
       }
 
       let inserted = 0;
@@ -57,6 +57,20 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
         // Find the nearest price row for this item by scanning forward a few rows
         const priceRow = findSiblingPriceRow(imgRow, tbody);
 
+        // --- NEW: figure out the customer price from this card ---
+        const customerPrice = findCustomerPrice(imgRow, tbody, priceRow);
+        // Compute the lowest bulk price from tiers (ignore blank / non-numeric)
+        const minBulkPrice = tiers
+          .map(t => parseMoney(t.price))
+          .filter(v => Number.isFinite(v) && v > 0)
+          .reduce((min, v) => Math.min(min, v), Infinity);
+
+        // If we have both prices and customer's price is strictly less than the lowest bulk price, skip banner
+        if (Number.isFinite(customerPrice) && Number.isFinite(minBulkPrice) && customerPrice < minBulkPrice) {
+          // Skip inserting banner for this card
+          continue;
+        }
+
         // Build our bulk row
         const bulkTr = document.createElement('tr');
         bulkTr.className = 'wl-bulk-pricing-row';
@@ -70,7 +84,7 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
 
         const line = tiers.map(t => {
           const q = t.qty || 'Qty';
-          const p = t.price ? `$${t.price}` : '(price missing)';
+          const p = t.price ? `$${String(t.price).replace(/^\$/, '')}` : '(price missing)';
           return `${q}+ at ${p} ea`;
         }).join(' • ');
 
@@ -116,6 +130,49 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
     return null;
   }
 
+  // Try to find the customer's price shown in this card (e.g., span[id*="lblPrice"])
+  function findCustomerPrice(imgRow, tbody, priceRow) {
+    // 1) Look inside an obvious price row if present
+    if (priceRow) {
+      const v = extractMoneyFromNode(priceRow);
+      if (Number.isFinite(v) && v > 0) return v;
+    }
+    // 2) Search a few rows forward for a span that looks like the price
+    let tr = imgRow.nextElementSibling;
+    for (let i = 0; tr && i < 8; i++, tr = tr.nextElementSibling) {
+      if (tr.id && /ProductImageRow/i.test(tr.id)) break; // next item block
+      // direct span id pattern
+      const span = tr.querySelector('span[id*="lblPrice"], span[id*="Price"]');
+      if (span) {
+        const v = parseMoney(span.textContent);
+        if (Number.isFinite(v) && v > 0) return v;
+      }
+      // fallback: parse any money-looking text in the row
+      const v2 = extractMoneyFromNode(tr);
+      if (Number.isFinite(v2) && v2 > 0) return v2;
+    }
+    // 3) As a last resort, look within the same tbody section for the first price-looking element
+    if (tbody) {
+      const guess = tbody.querySelector('span[id*="lblPrice"], span[id*="Price"]');
+      if (guess) {
+        const v = parseMoney(guess.textContent);
+        if (Number.isFinite(v) && v > 0) return v;
+      }
+    }
+    return NaN; // unknown -> we'll allow the banner (preserves previous behavior)
+  }
+
+  // Pull first $N.NN in a node's text
+  function extractMoneyFromNode(node) {
+    const m = (node.textContent || "").match(/\$?\s*([0-9]+\.[0-9]{2})/);
+    return m ? parseMoney(m[0]) : NaN;
+  }
+
+  function parseMoney(s) {
+    const v = parseFloat(String(s || '').replace(/[^0-9.\-]/g, ''));
+    return Number.isFinite(v) ? v : NaN;
+  }
+
   // CSV parser (handles quotes/commas)
   function quickCSV(text) {
     const lines = text.replace(/\r/g, "").split("\n").filter(Boolean);
@@ -139,6 +196,7 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
   }
 
 })();
+
 
 
 
