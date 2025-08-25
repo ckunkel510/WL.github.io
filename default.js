@@ -35,7 +35,7 @@
     del: (k) => { try { sessionStorage.removeItem(k); } catch {} },
   };
 
-  const isStoreMode = ss.get('storeMode') === 'on';
+  let isStoreMode = ss.get('storeMode') === 'on';
   const stillAtStore = ss.get('storeProximity') === 'true';
   const storeName = ss.get('storeName') || 'Woodson Lumber';
   const storeBranchKey = ss.get('storeBranchKey') || ''; // e.g., "Brenham" or branch id used in stock grid
@@ -45,14 +45,26 @@
 
   // ===== Bootstrap: Home Overlay on Default.aspx OR when explicitly requested =====
   document.addEventListener('DOMContentLoaded', () => {
-    if (PATH.includes('default.aspx')) {
-      if (isStoreMode) renderStoreHomeOverlay(); else injectReturnToStoreBanner();
-      // Also wire product intercepts on all pages while near store
+    // If we're at/near a store, force-enable storeMode for this session
+    if (stillAtStore && !isStoreMode) { ss.set('storeMode', 'on'); isStoreMode = true; }
+
+    const isDefault = PATH.includes('default.aspx');
+    const isProducts = PATH.includes('products.aspx');
+    const url = new URL(location.href);
+    const hasSearch = !!(url.searchParams.get('searchText') || url.searchParams.get('pg') || url.searchParams.get('pl1'));
+
+    if (isDefault && isStoreMode) {
+      renderStoreHomeOverlay();
+      attachProductIntercepts();
+      ensureBarcodeDepsPreload();
+    } else if (isProducts && isStoreMode && !hasSearch) {
+      // Landed on Products with no active search/category -> show Store Home overlay to kick off the flow
+      renderStoreHomeOverlay();
       attachProductIntercepts();
       ensureBarcodeDepsPreload();
     } else {
-      // Non-home pages: show banner on Products.aspx and keep intercepts active
-      if (PATH.includes('products.aspx')) injectReturnToStoreBanner();
+      // Non-home pages or products with search/category: show banner + keep intercepts active
+      if (isProducts) injectReturnToStoreBanner();
       attachProductIntercepts();
       ensureBarcodeDepsPreload();
     }
