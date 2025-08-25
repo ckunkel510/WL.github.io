@@ -1,996 +1,424 @@
 
-setTimeout(() =>{
-(function() {
+/* ==========================================================
+   Woodson — Saved For Later (SFL) — perf-tuned
+   - Starts exactly 1s after DOMContentLoaded
+   - Caches quicklist detail URL per-session; no re-create loop
+   - Fast PDP postbacks via fetch (no iframes)
+   - Parallel image lookups with small concurrency
+   - No full page reload after add/remove; SFL re-renders instead
+   ========================================================== */
+(function () {
+  'use strict';
 
   const SFL_NAME = "Saved For Later";
   const SFL_DESC = "Saved For Later";
   const BASE = location.origin + "/";
+  const SFL_URL_KEY = "sfl_detail_url";
+  const IMG_API = "https://wlmarketingdashboard.vercel.app/api/get-product-image";
 
+  // ---------- utils ----------
+  const $  = (s, r=document)=> r.querySelector(s);
+  const $$ = (s, r=document)=> Array.from(r.querySelectorAll(s));
+  const visible = el => el && el.offsetParent !== null;
 
-
-
-  // Inject container HTML into DOM
-  const container = document.createElement("div");
-  container.id = "savedForLater";
-  container.style.display = "none";
-  container.innerHTML = `
-    <div id="sflHeader">
-      <span>Saved For Later</span>
-      <span class="sflCount" id="sflCount"></span>
-    </div>
-    <div id="sflBody">
-      <div id="sflLoading">Loading your saved items…</div>
-      <div id="sflList" style="display:none;"></div>
-      <div id="sflEmpty" style="display:none;">No items saved for later.</div>
-    </div>
-  `;
-  const mainContents = document.querySelector('.mainContents');
-if (mainContents && mainContents.parentNode) {
-  mainContents.parentNode.insertBefore(container, mainContents.nextSibling);
-  console.log("[SFL] Injected after .mainContents");
-} else {
-  console.warn("[SFL] .mainContents not found, appending to body");
-  document.body.appendChild(container);
-}
-
-  console.log("[SFL] Injected Saved For Later HTML container");
-
-  // Utility functions
-  async function fetchHtml(url, options = {}) {
-    console.log("[SFL] Fetching HTML from:", url);
+  async function fetchHtml(url, options={}) {
     const res = await fetch(url, { credentials: "include", ...options });
     if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
     const text = await res.text();
-    const doc = new DOMParser().parseFromString(text, "text/html");
-    return { text, doc };
+    const doc  = new DOMParser().parseFromString(text, "text/html");
+    return { text, doc, res };
   }
-
-  function getHiddenFields(doc) {
-    const fields = {};
-    doc.querySelectorAll('input[type="hidden"]').forEach(inp => {
-      if (inp.name) fields[inp.name] = inp.value || "";
-    });
-    return fields;
+  function hiddenFields(doc){
+    const out={};
+    $$('input[type="hidden"]', doc).forEach(i => { if (i.name) out[i.name] = i.value ?? ""; });
+    return out;
   }
+  function toFD(obj){ const fd=new FormData(); for (const [k,v] of Object.entries(obj)) fd.append(k,v); return fd; }
+  function pidFromHref(href){ try{ return new URL(href, BASE).searchParams.get("pid"); }catch{ return null; } }
 
-  function toFormData(obj) {
-    const fd = new FormData();
-    Object.entries(obj).forEach(([k, v]) => fd.append(k, v));
-    return fd;
+  // ---------- container ----------
+  function ensureContainer() {
+    let c = $("#savedForLater");
+    if (!c) {
+      c = document.createElement("div");
+      c.id = "savedForLater";
+      c.style.display = "none";
+      c.innerHTML = `
+        <div id="sflHeader">
+          <span>Saved For Later</span>
+          <span class="sflCount" id="sflCount"></span>
+        </div>
+        <div id="sflBody">
+          <div id="sflLoading">Loading your saved items…</div>
+          <div id="sflList" style="display:none;"></div>
+          <div id="sflEmpty" style="display:none;">No items saved for later.</div>
+        </div>`;
+      const main = document.querySelector('.mainContents');
+      if (main?.parentNode) main.parentNode.insertBefore(c, main.nextSibling);
+      else document.body.appendChild(c);
+    }
+    c.style.display = "block";
+    return c;
   }
-
-  function $(sel, root = document) {
-    return root.querySelector(sel);
-  }
-
-  function $all(sel, root = document) {
-    return Array.from(root.querySelectorAll(sel));
-  }
-
-  function ensureSflContainer() {
-    const el = document.getElementById("savedForLater");
-    if (el) el.style.display = "block";
-    return el;
-  }
-
-  function setLoading(msg = "Loading your saved items…") {
-    console.log("[SFL] setLoading:", msg);
+  function setLoading(msg="Loading your saved items…"){
     $("#sflLoading").style.display = "block";
     $("#sflLoading").textContent = msg;
     $("#sflList").style.display = "none";
     $("#sflEmpty").style.display = "none";
   }
-
-  function setEmpty() {
-    console.log("[SFL] No items found");
+  function setEmpty(){
     $("#sflLoading").style.display = "none";
     $("#sflList").style.display = "none";
     $("#sflEmpty").style.display = "block";
     $("#sflCount").textContent = "(0)";
   }
+  function setCount(n){ $("#sflCount").textContent = `(${n})`; }
 
-  function setListCount(n) {
-    console.log(`[SFL] Found ${n} items`);
-    $("#sflCount").textContent = `(${n})`;
-  }
-
-  // --------- Step 0: must be signed in
-  const wlUserId = (typeof localStorage !== "undefined") ? localStorage.getItem("wl_user_id") : null;
-  console.log("[SFL] wl_user_id =", wlUserId);
-  if (!wlUserId) {
-    console.log("[SFL] Not signed in — skipping");
-    return;
-  }
-
-  ensureSflContainer();
-  setLoading();
-
-  // --------- Step 1: Find or create the Saved For Later quicklist
-  async function findSavedForLaterList() {
-    console.log("[SFL] Searching for existing quicklist...");
+  // ---------- quicklist discovery / cache ----------
+  async function findSFL() {
     const { doc } = await fetchHtml(BASE + "Quicklists_R.aspx");
     const table = doc.querySelector("table.rgMasterTable");
-    if (!table) return { exists: false };
-
-    let sflRow = null;
-    const rows = $all("tbody > tr", table);
-    for (const tr of rows) {
-      const anchor = tr.querySelector('td a[href*="Quicklists_R.aspx"]');
-      if (!anchor) continue;
-      if (anchor.textContent.trim().toLowerCase() === SFL_NAME.toLowerCase()) {
-        sflRow = { tr, anchor };
-        break;
+    if (!table) return null;
+    for (const tr of $$("tbody > tr", table)) {
+      const a = tr.querySelector('td a[href*="Quicklists_R.aspx"]');
+      if (!a) continue;
+      if ((a.textContent || "").trim().toLowerCase() === SFL_NAME.toLowerCase()) {
+        return new URL(a.getAttribute("href"), BASE).toString();
       }
     }
-
-    if (sflRow) {
-      const href = new URL(sflRow.anchor.getAttribute("href"), BASE).toString();
-      console.log("[SFL] Found existing Saved For Later quicklist:", href);
-      return { exists: true, detailUrl: href };
-    }
-
-    console.log("[SFL] Quicklist not found — will create new");
-    return { exists: false };
+    return null;
   }
 
-  async function createSavedForLaterList() {
-    console.log("[SFL] Creating Saved For Later quicklist…");
+  async function createSFL() {
     const addUrl = BASE + "Quicklists_R.aspx?addNew=1";
     const { doc } = await fetchHtml(addUrl);
-
-    const hidden = getHiddenFields(doc);
+    const hidden = hiddenFields(doc);
     hidden["ctl00$PageBody$EditQuicklistName"] = SFL_NAME;
     hidden["ctl00$PageBody$EditQuicklistDescription"] = SFL_DESC;
-
-    const defaultSel = $("#ctl00_PageBody_EditDefaultQuicklistDropdown", doc);
-    const val = defaultSel ? (defaultSel.value || "no") : "no";
-    hidden["ctl00$PageBody$EditDefaultQuicklistDropdown"] = val;
-
-    // Simulate Save button click via __doPostBack
+    const def = $("#ctl00_PageBody_EditDefaultQuicklistDropdown", doc);
+    hidden["ctl00$PageBody$EditDefaultQuicklistDropdown"] = def ? (def.value || "no") : "no";
     hidden["__EVENTTARGET"] = "ctl00$PageBody$SaveQuickListButton";
     hidden["__EVENTARGUMENT"] = "";
+    await fetch(addUrl, { method: "POST", credentials:"include", body: toFD(hidden) });
+    const found = await findSFL();
+    if (!found) throw new Error("Quicklist creation failed");
+    return found;
+  }
 
-    console.log("[SFL] Submitting quicklist creation form with postback to SaveQuickListButton");
-    const fd = toFormData(hidden);
-    const res = await fetch(addUrl, {
+  async function getSFLUrl() {
+    const cached = sessionStorage.getItem(SFL_URL_KEY);
+    if (cached) return cached;
+    const found = await findSFL();
+    if (found) { sessionStorage.setItem(SFL_URL_KEY, found); return found; }
+    const created = await createSFL();
+    sessionStorage.setItem(SFL_URL_KEY, created);
+    return created;
+  }
+
+  // ---------- SFL loading / parsing ----------
+  function parseItems(detailDoc){
+    const grid = detailDoc.querySelector(".RadGrid, table.rgMasterTable");
+    const table = grid?.tagName === "TABLE" ? grid : grid?.querySelector("table.rgMasterTable");
+    if (!table) return [];
+    const rows = table.querySelectorAll("tr.rgRow, tr.rgAltRow");
+    const items = [];
+    rows.forEach(tr => {
+      const tds = tr.querySelectorAll("td");
+      if (tds.length < 5) return;
+      const a = tds[0].querySelector("a[href*='ProductDetail.aspx']");
+      const href  = a?.getAttribute("href") || null;
+      const code  = a?.textContent.trim() || "";
+      const desc  = tds[1].textContent.trim();
+      const price = tds[2].textContent.trim();
+      const per   = tds[3].textContent.trim();
+      // Delete target (if we need to trigger server delete directly)
+      const delA  = tr.querySelector("a[id*='DeleteQuicklistLineButtonX']");
+      const m = (delA?.getAttribute("href") || "").match(/__doPostBack\('([^']+)'/);
+      const eventTarget = m ? m[1] : null;
+      items.push({ href, code, desc, price, per, eventTarget });
+    });
+    return items;
+  }
+
+  async function loadSFL() {
+    const url = await getSFLUrl();
+    const { doc } = await fetchHtml(url);
+    return { url, items: parseItems(doc) };
+  }
+
+  // ---------- PDP actions (fast postbacks; no iframe) ----------
+  async function pdpPostback(pid, detector) {
+    const pdpUrl = BASE + "ProductDetail.aspx?pid=" + encodeURIComponent(pid);
+    const { doc } = await fetchHtml(pdpUrl);
+    const hid = hiddenFields(doc);
+
+    // Add-to-cart button target
+    if (detector === "ADD_TO_CART") {
+      let target = null;
+      const atc = doc.querySelector('a[href^="javascript:__doPostBack"][id*="AddProductButton"]');
+      if (atc) {
+        const m = atc.getAttribute("href").match(/__doPostBack\('([^']+)'/);
+        if (m) target = m[1];
+      }
+      target = target || "ctl00$PageBody$productDetail$ctl00$AddProductButton";
+      hid["__EVENTTARGET"]   = target;
+      hid["__EVENTARGUMENT"] = "";
+      await fetch(pdpUrl, { method:"POST", credentials:"include", body: toFD(hid) });
+      return true;
+    }
+
+    // Add to Saved For Later (Quicklist)
+    if (detector === "ADD_TO_SFL") {
+      let target = null;
+      // Prefer the explicit “Add to Saved For Later” link
+      const sflA = Array.from(doc.querySelectorAll("a"))
+        .find(a => (a.textContent || "").trim() === "Add to Saved For Later");
+      if (sflA) {
+        const m = (sflA.getAttribute("href") || "").match(/__doPostBack\('([^']+)'/);
+        if (m) target = m[1];
+      }
+      // Fallback: typical button id pattern if link text changes
+      target = target || "ctl00$PageBody$productDetail$ctl00$AddToQuicklistButton";
+
+      hid["__EVENTTARGET"]   = target;
+      hid["__EVENTARGUMENT"] = "";
+      await fetch(pdpUrl, { method:"POST", credentials:"include", body: toFD(hid) });
+      return true;
+    }
+
+    throw new Error("Unknown PDP postback type");
+  }
+
+  async function addPidToCart(pid, qty=1) {
+    if (!pid) throw new Error("PID required");
+    // qty set if PDP exposes it
+    const pdpUrl = BASE + "ProductDetail.aspx?pid=" + encodeURIComponent(pid);
+    const { doc } = await fetchHtml(pdpUrl);
+    const hid = hiddenFields(doc);
+    const qtyInput = doc.querySelector('input[name*="qty"]');
+    if (qtyInput?.name) hid[qtyInput.name] = String(qty);
+
+    let target = null;
+    const atc = doc.querySelector('a[href^="javascript:__doPostBack"][id*="AddProductButton"]');
+    if (atc) {
+      const m = atc.getAttribute("href").match(/__doPostBack\('([^']+)'/);
+      if (m) target = m[1];
+    }
+    target = target || "ctl00$PageBody$productDetail$ctl00$AddProductButton";
+    hid["__EVENTTARGET"]   = target;
+    hid["__EVENTARGUMENT"] = "";
+    await fetch(pdpUrl, { method:"POST", credentials:"include", body: toFD(hid) });
+    return true;
+  }
+
+  // ---------- quicklist delete (by product code) ----------
+  async function removeFromQuicklistByCode(productCode) {
+    const url = await getSFLUrl();
+    const { doc } = await fetchHtml(url);
+    const form = doc.querySelector("form");
+    if (!form) throw new Error("Quicklist form not found");
+    const hid = hiddenFields(doc);
+
+    // find delete button for the matching code
+    let target = null;
+    for (const tr of $$("tr.rgRow, tr.rgAltRow", doc)) {
+      const a = tr.querySelector("td a[href*='ProductDetail.aspx']");
+      const code = (a?.textContent || "").trim().toUpperCase();
+      if (code !== (productCode || "").toUpperCase()) continue;
+      const delA = tr.querySelector("a[id*='DeleteQuicklistLineButtonX']");
+      const m = (delA?.getAttribute("href") || "").match(/__doPostBack\('([^']+)'/);
+      if (m) { target = m[1]; break; }
+    }
+    if (!target) throw new Error("Delete target not found");
+
+    hid["__EVENTTARGET"]   = target;
+    hid["__EVENTARGUMENT"] = "";
+
+    const postUrl = new URL(form.getAttribute("action"), url).href;
+    await fetch(postUrl, {
       method: "POST",
       credentials: "include",
-      body: fd
+      body: new URLSearchParams(hid) // urlencoded ok here
     });
-
-    if (!res.ok) throw new Error("Quicklist creation POST failed.");
-
-    const found = await findSavedForLaterList();
-    if (!found.exists) throw new Error("Quicklist was not created as expected.");
-    return found.detailUrl;
   }
 
-  // --------- Step 2: Resolve detail URL for SFL
-  async function ensureSflDetailUrl() {
-  console.log("[SFL] Locating Saved For Later Quicklist via Quicklists_R.aspx...");
-  sessionStorage.removeItem("sfl_detail_url"); // always re-check
-
-  const found = await findSavedForLaterList(); // loads Quicklists_R.aspx
-  if (found.exists && found.detailUrl) {
-    console.log("[SFL] Found valid Quicklist detail URL:", found.detailUrl);
-    const fixedUrl = found.detailUrl.replace("QuicklistDetails.aspx", "Quicklists_R.aspx");
-sessionStorage.setItem("sfl_detail_url", fixedUrl);
-console.log("[SFL] Saved corrected detail URL:", fixedUrl);
-
-    return found.detailUrl;
-  }
-
-  console.log("[SFL] Not found, creating new Saved For Later list...");
-  const createdUrl = await createSavedForLaterList();
-  sessionStorage.setItem("sfl_detail_url", createdUrl);
-  return createdUrl;
-}
-
-
-  // --------- Step 3: Load items
- function parseSflItems(detailDoc) {
-  console.log("[SFL] Parsing Quicklist detail page...");
-
-  // Find the outer grid div (fallback to .RadGrid or .rgMasterTable)
-  let grid = detailDoc.querySelector(".RadGrid") || detailDoc.querySelector("table.rgMasterTable");
-  if (!grid) {
-    console.error("[SFL] Grid container not found");
-    return [];
-  }
-
-  // Ensure we have the actual table
-  let table = grid.tagName === "TABLE" ? grid : grid.querySelector("table.rgMasterTable");
-  if (!table) {
-    console.error("[SFL] .rgMasterTable not found inside grid container");
-    return [];
-  }
-
-  const rows = table.querySelectorAll("tr.rgRow, tr.rgAltRow");
-  console.log(`[SFL] Found ${rows.length} row(s) in Quicklist table`);
-
-  const items = [];
-
-  rows.forEach((tr, i) => {
-    const tds = Array.from(tr.querySelectorAll("td"));
-    if (tds.length < 5) {
-      console.warn(`[SFL] Skipping row ${i} — only ${tds.length} td cells`);
-      return;
-    }
-
-    const a = tds[0].querySelector("a[href*='ProductDetail.aspx']");
-    const productHref = a?.getAttribute("href") || null;
-    const productCode = a?.textContent.trim() || "";
-    const description = tds[1].textContent.trim();
-    const price = tds[2].textContent.trim();
-    const per = tds[3].textContent.trim();
-
-    // 🔍 Find delete anchor and extract EVENTTARGET
-    const deleteAnchor = tr.querySelector("a[id*='DeleteQuicklistLineButtonX']");
-    let eventTarget = null;
-
-    if (deleteAnchor) {
-      const href = deleteAnchor.getAttribute("href") || "";
-      const match = href.match(/__doPostBack\('([^']+)'/);
-      if (match) {
-        eventTarget = match[1];
-        console.log(`[SFL] Row ${i}: Found delete __EVENTTARGET: ${eventTarget}`);
-      } else {
-        console.warn(`[SFL] Row ${i}: Failed to extract __EVENTTARGET from href`);
-      }
-    } else {
-      console.warn(`[SFL] Row ${i}: No delete anchor found`);
-    }
-
-    console.log(`[SFL] Row ${i}: ${productCode} | ${description} | ${price} | ${per}`);
-
-    items.push({
-      productHref,
-      productCode,
-      description,
-      price,
-      per,
-      eventTarget // 💡 used later to remove item
-    });
-  });
-
-  return items;
-}
-
-
-
-
-
-
-  async function loadSflItems() {
-  const detailUrl = await ensureSflDetailUrl();
-  const { doc } = await fetchHtml(detailUrl);
-  const items = parseSflItems(doc);
-  return { detailUrl, items, doc };
-}
-
-  // --------- Step 4: Render
-  function pidFromHref(href) {
-    try {
-      const u = new URL(href, BASE);
-      return u.searchParams.get("pid");
-    } catch (e) {
-      return null;
-    }
-  }
-
-  function productImageUrlFromPid(pid) {
-    return "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/placeholder.png";
-  }
-
- async function renderSflList(items) {
-  const list = document.getElementById("sflList");
-  list.innerHTML = "";
-
-  if (!items.length) {
-    setEmpty();
-    return;
-  }
-
-  const placeholder = "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/placeholder.png";
-
-  for (const item of items) {
-    const pid = item.productHref ? pidFromHref(item.productHref) : null;
-    const productUrl = pid ? `https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=${pid}` : "#";
-
-    // === Create image element ===
-    const imgElement = document.createElement("img");
-    imgElement.className = "sflImg";
-    imgElement.src = placeholder;
-
-    // === Wrap image in anchor ===
-    const link = document.createElement("a");
-    link.href = productUrl;
-    link.target = "_blank"; // optional: open in new tab
-    link.appendChild(imgElement);
-
-    // === Build row ===
-    const row = document.createElement("div");
-    row.className = "sflRow";
-    row.innerHTML = `
-      <div class="sflImgWrapper"></div>
-      <div>
-        <div class="sflTitle">${item.productCode || ""}</div>
-        <div class="sflDesc">${item.description || ""}</div>
-      </div>
-      <div class="sflPrice">${item.price || ""}</div>
-      <div class="sflPer">${item.per || ""}</div>
-      <div class="sflActions">
-        <button class="sflBtn js-sfl-add" data-pid="${pid || ""}" data-code="${item.productCode || ""}">Add to Cart</button>
-      </div>
-    `;
-
-    // Add the <a><img></a> to the image wrapper
-    row.querySelector(".sflImgWrapper").appendChild(link);
-
-    // Add data attributes
-    row.dataset.eventTarget = item.eventTarget || "";
-    row.dataset.pid = pid || "";
-    row.dataset.code = item.productCode || "";
-
-    // Append to the list
-    list.appendChild(row);
-
-    // === Update image if available ===
-    if (pid) {
-      try {
-        const response = await fetch("https://wlmarketingdashboard.vercel.app/api/get-product-image", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ productUrl })
-        });
-
-        const result = await response.json();
-        if (result.imageUrl) {
-          imgElement.src = result.imageUrl;
-        } else {
-          console.warn(`[SFL] No image found for PID ${pid}`);
+  // ---------- render ----------
+  async function concurrentMap(items, limit, worker) {
+    const ret = new Array(items.length);
+    let idx = 0, active = 0;
+    return new Promise((resolve) => {
+      const kick = () => {
+        while (active < limit && idx < items.length) {
+          const my = idx++;
+          active++;
+          Promise.resolve(worker(items[my], my))
+            .then(v => { ret[my] = v; })
+            .catch(()=>{}) // ignore image fails
+            .finally(()=>{ active--; (idx >= items.length && active === 0) ? resolve(ret) : kick(); });
         }
-      } catch (err) {
-        console.error(`[SFL] Error fetching image for PID ${pid}:`, err.message);
-      }
-    }
-  }
-
-  setListCount(items.length);
-  document.getElementById("sflLoading").style.display = "none";
-  document.getElementById("sflEmpty").style.display = "none";
-  list.style.display = "block";
-}
-
-
-
-  // --------- Init
-  (async function initSfl() {
-  try {
-    console.log("[SFL] Initializing...");
-
-    // Check if we're on a step where SFL should be hidden
-    const shouldHide = (() => {
-      const isVisible = (el) => el && el.offsetParent !== null;
-      const paymentHeader = document.querySelector("#ctl00_PageBody_CardOnFileViewTitle_HeaderText");
-      const reviewHeader = document.querySelector("#ctl00_PageBody_SummaryHeading_HeaderText");
-      const summaryEntry2 = document.getElementById("SummaryEntry2");
-      const CheckoutDetails = document.getElementById("ctl00_PageBody_CheckoutTitle_HeaderText");
-
-      return (
-        isVisible(paymentHeader) ||
-        isVisible(reviewHeader) ||
-        isVisible(summaryEntry2) ||
-        isVisible(CheckoutDetails)
-      );
-    })();
-
-    if (shouldHide) {
-      console.log("[SFL] Skipping SFL load — on final step.");
-      const sflBlock = document.getElementById("savedForLater");
-      if (sflBlock) sflBlock.style.display = "none";
-      return; // exit early
-    }
-
-    const { items } = await loadSflItems();
-    renderSflList(items);
-    console.log("[SFL] Done.");
-  } catch (err) {
-    console.error("[SFL] Error during init:", err);
-    setEmpty();
-  }
-})();
-
-
-// === New logic to hide SFL block based on page step ===
-function hideSflIfOnFinalStep() {
-  const paymentHeader = document.querySelector("#ctl00_PageBody_CardOnFileViewTitle_HeaderText");
-  const reviewHeader = document.querySelector("#ctl00_PageBody_SummaryHeading_HeaderText");
-  const summaryEntry2 = document.getElementById("SummaryEntry2");
-  const CheckoutDetails = document.getElementById("ctl00_PageBody_CheckoutTitle_HeaderText");
-  const sflBlock = document.getElementById("savedForLater");
-
-  if (!sflBlock) return;
-
-  const isVisible = (el) => el && el.offsetParent !== null;
-
-  if (
-    isVisible(paymentHeader) ||
-    isVisible(reviewHeader) ||
-    isVisible(summaryEntry2) ||
-    isVisible(CheckoutDetails)
-  ) {
-    sflBlock.style.display = "none";
-    console.log("[SFL] Hiding Saved For Later section on payment, review, or summary step.");
-  }
-}
-
-
-
-})();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-(function(){
-  const BASE = location.origin + "/";
-
-  function $(sel, root=document) { return root.querySelector(sel); }
-  function $all(sel, root=document) { return Array.from(root.querySelectorAll(sel)); }
-
-  async function fetchHtml(url, options = {}) {
-    const res = await fetch(url, { credentials: "include", ...options });
-    if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-    const text = await res.text();
-    const doc = new DOMParser().parseFromString(text, "text/html");
-    return { text, doc };
-  }
-  function getHiddenFields(doc) {
-    const fields = {};
-    doc.querySelectorAll('input[type="hidden"]').forEach(inp => {
-      if (inp.name) fields[inp.name] = inp.value || "";
+      };
+      kick();
     });
-    return fields;
-  }
-  function toFormData(obj) {
-    const fd = new FormData();
-    Object.entries(obj).forEach(([k, v]) => fd.append(k, v));
-    return fd;
   }
 
-  async function addPidToCart(pid, qty = 1) {
-  if (!pid) throw new Error("PID required to add to cart.");
-  const pdpUrl = BASE + "ProductDetail.aspx?pid=" + encodeURIComponent(pid);
-  console.log("[SFL] Loading PDP:", pdpUrl);
-  const { doc } = await fetchHtml(pdpUrl);
-
-  const hidden = getHiddenFields(doc);
-
-  // Try to find quantity input (optional)
-  let qtyInput = doc.querySelector('input[name*="qty"]');
-  if (qtyInput && qtyInput.name) {
-    hidden[qtyInput.name] = String(qty);
-    console.log("[SFL] Setting quantity:", qtyInput.name, "=", qty);
-  }
-
-  // Auto-detect Add to Cart link first
-  let eventTarget = null;
-  const atcLink = doc.querySelector('a[href^="javascript:__doPostBack"][id*="AddProductButton"]');
-  if (atcLink) {
-    const href = atcLink.getAttribute("href");
-    const m = href.match(/__doPostBack\('([^']+)'/);
-    if (m) eventTarget = m[1];
-    console.log("[SFL] Auto-detected Add to Cart event target:", eventTarget);
-  }
-
-  // Fallback if not found
-  if (!eventTarget) {
-    eventTarget = "ctl00$PageBody$productDetail$ctl00$AddProductButton";
-    console.log("[SFL] Using hardcoded Add to Cart event target:", eventTarget);
-  }
-
-  hidden["__EVENTTARGET"] = eventTarget;
-  hidden["__EVENTARGUMENT"] = "";
-
-  const fd = toFormData(hidden);
-  const res = await fetch(pdpUrl, {
-    method: "POST",
-    credentials: "include",
-    body: fd
-  });
-
-  if (!res.ok) throw new Error("Add to Cart postback failed.");
-  console.log("[SFL] Add to Cart succeeded");
-  return true;
-}
-
-
-async function removeQuicklistLine(productCodeToRemove) {
-  const detailUrl = sessionStorage.getItem("sfl_detail_url");
-  if (!detailUrl) throw new Error("Missing quicklist detail URL");
-
-  console.log(`[SFL] Removing item from quicklist using detail URL: ${detailUrl}`);
-
-  // 1. Load the quicklist page HTML
-  const response = await fetch(detailUrl, { credentials: "include" });
-  const html = await response.text();
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, "text/html");
-  console.log("[SFL] Loaded quicklist detail page");
-
-  // 2. Parse the grid rows and find the correct delete __EVENTTARGET
-  const rows = doc.querySelectorAll("tr.rgRow, tr.rgAltRow");
-  let eventTarget = null;
-
-for (const tr of rows) {
-  const deleteAnchor = tr.querySelector("a[id*='DeleteQuicklistLineButtonX']");
-  const onclick = deleteAnchor?.getAttribute("onclick") || "";
-  const productCodeMatch = onclick.match(/PromptDeleteQuicklistLine\("([^"]+)"/);
-  const productCode = productCodeMatch?.[1]?.trim().toUpperCase();
-
-  if (productCode === productCodeToRemove.toUpperCase()) {
-    const href = deleteAnchor.getAttribute("href") || "";
-    const match = href.match(/__doPostBack\('([^']+)'/);
-
-    if (match) {
-      eventTarget = match[1];
-      console.log(`[SFL] Matched product '${productCodeToRemove}' — using eventTarget: ${eventTarget}`);
-      break;
-    }
-  }
-}
-
-
-
-  if (!eventTarget) {
-    console.error(`[SFL] Could not find delete button for product ${productCodeToRemove}`);
-    throw new Error("Delete button not found in DOM.");
-  }
-
-  // 3. Build form data for POST
-  const form = doc.querySelector("form");
-  const inputs = [...form.querySelectorAll("input[type=hidden]")];
-  const formData = new URLSearchParams();
-
-  inputs.forEach(input => {
-    if (input.name) formData.append(input.name, input.value);
-  });
-
-  formData.set("__EVENTTARGET", eventTarget);
-  formData.set("__EVENTARGUMENT", "");
-
-  const postUrl = new URL(form.getAttribute("action"), detailUrl).href;
-
-  const postRes = await fetch(postUrl, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded"
-    },
-    body: formData.toString()
-  });
-
-  const resText = await postRes.text();
-  if (!resText.includes("QuicklistDetailGrid")) {
-    console.error("[SFL] Response text preview:\n", resText.slice(0, 500));
-    throw new Error("Failed to remove item from Quicklist.");
-  }
-
-  console.log("[SFL] Item successfully removed from Quicklist.");
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  async function refreshSfl() {
-    // Re-run the loader from Phase 1
-    const init = window.__sflReload;
-    if (typeof init === "function") await init();
-  }
-
-  // Wire up the click handler
-  document.addEventListener("click", async (e) => {
-  const btn = e.target.closest(".js-sfl-add");
-  if (!btn) return;
-
-  btn.disabled = true;
-  btn.textContent = "Adding…";
-
-  const row = btn.closest(".sflRow");
-  const pid = row?.dataset?.pid || null;
-  const productCode = row?.dataset?.code || null;
-
-  try {
-    if (!pid) throw new Error("Missing PID for add-to-cart.");
-
-    // 1. Add to cart
-    await addPidToCart(pid, 1);
-
-    // 2. Remove from Quicklist using productCode
-    if (productCode) {
-      await removeQuicklistLine(productCode);
-      console.log("[SFL] Removed item from Saved For Later list");
-    } else {
-      throw new Error("Missing productCode for removal.");
-    }
-
-    // 3. Refresh UI
-    console.log("[SFL] Refreshing ShoppingCart page to show updated cart...");
-    location.replace(location.href);
-
-    await refreshSfl();
-  } catch (err) {
-    console.error("[SFL] Add to cart/remove failed:", err);
-    btn.textContent = "Try Again";
-    btn.disabled = false;
-  }
-});
-
-
-  // Expose a hook Phase 1 can call to re-render
-  window.__sflReload = async function() {
-    const sflLoading = document.getElementById("sflLoading");
-    if (sflLoading) sflLoading.style.display = "block";
-
-    // Reload the detail list the same way Phase 1 did
-    const detailUrl = sessionStorage.getItem("sfl_detail_url");
-    if (!detailUrl) {
-      location.reload();
-      return;
-    }
-    const { text, doc } = await fetchHtml(detailUrl);
-    const parse = (root) => {
-      const grid = root.querySelector("#ctl00_PageBody_ctl01_QuicklistDetailGrid");
-      if (!grid) return [];
-      const table = grid.querySelector("table.rgMasterTable");
-      if (!table) return [];
-      const items = [];
-      table.querySelectorAll("tbody > tr").forEach(tr => {
-        const tds = tr.querySelectorAll("td");
-        if (tds.length < 5) return;
-        const a = tds[0].querySelector("a[href*='ProductDetail.aspx']");
-        const href = a ? a.getAttribute("href") : null;
-        const code = a ? a.textContent.trim() : "";
-        const desc = tds[1].textContent.trim();
-        const price = tds[2].textContent.trim();
-        const per = tds[3].textContent.trim();
-        const delA = tds[4].querySelector("a[href^='javascript:__doPostBack']");
-        let target = null;
-        if (delA) {
-          const h = delA.getAttribute("href") || "";
-          const m = h.match(/__doPostBack\('([^']+)'/);
-          if (m) target = m[1];
-        }
-        items.push({ productHref: href, productCode: code, description: desc, price, per, eventTarget: target });
-      });
-      return items;
-    };
-    const items = parse(doc);
-
-    // Re-draw rows (reusing Phase 1’s render)
-    const list = document.getElementById("sflList");
-    if (!list) return;
+  async function renderSFL(items){
+    const list = $("#sflList");
     list.innerHTML = "";
+    if (!items.length) { setEmpty(); return; }
 
-    const hdrCount = document.getElementById("sflCount");
-    const loading = document.getElementById("sflLoading");
-    const empty = document.getElementById("sflEmpty");
-
-    function pidFromHref(href) {
-      try {
-        const u = new URL(href, location.origin + "/");
-        return u.searchParams.get("pid");
-      } catch (e) { return null; }
-    }
-    function productImageUrlFromPid(pid) {
-      return "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/placeholder.png";
-    }
-
-    if (!items.length) {
-      if (hdrCount) hdrCount.textContent = "(0)";
-      if (loading) loading.style.display = "none";
-      if (list) list.style.display = "none";
-      if (empty) empty.style.display = "block";
-      return;
-    }
-
-    items.forEach(item => {
-      const pid = item.productHref ? pidFromHref(item.productHref) : null;
-      const img = productImageUrlFromPid(pid);
+    // Pre-render rows quickly
+    const placeholder = "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/placeholder.png";
+    items.forEach(it => {
+      const pid = it.href ? pidFromHref(it.href) : null;
+      const productUrl = pid ? `${BASE}ProductDetail.aspx?pid=${pid}` : "#";
       const row = document.createElement("div");
       row.className = "sflRow";
-      row.dataset.eventTarget = item.eventTarget || "";
       row.dataset.pid = pid || "";
-      row.dataset.code = item.productCode || "";
+      row.dataset.code = it.code || "";
       row.innerHTML = `
-        <img class="sflImg" src="${img}" alt="">
+        <div class="sflImgWrapper">
+          <a href="${productUrl}" target="_blank"><img class="sflImg" src="${placeholder}" alt=""></a>
+        </div>
         <div>
-          <div class="sflTitle">${item.productCode || ""}</div>
-          <div class="sflDesc">${item.description || ""}</div>
+          <div class="sflTitle">${it.code || ""}</div>
+          <div class="sflDesc">${it.desc || ""}</div>
         </div>
-        <div class="sflPrice">${item.price || ""}</div>
-        <div class="sflPer">${item.per || ""}</div>
+        <div class="sflPrice">${it.price || ""}</div>
+        <div class="sflPer">${it.per || ""}</div>
         <div class="sflActions">
-          <button class="sflBtn js-sfl-add" data-pid="${pid || ""}" data-code="${item.productCode || ""}">Add to Cart</button>
-        </div>
-      `;
+          <button class="sflBtn js-sfl-add" data-pid="${pid || ""}" data-code="${it.code || ""}">Add to Cart</button>
+        </div>`;
       list.appendChild(row);
     });
 
-    if (hdrCount) hdrCount.textContent = `(${items.length})`;
-    if (loading) loading.style.display = "none";
-    if (empty) empty.style.display = "none";
-    if (list) list.style.display = "block";
-  };
-})();
-
-
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      
-
-
-    
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-async function injectSaveForLaterButtons() {
-  console.log("[SFL] Starting Save for Later button injection...");
-
-  const cartItems = document.querySelectorAll(".shopping-cart-item");
-  console.log(`[SFL] Found ${cartItems.length} cart items.`);
-
-  cartItems.forEach((item, index) => {
-    console.log(`[SFL] Processing cart item #${index+1}`);
-
-    // 1) Get the product link & code
-    const codeLink = item.querySelector("h6 a");
-    const productCode = codeLink?.textContent.trim();
-    if (!productCode) {
-      console.warn("[SFL] No product code:", item);
-      return;
-    }
-    console.log(`[SFL] Found product code: ${productCode}`);
-
-    // 2) Extract pid from that href
-    const pidMatch = codeLink.href?.match(/pid=(\d+)/);
-    if (!pidMatch) {
-      console.warn("[SFL] No pid in href:", codeLink.href);
-      return;
-    }
-    const productId = pidMatch[1];
-    console.log(`[SFL] Found pid: ${productId}`);
-
-    // 3) Find the “Delete” link you created
-    const deleteBtn = item.querySelector("a.delete-link");
-    if (!deleteBtn) {
-      console.warn("[SFL] Could not find delete-link in item:", item);
-      return;
-    }
-
-    // 4) Build the SFL button
-    const btn = document.createElement("button");
-    btn.textContent = "Save for Later";
-    btn.className = "btn btn-link text-primary btn-sm sfl-button";
-    btn.style.marginLeft = "1rem";
-
-    btn.addEventListener("click", async e => {
-      e.preventDefault();
-      btn.disabled = true;
-      btn.textContent = "Saving…";
+    // Fetch images in parallel (limit 4)
+    const rows = $$(".sflRow", list);
+    await concurrentMap(rows, 4, async (row) => {
+      const pid = row.dataset.pid;
+      if (!pid) return;
+      const productUrl = `${BASE}ProductDetail.aspx?pid=${pid}`;
       try {
-        await addToQuicklist(productId);
-        // now trigger your Delete link to remove from cart
-        deleteBtn.click();
-      } catch (err) {
-        console.error("[SFL] Failed to save for later:", err);
-        btn.textContent = "Error – Try Again";
-        btn.disabled = false;
-      }
+        const r = await fetch(IMG_API, {
+          method:"POST", headers:{ "Content-Type":"application/json" },
+          body: JSON.stringify({ productUrl })
+        });
+        const j = await r.json();
+        if (j.imageUrl) row.querySelector(".sflImg").src = j.imageUrl;
+      } catch {}
     });
 
-    // 5) Inject into the placeholder
-    const placeholder = item.querySelector(".sfl-placeholder");
-    if (placeholder) {
-      placeholder.appendChild(btn);
-      console.log("[SFL] Injected Save for Later button.");
-    } else {
-      console.warn("[SFL] No .sfl-placeholder found");
-    }
-  });
-}
-
-
-
-
-async function removeCartItem(eventTarget) {
-  const form = document.querySelector("form");
-  const inputs = [...form.querySelectorAll("input[type=hidden]")];
-  const formData = new URLSearchParams();
-
-  inputs.forEach(input => {
-    if (input.name) formData.append(input.name, input.value);
-  });
-
-  formData.set("__EVENTTARGET", eventTarget);
-  formData.set("__EVENTARGUMENT", "");
-
-  const postUrl = form.getAttribute("action");
-
-  const res = await fetch(postUrl, {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded"
-    },
-    body: formData.toString()
-  });
-
-  const resText = await res.text();
-  if (!resText.includes("ShoppingCart.aspx")) {
-    console.warn("[SFL] Remove POST response didn't contain expected content.");
+    setCount(items.length);
+    $("#sflLoading").style.display = "none";
+    $("#sflEmpty").style.display = "none";
+    list.style.display = "block";
   }
-}
 
-function addToQuicklist(productId) {
-  console.log(`[SFL] Attempting to add ProductID ${productId} to Saved For Later...`);
+  // ---------- public-ish reloader ----------
+  async function reloadSFL() {
+    setLoading("Updating…");
+    const { items } = await loadSFL();
+    await renderSFL(items);
+  }
+  window.__sflReload = reloadSFL;
 
-  return new Promise((resolve, reject) => {
-    const iframe = document.createElement("iframe");
-    iframe.style.display = "none";
-    iframe.src = `/ProductDetail.aspx?pid=${productId}`;
-    document.body.appendChild(iframe);
+  // ---------- init (1s after DOM ready) ----------
+  document.addEventListener("DOMContentLoaded", () => {
+    setTimeout(async () => {
+      // signed-in guard
+      const wlUserId = localStorage.getItem("wl_user_id");
+      if (!wlUserId) return;
 
-    iframe.onload = () => {
-      try {
-        const doc = iframe.contentDocument || iframe.contentWindow.document;
-
-        console.log("[SFL] Product detail iframe loaded.");
-
-        const link = Array.from(doc.querySelectorAll("a")).find(
-          a => a.textContent?.trim() === "Add to Saved For Later"
-        );
-
-        if (!link) {
-          throw new Error("Could not find 'Add to Saved For Later' link in iframe.");
-        }
-
-        const href = link.getAttribute("href");
-        const match = href.match(/__doPostBack\('([^']+)'/);
-
-        if (!match || !match[1]) {
-          throw new Error("Could not extract __doPostBack target.");
-        }
-
-        const postbackTarget = match[1];
-        console.log(`[SFL] Found __EVENTTARGET: ${postbackTarget}`);
-
-        const form = doc.forms[0];
-        if (!form) throw new Error("Form not found in iframe.");
-
-        form.__EVENTTARGET.value = postbackTarget;
-        form.__EVENTARGUMENT.value = "";
-
-        form.submit();
-
-        console.log(`[SFL] Submitted postback to add product ${productId} to quicklist.`);
-
-        // Give it time to complete, then cleanup
-        setTimeout(() => {
-          document.body.removeChild(iframe);
-          resolve();
-        }, 1500); // Adjust timing if needed
-      } catch (err) {
-        console.error("[SFL] Error in addToQuicklist via iframe:", err);
-        document.body.removeChild(iframe);
-        reject(err);
+      // hide on final steps
+      const shouldHide =
+        visible($("#ctl00_PageBody_CardOnFileViewTitle_HeaderText")) ||
+        visible($("#ctl00_PageBody_SummaryHeading_HeaderText")) ||
+        visible($("#SummaryEntry2")) ||
+        visible($("#ctl00_PageBody_CheckoutTitle_HeaderText"));
+      if (shouldHide) {
+        const blk = $("#savedForLater"); if (blk) blk.style.display = "none";
+        return;
       }
-    };
+
+      ensureContainer();
+      setLoading();
+
+      try {
+        const { items } = await loadSFL();
+        await renderSFL(items);
+      } catch (e) {
+        console.error("[SFL] init error:", e);
+        setEmpty();
+      }
+    }, 1000);
   });
-}
 
+  // ---------- Add to Cart from SFL (no full page reload) ----------
+  document.addEventListener("click", async (ev) => {
+    const btn = ev.target.closest(".js-sfl-add");
+    if (!btn) return;
+    const row  = btn.closest(".sflRow");
+    const pid  = row?.dataset?.pid;
+    const code = row?.dataset?.code;
 
-
-
-
-
-console.log("[SFL] Script loaded – injecting Save for Later buttons...");
-injectSaveForLaterButtons();
-
-
-
-// Ensure it runs on page load
-document.addEventListener("DOMContentLoaded", () => {
-  setTimeout(() => {
+    btn.disabled = true;
+    btn.textContent = "Adding…";
     try {
-      injectSaveForLaterButtons();
+      await addPidToCart(pid, 1);
+      // Remove from quicklist in background; if it fails, just reload SFL
+      try { if (code) await removeFromQuicklistByCode(code); } catch(e){ console.warn(e); }
+      // Optimistic UI: drop row + refresh SFL list
+      row?.remove();
+      await reloadSFL();
+      // Optional: if you MUST reflect cart totals instantly, we can ajax-refresh the cart DOM here.
     } catch (e) {
-      console.error("[SFL] Error injecting Save for Later buttons:", e);
+      console.error("[SFL] add-to-cart failed:", e);
+      btn.disabled = false;
+      btn.textContent = "Try Again";
     }
-  }, 1000); // slight delay for table rendering
-});
+  });
 
+  // ---------- Inject "Save for Later" buttons in cart 1s after DOM ready ----------
+  async function injectSaveForLaterButtons() {
+    const cartItems = document.querySelectorAll(".shopping-cart-item");
+    cartItems.forEach(item => {
+      const codeLink  = item.querySelector("h6 a");
+      const productCode = codeLink?.textContent.trim();
+      const pidMatch = codeLink?.href?.match(/pid=(\d+)/);
+      const pid = pidMatch ? pidMatch[1] : null;
+      const deleteBtn = item.querySelector("a.delete-link");
+      const host = item.querySelector(".sfl-placeholder");
+      if (!productCode || !pid || !deleteBtn || !host) return;
 
+      const btn = document.createElement("button");
+      btn.textContent = "Save for Later";
+      btn.className = "btn btn-link text-primary btn-sm sfl-button";
+      btn.style.marginLeft = "1rem";
 
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        btn.disabled = true;
+        btn.textContent = "Saving…";
+        try {
+          // Fast PDP postback instead of iframe
+          await pdpPostback(pid, "ADD_TO_SFL");
+          // remove from cart via your delete (server will re-render cart)
+          deleteBtn.click();
+        } catch (err) {
+          console.error("[SFL] Save for Later failed:", err);
+          btn.disabled = false;
+          btn.textContent = "Error – Try Again";
+        }
+      });
 
-}, 1000);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+      host.appendChild(btn);
+    });
+  }
 
+  document.addEventListener("DOMContentLoaded", () => {
+    setTimeout(() => {
+      try { injectSaveForLaterButtons(); } catch(e){ console.error(e); }
+    }, 1000); // exactly 1s
+  });
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+})();
 
