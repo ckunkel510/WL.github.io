@@ -1,92 +1,72 @@
 
-console.log("[BulkPricing] Script loaded (multi-card).");
+console.log("[BulkPricing] Script loaded (per-row scope).");
 
 (function () {
   'use strict';
-
-  // Small wait so WebForms/grids finish rendering
   setTimeout(init, 500);
 
   async function init() {
     try {
-      console.log("[BulkPricing] Executing after slight delay…");
-
-      // 1) Collect all product links that have a pid
-      const productLinks = Array.from(document.querySelectorAll('a[href*="pid="]'));
-      if (!productLinks.length) {
-        console.warn("[BulkPricing] No product links with pid= found.");
+      // 1) Only look at image/link rows so we scope per item
+      const productAnchors = Array.from(
+        document.querySelectorAll('tr[id*="ProductImageRow"] a[href*="pid="], a[href*="pid="][id*="ProductImageRow"]')
+      );
+      if (!productAnchors.length) {
+        console.warn("[BulkPricing] No product anchors found under ProductImageRow.");
         return;
       }
 
-      // 2) Fetch + parse sheet ONCE
+      // 2) Fetch the CSV once
       const sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRmHLHJE9OebjPpi7wMvOHxX6fOdarKQRRbd1W-Vf2o04kLwd9kc0jpm78WFCU4y1ErzCIWVqoUvAwn/pub?output=csv";
       const csvText = await (await fetch(sheetUrl)).text();
-      console.log("[BulkPricing] CSV fetched. (first 200 chars)", csvText.slice(0, 200));
-
       const { headers, rows } = quickCSV(csvText);
-      const toIdx = (name) => headers.indexOf(name.toLowerCase());
-      const pidIdx   = toIdx("pid");
-      const qtyIdx   = toIdx("qty");
-      const priceIdx = toIdx("price");
 
-      if (pidIdx === -1 || qtyIdx === -1 || priceIdx === -1) {
-        console.error("[BulkPricing] Required headers not found: 'pid', 'qty', 'price'");
+      const idx = (h) => headers.indexOf(h.toLowerCase());
+      const pidIdx = idx("pid"), qtyIdx = idx("qty"), priceIdx = idx("price");
+      if (pidIdx < 0 || qtyIdx < 0 || priceIdx < 0) {
+        console.error("[BulkPricing] Missing required headers pid/qty/price.");
         return;
       }
 
-      // Build a lookup: pid -> [{qty, price}, …]
+      // Build pid -> tiers
       const tiersByPid = new Map();
       for (const r of rows) {
         const pid = (r[pidIdx] || "").trim();
         if (!pid) continue;
-        const tier = {
-          qty: (r[qtyIdx] || "").trim(),
-          price: (r[priceIdx] || "").trim()
-        };
-        if (!tiersByPid.has(pid)) tiersByPid.set(pid, []);
-        tiersByPid.get(pid).push(tier);
+        const tier = { qty: (r[qtyIdx] || "").trim(), price: (r[priceIdx] || "").trim() };
+        (tiersByPid.get(pid) || tiersByPid.set(pid, []).get(pid)).push(tier);
       }
 
-      // 3) For each product card/link, insert the bulk pricing row (if any)
-      let insertedCount = 0;
-      for (const a of productLinks) {
+      let inserted = 0;
+
+      for (const a of productAnchors) {
         const pidMatch = a.href.match(/pid=(\d+)/i);
         const pid = pidMatch ? pidMatch[1] : null;
         if (!pid) continue;
 
         const tiers = tiersByPid.get(pid);
-        if (!tiers || !tiers.length) {
-          // No bulk tiers for this pid
-          continue;
-        }
+        if (!tiers || !tiers.length) continue;
 
-        // Find the nearest "card" container (table/row/div) to keep scope tight
-        const cardRoot =
-          a.closest('table') ||
-          a.closest('.card, .product-card, .row, tr') ||
-          a.parentElement;
+        // Scope to THIS item’s row and tbody
+        const imgRow = a.closest('tr');
+        if (!imgRow) continue;
+        if (imgRow.dataset.bulkApplied === "1") continue; // avoid duplicates on this item
 
-        if (!cardRoot) continue;
+        const tbody = imgRow.closest('tbody') || imgRow.parentElement;
 
-        // Avoid duplicate inserts on the same card
-        if (cardRoot.querySelector('.wl-bulk-pricing-row')) continue;
+        // Find the nearest price row for this item by scanning forward a few rows
+        const priceRow = findSiblingPriceRow(imgRow, tbody);
 
-        // Locate the price row within THIS card
-        // Try a few common patterns, scoped to cardRoot
-        const priceRow =
-          cardRoot.querySelector('tr#PriceRow') ||
-          cardRoot.querySelector('tr[id$="PriceRow"]') ||
-          cardRoot.querySelector('tr.PriceRow') ||
-          // Fallbacks: a row that contains a price label/value
-          Array.from(cardRoot.querySelectorAll('tr')).find(tr =>
-            /\bprice\b/i.test(tr.textContent || '')
-          );
-
-        // Build the row we’ll insert
+        // Build our bulk row
         const bulkTr = document.createElement('tr');
         bulkTr.className = 'wl-bulk-pricing-row';
         const td = document.createElement('td');
-        td.colSpan = (priceRow && priceRow.children.length) ? priceRow.children.length : 1;
+
+        // Match the colspan of the target row if possible
+        const colSpanGuess = (priceRow && priceRow.children.length) ? priceRow.children.length
+                              : (imgRow && imgRow.children.length) ? imgRow.children.length
+                              : 1;
+        td.colSpan = colSpanGuess;
 
         const line = tiers.map(t => {
           const q = t.qty || 'Qty';
@@ -95,66 +75,67 @@ console.log("[BulkPricing] Script loaded (multi-card).");
         }).join(' • ');
 
         td.innerHTML = `
-          <div style="
-            text-align:center;
-            font-weight:600;
-            color:#2c3e70;
-            font-size:1.05em;
-            padding:4px 0;
-          ">
+          <div style="text-align:center;font-weight:600;color:#2c3e70;font-size:1.05em;padding:4px 0;">
             Bulk Price: ${line}
           </div>
         `;
         bulkTr.appendChild(td);
 
-        if (priceRow && priceRow.parentNode) {
-          priceRow.parentNode.insertBefore(bulkTr, priceRow.nextSibling);
-          insertedCount++;
+        if (priceRow && priceRow.parentNode === tbody) {
+          priceRow.after(bulkTr);
         } else {
-          // If we can’t find a price row, append at end of the local table/card
-          (cardRoot.querySelector('tbody') || cardRoot).appendChild(bulkTr);
-          insertedCount++;
-          console.warn("[BulkPricing] Price row not found; appended bulk row to card root.", { pid });
+          imgRow.after(bulkTr); // fallback: immediately after image row
         }
+
+        imgRow.dataset.bulkApplied = "1";
+        inserted++;
       }
 
-      console.log(`[BulkPricing] Inserted bulk pricing on ${insertedCount} card(s).`);
+      console.log(`[BulkPricing] Inserted bulk pricing on ${inserted} item(s).`);
 
-    } catch (err) {
-      console.error("[BulkPricing] Error:", err);
+    } catch (e) {
+      console.error("[BulkPricing] Error:", e);
     }
   }
 
-  // Simple CSV that handles quoted fields (commas inside quotes)
+  // Scan forward within the same tbody to find the row that appears to be the price row
+  function findSiblingPriceRow(startTr, tbody) {
+    let tr = startTr.nextElementSibling;
+    for (let i = 0; tr && i < 8; i++, tr = tr.nextElementSibling) {
+      // Stop if we hit the next item block (another ProductImageRow)
+      if (tr.id && /ProductImageRow/i.test(tr.id)) return null;
+
+      // Prefer explicit IDs/classes first
+      if (/PriceRow/i.test(tr.id || "")) return tr;
+      if (tr.classList && tr.classList.contains('PriceRow')) return tr;
+
+      // Fallback: textual heuristic
+      const txt = (tr.textContent || "").toLowerCase();
+      if (/\bprice\b/.test(txt) || /\bunit\b/.test(txt)) return tr;
+    }
+    return null;
+  }
+
+  // CSV parser (handles quotes/commas)
   function quickCSV(text) {
     const lines = text.replace(/\r/g, "").split("\n").filter(Boolean);
     const parseLine = (line) => {
-      const out = [];
-      let cur = '';
-      let inQ = false;
-
+      const out = []; let cur = ""; let inQ = false;
       for (let i = 0; i < line.length; i++) {
         const ch = line[i];
-        if (ch === '"' ) {
-          if (inQ && line[i+1] === '"') { // escaped quote
-            cur += '"'; i++;
-          } else {
-            inQ = !inQ;
-          }
-        } else if (ch === ',' && !inQ) {
-          out.push(cur); cur = '';
-        } else {
-          cur += ch;
-        }
+        if (ch === '"') {
+          if (inQ && line[i+1] === '"') { cur += '"'; i++; }
+          else { inQ = !inQ; }
+        } else if (ch === ',' && !inQ) { out.push(cur); cur = ""; }
+        else { cur += ch; }
       }
       out.push(cur);
       return out.map(s => s.trim());
     };
-
     const header = parseLine(lines.shift());
-    const lowerHeaders = header.map(h => h.toLowerCase());
+    const lower = header.map(h => h.toLowerCase());
     const rows = lines.map(parseLine);
-    return { headers: lowerHeaders, rows };
+    return { headers: lower, rows };
   }
 
 })();
