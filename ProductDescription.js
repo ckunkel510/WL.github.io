@@ -416,7 +416,6 @@ window.addEventListener('load', async function() {
 
 
 
-
 (function () {
   const params = new URLSearchParams(location.search);
   if (params.get('binlabel') !== 'true') return;
@@ -455,12 +454,12 @@ window.addEventListener('load', async function() {
       .filter(Boolean);
   }
 
-  function getFeaturesOnce() {
-    // Desktop tab
+  function readFeaturesOnce() {
+    // Desktop tab content
     const featuresEl = document.querySelector('#product-widget #tab-content #tab-Features');
     if (featuresEl && featuresEl.innerHTML.trim()) return extractFeaturesFrom(featuresEl.innerHTML);
 
-    // Mobile section
+    // Mobile section fallback
     const mobileSec = [...document.querySelectorAll('#product-widget .mobile-section')]
       .find(s => /Features/i.test(text(s.querySelector('.mobile-header'))));
     if (mobileSec) {
@@ -468,24 +467,19 @@ window.addEventListener('load', async function() {
       if (mobileHTML.trim()) return extractFeaturesFrom(mobileHTML);
     }
 
-    // Active tab fallback when Features is selected
-    const activeTab = document.querySelector('#product-widget #tab-content .tab-section.active');
+    // Active tab is Features
     const tabBtn = [...document.querySelectorAll('#product-widget #tab-menu button')].find(b => b.classList.contains('active'));
+    const activeTab = document.querySelector('#product-widget #tab-content .tab-section.active');
     if (activeTab && /Features/i.test(tabBtn?.getAttribute('data-header') || '')) {
       return extractFeaturesFrom(activeTab.innerHTML);
     }
-
     return [];
   }
 
-  // Try immediately, then once more after a tick (in case the widget hydrates after load)
-  let features = getFeaturesOnce();
-  setTimeout(() => { if (!features.length) features = getFeaturesOnce(); }, 150);
-
+  // Price & UOM
   function findPriceAndUom() {
     const priceRegex = /^\$?\s*\d[\d,]*(\.\d{2})?$/;
     let price = '', uom = '';
-
     const buyBox = document.querySelector('#product-sidebar .buy-box');
     if (buyBox) {
       const spans = [...buyBox.querySelectorAll('span')].map(s => s.textContent.trim());
@@ -508,6 +502,7 @@ window.addEventListener('load', async function() {
   }
   const { price, uom } = findPriceAndUom();
 
+  // Product image
   const imgEl  = document.querySelector('#ctl00_PageBody_productDetail_ProductImage') ||
                  document.querySelector('#product-image-wrapper img') ||
                  document.querySelector('#main-block img');
@@ -515,8 +510,8 @@ window.addEventListener('load', async function() {
 
   const qrTarget = canonicalizeUrl(location.href);
 
-  // ---------- QR with robust fallback ----------
-  const QR_SIZE = 180; // slightly smaller so it never crowds the footer
+  // ---------- QR: robust fallback (CDN -> Google PNG -> URL box) ----------
+  const QR_SIZE = 140; // smaller so it never crowds edges
 
   function loadScript(src, timeoutMs = 2000) {
     return new Promise((resolve, reject) => {
@@ -541,13 +536,9 @@ window.addEventListener('load', async function() {
         return true;
       }
     } catch (_) {}
-
-    // Fallback: Google Chart PNG
     try {
       const img = new Image();
-      img.alt = 'QR';
-      img.width = size; img.height = size;
-      img.referrerPolicy = 'no-referrer';
+      img.alt = 'QR'; img.width = size; img.height = size; img.referrerPolicy = 'no-referrer';
       img.src = 'https://chart.googleapis.com/chart?cht=qr&chs=' + size + 'x' + size + '&chl=' + encodeURIComponent(text);
       await new Promise((res, rej) => {
         img.onload = () => res(true);
@@ -557,8 +548,6 @@ window.addEventListener('load', async function() {
       el.innerHTML = ''; el.appendChild(img);
       return true;
     } catch (_) {}
-
-    // Last resort: URL box (never fails)
     const box = document.createElement('div');
     box.style.width = size + 'px';
     box.style.height = size + 'px';
@@ -571,14 +560,14 @@ window.addEventListener('load', async function() {
     box.style.padding = '8px';
     box.style.textAlign = 'center';
     box.innerHTML = `
-      <div style="font:700 13px/1.2 sans-serif;margin-bottom:6px;">Scan URL</div>
+      <div style="font:700 12px/1.2 sans-serif;margin-bottom:6px;">Scan URL</div>
       <div style="font:11px/1.2 monospace;word-break:break-all;max-width:${size-16}px">${text}</div>
     `;
     el.innerHTML = ''; el.appendChild(box);
     return false;
   }
 
-  // ---------- styles (4x6 landscape, safer scaling) ----------
+  // ---------- styles (4x6 landscape, right-side price over QR, safe scaling) ----------
   const BRAND_COLOR = '#6B0016';
   const style = document.createElement('style');
   style.textContent = `
@@ -594,12 +583,13 @@ window.addEventListener('load', async function() {
     .bl-grid {
       position:absolute; inset:0;
       display:grid;
-      grid-template-columns: 2.0in 1fr; /* give image a hair more room but cap its max-height */
-      grid-template-rows: auto 1fr auto;
+      grid-template-columns: 2.0in 1fr;
+      grid-template-rows: auto 1fr;
       gap: 0.1in;
-      padding: 0.2in 0.25in; /* slightly tighter padding to keep everything inside */
+      padding: 0.2in 0.25in;
     }
 
+    /* Header: logo + product name */
     .bl-header {
       grid-column: 1 / span 2;
       display:flex; align-items:center; gap:0.18in;
@@ -613,48 +603,62 @@ window.addEventListener('load', async function() {
     .bl-title {
       font-weight:700; font-size: 15pt; line-height:1.1;
       letter-spacing: 0.2px; max-height: 0.5in; overflow: hidden;
-      display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; /* clamp long names */
+      display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;
     }
 
+    /* Left: product image pinned inside column */
     .bl-left {
-      grid-row: 2 / span 2;
+      grid-row: 2; grid-column: 1;
       display:flex; align-items:flex-end; justify-content:center;
-      overflow:hidden; /* prevent spillover */
-      padding: 0 0.05in 0.05in 0; /* tiny breathing room */
+      overflow:hidden; padding: 0 0.05in 0.05in 0;
     }
     .bl-left .bl-image {
       max-width: 100%;
-      max-height: 2.4in; /* lowered to ensure QR + footer always fit */
-      height:auto; width:auto;
-      object-fit: contain;
-      display:block;
+      max-height: 2.7in; /* a bit taller now that the right side is stacked */
+      height:auto; width:auto; object-fit: contain; display:block;
     }
 
+    /* Right: features (top-left of right col), and a bottom-right "price+QR" block */
     .bl-right {
-      grid-row: 2; display:grid; grid-template-rows: auto 1fr auto; gap: 0.06in;
-      padding-right: 0.1in; min-width: 0; /* allow shrinking */
+      grid-row: 2; grid-column: 2;
+      display:grid; grid-template-rows: 1fr auto; gap: 0.06in;
+      min-width: 0; padding-right: 0.05in;
     }
-    .bl-name { display:none; } /* moved name into header */
     .bl-features { font-size: 10.5pt; line-height: 1.25; overflow:hidden; }
     .bl-features ul { margin: 0.03in 0 0 0.16in; padding: 0; }
     .bl-features li { margin: 0.01in 0; }
 
-    .bl-priceRow {
-      display:flex; align-items:baseline; gap: 0.07in; margin-top: 0.02in;
-      flex-wrap: wrap;
+    .bl-priceQr {
+      display:grid;
+      grid-template-columns: 1fr auto;
+      grid-template-rows: auto auto;
+      align-items: end;
+      column-gap: 0.1in;
     }
-    .bl-price { font-size: 26pt; font-weight: 800; letter-spacing: -0.3px; }
-    .bl-uom { font-size: 13pt; color:#444; font-weight:600; }
-
+    .bl-price {
+      grid-column: 2; grid-row: 1;
+      font-size: 24pt; font-weight: 800; letter-spacing: -0.2px;
+      text-align: right; margin-right: 0.04in;
+    }
+    .bl-uom {
+      grid-column: 2; grid-row: 1;
+      font-size: 12pt; color:#444; font-weight:600;
+      text-align: right; margin-right: 0.04in; margin-top: 0.04in;
+    }
     .bl-qr {
-      grid-column: 2; grid-row: 3;
-      align-self: end; justify-self: end;
-      width: ${QR_SIZE}px; height: ${QR_SIZE}px;
-      margin-right: 0.05in; margin-bottom: 0.05in; /* keep it inside bounds */
-      overflow:hidden;
+      grid-column: 2; grid-row: 2;
+      width:${QR_SIZE}px; height:${QR_SIZE}px;
+      justify-self: end; align-self: end;
+      margin-right: 0.04in; margin-bottom: 0.02in; overflow:hidden;
+    }
+    .bl-cta {
+      grid-column: 1; grid-row: 2;
+      align-self: end; justify-self: start;
+      font-size: 11pt; font-weight: 700; color: ${BRAND_COLOR};
+      white-space: nowrap;
     }
 
-    /* Center on screen for preview */
+    /* Preview nicety */
     html, body { display:grid; place-items:center; }
     .binlabel-root { box-shadow: 0 0 0 1px #ddd, 0 4px 24px rgba(0,0,0,.12); }
     @media print { .binlabel-root { box-shadow:none; } }
@@ -677,37 +681,62 @@ window.addEventListener('load', async function() {
 
       <div class="bl-right">
         <div class="bl-features" id="bl-features-slot">
-          ${features.length ? `<ul>${features.map(f => `<li>${f}</li>`).join('')}</ul>` : '<div style="color:#888">Loading features…</div>'}
+          <div style="color:#888">Loading features…</div>
         </div>
-        <div class="bl-priceRow">
-          <div class="bl-price">${(price || '')}</div>
-          ${uom ? `<div class="bl-uom">/ ${uom}</div>` : ''}
+
+        <div class="bl-priceQr">
+          <div class="bl-cta">Learn more online →</div>
+          <div class="bl-price">${price || ''} ${uom ? `<span class="bl-uom">/ ${uom}</span>` : ''}</div>
+          <div class="bl-qr" id="bl-qr"></div>
         </div>
       </div>
-
-      <div class="bl-qr" id="bl-qr"></div>
     </div>
   `;
   document.body.appendChild(root);
 
-  // second-pass fill for features after 150ms retry (if first read was empty)
-  setTimeout(() => {
-    if (!features.length) {
-      const retry = getFeaturesOnce();
-      if (retry.length) {
-        const slot = document.getElementById('bl-features-slot');
-        if (slot) slot.innerHTML = `<ul>${retry.map(f => `<li>${f}</li>`).join('')}</ul>`;
-      } else {
-        const slot = document.getElementById('bl-features-slot');
-        if (slot) slot.innerHTML = '<div style="color:#888">No feature details found.</div>';
-      }
+  // ---------- fill features (observe & retry) ----------
+  const featuresSlot = document.getElementById('bl-features-slot');
+
+  function setFeaturesList(items) {
+    if (!featuresSlot) return;
+    featuresSlot.innerHTML = items.length
+      ? `<ul>${items.map(f => `<li>${f}</li>`).join('')}</ul>`
+      : '<div style="color:#888">No feature details found.</div>';
+  }
+
+  // 1) immediate read
+  let feats = readFeaturesOnce();
+  if (feats.length) setFeaturesList(feats);
+
+  // 2) small timed retries (because your site populates via JS)
+  let tries = 0;
+  const retryTimer = setInterval(() => {
+    if (feats.length || tries > 12) { clearInterval(retryTimer); return; } // ~3s total
+    tries++;
+    const attempt = readFeaturesOnce();
+    if (attempt.length) {
+      feats = attempt; setFeaturesList(feats); clearInterval(retryTimer);
     }
-  }, 170);
+  }, 250);
 
-  // Draw QR (will always render something, even if libraries/network fail)
-  renderQR(document.getElementById('bl-qr'), canonicalizeUrl(location.href), QR_SIZE);
+  // 3) MutationObserver (fires when tab content updates)
+  const widget = document.querySelector('#product-widget');
+  if (widget) {
+    const mo = new MutationObserver(() => {
+      if (feats.length) return;
+      const attempt = readFeaturesOnce();
+      if (attempt.length) { feats = attempt; setFeaturesList(feats); mo.disconnect(); }
+    });
+    mo.observe(widget, { childList: true, subtree: true });
+  }
 
+  // ---------- draw QR (always renders something) ----------
+  renderQR(document.getElementById('bl-qr'), qrTarget, QR_SIZE);
+
+  // Optional: auto-print
   if (params.get('print') === 'true') setTimeout(() => window.print(), 300);
 })();
+
+
 
 
