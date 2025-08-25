@@ -416,15 +416,27 @@ window.addEventListener('load', async function() {
 
 
 
+document.addEventListener('DOMContentLoaded', function () {
 (function () {
   const params = new URLSearchParams(location.search);
   if (params.get('binlabel') !== 'true') return;
 
+  const BRAND = '#6B0016';
+  const log = (...a) => { try { console.debug('[binlabel]', ...a); } catch {} };
+  const fail = (msg, err) => { console.error('[binlabel]', msg, err||''); toast(msg); };
+
+  /* ---------- tiny toast for visible errors ---------- */
+  function toast(msg) {
+    const t = document.createElement('div');
+    t.style.cssText = 'position:fixed;left:10px;bottom:10px;background:#222;color:#fff;padding:10px 12px;border-radius:8px;z-index:2147483647;font:12px/1.3 system-ui';
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(()=>t.remove(), 4000);
+  }
+
   /* ----------------------- helpers ----------------------- */
   const text = (el) => (el ? el.textContent.trim() : '');
   const abs  = (src) => src && /^https?:\/\//i.test(src) ? src : (src ? new URL(src, location.origin).toString() : '');
-  const BRAND = '#6B0016';
-
   function canonicalizeUrl(url) {
     const u = new URL(url, location.origin);
     const sp = u.searchParams;
@@ -433,161 +445,154 @@ window.addEventListener('load', async function() {
     u.search = sp.toString();
     return u.toString();
   }
-
-  function loadScript(src, timeoutMs = 2000) {
+  function loadScript(src, timeoutMs = 2500) {
     return new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      let done = false, t;
+      const s = document.createElement('script'); let done=false, t;
       s.src = src; s.async = true;
-      s.onload = () => { if (!done) { done = true; clearTimeout(t); resolve(); } };
-      s.onerror = () => { if (!done) { done = true; clearTimeout(t); reject(new Error('load error')); } };
+      s.onload = () => { if (!done){done=true;clearTimeout(t);resolve();} };
+      s.onerror = (e) => { if (!done){done=true;clearTimeout(t);reject(e||new Error('load error'));} };
       document.head.appendChild(s);
-      t = setTimeout(() => { if (!done) { done = true; reject(new Error('timeout')); } }, timeoutMs);
+      t = setTimeout(()=>{ if(!done){done=true;reject(new Error('timeout'));} }, timeoutMs);
     });
   }
 
   /* ------------------- extract page data ------------------- */
-  const logoEl  = document.querySelector('img[src*="WebTrackImage_"]') || document.querySelector('img[src*="/images/user_content/"]');
-  const logoSrc = abs(logoEl ? logoEl.getAttribute('src') : '');
+  function getProductData() {
+    const logoEl  = document.querySelector('img[src*="WebTrackImage_"]') || document.querySelector('img[src*="/images/user_content/"]');
+    const logoSrc = abs(logoEl ? logoEl.getAttribute('src') : '');
 
-  const productName =
-    text(document.querySelector('#ctl00_PageBody_productDetail_productDescription .productDescriptionOnThisPageFull')) ||
-    text(document.querySelector('.productDescriptionOnThisPageFull')) ||
-    text(document.querySelector('#product-main .productNameLink')) ||
-    (text(document.querySelector('.formPageHeader')).replace(/^Product Code:\s*\d+\s*$/i,'').trim()) ||
-    'Product';
+    const productName =
+      text(document.querySelector('#ctl00_PageBody_productDetail_productDescription .productDescriptionOnThisPageFull')) ||
+      text(document.querySelector('.productDescriptionOnThisPageFull')) ||
+      text(document.querySelector('#product-main .productNameLink')) ||
+      (text(document.querySelector('.formPageHeader')).replace(/^Product Code:\s*\d+\s*$/i,'').trim()) ||
+      'Product';
 
-  // Product code, e.g. "Product Code: 1394550"
-  function getProductCode() {
-    const header = text(document.querySelector('.formPageHeader'));
-    const m = header.match(/Product\s*Code:\s*([A-Za-z0-9\-]+)/i);
-    if (m) return m[1];
-    // fallbacks: look for obvious code fields near name
-    const codeSpan = document.querySelector('.productCodeOnSummaryPage');
-    if (codeSpan) return text(codeSpan).replace(/\s+/g,'');
-    return '';
+    // Product code “Product Code: 1394550”
+    function getProductCode() {
+      const header = text(document.querySelector('.formPageHeader'));
+      const m = header.match(/Product\s*Code:\s*([A-Za-z0-9\-]+)/i);
+      if (m) return m[1];
+      const codeSpan = document.querySelector('.productCodeOnSummaryPage');
+      if (codeSpan) return text(codeSpan).replace(/\s+/g,'');
+      return '';
+    }
+    const productCode = getProductCode();
+
+    // Price + UOM
+    function findPriceAndUom() {
+      const priceRegex = /^\$?\s*\d[\d,]*(\.\d{2})?$/;
+      let price = '', uom = '';
+      const buyBox = document.querySelector('#product-sidebar .buy-box');
+      if (buyBox) {
+        const spans = [...buyBox.querySelectorAll('span')].map(s => s.textContent.trim());
+        const p = spans.find(s => priceRegex.test(s.replace(/^\$/, '')));
+        if (p) price = p.startsWith('$') ? p : ('$' + p);
+        const slash = spans.find(s => /^\s*\/\s*\w+/.test(s));
+        if (slash) uom = slash.replace(/[\/\s]/g, '');
+      }
+      if (!uom) {
+        const perSeg = document.querySelector('.productPerSegment');
+        if (perSeg) uom = perSeg.textContent.trim();
+      }
+      if (!price) {
+        const txts = [...document.querySelectorAll('#product-sidebar .buy-box span, .productPriceSegment span, span, strong')].map(el => el.textContent.trim());
+        const p2 = txts.find(s => /^\$[\d,]+(\.\d{2})?$/.test(s));
+        if (p2) price = p2;
+      }
+      return { price, uom };
+    }
+    const { price, uom } = findPriceAndUom();
+
+    // Main image
+    const imgEl  = document.querySelector('#ctl00_PageBody_productDetail_ProductImage') ||
+                   document.querySelector('#product-image-wrapper img') ||
+                   document.querySelector('#main-block img');
+    const imgSrc = abs(imgEl ? imgEl.getAttribute('src') : '');
+
+    // Features
+    function extractFeaturesFrom(htmlStr) {
+      if (!htmlStr) return [];
+      return htmlStr.replace(/<\/?div[^>]*>/gi, '\n').replace(/<br\s*\/?>/gi, '\n').replace(/&nbsp;/g, ' ')
+                    .split('\n').map(s => s.replace(/\s+/g, ' ').trim()).filter(Boolean);
+    }
+    function readFeaturesOnce() {
+      const featuresEl = document.querySelector('#product-widget #tab-content #tab-Features');
+      if (featuresEl && featuresEl.innerHTML.trim()) return extractFeaturesFrom(featuresEl.innerHTML);
+      const mobileSec = [...document.querySelectorAll('#product-widget .mobile-section')]
+        .find(s => /Features/i.test(text(s.querySelector('.mobile-header'))));
+      if (mobileSec) {
+        const mobileHTML = mobileSec.querySelector('.mobile-content')?.innerHTML || '';
+        if (mobileHTML.trim()) return extractFeaturesFrom(mobileHTML);
+      }
+      const tabBtn = [...document.querySelectorAll('#product-widget #tab-menu button')].find(b => b.classList.contains('active'));
+      const activeTab = document.querySelector('#product-widget #tab-content .tab-section.active');
+      if (activeTab && /Features/i.test(tabBtn?.getAttribute('data-header') || '')) {
+        return extractFeaturesFrom(activeTab.innerHTML);
+      }
+      return [];
+    }
+
+    return { logoSrc, productName, productCode, price, uom, imgSrc, readFeaturesOnce };
   }
-  const productCode = getProductCode();
 
-  // Price & UOM
-  function findPriceAndUom() {
-    const priceRegex = /^\$?\s*\d[\d,]*(\.\d{2})?$/;
-    let price = '', uom = '';
-    const buyBox = document.querySelector('#product-sidebar .buy-box');
-    if (buyBox) {
-      const spans = [...buyBox.querySelectorAll('span')].map(s => s.textContent.trim());
-      const p = spans.find(s => priceRegex.test(s.replace(/^\$/, '')));
-      if (p) price = p.startsWith('$') ? p : ('$' + p);
-      const slash = spans.find(s => /^\s*\/\s*\w+/.test(s));
-      if (slash) uom = slash.replace(/[\/\s]/g, '');
-    }
-    if (!uom) {
-      const perSeg = document.querySelector('.productPerSegment');
-      if (perSeg) uom = perSeg.textContent.trim();
-    }
-    if (!price) {
-      const txts = [...document.querySelectorAll('#product-sidebar .buy-box span, .productPriceSegment span, span, strong')]
-        .map(el => el.textContent.trim());
-      const p2 = txts.find(s => /^\$[\d,]+(\.\d{2})?$/.test(s));
-      if (p2) price = p2;
-    }
-    return { price, uom };
-  }
-  const { price, uom } = findPriceAndUom();
-
-  // Image (for card sizes except 1×2)
-  const imgEl  = document.querySelector('#ctl00_PageBody_productDetail_ProductImage') ||
-                 document.querySelector('#product-image-wrapper img') ||
-                 document.querySelector('#main-block img');
-  const imgSrc = abs(imgEl ? imgEl.getAttribute('src') : '');
-
-  // Features (not used for 1×2)
-  function extractFeaturesFrom(htmlStr) {
-    if (!htmlStr) return [];
-    return htmlStr
-      .replace(/<\/?div[^>]*>/gi, '\n').replace(/<br\s*\/?>/gi, '\n').replace(/&nbsp;/g, ' ')
-      .split('\n').map(s => s.replace(/\s+/g, ' ').trim()).filter(Boolean);
-  }
-  function readFeaturesOnce() {
-    const featuresEl = document.querySelector('#product-widget #tab-content #tab-Features');
-    if (featuresEl && featuresEl.innerHTML.trim()) return extractFeaturesFrom(featuresEl.innerHTML);
-    const mobileSec = [...document.querySelectorAll('#product-widget .mobile-section')]
-      .find(s => /Features/i.test(text(s.querySelector('.mobile-header'))));
-    if (mobileSec) {
-      const mobileHTML = mobileSec.querySelector('.mobile-content')?.innerHTML || '';
-      if (mobileHTML.trim()) return extractFeaturesFrom(mobileHTML);
-    }
-    const tabBtn = [...document.querySelectorAll('#product-widget #tab-menu button')].find(b => b.classList.contains('active'));
-    const activeTab = document.querySelector('#product-widget #tab-content .tab-section.active');
-    if (activeTab && /Features/i.test(tabBtn?.getAttribute('data-header') || '')) {
-      return extractFeaturesFrom(activeTab.innerHTML);
-    }
-    return [];
-  }
-
-  /* ---------------------- label builder ---------------------- */
-  const qrTarget = canonicalizeUrl(location.href);
-
-  // Ensure QR (local -> CDN -> Google PNG -> URL box)
+  /* ---------------------- QR & Barcode ---------------------- */
   async function drawQR(container, sizePx, urlText) {
-    // try local first (drop /scripts/qrcode.min.js on your server if you can)
-    if (!window.QRCode) { try { await loadScript('/scripts/qrcode.min.js', 1200); } catch(_) {} }
-    if (!window.QRCode) { try { await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js', 2000); } catch(_) {} }
-    if (window.QRCode) {
-      container.innerHTML = '';
-      new QRCode(container, { text: urlText, width: sizePx, height: sizePx, correctLevel: (window.QRCode.CorrectLevel||{}).M || 1 });
-      return;
-    }
-    // Google PNG fallback
     try {
+      if (!window.QRCode) { try { await loadScript('/scripts/qrcode.min.js', 1200); } catch {} }
+      if (!window.QRCode) { try { await loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js'); } catch {} }
+      if (window.QRCode) {
+        container.innerHTML = '';
+        new QRCode(container, { text: urlText, width: sizePx, height: sizePx, correctLevel: (window.QRCode.CorrectLevel||{}).M || 1 });
+        return;
+      }
       const img = new Image();
       img.alt = 'QR'; img.width = sizePx; img.height = sizePx; img.referrerPolicy = 'no-referrer';
       img.src = 'https://chart.googleapis.com/chart?cht=qr&chs=' + sizePx + 'x' + sizePx + '&chl=' + encodeURIComponent(urlText);
       await new Promise((res, rej) => { img.onload = res; img.onerror = rej; setTimeout(()=>rej(new Error('timeout')), 2500); });
-      container.innerHTML=''; container.appendChild(img); return;
-    } catch(_) {
-      const box = document.createElement('div');
-      box.style.cssText = `width:${sizePx}px;height:${sizePx}px;border:2px solid #111;border-radius:6px;display:flex;align-items:center;justify-content:center;padding:8px;text-align:center;font:11px monospace`;
-      box.textContent = urlText;
-      container.innerHTML = ''; container.appendChild(box);
+      container.innerHTML=''; container.appendChild(img);
+    } catch (e) {
+      container.innerHTML = `<div style="width:${sizePx}px;height:${sizePx}px;border:2px solid #111;border-radius:6px;display:flex;align-items:center;justify-content:center;padding:8px;text-align:center;font:11px monospace;word-break:break-all">${urlText}</div>`;
+      log('QR fallback box used');
     }
   }
-
-  // Ensure Code128 (local -> CDN -> fallback text)
   async function drawBarcode(svgEl, code, opts) {
-    if (!code) { svgEl.outerHTML = `<div style="font:12px monospace;color:#444">No product code</div>`; return; }
-    if (!window.JsBarcode) { try { await loadScript('/scripts/JsBarcode.all.min.js', 1200); } catch(_) {} }
-    if (!window.JsBarcode) { try { await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js', 2000); } catch(_) {} }
-    if (window.JsBarcode) {
-      svgEl.innerHTML = '';
-      window.JsBarcode(svgEl, code, Object.assign({ format: 'CODE128', displayValue: true }, opts || {}));
-      return;
+    try {
+      if (!code) { svgEl.outerHTML = `<div style="font:12px monospace;color:#444">No product code</div>`; return; }
+      if (!window.JsBarcode) { try { await loadScript('/scripts/JsBarcode.all.min.js', 1200); } catch {} }
+      if (!window.JsBarcode) { try { await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.6/JsBarcode.all.min.js'); } catch {} }
+      if (window.JsBarcode) {
+        svgEl.innerHTML = '';
+        window.JsBarcode(svgEl, code, Object.assign({ format: 'CODE128', displayValue: true }, opts || {}));
+        return;
+      }
+      svgEl.outerHTML = `<div style="font:12px monospace;color:#444">CODE128: ${code}</div>`;
+      log('Barcode fallback text used');
+    } catch (e) {
+      svgEl.outerHTML = `<div style="font:12px monospace;color:#444">Barcode error</div>`;
+      log('Barcode error', e);
     }
-    svgEl.outerHTML = `<div style="font:12px monospace;color:#444">CODE128: ${code}</div>`;
   }
 
-  // Size presets (inches)
+  /* ---------------------- sizes & builder ---------------------- */
   const SIZES = {
-    '1x2':   { w: 2,   h: 1,   qr: 60,  imgMaxH: 0,     showImage:false, showFeatures:false,  priceFs: 14,  uomFs: 10,  titleClamp:1, cta:true  },
+    '1x2':   { w: 2,   h: 1,   qr: 60,  imgMaxH: 0,     showImage:false, showFeatures:false,  priceFs: 14,  uomFs: 10,  titleClamp:1, cta:false },
     '3x5':   { w: 5,   h: 3,   qr: 100, imgMaxH: 1.6,   showImage:true,  showFeatures:true,   priceFs: 20,  uomFs: 12,  titleClamp:2, cta:true  },
     '4x6':   { w: 6,   h: 4,   qr: 120, imgMaxH: 2.25,  showImage:true,  showFeatures:true,   priceFs: 22,  uomFs: 12,  titleClamp:2, cta:true  },
     'letter':{ w: 8.5, h: 11,  qr: 160, imgMaxH: 6.0,   showImage:true,  showFeatures:true,   priceFs: 28,  uomFs: 14,  titleClamp:3, cta:true  }
   };
 
-  // Build the label DOM for a given key
-  function buildLabel(key) {
-    const cfg = SIZES[key] || SIZES['4x6'];
-    // base styles (per size)
-    const style = document.createElement('style');
-    style.textContent = `
+  function makeStyle(key, cfg){
+    const s = document.createElement('style');
+    s.setAttribute('data-bl-style', key);
+    s.textContent = `
       :root { --w:${cfg.w}in; --h:${cfg.h}in; --brand:${BRAND}; }
       @page { size: var(--w) var(--h); margin:0; }
 
-      /* screen preview centered; print pinned top-left & hide everything else */
       html, body { margin:0!important; padding:0!important; background:#fff!important; display:grid; place-items:center; }
       @media print {
         html, body { display:block !important; width: var(--w) !important; height: var(--h) !important; }
-        body > *:not(.binlabel-root) { display:none !important; }
+        body > *:not(.binlabel-root):not([id^="bl-print-"]) { display:none !important; }
         .binlabel-root { box-shadow:none !important; margin:0 !important; position:static !important; left:0 !important; top:0 !important; transform:none !important; }
       }
 
@@ -595,6 +600,7 @@ window.addEventListener('load', async function() {
         position:relative; box-sizing:border-box; width:var(--w); height:var(--h); overflow:hidden;
         font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color:#111;
         box-shadow: 0 0 0 1px #ddd, 0 4px 24px rgba(0,0,0,.12);
+        z-index: 2147483000; /* above site chrome */
       }
       .bl-grid {
         position:absolute; inset:0;
@@ -619,11 +625,9 @@ window.addEventListener('load', async function() {
         display:-webkit-box; -webkit-line-clamp:${cfg.titleClamp}; -webkit-box-orient:vertical;
         font-size: clamp(10pt, calc(0.09 * var(--w)), 18pt);
       }
-      .bl-code {
-        margin-left:auto; font-weight:700; color:#333; font-size: clamp(9pt, calc(0.06 * var(--w)), 12pt);
-      }
+      .bl-code { margin-left:auto; font-weight:700; color:#333; font-size: clamp(9pt, calc(0.06 * var(--w)), 12pt); }
 
-      .bl-left { ${cfg.showImage ? '' : 'display:none;'} grid-row:2; grid-column:1; display:flex; align-items:flex-end; justify-content:center; overflow:hidden; padding: 0 0.04in 0.04in 0; }
+      .bl-left { ${cfg.showImage ? 'display:flex;' : 'display:none;'} grid-row:2; grid-column:1; align-items:flex-end; justify-content:center; overflow:hidden; padding: 0 0.04in 0.04in 0; }
       .bl-left .bl-image { max-width:100%; ${cfg.imgMaxH ? `max-height:${cfg.imgMaxH}in;`:'max-height:0;'} height:auto; width:auto; object-fit:contain; display:block; }
 
       .bl-right { grid-row:2; grid-column:${cfg.showImage ? 2 : 1}; display:grid; grid-template-rows: 1fr auto; gap: 0.06in; min-width:0; overflow:hidden; }
@@ -634,144 +638,141 @@ window.addEventListener('load', async function() {
       .bl-priceQr {
         display:grid;
         grid-template-columns: 1fr auto;
-        grid-template-rows: auto auto auto; /* price / qr / barcode */
+        grid-template-rows: auto auto auto;
         align-items:end; column-gap: 0.08in;
       }
-      .bl-price {
-        grid-column: 2; grid-row: 1;
-        font-size: ${cfg.priceFs}pt; font-weight:800; letter-spacing:-0.2px; text-align:right; margin-right: 0.02in;
-      }
+      .bl-price { grid-column:2; grid-row:1; font-size:${cfg.priceFs}pt; font-weight:800; letter-spacing:-0.2px; text-align:right; margin-right: 0.02in; }
       .bl-uom { font-size:${cfg.uomFs}pt; color:#444; font-weight:600; }
-      .bl-qr {
-        grid-column: 2; grid-row: 2;
-        width:${cfg.qr}px; height:${cfg.qr}px; justify-self:end; align-self:end;
-        margin-right:0.02in; margin-bottom:0.02in; overflow:hidden;
-      }
-      .bl-barcode {
-        grid-column: 2; grid-row: 3;
-        justify-self:end; align-self:end; margin-right:0.02in;
-        background:#fff; padding:2px 4px; border-radius:4px;
-      }
-      .bl-cta {
-        grid-column: 1; grid-row: 2;
-        align-self: end; justify-self: start;
-        font-size: clamp(9pt, calc(0.04 * var(--w)), 11pt); font-weight:700; color: var(--brand); white-space:nowrap;
-      }
-
-      /* 1×2 tweaks (tight layout) */
-      ${key==='1x2' ? `
-        .bl-grid { grid-template-rows: auto 1fr; }
-        .bl-header { min-height: 0.30in; }
-        .bl-title { -webkit-line-clamp:1; }
-        .bl-cta { display:none; }
-      `:''}
+      .bl-qr { grid-column:2; grid-row:2; width:${cfg.qr}px; height:${cfg.qr}px; justify-self:end; align-self:end; margin-right:0.02in; margin-bottom:0.02in; overflow:hidden; }
+      .bl-barcode { grid-column:2; grid-row:3; justify-self:end; align-self:end; margin-right:0.02in; background:#fff; padding:2px 4px; border-radius:4px; }
+      .bl-cta { ${cfg.cta ? '' : 'display:none;'} grid-column:1; grid-row:2; align-self:end; justify-self:start; font-size: clamp(9pt, calc(0.04 * var(--w)), 11pt); font-weight:700; color: var(--brand); white-space:nowrap; }
     `;
-    document.head.appendChild(style);
+    return s;
+  }
 
-    // Root
-    const root = document.createElement('div');
-    root.className = 'binlabel-root';
-    root.innerHTML = `
-      <div class="bl-grid">
-        <div class="bl-header">
-          <div class="bl-logo">${logoSrc ? `<img alt="Woodson Lumber" src="${logoSrc}">` : ''}</div>
-          <div class="bl-title">${productName}</div>
-          <div class="bl-code">${productCode ? `Code: ${productCode}` : ''}</div>
-        </div>
+  function buildLabel(sizeKey) {
+    try {
+      const cfg = SIZES[sizeKey] || SIZES['4x6'];
+      const data = getProductData();
+      log('Building label', sizeKey, data);
 
-        <div class="bl-left">
-          ${cfg.showImage && imgSrc ? `<img class="bl-image" alt="Product" src="${imgSrc}">` : ''}
-        </div>
+      // 1) inject style FIRST
+      const styleEl = makeStyle(sizeKey, cfg);
+      document.head.appendChild(styleEl);
 
-        <div class="bl-right">
-          <div class="bl-features" id="bl-features-slot">
-            ${cfg.showFeatures ? `<div style="color:#888">Loading features…</div>` : ''}
+      // 2) create root and attach BEFORE hiding anything
+      const root = document.createElement('div');
+      root.className = 'binlabel-root';
+      root.innerHTML = `
+        <div class="bl-grid">
+          <div class="bl-header">
+            <div class="bl-logo">${data.logoSrc ? `<img alt="Woodson Lumber" src="${data.logoSrc}">` : ''}</div>
+            <div class="bl-title">${data.productName}</div>
+            <div class="bl-code">${data.productCode ? `Code: ${data.productCode}` : ''}</div>
           </div>
-          <div class="bl-priceQr">
-            <div class="bl-cta">Learn more online →</div>
-            <div class="bl-price">${price || ''} ${uom ? `<span class="bl-uom">/ ${uom}</span>` : ''}</div>
-            <div class="bl-qr" id="bl-qr"></div>
-            <svg class="bl-barcode" id="bl-barcode" width="${Math.max(120, cfg.qr)}" height="${Math.max(36, Math.round(cfg.qr*0.5))}"></svg>
+
+          <div class="bl-left">
+            ${cfg.showImage && data.imgSrc ? `<img class="bl-image" alt="Product" src="${data.imgSrc}">` : ''}
+          </div>
+
+          <div class="bl-right">
+            <div class="bl-features" id="bl-features-slot">${cfg.showFeatures ? `<div style="color:#888">Loading features…</div>` : ''}</div>
+            <div class="bl-priceQr">
+              <div class="bl-cta">Learn more online →</div>
+              <div class="bl-price">${data.price || ''} ${data.uom ? `<span class="bl-uom">/ ${data.uom}</span>` : ''}</div>
+              <div class="bl-qr" id="bl-qr"></div>
+              <svg class="bl-barcode" id="bl-barcode" width="${Math.max(120, cfg.qr)}" height="${Math.max(36, Math.round(cfg.qr*0.5))}"></svg>
+            </div>
           </div>
         </div>
-      </div>
-    `;
+      `;
+      document.body.appendChild(root);
 
-    // Hide the site chrome on-screen while label is visible
-    [...document.body.children].forEach(ch => { if (ch !== root && !ch.id?.startsWith('bl-print')) ch.style.display = 'none'; });
-    document.body.appendChild(root);
+      // 3) now (and only now) we dim/hide site chrome (but keep buttons)
+      [...document.body.children].forEach(ch => {
+        if (ch !== root && !ch.id?.startsWith('bl-print-')) ch.setAttribute('data-bl-hide','1');
+      });
+      [...document.querySelectorAll('[data-bl-hide="1"]')].forEach(n => n.style.setProperty('display','none','important'));
 
-    // Fill features (for sizes that show them)
-    if (cfg.showFeatures) {
-      const slot = root.querySelector('#bl-features-slot');
-      let feats = readFeaturesOnce();
-      const setList = (arr) => slot && (slot.innerHTML = arr.length ? `<ul>${arr.map(f=>`<li>${f}</li>`).join('')}</ul>` : '<div style="color:#888">No feature details found.</div>');
-      if (feats.length) setList(feats);
-      let tries = 0;
-      const t = setInterval(() => {
-        if (feats.length || tries > 12) { clearInterval(t); return; }
-        tries++;
-        const a = readFeaturesOnce();
-        if (a.length) { feats = a; setList(feats); clearInterval(t); }
-      }, 250);
-      const widget = document.querySelector('#product-widget');
-      if (widget) {
-        const mo = new MutationObserver(() => {
-          if (feats.length) return;
-          const a = readFeaturesOnce();
-          if (a.length) { feats = a; setList(feats); mo.disconnect(); }
-        });
-        mo.observe(widget, { childList:true, subtree:true });
+      // 4) features (non-blocking)
+      if (cfg.showFeatures) {
+        const slot = root.querySelector('#bl-features-slot');
+        const setList = (arr) => slot && (slot.innerHTML = arr.length ? `<ul>${arr.map(f=>`<li>${f}</li>`).join('')}</ul>` : '<div style="color:#888">No feature details found.</div>');
+        try {
+          let feats = data.readFeaturesOnce();
+          if (feats.length) setList(feats);
+          let tries = 0;
+          const t = setInterval(() => {
+            if (feats.length || tries > 12) { clearInterval(t); return; }
+            tries++;
+            const a = data.readFeaturesOnce();
+            if (a.length) { feats = a; setList(feats); clearInterval(t); }
+          }, 250);
+          const widget = document.querySelector('#product-widget');
+          if (widget) {
+            const mo = new MutationObserver(() => {
+              if (feats.length) return;
+              const a = data.readFeaturesOnce();
+              if (a.length) { feats = a; setList(feats); mo.disconnect(); }
+            });
+            mo.observe(widget, { childList:true, subtree:true });
+          }
+        } catch (e) { log('features error', e); }
       }
+
+      // 5) QR + barcode (non-blocking)
+      drawQR(root.querySelector('#bl-qr'), cfg.qr, canonicalizeUrl(location.href))
+        .catch(e => log('qr error', e));
+      drawBarcode(root.querySelector('#bl-barcode'), data.productCode, {
+        lineColor: '#000', font: 'monospace',
+        fontSize: Math.max(10, Math.round(cfg.qr*0.2)),
+        height: Math.max(30, Math.round(cfg.qr*0.45)),
+        margin: 0, textMargin: 2, width: 1.4
+      }).catch(e => log('barcode error', e));
+
+      // 6) print
+      setTimeout(() => window.print(), 250);
+
+      // 7) cleanup after print (restore page)
+      const cleanup = () => {
+        try {
+          if (root && root.parentNode) root.parentNode.removeChild(root);
+          if (styleEl && styleEl.parentNode) styleEl.parentNode.removeChild(styleEl);
+          [...document.querySelectorAll('[data-bl-hide="1"]')].forEach(n => { n.style.removeProperty('display'); n.removeAttribute('data-bl-hide'); });
+        } catch (e) { log('cleanup error', e); }
+        window.removeEventListener('afterprint', cleanup);
+      };
+      window.addEventListener('afterprint', cleanup);
+
+    } catch (e) {
+      fail('Could not build label. See console for details.', e);
     }
-
-    // Draw QR + Barcode
-    drawQR(root.querySelector('#bl-qr'), cfg.qr, canonicalizeUrl(location.href));
-    drawBarcode(root.querySelector('#bl-barcode'), productCode, {
-      lineColor: '#000',
-      font: 'monospace',
-      fontSize: Math.max(10, Math.round(cfg.qr*0.2)),
-      height: Math.max(30, Math.round(cfg.qr*0.45)),
-      margin: 0,
-      textMargin: 2,
-      width: 1.4 // bar thickness
-    });
-
-    // Auto print if desired
-    setTimeout(() => window.print(), 200);
-
-    // After printing, remove label and restore page chrome
-    const cleanup = () => {
-      if (root && root.parentNode) root.parentNode.removeChild(root);
-      if (style && style.parentNode) style.parentNode.removeChild(style);
-      [...document.body.children].forEach(ch => { if (!ch.id?.startsWith('bl-print')) ch.style.removeProperty('display'); });
-      window.removeEventListener('afterprint', cleanup);
-    };
-    window.addEventListener('afterprint', cleanup);
   }
 
   /* -------------------- print buttons (UI) -------------------- */
-  function makeBtn(id, label, sizeKey) {
+  function makeBtn(id, label, sizeKey, topPx) {
     const btn = document.createElement('button');
-    btn.id = id;
-    btn.textContent = label;
-    btn.type = 'button';
+    btn.id = id; btn.textContent = label; btn.type = 'button';
     btn.style.cssText = `
-      position: fixed; right: 10px; z-index: 2147483647;
+      position: fixed; right: 10px; top:${topPx}px; z-index: 2147483647;
       background: ${BRAND}; color: #fff; border: 0; border-radius: 8px;
       padding: 8px 12px; font-weight: 700; cursor: pointer;
       box-shadow: 0 4px 14px rgba(0,0,0,.18);
     `;
-    btn.onclick = (e) => { e.preventDefault(); buildLabel(sizeKey); };
+    btn.addEventListener('click', (e) => { e.preventDefault(); buildLabel(sizeKey); });
     return btn;
   }
-  const b1 = makeBtn('bl-print-1x2',  'Print 1×2', '1x2');   b1.style.top = '10px';
-  const b2 = makeBtn('bl-print-3x5',  'Print 3×5', '3x5');   b2.style.top = '52px';
-  const b3 = makeBtn('bl-print-4x6',  'Print 4×6', '4x6');   b3.style.top = '94px';
-  const b4 = makeBtn('bl-print-let',  'Print 8.5×11', 'letter'); b4.style.top = '136px';
+  const b1 = makeBtn('bl-print-1x2',   'Print 1×2',     '1x2',    10);
+  const b2 = makeBtn('bl-print-3x5',   'Print 3×5',     '3x5',    52);
+  const b3 = makeBtn('bl-print-4x6',   'Print 4×6',     '4x6',    94);
+  const b4 = makeBtn('bl-print-let',   'Print 8.5×11',  'letter', 136);
   document.body.appendChild(b1); document.body.appendChild(b2);
   document.body.appendChild(b3); document.body.appendChild(b4);
+
+  log('Buttons ready. Click a size to render/print.');
 })();
+});
+
 
 
 
