@@ -7,7 +7,7 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
 
   async function init() {
     try {
-      // 1) Scope anchors per item
+      // 1) Only look at image/link rows so we scope per item
       const productAnchors = Array.from(
         document.querySelectorAll('tr[id*="ProductImageRow"] a[href*="pid="], a[href*="pid="][id*="ProductImageRow"]')
       );
@@ -16,9 +16,9 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
         return;
       }
 
-      // 2) Fetch CSV once
+      // 2) Fetch the CSV once
       const sheetUrl = "https://docs.google.com/spreadsheets/d/e/2PACX-1vRmHLHJE9OebjPpi7wMvOHxX6fOdarKQRRbd1W-Vf2o04kLwd9kc0jpm78WFCU4y1ErzCIWVqoUvAwn/pub?output=csv";
-      const csvText = await (await fetch(sheetUrl, { cache: "no-store" })).text();
+      const csvText = await (await fetch(sheetUrl)).text();
       const { headers, rows } = quickCSV(csvText);
 
       const idx = (h) => headers.indexOf(h.toLowerCase());
@@ -33,10 +33,7 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
       for (const r of rows) {
         const pid = (r[pidIdx] || "").trim();
         if (!pid) continue;
-        const tier = {
-          qty: (r[qtyIdx] || "").trim(),
-          price: (r[priceIdx] || "").trim()
-        };
+        const tier = { qty: (r[qtyIdx] || "").trim(), price: (r[priceIdx] || "").trim() };
         (tiersByPid.get(pid) || tiersByPid.set(pid, []).get(pid)).push(tier);
       }
 
@@ -50,50 +47,30 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
         const tiers = tiersByPid.get(pid);
         if (!tiers || !tiers.length) continue;
 
-        // Scope to THIS item’s row/tbody
+        // Scope to THIS item’s row and tbody
         const imgRow = a.closest('tr');
         if (!imgRow) continue;
-        if (imgRow.dataset.bulkApplied === "1") continue;
+        if (imgRow.dataset.bulkApplied === "1") continue; // avoid duplicates on this item
 
         const tbody = imgRow.closest('tbody') || imgRow.parentElement;
 
-        // Find the nearest price row for this item by scanning forward
+        // Find the nearest price row for this item by scanning forward a few rows
         const priceRow = findSiblingPriceRow(imgRow, tbody);
-
-        // Extract the customer's specific unit price
-        const customerUnitPrice = extractUnitPrice(priceRow, imgRow, tbody);
-        if (!isFinite(customerUnitPrice) || customerUnitPrice <= 0) {
-          // If we can't get a customer price, be conservative: don't inject
-          continue;
-        }
-
-        // Check: only show bulk if at least one bulk tier price is LOWER than the customer price
-        const bulkPrices = tiers
-          .map(t => parseFloat(String(t.price).replace(/[^0-9.\-]/g, "")))
-          .filter(n => Number.isFinite(n) && n > 0);
-
-        if (!bulkPrices.length) continue;
-        const minBulk = Math.min(...bulkPrices);
-        if (!(minBulk < customerUnitPrice)) {
-          // No savings → skip
-          continue;
-        }
 
         // Build our bulk row
         const bulkTr = document.createElement('tr');
         bulkTr.className = 'wl-bulk-pricing-row';
         const td = document.createElement('td');
 
-        const colSpanGuess =
-          (priceRow && priceRow.children.length) ? priceRow.children.length
-          : (imgRow && imgRow.children.length) ? imgRow.children.length
-          : 1;
+        // Match the colspan of the target row if possible
+        const colSpanGuess = (priceRow && priceRow.children.length) ? priceRow.children.length
+                              : (imgRow && imgRow.children.length) ? imgRow.children.length
+                              : 1;
         td.colSpan = colSpanGuess;
 
         const line = tiers.map(t => {
           const q = t.qty || 'Qty';
-          const pNum = parseFloat(String(t.price).replace(/[^0-9.\-]/g, ""));
-          const p = Number.isFinite(pNum) ? `$${pNum.toFixed(2)}` : '(price missing)';
+          const p = t.price ? `$${t.price}` : '(price missing)';
           return `${q}+ at ${p} ea`;
         }).join(' • ');
 
@@ -107,7 +84,7 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
         if (priceRow && priceRow.parentNode === tbody) {
           priceRow.after(bulkTr);
         } else {
-          imgRow.after(bulkTr);
+          imgRow.after(bulkTr); // fallback: immediately after image row
         }
 
         imgRow.dataset.bulkApplied = "1";
@@ -115,55 +92,26 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
       }
 
       console.log(`[BulkPricing] Inserted bulk pricing on ${inserted} item(s).`);
+
     } catch (e) {
       console.error("[BulkPricing] Error:", e);
     }
   }
 
-  // Try to extract a $xx.xx price from the row / small lookahead
-  function extractUnitPrice(priceRow, startTr, tbody) {
-    const MONEY_RE = /\$?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})|[0-9]+(?:\.[0-9]{2}))/g;
-
-    function parseFromEl(el) {
-      if (!el) return NaN;
-      const txt = (el.textContent || "").toLowerCase();
-      // Prefer parts that look like "price", "unit", etc.
-      let best = NaN;
-      if (/\b(price|unit|each|ea)\b/.test(txt)) {
-        const m = [...txt.matchAll(MONEY_RE)].map(x => x[1]);
-        if (m.length) best = parseFloat(m[0].replace(/,/g, ""));
-      }
-      // Fallback: any money in the row
-      if (!Number.isFinite(best)) {
-        const m = [...txt.matchAll(MONEY_RE)].map(x => x[1]);
-        if (m.length) best = parseFloat(m[0].replace(/,/g, ""));
-      }
-      return best;
-    }
-
-    // 1) Directly from priceRow if present
-    let v = parseFromEl(priceRow);
-    if (Number.isFinite(v)) return v;
-
-    // 2) Look ahead up to 8 rows within same tbody (stop at next ProductImageRow)
-    let tr = startTr?.nextElementSibling || null;
-    for (let i = 0; tr && i < 8; i++, tr = tr.nextElementSibling) {
-      if (tr.id && /ProductImageRow/i.test(tr.id)) break;
-      const p = parseFromEl(tr);
-      if (Number.isFinite(p)) return p;
-    }
-
-    return NaN;
-  }
-
+  // Scan forward within the same tbody to find the row that appears to be the price row
   function findSiblingPriceRow(startTr, tbody) {
     let tr = startTr.nextElementSibling;
     for (let i = 0; tr && i < 8; i++, tr = tr.nextElementSibling) {
+      // Stop if we hit the next item block (another ProductImageRow)
       if (tr.id && /ProductImageRow/i.test(tr.id)) return null;
+
+      // Prefer explicit IDs/classes first
       if (/PriceRow/i.test(tr.id || "")) return tr;
       if (tr.classList && tr.classList.contains('PriceRow')) return tr;
+
+      // Fallback: textual heuristic
       const txt = (tr.textContent || "").toLowerCase();
-      if (/\bprice\b/.test(txt) || /\bunit\b/.test(txt) || /\beat?\b/.test(txt)) return tr;
+      if (/\bprice\b/.test(txt) || /\bunit\b/.test(txt)) return tr;
     }
     return null;
   }
@@ -189,9 +137,8 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
     const rows = lines.map(parseLine);
     return { headers: lower, rows };
   }
+
 })();
-
-
 
 
 
@@ -251,7 +198,11 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
 
 /* ==========================================================
    Woodson — Bulk Pricing Banner (ProductDetail) + Click-to-Qty
-   - Only show tiers cheaper than the customer's current price
+   - Runs only on ProductDetail.aspx
+   - Detects PID robustly (URL, stock btn, qty_ ID, etc.)
+   - Pulls tiers from Google Sheet (pid, qty, price)
+   - Shows a "WOODSON BULK" banner under Add to Cart
+   - Clicking a tier sets the qty input and highlights price
    ========================================================== */
 (function(){
   'use strict';
@@ -263,6 +214,7 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
 
   const SHEET_CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRmHLHJE9OebjPpi7wMvOHxX6fOdarKQRRbd1W-Vf2o04kLwd9kc0jpm78WFCU4y1ErzCIWVqoUvAwn/pub?output=csv';
 
+  /* ---------- helpers ---------- */
   function waitFor(sel, timeout=6000, step=120){
     return new Promise((resolve, reject)=>{
       const t0 = Date.now();
@@ -362,12 +314,14 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
   }
 
   function findQtyInput(buyBox){
+    // Prefer explicit productQtyInput class
     let inp = buyBox.querySelector('input.productQtyInput');
     if (!inp) inp = buyBox.querySelector('input[id*="_qty_"]');
     return inp;
   }
 
   function getBestTierForQty(tiers, qty){
+    // Highest tier whose qty <= current qty
     const q = Number(qty)||0;
     let best=null;
     for(const t of tiers){ if (q >= t.qty) best = t; else break; }
@@ -377,36 +331,12 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
   function setQty(input, n){
     if (!input) return;
     input.value = String(n);
+    // Fire events so any site scripts react
     input.dispatchEvent(new Event('input', {bubbles:true}));
     input.dispatchEvent(new Event('change', {bubbles:true}));
+    // Visual flash for feedback
     input.classList.add('wbk-flash');
     setTimeout(()=>input.classList.remove('wbk-flash'), 900);
-  }
-
-  function extractCustomerPrice(buyBox){
-    // Heuristics: prefer elements labelled price / each / unit
-    const MONEY_RE = /\$?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})|[0-9]+(?:\.[0-9]{2}))/g;
-    const candidates = [
-      ...buyBox.querySelectorAll('[id*="Price"], .price, [class*="price"], [id*="Unit"], [class*="Unit"]')
-    ];
-    for (const el of candidates) {
-      const txt = (el.textContent||'').toLowerCase();
-      if (!txt) continue;
-      if (!/\$|ea|each|unit|price/.test(txt)) continue;
-      const m = [...txt.matchAll(MONEY_RE)].map(x => x[1]);
-      if (m.length) {
-        const v = parseFloat(m[0].replace(/,/g, ''));
-        if (Number.isFinite(v)) return v;
-      }
-    }
-    // Fallback: any money-looking number in buyBox
-    const txt = (buyBox.textContent||'');
-    const m = [...txt.matchAll(MONEY_RE)].map(x => x[1]);
-    if (m.length) {
-      const v = parseFloat(m[0].replace(/,/g, ''));
-      if (Number.isFinite(v)) return v;
-    }
-    return NaN;
   }
 
   function wireInteractions(banner, buyBox, tiers){
@@ -430,6 +360,7 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
       }
     }
 
+    // Clicking a chip sets the qty and updates applied price
     banner.addEventListener('click', (e)=>{
       const btn = e.target.closest('.wbk-chip');
       if (!btn) return;
@@ -440,9 +371,11 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
       refreshUI();
     });
 
+    // Keep banner in sync if user types or uses +/- buttons
     if (qtyInput){
       qtyInput.addEventListener('input', refreshUI);
       qtyInput.addEventListener('change', refreshUI);
+      // Initial sync
       refreshUI();
     }
   }
@@ -469,34 +402,20 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
       return;
     }
 
-    // Get customer-specific unit price from the buy box
-    const customerUnitPrice = extractCustomerPrice(buyBox);
-    if (!Number.isFinite(customerUnitPrice) || customerUnitPrice <= 0){
-      // If we can't confidently read a price, do NOT show bulk banner
-      LOG('Customer price not found, skipping banner.');
-      return;
-    }
-
-    // Pull tiers for PID and KEEP ONLY tiers that beat the customer price
-    const tiersRaw = rows
+    const tiers = rows
       .filter(r => String((r[h.pid]||'').trim()) === String(pid))
       .map(r => ({
         qty: parseFloat(String(r[h.qty]||'').replace(/[^0-9.]/g,'')) || 0,
         price: parseFloat(String(r[h.price]||'').replace(/[^0-9.]/g,'')) || 0
       }))
-      .filter(t => t.qty>0 && t.price>0);
-
-    const tiers = tiersRaw
-      .filter(t => t.price < customerUnitPrice)     // only strictly cheaper tiers
+      .filter(t => t.qty>0 && t.price>0)
       .sort((a,b)=> a.qty - b.qty);
 
-    if (!tiers.length){
-      LOG('No bulk tiers cheaper than customer price. Skipping banner.');
-      return;
-    }
+    if (!tiers.length){ LOG('No tiers found for pid', pid); return; }
 
     injectStyles();
 
+    // Place the banner just under the Add to Cart row
     const addToCart = buyBox.querySelector('#ctl00_PageBody_productDetail_ctl00_AddProductButton');
     const addRow = addToCart ? addToCart.closest('.mb-1') || addToCart.parentElement : null;
 
@@ -506,11 +425,9 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
     if (addRow) insertAfter(addRow, banner); else buyBox.appendChild(banner);
 
     wireInteractions(banner, buyBox, tiers);
-    LOG('Banner injected and wired. CustomerPrice=$' + customerUnitPrice.toFixed(2));
+    LOG('Banner injected and wired.');
   }
 
   setTimeout(()=>{ main().catch(e=>ERR('Unhandled:', e)); }, 350);
 })();
-
-
 
