@@ -500,24 +500,32 @@ document.addEventListener('DOMContentLoaded', function () {
                    document.querySelector('#main-block img');
     const imgSrc = abs(imgEl ? imgEl.getAttribute('src') : '');
 
-    function extractFeaturesFrom(htmlStr) {
+    function explodeHtmlLines(htmlStr) {
       if (!htmlStr) return [];
-      return htmlStr.replace(/<\/?div[^>]*>/gi, '\n').replace(/<br\s*\/?>/gi, '\n').replace(/&nbsp;/g, ' ')
-                    .split('\n').map(s => s.replace(/\s+/g, ' ').trim()).filter(Boolean);
+      return htmlStr
+        .replace(/<\/?(?:div|p)[^>]*>/gi, '\n')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/&nbsp;/g, ' ')
+        .split('\n')
+        .map(s => s.replace(/\s+/g, ' ').trim())
+        .filter(Boolean);
     }
     function readFeaturesOnce() {
       const featuresEl = document.querySelector('#product-widget #tab-content #tab-Features');
-      if (featuresEl && featuresEl.innerHTML.trim()) return extractFeaturesFrom(featuresEl.innerHTML);
+      if (featuresEl && featuresEl.innerHTML.trim()) return explodeHtmlLines(featuresEl.innerHTML);
+
       const mobileSec = [...document.querySelectorAll('#product-widget .mobile-section')]
         .find(s => /Features/i.test(text(s.querySelector('.mobile-header'))));
       if (mobileSec) {
         const mobileHTML = mobileSec.querySelector('.mobile-content')?.innerHTML || '';
-        if (mobileHTML.trim()) return extractFeaturesFrom(mobileHTML);
+        if (mobileHTML.trim()) return explodeHtmlLines(mobileHTML);
       }
+
+      // If the active tab is Features, pull that node
       const tabBtn = [...document.querySelectorAll('#product-widget #tab-menu button')].find(b => b.classList.contains('active'));
       const activeTab = document.querySelector('#product-widget #tab-content .tab-section.active');
       if (activeTab && /Features/i.test(tabBtn?.getAttribute('data-header') || '')) {
-        return extractFeaturesFrom(activeTab.innerHTML);
+        return explodeHtmlLines(activeTab.innerHTML);
       }
       return [];
     }
@@ -562,14 +570,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
   /* ------------ size presets & builder ------------ */
   const SIZES = {
-    // 1×2 — NO logo, bigger price, code above barcode (left), barcode bottom-left, QR bottom-right
-    '1x2':   { w: 2,   h: 1,   qr: 70,  imgMaxH: 0,     showImage:false, showFeatures:false,  priceFs: 18,  uomFs: 11,  titleClamp:1, cta:false, featFs: 0, gridCols: '1fr' },
-    // 3×5 index card
-    '3x5':   { w: 5,   h: 3,   qr: 100, imgMaxH: 1.6,   showImage:true,  showFeatures:true,   priceFs: 20,  uomFs: 12,  titleClamp:2, cta:true,  featFs: 11, gridCols: 'calc(0.42 * var(--w)) 1fr' },
-    // 4×6 — bigger image; features nudged right + slightly larger font
-    '4x6':   { w: 6,   h: 4,   qr: 120, imgMaxH: 2.7,   showImage:true,  showFeatures:true,   priceFs: 22,  uomFs: 12,  titleClamp:2, cta:true,  featFs: 12, featIndent: '0.12in', gridCols: '44% 56%' },
-    // 8.5×11 — much bigger image; larger features font
-    'letter':{ w: 8.5, h: 11,  qr: 180, imgMaxH: 8.0,   showImage:true,  showFeatures:true,   priceFs: 32,  uomFs: 16,  titleClamp:3, cta:true,  featFs: 15, gridCols: '48% 52%' }
+    '1x2':   { w: 2,   h: 1,   qr: 70,  imgMaxH: 0,    showImage:false, showFeatures:false, priceFs: 19, uomFs: 11, titleClamp:1, cta:false, featFs: 0,  gridCols: '1fr' },
+    '3x5':   { w: 5,   h: 3,   qr: 100, imgMaxH: 1.7,  showImage:true,  showFeatures:true,  priceFs: 21, uomFs: 12, titleClamp:2, cta:true,  featFs: 12, gridCols: '43% 57%' },
+    '4x6':   { w: 6,   h: 4,   qr: 120, imgMaxH: 2.8,  showImage:true,  showFeatures:true,  priceFs: 23, uomFs: 12, titleClamp:2, cta:true,  featFs: 13, gridCols: '44% 56%', featIndent:'0.12in' },
+    'letter':{ w: 8.5, h: 11,  qr: 180, imgMaxH: 8.0,  showImage:true,  showFeatures:true,  priceFs: 32, uomFs: 16, titleClamp:3, cta:true,  featFs: 15, gridCols: '48% 52%' }
   };
 
   function makeStyle(key, cfg){
@@ -583,7 +587,7 @@ document.addEventListener('DOMContentLoaded', function () {
       @media print {
         html, body { display:block !important; width: var(--w) !important; height: var(--h) !important; }
         body > *:not(.binlabel-root) { display:none !important; }
-        [id^="bl-print-"] { display:none !important; } /* ensure buttons never print */
+        [id^="bl-print-"] { display:none !important; }
         .binlabel-root { box-shadow:none !important; margin:0 !important; position:static !important; left:0 !important; top:0 !important; transform:none !important; }
       }
 
@@ -597,7 +601,7 @@ document.addEventListener('DOMContentLoaded', function () {
         position:absolute; inset:0;
         display:grid;
         grid-template-columns: ${cfg.showImage ? cfg.gridCols : '1fr'};
-        grid-template-rows: auto 1fr auto; /* footer row added */
+        grid-template-rows: auto 1fr auto;
         gap: calc(0.02 * var(--w));
         padding: calc(0.03 * var(--w)) calc(0.035 * var(--w));
         overflow:hidden;
@@ -615,7 +619,7 @@ document.addEventListener('DOMContentLoaded', function () {
       .bl-title {
         font-weight:700; line-height:1.1; letter-spacing: 0.2px; overflow:hidden;
         display:-webkit-box; -webkit-line-clamp:${cfg.titleClamp}; -webkit-box-orient:vertical;
-        font-size: clamp(10pt, calc(0.09 * var(--w)), 18pt);
+        font-size: clamp(11pt, calc(0.10 * var(--w)), 19pt);
       }
       .bl-code { margin-left:auto; font-weight:700; color:#333; font-size: clamp(9pt, calc(0.06 * var(--w)), 12pt); }
 
@@ -623,7 +627,7 @@ document.addEventListener('DOMContentLoaded', function () {
       .bl-left .bl-image { max-width:100%; ${cfg.imgMaxH ? `max-height:${cfg.imgMaxH}in;`:'max-height:0;'} height:auto; width:auto; object-fit:contain; display:block; }
 
       .bl-right { grid-row:2; grid-column:${cfg.showImage ? 2 : 1}; display:grid; grid-template-rows: 1fr auto; gap: 0.06in; min-width:0; overflow:hidden; }
-      .bl-features { ${cfg.showFeatures ? '' : 'display:none;'} font-size: ${cfg.featFs ? cfg.featFs+'pt' : '11pt'}; line-height:1.26; overflow:hidden; ${cfg.featIndent ? `margin-left:${cfg.featIndent};` : ''} }
+      .bl-features { ${cfg.showFeatures ? '' : 'display:none;'} font-size: ${cfg.featFs ? cfg.featFs+'pt' : '12pt'}; line-height:1.26; overflow:hidden; ${cfg.featIndent ? `margin-left:${cfg.featIndent};` : ''} }
       .bl-features ul { margin: 0.03in 0 0 0.16in; padding:0; }
       .bl-features li { margin: 0.01in 0; }
 
@@ -638,7 +642,6 @@ document.addEventListener('DOMContentLoaded', function () {
       .bl-uom { font-size:${cfg.uomFs}pt; color:#444; font-weight:600; }
       .bl-cta { ${cfg.cta ? '' : 'display:none;'} grid-column:1; grid-row:2; align-self:end; justify-self:start; font-size: clamp(9pt, calc(0.04 * var(--w)), 11pt); font-weight:700; color: var(--brand); white-space:nowrap; }
 
-      /* QR & barcode positions */
       ${key==='1x2' ? `
         .bl-qr { grid-column:2; grid-row:2; justify-self:end; align-self:end; width:${cfg.qr}px; height:${cfg.qr}px; }
         .bl-bar-left { grid-column:1; grid-row:2; justify-self:start; align-self:end; background:#fff; padding:2px 4px; border-radius:4px; }
@@ -647,7 +650,6 @@ document.addEventListener('DOMContentLoaded', function () {
         .bl-barcode { grid-column:2; grid-row:3; justify-self:end; align-self:end; margin-right:0.02in; background:#fff; padding:2px 4px; border-radius:4px; }
       `}
 
-      /* Footer (print date) */
       .bl-footer {
         grid-column: 1 / -1;
         grid-row: 3;
@@ -659,17 +661,12 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function clampFeaturesToFit(container) {
-    // Remove bullets from the end until content fits without vertical overflow; add ellipsis
     if (!container) return;
     const ul = container.querySelector('ul');
     if (!ul) return;
     const items = Array.from(ul.children);
     if (!items.length) return;
-
-    // If it already fits, do nothing
     if (container.scrollHeight <= container.clientHeight + 1) return;
-
-    // Remove from end until it fits, then append an ellipsis marker
     while (items.length && container.scrollHeight > container.clientHeight + 1) {
       const li = items.pop();
       if (li && li.parentNode) li.parentNode.removeChild(li);
@@ -680,115 +677,146 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
+  async function pullFeaturesReliably(maxWaitMs = 2500) {
+    const start = Date.now();
+    let feats = getProductData().readFeaturesOnce();
+    if (feats.length) return feats;
+
+    // Observe for late DOM injections
+    const widget = document.querySelector('#product-widget');
+    let resolveFn;
+    const p = new Promise(res => resolveFn = res);
+    let mo;
+    if (widget) {
+      mo = new MutationObserver(() => {
+        const a = getProductData().readFeaturesOnce();
+        if (a.length) { feats = a; mo.disconnect(); resolveFn(a); }
+      });
+      mo.observe(widget, { childList:true, subtree:true });
+    }
+
+    // Poll until timeout
+    while (!feats.length && (Date.now() - start) < maxWaitMs) {
+      await new Promise(r => setTimeout(r, 150));
+      feats = getProductData().readFeaturesOnce();
+      if (feats.length) break;
+    }
+    if (mo) mo.disconnect();
+    return feats;
+  }
+
   function buildLabel(sizeKey) {
-    try {
-      const cfg = SIZES[sizeKey] || SIZES['4x6'];
-      const data = getProductData();
+    (async () => {
+      try {
+        const cfg = SIZES[sizeKey] || SIZES['4x6'];
+        const data = getProductData();
 
-      const styleEl = makeStyle(sizeKey, cfg);
-      document.head.appendChild(styleEl);
+        const styleEl = makeStyle(sizeKey, cfg);
+        document.head.appendChild(styleEl);
 
-      const root = document.createElement('div');
-      root.className = 'binlabel-root';
-      root.innerHTML = `
-        <div class="bl-grid">
-          <div class="bl-header">
-            <div class="bl-logo">${sizeKey!=='1x2' && data.logoSrc ? `<img alt="Woodson Lumber" src="${data.logoSrc}">` : ''}</div>
-            <div class="bl-title">${data.productName}</div>
-            <div class="bl-code">${data.productCode ? `Code: ${data.productCode}` : ''}</div>
-          </div>
+        // Try to get features up-front (but don’t block beyond 2.5s)
+        let featuresArr = [];
+        if (cfg.showFeatures) {
+          featuresArr = await pullFeaturesReliably(2500);
+        }
 
-          <div class="bl-left">
-            ${cfg.showImage && data.imgSrc ? `<img class="bl-image" alt="Product" src="${data.imgSrc}">` : ''}
-          </div>
+        const root = document.createElement('div');
+        root.className = 'binlabel-root';
+        root.innerHTML = `
+          <div class="bl-grid">
+            <div class="bl-header">
+              <div class="bl-logo">${sizeKey!=='1x2' && data.logoSrc ? `<img alt="Woodson Lumber" src="${data.logoSrc}">` : ''}</div>
+              <div class="bl-title">${data.productName}</div>
+              <div class="bl-code">${data.productCode ? `Code: ${data.productCode}` : ''}</div>
+            </div>
 
-          <div class="bl-right">
-            <div class="bl-features" id="bl-features-slot">${cfg.showFeatures ? `<div style="color:#888">Loading features…</div>` : ''}</div>
-            <div class="bl-priceQr">
-              <div class="bl-cta">Learn more online →</div>
-              <div class="bl-price">${data.price || ''} ${data.uom ? `<span class="bl-uom">/ ${data.uom}</span>` : ''}</div>
-              <div class="bl-qr" id="bl-qr"></div>
-              ${sizeKey==='1x2'
-                ? `<div style="grid-column:1;grid-row:1;justify-self:start;align-self:center;font-weight:700;font-size:10pt;color:#333;display:${data.productCode?'block':'none'}">Code: ${data.productCode||''}</div>
-                   <svg class="bl-bar-left" id="bl-barcode" width="${Math.max(120, cfg.qr+10)}" height="${Math.max(40, Math.round(cfg.qr*0.6))}"></svg>`
-                : `<svg class="bl-barcode" id="bl-barcode" width="${Math.max(120, cfg.qr)}" height="${Math.max(36, Math.round(cfg.qr*0.5))}"></svg>`}
+            <div class="bl-left">
+              ${cfg.showImage && data.imgSrc ? `<img class="bl-image" alt="Product" src="${data.imgSrc}">` : ''}
+            </div>
+
+            <div class="bl-right">
+              <div class="bl-features" id="bl-features-slot">
+                ${cfg.showFeatures
+                  ? (featuresArr.length ? `<ul>${featuresArr.map(f=>`<li>${f}</li>`).join('')}</ul>` : `<div style="color:#888">Loading features…</div>`)
+                  : ''
+                }
+              </div>
+              <div class="bl-priceQr">
+                <div class="bl-cta">${sizeKey==='1x2' ? '' : 'Learn more online →'}</div>
+                <div class="bl-price">${data.price || ''} ${data.uom ? `<span class="bl-uom">/ ${data.uom}</span>` : ''}</div>
+                <div class="bl-qr" id="bl-qr"></div>
+                ${sizeKey==='1x2'
+                  ? `<div style="grid-column:1;grid-row:1;justify-self:start;align-self:center;font-weight:700;font-size:10pt;color:#333;display:${data.productCode?'block':'none'}">Code: ${data.productCode||''}</div>
+                     <svg class="bl-bar-left" id="bl-barcode" width="${Math.max(120, cfg.qr+10)}" height="${Math.max(40, Math.round(cfg.qr*0.6))}"></svg>`
+                  : `<svg class="bl-barcode" id="bl-barcode" width="${Math.max(120, cfg.qr)}" height="${Math.max(36, Math.round(cfg.qr*0.5))}"></svg>`}
+              </div>
+            </div>
+
+            <div class="bl-footer">
+              Printed: ${printDateStr()}
             </div>
           </div>
+        `;
+        document.body.appendChild(root);
 
-          <div class="bl-footer">
-            Printed: ${printDateStr()}
-          </div>
-        </div>
-      `;
-      document.body.appendChild(root);
+        // hide site chrome (keep buttons visible on screen; they won't print)
+        [...document.body.children].forEach(ch => {
+          if (ch === root) return;
+          const rawId = (ch && (ch.id ?? (ch.getAttribute && ch.getAttribute('id')))) || '';
+          const isPrintBtn = String(rawId).indexOf('bl-print-') === 0;
+          if (!isPrintBtn) ch.setAttribute('data-bl-hide','1');
+        });
+        [...document.querySelectorAll('[data-bl-hide="1"]')].forEach(n => n.style.setProperty('display','none','important'));
 
-      // hide site chrome (keep buttons visible on screen; they won't print)
-      [...document.body.children].forEach(ch => {
-        if (ch === root) return;
-        const rawId = (ch && (ch.id ?? (ch.getAttribute && ch.getAttribute('id')))) || '';
-        const isPrintBtn = String(rawId).indexOf('bl-print-') === 0;
-        if (!isPrintBtn) ch.setAttribute('data-bl-hide','1');
-      });
-      [...document.querySelectorAll('[data-bl-hide="1"]')].forEach(n => n.style.setProperty('display','none','important'));
-
-      // features (non-blocking + clamp to fit on 3x5 and 4x6)
-      const shouldClamp = (sizeKey === '3x5' || sizeKey === '4x6' || sizeKey === 'letter'); // letter also clamps just in case
-      if (cfg.showFeatures) {
-        const slot = root.querySelector('#bl-features-slot');
-        const setList = (arr) => {
-          if (!slot) return;
-          slot.innerHTML = arr.length ? `<ul>${arr.map(f=>`<li>${f}</li>`).join('')}</ul>` : '<div style="color:#888">No feature details found.</div>';
-          if (shouldClamp) clampFeaturesToFit(slot);
-        };
-        let feats = getProductData().readFeaturesOnce(); // fresh call in case DOM changed
-        if (feats.length) setList(feats);
-        let tries = 0;
-        const t = setInterval(() => {
-          if ((feats.length && (!shouldClamp || slot.querySelector('ul'))) || tries > 12) { clearInterval(t); return; }
-          tries++;
-          const a = getProductData().readFeaturesOnce();
-          if (a.length) { feats = a; setList(feats); clearInterval(t); }
-        }, 250);
-        const widget = document.querySelector('#product-widget');
-        if (widget) {
-          const mo = new MutationObserver(() => {
-            if (feats.length) { mo.disconnect(); return; }
-            const a = getProductData().readFeaturesOnce();
-            if (a.length) { feats = a; setList(feats); mo.disconnect(); }
-          });
-          mo.observe(widget, { childList:true, subtree:true });
+        // After insertion: if features were empty, try one last pass + clamp
+        if (cfg.showFeatures) {
+          const slot = root.querySelector('#bl-features-slot');
+          const finalize = (arr) => {
+            if (!slot) return;
+            slot.innerHTML = arr.length ? `<ul>${arr.map(f=>`<li>${f}</li>`).join('')}</ul>` : '<div style="color:#888">No feature details found.</div>';
+            clampFeaturesToFit(slot);
+          };
+          if (!featuresArr.length) {
+            let tries = 0;
+            const t = setInterval(() => {
+              tries++;
+              const a = getProductData().readFeaturesOnce();
+              if (a.length || tries > 14) { clearInterval(t); finalize(a||[]); }
+            }, 150);
+          } else {
+            // Clamp once layout settles
+            setTimeout(()=> clampFeaturesToFit(slot), 120);
+          }
         }
-        // safety clamp after images/fonts layout
-        setTimeout(()=> slot && shouldClamp && clampFeaturesToFit(slot), 150);
+
+        // QR + barcode
+        drawQR(root.querySelector('#bl-qr'), cfg.qr, canonicalizeUrl(location.href));
+        drawBarcode(root.querySelector('#bl-barcode'), data.productCode, {
+          lineColor: '#000', font: 'monospace',
+          fontSize: Math.max(10, Math.round(cfg.qr*0.22)),
+          height: Math.max(30, Math.round(cfg.qr*0.5)),
+          margin: 0, textMargin: 2, width: sizeKey==='1x2' ? 1.2 : 1.4
+        });
+
+        // print
+        setTimeout(() => window.print(), 250);
+
+        // cleanup
+        const cleanup = () => {
+          try {
+            if (root && root.parentNode) root.parentNode.removeChild(root);
+            if (styleEl && styleEl.parentNode) styleEl.parentNode.removeChild(styleEl);
+            [...document.querySelectorAll('[data-bl-hide="1"]')].forEach(n => { n.style.removeProperty('display'); n.removeAttribute('data-bl-hide'); });
+          } catch {}
+          window.removeEventListener('afterprint', cleanup);
+        };
+        window.addEventListener('afterprint', cleanup);
+
+      } catch (e) {
+        console.error('[binlabel] build error', e);
+        alert('Could not build label. See console for details.');
       }
-
-      // QR + barcode
-      drawQR(root.querySelector('#bl-qr'), cfg.qr, canonicalizeUrl(location.href));
-      drawBarcode(root.querySelector('#bl-barcode'), data.productCode, {
-        lineColor: '#000', font: 'monospace',
-        fontSize: Math.max(10, Math.round(cfg.qr*0.22)),
-        height: Math.max(30, Math.round(cfg.qr*0.5)),
-        margin: 0, textMargin: 2, width: sizeKey==='1x2' ? 1.2 : 1.4
-      });
-
-      // print
-      setTimeout(() => window.print(), 250);
-
-      // cleanup
-      const cleanup = () => {
-        try {
-          if (root && root.parentNode) root.parentNode.removeChild(root);
-          if (styleEl && styleEl.parentNode) styleEl.parentNode.removeChild(styleEl);
-          [...document.querySelectorAll('[data-bl-hide="1"]')].forEach(n => { n.style.removeProperty('display'); n.removeAttribute('data-bl-hide'); });
-        } catch {}
-        window.removeEventListener('afterprint', cleanup);
-      };
-      window.addEventListener('afterprint', cleanup);
-
-    } catch (e) {
-      console.error('[binlabel] build error', e);
-      alert('Could not build label. See console for details.');
-    }
+    })();
   }
 
   /* ------------ print buttons (UI) ------------ */
