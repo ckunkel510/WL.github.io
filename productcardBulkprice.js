@@ -256,7 +256,7 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
   const WARN = (...a)=>console.warn('[BulkBanner]', ...a);
   const ERR  = (...a)=>console.error('[BulkBanner]', ...a);
 
-  const SHEET_CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRmHLHJE9OebjPpi7wMvOHxX6fOdarKQRRbd1W-Vf2o04kLwd9kc0jpm78WFCU4y1ErzCIWVqoUvAwn/pub?output=csv';
+  const SHEET_CSV = 'https://images-woodsonlumber.sirv.com/csv/Bulk%20Pricing%20-%20Sheet1.csv';
 
   /* ---------- helpers ---------- */
   function waitFor(sel, timeout=6000, step=120){
