@@ -186,7 +186,7 @@ window.addEventListener('load', async function() {
       return;
     }
 
-    const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSz4pwwlgmNw8642O1eDV8Jir2GBslQyyTX4ykx_rRlAb6k2EHe_QYy2gwk7R9bq5gV3KZpYOdXA3HW/pub?output=csv';
+    const csvUrl = 'https://images-woodsonlumber.sirv.com/csv/Product%20Descriptions%20-%20Sheet1.csv';
 
     try {
       insertStyles();

@@ -1,4 +1,4 @@
-<script>
+
 document.addEventListener('DOMContentLoaded', function () {
     // Add styles after the iframe content is embedded
     setTimeout(function () {
@@ -38,4 +38,4 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }, 500); // Delay to ensure content is embedded first
 });
-</script>
+
