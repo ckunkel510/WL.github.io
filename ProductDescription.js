@@ -445,6 +445,9 @@ document.addEventListener('DOMContentLoaded', function () {
       t = setTimeout(()=>{ if(!done){done=true;reject(new Error('timeout'));} }, timeoutMs);
     });
   }
+  const printDateStr = () => {
+    try { return new Date().toLocaleDateString('en-US'); } catch { return new Date().toISOString().slice(0,10); }
+  };
 
   /* ------------ extract page data ------------ */
   function getProductData() {
@@ -560,13 +563,13 @@ document.addEventListener('DOMContentLoaded', function () {
   /* ------------ size presets & builder ------------ */
   const SIZES = {
     // 1×2 — NO logo, bigger price, code above barcode (left), barcode bottom-left, QR bottom-right
-    '1x2':   { w: 2,   h: 1,   qr: 70,  imgMaxH: 0,     showImage:false, showFeatures:false,  priceFs: 18,  uomFs: 11,  titleClamp:1, cta:false, featFs: 0 },
+    '1x2':   { w: 2,   h: 1,   qr: 70,  imgMaxH: 0,     showImage:false, showFeatures:false,  priceFs: 18,  uomFs: 11,  titleClamp:1, cta:false, featFs: 0, gridCols: '1fr' },
     // 3×5 index card
-    '3x5':   { w: 5,   h: 3,   qr: 100, imgMaxH: 1.6,   showImage:true,  showFeatures:true,   priceFs: 20,  uomFs: 12,  titleClamp:2, cta:true,  featFs: 11 },
+    '3x5':   { w: 5,   h: 3,   qr: 100, imgMaxH: 1.6,   showImage:true,  showFeatures:true,   priceFs: 20,  uomFs: 12,  titleClamp:2, cta:true,  featFs: 11, gridCols: 'calc(0.42 * var(--w)) 1fr' },
     // 4×6 — bigger image; features nudged right + slightly larger font
-    '4x6':   { w: 6,   h: 4,   qr: 120, imgMaxH: 2.55,  showImage:true,  showFeatures:true,   priceFs: 22,  uomFs: 12,  titleClamp:2, cta:true,  featFs: 12, featIndent: '0.12in' },
-    // 8.5×11 — bigger image; larger features font
-    'letter':{ w: 8.5, h: 11,  qr: 170, imgMaxH: 7.0,   showImage:true,  showFeatures:true,   priceFs: 30,  uomFs: 15,  titleClamp:3, cta:true,  featFs: 14 }
+    '4x6':   { w: 6,   h: 4,   qr: 120, imgMaxH: 2.7,   showImage:true,  showFeatures:true,   priceFs: 22,  uomFs: 12,  titleClamp:2, cta:true,  featFs: 12, featIndent: '0.12in', gridCols: '44% 56%' },
+    // 8.5×11 — much bigger image; larger features font
+    'letter':{ w: 8.5, h: 11,  qr: 180, imgMaxH: 8.0,   showImage:true,  showFeatures:true,   priceFs: 32,  uomFs: 16,  titleClamp:3, cta:true,  featFs: 15, gridCols: '48% 52%' }
   };
 
   function makeStyle(key, cfg){
@@ -593,8 +596,8 @@ document.addEventListener('DOMContentLoaded', function () {
       .bl-grid {
         position:absolute; inset:0;
         display:grid;
-        grid-template-columns: ${cfg.showImage ? 'calc(0.42 * var(--w)) 1fr' : '1fr'};
-        grid-template-rows: auto 1fr;
+        grid-template-columns: ${cfg.showImage ? cfg.gridCols : '1fr'};
+        grid-template-rows: auto 1fr auto; /* footer row added */
         gap: calc(0.02 * var(--w));
         padding: calc(0.03 * var(--w)) calc(0.035 * var(--w));
         overflow:hidden;
@@ -616,11 +619,11 @@ document.addEventListener('DOMContentLoaded', function () {
       }
       .bl-code { margin-left:auto; font-weight:700; color:#333; font-size: clamp(9pt, calc(0.06 * var(--w)), 12pt); }
 
-      .bl-left { ${cfg.showImage ? 'display:flex;' : 'display:none;'} grid-row:2; grid-column:1; align-items:flex-end; justify-content:center; overflow:hidden; padding: 0 0.04in 0.04in 0; }
+      .bl-left { ${cfg.showImage ? 'display:flex;' : 'display:none;'} grid-row:2; grid-column:1; align-items:center; justify-content:center; overflow:hidden; padding: 0 0.04in 0.04in 0; }
       .bl-left .bl-image { max-width:100%; ${cfg.imgMaxH ? `max-height:${cfg.imgMaxH}in;`:'max-height:0;'} height:auto; width:auto; object-fit:contain; display:block; }
 
       .bl-right { grid-row:2; grid-column:${cfg.showImage ? 2 : 1}; display:grid; grid-template-rows: 1fr auto; gap: 0.06in; min-width:0; overflow:hidden; }
-      .bl-features { ${cfg.showFeatures ? '' : 'display:none;'} font-size: ${cfg.featFs ? cfg.featFs+'pt' : '11pt'}; line-height:1.26; overflow:auto; ${cfg.featIndent ? `margin-left:${cfg.featIndent};` : ''} }
+      .bl-features { ${cfg.showFeatures ? '' : 'display:none;'} font-size: ${cfg.featFs ? cfg.featFs+'pt' : '11pt'}; line-height:1.26; overflow:hidden; ${cfg.featIndent ? `margin-left:${cfg.featIndent};` : ''} }
       .bl-features ul { margin: 0.03in 0 0 0.16in; padding:0; }
       .bl-features li { margin: 0.01in 0; }
 
@@ -643,8 +646,38 @@ document.addEventListener('DOMContentLoaded', function () {
         .bl-qr { grid-column:2; grid-row:2; width:${cfg.qr}px; height:${cfg.qr}px; justify-self:end; align-self:end; margin-right:0.02in; margin-bottom:0.02in; overflow:hidden; }
         .bl-barcode { grid-column:2; grid-row:3; justify-self:end; align-self:end; margin-right:0.02in; background:#fff; padding:2px 4px; border-radius:4px; }
       `}
+
+      /* Footer (print date) */
+      .bl-footer {
+        grid-column: 1 / -1;
+        grid-row: 3;
+        display:flex; align-items:center; justify-content:flex-start;
+        font-size: 9pt; color:#666; border-top: 1px solid #eee; padding-top: 0.04in;
+      }
     `;
     return s;
+  }
+
+  function clampFeaturesToFit(container) {
+    // Remove bullets from the end until content fits without vertical overflow; add ellipsis
+    if (!container) return;
+    const ul = container.querySelector('ul');
+    if (!ul) return;
+    const items = Array.from(ul.children);
+    if (!items.length) return;
+
+    // If it already fits, do nothing
+    if (container.scrollHeight <= container.clientHeight + 1) return;
+
+    // Remove from end until it fits, then append an ellipsis marker
+    while (items.length && container.scrollHeight > container.clientHeight + 1) {
+      const li = items.pop();
+      if (li && li.parentNode) li.parentNode.removeChild(li);
+    }
+    if (ul.lastElementChild && ul.lastElementChild.textContent.trim().slice(-1) !== '…') {
+      const last = ul.lastElementChild;
+      if (last) last.textContent = last.textContent.replace(/\.*\s*$/, '') + ' …';
+    }
   }
 
   function buildLabel(sizeKey) {
@@ -681,6 +714,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 : `<svg class="bl-barcode" id="bl-barcode" width="${Math.max(120, cfg.qr)}" height="${Math.max(36, Math.round(cfg.qr*0.5))}"></svg>`}
             </div>
           </div>
+
+          <div class="bl-footer">
+            Printed: ${printDateStr()}
+          </div>
         </div>
       `;
       document.body.appendChild(root);
@@ -694,28 +731,35 @@ document.addEventListener('DOMContentLoaded', function () {
       });
       [...document.querySelectorAll('[data-bl-hide="1"]')].forEach(n => n.style.setProperty('display','none','important'));
 
-      // features (non-blocking)
+      // features (non-blocking + clamp to fit on 3x5 and 4x6)
+      const shouldClamp = (sizeKey === '3x5' || sizeKey === '4x6' || sizeKey === 'letter'); // letter also clamps just in case
       if (cfg.showFeatures) {
         const slot = root.querySelector('#bl-features-slot');
-        const setList = (arr) => slot && (slot.innerHTML = arr.length ? `<ul>${arr.map(f=>`<li>${f}</li>`).join('')}</ul>` : '<div style="color:#888">No feature details found.</div>');
-        let feats = data.readFeaturesOnce();
+        const setList = (arr) => {
+          if (!slot) return;
+          slot.innerHTML = arr.length ? `<ul>${arr.map(f=>`<li>${f}</li>`).join('')}</ul>` : '<div style="color:#888">No feature details found.</div>';
+          if (shouldClamp) clampFeaturesToFit(slot);
+        };
+        let feats = getProductData().readFeaturesOnce(); // fresh call in case DOM changed
         if (feats.length) setList(feats);
         let tries = 0;
         const t = setInterval(() => {
-          if (feats.length || tries > 12) { clearInterval(t); return; }
+          if ((feats.length && (!shouldClamp || slot.querySelector('ul'))) || tries > 12) { clearInterval(t); return; }
           tries++;
-          const a = data.readFeaturesOnce();
+          const a = getProductData().readFeaturesOnce();
           if (a.length) { feats = a; setList(feats); clearInterval(t); }
         }, 250);
         const widget = document.querySelector('#product-widget');
         if (widget) {
           const mo = new MutationObserver(() => {
-            if (feats.length) return;
-            const a = data.readFeaturesOnce();
+            if (feats.length) { mo.disconnect(); return; }
+            const a = getProductData().readFeaturesOnce();
             if (a.length) { feats = a; setList(feats); mo.disconnect(); }
           });
           mo.observe(widget, { childList:true, subtree:true });
         }
+        // safety clamp after images/fonts layout
+        setTimeout(()=> slot && shouldClamp && clampFeaturesToFit(slot), 150);
       }
 
       // QR + barcode
@@ -770,6 +814,8 @@ document.addEventListener('DOMContentLoaded', function () {
   log('Bin label buttons ready.');
 })();
 });
+
+
 
 
 
