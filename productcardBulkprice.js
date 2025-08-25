@@ -239,10 +239,10 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
 
 
 
-
 /* ==========================================================
    Woodson — Bulk Pricing Banner (ProductDetail) + Click-to-Qty
    - Runs only on ProductDetail.aspx
+   - Hides banner if customer's unit price ≤ lowest bulk price
    - Detects PID robustly (URL, stock btn, qty_ ID, etc.)
    - Pulls tiers from Google Sheet (pid, qty, price)
    - Shows a "WOODSON BULK" banner under Add to Cart
@@ -252,9 +252,9 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
   'use strict';
   if (!/ProductDetail\.aspx/i.test(location.pathname)) return;
 
-  const LOG = (...a)=>console.log('[BulkBanner]', ...a);
+  const LOG  = (...a)=>console.log('[BulkBanner]', ...a);
   const WARN = (...a)=>console.warn('[BulkBanner]', ...a);
-  const ERR = (...a)=>console.error('[BulkBanner]', ...a);
+  const ERR  = (...a)=>console.error('[BulkBanner]', ...a);
 
   const SHEET_CSV = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vRmHLHJE9OebjPpi7wMvOHxX6fOdarKQRRbd1W-Vf2o04kLwd9kc0jpm78WFCU4y1ErzCIWVqoUvAwn/pub?output=csv';
 
@@ -294,6 +294,15 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
     const rows = lines.slice(1).map(parseCSVLine);
     return {headers,rows};
   }
+  function parseMoney(s){
+    const v = parseFloat(String(s||'').replace(/[^0-9.\-]/g,''));
+    return Number.isFinite(v) ? v : NaN;
+  }
+  const money = v => {
+    const n = parseMoney(v);
+    return Number.isFinite(n) ? n.toFixed(2) : String(v);
+  };
+
   function getPID(){
     try { const u=new URL(location.href); const p=u.searchParams.get('pid'); if (p && /^\d+$/.test(p)) return p; } catch{}
     try { const href=document.querySelector('#ProductImageRow a')?.href||''; const m=href.match(/pid=(\d+)/i); if (m) return m[1]; } catch{}
@@ -302,10 +311,6 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
     try { const qty=document.querySelector('input.productQtyInput,[id*="_qty_"]'); if (qty){ const m=qty.id.match(/_qty_(\d+)/); if (m) return m[1]; } } catch{}
     return null;
   }
-  const money = v => {
-    const n = parseFloat(String(v).replace(/[^0-9.\-]/g,'')); 
-    return Number.isFinite(n) ? n.toFixed(2) : String(v);
-  };
 
   function injectStyles(){
     if (document.getElementById('wbk-styles')) return;
@@ -358,14 +363,12 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
   }
 
   function findQtyInput(buyBox){
-    // Prefer explicit productQtyInput class
     let inp = buyBox.querySelector('input.productQtyInput');
     if (!inp) inp = buyBox.querySelector('input[id*="_qty_"]');
     return inp;
   }
 
   function getBestTierForQty(tiers, qty){
-    // Highest tier whose qty <= current qty
     const q = Number(qty)||0;
     let best=null;
     for(const t of tiers){ if (q >= t.qty) best = t; else break; }
@@ -375,10 +378,8 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
   function setQty(input, n){
     if (!input) return;
     input.value = String(n);
-    // Fire events so any site scripts react
     input.dispatchEvent(new Event('input', {bubbles:true}));
     input.dispatchEvent(new Event('change', {bubbles:true}));
-    // Visual flash for feedback
     input.classList.add('wbk-flash');
     setTimeout(()=>input.classList.remove('wbk-flash'), 900);
   }
@@ -404,7 +405,6 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
       }
     }
 
-    // Clicking a chip sets the qty and updates applied price
     banner.addEventListener('click', (e)=>{
       const btn = e.target.closest('.wbk-chip');
       if (!btn) return;
@@ -415,13 +415,35 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
       refreshUI();
     });
 
-    // Keep banner in sync if user types or uses +/- buttons
     if (qtyInput){
       qtyInput.addEventListener('input', refreshUI);
       qtyInput.addEventListener('change', refreshUI);
-      // Initial sync
       refreshUI();
     }
+  }
+
+  // ---- NEW: find the customer's unit price inside the buy box ----
+  function findCustomerUnitPrice(buyBox){
+    // 1) Specific IDs/classes commonly used
+    const explicit = buyBox.querySelector(
+      'span[id*="lblPrice"], span[id*="Price"], .product-price, .unit-price, [data-price]'
+    );
+    if (explicit){
+      const v = parseMoney(explicit.textContent);
+      if (Number.isFinite(v) && v > 0) return v;
+    }
+    // 2) Any element in buy box whose text contains a $ with decimals
+    const candidates = [...buyBox.querySelectorAll('span,div,strong,em,b')];
+    for (const el of candidates){
+      const txt = (el.textContent || '').trim();
+      // match $12.34 or 12.34 (avoid integers like qty)
+      const m = txt.match(/\$?\s*([\d,]+\.\d{2})/);
+      if (m){
+        const v = parseMoney(m[0]);
+        if (Number.isFinite(v) && v > 0) return v;
+      }
+    }
+    return NaN;
   }
 
   async function main(){
@@ -449,13 +471,26 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
     const tiers = rows
       .filter(r => String((r[h.pid]||'').trim()) === String(pid))
       .map(r => ({
-        qty: parseFloat(String(r[h.qty]||'').replace(/[^0-9.]/g,'')) || 0,
-        price: parseFloat(String(r[h.price]||'').replace(/[^0-9.]/g,'')) || 0
+        qty:  parseMoney(r[h.qty]),
+        price:parseMoney(r[h.price])
       }))
-      .filter(t => t.qty>0 && t.price>0)
+      .filter(t => (t.qty||0)>0 && (t.price||0)>0)
       .sort((a,b)=> a.qty - b.qty);
 
     if (!tiers.length){ LOG('No tiers found for pid', pid); return; }
+
+    // ---- NEW: compare customer's unit price vs lowest bulk price ----
+    const customerPrice = findCustomerUnitPrice(buyBox);
+    const minBulkPrice = tiers.reduce((min,t)=>Math.min(min, t.price), Infinity);
+
+    if (!Number.isFinite(customerPrice) || customerPrice <= 0){
+      LOG('No reliable customer price found — skipping banner (fail-safe).');
+      return;
+    }
+    if (Number.isFinite(minBulkPrice) && customerPrice <= minBulkPrice){
+      LOG(`Skip banner: customer ${customerPrice} ≤ min bulk ${minBulkPrice}`);
+      return;
+    }
 
     injectStyles();
 
@@ -474,4 +509,3 @@ console.log("[BulkPricing] Script loaded (per-row scope).");
 
   setTimeout(()=>{ main().catch(e=>ERR('Unhandled:', e)); }, 350);
 })();
-
