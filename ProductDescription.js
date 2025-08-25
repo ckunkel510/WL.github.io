@@ -423,18 +423,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
   const BRAND = '#6B0016';
   const log = (...a) => { try { console.debug('[binlabel]', ...a); } catch {} };
-  const fail = (msg, err) => { console.error('[binlabel]', msg, err||''); toast(msg); };
 
-  /* ---------- tiny toast for visible errors ---------- */
-  function toast(msg) {
-    const t = document.createElement('div');
-    t.style.cssText = 'position:fixed;left:10px;bottom:10px;background:#222;color:#fff;padding:10px 12px;border-radius:8px;z-index:2147483647;font:12px/1.3 system-ui';
-    t.textContent = msg;
-    document.body.appendChild(t);
-    setTimeout(()=>t.remove(), 4000);
-  }
-
-  /* ----------------------- helpers ----------------------- */
+  /* ------------ helpers ------------ */
   const text = (el) => (el ? el.textContent.trim() : '');
   const abs  = (src) => src && /^https?:\/\//i.test(src) ? src : (src ? new URL(src, location.origin).toString() : '');
   function canonicalizeUrl(url) {
@@ -456,7 +446,7 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  /* ------------------- extract page data ------------------- */
+  /* ------------ extract page data ------------ */
   function getProductData() {
     const logoEl  = document.querySelector('img[src*="WebTrackImage_"]') || document.querySelector('img[src*="/images/user_content/"]');
     const logoSrc = abs(logoEl ? logoEl.getAttribute('src') : '');
@@ -468,7 +458,6 @@ document.addEventListener('DOMContentLoaded', function () {
       (text(document.querySelector('.formPageHeader')).replace(/^Product Code:\s*\d+\s*$/i,'').trim()) ||
       'Product';
 
-    // Product code “Product Code: 1394550”
     function getProductCode() {
       const header = text(document.querySelector('.formPageHeader'));
       const m = header.match(/Product\s*Code:\s*([A-Za-z0-9\-]+)/i);
@@ -479,7 +468,6 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     const productCode = getProductCode();
 
-    // Price + UOM
     function findPriceAndUom() {
       const priceRegex = /^\$?\s*\d[\d,]*(\.\d{2})?$/;
       let price = '', uom = '';
@@ -504,13 +492,11 @@ document.addEventListener('DOMContentLoaded', function () {
     }
     const { price, uom } = findPriceAndUom();
 
-    // Main image
     const imgEl  = document.querySelector('#ctl00_PageBody_productDetail_ProductImage') ||
                    document.querySelector('#product-image-wrapper img') ||
                    document.querySelector('#main-block img');
     const imgSrc = abs(imgEl ? imgEl.getAttribute('src') : '');
 
-    // Features
     function extractFeaturesFrom(htmlStr) {
       if (!htmlStr) return [];
       return htmlStr.replace(/<\/?div[^>]*>/gi, '\n').replace(/<br\s*\/?>/gi, '\n').replace(/&nbsp;/g, ' ')
@@ -536,7 +522,7 @@ document.addEventListener('DOMContentLoaded', function () {
     return { logoSrc, productName, productCode, price, uom, imgSrc, readFeaturesOnce };
   }
 
-  /* ---------------------- QR & Barcode ---------------------- */
+  /* ------------ QR & Barcode ------------ */
   async function drawQR(container, sizePx, urlText) {
     try {
       if (!window.QRCode) { try { await loadScript('/scripts/qrcode.min.js', 1200); } catch {} }
@@ -551,9 +537,8 @@ document.addEventListener('DOMContentLoaded', function () {
       img.src = 'https://chart.googleapis.com/chart?cht=qr&chs=' + sizePx + 'x' + sizePx + '&chl=' + encodeURIComponent(urlText);
       await new Promise((res, rej) => { img.onload = res; img.onerror = rej; setTimeout(()=>rej(new Error('timeout')), 2500); });
       container.innerHTML=''; container.appendChild(img);
-    } catch (e) {
+    } catch {
       container.innerHTML = `<div style="width:${sizePx}px;height:${sizePx}px;border:2px solid #111;border-radius:6px;display:flex;align-items:center;justify-content:center;padding:8px;text-align:center;font:11px monospace;word-break:break-all">${urlText}</div>`;
-      log('QR fallback box used');
     }
   }
   async function drawBarcode(svgEl, code, opts) {
@@ -567,19 +552,21 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
       }
       svgEl.outerHTML = `<div style="font:12px monospace;color:#444">CODE128: ${code}</div>`;
-      log('Barcode fallback text used');
-    } catch (e) {
+    } catch {
       svgEl.outerHTML = `<div style="font:12px monospace;color:#444">Barcode error</div>`;
-      log('Barcode error', e);
     }
   }
 
-  /* ---------------------- sizes & builder ---------------------- */
+  /* ------------ size presets & builder ------------ */
   const SIZES = {
-    '1x2':   { w: 2,   h: 1,   qr: 60,  imgMaxH: 0,     showImage:false, showFeatures:false,  priceFs: 14,  uomFs: 10,  titleClamp:1, cta:false },
-    '3x5':   { w: 5,   h: 3,   qr: 100, imgMaxH: 1.6,   showImage:true,  showFeatures:true,   priceFs: 20,  uomFs: 12,  titleClamp:2, cta:true  },
-    '4x6':   { w: 6,   h: 4,   qr: 120, imgMaxH: 2.25,  showImage:true,  showFeatures:true,   priceFs: 22,  uomFs: 12,  titleClamp:2, cta:true  },
-    'letter':{ w: 8.5, h: 11,  qr: 160, imgMaxH: 6.0,   showImage:true,  showFeatures:true,   priceFs: 28,  uomFs: 14,  titleClamp:3, cta:true  }
+    // 1×2 — NO logo, bigger price, code above barcode (left), barcode bottom-left, QR bottom-right
+    '1x2':   { w: 2,   h: 1,   qr: 70,  imgMaxH: 0,     showImage:false, showFeatures:false,  priceFs: 18,  uomFs: 11,  titleClamp:1, cta:false, featFs: 0 },
+    // 3×5 index card
+    '3x5':   { w: 5,   h: 3,   qr: 100, imgMaxH: 1.6,   showImage:true,  showFeatures:true,   priceFs: 20,  uomFs: 12,  titleClamp:2, cta:true,  featFs: 11 },
+    // 4×6 — bigger image; features nudged right + slightly larger font
+    '4x6':   { w: 6,   h: 4,   qr: 120, imgMaxH: 2.55,  showImage:true,  showFeatures:true,   priceFs: 22,  uomFs: 12,  titleClamp:2, cta:true,  featFs: 12, featIndent: '0.12in' },
+    // 8.5×11 — bigger image; larger features font
+    'letter':{ w: 8.5, h: 11,  qr: 170, imgMaxH: 7.0,   showImage:true,  showFeatures:true,   priceFs: 30,  uomFs: 15,  titleClamp:3, cta:true,  featFs: 14 }
   };
 
   function makeStyle(key, cfg){
@@ -592,7 +579,8 @@ document.addEventListener('DOMContentLoaded', function () {
       html, body { margin:0!important; padding:0!important; background:#fff!important; display:grid; place-items:center; }
       @media print {
         html, body { display:block !important; width: var(--w) !important; height: var(--h) !important; }
-        body > *:not(.binlabel-root):not([id^="bl-print-"]) { display:none !important; }
+        body > *:not(.binlabel-root) { display:none !important; }
+        [id^="bl-print-"] { display:none !important; } /* ensure buttons never print */
         .binlabel-root { box-shadow:none !important; margin:0 !important; position:static !important; left:0 !important; top:0 !important; transform:none !important; }
       }
 
@@ -600,7 +588,7 @@ document.addEventListener('DOMContentLoaded', function () {
         position:relative; box-sizing:border-box; width:var(--w); height:var(--h); overflow:hidden;
         font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color:#111;
         box-shadow: 0 0 0 1px #ddd, 0 4px 24px rgba(0,0,0,.12);
-        z-index: 2147483000; /* above site chrome */
+        z-index: 2147483000;
       }
       .bl-grid {
         position:absolute; inset:0;
@@ -614,11 +602,12 @@ document.addEventListener('DOMContentLoaded', function () {
       .bl-header {
         grid-column: 1 / -1;
         display:flex; align-items:center; gap: calc(0.03 * var(--w));
-        min-height: calc(0.14 * var(--h));
+        min-height: ${key==='1x2' ? '0.28in' : 'calc(0.14 * var(--h))'};
         border-bottom: 2px solid var(--brand)22;
         padding-bottom: calc(0.01 * var(--w));
         overflow:hidden;
       }
+      .bl-logo { ${key==='1x2' ? 'display:none;' : ''} }
       .bl-logo img { max-height: calc(0.12 * var(--h)); width:auto; object-fit:contain; background:#fff; padding:0.03in; border-radius:4px; }
       .bl-title {
         font-weight:700; line-height:1.1; letter-spacing: 0.2px; overflow:hidden;
@@ -631,21 +620,29 @@ document.addEventListener('DOMContentLoaded', function () {
       .bl-left .bl-image { max-width:100%; ${cfg.imgMaxH ? `max-height:${cfg.imgMaxH}in;`:'max-height:0;'} height:auto; width:auto; object-fit:contain; display:block; }
 
       .bl-right { grid-row:2; grid-column:${cfg.showImage ? 2 : 1}; display:grid; grid-template-rows: 1fr auto; gap: 0.06in; min-width:0; overflow:hidden; }
-      .bl-features { ${cfg.showFeatures ? '' : 'display:none;'} font-size: clamp(9pt, calc(0.042 * var(--w)), 11pt); line-height:1.24; overflow:auto; }
+      .bl-features { ${cfg.showFeatures ? '' : 'display:none;'} font-size: ${cfg.featFs ? cfg.featFs+'pt' : '11pt'}; line-height:1.26; overflow:auto; ${cfg.featIndent ? `margin-left:${cfg.featIndent};` : ''} }
       .bl-features ul { margin: 0.03in 0 0 0.16in; padding:0; }
       .bl-features li { margin: 0.01in 0; }
 
       .bl-priceQr {
         display:grid;
-        grid-template-columns: 1fr auto;
-        grid-template-rows: auto auto auto;
+        ${key==='1x2'
+          ? `grid-template-columns: 1fr 1fr; grid-template-rows: auto 1fr;`
+          : `grid-template-columns: 1fr auto; grid-template-rows: auto auto auto;`}
         align-items:end; column-gap: 0.08in;
       }
-      .bl-price { grid-column:2; grid-row:1; font-size:${cfg.priceFs}pt; font-weight:800; letter-spacing:-0.2px; text-align:right; margin-right: 0.02in; }
+      .bl-price { grid-column:${key==='1x2' ? '1 / span 2' : '2'}; grid-row:1; font-size:${cfg.priceFs}pt; font-weight:800; letter-spacing:-0.2px; text-align:${key==='1x2' ? 'center' : 'right'}; margin:${key==='1x2' ? '0' : '0 0.02in 0 0'}; }
       .bl-uom { font-size:${cfg.uomFs}pt; color:#444; font-weight:600; }
-      .bl-qr { grid-column:2; grid-row:2; width:${cfg.qr}px; height:${cfg.qr}px; justify-self:end; align-self:end; margin-right:0.02in; margin-bottom:0.02in; overflow:hidden; }
-      .bl-barcode { grid-column:2; grid-row:3; justify-self:end; align-self:end; margin-right:0.02in; background:#fff; padding:2px 4px; border-radius:4px; }
       .bl-cta { ${cfg.cta ? '' : 'display:none;'} grid-column:1; grid-row:2; align-self:end; justify-self:start; font-size: clamp(9pt, calc(0.04 * var(--w)), 11pt); font-weight:700; color: var(--brand); white-space:nowrap; }
+
+      /* QR & barcode positions */
+      ${key==='1x2' ? `
+        .bl-qr { grid-column:2; grid-row:2; justify-self:end; align-self:end; width:${cfg.qr}px; height:${cfg.qr}px; }
+        .bl-bar-left { grid-column:1; grid-row:2; justify-self:start; align-self:end; background:#fff; padding:2px 4px; border-radius:4px; }
+      ` : `
+        .bl-qr { grid-column:2; grid-row:2; width:${cfg.qr}px; height:${cfg.qr}px; justify-self:end; align-self:end; margin-right:0.02in; margin-bottom:0.02in; overflow:hidden; }
+        .bl-barcode { grid-column:2; grid-row:3; justify-self:end; align-self:end; margin-right:0.02in; background:#fff; padding:2px 4px; border-radius:4px; }
+      `}
     `;
     return s;
   }
@@ -654,19 +651,16 @@ document.addEventListener('DOMContentLoaded', function () {
     try {
       const cfg = SIZES[sizeKey] || SIZES['4x6'];
       const data = getProductData();
-      log('Building label', sizeKey, data);
 
-      // 1) inject style FIRST
       const styleEl = makeStyle(sizeKey, cfg);
       document.head.appendChild(styleEl);
 
-      // 2) create root and attach BEFORE hiding anything
       const root = document.createElement('div');
       root.className = 'binlabel-root';
       root.innerHTML = `
         <div class="bl-grid">
           <div class="bl-header">
-            <div class="bl-logo">${data.logoSrc ? `<img alt="Woodson Lumber" src="${data.logoSrc}">` : ''}</div>
+            <div class="bl-logo">${sizeKey!=='1x2' && data.logoSrc ? `<img alt="Woodson Lumber" src="${data.logoSrc}">` : ''}</div>
             <div class="bl-title">${data.productName}</div>
             <div class="bl-code">${data.productCode ? `Code: ${data.productCode}` : ''}</div>
           </div>
@@ -681,82 +675,79 @@ document.addEventListener('DOMContentLoaded', function () {
               <div class="bl-cta">Learn more online →</div>
               <div class="bl-price">${data.price || ''} ${data.uom ? `<span class="bl-uom">/ ${data.uom}</span>` : ''}</div>
               <div class="bl-qr" id="bl-qr"></div>
-              <svg class="bl-barcode" id="bl-barcode" width="${Math.max(120, cfg.qr)}" height="${Math.max(36, Math.round(cfg.qr*0.5))}"></svg>
+              ${sizeKey==='1x2'
+                ? `<div style="grid-column:1;grid-row:1;justify-self:start;align-self:center;font-weight:700;font-size:10pt;color:#333;display:${data.productCode?'block':'none'}">Code: ${data.productCode||''}</div>
+                   <svg class="bl-bar-left" id="bl-barcode" width="${Math.max(120, cfg.qr+10)}" height="${Math.max(40, Math.round(cfg.qr*0.6))}"></svg>`
+                : `<svg class="bl-barcode" id="bl-barcode" width="${Math.max(120, cfg.qr)}" height="${Math.max(36, Math.round(cfg.qr*0.5))}"></svg>`}
             </div>
           </div>
         </div>
       `;
       document.body.appendChild(root);
 
-      // 3) now (and only now) we dim/hide site chrome (but keep buttons)
+      // hide site chrome (keep buttons visible on screen; they won't print)
       [...document.body.children].forEach(ch => {
-  if (ch === root) return;
-  // robust id check
-  const rawId = (ch && (ch.id ?? (ch.getAttribute && ch.getAttribute('id')))) || '';
-  const isPrintBtn = String(rawId).indexOf('bl-print-') === 0;
-  if (!isPrintBtn) ch.setAttribute('data-bl-hide','1');
-});
-[...document.querySelectorAll('[data-bl-hide="1"]')].forEach(n => n.style.setProperty('display','none','important'));
+        if (ch === root) return;
+        const rawId = (ch && (ch.id ?? (ch.getAttribute && ch.getAttribute('id')))) || '';
+        const isPrintBtn = String(rawId).indexOf('bl-print-') === 0;
+        if (!isPrintBtn) ch.setAttribute('data-bl-hide','1');
+      });
+      [...document.querySelectorAll('[data-bl-hide="1"]')].forEach(n => n.style.setProperty('display','none','important'));
 
-      // 4) features (non-blocking)
+      // features (non-blocking)
       if (cfg.showFeatures) {
         const slot = root.querySelector('#bl-features-slot');
         const setList = (arr) => slot && (slot.innerHTML = arr.length ? `<ul>${arr.map(f=>`<li>${f}</li>`).join('')}</ul>` : '<div style="color:#888">No feature details found.</div>');
-        try {
-          let feats = data.readFeaturesOnce();
-          if (feats.length) setList(feats);
-          let tries = 0;
-          const t = setInterval(() => {
-            if (feats.length || tries > 12) { clearInterval(t); return; }
-            tries++;
+        let feats = data.readFeaturesOnce();
+        if (feats.length) setList(feats);
+        let tries = 0;
+        const t = setInterval(() => {
+          if (feats.length || tries > 12) { clearInterval(t); return; }
+          tries++;
+          const a = data.readFeaturesOnce();
+          if (a.length) { feats = a; setList(feats); clearInterval(t); }
+        }, 250);
+        const widget = document.querySelector('#product-widget');
+        if (widget) {
+          const mo = new MutationObserver(() => {
+            if (feats.length) return;
             const a = data.readFeaturesOnce();
-            if (a.length) { feats = a; setList(feats); clearInterval(t); }
-          }, 250);
-          const widget = document.querySelector('#product-widget');
-          if (widget) {
-            const mo = new MutationObserver(() => {
-              if (feats.length) return;
-              const a = data.readFeaturesOnce();
-              if (a.length) { feats = a; setList(feats); mo.disconnect(); }
-            });
-            mo.observe(widget, { childList:true, subtree:true });
-          }
-        } catch (e) { log('features error', e); }
+            if (a.length) { feats = a; setList(feats); mo.disconnect(); }
+          });
+          mo.observe(widget, { childList:true, subtree:true });
+        }
       }
 
-      // 5) QR + barcode (non-blocking)
-      drawQR(root.querySelector('#bl-qr'), cfg.qr, canonicalizeUrl(location.href))
-        .catch(e => log('qr error', e));
+      // QR + barcode
+      drawQR(root.querySelector('#bl-qr'), cfg.qr, canonicalizeUrl(location.href));
       drawBarcode(root.querySelector('#bl-barcode'), data.productCode, {
         lineColor: '#000', font: 'monospace',
-        fontSize: Math.max(10, Math.round(cfg.qr*0.2)),
-        height: Math.max(30, Math.round(cfg.qr*0.45)),
-        margin: 0, textMargin: 2, width: 1.4
-      }).catch(e => log('barcode error', e));
+        fontSize: Math.max(10, Math.round(cfg.qr*0.22)),
+        height: Math.max(30, Math.round(cfg.qr*0.5)),
+        margin: 0, textMargin: 2, width: sizeKey==='1x2' ? 1.2 : 1.4
+      });
 
-      // 6) print
+      // print
       setTimeout(() => window.print(), 250);
 
-      // 7) cleanup after print (restore page)
+      // cleanup
       const cleanup = () => {
         try {
           if (root && root.parentNode) root.parentNode.removeChild(root);
           if (styleEl && styleEl.parentNode) styleEl.parentNode.removeChild(styleEl);
-          [...document.querySelectorAll('[data-bl-hide="1"]')].forEach(n => {
-  n.style.removeProperty('display');
-  n.removeAttribute('data-bl-hide');
-});
-        } catch (e) { log('cleanup error', e); }
+          [...document.querySelectorAll('[data-bl-hide="1"]')].forEach(n => { n.style.removeProperty('display'); n.removeAttribute('data-bl-hide'); });
+        } catch {}
         window.removeEventListener('afterprint', cleanup);
       };
       window.addEventListener('afterprint', cleanup);
 
     } catch (e) {
-      fail('Could not build label. See console for details.', e);
+      console.error('[binlabel] build error', e);
+      alert('Could not build label. See console for details.');
     }
   }
 
-  /* -------------------- print buttons (UI) -------------------- */
+  /* ------------ print buttons (UI) ------------ */
   function makeBtn(id, label, sizeKey, topPx) {
     const btn = document.createElement('button');
     btn.id = id; btn.textContent = label; btn.type = 'button';
@@ -776,9 +767,11 @@ document.addEventListener('DOMContentLoaded', function () {
   document.body.appendChild(b1); document.body.appendChild(b2);
   document.body.appendChild(b3); document.body.appendChild(b4);
 
-  log('Buttons ready. Click a size to render/print.');
+  log('Bin label buttons ready.');
 })();
 });
+
+
 
 
 
