@@ -4,23 +4,11 @@
 
   if (!/ShoppingCart\.aspx/i.test(location.pathname)) return;
 
-
   /* =========================
-   CONFIG / HELPERS
-========================== */
-const LOG = (...a)=>console.log('[GuestCheckout]', ...a);
-const ERR = (...a)=>console.error('[GuestCheckout]', ...a);
-
-// ✅ always use random 16-char temp password
-function randTempPassword(len=16){
-  const chars='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-  let s='';
-  for (let i=0; i<len; i++){
-    s += chars[Math.floor(Math.random()*chars.length)];
-  }
-  return s;
-}
-
+     CONFIG / HELPERS
+  ========================== */
+  const LOG = (...a)=>console.log('[GuestCheckout]', ...a);
+  const ERR = (...a)=>console.error('[GuestCheckout]', ...a);
 
   // Page endpoints (adjust if your paths differ)
   const SIGNUP_PATH = location.origin + '/UserSignup.aspx';
@@ -44,44 +32,26 @@ function randTempPassword(len=16){
     PE:'Prince Edward Island', QC:'Quebec', SK:'Saskatchewan', YT:'Yukon Territory'
   };
 
+  // Always use random 16-char temp password (A–Z, 0–9)
   function randTempPassword(len=16){
-    const chars='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%^&*';
+    const chars='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let s=''; for (let i=0;i<len;i++) s += chars[Math.floor(Math.random()*chars.length)];
     return s;
   }
 
   function el(q,root=document){ return root.querySelector(q); }
-  function els(q,root=document){ return Array.from(root.querySelectorAll(q)); }
   function setVal(node, val){
     if (!node) return;
     if (node.tagName === 'SELECT'){
-      // try to match by text first, then value
-      const opt = Array.from(node.options).find(o => (o.text||'').trim().toLowerCase() === String(val||'').trim().toLowerCase());
-      if (opt) { node.value = opt.value; node.dispatchEvent(new Event('change', {bubbles:true})); return; }
-      const opt2 = Array.from(node.options).find(o => String(o.value).trim().toLowerCase() === String(val||'').trim().toLowerCase());
-      if (opt2) { node.value = opt2.value; node.dispatchEvent(new Event('change', {bubbles:true})); }
+      const optByText = Array.from(node.options).find(o => (o.text||'').trim().toLowerCase() === String(val||'').trim().toLowerCase());
+      if (optByText) { node.value = optByText.value; node.dispatchEvent(new Event('change', {bubbles:true})); return; }
+      const optByVal = Array.from(node.options).find(o => String(o.value).trim().toLowerCase() === String(val||'').trim().toLowerCase());
+      if (optByVal) { node.value = optByVal.value; node.dispatchEvent(new Event('change', {bubbles:true})); return; }
     } else {
       node.value = val;
       node.dispatchEvent(new Event('input', {bubbles:true}));
       node.dispatchEvent(new Event('change', {bubbles:true}));
     }
-  }
-
-  function waitFor(predicate, timeout=15000, interval=100){
-    return new Promise((res, rej)=>{
-      const start = Date.now();
-      const timer = setInterval(()=>{
-        try{
-          if (predicate()){
-            clearInterval(timer); res(true);
-          } else if (Date.now() - start > timeout){
-            clearInterval(timer); rej(new Error('waitFor timeout'));
-          }
-        }catch(e){
-          clearInterval(timer); rej(e);
-        }
-      }, interval);
-    });
   }
 
   // Persist the guest data so we can reuse on the Step 6 fill
@@ -268,37 +238,36 @@ function randTempPassword(len=16){
 
     const billSame = el('#gc_bill_same').checked;
 
-    const i_addr1 = billSame ? d_addr1 : el('#gc_inv_addr1').value.trim();
-    const i_city  = billSame ? d_city  : el('#gc_inv_city').value.trim();
-    const i_state2 = billSame ? d_state : el('#gc_inv_state').value.trim().toUpperCase();
-    const i_zip   = billSame ? d_zip   : el('#gc_inv_zip').value.trim();
+    const i_addr1 = billSame ? d_addr1 : (el('#gc_inv_addr1').value.trim());
+    const i_city  = billSame ? d_city  : (el('#gc_inv_city').value.trim());
+    const i_state2 = billSame ? d_state : (el('#gc_inv_state').value.trim().toUpperCase());
+    const i_zip   = billSame ? d_zip   : (el('#gc_inv_zip').value.trim());
 
     // Minimal validation
     if (!email || !phone || !fname || !lname || !d_addr1 || !d_city || !d_state || !d_zip){
       alert('Please complete all required fields.');
       return;
     }
-    if (billSame === false && (!i_addr1 || !i_city || !i_state2 || !i_zip)){
+    if (!billSame && (!i_addr1 || !i_city || !i_state2 || !i_zip)){
       alert('Please complete billing address fields or check “Billing same as delivery.”');
       return;
     }
 
     const contactName = `${fname} ${lname}`.trim();
-   const password = randTempPassword(16);
 
+    // Always use randomized 16-char uppercase+digits temp password
+    const password = randTempPassword(16);
 
     // Persist for step-6 autofill
-    // Persist for step-6 autofill
-const payload = {
-  email, phone, fname, lname, contactName,
-  d_addr1, d_city, d_state, d_zip,
-  billSame,
-  i_addr1, i_city, i_state2, i_zip,
-  password: randTempPassword(16)  // ✅ secure temp password
-};
-
+    const payload = {
+      email, phone, fname, lname, contactName,
+      d_addr1, d_city, d_state, d_zip,
+      billSame,
+      i_addr1, i_city, i_state2, i_zip,
+      password
+    };
     saveGuest(payload);
-    LOG('Saved guest payload to sessionStorage', payload);
+    LOG('Saved guest payload to sessionStorage', {...payload, password:'[hidden]'}); // don’t log password
 
     // Kick off background signup in hidden iframe
     try{
@@ -334,33 +303,30 @@ const payload = {
         document.body.appendChild(frame);
       }
 
-      const cleanup = ()=> {
-        // keep iframe around for postback chains; don’t remove immediately
-      };
+      const cleanup = ()=> { /* keep iframe for chained postbacks if needed */ };
 
       frame.onload = async ()=>{
         try{
-          const doc = frame.contentDocument || frame.contentWindow.document;
+          const win = frame.contentWindow;
+          const doc = frame.contentDocument || win.document;
           if (!doc) throw new Error('No iframe document');
 
-          // Detect “email already exists -> password reset” redirect
+          // Detect password-reset/exists redirect by common phrases
           const bodyText = (doc.body && doc.body.innerText || '').toLowerCase();
           if (bodyText.includes('reset password') || bodyText.includes('forgot password')){
-            LOG('Existing account detected; redirecting top to reset page.');
-            // Send user to the reset flow to keep things consistent
-            top.location.href = frame.contentWindow.location.href;
+            LOG('Existing account detected; redirecting parent to reset page.');
+            top.location.href = win.location.href;
             cleanup(); resolve(); return;
           }
 
-          // Try to find signup fields
-          const $ = (id)=> doc.getElementById(id);
-
           // Ensure we are on UserSignup.aspx; if not, navigate first
-          if (!/UserSignup\.aspx/i.test(frame.contentWindow.location.pathname)){
+          if (!/UserSignup\.aspx/i.test(win.location.pathname)){
             LOG('Navigating iframe to UserSignup.aspx…');
-            frame.contentWindow.location.href = SIGNUP_PATH;
-            return; // let onload fire again
+            win.location.href = SIGNUP_PATH;
+            return; // wait for next onload
           }
+
+          const $ = (id)=> doc.getElementById(id);
 
           // On signup: fill email into both username + email fields
           const Email1 = $('ctl00_PageBody_UserNameTextBox');
@@ -375,7 +341,7 @@ const payload = {
 
           const DAddr1 = $('ctl00_PageBody_DeliveryAddressLine1TextBox');
           const DCity  = $('ctl00_PageBody_DeliveryCityTextBox');
-          const DState = $('ctl00_PageBody_DeliveryStateCountyTextBox') || $('ctl00_PageBody_DeliveryStateTextBox') || $('ctl00_PageBody_DeliveryState'); // fallback
+          const DState = $('ctl00_PageBody_DeliveryStateCountyTextBox') || $('ctl00_PageBody_DeliveryStateTextBox') || $('ctl00_PageBody_DeliveryState');
           const DZip   = $('ctl00_PageBody_DeliveryPostalCodeTextBox');
 
           const IAddr1 = $('ctl00_PageBody_InvoiceAddressLine1TextBox');
@@ -389,7 +355,7 @@ const payload = {
             return;
           }
 
-          // Try to minimize password prompt heuristics
+          // Reduce password manager prompts
           [Pass1, Pass2].forEach(inp=>{
             try{
               inp.autocomplete = 'off';
@@ -400,18 +366,18 @@ const payload = {
           // Fill fields
           setVal(Email1, p.email);
           setVal(Email2, p.email);
-          setVal(Pass1, p.password);
-          setVal(Pass2, p.password);
-          setVal(Phone, p.phone);
+          setVal(Pass1,  p.password);
+          setVal(Pass2,  p.password);
+          setVal(Phone,  p.phone);
 
-          setVal(FName, p.fname);
-          setVal(LName, p.lname);
-          setVal(CName, p.contactName);
+          setVal(FName,  p.fname);
+          setVal(LName,  p.lname);
+          setVal(CName,  p.contactName);
 
           setVal(DAddr1, p.d_addr1);
           setVal(DCity,  p.d_city);
           if (DState) setVal(DState, p.d_state);
-          setVal(DZip,   p.d_zip);
+          setVal(DZip,  p.d_zip);
 
           setVal(IAddr1, p.i_addr1);
           setVal(ICity,  p.i_city);
@@ -420,30 +386,20 @@ const payload = {
 
           // Enable and click the Sign Up postback
           const btn = $('ctl00_PageBody_SignupButton');
-          if (!btn){
-            throw new Error('Signup button not found.');
-          }
+          if (!btn) throw new Error('Signup button not found.');
+
           btn.classList.remove('disabled');
           btn.removeAttribute('aria-disabled');
           btn.style.pointerEvents = 'auto';
           btn.style.opacity = '1';
 
-          // Some skins require focus before click
-          btn.focus();
           // Trigger the postback the anchor already has in its href
-          frame.contentWindow.eval(btn.getAttribute('href').replace('javascript:',''));
+          try { win.eval(btn.getAttribute('href').replace('javascript:','')); }
+          catch { btn.click(); }
 
-          // Wait for either success, or redirect, or validation errors
-          let observed = 0;
-          const observer = new MutationObserver(()=>{
-            observed++;
-          });
-          observer.observe(doc.documentElement, { childList:true, subtree:true });
-
-          // Give the flow a couple seconds to complete
+          // Allow time for the postback/redirect
           setTimeout(()=>{
-            observer.disconnect();
-            LOG('Signup postback dispatched; continuing...');
+            LOG('Signup postback dispatched; continuing…');
             cleanup(); resolve();
           }, 2500);
 
@@ -466,13 +422,10 @@ const payload = {
     if (proceedBtn){
       LOG('Clicking Proceed to checkout…');
       try {
-        // Trigger its postback
         eval(proceedBtn.getAttribute('href').replace('javascript:',''));
       } catch {
         proceedBtn.click();
       }
-    } else {
-      LOG('Proceed button not found; will still hook billing observer.');
     }
 
     // Install a MutationObserver to catch when Step 6 (billing) appears
@@ -540,7 +493,6 @@ const payload = {
     LOG('Ready.');
   }
 
-  // Kick off after DOM ready
   if (document.readyState === 'loading'){
     document.addEventListener('DOMContentLoaded', init);
   } else {
