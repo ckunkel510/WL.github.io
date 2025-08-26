@@ -60,7 +60,7 @@
   function loadGuest(){ try{ return JSON.parse(sessionStorage.getItem(KEY)||'{}'); }catch(e){ return {}; } }
 
   /* =========================
-     INJECT BUTTON + MODAL
+     STYLES (modal + below-proceed container)
   ========================== */
   function injectStyles(){
     if (document.getElementById('gc_modal_styles')) return;
@@ -81,6 +81,10 @@
       .gc-hidden{display:none;}
       .gc-note{font-size:12px;color:#666;margin-top:6px;}
       @media (max-width:640px){ .gc-row{grid-template-columns:1fr;} }
+
+      /* Placement container below Proceed */
+      #gc_below_proceed{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;}
+      #gc_below_proceed .epi-button{display:inline-block;}
     `;
     const style = document.createElement('style');
     style.id = 'gc_modal_styles';
@@ -88,6 +92,9 @@
     document.head.appendChild(style);
   }
 
+  /* =========================
+     MODAL BUILD
+  ========================== */
   function buildModal(){
     if (document.getElementById('gc_modal')) return;
 
@@ -99,7 +106,7 @@
     modal.innerHTML = `
       <div class="gc-card" role="dialog" aria-modal="true" aria-labelledby="gc_title">
         <div class="gc-head" id="gc_title">Checkout as Guest</div>
-        <div class="gc-sub"></div>
+        <div class="gc-sub">We’ll create a quick account to move you through checkout. You can set a new password later.</div>
 
         <div class="gc-row">
           <div class="gc-field">
@@ -175,7 +182,7 @@
           </div>
         </div>
 
-        <div class="gc-note"></div>
+        <div class="gc-note">Tip: To reduce browser password prompts, we create your account in the background.</div>
 
         <div class="gc-actions">
           <button class="gc-btn" id="gc_cancel">Cancel</button>
@@ -201,22 +208,100 @@
     el('#gc_submit').addEventListener('click', onSubmitGuest);
   }
 
-  function injectButton(){
-    const proceedBtn = document.getElementById('ctl00_PageBody_PlaceOrderButton');
-    if (!proceedBtn) { LOG('Proceed button not found; deferring'); return; }
-    if (document.getElementById('gc_guest_btn')) return;
+  /* =========================
+     ROBUST PLACEMENT (retry + observer)
+  ========================== */
+  function getProceedBtn(){ return document.getElementById('ctl00_PageBody_PlaceOrderButton'); }
+  function getSignInCell(){ return document.getElementById('ctl00_PageBody_OptionalSigninButton'); }
 
-    const guestBtn = document.createElement('a');
-    guestBtn.id = 'gc_guest_btn';
-    guestBtn.className = 'epi-button';
-    guestBtn.href = 'javascript:void(0)';
-    guestBtn.style.marginLeft = '10px';
-    guestBtn.innerHTML = '<span>Checkout as Guest</span>';
-    proceedBtn.insertAdjacentElement('afterend', guestBtn);
+  function getOrCreateGuestBtn(){
+    let btn = document.getElementById('gc_guest_btn');
+    if (!btn){
+      btn = document.createElement('a');
+      btn.id = 'gc_guest_btn';
+      btn.className = 'epi-button';
+      btn.href = 'javascript:void(0)';
+      btn.innerHTML = '<span>Checkout as Guest</span>';
+      btn.addEventListener('click', ()=>{
+        el('#gc_backdrop').style.display='block';
+        el('#gc_modal').style.display='flex';
+      });
+    }
+    return btn;
+  }
 
-    guestBtn.addEventListener('click', ()=>{
-      el('#gc_backdrop').style.display='block';
-      el('#gc_modal').style.display='flex';
+  function getOrCreateBelowContainer(proceedBtn){
+    let cont = document.getElementById('gc_below_proceed');
+    if (!cont){
+      cont = document.createElement('div');
+      cont.id = 'gc_below_proceed';
+    }
+    // Ensure it's directly after Proceed button (even if Proceed moves)
+    if (proceedBtn && proceedBtn.nextSibling !== cont){
+      proceedBtn.insertAdjacentElement('afterend', cont);
+    }
+    return cont;
+  }
+
+  function getOrCreateSignInClone(){
+    let clone = document.getElementById('gc_signin_btn');
+    const td = getSignInCell();
+    const origA = td ? td.querySelector('a[href*="Signin.aspx"]') : null;
+    if (origA){
+      // Hide original TD to avoid layout issues
+      td.style.display = 'none';
+      if (!clone){
+        clone = origA.cloneNode(true);
+        clone.id = 'gc_signin_btn';
+        // keep .epi-button class; already present on orig
+      }
+    }
+    return clone; // may be null if none exists
+  }
+
+  function placeAdjacentUI(){
+    const proceed = getProceedBtn();
+    if (!proceed) return false;
+
+    const cont = getOrCreateBelowContainer(proceed);
+    const guest = getOrCreateGuestBtn();
+    const signinClone = getOrCreateSignInClone();
+
+    // Ensure container exists immediately after Proceed
+    if (cont.parentNode !== proceed.parentNode){
+      proceed.parentNode.insertBefore(cont, proceed.nextSibling);
+    }
+
+    // Place buttons inside container (order: Guest, then Sign In)
+    if (!guest.parentNode || guest.parentNode.id !== 'gc_below_proceed'){
+      cont.appendChild(guest);
+    }
+    if (signinClone){
+      if (!signinClone.parentNode || signinClone.parentNode.id !== 'gc_below_proceed'){
+        cont.appendChild(signinClone);
+      }
+    }
+
+    return true;
+  }
+
+  function startPlacementWatcher(){
+    // Initial tries (covers scripts that move things shortly after load)
+    const tries = [0, 150, 400, 800, 1600, 3200];
+    tries.forEach(t=> setTimeout(placeAdjacentUI, t));
+
+    // Observe DOM mutations and debounce reposition
+    let debounce;
+    const obs = new MutationObserver(()=>{
+      clearTimeout(debounce);
+      debounce = setTimeout(placeAdjacentUI, 120);
+    });
+    obs.observe(document.body, {childList:true, subtree:true});
+
+    // Also try on resize (some scripts relocate on breakpoints)
+    window.addEventListener('resize', ()=> {
+      clearTimeout(debounce);
+      debounce = setTimeout(placeAdjacentUI, 120);
     });
   }
 
@@ -254,9 +339,7 @@
     }
 
     const contactName = `${fname} ${lname}`.trim();
-
-    // Always use randomized 16-char uppercase+digits temp password
-    const password = randTempPassword(16);
+    const password = randTempPassword(16); // randomized temp password
 
     // Persist for step-6 autofill
     const payload = {
@@ -470,7 +553,6 @@
       sameChk.checked = true;
       sameChk.dispatchEvent(new Event('change', {bubbles:true}));
     } else {
-      // Fill invoice fields from billing values (or from delivery if missing)
       const useStateName = STATE_LONG[p.i_state2] || p.i_state2;
       setVal(line1, p.i_addr1 || p.d_addr1);
       setVal(city,  p.i_city  || p.d_city);
@@ -478,7 +560,6 @@
       setVal(zip,   p.i_zip   || p.d_zip);
     }
 
-    // Always set country + email where available
     if (country) setVal(country, 'United States');
     if (email)   setVal(email, p.email);
   }
@@ -489,7 +570,7 @@
   function init(){
     injectStyles();
     buildModal();
-    injectButton();
+    startPlacementWatcher(); // <-- ensures “Guest” + “Sign In” follow the Proceed button
     LOG('Ready.');
   }
 
@@ -500,3 +581,4 @@
   }
 
 })();
+
