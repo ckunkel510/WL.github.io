@@ -175,7 +175,7 @@
           </div>
         </div>
 
-        <div class="gc-note">Tip: To reduce browser password prompts, we create your account in the background.</div>
+        <div class="gc-note"></div>
 
         <div class="gc-actions">
           <button class="gc-btn" id="gc_cancel">Cancel</button>
