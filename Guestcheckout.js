@@ -106,7 +106,7 @@
     modal.innerHTML = `
       <div class="gc-card" role="dialog" aria-modal="true" aria-labelledby="gc_title">
         <div class="gc-head" id="gc_title">Checkout as Guest</div>
-        <div class="gc-sub">We’ll create a quick account to move you through checkout. You can set a new password later.</div>
+        <div class="gc-sub"></div>
 
         <div class="gc-row">
           <div class="gc-field">
@@ -182,7 +182,7 @@
           </div>
         </div>
 
-        <div class="gc-note">Tip: To reduce browser password prompts, we create your account in the background.</div>
+        <div class="gc-note"></div>
 
         <div class="gc-actions">
           <button class="gc-btn" id="gc_cancel">Cancel</button>
