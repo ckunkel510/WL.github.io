@@ -746,3 +746,8 @@ a#gc_guest_gtn{
   margin-top: 10px;
   margin-left: 1px !important;
 }
+
+#gc_below_proceed .epi-button{
+  margin: auto;
+  width: 70%;
+}
