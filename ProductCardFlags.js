@@ -55,7 +55,7 @@ $(document).ready(function () {
 
                 const saleMatch = saleItems.find(item => item.productid === extractedNumber);
                 if (saleMatch && saleMatch.wasprice) {
-                    $wrapper.append('<div class="SaleTag animated">Summer Savings!<br><span>Was: $' + saleMatch.wasprice + '</span></div>');
+                    $wrapper.append('<div class="SaleTag animated">Labor Day Savings!<br><span>Was: $' + saleMatch.wasprice + '</span></div>');
                 }
             });
         }, 1000);
@@ -80,7 +80,7 @@ $(document).ready(function () {
             } \
             .Clearance-tag span { display: block; font-size: 14px; color: #ccc; } \
             .SaleTag { \
-                position: absolute; bottom: 2px; right: 2px; background: #ffd700; color: #000; \
+                position: absolute; bottom: 2px; right: 2px; background: #38B6FF; color: #000; \
                 padding: 10px; font-weight: bold; border-radius: 12px; font-size: 16px; \
                 box-shadow: 0 0 10px rgba(255, 215, 0, 0.5); \
             } \
