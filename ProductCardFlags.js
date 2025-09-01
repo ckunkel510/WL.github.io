@@ -106,7 +106,7 @@ $(document).ready(function () {
               ? ` <small class="expires">(${EXPIRES_LABEL}: ${saleMatch.expirationdate})</small>`
               : '';
             $flags.append(
-              `<span class="badge sale-tag animated">Summer Savings! <em>Was: $${saleMatch.wasprice}</em>${expiresText}</span>`
+              `<span class="badge sale-tag animated">End of Summer Savings! <em>Was: $${saleMatch.wasprice}</em>${expiresText}</span>`
             );
           }
         }
