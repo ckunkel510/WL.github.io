@@ -10,7 +10,8 @@ document.addEventListener('DOMContentLoaded', function () {
         // Find the target divs that may contain the embedded content
         var targetDivs = [
             document.getElementById('ctl00_PageBody_productDetail_ctl01'),
-            document.getElementById('ctl00_PageBody_productDetail_ctl02')
+            document.getElementById('ctl00_PageBody_productDetail_ctl02'),
+            document.getElementById('ctl00_PageBody_productDetail_ctl03')
         ];
 
         targetDivs.forEach(function (div) {
