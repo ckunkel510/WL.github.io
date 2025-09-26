@@ -26,7 +26,7 @@ window.addEventListener("load", function () {
         }
 
         // Google Sheet URL for CSV
-        const sheetUrl = 'https://images-woodsonlumber.sirv.com/csv/Additional%20Images%20-%20Sheet1.csv';
+        const sheetUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQQ-ZOrdYefnmGgY5ftFm_QfQDsOo419SDM-TQxyID5ssMpdA9yyeLfQSjuRZT1qtlzUc-qk9AYoll3/pub?output=csv';
 
         // Wait for the main image element to be available
         const mainImageElement = document.getElementById("ctl00_PageBody_productDetail_ProductImage");
