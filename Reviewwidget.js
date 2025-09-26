@@ -101,7 +101,7 @@
   // Get the gid from the Reviews tab URL in Google Sheets (File > Share > Publish to web > pick that tab).
   // Example with gid placeholder:
   const SHEET_PUBHTML =
-    "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZGjAjfdB4m_XfqFQC3i3-n09g-BlRp_oVBo0sD1eyMV9OlwMFbCaVQ3Urrw6rwWPr9VPu5vDXcMyo/pubhtml";
+    "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZGjAjfdB4m_XfqFQC3i3-n09g-BlRp_oVBo0sD1eyMV9OlwMFbCaVQ3Urrw6rwWPr9VPu5vDXcMyo/pubhtml?gid=220983932&single=true";
 
   fetch(`${SHEET_PUBHTML}&cacheBust=${Date.now()}`)
     .then(r => r.text())
@@ -215,5 +215,6 @@
       if (list) list.innerHTML = "<li>Unable to load reviews right now.</li>";
     });
 })();
+
 
 
