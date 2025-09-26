@@ -365,6 +365,11 @@ window.addEventListener('load', async function() {
         productDescription.classList.add('hidden');
       }
 
+      const productDescription2 = document.getElementById('ct100_PageBody_productDetail_radMultiPage1');
+      if (productDescription2) {
+        productDescription2.classList.add('hidden');
+      }
+
     } catch (error) {
       console.error('Error loading product data:', error);
     }
