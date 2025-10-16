@@ -1,0 +1,75 @@
+/* Woodson Hero Carousel (Desktop 1920x500 aspect, Square on Mobile) */
+#wl-hero { width: 980px; max-width: 100%; margin: 0 auto; }
+
+#wl-hero .wl-hero-frame {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 12px;
+  aspect-ratio: 1920 / 500;
+}
+
+@media (max-width: 640px) {
+  #wl-hero .wl-hero-frame { aspect-ratio: 1 / 1; } /* square crop */
+}
+
+#wl-hero .wl-hero-media {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+#wl-hero .wl-hero-link {
+  position: absolute;
+  inset: 0;
+  display: block;
+  z-index: 2;
+}
+
+/* Tabs / pagination */
+#wl-hero .wl-hero-tabs {
+  position: absolute;
+  left: 0; right: 0; bottom: 8px;
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  z-index: 3;
+  pointer-events: auto;
+}
+
+/* pill buttons: height 12px, width ~2.5x for that long look */
+#wl-hero .wl-hero-tab {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  width: 30px;
+  height: 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  background: #d1d5db; /* gray-300 */
+  box-shadow: 0 0 0 2px rgba(255,255,255,.6) inset;
+  transition: background 0.25s, transform 0.15s;
+}
+
+#wl-hero .wl-hero-tab:hover { transform: translateY(-1px); }
+
+#wl-hero .wl-hero-tab[aria-current="true"] {
+  background: #6b0016; /* Woodson maroon */
+  box-shadow: 0 0 0 2px rgba(255,255,255,.85) inset;
+}
+
+#wl-hero .wl-hero-tab:focus-visible {
+  outline: 2px solid #6b0016;
+  outline-offset: 2px;
+}
+
+/* Subtle gradient behind tabs for contrast on bright media */
+#wl-hero .wl-hero-tabbar-bg {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 48px; z-index: 2;
+  background: linear-gradient(to top, rgba(0,0,0,.35), rgba(0,0,0,0));
+  pointer-events: none;
+}
