@@ -43,21 +43,12 @@
     },
     {
       type: "image",
-      desktopSrc: "https://images-woodsonlumber.sirv.com/Promos/Fall-Hero-Desktop.jpg",
-      mobileSrc:  "https://images-woodsonlumber.sirv.com/Promos/Fall-Hero-Mobile.jpg",
-      alt: "Fall cleanup gear and outdoor essentials",
-      href: "https://webtrack.woodsonlumber.com/Search.aspx?keywords=fall",
-      label: "Fall Essentials",
+      desktopSrc: "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/ChristmasLightsHeader.jpg",
+      mobileSrc:  "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/ChristmasLightsHeaderMobile.jpg",
+      alt: "Christmas Lights Now In Stock",
+      href: "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4649",
+      label: "Christmas Lights & Decor Now In Stock",
       duration: 6000
-    },
-    {
-      type: "image",
-      desktopSrc: "https://images-woodsonlumber.sirv.com/Promos/WeDeliver-Desktop.jpg",
-      mobileSrc:  "https://images-woodsonlumber.sirv.com/Promos/WeDeliver-Mobile.jpg",
-      alt: "We Deliver: Lumber, Hardware, Results",
-      href: "https://webtrack.woodsonlumber.com/Delivery.aspx",
-      label: "We Deliver",
-      duration: 5000
     }
   ];
 
