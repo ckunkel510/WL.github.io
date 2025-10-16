@@ -43,7 +43,7 @@
     },
     {
       type: "image",
-      desktopSrc: "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/ChristmasLightsHeader.jpg",
+      desktopSrc: "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/ChristmasLightsHeader2.jpg",
       mobileSrc:  "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/ChristmasLightsHeaderMobile.jpg",
       alt: "Christmas Lights Now In Stock",
       href: "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4649",
