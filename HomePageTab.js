@@ -33,13 +33,13 @@
   // - target: link target (default "_top")
   const SLIDES = [
     {
-      type: "video",
-      desktopSrc: "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/Labor%20Day%20Heading%20Desktop%202.mp4",
-      mobileSrc:  "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/Labor%20Day%20Heading%20Mobile.mp4",
-      poster:     "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/Labor%20Day%20Heading%20Desktop%202.mp4",
-      href: "https://webtrack.woodsonlumber.com/Products.aspx",
-      label: "Labor Day Deals",
-      duration: 12000
+      type: "image",
+      desktopSrc: "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/FallCleanupHeader.jpg",
+      mobileSrc:  "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/FallCleanupHeaderMobile.jpg",
+      poster:     "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/FallCleanupHeader.jpg",
+      href: "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4677&pg=4643",
+      label: "Fall Cleanup Days",
+      duration: 6000
     },
     {
       type: "image",
