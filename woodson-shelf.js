@@ -13,25 +13,25 @@
    * ========================= */
   const ITEMS = [
     {
-      title: "Feeders",
+      title: "Wreaths",
       type: "image",                           // "image" or "video"
-      src:  "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/Labor%20Day%20Feeders.jpg",
-      alt:  "Shop Feeders",
-      href: "https://webtrack.woodsonlumber.com/Products.aspx?pl1=2357&pg=2722"
+      src:  "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/shelf2.jpg",
+      alt:  "Wreaths",
+      href: "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4658c"
     },
     {
-      title: "Hunting Blinds",
+      title: "Christmas Lights",
       type: "image",
-      src:  "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/Labor%20Day%20Blinds.jpg",
-      alt:  "Browse Blinds",
-      href: "https://webtrack.woodsonlumber.com/Products.aspx?pl1=2357&pg=2720"
+      src:  "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/shelf1.jpg",
+      alt:  "Shop Lights",
+      href: "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4651"
     },
     {
-      title: "Game Cameras",
+      title: "Christmas Trees",
       type: "image",
-      src:  "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/Labor%20Day%20Game%20Cameras.jpg",
-      alt:  "Shop Cameras",
-      href: "https://webtrack.woodsonlumber.com/Products.aspx?pl1=2357&pg=2736"
+      src:  "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/shelf3.jpg",
+      alt:  "Shop Trees",
+      href: "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4656"
     }
     // You can add more; desktop shows first 3, mobile tabs show all.
   ];
