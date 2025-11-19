@@ -133,7 +133,7 @@ $(document).ready(function () {
       .badge small.expires { font-weight: 600; opacity: .85; } \
       .newitem-tag { background-color: #c20000; color: #fff; } \
       .clearance-tag { background: #000; color: #fff; } \
-      .sale-tag { background: #007d0c; color: #000; } \
+      .sale-tag { background: #007d0c; color: #fff; } \
       /* Optional: make badges stack nicely on tight grids */ \
       .image-with-flags { max-width: 100%; } \
     </style>").appendTo("head");
