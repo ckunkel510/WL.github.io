@@ -106,7 +106,7 @@ $(document).ready(function () {
               ? ` <small class="expires">(${EXPIRES_LABEL}: ${saleMatch.expirationdate})</small>`
               : '';
             $flags.append(
-              `<span class="badge sale-tag animated">End of Summer Savings! <em>Was: $${saleMatch.wasprice}</em>${expiresText}</span>`
+              `<span class="badge sale-tag animated">Holiday Deals! <em>Was: $${saleMatch.wasprice}</em>${expiresText}</span>`
             );
           }
         }
@@ -133,7 +133,7 @@ $(document).ready(function () {
       .badge small.expires { font-weight: 600; opacity: .85; } \
       .newitem-tag { background-color: #c20000; color: #fff; } \
       .clearance-tag { background: #000; color: #fff; } \
-      .sale-tag { background: #ffd700; color: #000; } \
+      .sale-tag { background: #007d0c; color: #000; } \
       /* Optional: make badges stack nicely on tight grids */ \
       .image-with-flags { max-width: 100%; } \
     </style>").appendTo("head");
