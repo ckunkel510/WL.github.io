@@ -34,20 +34,20 @@
   const SLIDES = [
     {
       type: "image",
-      desktopSrc: "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/FallCleanupHeader.jpg",
-      mobileSrc:  "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/FallCleanupHeaderMobile.jpg",
-      poster:     "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/FallCleanupHeader.jpg",
-      href: "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4677&pg=4643",
-      label: "Fall Cleanup Days",
+      desktopSrc: "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/STAYWARM.jpg",
+      mobileSrc:  "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/STAYWARM.jpg",
+      poster:     "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/STAYWARM.jpg",
+      href: "https://webtrack.woodsonlumber.com/Products.aspx?pl1=2076&pg=2104",
+      label: "Stay Warm",
       duration: 6000
     },
     {
       type: "image",
-      desktopSrc: "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/ChristmasLightsHeader2.jpg",
-      mobileSrc:  "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/ChristmasLightsHeaderMobile.jpg",
-      alt: "Christmas Lights Now In Stock",
-      href: "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4649",
-      label: "Christmas Lights & Decor Now In Stock",
+      desktopSrc: "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/RODENTDEFENSE.jpg",
+      mobileSrc:  "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/RODENTDEFENSE.jpg",
+      alt: "Rodent Defense",
+      href: "https://webtrack.woodsonlumber.com/Products.aspx?pl1=18&pg=2452",
+      label: "Rodent Defense",
       duration: 6000
     }
   ];
