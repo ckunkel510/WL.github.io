@@ -13,25 +13,25 @@
    * ========================= */
   const ITEMS = [
     {
-      title: "Wreaths",
+      title: "Torpedo Heaters",
       type: "image",                           // "image" or "video"
-      src:  "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/shelf2.jpg",
-      alt:  "Wreaths",
-      href: "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4658c"
+      src:  "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/TorpHeaters.jpg",
+      alt:  "Torpedo Heaters",
+      href: "https://webtrack.woodsonlumber.com/Products.aspx?pl1=2076&pg=2124"
     },
     {
-      title: "Christmas Lights",
+      title: "Propane Heaters",
       type: "image",
-      src:  "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/shelf1.jpg",
-      alt:  "Shop Lights",
-      href: "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4651"
+      src:  "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/PropHeaters.jpg",
+      alt:  "Propane Heaters",
+      href: "https://webtrack.woodsonlumber.com/Products.aspx?pl1=2076&pg=2123"
     },
     {
-      title: "Christmas Trees",
+      title: "Portable Heaters",
       type: "image",
-      src:  "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/shelf3.jpg",
-      alt:  "Shop Trees",
-      href: "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4656"
+      src:  "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/PortHeaters.jpg",
+      alt:  "Portable Heaters",
+      href: "https://webtrack.woodsonlumber.com/Products.aspx?pl1=2076&pg=2122&sort=StockClassSort&direction=asc"
     }
     // You can add more; desktop shows first 3, mobile tabs show all.
   ];
