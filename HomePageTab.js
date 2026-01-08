@@ -34,8 +34,8 @@
   const SLIDES = [
     {
       type: "image",
-      desktopSrc: "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/STAYWARM.jpg",
-      mobileSrc:  "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/STAYWARM.jpg",
+      desktopSrc: "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/STAYWARM.1.jpg",
+      mobileSrc:  "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/STAYWARMMOBILE.jpg",
       poster:     "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/STAYWARM.jpg",
       href: "https://webtrack.woodsonlumber.com/Products.aspx?pl1=2076&pg=2104",
       label: "Stay Warm",
@@ -43,8 +43,8 @@
     },
     {
       type: "image",
-      desktopSrc: "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/RODENTDEFENSE.jpg",
-      mobileSrc:  "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/RODENTDEFENSE.jpg",
+      desktopSrc: "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/RODENTDEFENSE.2.jpg",
+      mobileSrc:  "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/RODENTDEFENSEMOBILE.jpg",
       alt: "Rodent Defense",
       href: "https://webtrack.woodsonlumber.com/Products.aspx?pl1=18&pg=2452",
       label: "Rodent Defense",
