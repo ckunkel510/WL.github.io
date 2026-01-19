@@ -1,10 +1,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Woodson WebTrack Checkout Wizard (Modern Flow Rebuild)
-// Fixes "kicked back to Step 2" by:
-//  - storing a "returnStep" in sessionStorage before any likely postback
-//  - restoring that step on reload
-//  - avoiding unnecessary step resets
-//  - avoiding trigger('change') on WebForms autofills
+// Woodson WebTrack Checkout Wizard (Modern Flow Rebuild + Fixes)
+// Fixes:
+//  1) Same-day pickup times must be >= 2 hours out
+//  2) Billing "same as delivery" persistence: if invoice fields blank after reload,
+//     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 6
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
   // ---------------------------------------------------------------------------
@@ -92,6 +91,14 @@
     }
   }
 
+  // One-time per-session guard for auto-copy
+  function markAutoCopyDone() {
+    try { sessionStorage.setItem("wl_autocopy_done", "1"); } catch {}
+  }
+  function autoCopyAlreadyDone() {
+    try { return sessionStorage.getItem("wl_autocopy_done") === "1"; } catch { return false; }
+  }
+
   window.WLCheckout = window.WLCheckout || {};
   window.WLCheckout.setStep = setStep;
   window.WLCheckout.getStep = getStep;
@@ -102,20 +109,17 @@
   // 1) DOM Ready
   // ---------------------------------------------------------------------------
   document.addEventListener("DOMContentLoaded", function () {
-    // jQuery guard (WebTrack usually has it)
     const $ = window.jQuery;
 
     // -------------------------------------------------------------------------
     // A) Hide legacy UI bits
     // -------------------------------------------------------------------------
     try {
-      // Hide the original “Date Required” picker entirely
       const dateColDefault = document.getElementById(
         "ctl00_PageBody_dtRequired_DatePicker_wrapper"
       );
       if (dateColDefault) dateColDefault.style.display = "none";
 
-      // Hide “Date required:” label + wrapper
       if ($) {
         $("label")
           .filter(function () {
@@ -128,11 +132,9 @@
           .closest(".epi-form-col-single-checkout.epi-form-group-checkout")
           .hide();
 
-        // Hide default ASP.NET panel of back/continue
         $(".submit-button-panel").hide();
       }
 
-      // Rename secondary back button
       if ($) $("#ctl00_PageBody_BackToCartButton2").val("Back to Cart");
     } catch {}
 
@@ -142,7 +144,6 @@
     const container = document.querySelector(".container");
     if (!container) return;
 
-    // Prevent double-inject
     if (document.querySelector(".checkout-wizard")) return;
 
     const wizard = document.createElement("div");
@@ -158,7 +159,7 @@
     }
 
     // -------------------------------------------------------------------------
-    // C) Steps definition (same as yours, just cleaned up)
+    // C) Steps definition
     // -------------------------------------------------------------------------
     const steps = [
       {
@@ -276,7 +277,6 @@
         });
         navDiv.appendChild(next);
       } else {
-        // Re-home the Continue button on last step (keep submit)
         const conts = Array.from(
           document.querySelectorAll(
             "#ctl00_PageBody_ContinueButton1,#ctl00_PageBody_ContinueButton2"
@@ -337,8 +337,6 @@
     // -------------------------------------------------------------------------
     // F) Postback-safe returnStep logic (core fix)
     // -------------------------------------------------------------------------
-    // Any of these controls are known to sometimes post back.
-    // Before they change/click, we store "return to this step after reload".
     function bindReturnStepFor(selector, stepNum, eventName) {
       const ev = eventName || "change";
       const el = document.querySelector(selector);
@@ -348,23 +346,20 @@
         function () {
           setReturnStep(stepNum);
         },
-        true // capture so we run before inline/onchange handlers
+        true // capture
       );
     }
 
-    // Delivery address dropdowns that often trigger postback
     bindReturnStepFor("#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList", 5, "change");
     bindReturnStepFor("#ctl00_PageBody_DeliveryAddress_CountrySelector", 5, "change");
 
-    // Invoice address dropdowns that often trigger postback
     bindReturnStepFor("#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList", 6, "change");
     bindReturnStepFor("#ctl00_PageBody_InvoiceAddress_CountrySelector1", 6, "change");
 
-    // Branch selector can trigger postback in some templates
     bindReturnStepFor("#ctl00_PageBody_BranchSelector", 4, "change");
 
     // -------------------------------------------------------------------------
-    // G) Delivery summary/edit (Step 5) — keep your UX but avoid postbacks
+    // G) Delivery summary/edit (Step 5)
     // -------------------------------------------------------------------------
     (function () {
       const pane5 = wizard.querySelector('.checkout-step[data-step="5"]');
@@ -412,9 +407,7 @@
         e.preventDefault();
         sum.style.display = "none";
         wrap.style.display = "";
-        try {
-          wrap.scrollIntoView({ behavior: "smooth" });
-        } catch {}
+        try { wrap.scrollIntoView({ behavior: "smooth" }); } catch {}
 
         if (!wrap.querySelector("#saveDelivery")) {
           const btn = document.createElement("button");
@@ -438,7 +431,8 @@
 
     // -------------------------------------------------------------------------
     // H) Billing address same-as-delivery + summary/edit (Step 6)
-    // Key fix: store returnStep=6 BEFORE CopyDeliveryAddress postback
+    // Fix: If sameAsDelivery=true but invoice fields blank after reload/cart changes,
+    // auto-trigger CopyDeliveryAddress postback ONCE per session.
     // -------------------------------------------------------------------------
     (function () {
       const pane6 = wizard.querySelector('.checkout-step[data-step="6"]');
@@ -457,7 +451,6 @@
       pane6.insertBefore(chkDiv, pane6.firstChild);
 
       const sameCheck = chkDiv.querySelector("#sameAsDeliveryCheck");
-
       const colInv = pane6.querySelector(".epi-form-col-single-checkout");
       if (!colInv) return;
 
@@ -469,16 +462,14 @@
       while (colInv.firstChild) wrapInv.appendChild(colInv.firstChild);
       colInv.appendChild(wrapInv);
 
-      function q(sel) {
-        return wrapInv.querySelector(sel);
-      }
+      const q = (sel) => wrapInv.querySelector(sel);
+
       function refreshInv() {
         const a1 = (q("#ctl00_PageBody_InvoiceAddress_AddressLine1")?.value || "").trim();
         const a2 = (q("#ctl00_PageBody_InvoiceAddress_AddressLine2")?.value || "").trim();
         const c = (q("#ctl00_PageBody_InvoiceAddress_City")?.value || "").trim();
         const st =
-          q("#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList")?.selectedOptions?.[0]
-            ?.text || "";
+          q("#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList")?.selectedOptions?.[0]?.text || "";
         const z = (q("#ctl00_PageBody_InvoiceAddress_Postcode")?.value || "").trim();
         const e = (q("#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox")?.value || "").trim();
 
@@ -489,14 +480,40 @@
           <button type="button" id="editInvoice" class="btn btn-link">Enter new billing address</button>`;
       }
 
+      function invoiceLooksBlank() {
+        const invLine1 = (q("#ctl00_PageBody_InvoiceAddress_AddressLine1")?.value || "").trim();
+        const invCity  = (q("#ctl00_PageBody_InvoiceAddress_City")?.value || "").trim();
+        const invZip   = (q("#ctl00_PageBody_InvoiceAddress_Postcode")?.value || "").trim();
+        return !invLine1 && !invCity && !invZip;
+      }
+
+      function deliveryHasData() {
+        const delLine1 = (document.getElementById("ctl00_PageBody_DeliveryAddress_AddressLine1")?.value || "").trim();
+        const delCity  = (document.getElementById("ctl00_PageBody_DeliveryAddress_City")?.value || "").trim();
+        const delZip   = (document.getElementById("ctl00_PageBody_DeliveryAddress_Postcode")?.value || "").trim();
+        return !!(delLine1 || delCity || delZip);
+      }
+
       wrapInv.style.display = "none";
       sumInv.style.display = "none";
       colInv.insertBefore(sumInv, wrapInv);
 
-      // Initial state
+      // Initial state from storage
       const sameStored = getSameAsDelivery();
       sameCheck.checked = sameStored;
 
+      // If the user wants same-as-delivery AND invoice is blank after reload,
+      // trigger the server-side copy ONCE this session.
+      if (sameStored && invoiceLooksBlank() && deliveryHasData() && !autoCopyAlreadyDone()) {
+        markAutoCopyDone();
+        setReturnStep(6);
+        try {
+          __doPostBack("ctl00$PageBody$CopyDeliveryAddressLinkButton", "");
+          return; // page will reload; stop further UI work this pass
+        } catch {}
+      }
+
+      // Normal display
       if (sameStored) {
         refreshInv();
         wrapInv.style.display = "none";
@@ -508,11 +525,9 @@
 
       sameCheck.addEventListener("change", function () {
         if (this.checked) {
-          // IMPORTANT: keep them on Step 6 after postback
           setReturnStep(6);
           setSameAsDelivery(true);
-
-          // triggers server copy logic
+          markAutoCopyDone(); // user-initiated copy: treat as done
           try {
             __doPostBack("ctl00$PageBody$CopyDeliveryAddressLinkButton", "");
           } catch {}
@@ -528,17 +543,14 @@
         e.preventDefault();
         sumInv.style.display = "none";
         wrapInv.style.display = "";
-        try {
-          wrapInv.scrollIntoView({ behavior: "smooth" });
-        } catch {}
+        try { wrapInv.scrollIntoView({ behavior: "smooth" }); } catch {}
       });
 
-      // If page reloaded after copy, we can refresh summary
       refreshInv();
     })();
 
     // -------------------------------------------------------------------------
-    // I) Prefill delivery address (unchanged logic; but less “pushy”)
+    // I) Prefill delivery address (kept light)
     // -------------------------------------------------------------------------
     try {
       if ($ && !$("#ctl00_PageBody_DeliveryAddress_AddressLine1").val()) {
@@ -565,8 +577,7 @@
 
           const line1 = parts[0] || "";
           const city = parts[1] || "";
-          let state = "",
-            zip = "";
+          let state = "", zip = "";
 
           if (parts.length >= 4) {
             state = parts[parts.length - 2] || "";
@@ -609,7 +620,7 @@
 
         const setIfExists = (sel, val) => {
           const $el = $(sel);
-          if ($el.length && val) $el.val(val); // no trigger("change")
+          if ($el.length && val) $el.val(val);
         };
 
         setIfExists("#ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox", fn);
@@ -628,8 +639,8 @@
     }
 
     // -------------------------------------------------------------------------
-    // K) Step 7: pickup/delivery + special instructions (keeps your logic)
-    // Plus: store returnStep=7 before Continue postback attempts
+    // K) Step 7: pickup/delivery + special instructions
+    // Fix: Same-day pickup times must be >= 2 hours out (rounded up to next hour)
     // -------------------------------------------------------------------------
     (function () {
       const p7 = wizard.querySelector('.checkout-step[data-step="7"]');
@@ -644,15 +655,6 @@
         const dd = String(d.getDate()).padStart(2, "0");
         return `${d.getFullYear()}-${mm}-${dd}`;
       };
-
-      const th = p7.querySelector("th");
-      if (th) {
-        const opt2 = document.createElement("small");
-        opt2.className = "text-muted";
-        opt2.style.marginLeft = "8px";
-        opt2.textContent = "(optional)";
-        th.appendChild(opt2);
-      }
 
       const specialIns = document.getElementById("ctl00_PageBody_SpecialInstructionsTextBox");
       if (!specialIns) return;
@@ -719,16 +721,48 @@
         const mm = String(m).padStart(2, "0");
         return `${hh}:${mm} ${ampm}`;
       }
+
+      function minutesFromMidnight(d) {
+        return d.getHours() * 60 + d.getMinutes();
+      }
+
+      // NEW: if selected pickup date is today, minimum start time is now + 120 minutes,
+      // rounded up to next hour
+      function getSameDayMinStartMins() {
+        const now = new Date();
+        const mins = minutesFromMidnight(now) + 120; // +2h
+        // round up to next hour boundary
+        return Math.ceil(mins / 60) * 60;
+      }
+
       function populatePickupTimes(date) {
         const day = date.getDay();
-        let openMins = 7 * 60 + 30,
-          closeMins;
+        let openMins = 7 * 60 + 30;
+        let closeMins;
+
         if (1 <= day && day <= 5) closeMins = 17 * 60 + 30;
         else if (day === 6) closeMins = 16 * 60;
-        else closeMins = openMins + 60;
+        else closeMins = openMins + 60; // Sunday: basically none
+
+        // Apply same-day rule
+        const isSameDay =
+          date.getFullYear() === today.getFullYear() &&
+          date.getMonth() === today.getMonth() &&
+          date.getDate() === today.getDate();
+
+        let minStart = openMins;
+        if (isSameDay) {
+          minStart = Math.max(openMins, getSameDayMinStartMins());
+        }
 
         pickupTimeSel.innerHTML = "";
-        for (let m = openMins; m + 60 <= closeMins; m += 60) {
+
+        // We show 1-hour windows [m, m+60], starting at minStart, stepping by 60
+        // Ensure the window fits fully before close
+        // Also snap minStart to an hour boundary to keep clean windows
+        minStart = Math.ceil(minStart / 60) * 60;
+
+        for (let m = minStart; m + 60 <= closeMins; m += 60) {
           const start = formatTime(Math.floor(m / 60), m % 60);
           const end = formatTime(Math.floor((m + 60) / 60), (m + 60) % 60);
           const opt = document.createElement("option");
@@ -736,12 +770,23 @@
           opt.text = `${start} – ${end}`;
           pickupTimeSel.appendChild(opt);
         }
+
         pickupTimeSel.disabled = false;
+
+        // If nothing available same-day, disable and show a placeholder option
+        if (!pickupTimeSel.options.length) {
+          pickupTimeSel.disabled = true;
+          const opt = document.createElement("option");
+          opt.value = "";
+          opt.text = "No pickup times available today (select another date)";
+          pickupTimeSel.appendChild(opt);
+        }
       }
 
       pickupInput.addEventListener("change", function () {
         if (!this.value) return updateSpecial();
         let d = parseLocalDate(this.value);
+
         if (d.getDay() === 0) {
           alert("No Sunday pickups – moved to Monday");
           d.setDate(d.getDate() + 1);
@@ -750,6 +795,7 @@
           alert("Pickups only within next two weeks");
           d = maxPickupD;
         }
+
         this.value = formatLocal(d);
         populatePickupTimes(d);
         updateSpecial();
@@ -780,10 +826,12 @@
 
       function updateSpecial() {
         let baseText = "";
+
         if (rbPick && rbPick.checked) {
           const d = pickupInput.value;
-          const t = pickupTimeSel.value;
+          const t = pickupTimeSel.disabled ? "" : pickupTimeSel.value;
           const p = pickupDiv.querySelector("#pickupPerson").value;
+
           specialIns.readOnly = false;
           baseText = "Pickup on " + d + (t ? " at " + t : "") + (p ? " for " + p : "");
         } else if (rbDel && rbDel.checked) {
@@ -796,6 +844,7 @@
             baseText = "Ship via 3rd party delivery on next screen.";
           }
         }
+
         specialIns.value = baseText + (specialExtra.value ? " – " + specialExtra.value : "");
       }
 
@@ -803,6 +852,9 @@
         if (rbPick && rbPick.checked) {
           pickupDiv.style.display = "block";
           deliveryDiv.style.display = "none";
+
+          // If date already chosen, enforce same-day rule immediately
+          if (pickupInput.value) populatePickupTimes(parseLocalDate(pickupInput.value));
         } else if (rbDel && rbDel.checked) {
           pickupDiv.style.display = "none";
           deliveryDiv.style.display = "block";
@@ -817,6 +869,8 @@
       if (rbDel) rbDel.addEventListener("change", onShip);
 
       pickupDiv.querySelector("#pickupPerson").addEventListener("input", updateSpecial);
+      pickupTimeSel.addEventListener("change", updateSpecial);
+
       deliveryDiv
         .querySelectorAll('input[name="deliveryTime"]')
         .forEach((r) => r.addEventListener("change", updateSpecial));
@@ -824,10 +878,9 @@
 
       onShip();
 
-      // Client validation on Continue buttons (no forced reset to step 2)
+      // Client validation on Continue buttons
       if ($) {
         $("#ctl00_PageBody_ContinueButton1, #ctl00_PageBody_ContinueButton2").on("click", function (e) {
-          // We expect a navigation attempt; if it fails (errors), we’ll bounce correctly.
           setReturnStep(7);
           setExpectedNav(true);
 
@@ -854,6 +907,10 @@
               valid = false;
               errors.push("• Please enter a Pickup Person.");
             }
+            if ($("#pickupTime").prop("disabled") || !$("#pickupTime").val()) {
+              valid = false;
+              errors.push("• Please select an available Pickup Time.");
+            }
           }
 
           if (!valid) {
@@ -864,7 +921,6 @@
             return;
           }
 
-          // Safety net: if we remain on page and errors appear, jump to them
           setTimeout(function () {
             window.WLCheckout?.detectAndJumpToValidation?.();
           }, 900);
@@ -946,11 +1002,10 @@
     })();
 
     // -------------------------------------------------------------------------
-    // M) Modern Transaction & Shipping selectors (kept; no forced disabling)
+    // M) Modern Transaction & Shipping selectors (kept)
     // -------------------------------------------------------------------------
     if ($) {
       $(function () {
-        // Transaction selector
         if ($("#ctl00_PageBody_TransactionTypeDiv").length) {
           $(".TransactionTypeSelector").hide();
 
@@ -990,7 +1045,6 @@
           });
         }
 
-        // Shipping selector
         if ($(".SaleTypeSelector").length) {
           $(".SaleTypeSelector").hide();
 
@@ -1062,12 +1116,11 @@
 
       function resetWizardState() {
         setSameAsDelivery(false);
-        try {
-          localStorage.removeItem(STEP_KEY);
-        } catch {}
+        try { localStorage.removeItem(STEP_KEY); } catch {}
         try {
           sessionStorage.removeItem("wl_returnStep");
           sessionStorage.removeItem("wl_expect_nav");
+          sessionStorage.removeItem("wl_autocopy_done");
         } catch {}
       }
 
@@ -1076,11 +1129,7 @@
     })();
 
     // -------------------------------------------------------------------------
-    // P) Restore step on load (priority order):
-    //  1) returnStep (sessionStorage) — for postbacks
-    //  2) saved step (TTL localStorage)
-    //  3) default 2
-    // Then: if expectedNav (continue attempted), scan for errors and bounce.
+    // P) Restore step on load
     // -------------------------------------------------------------------------
     const expectedNav = consumeExpectedNav();
     const returnStep = consumeReturnStep();
