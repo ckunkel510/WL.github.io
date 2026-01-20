@@ -173,9 +173,13 @@
       const rows = tbl.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow');
       rows.forEach(tr=>{
         const type = txt(tr.querySelector('td[data-title="Type"]')) || txt(tr.children[1]);
-        let docNo = txt(tr.querySelector('span[id*="_DocumentNumber"]')) ||
-                    txt(tr.querySelector('td[data-title="Doc. #"] span')) ||
-                    txt(tr.querySelector('td[data-title="Document #"] span'));
+        let docNo =
+  txt(tr.querySelector('span[id*="_DocumentNumber"]')) ||
+  txt(tr.querySelector('td[data-title="Doc. #"] span')) ||
+  txt(tr.querySelector('td[data-title="Doc. #"]')) ||                // ✅ add this
+  txt(tr.querySelector('td[data-title="Document #"] span')) ||
+  txt(tr.querySelector('td[data-title="Document #"]'));              // ✅ and this
+
         const outTxt = txt(tr.querySelector('td[data-title="Amount Outstanding"]')) || txt(tr.children[8]);
         const outVal = parseMoney(outTxt);
         if (docNo && (type||'').toLowerCase() === 'invoice'){
