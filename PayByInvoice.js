@@ -318,8 +318,7 @@ function startSelectionSync(){
         el.__wlBound = true;
       }
     });
-renderSummary(loadPref());
-    });
+    renderSummary(loadPref());
   }
 
   /* =============================
