@@ -3747,47 +3747,52 @@ function setStep(n){
 
 
 /* ============================================================
-   Woodson WebTrack AccountPayment Wizard — PATCH PACK v2
+   WL AccountPayment Wizard — PATCH v3 (single patch; remove others)
    Fixes:
-   1) Billing stays pinned to Step 1 (even after wizard rearrange / partial postbacks)
-   2) Billing no longer disappears while typing:
-      - Cancel async postbacks triggered by the Billing textbox while user is typing
-   3) Before "Check on File" (COF) loads stored accounts:
-      - Run a safe sync postback (Address dropdown preferred) to satisfy EventValidation
-      - Then re-click COF automatically
-   4) If COF postback resets wizard to Step 1:
-      - Force back to Pay step (Step 4)
+   A) Billing disappearing while typing:
+      - Cancel ANY async postback while Billing is focused or recently typed,
+        unless explicitly allowed by our code.
+   B) COF resetting to Step 1:
+      - Capture intent on COF click
+      - Run safe sync postback (address dropdown preferred)
+      - Then re-click COF
+      - After COF postback, force wizard to Step 4 with a short "force loop"
 
-   IMPORTANT:
-   - This assumes the page uses ASP.NET AJAX (Sys.WebForms.PageRequestManager).
-   - This patch is designed to be the ONLY active "billing/cof" patch.
+   Notes:
+   - Requires ASP.NET AJAX PageRequestManager (Sys.WebForms.PageRequestManager)
+   - This patch assumes your wizard uses .wl-panel[data-step] and .wl-step-pill[data-step-pill]
    ============================================================ */
-(function WL_PATCH_PACK_V2() {
+(function WL_AP_PATCH_V3() {
   "use strict";
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
-  if (window.__WL_PATCH_PACK_V2_APPLIED__) return;
-  window.__WL_PATCH_PACK_V2_APPLIED__ = true;
+  if (window.__WL_AP_PATCH_V3__) return;
+  window.__WL_AP_PATCH_V3__ = true;
 
   const IDS = {
-    billContainer: "ctl00_PageBody_BillingAddressContainer",
-    billText:      "ctl00_PageBody_BillingAddressTextBox",
-    billZip:       "ctl00_PageBody_BillingPostalCodeTextBox",
-    addrDropdown:  "ctl00_PageBody_AddressDropdownList",
-    rbCof:         "ctl00_PageBody_RadioButton_PayByCheckOnFile",
+    billText:     "ctl00_PageBody_BillingAddressTextBox",
+    billZip:      "ctl00_PageBody_BillingPostalCodeTextBox",
+    billContainer:"ctl00_PageBody_BillingAddressContainer",
+    addrDropdown: "ctl00_PageBody_AddressDropdownList",
+    rbCof:        "ctl00_PageBody_RadioButton_PayByCheckOnFile",
   };
 
-  const KEYS = {
-    billTyping:       "__WL_BILL_TYPING",
-    allowBillPost:    "__WL_ALLOW_BILL_POSTBACK",
-    wantCofAfterSync: "__WL_WANT_COF_AFTER_SYNC",
-    syncing:          "__WL_SYNCING",
-    wantPayStep:      "__WL_WANT_PAY_STEP",
+  const KEY = {
+    billActive:     "__WL_BILL_ACTIVE",        // "1" while focused / recently typed
+    allowPostback:  "__WL_ALLOW_POSTBACK",     // "1" to allow next async request
+    syncing:        "__WL_SYNCING",            // "1" while we are doing safe sync
+    wantCof:        "__WL_WANT_COF",           // "1" to re-click COF after sync
+    wantPayStep:    "__WL_WANT_PAY_STEP",      // "1" to force Step 4 after COF
+    forcePayUntil:  "__WL_FORCE_PAY_UNTIL",    // timestamp ms to keep forcing step 4
   };
 
   const $ = (id) => document.getElementById(id);
 
+  function ssSet(k, v) { try { sessionStorage.setItem(k, v); } catch {} }
+  function ssGet(k) { try { return sessionStorage.getItem(k); } catch { return null; } }
+  function ssDel(k) { try { sessionStorage.removeItem(k); } catch {} }
+
   // ----------------------------
-  // Wizard helpers
+  // Wizard force step
   // ----------------------------
   function getWizardRoot() {
     return $("wlApWizard3") || $("wlApWizard2") || $("wlApWizard") || null;
@@ -3806,20 +3811,35 @@ function setStep(n){
       p.classList.toggle("on", Number(p.getAttribute("data-step")) === s);
     });
 
-    const back = $("wlWizBackBtn");
-    const next = $("wlWizNextBtn");
+    const back = document.getElementById("wlWizBackBtn");
+    const next = document.getElementById("wlWizNextBtn");
     if (back) back.disabled = (s === 0);
     if (next) next.textContent = (s === 3) ? "Review complete" : "Next";
 
     try { sessionStorage.setItem("__WL_AP_WIZ3_STEP", String(s)); } catch {}
   }
 
+  function startForcePayLoop(ms) {
+    const until = Date.now() + (ms || 2000);
+    ssSet(KEY.forcePayUntil, String(until));
+
+    (function loop() {
+      const u = Number(ssGet(KEY.forcePayUntil) || "0");
+      if (!u || Date.now() > u) return;
+
+      const cof = $(IDS.rbCof);
+      if (cof && cof.checked) forceWizardToStep(3);
+
+      requestAnimationFrame(loop);
+    })();
+  }
+
   // ----------------------------
-  // Step 1 host
+  // Pin Billing into Step 1 (best-effort)
   // ----------------------------
   function stepPanel(stepNum) {
     return (
-      $("w3Step" + stepNum) ||
+      document.getElementById("w3Step" + stepNum) ||
       document.querySelector('.wl-panel[data-step="' + stepNum + '"]') ||
       null
     );
@@ -3831,16 +3851,11 @@ function setStep(n){
     return s1.querySelector("#w3InfoInner") || s1;
   }
 
-  // ----------------------------
-  // Billing wrappers
-  // ----------------------------
   function findBillingWrap() {
     const c = $(IDS.billContainer);
     if (c) return c;
-
     const box = $(IDS.billText);
     if (!box) return null;
-
     return box.closest(".epi-form-group-acctPayment") || box.closest("tr") || box.parentElement;
   }
 
@@ -3854,73 +3869,54 @@ function setStep(n){
     if (!el) return;
     el.hidden = false;
     try {
-      el.style.removeProperty("display");
-      el.style.removeProperty("visibility");
-      el.style.removeProperty("opacity");
+      el.style.setProperty("display", "", "");
+      el.style.setProperty("visibility", "", "");
+      el.style.setProperty("opacity", "", "");
     } catch {}
   }
 
   function pinBillingToStep1() {
-    const host1 = getStep1Host();
-    if (!host1) return;
+    const host = getStep1Host();
+    if (!host) return;
 
-    const bill = findBillingWrap();
-    const zip  = findBillingZipWrap();
+    const bw = findBillingWrap();
+    const zw = findBillingZipWrap();
 
-    if (bill) {
-      ensureVisible(bill);
-      if (!host1.contains(bill)) host1.appendChild(bill);
-    }
-    if (zip) {
-      ensureVisible(zip);
-      if (!host1.contains(zip)) host1.appendChild(zip);
-    }
+    if (bw) { ensureVisible(bw); if (!host.contains(bw)) host.appendChild(bw); }
+    if (zw) { ensureVisible(zw); if (!host.contains(zw)) host.appendChild(zw); }
   }
 
-  function pinBurst(msTotal) {
+  function pinBurst(ms) {
     const start = Date.now();
     (function loop() {
       pinBillingToStep1();
-      if (Date.now() - start < msTotal) requestAnimationFrame(loop);
+      if (Date.now() - start < ms) requestAnimationFrame(loop);
     })();
   }
 
   // ----------------------------
-  // Billing typing detection
-  // Cancel async postbacks from billing textbox while typing
+  // Billing typing guard: treat as "active typing" for ~900ms after input
   // ----------------------------
   let typingTimer = null;
 
-  function setFlag(key, val) {
-    try { sessionStorage.setItem(key, val); } catch {}
-  }
-  function getFlag(key) {
-    try { return sessionStorage.getItem(key); } catch { return null; }
-  }
-  function clearFlag(key) {
-    try { sessionStorage.removeItem(key); } catch {}
-  }
-
-  function markTyping() {
-    setFlag(KEYS.billTyping, "1");
+  function markBillingActive() {
+    ssSet(KEY.billActive, "1");
     if (typingTimer) clearTimeout(typingTimer);
-    // consider "typing done" after idle
-    typingTimer = setTimeout(() => clearFlag(KEYS.billTyping), 900);
+    typingTimer = setTimeout(() => ssDel(KEY.billActive), 900);
   }
 
-  function bindBillingTypingWatch() {
+  function bindBillingActivity() {
     const bill = $(IDS.billText);
-    if (!bill || bill.__wlTypingBound) return;
+    if (!bill || bill.__wlBound) return;
 
-    // If a Telerik wrapper fires input-like events, this still catches them
-    bill.addEventListener("input", markTyping, true);
-    bill.addEventListener("keydown", markTyping, true);
+    bill.addEventListener("focus", () => ssSet(KEY.billActive, "1"), true);
+    bill.addEventListener("blur",  () => ssDel(KEY.billActive), true);
 
-    // If you leave the field, allow postbacks again
-    bill.addEventListener("blur", () => clearFlag(KEYS.billTyping), true);
+    bill.addEventListener("input", markBillingActive, true);
+    bill.addEventListener("keydown", markBillingActive, true);
 
-    // Prevent Enter from submitting anything weird
-    bill.addEventListener("keydown", function (e) {
+    // Prevent Enter submitting anything weird
+    bill.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.keyCode === 13) {
         e.preventDefault();
         e.stopPropagation();
@@ -3928,45 +3924,67 @@ function setStep(n){
       }
     }, true);
 
-    bill.__wlTypingBound = true;
+    bill.__wlBound = true;
   }
 
-  function bindAsyncCancelForBilling() {
+  // ----------------------------
+  // Cancel async postbacks while billing is active (unless allowed)
+  // ----------------------------
+  function bindPRMGuards() {
     if (!(window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager)) return;
     const prm = Sys.WebForms.PageRequestManager.getInstance();
-    if (prm.__wlCancelBillingBound) return;
+    if (prm.__wlGuardBound) return;
 
     prm.add_initializeRequest(function (sender, args) {
-      // If we're intentionally syncing, don't cancel anything
-      if (getFlag(KEYS.allowBillPost) === "1") return;
+      // If we explicitly allow the next postback, let it go.
+      if (ssGet(KEY.allowPostback) === "1") return;
 
-      const typing = getFlag(KEYS.billTyping) === "1";
-      if (!typing) return;
-
-      // Which element triggered this async postback?
-      let el = null;
-      try { el = args.get_postBackElement && args.get_postBackElement(); } catch {}
-      if (!el) return;
-
-      // If billing textbox (or its wrapper) triggered it, cancel it.
-      const bill = $(IDS.billText);
-      const triggeredByBilling =
-        (bill && el === bill) ||
-        (bill && (el.id === bill.id)) ||
-        (bill && el.closest && el.closest("#" + bill.id));
-
-      if (triggeredByBilling) {
+      // If billing is active, cancel ALL async requests to prevent re-render/disappear.
+      const billActive = ssGet(KEY.billActive) === "1";
+      if (billActive) {
         try { args.set_cancel(true); } catch {}
-        // After canceling, ensure billing is pinned (sometimes the wizard reacts)
+        // keep UI stable
         setTimeout(pinBillingToStep1, 0);
       }
     });
 
-    prm.__wlCancelBillingBound = true;
+    prm.add_endRequest(function () {
+      // Re-pin after any async request
+      setTimeout(() => pinBurst(800), 50);
+      setTimeout(pinBillingToStep1, 250);
+
+      // If we were syncing, clear sync state and allow COF click replay
+      if (ssGet(KEY.syncing) === "1") {
+        ssDel(KEY.syncing);
+        ssDel(KEY.allowPostback);
+      }
+
+      // Re-click COF after sync if requested
+      if (ssGet(KEY.wantCof) === "1") {
+        ssDel(KEY.wantCof);
+        const rb = $(IDS.rbCof);
+        setTimeout(() => { try { rb && rb.click(); } catch {} }, 120);
+      }
+
+      // Force pay step after COF if requested
+      if (ssGet(KEY.wantPayStep) === "1") {
+        const cof = $(IDS.rbCof);
+        if (cof && cof.checked) {
+          startForcePayLoop(2200);
+        }
+        // keep it around briefly in case another remount happens
+        setTimeout(() => ssDel(KEY.wantPayStep), 2500);
+      }
+
+      // Re-bind because controls may be recreated
+      setTimeout(boot, 50);
+    });
+
+    prm.__wlGuardBound = true;
   }
 
   // ----------------------------
-  // Safe sync before COF (EventValidation)
+  // Safe sync before COF to avoid event validation issues
   // ----------------------------
   function doSafeSyncPostback() {
     const addr = $(IDS.addrDropdown);
@@ -3975,120 +3993,78 @@ function setStep(n){
     const target = (addr && (addr.name || addr.id)) || (bill && (bill.name || bill.id));
     if (!target || typeof window.__doPostBack !== "function") return false;
 
-    setFlag(KEYS.syncing, "1");
-    setFlag(KEYS.allowBillPost, "1"); // allow this one
+    // Allow exactly one postback through (bypasses billing-active cancel)
+    ssSet(KEY.allowPostback, "1");
+    ssSet(KEY.syncing, "1");
 
     try {
       window.__doPostBack(target, "");
       return true;
     } catch {
-      clearFlag(KEYS.allowBillPost);
-      clearFlag(KEYS.syncing);
+      ssDel(KEY.allowPostback);
+      ssDel(KEY.syncing);
       return false;
     }
   }
 
-  function armCofInterception() {
+  function armCOF() {
     const rb = $(IDS.rbCof);
-    if (!rb || rb.__wlCofArmed) return;
+    if (!rb || rb.__wlCofBound) return;
 
     rb.addEventListener("click", function (e) {
-      // If we are already mid-sync, let clicks flow naturally
-      if (getFlag(KEYS.syncing) === "1") return;
+      // If we're mid-sync, allow natural flow
+      if (ssGet(KEY.syncing) === "1") return;
 
-      // If billing has content, do sync first
+      // We always want to land on pay step after COF
+      ssSet(KEY.wantPayStep, "1");
+
+      // If billing is being typed, clear active so COF can proceed after sync
+      ssDel(KEY.billActive);
+
+      // If billing has content, do safe sync first then replay COF
       const bill = $(IDS.billText);
       const hasBilling = !!(bill && String(bill.value || "").trim());
 
-      // Always keep user on Pay step if COF is selected
-      setFlag(KEYS.wantPayStep, "1");
+      if (hasBilling) {
+        e.preventDefault();
+        e.stopPropagation();
+        ssSet(KEY.wantCof, "1");
+        doSafeSyncPostback();
+        return false;
+      }
 
-      if (!hasBilling) return;
-
-      e.preventDefault();
-      e.stopPropagation();
-
-      setFlag(KEYS.wantCofAfterSync, "1");
-      doSafeSyncPostback();
-      return false;
+      // If no billing, let COF proceed; endRequest will force pay step
     }, true);
 
-    rb.__wlCofArmed = true;
-  }
-
-  function afterAsyncPostback() {
-    const syncing = getFlag(KEYS.syncing) === "1";
-    const wantCof = getFlag(KEYS.wantCofAfterSync) === "1";
-
-    // If we just returned from our sync, clear allow flag so billing doesn’t trigger again
-    if (syncing) {
-      clearFlag(KEYS.syncing);
-      clearFlag(KEYS.allowBillPost);
-    }
-
-    if (wantCof) {
-      clearFlag(KEYS.wantCofAfterSync);
-      const rb = $(IDS.rbCof);
-      setTimeout(() => { try { rb && rb.click(); } catch {} }, 120);
-    }
+    rb.__wlCofBound = true;
   }
 
   // ----------------------------
-  // Return to Pay step if COF resets wizard
-  // ----------------------------
-  function returnToPayStepIfNeeded() {
-    const want = getFlag(KEYS.wantPayStep) === "1";
-    const rb = $(IDS.rbCof);
-    if (!want || !rb || !rb.checked) return;
-
-    forceWizardToStep(3);
-    setTimeout(() => forceWizardToStep(3), 120);
-    setTimeout(() => forceWizardToStep(3), 260);
-    setTimeout(() => forceWizardToStep(3), 520);
-
-    setTimeout(() => clearFlag(KEYS.wantPayStep), 1500);
-  }
-
-  // ----------------------------
-  // Boot/hydrate
+  // Boot
   // ----------------------------
   function boot() {
-    bindBillingTypingWatch();
-    bindAsyncCancelForBilling();
-    armCofInterception();
+    bindBillingActivity();
+    armCOF();
     pinBillingToStep1();
   }
 
-  // Initial: let wizard rearrange, then pin hard
-  setTimeout(() => pinBurst(3000), 120);
+  // Initial mount: let wizard rearrange, then pin hard
+  setTimeout(() => pinBurst(2500), 120);
   setTimeout(boot, 0);
   setTimeout(boot, 250);
   setTimeout(boot, 800);
   setTimeout(boot, 1500);
 
-  // After partial postbacks
+  bindPRMGuards();
+
+  // Mutation observer for non-PRM DOM churn
   try {
-    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
-      const prm = Sys.WebForms.PageRequestManager.getInstance();
-      if (!prm.__wlPatchPackV2Bound) {
-        prm.add_endRequest(function () {
-          // Rebind (controls may recreate)
-          setTimeout(boot, 50);
-          setTimeout(() => pinBurst(2000), 80);
-
-          // Complete COF after sync
-          setTimeout(afterAsyncPostback, 120);
-          setTimeout(afterAsyncPostback, 260);
-
-          // Re-pin & step restore
-          setTimeout(pinBillingToStep1, 120);
-          setTimeout(pinBillingToStep1, 420);
-          setTimeout(returnToPayStepIfNeeded, 200);
-          setTimeout(returnToPayStepIfNeeded, 520);
-        });
-        prm.__wlPatchPackV2Bound = true;
-      }
-    }
+    const mo = new MutationObserver(() => {
+      // Light-touch re-pin; avoids heavy work
+      pinBillingToStep1();
+      armCOF();
+      bindBillingActivity();
+    });
+    mo.observe(document.body, { childList: true, subtree: true });
   } catch {}
-
 })();
