@@ -4083,3 +4083,253 @@ if (jobBtn){
   } catch {}
 })();
 
+
+
+
+
+
+
+
+
+
+
+
+
+/* ============================================================================
+   WL AccountPayment — Pay options keep-displaying after Email async postback
+   Policy:
+   - Show: Check + Check on file (+ dropdown container)
+   - Hide: Card/Credit only
+   - Sanitize email to a real address (strip "(name) " prefix etc.)
+   Paste at VERY BOTTOM of PayByInvoice.js
+   ============================================================================ */
+(function () {
+  'use strict';
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+
+  const IDS = {
+    rbCheck:  'ctl00_PageBody_RadioButton_PayByCheck',
+    rbCof:    'ctl00_PageBody_RadioButton_PayByCheckOnFile',
+    rbCredit: 'ctl00_PageBody_RadioButton_PayByCredit',
+
+    cofWrap:  'ctl00_PageBody_ChecksOnFileContainer',
+    cofWrap2: 'ctl00_PageBody_ChecksOnFileContainer1',
+
+    // Seen on your page:
+    email: 'ctl00_PageBody_EmailAddressTextBox',
+
+    // Shadow field name WebForms expects for PayBy
+    shadowId:   'wlPayByShadow',
+    shadowName: 'ctl00$PageBody$PayBy'
+  };
+
+  const $ = (id) => document.getElementById(id);
+
+  function isSuccessPage() {
+    const p = document.querySelector('.bodyFlexItem p');
+    const t = (p?.textContent || '');
+    return /account payment was successful/i.test(t) && !!document.querySelector('table.paymentDataTable');
+  }
+
+  /* ---------- Strong CSS override (beats server display:none) ---------- */
+  function injectStrongCSS() {
+    if (document.getElementById('wl-payby-strong-css')) return;
+    const css = `
+      /* If server returns display:none, we still want these visible */
+      .wl-force-show { display:block !important; visibility:visible !important; opacity:1 !important; }
+      #${IDS.cofWrap}, #${IDS.cofWrap2} { display:block !important; visibility:visible !important; opacity:1 !important; }
+      /* Some themes hide radiobutton rows */
+      .epi-form-group-acctPayment .radiobutton { display:block !important; visibility:visible !important; }
+    `;
+    const s = document.createElement('style');
+    s.id = 'wl-payby-strong-css';
+    s.textContent = css;
+    document.head.appendChild(s);
+  }
+
+  /* ---------- DOM helpers ---------- */
+  function hardShow(el, displayValue) {
+    if (!el) return;
+    el.hidden = false;
+    el.classList.add('wl-force-show');
+    el.style.setProperty('display', displayValue || 'block', 'important');
+    el.style.setProperty('visibility', 'visible', 'important');
+    el.style.setProperty('opacity', '1', 'important');
+  }
+
+  function hardHide(el) {
+    if (!el) return;
+    el.hidden = true;
+    el.style.setProperty('display', 'none', 'important');
+  }
+
+  function getRadioWrapper(rb) {
+    if (!rb) return null;
+    return rb.closest('.radiobutton') || rb.parentElement;
+  }
+
+  /* ---------- PayBy shadow (prevents “forgetting” selection) ---------- */
+  function ensureShadowPayBy() {
+    const form = document.forms[0];
+    if (!form) return;
+
+    let h = document.getElementById(IDS.shadowId);
+    if (!h) {
+      h = document.createElement('input');
+      h.type = 'hidden';
+      h.id = IDS.shadowId;
+      h.name = IDS.shadowName;
+      form.appendChild(h);
+    }
+
+    const cof = $(IDS.rbCof);
+    const cr  = $(IDS.rbCredit);
+    const chk = $(IDS.rbCheck);
+
+    h.value =
+      (cof && cof.checked) ? 'RadioButton_PayByCheckOnFile' :
+      (cr  && cr.checked)  ? 'RadioButton_PayByCredit' :
+                             'RadioButton_PayByCheck';
+  }
+
+  /* ---------- Main fix: always re-show pay options after async updates ---------- */
+  function reapplyPayByVisibility() {
+    if (isSuccessPage()) return; // don’t touch receipt view
+
+    injectStrongCSS();
+
+    const chk = $(IDS.rbCheck);
+    const cof = $(IDS.rbCof);
+    const cr  = $(IDS.rbCredit);
+
+    // If the server temporarily removed them, just bail until they exist again
+    if (!chk && !cof && !cr) return;
+
+    // Ensure their overall group is visible too (server sometimes hides the whole group)
+    const any = cof || chk || cr;
+    const grp = any ? any.closest('.epi-form-group-acctPayment') : null;
+    hardShow(grp, 'block');
+
+    // Show Check
+    if (chk) {
+      hardShow(getRadioWrapper(chk), 'block');
+      chk.disabled = false;
+      chk.removeAttribute('disabled');
+    }
+
+    // Show Check on file + dropdown containers (server populates options)
+    if (cof) {
+      hardShow(getRadioWrapper(cof), 'block');
+      cof.disabled = false;
+      cof.removeAttribute('disabled');
+      cof.style.pointerEvents = 'auto';
+    }
+    hardShow($(IDS.cofWrap), 'block');
+    hardShow($(IDS.cofWrap2), 'block');
+
+    // Hide Credit/Card only
+    if (cr) hardHide(getRadioWrapper(cr));
+
+    // Labels sometimes get hidden separately
+    hardShow(document.querySelector(`label[for="${IDS.rbCheck}"]`), 'inline-flex');
+    hardShow(document.querySelector(`label[for="${IDS.rbCof}"]`), 'inline-flex');
+    const lblCr = document.querySelector(`label[for="${IDS.rbCredit}"]`);
+    if (lblCr) hardHide(lblCr);
+
+    // Keep shadow in sync
+    ensureShadowPayBy();
+  }
+
+  /* ---------- Email sanitization ---------- */
+  function extractFirstEmail(raw) {
+    const s = String(raw || '').trim();
+    if (!s) return '';
+    const m = s.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+    return m ? m[0] : '';
+  }
+
+  function sanitizeEmailField() {
+    const el = $(IDS.email);
+    if (!el) return;
+
+    const cleaned = extractFirstEmail(el.value);
+    // Only replace if we found a valid email and it differs from what’s in the box
+    if (cleaned && el.value.trim() !== cleaned) {
+      el.value = cleaned;
+      el.defaultValue = cleaned;
+      // Don’t trigger a postback here; just fix the value in-place.
+    }
+  }
+
+  /* ---------- Reapply after all async postbacks + DOM swaps ---------- */
+  function hookAjax() {
+    try {
+      if (!(window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager)) return;
+      const prm = Sys.WebForms.PageRequestManager.getInstance();
+      if (prm.__wlPayBySticky) return;
+
+      prm.add_endRequest(function () {
+        // Server may finish DOM swaps slightly after endRequest
+        reapplyPayByVisibility();
+        setTimeout(reapplyPayByVisibility, 50);
+        setTimeout(reapplyPayByVisibility, 250);
+        setTimeout(reapplyPayByVisibility, 700);
+      });
+
+      prm.__wlPayBySticky = true;
+    } catch {}
+  }
+
+  /* ---------- MutationObserver backup (catches weird Telerik swaps) ---------- */
+  function hookObserver() {
+    if (window.__wlPayByObserver) return;
+    window.__wlPayByObserver = true;
+
+    const root = document.querySelector('form') || document.body;
+    if (!root) return;
+
+    const obs = new MutationObserver(function () {
+      // light debounce
+      clearTimeout(obs.__t);
+      obs.__t = setTimeout(reapplyPayByVisibility, 40);
+    });
+    obs.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class', 'hidden'] });
+  }
+
+  function boot() {
+    if (isSuccessPage()) return; // this patch is for entry page behavior
+    reapplyPayByVisibility();
+    hookAjax();
+    hookObserver();
+  }
+
+  // Run now
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
+  } else {
+    boot();
+  }
+
+  // Sanitize email on user input AND after changes (even if server prefills weirdly)
+  document.addEventListener('input', function (e) {
+    const t = e?.target;
+    if (!t) return;
+    if (t.id === IDS.email || /Email/i.test(t.name || '')) {
+      sanitizeEmailField();
+    }
+  }, true);
+
+  document.addEventListener('change', function (e) {
+    const t = e?.target;
+    if (!t) return;
+    if (t.id === IDS.email || /Email/i.test(t.name || '')) {
+      sanitizeEmailField();
+      // After email change, server may postback and hide the pay options again
+      setTimeout(reapplyPayByVisibility, 50);
+      setTimeout(reapplyPayByVisibility, 250);
+      setTimeout(reapplyPayByVisibility, 700);
+    }
+  }, true);
+
+})();
+
