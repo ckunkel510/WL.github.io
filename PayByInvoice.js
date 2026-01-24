@@ -4068,58 +4068,133 @@ function setStep(n){
 
 
 
-
+/* ============================================================
+   WL PATCH: Billing stays stable while typing BUT we sync server state
+   before COF (prevents EventValidation error)
+   ============================================================ */
 (function(){
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+  if (window.__WL_BILLING_SYNC_BEFORE_COF__) return;
+  window.__WL_BILLING_SYNC_BEFORE_COF__ = true;
 
-  const id = "ctl00_PageBody_BillingAddressTextBox";
+  const IDS = {
+    billBox: "ctl00_PageBody_BillingAddressTextBox",
+    nextBtn: "wlWizNextBtn",
+    rbCof:   "ctl00_PageBody_RadioButton_PayByCheckOnFile",
+  };
 
-  function blockIfBilling(e){
+  const $ = (id) => document.getElementById(id);
+
+  // 1) Only block ENTER submits in billing box (do NOT kill change/blur entirely)
+  document.addEventListener("keydown", function(e){
     const t = e.target;
-    if (!t || t.id !== id) return;
-
-    // Block Enter key submits
-    if (e.type === "keydown" && (e.key === "Enter" || e.keyCode === 13)) {
+    if (!t || t.id !== IDS.billBox) return;
+    if (e.key === "Enter" || e.keyCode === 13) {
       e.preventDefault();
       e.stopPropagation();
       return false;
     }
+  }, true);
 
-    // Block events that often trigger __doPostBack via onchange/onblur
-    if (e.type === "change" || e.type === "blur") {
-      e.stopPropagation();
-      // don’t prevent blur itself (user experience), but kill the bubble that hits handlers
-      // Some pages attach onchange directly; we also strip inline handler below.
+  // 2) We need a safe server sync postback BEFORE COF triggers its postback.
+  // Best candidate is the billing textbox itself if it has a server-side AutoPostBack,
+  // but we avoid relying on inline onchange. We'll trigger __doPostBack explicitly.
+  function doSafeBillingSyncPostback(){
+    const bill = $(IDS.billBox);
+    if (!bill) return false;
+
+    // Try: __doPostBack using the control's unique name
+    // WebForms usually uses "name" for event target.
+    const target = bill.name || bill.id;
+    if (!target || typeof window.__doPostBack !== "function") return false;
+
+    try {
+      // mark that next postback is our "sync"
+      sessionStorage.setItem("__WL_BILL_SYNCING", "1");
+    } catch {}
+
+    try {
+      window.__doPostBack(target, "");
+      return true;
+    } catch(e){
+      return false;
     }
   }
 
-  function stripInlinePostback(){
-    const el = document.getElementById(id);
-    if (!el) return;
+  // 3) If user clicks COF, we first do billing sync postback, then after that completes,
+  // allow COF click to proceed (we re-click it after endRequest).
+  function armCofInterception(){
+    const rb = $(IDS.rbCof);
+    if (!rb || rb.__wlCofArmed) return;
 
-    // Remove inline handlers if present
-    if (el.getAttribute("onchange") && /__doPostBack/i.test(el.getAttribute("onchange"))) el.setAttribute("onchange","");
-    if (el.getAttribute("onblur") && /__doPostBack/i.test(el.getAttribute("onblur"))) el.setAttribute("onblur","");
+    rb.addEventListener("click", function(e){
+      // If we're already in a sync flow, don't intercept
+      try {
+        if (sessionStorage.getItem("__WL_BILL_SYNCING") === "1") return;
+      } catch {}
+
+      // If billing box exists and has a value, do a sync postback first
+      const bill = $(IDS.billBox);
+      const hasBilling = !!(bill && String(bill.value || "").trim());
+
+      if (!hasBilling) return; // nothing to sync
+
+      // Prevent COF from posting back right now
+      e.preventDefault();
+      e.stopPropagation();
+
+      // Store intent: after sync, we want to be on COF
+      try { sessionStorage.setItem("__WL_WANT_COF_AFTER_SYNC", "1"); } catch {}
+
+      // Trigger a "safe" postback that updates event validation state
+      doSafeBillingSyncPostback();
+      return false;
+    }, true);
+
+    rb.__wlCofArmed = true;
   }
 
-  // Capture phase to intercept before Telerik/WebForms handlers
-  document.addEventListener("keydown", blockIfBilling, true);
-  document.addEventListener("change", blockIfBilling, true);
-  document.addEventListener("blur", blockIfBilling, true);
+  // 4) After the billing sync postback returns, re-click COF to load accounts
+  function afterAsyncPostback(){
+    let want = false, syncing = false;
+    try {
+      want = sessionStorage.getItem("__WL_WANT_COF_AFTER_SYNC") === "1";
+      syncing = sessionStorage.getItem("__WL_BILL_SYNCING") === "1";
+    } catch {}
 
-  setTimeout(stripInlinePostback, 0);
-  setTimeout(stripInlinePostback, 250);
+    if (syncing) {
+      // Clear syncing flag now that we returned
+      try { sessionStorage.removeItem("__WL_BILL_SYNCING"); } catch {}
+    }
 
-  // After partial postbacks, the input gets recreated, so strip again
+    if (want) {
+      try { sessionStorage.removeItem("__WL_WANT_COF_AFTER_SYNC"); } catch {}
+
+      const rb = $(IDS.rbCof);
+      // Give the DOM a moment to settle, then click COF for real
+      setTimeout(function(){
+        try { rb && rb.click(); } catch {}
+      }, 120);
+    }
+  }
+
+  // 5) Bind on load + after partial postbacks
+  function boot(){
+    armCofInterception();
+  }
+
+  setTimeout(boot, 0);
+  setTimeout(boot, 250);
+
   try {
     if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
       const prm = Sys.WebForms.PageRequestManager.getInstance();
-      if (!prm.__wlStripBillBound) {
+      if (!prm.__wlBillSyncBound) {
         prm.add_endRequest(function(){
-          setTimeout(stripInlinePostback, 0);
-          setTimeout(stripInlinePostback, 200);
+          boot();
+          afterAsyncPostback();
         });
-        prm.__wlStripBillBound = true;
+        prm.__wlBillSyncBound = true;
       }
     }
   } catch {}
