@@ -3714,3 +3714,160 @@ if (jobBtn){
     boot(); hookMsAjax();
   }
 })();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ============================================================================
+   WL PayByInvoice — Reapply PayBy visibility after async postbacks (email, etc.)
+   Fixes: entering email triggers postback and PayBy options disappear
+   Paste at the VERY BOTTOM of PayByInvoice.js (after your other patches)
+   ============================================================================ */
+(function () {
+  'use strict';
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+  if (window.__WL_PAYBY_REAPPLY_BOUND) return;
+  window.__WL_PAYBY_REAPPLY_BOUND = true;
+
+  const IDS = {
+    rbCheck:  'ctl00_PageBody_RadioButton_PayByCheck',
+    rbCredit: 'ctl00_PageBody_RadioButton_PayByCredit',
+    rbCof:    'ctl00_PageBody_RadioButton_PayByCheckOnFile',
+    cofWrap:  'ctl00_PageBody_ChecksOnFileContainer',
+    cofWrap2: 'ctl00_PageBody_ChecksOnFileContainer1',
+  };
+
+  const $ = (id) => document.getElementById(id);
+
+  function forceShow(el) {
+    if (!el) return;
+    el.hidden = false;
+    el.style.removeProperty('display');
+    el.style.removeProperty('visibility');
+    el.style.display = '';
+    el.style.visibility = 'visible';
+    el.style.opacity = '1';
+    el.classList.add('wl-force-show');
+  }
+
+  function hide(el) {
+    if (!el) return;
+    el.style.display = 'none';
+    el.hidden = true;
+  }
+
+  function isSuccessPage() {
+    const p = document.querySelector('.bodyFlexItem p');
+    const t = (p?.textContent || '');
+    return /account payment was successful/i.test(t) && !!document.querySelector('table.paymentDataTable');
+  }
+
+  function reapplyPayByVisibility() {
+    // Don’t mess with the success/receipt view.
+    if (isSuccessPage()) return;
+
+    const chk = $(IDS.rbCheck);
+    const cof = $(IDS.rbCof);
+    const cr  = $(IDS.rbCredit);
+
+    // If none exist, nothing to do (likely different view)
+    if (!chk && !cof && !cr) return;
+
+    // Always show Check + COF containers
+    forceShow(chk?.closest('.radiobutton') || chk?.parentElement);
+    forceShow(cof?.closest('.radiobutton') || $(IDS.cofWrap));
+    forceShow($(IDS.cofWrap));
+    forceShow($(IDS.cofWrap2));
+
+    // Hide credit/card option ONLY (do not hide the whole pay section)
+    if (cr) hide(cr.closest('.radiobutton') || cr.parentElement);
+
+    // Keep COF enabled
+    if (cof) {
+      cof.disabled = false;
+      cof.removeAttribute('disabled');
+      cof.style.pointerEvents = 'auto';
+    }
+
+    // Sync wlPayByShadow if you’re using it (supports COF mapping if your v2 patch is present)
+    try {
+      if (typeof window.ensureShadowPayBy === 'function') {
+        window.ensureShadowPayBy();
+      } else {
+        // minimal shadow if the function doesn’t exist for some reason
+        const form = document.forms[0];
+        if (form) {
+          let h = document.getElementById('wlPayByShadow');
+          if (!h) {
+            h = document.createElement('input');
+            h.type = 'hidden';
+            h.id = 'wlPayByShadow';
+            h.name = 'ctl00$PageBody$PayBy';
+            form.appendChild(h);
+          }
+          h.value =
+            (cof && cof.checked) ? 'RadioButton_PayByCheckOnFile' :
+            (cr  && cr.checked)  ? 'RadioButton_PayByCredit' :
+                                   'RadioButton_PayByCheck';
+        }
+      }
+    } catch {}
+  }
+
+  function boot() {
+    // Run now
+    reapplyPayByVisibility();
+
+    // Also run shortly after, because some Telerik/UpdatePanel swaps finish *after* endRequest
+    setTimeout(reapplyPayByVisibility, 50);
+    setTimeout(reapplyPayByVisibility, 250);
+  }
+
+  // Initial
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
+  } else {
+    boot();
+  }
+
+  // Re-run after ASP.NET async postbacks (email entry, validation, etc.)
+  try {
+    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
+      const prm = Sys.WebForms.PageRequestManager.getInstance();
+      if (!prm.__wlPayByReapply) {
+        prm.add_endRequest(function () { boot(); });
+        prm.__wlPayByReapply = true;
+      }
+    }
+  } catch {}
+
+  // Extra safety: if user edits an email field and it triggers postback, reapply after change too.
+  // (Won’t block postback; just cleans up after it.)
+  document.addEventListener('change', function (e) {
+    const id = e?.target?.id || '';
+    const name = e?.target?.name || '';
+    if (/Email/i.test(id) || /Email/i.test(name)) {
+      setTimeout(reapplyPayByVisibility, 50);
+      setTimeout(reapplyPayByVisibility, 250);
+    }
+  }, true);
+
+})();
+
