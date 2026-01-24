@@ -5310,3 +5310,568 @@ if (jobBtn){
     }
   }catch{}
 })();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ============================================================================
+   WL AccountPayment — Full Wizard UI v2 (Info → Select → Review → Pay)
+   Paste at VERY BOTTOM of PayByInvoice.js
+   ============================================================================ */
+(function () {
+  'use strict';
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+  if (window.__WL_AP_WIZ2) return;
+  window.__WL_AP_WIZ2 = true;
+
+  const IDS = {
+    // Core fields
+    amount:    'ctl00_PageBody_PaymentAmountTextBox',
+    remit:     'ctl00_PageBody_RemittanceAdviceTextBox',
+    notes:     'ctl00_PageBody_NotesTextBox',
+    email:     'ctl00_PageBody_EmailAddressTextBox',
+
+    billWrap:  'ctl00_PageBody_BillingAddressContainer',
+    billBox:   'ctl00_PageBody_BillingAddressTextBox',
+    zip:       'ctl00_PageBody_BillingPostalCodeTextBox',
+
+    // Pay by radios / COF
+    rbCheck:   'ctl00_PageBody_RadioButton_PayByCheck',
+    rbCof:     'ctl00_PageBody_RadioButton_PayByCheckOnFile',
+    rbCredit:  'ctl00_PageBody_RadioButton_PayByCredit',
+    cofWrap:   'ctl00_PageBody_ChecksOnFileContainer',
+    cofWrap2:  'ctl00_PageBody_ChecksOnFileContainer1',
+
+    // Your widget buttons (already created by your script)
+    quickHost: 'wlQuickWidget',
+    btnLast:   'wlLastStmtBtn',
+    btnFill:   'wlFillOwingBtn',
+    btnInv:    'wlOpenTxModalBtn',
+    btnJobs:   'wlOpenJobsModalBtn',
+  };
+
+  const $  = (id) => document.getElementById(id);
+  const $1 = (sel, root=document) => root.querySelector(sel);
+
+  function isSuccessPage(){
+    const p = document.querySelector('.bodyFlexItem p');
+    const t = (p?.textContent || '');
+    return /account payment was successful/i.test(t) && !!document.querySelector('table.paymentDataTable');
+  }
+  if (isSuccessPage()) return; // don’t wizard the receipt page
+
+  function injectCSS(){
+    if ($('wl-ap-wiz2-css')) return;
+    const css = `
+      #wlApWizard2 { border:1px solid #e5e7eb; border-radius:16px; padding:14px; background:#fff; }
+      #wlApWizard2 .wl-head { display:flex; justify-content:space-between; gap:12px; align-items:center; margin-bottom:10px; }
+      #wlApWizard2 .wl-title { font-weight:900; font-size:18px; }
+      #wlApWizard2 .wl-steps { display:flex; gap:6px; flex-wrap:wrap; }
+      #wlApWizard2 .wl-step-pill { font-size:12px; font-weight:800; padding:6px 10px; border-radius:999px; border:1px solid #e5e7eb; background:#f8fafc; }
+      #wlApWizard2 .wl-step-pill.on { background:#111827; color:#fff; border-color:#111827; }
+      #wlApWizard2 .wl-body { margin-top:10px; }
+      #wlApWizard2 .wl-panel { display:none; }
+      #wlApWizard2 .wl-panel.on { display:block; }
+
+      #wlApWizard2 .wl-grid { display:grid; gap:10px; }
+      @media (min-width: 900px){
+        #wlApWizard2 .wl-grid.two { grid-template-columns: 1fr 1fr; }
+      }
+
+      #wlApWizard2 .wl-card { border:1px solid #e5e7eb; border-radius:14px; padding:12px; background:#fff; }
+      #wlApWizard2 .wl-card h3 { margin:0 0 8px 0; font-size:14px; font-weight:900; }
+      #wlApWizard2 .wl-help { font-size:12px; color:#475569; margin-top:6px; line-height:1.35; }
+
+      #wlApWizard2 .wl-nav { display:flex; justify-content:space-between; gap:10px; margin-top:12px; }
+      #wlApWizard2 .wl-btn { border:1px solid #e5e7eb; background:#fff; border-radius:12px; padding:10px 12px; font-weight:900; cursor:pointer; }
+      #wlApWizard2 .wl-btn.primary { background:#111827; color:#fff; border-color:#111827; }
+      #wlApWizard2 .wl-btn[disabled]{ opacity:.5; cursor:not-allowed; }
+
+      /* Force-show COF bits */
+      .wl-force-show { display:block !important; visibility:visible !important; opacity:1 !important; }
+      #${IDS.cofWrap}, #${IDS.cofWrap2} { display:block !important; visibility:visible !important; opacity:1 !important; }
+      .epi-form-group-acctPayment .radiobutton { display:block !important; visibility:visible !important; }
+
+      /* Make COF select usable if theme constrains it */
+      #${IDS.cofWrap} select, #${IDS.cofWrap2} select {
+        width: 100% !important;
+        max-width: 520px;
+        pointer-events:auto !important;
+      }
+    `;
+    const s = document.createElement('style');
+    s.id = 'wl-ap-wiz2-css';
+    s.textContent = css;
+    document.head.appendChild(s);
+  }
+
+  function hardShow(el, displayValue){
+    if (!el) return;
+    el.hidden = false;
+    el.classList.add('wl-force-show');
+    el.style.setProperty('display', displayValue || 'block', 'important');
+    el.style.setProperty('visibility', 'visible', 'important');
+    el.style.setProperty('opacity', '1', 'important');
+  }
+  function hardHide(el){
+    if (!el) return;
+    el.hidden = true;
+    el.style.setProperty('display', 'none', 'important');
+  }
+
+  function normalizePayByForWizard(){
+    // Show check + COF + containers; hide credit
+    const rbCheck  = $(IDS.rbCheck);
+    const rbCof    = $(IDS.rbCof);
+    const rbCredit = $(IDS.rbCredit);
+    const cof1 = $(IDS.cofWrap);
+    const cof2 = $(IDS.cofWrap2);
+
+    hardShow(rbCheck?.closest('.radiobutton') || rbCheck?.parentElement || null);
+    hardShow(rbCof?.closest('.radiobutton')   || rbCof?.parentElement   || null);
+    hardShow(cof1); hardShow(cof2);
+
+    if (rbCredit){
+      hardHide(rbCredit.closest('.radiobutton') || rbCredit.parentElement);
+    }
+
+    if (rbCof){
+      rbCof.disabled = false;
+      rbCof.removeAttribute('disabled');
+      rbCof.style.pointerEvents = 'auto';
+    }
+
+    // If COF is selected, ensure its dropdown is interactable
+    if (rbCof && rbCof.checked){
+      const sel = (cof1?.querySelector('select') || cof2?.querySelector('select'));
+      if (sel){
+        sel.disabled = false;
+        sel.removeAttribute('disabled');
+        sel.style.pointerEvents = 'auto';
+      }
+    }
+  }
+
+  function findMakePaymentButton(){
+    // Try common patterns first
+    let btn =
+      $1('input[type="submit"][id*="MakePayment"]') ||
+      $1('input[type="submit"][value*="Make Payment"]') ||
+      $1('a.epi-button span:contains("Make Payment")');
+
+    // Safer scan: look for submit-ish inputs with “Make Payment”
+    if (!btn){
+      const inputs = Array.from(document.querySelectorAll('input[type="submit"], input[type="button"], button'));
+      btn = inputs.find(x => /make\s+payment/i.test((x.value || x.textContent || '').trim())) || null;
+    }
+    return btn;
+  }
+
+  function getSelectionSummaryTextSafe(){
+    // Prefer your existing helper if present in scope (some of your patches add one)
+    try {
+      if (typeof window.getSelectionSummaryText === 'function') return window.getSelectionSummaryText();
+    } catch {}
+
+    // Fallback: build from localStorage/sessionStorage + remit + notes
+    const parts = [];
+    try{
+      const selRaw = localStorage.getItem('WL_AP_SelectedDocs');
+      const sel = selRaw ? JSON.parse(selRaw) : null;
+      const docs = sel?.value?.docs || sel?.docs || sel?.value || sel;
+      if (Array.isArray(docs) && docs.length){
+        const firstFew = docs.slice(0,6).map(d=>{
+          const t = (d.type||d.DocType||'').toString().toUpperCase().startsWith('C') ? 'CR' : 'INV';
+          const n = (d.doc || d.Doc || d.docNumber || d.DocumentNumber || '').toString().trim();
+          return n ? `${t} ${n}` : t;
+        }).filter(Boolean);
+        parts.push(`Invoices/Credits: ${firstFew.join(', ')}${docs.length>6?` (+${docs.length-6} more)`:''}`);
+      }
+    }catch{}
+
+    try{
+      const jobsRaw = sessionStorage.getItem('__WL_JobsSelection');
+      const jobs = jobsRaw ? JSON.parse(jobsRaw) : null;
+      if (jobs && typeof jobs === 'object'){
+        const keys = Array.isArray(jobs) ? jobs : Object.keys(jobs);
+        if (keys.length) parts.push(`Jobs: ${keys.slice(0,8).join(', ')}${keys.length>8?` (+${keys.length-8} more)`:''}`);
+      }
+    }catch{}
+
+    const remit = ($(IDS.remit)?.value || '').trim();
+    if (remit) parts.push(`Remit: ${remit}`);
+
+    const notes = ($(IDS.notes)?.value || '').trim();
+    if (notes) parts.push(`Notes: ${notes}`);
+
+    return parts.join(' • ');
+  }
+
+  function mountWizard(){
+    injectCSS();
+
+    // Where to mount:
+    // Prefer your modern layout card, but fall back to page body.
+    const host =
+      $('wlLeftCard')?.querySelector?.('#wlLeftCardBody') ||
+      $1('.bodyFlexItem') ||
+      document.body;
+
+    if (!host) return;
+
+    // Don’t double mount
+    if ($('wlApWizard2')) return;
+
+    // Hide the noisy legacy blocks (we’ll keep controls but move what we need)
+    // NOTE: we do NOT delete anything; we only hide containers after moving children.
+    const legacyForm = $1('table')?.closest?.('.bodyFlexItem') || $1('.bodyFlexItem');
+    // (We’ll keep this conservative; your earlier scripts already did layout changes.)
+
+    const wiz = document.createElement('div');
+    wiz.id = 'wlApWizard2';
+    wiz.innerHTML = `
+      <div class="wl-head">
+        <div class="wl-title">Make a Payment</div>
+        <div class="wl-steps" aria-label="Payment wizard steps">
+          <span class="wl-step-pill" data-step-pill="0">1) Info</span>
+          <span class="wl-step-pill" data-step-pill="1">2) Select</span>
+          <span class="wl-step-pill" data-step-pill="2">3) Review</span>
+          <span class="wl-step-pill" data-step-pill="3">4) Pay</span>
+        </div>
+      </div>
+
+      <div class="wl-body">
+        <div class="wl-panel" data-step="0">
+          <div class="wl-grid two">
+            <div class="wl-card">
+              <h3>Your information</h3>
+              <div id="wlStepInfoFields" class="wl-grid"></div>
+              <div class="wl-help">We’ll use this to send confirmation and keep billing details correct.</div>
+            </div>
+            <div class="wl-card">
+              <h3>Notes (optional)</h3>
+              <div id="wlStepInfoNotes" class="wl-grid"></div>
+              <div class="wl-help">If you want to add context for the office (PO, who approved, etc.).</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="wl-panel" data-step="1">
+          <div class="wl-grid two">
+            <div class="wl-card">
+              <h3>Choose what you’re paying</h3>
+              <div id="wlStepSelectActions"></div>
+              <div class="wl-help">Pick invoices, jobs, last statement, or just enter an amount manually.</div>
+            </div>
+            <div class="wl-card">
+              <h3>Amount</h3>
+              <div id="wlStepSelectAmount" class="wl-grid"></div>
+              <div class="wl-help">If you used an action (invoice/job/statement), this will fill automatically.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="wl-panel" data-step="2">
+          <div class="wl-card">
+            <h3>Review</h3>
+            <div id="wlReviewBox" class="wl-grid"></div>
+            <div class="wl-help">Confirm the amount and what was selected before choosing payment method.</div>
+          </div>
+        </div>
+
+        <div class="wl-panel" data-step="3">
+          <div class="wl-grid two">
+            <div class="wl-card">
+              <h3>Payment method</h3>
+              <div id="wlStepPayBy"></div>
+              <div class="wl-help">If “Check on file” is available, select the account before submitting.</div>
+            </div>
+            <div class="wl-card">
+              <h3>Submit</h3>
+              <div id="wlStepSubmit"></div>
+              <div class="wl-help">When you click Make Payment, the server processes using the real WebForms controls.</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="wl-nav">
+          <button type="button" class="wl-btn" id="wlWizBackBtn">Back</button>
+          <button type="button" class="wl-btn primary" id="wlWizNextBtn">Next</button>
+        </div>
+      </div>
+    `;
+
+    host.prepend(wiz);
+
+    // Move real fields into wizard (do NOT clone)
+    const infoHost  = $('wlStepInfoFields');
+    const notesHost = $('wlStepInfoNotes');
+    const amtHost   = $('wlStepSelectAmount');
+
+    // Helper: move the nearest WebForms “group” wrapper if it exists
+    function moveFieldById(id, to){
+      const el = $(id);
+      if (!el) return;
+      const wrap =
+        el.closest('.epi-form-group-acctPayment') ||
+        el.closest('tr') ||
+        el.parentElement;
+      if (wrap && to) to.appendChild(wrap);
+    }
+
+    // Info step: email + billing address container + zip
+    moveFieldById(IDS.email, infoHost);
+    // Billing container sometimes wraps multiple fields
+    const billWrap = $(IDS.billWrap) || $(IDS.billBox)?.closest('.epi-form-group-acctPayment');
+    if (billWrap && infoHost) infoHost.appendChild(billWrap);
+    moveFieldById(IDS.zip, infoHost);
+
+    // Notes
+    moveFieldById(IDS.notes, notesHost);
+    // Remittance can be shown earlier (optional), but we keep it in “review context” by leaving it available:
+    moveFieldById(IDS.remit, notesHost);
+
+    // Amount step
+    moveFieldById(IDS.amount, amtHost);
+
+    // Select step: move your existing Quick Payment widget into the actions box
+    const actionsBox = $('wlStepSelectActions');
+    const quick = $(IDS.quickHost);
+    if (quick && actionsBox) actionsBox.appendChild(quick);
+
+    // Pay step: move real pay-by radios + COF container(s)
+    const payByBox = $('wlStepPayBy');
+    const rbCheck = $(IDS.rbCheck);
+    const rbCof   = $(IDS.rbCof);
+    const rbCredit= $(IDS.rbCredit);
+
+    // Move their wrappers if found
+    const wCheck  = rbCheck?.closest('.radiobutton')  || rbCheck?.parentElement;
+    const wCof    = rbCof?.closest('.radiobutton')    || rbCof?.parentElement;
+    const wCredit = rbCredit?.closest('.radiobutton') || rbCredit?.parentElement;
+
+    if (payByBox){
+      if (wCheck)  payByBox.appendChild(wCheck);
+      if (wCof)    payByBox.appendChild(wCof);
+      // Credit intentionally hidden later, but keep it in DOM if needed:
+      if (wCredit) payByBox.appendChild(wCredit);
+      const cof1 = $(IDS.cofWrap);
+      const cof2 = $(IDS.cofWrap2);
+      if (cof1) payByBox.appendChild(cof1);
+      if (cof2) payByBox.appendChild(cof2);
+    }
+
+    // Submit step: move the Make Payment button (real control)
+    const submitBox = $('wlStepSubmit');
+    const mp = findMakePaymentButton();
+    if (mp && submitBox){
+      const wrap = mp.closest('.epi-form-group-acctPayment') || mp.parentElement;
+      if (wrap) submitBox.appendChild(wrap);
+      else submitBox.appendChild(mp);
+    }
+
+    // Wizard state + navigation
+    const KEY = '__WL_AP_WIZ2_STEP';
+    let step = Math.max(0, Math.min(3, Number(sessionStorage.getItem(KEY) || '0')));
+
+    function setStep(n){
+      step = Math.max(0, Math.min(3, Number(n||0)));
+      sessionStorage.setItem(KEY, String(step));
+
+      // pills
+      wiz.querySelectorAll('[data-step-pill]').forEach(p=>{
+        p.classList.toggle('on', Number(p.getAttribute('data-step-pill')) === step);
+      });
+      // panels
+      wiz.querySelectorAll('.wl-panel').forEach(p=>{
+        p.classList.toggle('on', Number(p.getAttribute('data-step')) === step);
+      });
+
+      // buttons
+      $('wlWizBackBtn').disabled = (step === 0);
+      $('wlWizNextBtn').textContent = (step === 3) ? 'Review complete' : 'Next';
+
+      // keep pay-by normalized anytime we hit Pay step
+      if (step === 3){
+        normalizePayByForWizard();
+        wirePayByVisibility();
+      }
+
+      // refresh review contents on step 2
+      if (step === 2){
+        renderReview();
+      }
+    }
+
+    function moneyNum(s){
+      const v = parseFloat(String(s||'').replace(/[^0-9.\-]/g,''));
+      return Number.isFinite(v) ? v : 0;
+    }
+
+    function validateStep(n){
+      // Keep it practical: don’t hard-block unless truly broken.
+      if (n === 0){
+        const email = ($(IDS.email)?.value || '').trim();
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
+          alert('That email address doesn’t look valid.');
+          return false;
+        }
+      }
+      if (n === 1){
+        const amt = moneyNum($(IDS.amount)?.value || '');
+        if (!(amt > 0)){
+          alert('Enter a payment amount (or use an action like invoices/jobs/statement to fill it).');
+          return false;
+        }
+      }
+      if (n === 3){
+        // If COF selected, ensure a selection exists
+        const rbCofNow = $(IDS.rbCof);
+        if (rbCofNow && rbCofNow.checked){
+          const cof1 = $(IDS.cofWrap), cof2 = $(IDS.cofWrap2);
+          const sel = (cof1?.querySelector('select') || cof2?.querySelector('select'));
+          if (sel && !sel.value){
+            alert('Select the account for “Check on file” before submitting.');
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+
+    function renderReview(){
+      const box = $('wlReviewBox');
+      if (!box) return;
+
+      const amtStr = ($(IDS.amount)?.value || '').trim();
+      const email  = ($(IDS.email)?.value || '').trim();
+      const notes  = ($(IDS.notes)?.value || '').trim();
+      const remit  = ($(IDS.remit)?.value || '').trim();
+      const sel    = getSelectionSummaryTextSafe();
+
+      box.innerHTML = `
+        <div class="wl-card">
+          <h3>Amount</h3>
+          <div style="font-weight:1000;font-size:20px;">${amtStr ? '$' + amtStr : '(none)'}</div>
+        </div>
+        <div class="wl-card">
+          <h3>Selected items</h3>
+          <div style="font-weight:800;">${sel || '(none)'}</div>
+        </div>
+        <div class="wl-card">
+          <h3>Contact</h3>
+          <div>${email || '(email not provided)'}</div>
+        </div>
+        <div class="wl-card">
+          <h3>Remittance / Notes</h3>
+          <div style="white-space:pre-wrap;">${(remit || notes) ? `${remit ? remit : ''}${(remit && notes) ? '\n\n' : ''}${notes ? notes : ''}` : '(none)'}</div>
+        </div>
+      `;
+    }
+
+    function wirePayByVisibility(){
+      const rbCofNow = $(IDS.rbCof);
+      const rbChkNow = $(IDS.rbCheck);
+      const cof1 = $(IDS.cofWrap);
+      const cof2 = $(IDS.cofWrap2);
+
+      function sync(){
+        normalizePayByForWizard();
+        const isCof = !!(rbCofNow && rbCofNow.checked);
+        // show COF containers only if COF selected
+        if (isCof){
+          hardShow(cof1); hardShow(cof2);
+          const sel = (cof1?.querySelector('select') || cof2?.querySelector('select'));
+          if (sel){
+            sel.disabled = false;
+            sel.removeAttribute('disabled');
+            sel.style.pointerEvents = 'auto';
+          }
+        } else {
+          // keep them available but not visually noisy
+          // (If you prefer always visible, remove these two hides.)
+          if (cof1) hardHide(cof1);
+          if (cof2) hardHide(cof2);
+        }
+      }
+
+      rbCofNow?.addEventListener('change', sync);
+      rbChkNow?.addEventListener('change', sync);
+      sync();
+    }
+
+    // Nav buttons
+    $('wlWizBackBtn').addEventListener('click', ()=>{
+      setStep(step - 1);
+    });
+    $('wlWizNextBtn').addEventListener('click', ()=>{
+      if (!validateStep(step)) return;
+      setStep(step + 1);
+    });
+
+    // Start
+    setStep(step);
+
+    // If the user clicks “Pay by Invoice / Pay by Job / Last Statement” inside step 1,
+    // keep the wizard on step 1 and let your existing code fill fields.
+    // (Nothing special needed here — those buttons already wire themselves.)
+  }
+
+  function boot(){
+    try { mountWizard(); } catch(e){ console.warn('[AP WIZ2] mount error', e); }
+    try { normalizePayByForWizard(); } catch {}
+  }
+
+  // initial
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, { once:true });
+  } else {
+    boot();
+  }
+
+  // re-run after WebForms/Telerik async updates
+  try {
+    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
+      const prm = Sys.WebForms.PageRequestManager.getInstance();
+      prm.add_endRequest(function () {
+        // Ensure wizard still exists and COF remains usable
+        try { mountWizard(); } catch {}
+        try { normalizePayByForWizard(); } catch {}
+      });
+    }
+  } catch {}
+})();
