@@ -3664,66 +3664,97 @@ function setStep(n){
 
 
 /* ============================================================
-   WL Wizard Patch: Billing stays in Step 1 + preserve step on COF postback
+   WL Wizard Patch (STRONG): lock Billing Address into Step 1
    ============================================================ */
 (function () {
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
-  const STEP_KEY = '__WL_AP_WIZ3_STEP';
-
   function $(id){ return document.getElementById(id); }
 
-  function moveBillingToStep1(){
-    try {
-      const step1 = document.getElementById('w3Step0') || document.querySelector('[data-step="0"]');
-      if (!step1) return;
-
-      const infoInner = step1.querySelector('#w3InfoInner') || step1;
-
-      const billingWrap =
-        $('ctl00_PageBody_BillingAddressContainer') ||
-        $('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment');
-
-      const billingZip =
-        $('ctl00_PageBody_BillingPostalCodeTextBox')?.closest('.epi-form-group-acctPayment');
-
-      if (billingWrap && !infoInner.contains(billingWrap)) {
-        infoInner.appendChild(billingWrap);
-      }
-
-      if (billingZip && !infoInner.contains(billingZip)) {
-        infoInner.appendChild(billingZip);
-      }
-
-    } catch(e){}
+  function getStep1Root(){
+    // Works for both wizard variants you've used
+    return $('w3Step0') || document.querySelector('.wl-panel[data-step="0"]') || null;
   }
 
-  function preserveWizardStep(){
-    try {
-      const step = sessionStorage.getItem(STEP_KEY);
-      if (step !== null) {
-        sessionStorage.setItem(STEP_KEY, step);
-      }
-    } catch(e){}
+  function ensureBillingSlot(){
+    const step1 = getStep1Root();
+    if (!step1) return null;
+
+    // Prefer your existing inner container if present
+    let infoInner = step1.querySelector('#w3InfoInner') || step1;
+
+    // Create a dedicated "slot" that we will always move billing into
+    let slot = step1.querySelector('#wlBillingSlot');
+    if (!slot) {
+      slot = document.createElement('div');
+      slot.id = 'wlBillingSlot';
+      slot.style.display = 'grid';
+      slot.style.gap = '12px';
+      // Put it AFTER email/address/zip if those exist, otherwise just append
+      infoInner.appendChild(slot);
+    }
+    return slot;
   }
 
-  // Initial fix
-  setTimeout(moveBillingToStep1, 200);
-  setTimeout(moveBillingToStep1, 800);
+  function findBillingWrap(){
+    // Prefer the container that wraps the whole billing block
+    return (
+      $('ctl00_PageBody_BillingAddressContainer') ||
+      $('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment') ||
+      null
+    );
+  }
+
+  function findBillingZipWrap(){
+    return $('ctl00_PageBody_BillingPostalCodeTextBox')?.closest('.epi-form-group-acctPayment') || null;
+  }
+
+  function lockBillingIntoStep1(){
+    try {
+      const slot = ensureBillingSlot();
+      if (!slot) return;
+
+      const billWrap = findBillingWrap();
+      const billZip  = findBillingZipWrap();
+
+      // If the billing wrapper exists and isn't already in the billing slot, move it back.
+      if (billWrap && billWrap.parentElement !== slot) {
+        slot.appendChild(billWrap);
+      }
+
+      // Ensure Billing ZIP sits with billing (some templates separate it)
+      if (billZip && billZip.parentElement !== slot) {
+        slot.appendChild(billZip);
+      }
+    } catch(e) {}
+  }
+
+  // Run immediately, then again after common “late moves”
+  setTimeout(lockBillingIntoStep1, 0);
+  setTimeout(lockBillingIntoStep1, 200);
+  setTimeout(lockBillingIntoStep1, 800);
+  setTimeout(lockBillingIntoStep1, 1500);
+
+  // Watch for DOM moves (your script + Telerik/WebForms will re-render / move nodes)
+  try {
+    const mo = new MutationObserver(function () {
+      lockBillingIntoStep1();
+    });
+    mo.observe(document.body, { childList: true, subtree: true });
+  } catch(e){}
 
   // After WebForms partial postbacks (COF radio etc.)
   try {
     if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
       const prm = Sys.WebForms.PageRequestManager.getInstance();
-
-      if (!prm.__wlBillingFixBound) {
+      if (!prm.__wlBillingLockBound) {
         prm.add_endRequest(function () {
-          preserveWizardStep();
-          setTimeout(moveBillingToStep1, 150);
+          setTimeout(lockBillingIntoStep1, 50);
+          setTimeout(lockBillingIntoStep1, 250);
         });
-        prm.__wlBillingFixBound = true;
+        prm.__wlBillingLockBound = true;
       }
     }
   } catch(e){}
-
 })();
+
