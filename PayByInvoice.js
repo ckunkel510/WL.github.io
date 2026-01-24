@@ -4069,3 +4069,58 @@ function setStep(n){
 
 
 
+(function(){
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+
+  const id = "ctl00_PageBody_BillingAddressTextBox";
+
+  function blockIfBilling(e){
+    const t = e.target;
+    if (!t || t.id !== id) return;
+
+    // Block Enter key submits
+    if (e.type === "keydown" && (e.key === "Enter" || e.keyCode === 13)) {
+      e.preventDefault();
+      e.stopPropagation();
+      return false;
+    }
+
+    // Block events that often trigger __doPostBack via onchange/onblur
+    if (e.type === "change" || e.type === "blur") {
+      e.stopPropagation();
+      // don’t prevent blur itself (user experience), but kill the bubble that hits handlers
+      // Some pages attach onchange directly; we also strip inline handler below.
+    }
+  }
+
+  function stripInlinePostback(){
+    const el = document.getElementById(id);
+    if (!el) return;
+
+    // Remove inline handlers if present
+    if (el.getAttribute("onchange") && /__doPostBack/i.test(el.getAttribute("onchange"))) el.setAttribute("onchange","");
+    if (el.getAttribute("onblur") && /__doPostBack/i.test(el.getAttribute("onblur"))) el.setAttribute("onblur","");
+  }
+
+  // Capture phase to intercept before Telerik/WebForms handlers
+  document.addEventListener("keydown", blockIfBilling, true);
+  document.addEventListener("change", blockIfBilling, true);
+  document.addEventListener("blur", blockIfBilling, true);
+
+  setTimeout(stripInlinePostback, 0);
+  setTimeout(stripInlinePostback, 250);
+
+  // After partial postbacks, the input gets recreated, so strip again
+  try {
+    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
+      const prm = Sys.WebForms.PageRequestManager.getInstance();
+      if (!prm.__wlStripBillBound) {
+        prm.add_endRequest(function(){
+          setTimeout(stripInlinePostback, 0);
+          setTimeout(stripInlinePostback, 200);
+        });
+        prm.__wlStripBillBound = true;
+      }
+    }
+  } catch {}
+})();
