@@ -3492,3 +3492,225 @@ if (jobBtn){
   }
 })();
 
+
+
+
+/* =============================================================================
+   Woodson — PayByInvoice Patch (Check + Check On File visibility + Success Receipt)
+   - Shows: Pay by Check, Check on file (+ dropdown container)
+   - Hides: Card/Credit option
+   - Fixes: wlPayByShadow to support CheckOnFile so postbacks don’t revert
+   - Success page: adds formatted "Print Receipt" and clearer labels + selection summary
+   ============================================================================= */
+(function(){
+  'use strict';
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+
+  const IDS = {
+    rbCheck: 'ctl00_PageBody_RadioButton_PayByCheck',
+    rbCredit:'ctl00_PageBody_RadioButton_PayByCredit',
+    rbCof:   'ctl00_PageBody_RadioButton_PayByCheckOnFile',
+    cofWrap: 'ctl00_PageBody_ChecksOnFileContainer',
+    cofWrap2:'ctl00_PageBody_ChecksOnFileContainer1',
+    saveTok: 'ctl00_PageBody_btnSaveToken',
+  };
+
+  const $ = (id)=>document.getElementById(id);
+
+  function isSuccessPage(){
+    const p = document.querySelector('.bodyFlexItem p');
+    const t = (p?.textContent || '');
+    return /account payment was successful/i.test(t) && !!document.querySelector('table.paymentDataTable');
+  }
+
+  function forceShow(el){
+    if (!el) return;
+    el.hidden = false;
+    el.style.removeProperty('display');
+    el.style.removeProperty('visibility');
+    el.style.display = '';
+    el.style.visibility = 'visible';
+    el.style.opacity = '1';
+    el.classList.add('wl-force-show');
+  }
+
+  function hide(el){
+    if (!el) return;
+    el.style.display = 'none';
+    el.hidden = true;
+  }
+
+  function normalizePayByRadios(){
+    // Show check + COF
+    forceShow($(IDS.rbCheck)?.closest('.radiobutton') || $(IDS.rbCheck)?.parentElement);
+    forceShow($(IDS.rbCof)?.closest('.radiobutton')   || $(IDS.cofWrap));
+    forceShow($(IDS.cofWrap));
+    forceShow($(IDS.cofWrap2));
+
+    // Hide credit/card
+    const cr = $(IDS.rbCredit);
+    if (cr){
+      hide(cr.closest('.radiobutton') || cr.parentElement);
+    }
+
+    // Ensure COF is not disabled
+    const cof = $(IDS.rbCof);
+    if (cof){
+      cof.disabled = false;
+      cof.removeAttribute('disabled');
+      cof.style.pointerEvents = 'auto';
+    }
+  }
+
+  // ---- Shadow PayBy value (prevents WebForms from "forgetting" selected option on async postbacks)
+  function readPayByValue(){
+    const cof = $(IDS.rbCof);
+    const cr  = $(IDS.rbCredit);
+    const chk = $(IDS.rbCheck);
+    if (cof && cof.checked) return 'RadioButton_PayByCheckOnFile';
+    if (cr  && cr.checked)  return 'RadioButton_PayByCredit';
+    return 'RadioButton_PayByCheck';
+  }
+
+  function ensureShadowPayBy_v2(){
+    const form = document.forms[0]; if (!form) return;
+    let h = document.getElementById('wlPayByShadow');
+    if (!h){
+      h = document.createElement('input');
+      h.type = 'hidden';
+      h.id   = 'wlPayByShadow';
+      h.name = 'ctl00$PageBody$PayBy';
+      form.appendChild(h);
+    }
+    h.value = readPayByValue();
+  }
+
+  function patchShadowHook(){
+    // If the main script already exposes ensureShadowPayBy, replace it with v2 mapping.
+    if (typeof window.ensureShadowPayBy === 'function' && !window.ensureShadowPayBy.__wlV2){
+      window.ensureShadowPayBy = function(){ return ensureShadowPayBy_v2(); };
+      window.ensureShadowPayBy.__wlV2 = true;
+    }
+    // Also keep it synced on changes (capture, before ASP.NET handlers)
+    ['change','input','click'].forEach(evt=>{
+      document.addEventListener(evt, (e)=>{
+        const id = e?.target?.id || '';
+        if (id === IDS.rbCheck || id === IDS.rbCredit || id === IDS.rbCof){
+          ensureShadowPayBy_v2();
+        }
+      }, true);
+    });
+    // On submit, always sync
+    document.forms[0]?.addEventListener?.('submit', ()=> ensureShadowPayBy_v2(), true);
+  }
+
+  // ---- Selection summary (Invoices/Credits/Jobs/Statement/Cab, etc.)
+  function safeJSONParse(s){
+    try{ return JSON.parse(s); }catch{ return null; }
+  }
+  function getSelectionSummaryText(){
+    const parts = [];
+
+    // Invoices/Credits picker TTL store (object or array depending on version)
+    const selRaw = localStorage.getItem('WL_AP_SelectedDocs');
+    const sel = safeJSONParse(selRaw);
+    const docs = sel?.value?.docs || sel?.docs || sel?.value || sel;
+    if (Array.isArray(docs) && docs.length){
+      // keep compact: "INV 203369, CR 12345 (3 items)"
+      const firstFew = docs.slice(0,6).map(d=>{
+        const t = (d.type||d.DocType||'').toString().toUpperCase().startsWith('C') ? 'CR' : 'INV';
+        const n = (d.doc || d.Doc || d.docNumber || d.DocumentNumber || '').toString().trim();
+        return (n ? `${t} ${n}` : t);
+      }).filter(Boolean);
+      parts.push(`Invoices/Credits: ${firstFew.join(', ')}${docs.length>6?` (+${docs.length-6} more)`:''}`);
+    }
+
+    // Jobs modal selection
+    const jobsRaw = sessionStorage.getItem('__WL_JobsSelection');
+    const jobs = safeJSONParse(jobsRaw);
+    if (Array.isArray(jobs) && jobs.length){
+      const ids = jobs.slice(0,8).map(j=> (j.job || j.Job || j.jobNumber || j.id || '').toString().trim()).filter(Boolean);
+      parts.push(`Jobs: ${ids.join(', ')}${jobs.length>8?` (+${jobs.length-8} more)`:''}`);
+    }
+
+    // Statement quick action (remittance line)
+    const remit = (document.getElementById('ctl00_PageBody_RemittanceAdviceTextBox')?.value || '').trim();
+    if (/^STATEMENT/i.test(remit)) parts.push(remit);
+
+    // Notes line (cab load, etc. — anything your UI writes into Notes)
+    const notes = (document.getElementById('ctl00_PageBody_NotesTextBox')?.value || '').trim();
+    if (notes) parts.push(`Notes: ${notes}`);
+
+    return parts.join(' • ');
+  }
+
+  // ---- Success page improvements
+  function applySuccessUX(){
+    const tbl = document.querySelector('table.paymentDataTable');
+    if (!tbl) return;
+
+    // Rename misleading label "Invoice number" -> "Payment confirmation #"
+    [...tbl.querySelectorAll('tr')].forEach(tr=>{
+      const th = tr.querySelector('th');
+      if (!th) return;
+      const key = (th.textContent || '').replace(/\s+/g,' ').trim().toLowerCase();
+      if (key === 'invoice number:' || key === 'invoice number'){
+        th.textContent = 'Payment confirmation #:';
+      }
+    });
+
+    // Add "Payment applied to" row (from our selections)
+    const summary = getSelectionSummaryText();
+    if (summary && !tbl.querySelector('tr[data-wl="appliedTo"]')){
+      const tr = document.createElement('tr');
+      tr.setAttribute('data-wl','appliedTo');
+      tr.innerHTML = `<th style="vertical-align: top;">Payment applied to:</th><td colspan="2">${summary}</td>`;
+      // Insert before Notes row if possible
+      const notesRow = [...tbl.querySelectorAll('tr')].find(r=>/notes/i.test(r.querySelector('th')?.textContent||''));
+      if (notesRow && notesRow.parentNode) notesRow.parentNode.insertBefore(tr, notesRow);
+      else tbl.tBodies[0]?.appendChild(tr);
+    }
+
+    // Improve token button label
+    const tok = $(IDS.saveTok);
+    if (tok){
+      tok.value = 'Save payment method';
+      tok.title = 'Save payment method for future payments';
+    }
+
+    // Hide any WL widgets/modals that might still be mounted on success view
+    [
+      '#wlOpenTxModalBtn', '#wlOpenJobsModalBtn', '#wlFillOwingBtn', '#wlLastStmtBtn',
+      '#wlInvModal', '#wlInvBackdrop', '#wlJobsModal', '#wlJobsModalBackdrop'
+    ].forEach(sel=>{
+      document.querySelectorAll(sel).forEach(hide);
+    });
+  }
+
+  // ---- Boot + MS AJAX re-apply
+  function boot(){
+    normalizePayByRadios();
+    patchShadowHook();
+    ensureShadowPayBy_v2();
+    if (isSuccessPage()){
+      applySuccessUX();
+    }
+  }
+
+  // Run now + after MS AJAX updates
+  function hookMsAjax(){
+    try{
+      if (!(window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager)) return;
+      const prm = Sys.WebForms.PageRequestManager.getInstance();
+      if (prm.__wlPayByPatchV2) return;
+      prm.add_endRequest(()=> setTimeout(boot, 25));
+      prm.__wlPayByPatchV2 = true;
+    }catch{}
+  }
+
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', ()=>{ boot(); hookMsAjax(); }, { once:true });
+  } else {
+    boot(); hookMsAjax();
+  }
+})();
