@@ -3647,3 +3647,83 @@ function setStep(n){
     }
   } catch {}
 })();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ============================================================
+   WL Wizard Patch: Billing stays in Step 1 + preserve step on COF postback
+   ============================================================ */
+(function () {
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+
+  const STEP_KEY = '__WL_AP_WIZ3_STEP';
+
+  function $(id){ return document.getElementById(id); }
+
+  function moveBillingToStep1(){
+    try {
+      const step1 = document.getElementById('w3Step0') || document.querySelector('[data-step="0"]');
+      if (!step1) return;
+
+      const infoInner = step1.querySelector('#w3InfoInner') || step1;
+
+      const billingWrap =
+        $('ctl00_PageBody_BillingAddressContainer') ||
+        $('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment');
+
+      const billingZip =
+        $('ctl00_PageBody_BillingPostalCodeTextBox')?.closest('.epi-form-group-acctPayment');
+
+      if (billingWrap && !infoInner.contains(billingWrap)) {
+        infoInner.appendChild(billingWrap);
+      }
+
+      if (billingZip && !infoInner.contains(billingZip)) {
+        infoInner.appendChild(billingZip);
+      }
+
+    } catch(e){}
+  }
+
+  function preserveWizardStep(){
+    try {
+      const step = sessionStorage.getItem(STEP_KEY);
+      if (step !== null) {
+        sessionStorage.setItem(STEP_KEY, step);
+      }
+    } catch(e){}
+  }
+
+  // Initial fix
+  setTimeout(moveBillingToStep1, 200);
+  setTimeout(moveBillingToStep1, 800);
+
+  // After WebForms partial postbacks (COF radio etc.)
+  try {
+    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
+      const prm = Sys.WebForms.PageRequestManager.getInstance();
+
+      if (!prm.__wlBillingFixBound) {
+        prm.add_endRequest(function () {
+          preserveWizardStep();
+          setTimeout(moveBillingToStep1, 150);
+        });
+        prm.__wlBillingFixBound = true;
+      }
+    }
+  } catch(e){}
+
+})();
