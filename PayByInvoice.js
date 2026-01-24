@@ -3336,7 +3336,18 @@ if (jobBtn){
     return moneyNum(el?.value || '');
   }
 
-  function buildReviewHTML(){
+  function sanitizeEmailInPlace(){
+  const el = $('ctl00_PageBody_EmailAddressTextBox');
+  if (!el) return;
+  const raw = String(el.value || '').trim();
+  if (!raw) return;
+  // If something like "(ckunkel) ckunkel@woodsonlumber.com", extract the first valid email token.
+  const tokens = raw.split(/[\s,;<>\(\)]+/).filter(Boolean);
+  const email = tokens.find(t => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)) || '';
+  if (email && email !== raw) el.value = email;
+}
+
+function buildReviewHTML(){
     const amtEl = $('ctl00_PageBody_PaymentAmountTextBox');
     const remit = $('ctl00_PageBody_RemittanceAdviceTextBox')?.value || '';
     const notes = $('ctl00_PageBody_NotesTextBox')?.value || '';
@@ -3371,26 +3382,41 @@ if (jobBtn){
   }
 
   function ensureCOFLoaded(){
-    window.WLPayMode?.ensureCheckOnFileUI?.();
+  // Only attempt to load COF accounts when COF is actually selected.
+  window.WLPayMode?.ensureCheckOnFileUI?.();
 
-    const rb = $('ctl00_PageBody_RadioButton_PayByCheckOnFile');
-    if (!rb) return;
+  const rb = $('ctl00_PageBody_RadioButton_PayByCheckOnFile');
+  if (!rb || !rb.checked) return;
 
-    const c1 = $('ctl00_PageBody_ChecksOnFileContainer');
-    const c2 = $('ctl00_PageBody_ChecksOnFileContainer1');
-    const sel = (c1?.querySelector('select') || c2?.querySelector('select'));
+  const c1 = $('ctl00_PageBody_ChecksOnFileContainer');
+  const c2 = $('ctl00_PageBody_ChecksOnFileContainer1');
+  const sel = (c1?.querySelector('select') || c2?.querySelector('select'));
 
-    // If select exists but looks empty, force a postback by clicking the radio again.
-    if (sel && sel.options && sel.options.length <= 1){
-      try { rb.click(); } catch {}
-      // Fallback: manual postback
-      try {
-        if (typeof window.__doPostBack === 'function' && rb.name){
-          window.__doPostBack(rb.name, '');
-        }
-      } catch {}
+  // Throttle retries to avoid infinite postback loops
+  const TRY_KEY = '__WL_COF_LOAD_TRIES';
+  const TS_KEY  = '__WL_COF_LOAD_LAST_TS';
+  const tries = Number(sessionStorage.getItem(TRY_KEY) || '0');
+  const lastTs = Number(sessionStorage.getItem(TS_KEY) || '0');
+  const now = Date.now();
+
+  // If select looks empty, try at most 2 times, no more than once per 2 seconds
+  const looksEmpty = !!(sel && sel.options && sel.options.length <= 1);
+  if (!looksEmpty) return;
+
+  if (tries >= 2) return;
+  if (now - lastTs < 2000) return;
+
+  sessionStorage.setItem(TRY_KEY, String(tries + 1));
+  sessionStorage.setItem(TS_KEY, String(now));
+
+  try { rb.click(); } catch {}
+  // Fallback: manual postback
+  try {
+    if (typeof window.__doPostBack === 'function' && rb.name){
+      window.__doPostBack(rb.name, '');
     }
-  }
+  } catch {}
+}
 
   function mount(){
     injectCSS();
@@ -3456,8 +3482,19 @@ const billWrap =
   $('ctl00_PageBody_BillingAddressContainer') ||
   $('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment');
 
+sanitizeEmailInPlace();
+
+// Address / billing / zip / email (only) on Step 0
 moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
+
+// If there is a delivery/address selector + postal code, keep it on Step 0 too
+moveFieldGroupById('ctl00_PageBody_AddressDropdownList', infoInner);
+moveFieldGroupById('ctl00_PageBody_PostalCodeTextBox', infoInner);
+
+// Billing address block (may include textarea + helper controls)
 if (billWrap) infoInner.appendChild(billWrap);
+
+// Billing zip (if separate)
 moveFieldGroupById('ctl00_PageBody_BillingPostalCodeTextBox', infoInner);
 
 // Keep the rest of the original UI (amount/quick-pay/remit/etc.) out of Step 0:
@@ -3508,7 +3545,22 @@ moveFieldGroupById('ctl00_PageBody_BillingPostalCodeTextBox', infoInner);
     }
 
     // Step state
-    let step = Math.max(0, Math.min(3, Number(sessionStorage.getItem(STEP_KEY) || '0')));
+    let step = 0; // always start fresh on full page load
+    sessionStorage.setItem(STEP_KEY, '0');
+
+let __wlSubmitted = false;
+// Warn if user navigates away mid-payment
+window.addEventListener('beforeunload', function (e) {
+  try {
+    if (__wlSubmitted) return;
+    const s = Number(sessionStorage.getItem(STEP_KEY) || '0');
+    if (s > 0) {
+      e.preventDefault();
+      e.returnValue = 'Any progress on this payment may be lost.';
+      return e.returnValue;
+    }
+  } catch {}
+});
 
     function setStep(n){
       step = Math.max(0, Math.min(3, Number(n||0)));
@@ -3559,6 +3611,8 @@ moveFieldGroupById('ctl00_PageBody_BillingPostalCodeTextBox', infoInner);
   }
 
   function boot(){
+    sanitizeEmailInPlace();
+
     // try a few times — layout may build after async scripts
     let tries = 0;
     const max = 80; // ~4s at 50ms
