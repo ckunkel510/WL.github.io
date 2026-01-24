@@ -3854,3 +3854,186 @@ function setStep(n){
   } catch {}
 })();
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ============================================================
+   WL PATCH: Billing disappears after typing (UpdatePanel rerender)
+   - After postback, the billing control is recreated elsewhere.
+   - Re-pin it back into Step 1 with delayed retries.
+   - Restore focus to the billing textbox if user was typing there.
+   ============================================================ */
+(function () {
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+  if (window.__WL_BILLING_RERENDER_FIX__) return;
+  window.__WL_BILLING_RERENDER_FIX__ = true;
+
+  const $ = (id) => document.getElementById(id);
+
+  function step1Host(){
+    const s1 =
+      $("w3Step0") ||
+      document.querySelector('.wl-panel[data-step="0"]');
+    if (!s1) return null;
+    return s1.querySelector("#w3InfoInner") || s1;
+  }
+
+  function billingWrap(){
+    const c = $("ctl00_PageBody_BillingAddressContainer");
+    if (c) return c;
+
+    const box = $("ctl00_PageBody_BillingAddressTextBox");
+    if (!box) return null;
+    return box.closest(".epi-form-group-acctPayment") || box.closest("tr") || box.parentElement;
+  }
+
+  function billingZipWrap(){
+    const z = $("ctl00_PageBody_BillingPostalCodeTextBox");
+    if (!z) return null;
+    return z.closest(".epi-form-group-acctPayment") || z.closest("tr") || z.parentElement;
+  }
+
+  function pinBilling(){
+    const host = step1Host();
+    if (!host) return;
+
+    const b = billingWrap();
+    const z = billingZipWrap();
+
+    if (b && !host.contains(b)) host.appendChild(b);
+    if (z && !host.contains(z)) host.appendChild(z);
+  }
+
+  // Remember if user was actively typing in billing field before a postback
+  let wasInBilling = false;
+  function bindBillingFocus(){
+    const box = $("ctl00_PageBody_BillingAddressTextBox");
+    if (!box || box.__wlFocusBound) return;
+    box.addEventListener("focus", () => { wasInBilling = true; }, true);
+    box.addEventListener("blur",  () => { wasInBilling = false; }, true);
+    box.__wlFocusBound = true;
+  }
+
+  function repinBurst(){
+    // multiple delayed attempts catches multi-wave Telerik/WebForms re-render
+    pinBilling();
+    setTimeout(pinBilling, 60);
+    setTimeout(pinBilling, 140);
+    setTimeout(pinBilling, 260);
+    setTimeout(pinBilling, 520);
+    setTimeout(() => {
+      pinBilling();
+      bindBillingFocus();
+      if (wasInBilling) {
+        const box = $("ctl00_PageBody_BillingAddressTextBox");
+        try { box && box.focus(); } catch {}
+      }
+    }, 820);
+  }
+
+  // Initial bind + pin
+  setTimeout(() => { bindBillingFocus(); pinBilling(); }, 0);
+  setTimeout(pinBilling, 200);
+  setTimeout(pinBilling, 600);
+
+  // After partial postbacks
+  try {
+    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
+      const prm = Sys.WebForms.PageRequestManager.getInstance();
+      if (!prm.__wlBillRerenderBound) {
+        prm.add_initializeRequest(function () {
+          // capture whether billing had focus right before postback
+          const ae = document.activeElement;
+          wasInBilling = !!(ae && ae.id === "ctl00_PageBody_BillingAddressTextBox");
+        });
+        prm.add_endRequest(function () {
+          // Re-pin after postback replaces the controls
+          repinBurst();
+        });
+        prm.__wlBillRerenderBound = true;
+      }
+    }
+  } catch {}
+})();
+
