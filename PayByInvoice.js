@@ -4356,8 +4356,6 @@ if (jobBtn){
 
 
 
-
-
 /* =============================================================================
    WL AccountPayment — Payment Method UI (Check vs Account On File) + Postback Fix
    - Keeps Pay options visible after MS AJAX postbacks (email validation, etc.)
@@ -4370,8 +4368,8 @@ if (jobBtn){
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
   // prevent double-boot
-  if (window.__WL_AP_PAY_METHOD_UI_V1) return;
-  window.__WL_AP_PAY_METHOD_UI_V1 = true;
+  if (window.__WL_AP_PAY_METHOD_UI_V2) return;
+  window.__WL_AP_PAY_METHOD_UI_V2 = true;
 
   const IDS = {
     rbCheck:  'ctl00_PageBody_RadioButton_PayByCheck',
@@ -4386,7 +4384,10 @@ if (jobBtn){
 
     // Shadow field (WebForms expects ctl00$PageBody$PayBy)
     shadowId:   'wlPayByShadow',
-    shadowName: 'ctl00$PageBody$PayBy'
+    shadowName: 'ctl00$PageBody$PayBy',
+
+    // Session key so mode survives postbacks
+    modeKey: 'wl_pay_method_mode'
   };
 
   const $ = (id) => document.getElementById(id);
@@ -4474,7 +4475,6 @@ if (jobBtn){
   function readPayByValue() {
     const rbCof = $(IDS.rbCof);
     const rbCr  = $(IDS.rbCredit);
-    const rbChk = $(IDS.rbCheck);
     if (rbCof && rbCof.checked) return 'RadioButton_PayByCheckOnFile';
     if (rbCr  && rbCr.checked)  return 'RadioButton_PayByCredit';
     return 'RadioButton_PayByCheck';
@@ -4495,6 +4495,48 @@ if (jobBtn){
 
   // Override any earlier exported ensureShadowPayBy so everything uses COF-aware mapping
   window.ensureShadowPayBy = ensureShadowPayBy;
+
+  /* ---------- WebForms postback helper ---------- */
+  function postbackForRadio(rb) {
+    const target = rb?.name || rb?.id;
+    if (!target) return;
+    if (typeof window.__doPostBack === 'function') {
+      window.__doPostBack(target, '');
+    } else {
+      // last resort
+      try { rb.click(); } catch {}
+    }
+  }
+
+  /* ---------- COF dropdown helper ---------- */
+  function getCofSelect() {
+    const wrap1 = $(IDS.cofWrap);
+    const wrap2 = $(IDS.cofWrap2);
+    return (wrap1 && wrap1.querySelector('select')) ||
+           (wrap2 && wrap2.querySelector('select')) ||
+           null;
+  }
+  function ensureCofSelection() {
+    const sel = getCofSelect();
+    if (!sel) return true; // some implementations don't use a <select>
+
+    // If already valid, done
+    if (sel.value && sel.value.trim() !== '') return true;
+
+    // Choose first non-empty option
+    for (let i = 0; i < sel.options.length; i++) {
+      const opt = sel.options[i];
+      if (opt && opt.value && opt.value.trim() !== '') {
+        sel.selectedIndex = i;
+        break;
+      }
+    }
+
+    // Trigger change (some pages expect it)
+    try { sel.dispatchEvent(new Event('change', { bubbles: true })); } catch {}
+
+    return !!(sel.value && sel.value.trim() !== '');
+  }
 
   /* ---------- Payment Method dropdown UI ---------- */
   function mountPaymentMethodUI() {
@@ -4536,50 +4578,69 @@ if (jobBtn){
     if (!sel) return;
 
     // Sync dropdown -> radios -> server UI visibility
-    function applyMode(mode) {
+    function applyMode(mode, opts) {
+      opts = opts || {};
+      const shouldPostback = opts.postback !== false;
+
       normalizePayByVisibility();
 
       const cofWrap  = $(IDS.cofWrap);
       const cofWrap2 = $(IDS.cofWrap2);
 
+      // remember user intent across postbacks
+      try { sessionStorage.setItem(IDS.modeKey, mode); } catch {}
+
       if (mode === 'cof' && rbCof) {
-        // Click the real radio so any WebForms onchange/onclick hooks still run
-        try { rbCof.click(); } catch { rbCof.checked = true; }
+        // SHOW COF containers
+        hardShow(cofWrap);
+        hardShow(cofWrap2);
+
+        // CRITICAL: set checked states BEFORE any postback
+        rbCof.checked = true;
         if (rbCheck) rbCheck.checked = false;
 
-        hardShow(cofWrap);
-        hardShow(cofWrap2);
+        // Make sure COF dropdown has a real selection
+        const ok = ensureCofSelection();
+
+        // CRITICAL: stamp hidden PayBy BEFORE postback
+        ensureShadowPayBy();
+
+        // Trigger the postback ourselves (avoid rbCof.click() which posts too early)
+        if (shouldPostback && ok) setTimeout(() => postbackForRadio(rbCof), 0);
       } else {
-        // Default to check
-        if (rbCheck) {
-          try { rbCheck.click(); } catch { rbCheck.checked = true; }
-        }
+        // CHECK mode
+        if (rbCheck) rbCheck.checked = true;
         if (rbCof) rbCof.checked = false;
 
-        // Still keep containers visible if the server expects them, but you can hide visually if you prefer:
-        // hardHide(cofWrap); hardHide(cofWrap2);
-        // For now: show, because some layouts nest the dropdown there and WebForms can get touchy.
+        // Keep containers shown (WebForms can be touchy)
         hardShow(cofWrap);
         hardShow(cofWrap2);
-      }
 
-      ensureShadowPayBy();
+        ensureShadowPayBy();
+
+        if (shouldPostback && rbCheck) setTimeout(() => postbackForRadio(rbCheck), 0);
+      }
     }
 
-    // Initialize selection from current state
-    const initMode = (rbCof && rbCof.checked) ? 'cof' : 'check';
+    // Initialize selection from current state OR saved mode
+    let initMode = (rbCof && rbCof.checked) ? 'cof' : 'check';
+    try {
+      const saved = sessionStorage.getItem(IDS.modeKey);
+      if (saved === 'cof' || saved === 'check') initMode = saved;
+    } catch {}
     sel.value = initMode;
-    applyMode(initMode);
+    applyMode(initMode, { postback: false }); // initial paint without forcing another request
 
     // On change, switch modes
     if (!sel.__wlBound) {
-      sel.addEventListener('change', () => applyMode(sel.value));
+      sel.addEventListener('change', () => applyMode(sel.value, { postback: true }));
       sel.__wlBound = true;
     }
 
     // Also: if user clicks the native radios, keep dropdown synced
     function syncFromRadios() {
       sel.value = (rbCof && rbCof.checked) ? 'cof' : 'check';
+      try { sessionStorage.setItem(IDS.modeKey, sel.value); } catch {}
       ensureShadowPayBy();
       normalizePayByVisibility();
     }
@@ -4590,6 +4651,9 @@ if (jobBtn){
         rb.__wlSyncBound = true;
       }
     });
+
+    // Expose for boot() restore
+    window.__wlApplyPayMode = applyMode;
   }
 
   /* ---------- Re-apply after async postbacks ---------- */
@@ -4598,6 +4662,16 @@ if (jobBtn){
     normalizePayByVisibility();
     mountPaymentMethodUI();
     ensureShadowPayBy();
+
+    // Restore user's preferred mode after postback render (without looping)
+    try {
+      const saved = sessionStorage.getItem(IDS.modeKey);
+      if (saved === 'cof' && typeof window.__wlApplyPayMode === 'function') {
+        window.__wlApplyPayMode('cof', { postback: false });
+        const sel = document.getElementById('wlPayMethodSelect');
+        if (sel) sel.value = 'cof';
+      }
+    } catch {}
   }
 
   boot();
@@ -4621,8 +4695,6 @@ if (jobBtn){
   } catch {}
 
   // Extra safety: if something inline hides these later, re-assert quickly
-  // (lightweight “self-heal” without a heavy MutationObserver)
   setTimeout(boot, 150);
   setTimeout(boot, 600);
 })();
-
