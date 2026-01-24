@@ -3434,8 +3434,36 @@ if (jobBtn){
     shell.parentNode.insertBefore(wiz, shell);
 
     // Move cards into steps (keeps all original logic intact)
-    $('w3Step0').appendChild(left);
+    
+// Step 0 (Info): only show Email + Billing Address + ZIP
+const step0 = $('w3Step0');
+const infoCard = document.createElement('div');
+infoCard.className = 'wl-card';
+infoCard.innerHTML = `<div class="wl-card-head">Your information</div><div class="wl-card-body"><div id="w3InfoInner" style="display:grid;gap:12px;"></div></div>`;
+step0.appendChild(infoCard);
+
+const infoInner = $('w3InfoInner');
+
+function moveFieldGroupById(id, to){
+  const el = $(id);
+  if (!el || !to) return;
+  const wrap = el.closest('.epi-form-group-acctPayment') || el.closest('tr') || el.parentElement;
+  if (wrap) to.appendChild(wrap);
+}
+
+// Prefer the BillingAddressContainer if present (may wrap multiple controls)
+const billWrap =
+  $('ctl00_PageBody_BillingAddressContainer') ||
+  $('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment');
+
+moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
+if (billWrap) infoInner.appendChild(billWrap);
+moveFieldGroupById('ctl00_PageBody_BillingPostalCodeTextBox', infoInner);
+
+// Keep the rest of the original UI (amount/quick-pay/remit/etc.) out of Step 0:
+// put the existing cards into Step 1 instead.
     const step1 = $('w3Step1');
+    step1.appendChild(left);
     step1.appendChild(right);
     if (tx) step1.appendChild(tx);
 
