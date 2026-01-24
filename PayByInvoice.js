@@ -3193,3 +3193,173 @@ if (jobBtn){
   } catch {}
 })();
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ============================================================================
+   WL Pay-By-Invoice PATCH: Support "Check on file" PayBy radio
+   Paste at the VERY BOTTOM of PayByInvoice.js
+   ============================================================================ */
+(function () {
+  'use strict';
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+
+  const IDS = {
+    checkOnFileContainer: 'ctl00_PageBody_ChecksOnFileContainer',
+    rbCheckOnFile:        'ctl00_PageBody_RadioButton_PayByCheckOnFile',
+    rbCheck:              'ctl00_PageBody_RadioButton_PayByCheck',
+    rbCredit:             'ctl00_PageBody_RadioButton_PayByCredit',
+    shadowId:             'wlPayByShadow',
+    shadowName:           'ctl00$PageBody$PayBy'
+  };
+
+  function forceShowCheckOnFile() {
+    const c = document.getElementById(IDS.checkOnFileContainer);
+    if (!c) return;
+
+    // Make sure it isn't suppressed by prior styles or DOM moves
+    c.style.removeProperty('display');
+    c.style.display = '';
+    c.style.visibility = 'visible';
+    c.style.opacity = '1';
+    c.hidden = false;
+    c.classList.add('wl-force-show');
+
+    const rb = document.getElementById(IDS.rbCheckOnFile);
+    if (rb) {
+      rb.disabled = false;
+      rb.removeAttribute('disabled');
+      rb.style.pointerEvents = 'auto';
+    }
+  }
+
+  function ensureShadowExists() {
+    const form = document.forms[0];
+    if (!form) return null;
+
+    let h = document.getElementById(IDS.shadowId);
+    if (!h) {
+      h = document.createElement('input');
+      h.type = 'hidden';
+      h.id = IDS.shadowId;
+      h.name = IDS.shadowName;
+      form.appendChild(h);
+    }
+    return h;
+  }
+
+  function patchPayModeFunctions() {
+    // Your script exposes these globally :contentReference[oaicite:2]{index=2}
+    const origRead = window.WLPayMode?.readPayMode;
+    const origEnsure = window.ensureShadowPayBy;
+
+    // If those aren't available yet, just bail; we retry later via endRequest
+    if (typeof origRead !== 'function' || typeof origEnsure !== 'function') return false;
+
+    // Avoid double patching
+    if (window.__wlCheckOnFilePatched) return true;
+    window.__wlCheckOnFilePatched = true;
+
+    // Patch readPayMode: add third state "checkOnFile"
+    window.WLPayMode.readPayMode = function () {
+      const rbCOF = document.getElementById(IDS.rbCheckOnFile);
+      if (rbCOF && rbCOF.checked) return 'checkOnFile';
+      return origRead();
+    };
+
+    // Patch ensureShadowPayBy: write the correct PayBy value
+    window.ensureShadowPayBy = function (mode) {
+      // If "Check on file" selected, set shadow to that, otherwise run original behavior
+      const rbCOF = document.getElementById(IDS.rbCheckOnFile);
+      const h = ensureShadowExists();
+      const m = mode || window.WLPayMode.readPayMode();
+
+      if (h && (m === 'checkOnFile' || (rbCOF && rbCOF.checked))) {
+        h.value = 'RadioButton_PayByCheckOnFile';
+        return;
+      }
+      // Fall back to original behavior (check/credit) :contentReference[oaicite:3]{index=3}
+      return origEnsure(mode);
+    };
+
+    // Keep shadow in sync when user clicks the "Check on file" radio
+    const rbCOF = document.getElementById(IDS.rbCheckOnFile);
+    if (rbCOF && !rbCOF.__wlShadowSync) {
+      rbCOF.addEventListener('change', () => window.ensureShadowPayBy('checkOnFile'), true);
+      rbCOF.addEventListener('click',  () => window.ensureShadowPayBy('checkOnFile'), true);
+      rbCOF.__wlShadowSync = true;
+    }
+
+    return true;
+  }
+
+  function boot() {
+    // Only relevant on the payment entry view (not the success confirmation view)
+    forceShowCheckOnFile();
+    patchPayModeFunctions();
+
+    // Also ensure shadow reflects current selection immediately
+    try { window.ensureShadowPayBy?.(); } catch {}
+  }
+
+  // Initial
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
+  } else {
+    boot();
+  }
+
+  // Re-run after WebForms async postbacks so it doesn't disappear after clicking
+  try {
+    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
+      const prm = Sys.WebForms.PageRequestManager.getInstance();
+      prm.add_endRequest(function () { boot(); });
+    }
+  } catch {}
+})();
+
