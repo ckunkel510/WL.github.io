@@ -3363,3 +3363,132 @@ if (jobBtn){
   } catch {}
 })();
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ============================================================================
+   WL PayByInvoice — Check On File: VISIBILITY + NON-INTERFERENCE PATCH
+   - Do NOT manage the dropdown yet (server populates it)
+   - Do NOT force PayByCheck after CheckOnFile postbacks
+   Paste at the VERY BOTTOM of PayByInvoice.js
+   ============================================================================ */
+(function () {
+  'use strict';
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+
+  const ID_RB_COF = 'ctl00_PageBody_RadioButton_PayByCheckOnFile';
+  const ID_COF_CONTAINER = 'ctl00_PageBody_ChecksOnFileContainer';
+  const ID_COF_CONTAINER2 = 'ctl00_PageBody_ChecksOnFileContainer1';
+
+  function $(id) { return document.getElementById(id); }
+
+  function isCOFSelected() {
+    const rb = $(ID_RB_COF);
+    return !!(rb && rb.checked);
+  }
+
+  function forceShowCOFContainers() {
+    const c1 = $(ID_COF_CONTAINER);
+    const c2 = $(ID_COF_CONTAINER2);
+
+    [c1, c2].forEach((c) => {
+      if (!c) return;
+      c.hidden = false;
+      c.style.removeProperty('display');
+      c.style.display = '';
+      c.style.visibility = 'visible';
+      c.style.opacity = '1';
+    });
+
+    const rb = $(ID_RB_COF);
+    if (rb) {
+      rb.disabled = false;
+      rb.removeAttribute('disabled');
+      rb.style.pointerEvents = 'auto';
+    }
+  }
+
+  // Key idea: your existing code only understands credit/check and defaults to check if unset.
+  // If CheckOnFile is selected (or the postback was triggered by it), we skip shadow/default forcing.
+  function patchEnsureShadowPayByHandsOff() {
+    if (typeof window.ensureShadowPayBy !== 'function') return false;
+    if (window.ensureShadowPayBy.__wlCofHandsOff) return true;
+
+    const orig = window.ensureShadowPayBy;
+    window.ensureShadowPayBy = function (mode) {
+      // One-shot skip set during COF postback
+      if (window.__WL_SKIP_PAYBY_SHADOW_ONCE) return;
+      // If COF selected, do not write shadow values (let server do its thing)
+      if (isCOFSelected() || mode === 'checkOnFile') return;
+      return orig(mode);
+    };
+    window.ensureShadowPayBy.__wlCofHandsOff = true;
+    return true;
+  }
+
+  function hookMsAjaxToSkipDuringCOF() {
+    try {
+      if (!(window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager)) return false;
+      const prm = Sys.WebForms.PageRequestManager.getInstance();
+      if (prm.__wlCofHandsOff) return true;
+
+      prm.add_initializeRequest(function (sender, args) {
+        const src = args && typeof args.get_postBackElement === 'function' ? args.get_postBackElement() : null;
+        const srcId = src && src.id ? src.id : '';
+        // If COF radio caused this postback, skip any payby shadow syncing
+        window.__WL_SKIP_PAYBY_SHADOW_ONCE = (srcId === ID_RB_COF);
+      });
+
+      prm.add_endRequest(function () {
+        // After update, keep containers visible and clear skip flag
+        forceShowCOFContainers();
+        window.__WL_SKIP_PAYBY_SHADOW_ONCE = false;
+      });
+
+      prm.__wlCofHandsOff = true;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function boot() {
+    forceShowCOFContainers();
+    patchEnsureShadowPayByHandsOff();
+    hookMsAjaxToSkipDuringCOF();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
+  } else {
+    boot();
+  }
+})();
+
