@@ -1,7 +1,7 @@
 
 /* ==========================================================
    Woodson — Account Overview (AccountInfo_R.aspx)
-   v3.4 — Cart Snapshot from ShoppingCart.aspx (only),
+   v3.5 — Cart Snapshot from ShoppingCart.aspx (only),
           robust parsing + silent hides
    ========================================================== */
 (function(){
@@ -25,6 +25,13 @@
   const next10=(d)=>{ if(!(d instanceof Date)) return '—'; const x=new Date(d.getFullYear(),d.getMonth(),d.getDate()); (x.getDate()<10)?x.setDate(10):x.setMonth(x.getMonth()+1,10); return x.toLocaleDateString(); };
   const emailOK=(v)=> /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v||'').trim());
   const digits=(v)=> String(v||'').replace(/\D+/g,'').slice(0,15);
+  const fmtMoney=(n)=> new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(n||0));
+  function getCashBalanceCredit(){
+    const el=document.getElementById('ctl00_PageBody_lblBalanceLabel');
+    if(!el) return 0;
+    // e.g. "Cash balance: $10.00"
+    return mNum(el.textContent);
+  }
   function waitFor(sel,{timeout=1000,interval=120}={}){return new Promise((res,rej)=>{const t0=Date.now();const tick=()=>{const el=$(sel);if(el) return res(el); if(Date.now()-t0>=timeout) return rej(new Error('timeout '+sel)); setTimeout(tick,interval)}; (document.readyState==='loading')?document.addEventListener('DOMContentLoaded',tick,{once:true}):tick();});}
 
   /* ----------- styles ----------- */
@@ -55,7 +62,7 @@
   .wl-body{padding:12px;background:${BRAND.bgSoft}}
 
   /* KPIs */
-  .wl-kpis{display:grid;grid-template-columns:repeat(2, minmax(0,1fr));gap:10px}
+  .wl-kpis{display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:10px}
   .wl-kpi{background:#fff;border:1px solid #ecd6db;border-radius:10px;padding:10px;min-width:0}
   .wl-kpi .lbl{font-size:.9rem;color:#6e5f61;white-space:nowrap}
   .wl-kpi .val{font-weight:800;font-size:1.1rem;margin-top:2px;color:${BRAND.primary};white-space:nowrap}
@@ -146,6 +153,10 @@
     const stmtDue    = next10(stmtDate);
     const payStmtUrl = (()=>{ const q=new URLSearchParams(); if(stmtNetAmt>0) q.set('utm_total', stmtNetAmt.toFixed(2)); if(stmtDate) q.set('utm_note',`Statement ${stmtDate.toLocaleDateString()}`); q.set('utm_source','AccountInfo'); q.set('utm_action','PayStatement'); return `AccountPayment_r.aspx?${q.toString()}`; })();
 
+    // Cash account (store credit) — shown separately from Net Balance
+    const cashCredit = getCashBalanceCredit();
+    const cashCreditDisplay = cashCredit > 0 ? fmtMoney(cashCredit) : '—';
+
     /* mount */
     const container = dom(`
       <div class="wl-acct-root">
@@ -166,9 +177,11 @@
             <div class="wl-head">Account Snapshot</div>
             <div class="wl-body">
               <div class="wl-kpis">
-                <div class="wl-kpi"><div class="lbl">Net Balance</div><div class="val">${snapshot['Net Balance'] ?? '—'}</div></div>
+                <div class="wl-kpi"><div class="lbl">Account Balance</div><div class="val">${snapshot['Net Balance'] ?? '—'}</div></div>
+                <div class="wl-kpi"><div class="lbl">Store Credit</div><div class="val">${cashCreditDisplay}</div></div>
                 <div class="wl-kpi"><div class="lbl">On Order</div><div class="val">${snapshot['On Order'] ?? '—'}</div></div>
               </div>
+              ${cashCredit > 0 ? `<div class="wl-meta" style="margin-top:8px">Store Credit works like a gift card balance.</div>` : ''}
               <div class="wl-actions" style="margin-top:8px">
                 <a class="wl-btn" href="${href(links.jobs)||'JobBalances_R.aspx'}">Job Balances</a>
               </div>
@@ -611,6 +624,5 @@ function mountCashAccountReload(container){
 
   container.appendChild(branded);
 }
-
 
 
