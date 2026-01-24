@@ -212,6 +212,60 @@
     }
   }
 
+// Keep Remittance in sync with invoice/job selections made in modals (same-tab changes)
+function startSelectionSync(){
+  if (window.__WL_AP_SEL_SYNC) return;
+  window.__WL_AP_SEL_SYNC = true;
+
+  let lastDocs = null;
+  let lastJobs = null;
+
+  function extractDocsString(){
+    try{
+      const raw = localStorage.getItem('WL_AP_SelectedDocs');
+      if (!raw) return '';
+      const obj = JSON.parse(raw);
+      const docs = obj?.value?.docs || obj?.docs || obj?.value || obj;
+      if (!Array.isArray(docs)) return '';
+      // Build a concise "INV 123, CR 456" style list
+      return docs.map(d=>{
+        const t = (d.type||d.DocType||'').toString().toUpperCase().startsWith('C') ? 'CN' : 'INV';
+        const n = (d.doc || d.Doc || d.docNumber || d.DocumentNumber || '').toString().trim();
+        return n ? `${t}${n}` : '';
+      }).filter(Boolean).join(',');
+    }catch{ return ''; }
+  }
+
+  function extractJobsString(){
+    try{
+      const raw = sessionStorage.getItem('__WL_JobsSelection');
+      if (!raw) return '';
+      const obj = JSON.parse(raw);
+      if (Array.isArray(obj)) return obj.join(',');
+      if (obj && typeof obj === 'object') return Object.keys(obj).join(',');
+      return '';
+    }catch{ return ''; }
+  }
+
+  setInterval(function(){
+    try{
+      const docsStr = extractDocsString();
+      const jobsStr = extractJobsString();
+
+      if (docsStr !== lastDocs || jobsStr !== lastJobs){
+        lastDocs = docsStr;
+        lastJobs = jobsStr;
+
+        const pref = loadPref();
+        const next = { ...pref, docs: docsStr || '', jobs: jobsStr || '', clear:false };
+        savePref(next);
+        applyPrefill();
+      }
+    }catch{}
+  }, 700);
+}
+
+
   function wireAjax(){
     try{
       if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
@@ -264,64 +318,7 @@
         el.__wlBound = true;
       }
     });
-    window.addEventListener('beforeunload', ()=> stampValuesIntoForm());
-  }
-
-  // Some pages react to amount change; nudge it once
-  function triggerAmountChangeOnce(){
-    const pref = loadPref(); if (!pref.total) return;
-    if (window.__wlAmtPosted) return;
-    const amt = $('ctl00_PageBody_PaymentAmountTextBox'); if (!amt) return;
-    window.__wlAmtPosted = true;
-    setTimeout(()=> { amt.dispatchEvent(new Event('change', { bubbles:true })); }, 60);
-  }
-
-  /* =============================
-     Summary UI
-     ============================= */
-  function injectCSS(){
-    if (document.getElementById('wl-pay-summary-css')) return;
-    const css = `
-      .wl-pay-summary{
-        display:flex; gap:10px; align-items:center; justify-content:space-between;
-        background:#f8fafc; border:1px solid #e5e7eb; border-radius:14px; padding:12px 14px; margin:8px 0 14px;
-      }
-      .wl-pay-summary .left{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
-      .wl-pill{ border:1px solid #e5e7eb; background:#fff; border-radius:999px; padding:6px 10px; font-weight:700; font-size:12px; }
-      .wl-action{ border:1px solid #e5e7eb; background:#fff; border-radius:10px; padding:8px 10px; font-weight:800; cursor:pointer; }
-    `;
-    const s = document.createElement('style'); s.id='wl-pay-summary-css'; s.textContent = css; document.head.appendChild(s);
-  }
-
-  function renderSummary(pref){
-    const host = document.querySelector('.bodyFlexItem .epi-form-group-acctPayment');
-    if (!host) return;
-    let box = document.getElementById('wlPaySummary');
-    if (!box){
-      box = document.createElement('div');
-      box.id = 'wlPaySummary';
-      box.className = 'wl-pay-summary';
-      host.parentNode.insertBefore(box, host);
-    }
-    const invList = (String(pref.docs||'').split(',').filter(Boolean));
-    const totalStr = pref.total || '';
-    const backHref = pref.back || '/Invoices_r.aspx';
-    box.innerHTML = `
-      <div class="left">
-        <div class="wl-pill">${invList.length} doc${invList.length===1?'':'s'}</div>
-        ${totalStr ? `<div class="wl-pill">Total ${totalStr}</div>` : ``}
-        ${invList.length ? `<div class="wl-pill" title="${pref.docs}">${invList.slice(0,4).join(', ')}${invList.length>4?'…':''}</div>` : ``}
-      </div>
-      <div class="right">
-        <button type="button" class="wl-action" data-act="clear-remit">Clear</button>
-        <a class="wl-action" href="${backHref}">Back to invoices</a>
-      </div>
-    `;
-    box.querySelector('[data-act="clear-remit"]')?.addEventListener('click', ()=>{
-      const rem = $('ctl00_PageBody_RemittanceAdviceTextBox');
-      if (rem){ rem.value=''; rem.defaultValue=''; }
-      const pref2 = loadPref(); savePref({ ...pref2, docs:'', remit:'', notes:'', jobs:'', clear:false });
-      renderSummary(loadPref());
+renderSummary(loadPref());
     });
   }
 
@@ -330,7 +327,8 @@
      ============================= */
   injectCSS();
   wireAjax();
-  wireFieldPersistence();
+  startSelectionSync();
+wireFieldPersistence();
   applyPrefill();
   triggerAmountChangeOnce();
 
@@ -479,6 +477,9 @@
       @media(max-width:1023px){ .wl-shell{ grid-template-areas:"left" "right" "tx"; grid-template-columns: 1fr; } }
 
       #wlLeftCard{ grid-area:left; }  #wlRightCard{ grid-area:right; }  #wlTxCard{ grid-area:tx; }
+      /* Keep recent transactions in DOM for selection logic, but hide from users */
+      #wlTxCard{ position:absolute !important; left:-99999px !important; top:auto !important; width:1px !important; height:1px !important; overflow:hidden !important; }
+
 
       .wl-card{ background:var(--wl-card); border:1px solid var(--wl-border);
                 border-radius:16px; box-shadow:0 6px 18px rgba(15,23,42,.06); }
@@ -3549,20 +3550,28 @@ moveFieldGroupById('ctl00_PageBody_BillingPostalCodeTextBox', infoInner);
     sessionStorage.setItem(STEP_KEY, '0');
 
 let __wlSubmitted = false;
-// Warn if user navigates away mid-payment
-window.addEventListener('beforeunload', function (e) {
+// Warn only on real navigation (not WebForms postbacks)
+document.addEventListener('click', function (ev) {
   try {
     if (__wlSubmitted) return;
+    const a = ev.target?.closest?.('a[href]');
+    if (!a) return;
+
+    const href = (a.getAttribute('href') || '').trim();
+    if (!href) return;
+
+    // Ignore WebForms postbacks / JS links / same-page anchors
+    if (href.startsWith('#') || /^javascript:/i.test(href) || /__doPostBack/i.test(href)) return;
+
+    // If user has progressed in the wizard, warn before leaving
     const s = Number(sessionStorage.getItem(STEP_KEY) || '0');
     if (s > 0) {
-      e.preventDefault();
-      e.returnValue = 'Any progress on this payment may be lost.';
-      return e.returnValue;
+      const ok = window.confirm('Any progress on this payment may be lost. Continue?');
+      if (!ok) { ev.preventDefault(); ev.stopPropagation(); }
     }
   } catch {}
-});
-
-    function setStep(n){
+}, true);
+function setStep(n){
       step = Math.max(0, Math.min(3, Number(n||0)));
       sessionStorage.setItem(STEP_KEY, String(step));
 
