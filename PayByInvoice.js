@@ -2782,3 +2782,414 @@ if (jobBtn){
   bindPRM();
   setTimeout(applyPending, 0);
 })();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ============================================================================
+   WL Pay-By-Invoice: SUCCESS PAGE PATCH v2
+   - Renames "Invoice number" -> "Payment confirmation #"
+   - Adds "Selected items" row (docs/jobs/cab)
+   - Print Receipt uses the same terms + includes selection summary
+   Paste at the VERY BOTTOM of PayByInvoice.js
+   ============================================================================ */
+(function () {
+  'use strict';
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+
+  // Your existing PayByInvoice.js uses this session key
+  const PREF_KEY = 'wl_ap_prefill_v3';
+
+  function loadPrefSafe() {
+    try { return JSON.parse(sessionStorage.getItem(PREF_KEY) || '{}'); }
+    catch { return {}; }
+  }
+
+  // Detect confirmation view by presence of the success payment table
+  function isSuccessView() {
+    const t = document.querySelector('table.paymentDataTable');
+    if (!t) return false;
+    const txt = (document.querySelector('.bodyFlexItem')?.innerText || document.body.innerText || '');
+    return /account payment was successful/i.test(txt) || /payment was successful/i.test(txt);
+  }
+
+  function getEmailFromSuccessText() {
+    const strongs = Array.from(document.querySelectorAll('.bodyFlexItem strong'));
+    for (const st of strongs) {
+      const v = (st.textContent || '').trim();
+      if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return v;
+    }
+    return '';
+  }
+
+  function parseList(str) {
+    return String(str || '')
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean);
+  }
+
+  function buildSelectionSummary(pref) {
+    const docs = parseList(pref.docs);
+    const jobs = parseList(pref.jobs);
+
+    // Future: cab load — you can set pref.cab = true later (or a string)
+    const cab = !!pref.cab || String(pref.cab || '').toLowerCase() === 'true';
+
+    const parts = [];
+    if (docs.length) parts.push(`${docs.length} invoice/credit item${docs.length === 1 ? '' : 's'}`);
+    if (jobs.length) parts.push(`${jobs.length} job${jobs.length === 1 ? '' : 's'}`);
+    if (cab) parts.push('Cab Load');
+
+    // Human-friendly fallback
+    if (!parts.length) return { text: '(not available)', docs, jobs, cab };
+
+    return { text: parts.join(' • '), docs, jobs, cab };
+  }
+
+  // --- Table tweaks on the success screen ---
+  function renameInvoiceNumberToConfirmation(table) {
+    const ths = Array.from(table.querySelectorAll('th'));
+    for (const th of ths) {
+      const norm = (th.textContent || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+      if (norm === 'invoice number:' || norm === 'invoice number') {
+        th.textContent = 'Payment confirmation #:';
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function injectSelectedRow(table, summaryText) {
+    if (document.getElementById('wlSelectedItemsRow')) return;
+
+    const tr = document.createElement('tr');
+    tr.id = 'wlSelectedItemsRow';
+    tr.innerHTML = `
+      <th>Selected&nbsp;items:</th>
+      <td colspan="2">${escapeHtml(summaryText)}</td>
+    `;
+
+    // Insert right after the confirmation # row if we can find it, otherwise before Notes
+    const rows = Array.from(table.querySelectorAll('tr'));
+    let inserted = false;
+
+    // Try after "Payment confirmation #"
+    for (const r of rows) {
+      const th = r.querySelector('th');
+      const norm = (th?.textContent || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+      if (norm.startsWith('payment confirmation')) {
+        r.parentNode.insertBefore(tr, r.nextSibling);
+        inserted = true;
+        break;
+      }
+    }
+
+    // Fallback: insert before Notes
+    if (!inserted) {
+      for (const r of rows) {
+        const th = r.querySelector('th');
+        const norm = (th?.textContent || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
+        if (norm.startsWith('notes')) {
+          r.parentNode.insertBefore(tr, r);
+          inserted = true;
+          break;
+        }
+      }
+    }
+
+    // Last fallback: append
+    if (!inserted) table.querySelector('tbody')?.appendChild(tr);
+  }
+
+  // --- Printable receipt (formatted) ---
+  function parsePaymentDataTable() {
+    const table = document.querySelector('table.paymentDataTable');
+    if (!table) return null;
+
+    const rows = Array.from(table.querySelectorAll('tr'));
+    const data = {
+      LocationBlock: '',
+      DateAndTime: '',
+      Amount: '',
+      Method: '',
+      AuthorizationCode: '',
+      PaymentConfirmation: '',
+      Address: '',
+      Notes: '',
+      RemittanceAdvice: '',
+      Email: getEmailFromSuccessText(),
+    };
+
+    for (const r of rows) {
+      const th = (r.querySelector('th')?.textContent || '').replace(/\s+/g, ' ').trim();
+      const td = (r.querySelector('td')?.textContent || '').replace(/\s+\n/g, '\n').trim();
+
+      if (!th && td) {
+        data.LocationBlock = td.replace(/\n{3,}/g, '\n\n');
+        continue;
+      }
+
+      const key = th
+        .replace(/\u00a0/g, ' ')
+        .replace(/\s+/g, ' ')
+        .replace(/:$/, '')
+        .trim()
+        .toLowerCase();
+
+      if (key === 'date and time') data.DateAndTime = td;
+      else if (key === 'amount') data.Amount = td;
+      else if (key === 'card type') data.Method = td;
+      else if (key === 'authorization code') data.AuthorizationCode = td;
+      else if (key === 'invoice number') data.PaymentConfirmation = td; // the page label is misleading; treat as confirmation
+      else if (key === 'address') data.Address = td;
+      else if (key === 'notes') data.Notes = td;
+      else if (key === 'remittance advice') data.RemittanceAdvice = td;
+    }
+
+    return data;
+  }
+
+  function buildReceiptHTML(payment, selectionSummaryText) {
+    const safe = (s) => String(s || '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const now = new Date();
+
+    const locLines = String(payment.LocationBlock || '').split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+    const storeName = locLines[0] || 'Woodson Lumber';
+    const addrBlock = locLines.length ? locLines.join('<br>') : '';
+
+    const details = [
+      ['Store', storeName],
+      ['Date/Time', payment.DateAndTime],
+      ['Amount Paid', payment.Amount],
+      ['Payment Method', payment.Method],
+      ['Authorization Code', payment.AuthorizationCode],
+      ['Payment Confirmation #', payment.PaymentConfirmation],
+      ['Selected Items', selectionSummaryText],
+      ['Email Receipt Sent To', payment.Email || ''],
+    ].filter(([_, v]) => String(v || '').trim() !== '');
+
+    const notes = safe(payment.Notes).trim();
+    const remit = safe(payment.RemittanceAdvice).trim();
+
+    return `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>Woodson Lumber - Account Payment Receipt</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root { --fg:#0f172a; --muted:#475569; --line:#e2e8f0; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family: Arial, Helvetica, sans-serif; color:var(--fg); background:#fff; }
+  .page { max-width: 780px; margin: 24px auto; padding: 0 18px 40px; }
+  .top { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; border-bottom:2px solid var(--line); padding-bottom:14px; margin-bottom:16px; }
+  .brand { font-size: 20px; font-weight: 800; letter-spacing: .2px; }
+  .subtitle { color:var(--muted); margin-top:4px; font-size: 12px; }
+  .meta { text-align:right; color:var(--muted); font-size:12px; white-space:nowrap; }
+  .card { border:1px solid var(--line); border-radius:12px; padding:14px; margin: 12px 0; }
+  .h { font-weight: 800; margin:0 0 10px; }
+  table { width:100%; border-collapse:collapse; }
+  td { padding:10px 8px; border-top:1px solid var(--line); vertical-align:top; }
+  td.k { width: 44%; color:var(--muted); font-weight:700; }
+  .addr { line-height: 1.25rem; }
+  .small { font-size: 12px; color:var(--muted); }
+  .foot { margin-top: 14px; font-size: 12px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; }
+  @media print { .page { margin: 0; max-width: none; } .card { break-inside: avoid; } }
+</style>
+</head>
+<body>
+  <div class="page">
+    <div class="top">
+      <div>
+        <div class="brand">Woodson Lumber</div>
+        <div class="subtitle">Account Payment Receipt</div>
+      </div>
+      <div class="meta">Printed: ${safe(now.toLocaleString())}</div>
+    </div>
+
+    <div class="card">
+      <p class="h">Payment Summary</p>
+      <table><tbody>
+        ${details.map(([k,v]) => `
+          <tr><td class="k">${safe(k)}</td><td>${safe(v)}</td></tr>
+        `).join('')}
+      </tbody></table>
+    </div>
+
+    ${addrBlock ? `<div class="card"><p class="h">Store Information</p><div class="addr">${addrBlock}</div></div>` : ''}
+
+    ${(notes || remit) ? `
+      <div class="card">
+        <p class="h">Additional Information</p>
+        ${notes ? `<div><div class="small">Notes</div><div>${notes || '(none)'}</div></div>` : ''}
+        ${remit ? `<div style="margin-top:10px;"><div class="small">Remittance Advice</div><div>${remit || '(none)'}</div></div>` : ''}
+      </div>` : ''}
+
+    <div class="foot">Keep this receipt for your records. If you have questions, contact your Woodson Lumber location.</div>
+  </div>
+</body>
+</html>`;
+  }
+
+  function openPrintWindow(html) {
+    const w = window.open('', '_blank', 'noopener,noreferrer,width=900,height=700');
+    if (!w) { alert('Pop-up blocked. Please allow pop-ups to print your receipt.'); return; }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
+    w.focus();
+    setTimeout(() => { try { w.print(); } catch {} }, 250);
+  }
+
+  function escapeHtml(s) {
+    return String(s || '').replace(/[&<>"]/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+  }
+
+  // --- Buttons section: rename token + replace Print button with Receipt print ---
+  function patchButtons(selectionSummaryText) {
+    // Rename Save Token
+    const saveBtn = document.getElementById('ctl00_PageBody_btnSaveToken');
+    if (saveBtn && saveBtn.tagName === 'INPUT') {
+      saveBtn.value = 'Save payment for future';
+      saveBtn.title = 'Save this payment method for future use';
+    }
+
+    // Hide default "Print This"
+    const oldPrint = document.querySelector('.bodyFlexItem a[onclick*="window.print"]');
+    if (oldPrint) oldPrint.style.display = 'none';
+
+    // Add Print Receipt
+    if (document.getElementById('wlPrintReceiptBtnV2')) return;
+
+    const btnHost =
+      saveBtn?.parentElement ||
+      document.querySelector('.bodyFlexItem') ||
+      null;
+
+    if (!btnHost) return;
+
+    const a = document.createElement('a');
+    a.id = 'wlPrintReceiptBtnV2';
+    a.href = '#';
+    a.className = 'epi-button';
+    a.title = 'Print Receipt';
+    a.innerHTML = '<span>Print Receipt</span>';
+    a.style.marginRight = '8px';
+
+    a.addEventListener('click', function (e) {
+      e.preventDefault();
+      const payment = parsePaymentDataTable();
+      if (!payment) { alert('Could not read receipt details from the page.'); return; }
+      const html = buildReceiptHTML(payment, selectionSummaryText);
+      openPrintWindow(html);
+    });
+
+    // Insert before Save Token if possible
+    if (saveBtn && saveBtn.parentElement) {
+      saveBtn.parentElement.insertBefore(a, saveBtn);
+    } else {
+      btnHost.prepend(a);
+    }
+  }
+
+  function applySuccessEnhancements() {
+    const table = document.querySelector('table.paymentDataTable');
+    if (!table) return;
+
+    // Get selection info from sessionStorage pref object
+    const pref = loadPrefSafe();
+    const sel = buildSelectionSummary(pref);
+
+    // 1) Rename label
+    renameInvoiceNumberToConfirmation(table);
+
+    // 2) Inject "Selected items" row on-screen
+    injectSelectedRow(table, sel.text);
+
+    // 3) Patch buttons (Print Receipt + Save payment for future)
+    patchButtons(sel.text);
+  }
+
+  function boot() {
+    if (!isSuccessView()) return;
+    applySuccessEnhancements();
+  }
+
+  // Initial
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
+  } else {
+    boot();
+  }
+
+  // Re-run after async updates (WebForms/Telerik)
+  try {
+    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
+      const prm = Sys.WebForms.PageRequestManager.getInstance();
+      prm.add_endRequest(function () { boot(); });
+    }
+  } catch {}
+})();
+
