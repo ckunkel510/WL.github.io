@@ -3746,19 +3746,72 @@ function setStep(n){
 
 
 
-
 /* ============================================================
-   WL PATCH: Pin Billing Address to Step 1 (runs AFTER wizard rearrange)
-   - If Billing ends up in Step 2, move it back to Step 1.
-   - Re-assert for a short window on load + after partial postbacks.
+   Woodson WebTrack AccountPayment Wizard — PATCH PACK (single file)
+   Goals:
+   1) Keep Billing Address + Billing ZIP pinned to Step 1 (even after wizard rearrange / partial postbacks)
+   2) Prevent Billing from "disappearing" during typing by NOT stripping handlers
+      (we do NOT block blur/change; only block Enter-to-submit)
+   3) When user clicks "Check on File" (COF), do a safe sync postback FIRST
+      (to avoid EventValidation errors), then re-click COF automatically
+   4) If COF postback resets wizard to Step 1, force user back to Pay step (Step 4)
+
+   Paste this whole file at the bottom of your paybyinvoice.js (or load as a patch).
    ============================================================ */
-(function () {
+(function WL_PATCH_PACK() {
+  "use strict";
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
-  if (window.__WL_PIN_BILLING_STEP1__) return;
-  window.__WL_PIN_BILLING_STEP1__ = true;
+  if (window.__WL_PATCH_PACK_APPLIED__) return;
+  window.__WL_PATCH_PACK_APPLIED__ = true;
+
+  const IDS = {
+    billContainer: "ctl00_PageBody_BillingAddressContainer",
+    billText:      "ctl00_PageBody_BillingAddressTextBox",
+    billZip:       "ctl00_PageBody_BillingPostalCodeTextBox",
+    addrDropdown:  "ctl00_PageBody_AddressDropdownList",
+    rbCof:         "ctl00_PageBody_RadioButton_PayByCheckOnFile",
+  };
+
+  const KEYS = {
+    wantCofAfterSync: "__WL_WANT_COF_AFTER_SYNC",
+    billSyncing:      "__WL_BILL_SYNCING",
+    wantPayStep:      "__WL_WANT_PAY_STEP",
+  };
 
   const $ = (id) => document.getElementById(id);
 
+  // ----------------------------
+  // Helpers: Wizard step forcing
+  // ----------------------------
+  function getWizardRoot() {
+    return $("wlApWizard3") || $("wlApWizard2") || $("wlApWizard") || null;
+  }
+
+  function forceWizardToStep(step) {
+    const wiz = getWizardRoot();
+    if (!wiz) return;
+
+    const s = Math.max(0, Math.min(3, Number(step || 0)));
+
+    wiz.querySelectorAll("[data-step-pill]").forEach((p) => {
+      p.classList.toggle("on", Number(p.getAttribute("data-step-pill")) === s);
+    });
+    wiz.querySelectorAll(".wl-panel").forEach((p) => {
+      p.classList.toggle("on", Number(p.getAttribute("data-step")) === s);
+    });
+
+    const back = $("wlWizBackBtn");
+    const next = $("wlWizNextBtn");
+    if (back) back.disabled = (s === 0);
+    if (next) next.textContent = (s === 3) ? "Review complete" : "Next";
+
+    // Best-effort internal step storage the wizard uses
+    try { sessionStorage.setItem("__WL_AP_WIZ3_STEP", String(s)); } catch {}
+  }
+
+  // ----------------------------
+  // Step 1 host (Info step)
+  // ----------------------------
   function stepPanel(stepNum) {
     return (
       $("w3Step" + stepNum) ||
@@ -3773,24 +3826,21 @@ function setStep(n){
     return s1.querySelector("#w3InfoInner") || s1;
   }
 
-  function getStep2Host() {
-    return stepPanel(1);
-  }
-
+  // ----------------------------
+  // Billing wrappers
+  // ----------------------------
   function findBillingWrap() {
-    // Prefer container if present
-    const c = $("ctl00_PageBody_BillingAddressContainer");
+    const c = $(IDS.billContainer);
     if (c) return c;
 
-    // Otherwise wrap around the textbox
-    const box = $("ctl00_PageBody_BillingAddressTextBox");
+    const box = $(IDS.billText);
     if (!box) return null;
 
     return box.closest(".epi-form-group-acctPayment") || box.closest("tr") || box.parentElement;
   }
 
   function findBillingZipWrap() {
-    const z = $("ctl00_PageBody_BillingPostalCodeTextBox");
+    const z = $(IDS.billZip);
     if (!z) return null;
     return z.closest(".epi-form-group-acctPayment") || z.closest("tr") || z.parentElement;
   }
@@ -3798,9 +3848,12 @@ function setStep(n){
   function ensureVisible(el) {
     if (!el) return;
     el.hidden = false;
-    el.style.removeProperty("display");
-    el.style.removeProperty("visibility");
-    el.style.removeProperty("opacity");
+    // Remove any inline hiding that may have been applied
+    try {
+      el.style.removeProperty("display");
+      el.style.removeProperty("visibility");
+      el.style.removeProperty("opacity");
+    } catch {}
   }
 
   function pinBillingToStep1() {
@@ -3810,7 +3863,6 @@ function setStep(n){
     const bill = findBillingWrap();
     const zip  = findBillingZipWrap();
 
-    // If the wizard moved billing into Step 2, yank it back.
     if (bill) {
       ensureVisible(bill);
       if (!host1.contains(bill)) host1.appendChild(bill);
@@ -3821,7 +3873,6 @@ function setStep(n){
     }
   }
 
-  // Run repeatedly for ~3 seconds to override the wizard’s initial rearrange
   function pinBurst(msTotal) {
     const start = Date.now();
     (function loop() {
@@ -3832,441 +3883,167 @@ function setStep(n){
     })();
   }
 
-  // Initial: wait a beat so the wizard can do its moves, then pin
-  setTimeout(() => pinBurst(3000), 120);
-  setTimeout(pinBillingToStep1, 800);
-  setTimeout(pinBillingToStep1, 1500);
+  // ----------------------------
+  // Billing textbox: only block Enter submit
+  // (do NOT block blur/change; do NOT strip onchange/onblur)
+  // ----------------------------
+  function bindBillingEnterBlock() {
+    const bill = $(IDS.billText);
+    if (!bill || bill.__wlEnterBound) return;
 
-  // After partial postbacks (billing textbox events / COF / etc.)
-  try {
-    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
-      const prm = Sys.WebForms.PageRequestManager.getInstance();
-      if (!prm.__wlPinBillingBound) {
-        prm.add_endRequest(function () {
-          // Wizard often re-mounts after endRequest; do another burst
-          setTimeout(() => pinBurst(2500), 80);
-          setTimeout(pinBillingToStep1, 600);
-          setTimeout(pinBillingToStep1, 1200);
-        });
-        prm.__wlPinBillingBound = true;
+    bill.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.keyCode === 13) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
       }
-    }
-  } catch {}
-})();
+    }, true);
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/* ============================================================
-   WL PATCH: Billing disappears after typing (UpdatePanel rerender)
-   - After postback, the billing control is recreated elsewhere.
-   - Re-pin it back into Step 1 with delayed retries.
-   - Restore focus to the billing textbox if user was typing there.
-   ============================================================ */
-(function () {
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
-  if (window.__WL_BILLING_RERENDER_FIX__) return;
-  window.__WL_BILLING_RERENDER_FIX__ = true;
-
-  const $ = (id) => document.getElementById(id);
-
-  function step1Host(){
-    const s1 =
-      $("w3Step0") ||
-      document.querySelector('.wl-panel[data-step="0"]');
-    if (!s1) return null;
-    return s1.querySelector("#w3InfoInner") || s1;
+    bill.__wlEnterBound = true;
   }
 
-  function billingWrap(){
-    const c = $("ctl00_PageBody_BillingAddressContainer");
-    if (c) return c;
-
-    const box = $("ctl00_PageBody_BillingAddressTextBox");
-    if (!box) return null;
-    return box.closest(".epi-form-group-acctPayment") || box.closest("tr") || box.parentElement;
-  }
-
-  function billingZipWrap(){
-    const z = $("ctl00_PageBody_BillingPostalCodeTextBox");
-    if (!z) return null;
-    return z.closest(".epi-form-group-acctPayment") || z.closest("tr") || z.parentElement;
-  }
-
-  function pinBilling(){
-    const host = step1Host();
-    if (!host) return;
-
-    const b = billingWrap();
-    const z = billingZipWrap();
-
-    if (b && !host.contains(b)) host.appendChild(b);
-    if (z && !host.contains(z)) host.appendChild(z);
-  }
-
-  // Remember if user was actively typing in billing field before a postback
-  let wasInBilling = false;
-  function bindBillingFocus(){
-    const box = $("ctl00_PageBody_BillingAddressTextBox");
-    if (!box || box.__wlFocusBound) return;
-    box.addEventListener("focus", () => { wasInBilling = true; }, true);
-    box.addEventListener("blur",  () => { wasInBilling = false; }, true);
-    box.__wlFocusBound = true;
-  }
-
-  function repinBurst(){
-    // multiple delayed attempts catches multi-wave Telerik/WebForms re-render
-    pinBilling();
-    setTimeout(pinBilling, 60);
-    setTimeout(pinBilling, 140);
-    setTimeout(pinBilling, 260);
-    setTimeout(pinBilling, 520);
-    setTimeout(() => {
-      pinBilling();
-      bindBillingFocus();
-      if (wasInBilling) {
-        const box = $("ctl00_PageBody_BillingAddressTextBox");
-        try { box && box.focus(); } catch {}
-      }
-    }, 820);
-  }
-
-  // Initial bind + pin
-  setTimeout(() => { bindBillingFocus(); pinBilling(); }, 0);
-  setTimeout(pinBilling, 200);
-  setTimeout(pinBilling, 600);
-
-  // After partial postbacks
-  try {
-    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
-      const prm = Sys.WebForms.PageRequestManager.getInstance();
-      if (!prm.__wlBillRerenderBound) {
-        prm.add_initializeRequest(function () {
-          // capture whether billing had focus right before postback
-          const ae = document.activeElement;
-          wasInBilling = !!(ae && ae.id === "ctl00_PageBody_BillingAddressTextBox");
-        });
-        prm.add_endRequest(function () {
-          // Re-pin after postback replaces the controls
-          repinBurst();
-        });
-        prm.__wlBillRerenderBound = true;
-      }
-    }
-  } catch {}
-})();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-(function(){
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
-
-  const id = "ctl00_PageBody_BillingAddressTextBox";
-
-  function blockIfBilling(e){
-    const t = e.target;
-    if (!t || t.id !== id) return;
-
-    // Block Enter key submits
-    if (e.type === "keydown" && (e.key === "Enter" || e.keyCode === 13)) {
-      e.preventDefault();
-      e.stopPropagation();
-      return false;
-    }
-
-    // Block events that often trigger __doPostBack via onchange/onblur
-    if (e.type === "change" || e.type === "blur") {
-      e.stopPropagation();
-      // don’t prevent blur itself (user experience), but kill the bubble that hits handlers
-      // Some pages attach onchange directly; we also strip inline handler below.
-    }
-  }
-
-  function stripInlinePostback(){
-    const el = document.getElementById(id);
-    if (!el) return;
-
-    // Remove inline handlers if present
-    if (el.getAttribute("onchange") && /__doPostBack/i.test(el.getAttribute("onchange"))) el.setAttribute("onchange","");
-    if (el.getAttribute("onblur") && /__doPostBack/i.test(el.getAttribute("onblur"))) el.setAttribute("onblur","");
-  }
-
-  // Capture phase to intercept before Telerik/WebForms handlers
-  document.addEventListener("keydown", blockIfBilling, true);
-  document.addEventListener("change", blockIfBilling, true);
-  document.addEventListener("blur", blockIfBilling, true);
-
-  setTimeout(stripInlinePostback, 0);
-  setTimeout(stripInlinePostback, 250);
-
-  // After partial postbacks, the input gets recreated, so strip again
-  try {
-    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
-      const prm = Sys.WebForms.PageRequestManager.getInstance();
-      if (!prm.__wlStripBillBound) {
-        prm.add_endRequest(function(){
-          setTimeout(stripInlinePostback, 0);
-          setTimeout(stripInlinePostback, 200);
-        });
-        prm.__wlStripBillBound = true;
-      }
-    }
-  } catch {}
-})();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/* ============================================================
-   WL PATCH: Billing stays stable while typing BUT we sync server state
-   before COF (prevents EventValidation error)
-   ============================================================ */
-(function(){
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
-  if (window.__WL_BILLING_SYNC_BEFORE_COF__) return;
-  window.__WL_BILLING_SYNC_BEFORE_COF__ = true;
-
-  const IDS = {
-    billBox: "ctl00_PageBody_BillingAddressTextBox",
-    nextBtn: "wlWizNextBtn",
-    rbCof:   "ctl00_PageBody_RadioButton_PayByCheckOnFile",
-  };
-
-  const $ = (id) => document.getElementById(id);
-
-  // 1) Only block ENTER submits in billing box (do NOT kill change/blur entirely)
-  document.addEventListener("keydown", function(e){
-    const t = e.target;
-    if (!t || t.id !== IDS.billBox) return;
-    if (e.key === "Enter" || e.keyCode === 13) {
-      e.preventDefault();
-      e.stopPropagation();
-      return false;
-    }
-  }, true);
-
-  // 2) We need a safe server sync postback BEFORE COF triggers its postback.
-  // Best candidate is the billing textbox itself if it has a server-side AutoPostBack,
-  // but we avoid relying on inline onchange. We'll trigger __doPostBack explicitly.
-  function doSafeBillingSyncPostback(){
-    const bill = $(IDS.billBox);
-    if (!bill) return false;
-
-    // Try: __doPostBack using the control's unique name
-    // WebForms usually uses "name" for event target.
-    const target = bill.name || bill.id;
+  // ----------------------------
+  // Safe server sync before COF to avoid EventValidation errors
+  // ----------------------------
+  function doSafeSyncPostback() {
+    // Prefer AddressDropdownList as a safer AutoPostBack target; fallback to billing textbox
+    const addr = $(IDS.addrDropdown);
+    const bill = $(IDS.billText);
+
+    const target = (addr && (addr.name || addr.id)) || (bill && (bill.name || bill.id));
     if (!target || typeof window.__doPostBack !== "function") return false;
 
-    try {
-      // mark that next postback is our "sync"
-      sessionStorage.setItem("__WL_BILL_SYNCING", "1");
-    } catch {}
-
+    try { sessionStorage.setItem(KEYS.billSyncing, "1"); } catch {}
     try {
       window.__doPostBack(target, "");
       return true;
-    } catch(e){
+    } catch {
       return false;
     }
   }
 
-  // 3) If user clicks COF, we first do billing sync postback, then after that completes,
-  // allow COF click to proceed (we re-click it after endRequest).
-  function armCofInterception(){
+  function armCofInterception() {
     const rb = $(IDS.rbCof);
     if (!rb || rb.__wlCofArmed) return;
 
-    rb.addEventListener("click", function(e){
-      // If we're already in a sync flow, don't intercept
+    rb.addEventListener("click", function (e) {
+      // If already in our sync flow, don't intercept
       try {
-        if (sessionStorage.getItem("__WL_BILL_SYNCING") === "1") return;
+        if (sessionStorage.getItem(KEYS.billSyncing) === "1") return;
       } catch {}
 
-      // If billing box exists and has a value, do a sync postback first
-      const bill = $(IDS.billBox);
+      // If billing has anything entered, do safe sync before COF postback
+      const bill = $(IDS.billText);
       const hasBilling = !!(bill && String(bill.value || "").trim());
 
-      if (!hasBilling) return; // nothing to sync
+      if (!hasBilling) {
+        // Still mark we want to remain on Pay step if COF is selected
+        try { sessionStorage.setItem(KEYS.wantPayStep, "1"); } catch {}
+        return;
+      }
 
-      // Prevent COF from posting back right now
+      // We are going to sync first; prevent COF click from posting back right now
       e.preventDefault();
       e.stopPropagation();
 
-      // Store intent: after sync, we want to be on COF
-      try { sessionStorage.setItem("__WL_WANT_COF_AFTER_SYNC", "1"); } catch {}
+      try {
+        sessionStorage.setItem(KEYS.wantCofAfterSync, "1");
+        sessionStorage.setItem(KEYS.wantPayStep, "1"); // we want to land on Pay step after COF
+      } catch {}
 
-      // Trigger a "safe" postback that updates event validation state
-      doSafeBillingSyncPostback();
+      doSafeSyncPostback();
       return false;
     }, true);
 
     rb.__wlCofArmed = true;
   }
 
-  // 4) After the billing sync postback returns, re-click COF to load accounts
-  function afterAsyncPostback(){
-    let want = false, syncing = false;
+  function afterAsyncPostback() {
+    let syncing = false;
+    let wantCof = false;
+
     try {
-      want = sessionStorage.getItem("__WL_WANT_COF_AFTER_SYNC") === "1";
-      syncing = sessionStorage.getItem("__WL_BILL_SYNCING") === "1";
+      syncing = sessionStorage.getItem(KEYS.billSyncing) === "1";
+      wantCof = sessionStorage.getItem(KEYS.wantCofAfterSync) === "1";
     } catch {}
 
     if (syncing) {
-      // Clear syncing flag now that we returned
-      try { sessionStorage.removeItem("__WL_BILL_SYNCING"); } catch {}
+      try { sessionStorage.removeItem(KEYS.billSyncing); } catch {}
     }
 
-    if (want) {
-      try { sessionStorage.removeItem("__WL_WANT_COF_AFTER_SYNC"); } catch {}
+    if (wantCof) {
+      try { sessionStorage.removeItem(KEYS.wantCofAfterSync); } catch {}
 
       const rb = $(IDS.rbCof);
-      // Give the DOM a moment to settle, then click COF for real
-      setTimeout(function(){
+      // Give DOM a moment, then click COF "for real"
+      setTimeout(() => {
         try { rb && rb.click(); } catch {}
       }, 120);
     }
   }
 
-  // 5) Bind on load + after partial postbacks
-  function boot(){
-    armCofInterception();
+  // ----------------------------
+  // If COF postback resets wizard, force back to Pay step
+  // ----------------------------
+  function returnToPayStepIfNeeded() {
+    let want = false;
+    try { want = sessionStorage.getItem(KEYS.wantPayStep) === "1"; } catch {}
+
+    const rb = $(IDS.rbCof);
+    if (!want) return;
+    if (!rb || !rb.checked) return;
+
+    // Force to Step 4 (Pay step)
+    forceWizardToStep(3);
+    setTimeout(() => forceWizardToStep(3), 120);
+    setTimeout(() => forceWizardToStep(3), 260);
+    setTimeout(() => forceWizardToStep(3), 520);
+
+    // Keep the flag for a short window in case another remount happens
+    setTimeout(() => {
+      try { sessionStorage.removeItem(KEYS.wantPayStep); } catch {}
+    }, 1500);
   }
 
+  // ----------------------------
+  // Boot + hooks
+  // ----------------------------
+  function boot() {
+    bindBillingEnterBlock();
+    armCofInterception();
+    // Pin billing after wizard rearrange
+    pinBillingToStep1();
+  }
+
+  // Initial: let wizard render/move things, then pin hard for 3s
+  setTimeout(() => pinBurst(3000), 120);
   setTimeout(boot, 0);
   setTimeout(boot, 250);
+  setTimeout(boot, 800);
+  setTimeout(boot, 1500);
 
+  // After WebForms partial postbacks
   try {
     if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
       const prm = Sys.WebForms.PageRequestManager.getInstance();
-      if (!prm.__wlBillSyncBound) {
-        prm.add_endRequest(function(){
-          boot();
-          afterAsyncPostback();
+      if (!prm.__wlPatchPackBound) {
+        prm.add_endRequest(function () {
+          // Re-bind and re-pin (controls may be recreated)
+          setTimeout(boot, 50);
+          setTimeout(() => pinBurst(2000), 80);
+
+          // If we did a sync, complete the COF click
+          setTimeout(afterAsyncPostback, 120);
+          setTimeout(afterAsyncPostback, 260);
+
+          // If COF reset the wizard, force back to Pay step
+          setTimeout(returnToPayStepIfNeeded, 160);
+          setTimeout(returnToPayStepIfNeeded, 340);
+          setTimeout(returnToPayStepIfNeeded, 700);
         });
-        prm.__wlBillSyncBound = true;
+        prm.__wlPatchPackBound = true;
       }
     }
   } catch {}
+
 })();
