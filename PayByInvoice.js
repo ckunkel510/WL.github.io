@@ -930,28 +930,65 @@
   }
 
   // Hidden input mirrors the CURRENT pay mode (does not force a mode)
-  function ensureShadowPayBy(mode){
-    const form = document.forms[0]; if (!form) { log.warn('ensureShadowPayBy: no form'); return; }
-    let h = document.getElementById('wlPayByShadow');
-    if (!h){
-      h = document.createElement('input');
-      h.type = 'hidden';
-      h.id   = 'wlPayByShadow';
-      h.name = 'ctl00$PageBody$PayBy';
-      form.appendChild(h);
-      log.debug('ensureShadowPayBy: created');
+  function readPayMode(){
+    // Prefer real radios on the page (Check, Check-on-file, Credit)
+    const cof = document.getElementById('ctl00_PageBody_RadioButton_PayByCheckOnFile');
+    const cr  = document.getElementById('ctl00_PageBody_RadioButton_PayByCredit');
+    const ck  = document.getElementById('ctl00_PageBody_RadioButton_PayByCheck');
+    if (cof && cof.checked) return 'check_on_file';
+    if (cr  && cr.checked)  return 'credit';
+    return 'check';
+  }
+
+  function setPayMode(mode){
+    const m = String(mode||'').toLowerCase();
+    const cof = document.getElementById('ctl00_PageBody_RadioButton_PayByCheckOnFile');
+    const cr  = document.getElementById('ctl00_PageBody_RadioButton_PayByCredit');
+    const ck  = document.getElementById('ctl00_PageBody_RadioButton_PayByCheck');
+
+    const target = (m === 'check_on_file' || m === 'cof' || m === 'checkonfile') ? cof
+                 : (m === 'credit') ? cr
+                 : ck;
+
+    if (!target) return false;
+
+    // Some WebForms radios trigger postbacks via onclick — use click(), not checked=true.
+    try { target.disabled = false; target.removeAttribute('disabled'); } catch {}
+    target.click();
+    return true;
+  }
+
+  function ensureCheckOnFileUI(){
+    const c1 = document.getElementById('ctl00_PageBody_ChecksOnFileContainer');
+    const c2 = document.getElementById('ctl00_PageBody_ChecksOnFileContainer1');
+    const rb = document.getElementById('ctl00_PageBody_RadioButton_PayByCheckOnFile');
+
+    // Force containers visible (they may be display:none until postback)
+    [c1,c2].forEach(c=>{
+      if (!c) return;
+      c.hidden = false;
+      c.style.setProperty('display','block','important');
+      c.style.setProperty('visibility','visible','important');
+      c.style.setProperty('opacity','1','important');
+    });
+
+    if (rb){
+      rb.disabled = false;
+      rb.removeAttribute('disabled');
+      rb.style.pointerEvents = 'auto';
     }
-    const m = mode || readPayMode();
-    h.value = (m === 'credit') ? 'RadioButton_PayByCredit' : 'RadioButton_PayByCheck';
-    log.debug('ensureShadowPayBy: value set', h.value);
+
+    // Ensure select is usable
+    const sel = (c1?.querySelector('select') || c2?.querySelector('select'));
+    if (sel){
+      sel.disabled = false;
+      sel.removeAttribute('disabled');
+      sel.style.pointerEvents = 'auto';
+    }
   }
-  function removeShadowPayBy(){
-    const h = document.getElementById('wlPayByShadow');
-    if (h){ h.remove(); log.debug('removeShadowPayBy: removed'); }
-  }
-  // expose for bridge
-  window.ensureShadowPayBy = ensureShadowPayBy;
-  window.WLPayMode = { readPayMode, ensureShadowPayBy };
+
+  // expose for other modules
+  window.WLPayMode = { readPayMode, setPayMode, ensureCheckOnFileUI };
 
   function showBilling(){
     const wrap = document.getElementById(IDS.billWrap) ||
@@ -3241,2636 +3278,281 @@ if (jobBtn){
 
 
 
-/* ============================================================================
-   WL Pay-By-Invoice PATCH: Support "Check on file" PayBy radio
-   Paste at the VERY BOTTOM of PayByInvoice.js
-   ============================================================================ */
-(function () {
-  'use strict';
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
-
-  const IDS = {
-    checkOnFileContainer: 'ctl00_PageBody_ChecksOnFileContainer',
-    rbCheckOnFile:        'ctl00_PageBody_RadioButton_PayByCheckOnFile',
-    rbCheck:              'ctl00_PageBody_RadioButton_PayByCheck',
-    rbCredit:             'ctl00_PageBody_RadioButton_PayByCredit',
-    shadowId:             'wlPayByShadow',
-    shadowName:           'ctl00$PageBody$PayBy'
-  };
-
-  function forceShowCheckOnFile() {
-    const c = document.getElementById(IDS.checkOnFileContainer);
-    if (!c) return;
-
-    // Make sure it isn't suppressed by prior styles or DOM moves
-    c.style.removeProperty('display');
-    c.style.display = '';
-    c.style.visibility = 'visible';
-    c.style.opacity = '1';
-    c.hidden = false;
-    c.classList.add('wl-force-show');
-
-    const rb = document.getElementById(IDS.rbCheckOnFile);
-    if (rb) {
-      rb.disabled = false;
-      rb.removeAttribute('disabled');
-      rb.style.pointerEvents = 'auto';
-    }
-  }
-
-  function ensureShadowExists() {
-    const form = document.forms[0];
-    if (!form) return null;
-
-    let h = document.getElementById(IDS.shadowId);
-    if (!h) {
-      h = document.createElement('input');
-      h.type = 'hidden';
-      h.id = IDS.shadowId;
-      h.name = IDS.shadowName;
-      form.appendChild(h);
-    }
-    return h;
-  }
-
-  function patchPayModeFunctions() {
-    // Your script exposes these globally :contentReference[oaicite:2]{index=2}
-    const origRead = window.WLPayMode?.readPayMode;
-    const origEnsure = window.ensureShadowPayBy;
-
-    // If those aren't available yet, just bail; we retry later via endRequest
-    if (typeof origRead !== 'function' || typeof origEnsure !== 'function') return false;
-
-    // Avoid double patching
-    if (window.__wlCheckOnFilePatched) return true;
-    window.__wlCheckOnFilePatched = true;
-
-    // Patch readPayMode: add third state "checkOnFile"
-    window.WLPayMode.readPayMode = function () {
-      const rbCOF = document.getElementById(IDS.rbCheckOnFile);
-      if (rbCOF && rbCOF.checked) return 'checkOnFile';
-      return origRead();
-    };
-
-    // Patch ensureShadowPayBy: write the correct PayBy value
-    window.ensureShadowPayBy = function (mode) {
-      // If "Check on file" selected, set shadow to that, otherwise run original behavior
-      const rbCOF = document.getElementById(IDS.rbCheckOnFile);
-      const h = ensureShadowExists();
-      const m = mode || window.WLPayMode.readPayMode();
-
-      if (h && (m === 'checkOnFile' || (rbCOF && rbCOF.checked))) {
-        h.value = 'RadioButton_PayByCheckOnFile';
-        return;
-      }
-      // Fall back to original behavior (check/credit) :contentReference[oaicite:3]{index=3}
-      return origEnsure(mode);
-    };
-
-    // Keep shadow in sync when user clicks the "Check on file" radio
-    const rbCOF = document.getElementById(IDS.rbCheckOnFile);
-    if (rbCOF && !rbCOF.__wlShadowSync) {
-      rbCOF.addEventListener('change', () => window.ensureShadowPayBy('checkOnFile'), true);
-      rbCOF.addEventListener('click',  () => window.ensureShadowPayBy('checkOnFile'), true);
-      rbCOF.__wlShadowSync = true;
-    }
-
-    return true;
-  }
-
-  function boot() {
-    // Only relevant on the payment entry view (not the success confirmation view)
-    forceShowCheckOnFile();
-    patchPayModeFunctions();
-
-    // Also ensure shadow reflects current selection immediately
-    try { window.ensureShadowPayBy?.(); } catch {}
-  }
-
-  // Initial
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot, { once: true });
-  } else {
-    boot();
-  }
-
-  // Re-run after WebForms async postbacks so it doesn't disappear after clicking
-  try {
-    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
-      const prm = Sys.WebForms.PageRequestManager.getInstance();
-      prm.add_endRequest(function () { boot(); });
-    }
-  } catch {}
-})();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
 /* ============================================================================
-   WL PayByInvoice — Check On File: VISIBILITY + NON-INTERFERENCE PATCH
-   - Do NOT manage the dropdown yet (server populates it)
-   - Do NOT force PayByCheck after CheckOnFile postbacks
-   Paste at the VERY BOTTOM of PayByInvoice.js
+   WL AccountPayment — Wizard UI v3 (integrated, mounts on load)
+   Goal: wizard is the FIRST-class DOM, not an afterthought.
    ============================================================================ */
 (function () {
   'use strict';
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
-
-  const ID_RB_COF = 'ctl00_PageBody_RadioButton_PayByCheckOnFile';
-  const ID_COF_CONTAINER = 'ctl00_PageBody_ChecksOnFileContainer';
-  const ID_COF_CONTAINER2 = 'ctl00_PageBody_ChecksOnFileContainer1';
-
-  function $(id) { return document.getElementById(id); }
-
-  function isCOFSelected() {
-    const rb = $(ID_RB_COF);
-    return !!(rb && rb.checked);
-  }
-
-  function forceShowCOFContainers() {
-    const c1 = $(ID_COF_CONTAINER);
-    const c2 = $(ID_COF_CONTAINER2);
-
-    [c1, c2].forEach((c) => {
-      if (!c) return;
-      c.hidden = false;
-      c.style.removeProperty('display');
-      c.style.display = '';
-      c.style.visibility = 'visible';
-      c.style.opacity = '1';
-    });
-
-    const rb = $(ID_RB_COF);
-    if (rb) {
-      rb.disabled = false;
-      rb.removeAttribute('disabled');
-      rb.style.pointerEvents = 'auto';
-    }
-  }
-
-  // Key idea: your existing code only understands credit/check and defaults to check if unset.
-  // If CheckOnFile is selected (or the postback was triggered by it), we skip shadow/default forcing.
-  function patchEnsureShadowPayByHandsOff() {
-    if (typeof window.ensureShadowPayBy !== 'function') return false;
-    if (window.ensureShadowPayBy.__wlCofHandsOff) return true;
-
-    const orig = window.ensureShadowPayBy;
-    window.ensureShadowPayBy = function (mode) {
-      // One-shot skip set during COF postback
-      if (window.__WL_SKIP_PAYBY_SHADOW_ONCE) return;
-      // If COF selected, do not write shadow values (let server do its thing)
-      if (isCOFSelected() || mode === 'checkOnFile') return;
-      return orig(mode);
-    };
-    window.ensureShadowPayBy.__wlCofHandsOff = true;
-    return true;
-  }
-
-  function hookMsAjaxToSkipDuringCOF() {
-    try {
-      if (!(window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager)) return false;
-      const prm = Sys.WebForms.PageRequestManager.getInstance();
-      if (prm.__wlCofHandsOff) return true;
-
-      prm.add_initializeRequest(function (sender, args) {
-        const src = args && typeof args.get_postBackElement === 'function' ? args.get_postBackElement() : null;
-        const srcId = src && src.id ? src.id : '';
-        // If COF radio caused this postback, skip any payby shadow syncing
-        window.__WL_SKIP_PAYBY_SHADOW_ONCE = (srcId === ID_RB_COF);
-      });
-
-      prm.add_endRequest(function () {
-        // After update, keep containers visible and clear skip flag
-        forceShowCOFContainers();
-        window.__WL_SKIP_PAYBY_SHADOW_ONCE = false;
-      });
-
-      prm.__wlCofHandsOff = true;
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  function boot() {
-    forceShowCOFContainers();
-    patchEnsureShadowPayByHandsOff();
-    hookMsAjaxToSkipDuringCOF();
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot, { once: true });
-  } else {
-    boot();
-  }
-})();
-
-
-
-
-/* =============================================================================
-   Woodson — PayByInvoice Patch (Check + Check On File visibility + Success Receipt)
-   - Shows: Pay by Check, Check on file (+ dropdown container)
-   - Hides: Card/Credit option
-   - Fixes: wlPayByShadow to support CheckOnFile so postbacks don’t revert
-   - Success page: adds formatted "Print Receipt" and clearer labels + selection summary
-   ============================================================================= */
-(function(){
-  'use strict';
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
-
-  const IDS = {
-    rbCheck: 'ctl00_PageBody_RadioButton_PayByCheck',
-    rbCredit:'ctl00_PageBody_RadioButton_PayByCredit',
-    rbCof:   'ctl00_PageBody_RadioButton_PayByCheckOnFile',
-    cofWrap: 'ctl00_PageBody_ChecksOnFileContainer',
-    cofWrap2:'ctl00_PageBody_ChecksOnFileContainer1',
-    saveTok: 'ctl00_PageBody_btnSaveToken',
-  };
+  if (window.__WL_AP_WIZ3) return;
+  window.__WL_AP_WIZ3 = true;
 
   const $ = (id)=>document.getElementById(id);
+  const qs = (sel, root=document)=>root.querySelector(sel);
 
-  function isSuccessPage(){
-    const p = document.querySelector('.bodyFlexItem p');
-    const t = (p?.textContent || '');
-    return /account payment was successful/i.test(t) && !!document.querySelector('table.paymentDataTable');
+  const STEP_KEY = '__WL_AP_WIZ3_STEP';
+
+  function injectCSS(){
+    if ($('wl-ap-wiz3-css')) return;
+    const css = `
+      #wlApWizard3{ border:1px solid #e5e7eb; border-radius:16px; background:#fff; margin-bottom:16px; }
+      #wlApWizard3 .w3-head{ display:flex; justify-content:space-between; gap:12px; align-items:center; padding:12px 14px; border-bottom:1px solid #e5e7eb; }
+      #wlApWizard3 .w3-title{ font-weight:1000; font-size:16px; }
+      #wlApWizard3 .w3-steps{ display:flex; gap:6px; flex-wrap:wrap; }
+      #wlApWizard3 .w3-pill{ font-size:12px; font-weight:900; padding:6px 10px; border-radius:999px; border:1px solid #e5e7eb; background:#f8fafc; }
+      #wlApWizard3 .w3-pill.on{ background:#111827; color:#fff; border-color:#111827; }
+      #wlApWizard3 .w3-body{ padding:14px; }
+      #wlApWizard3 .w3-panel{ display:none; }
+      #wlApWizard3 .w3-panel.on{ display:block; }
+      #wlApWizard3 .w3-nav{ display:flex; justify-content:space-between; gap:10px; margin-top:14px; }
+      #wlApWizard3 .w3-btn{ border:1px solid #e5e7eb; background:#fff; border-radius:12px; padding:10px 12px; font-weight:1000; cursor:pointer; }
+      #wlApWizard3 .w3-btn.primary{ background:#111827; color:#fff; border-color:#111827; }
+      #wlApWizard3 .w3-btn[disabled]{ opacity:.5; cursor:not-allowed; }
+      #wlApWizard3 .w3-help{ font-size:12px; color:#475569; margin-top:8px; line-height:1.35; }
+
+      /* COF hard-show */
+      #ctl00_PageBody_ChecksOnFileContainer,
+      #ctl00_PageBody_ChecksOnFileContainer1{ display:block !important; visibility:visible !important; opacity:1 !important; }
+      #ctl00_PageBody_ChecksOnFileContainer select,
+      #ctl00_PageBody_ChecksOnFileContainer1 select{ width:100% !important; pointer-events:auto !important; }
+    `;
+    const s = document.createElement('style');
+    s.id = 'wl-ap-wiz3-css';
+    s.textContent = css;
+    document.head.appendChild(s);
   }
 
-  function forceShow(el){
-    if (!el) return;
-    el.hidden = false;
-    el.style.removeProperty('display');
-    el.style.removeProperty('visibility');
-    el.style.display = '';
-    el.style.visibility = 'visible';
-    el.style.opacity = '1';
-    el.classList.add('wl-force-show');
+  function moneyNum(v){
+    const n = parseFloat(String(v||'').replace(/[^0-9.\-]/g,''));
+    return Number.isFinite(n) ? n : 0;
   }
 
-  function hide(el){
-    if (!el) return;
-    el.style.display = 'none';
-    el.hidden = true;
+  function getAmount(){
+    const el = $('ctl00_PageBody_PaymentAmountTextBox');
+    return moneyNum(el?.value || '');
   }
 
-  function normalizePayByRadios(){
-    // Show check + COF
-    forceShow($(IDS.rbCheck)?.closest('.radiobutton') || $(IDS.rbCheck)?.parentElement);
-    forceShow($(IDS.rbCof)?.closest('.radiobutton')   || $(IDS.cofWrap));
-    forceShow($(IDS.cofWrap));
-    forceShow($(IDS.cofWrap2));
+  function buildReviewHTML(){
+    const amtEl = $('ctl00_PageBody_PaymentAmountTextBox');
+    const remit = $('ctl00_PageBody_RemittanceAdviceTextBox')?.value || '';
+    const notes = $('ctl00_PageBody_NotesTextBox')?.value || '';
+    const email = $('ctl00_PageBody_EmailAddressTextBox')?.value || '';
 
-    // Hide credit/card
-    const cr = $(IDS.rbCredit);
-    if (cr){
-      hide(cr.closest('.radiobutton') || cr.parentElement);
-    }
-
-    // Ensure COF is not disabled
-    const cof = $(IDS.rbCof);
-    if (cof){
-      cof.disabled = false;
-      cof.removeAttribute('disabled');
-      cof.style.pointerEvents = 'auto';
-    }
-  }
-
-  // ---- Shadow PayBy value (prevents WebForms from "forgetting" selected option on async postbacks)
-  function readPayByValue(){
-    const cof = $(IDS.rbCof);
-    const cr  = $(IDS.rbCredit);
-    const chk = $(IDS.rbCheck);
-    if (cof && cof.checked) return 'RadioButton_PayByCheckOnFile';
-    if (cr  && cr.checked)  return 'RadioButton_PayByCredit';
-    return 'RadioButton_PayByCheck';
-  }
-
-  function ensureShadowPayBy_v2(){
-    const form = document.forms[0]; if (!form) return;
-    let h = document.getElementById('wlPayByShadow');
-    if (!h){
-      h = document.createElement('input');
-      h.type = 'hidden';
-      h.id   = 'wlPayByShadow';
-      h.name = 'ctl00$PageBody$PayBy';
-      form.appendChild(h);
-    }
-    h.value = readPayByValue();
-  }
-
-  function patchShadowHook(){
-    // If the main script already exposes ensureShadowPayBy, replace it with v2 mapping.
-    if (typeof window.ensureShadowPayBy === 'function' && !window.ensureShadowPayBy.__wlV2){
-      window.ensureShadowPayBy = function(){ return ensureShadowPayBy_v2(); };
-      window.ensureShadowPayBy.__wlV2 = true;
-    }
-    // Also keep it synced on changes (capture, before ASP.NET handlers)
-    ['change','input','click'].forEach(evt=>{
-      document.addEventListener(evt, (e)=>{
-        const id = e?.target?.id || '';
-        if (id === IDS.rbCheck || id === IDS.rbCredit || id === IDS.rbCof){
-          ensureShadowPayBy_v2();
-        }
-      }, true);
-    });
-    // On submit, always sync
-    document.forms[0]?.addEventListener?.('submit', ()=> ensureShadowPayBy_v2(), true);
-  }
-
-  // ---- Selection summary (Invoices/Credits/Jobs/Statement/Cab, etc.)
-  function safeJSONParse(s){
-    try{ return JSON.parse(s); }catch{ return null; }
-  }
-  function getSelectionSummaryText(){
-    const parts = [];
-
-    // Invoices/Credits picker TTL store (object or array depending on version)
-    const selRaw = localStorage.getItem('WL_AP_SelectedDocs');
-    const sel = safeJSONParse(selRaw);
-    const docs = sel?.value?.docs || sel?.docs || sel?.value || sel;
-    if (Array.isArray(docs) && docs.length){
-      // keep compact: "INV 203369, CR 12345 (3 items)"
-      const firstFew = docs.slice(0,6).map(d=>{
-        const t = (d.type||d.DocType||'').toString().toUpperCase().startsWith('C') ? 'CR' : 'INV';
-        const n = (d.doc || d.Doc || d.docNumber || d.DocumentNumber || '').toString().trim();
-        return (n ? `${t} ${n}` : t);
-      }).filter(Boolean);
-      parts.push(`Invoices/Credits: ${firstFew.join(', ')}${docs.length>6?` (+${docs.length-6} more)`:''}`);
-    }
-
-    // Jobs modal selection
-    const jobsRaw = sessionStorage.getItem('__WL_JobsSelection');
-    const jobs = safeJSONParse(jobsRaw);
-    if (Array.isArray(jobs) && jobs.length){
-      const ids = jobs.slice(0,8).map(j=> (j.job || j.Job || j.jobNumber || j.id || '').toString().trim()).filter(Boolean);
-      parts.push(`Jobs: ${ids.join(', ')}${jobs.length>8?` (+${jobs.length-8} more)`:''}`);
-    }
-
-    // Statement quick action (remittance line)
-    const remit = (document.getElementById('ctl00_PageBody_RemittanceAdviceTextBox')?.value || '').trim();
-    if (/^STATEMENT/i.test(remit)) parts.push(remit);
-
-    // Notes line (cab load, etc. — anything your UI writes into Notes)
-    const notes = (document.getElementById('ctl00_PageBody_NotesTextBox')?.value || '').trim();
-    if (notes) parts.push(`Notes: ${notes}`);
-
-    return parts.join(' • ');
-  }
-
-  // ---- Success page improvements
-  function applySuccessUX(){
-    const tbl = document.querySelector('table.paymentDataTable');
-    if (!tbl) return;
-
-    // Rename misleading label "Invoice number" -> "Payment confirmation #"
-    [...tbl.querySelectorAll('tr')].forEach(tr=>{
-      const th = tr.querySelector('th');
-      if (!th) return;
-      const key = (th.textContent || '').replace(/\s+/g,' ').trim().toLowerCase();
-      if (key === 'invoice number:' || key === 'invoice number'){
-        th.textContent = 'Payment confirmation #:';
-      }
-    });
-
-    // Add "Payment applied to" row (from our selections)
-    const summary = getSelectionSummaryText();
-    if (summary && !tbl.querySelector('tr[data-wl="appliedTo"]')){
-      const tr = document.createElement('tr');
-      tr.setAttribute('data-wl','appliedTo');
-      tr.innerHTML = `<th style="vertical-align: top;">Payment applied to:</th><td colspan="2">${summary}</td>`;
-      // Insert before Notes row if possible
-      const notesRow = [...tbl.querySelectorAll('tr')].find(r=>/notes/i.test(r.querySelector('th')?.textContent||''));
-      if (notesRow && notesRow.parentNode) notesRow.parentNode.insertBefore(tr, notesRow);
-      else tbl.tBodies[0]?.appendChild(tr);
-    }
-
-    // Improve token button label
-    const tok = $(IDS.saveTok);
-    if (tok){
-      tok.value = 'Save payment method';
-      tok.title = 'Save payment method for future payments';
-    }
-
-    // Hide any WL widgets/modals that might still be mounted on success view
-    [
-      '#wlOpenTxModalBtn', '#wlOpenJobsModalBtn', '#wlFillOwingBtn', '#wlLastStmtBtn',
-      '#wlInvModal', '#wlInvBackdrop', '#wlJobsModal', '#wlJobsModalBackdrop'
-    ].forEach(sel=>{
-      document.querySelectorAll(sel).forEach(hide);
-    });
-  }
-
-  // ---- Boot + MS AJAX re-apply
-  function boot(){
-    normalizePayByRadios();
-    patchShadowHook();
-    ensureShadowPayBy_v2();
-    if (isSuccessPage()){
-      applySuccessUX();
-    }
-  }
-
-  // Run now + after MS AJAX updates
-  function hookMsAjax(){
+    // If your core script exposes a summary method, use it.
+    let sel = '';
     try{
-      if (!(window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager)) return;
-      const prm = Sys.WebForms.PageRequestManager.getInstance();
-      if (prm.__wlPayByPatchV2) return;
-      prm.add_endRequest(()=> setTimeout(boot, 25));
-      prm.__wlPayByPatchV2 = true;
-    }catch{}
-  }
-
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', ()=>{ boot(); hookMsAjax(); }, { once:true });
-  } else {
-    boot(); hookMsAjax();
-  }
-})();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/* ============================================================================
-   WL PayByInvoice — Reapply PayBy visibility after async postbacks (email, etc.)
-   Fixes: entering email triggers postback and PayBy options disappear
-   Paste at the VERY BOTTOM of PayByInvoice.js (after your other patches)
-   ============================================================================ */
-(function () {
-  'use strict';
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
-  if (window.__WL_PAYBY_REAPPLY_BOUND) return;
-  window.__WL_PAYBY_REAPPLY_BOUND = true;
-
-  const IDS = {
-    rbCheck:  'ctl00_PageBody_RadioButton_PayByCheck',
-    rbCredit: 'ctl00_PageBody_RadioButton_PayByCredit',
-    rbCof:    'ctl00_PageBody_RadioButton_PayByCheckOnFile',
-    cofWrap:  'ctl00_PageBody_ChecksOnFileContainer',
-    cofWrap2: 'ctl00_PageBody_ChecksOnFileContainer1',
-  };
-
-  const $ = (id) => document.getElementById(id);
-
-  function forceShow(el) {
-    if (!el) return;
-    el.hidden = false;
-    el.style.removeProperty('display');
-    el.style.removeProperty('visibility');
-    el.style.display = '';
-    el.style.visibility = 'visible';
-    el.style.opacity = '1';
-    el.classList.add('wl-force-show');
-  }
-
-  function hide(el) {
-    if (!el) return;
-    el.style.display = 'none';
-    el.hidden = true;
-  }
-
-  function isSuccessPage() {
-    const p = document.querySelector('.bodyFlexItem p');
-    const t = (p?.textContent || '');
-    return /account payment was successful/i.test(t) && !!document.querySelector('table.paymentDataTable');
-  }
-
-  function reapplyPayByVisibility() {
-    // Don’t mess with the success/receipt view.
-    if (isSuccessPage()) return;
-
-    const chk = $(IDS.rbCheck);
-    const cof = $(IDS.rbCof);
-    const cr  = $(IDS.rbCredit);
-
-    // If none exist, nothing to do (likely different view)
-    if (!chk && !cof && !cr) return;
-
-    // Always show Check + COF containers
-    forceShow(chk?.closest('.radiobutton') || chk?.parentElement);
-    forceShow(cof?.closest('.radiobutton') || $(IDS.cofWrap));
-    forceShow($(IDS.cofWrap));
-    forceShow($(IDS.cofWrap2));
-
-    // Hide credit/card option ONLY (do not hide the whole pay section)
-    if (cr) hide(cr.closest('.radiobutton') || cr.parentElement);
-
-    // Keep COF enabled
-    if (cof) {
-      cof.disabled = false;
-      cof.removeAttribute('disabled');
-      cof.style.pointerEvents = 'auto';
-    }
-
-    // Sync wlPayByShadow if you’re using it (supports COF mapping if your v2 patch is present)
-    try {
-      if (typeof window.ensureShadowPayBy === 'function') {
-        window.ensureShadowPayBy();
-      } else {
-        // minimal shadow if the function doesn’t exist for some reason
-        const form = document.forms[0];
-        if (form) {
-          let h = document.getElementById('wlPayByShadow');
-          if (!h) {
-            h = document.createElement('input');
-            h.type = 'hidden';
-            h.id = 'wlPayByShadow';
-            h.name = 'ctl00$PageBody$PayBy';
-            form.appendChild(h);
-          }
-          h.value =
-            (cof && cof.checked) ? 'RadioButton_PayByCheckOnFile' :
-            (cr  && cr.checked)  ? 'RadioButton_PayByCredit' :
-                                   'RadioButton_PayByCheck';
-        }
-      }
+      if (typeof window.getSelectionSummaryText === 'function') sel = window.getSelectionSummaryText();
     } catch {}
-  }
-
-  function boot() {
-    // Run now
-    reapplyPayByVisibility();
-
-    // Also run shortly after, because some Telerik/UpdatePanel swaps finish *after* endRequest
-    setTimeout(reapplyPayByVisibility, 50);
-    setTimeout(reapplyPayByVisibility, 250);
-  }
-
-  // Initial
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot, { once: true });
-  } else {
-    boot();
-  }
-
-  // Re-run after ASP.NET async postbacks (email entry, validation, etc.)
-  try {
-    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
-      const prm = Sys.WebForms.PageRequestManager.getInstance();
-      if (!prm.__wlPayByReapply) {
-        prm.add_endRequest(function () { boot(); });
-        prm.__wlPayByReapply = true;
-      }
-    }
-  } catch {}
-
-  // Extra safety: if user edits an email field and it triggers postback, reapply after change too.
-  // (Won’t block postback; just cleans up after it.)
-  document.addEventListener('change', function (e) {
-    const id = e?.target?.id || '';
-    const name = e?.target?.name || '';
-    if (/Email/i.test(id) || /Email/i.test(name)) {
-      setTimeout(reapplyPayByVisibility, 50);
-      setTimeout(reapplyPayByVisibility, 250);
-    }
-  }, true);
-
-})();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/* ============================================================================
-   WL AccountPayment — HARDEN PayBy visibility + Email sanitization
-   Fixes:
-   1) Entering email triggers async postback -> PayBy options become hidden
-   2) Email prefill like "(ckunkel) ckunkel@woodsonlumber.com" fails validation
-   Policy:
-   - Show Check + Check on file
-   - Do NOT show Card/Credit
-   - Do NOT "manage" COF dropdown; just keep it visible and let server render it
-   ============================================================================ */
-(function () {
-  'use strict';
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
-
-  if (window.__WL_AP_PAYBY_EMAIL_HARDENED) return;
-  window.__WL_AP_PAYBY_EMAIL_HARDENED = true;
-
-  const IDS = {
-    rbCheck: 'ctl00_PageBody_RadioButton_PayByCheck',
-    rbCof:   'ctl00_PageBody_RadioButton_PayByCheckOnFile',
-    rbCredit:'ctl00_PageBody_RadioButton_PayByCredit',
-
-    cofWrap:  'ctl00_PageBody_ChecksOnFileContainer',
-    cofWrap2: 'ctl00_PageBody_ChecksOnFileContainer1',
-
-    email: 'ctl00_PageBody_EmailAddressTextBox'
-  };
-
-  const $ = (id) => document.getElementById(id);
-
-  function forceShow(el) {
-    if (!el) return;
-    el.hidden = false;
-    el.classList.add('wl-force-show');
-    el.style.removeProperty('display');
-    el.style.removeProperty('visibility');
-    el.style.display = '';
-    el.style.visibility = 'visible';
-    el.style.opacity = '1';
-  }
-
-  function forceHide(el) {
-    if (!el) return;
-    el.style.display = 'none';
-    el.hidden = true;
-  }
-
-  function getRadioWrapper(rb) {
-    if (!rb) return null;
-    // Most WebTrack pay options use a div.radiobutton wrapper
-    return rb.closest('.radiobutton') || rb.parentElement;
-  }
-
-  function normalizePayByVisibility() {
-    // Success page? do nothing.
-    const p = document.querySelector('.bodyFlexItem p');
-    if (p && /account payment was successful/i.test(p.textContent || '')) return;
-
-    const rbCheck  = $(IDS.rbCheck);
-    const rbCof    = $(IDS.rbCof);
-    const rbCredit = $(IDS.rbCredit);
-
-    // Always show Check
-    forceShow(getRadioWrapper(rbCheck));
-    if (rbCheck) {
-      rbCheck.disabled = false;
-      rbCheck.removeAttribute('disabled');
-    }
-
-    // Always show Check on file + its server-rendered containers
-    forceShow(getRadioWrapper(rbCof));
-    forceShow($(IDS.cofWrap));
-    forceShow($(IDS.cofWrap2));
-    if (rbCof) {
-      rbCof.disabled = false;
-      rbCof.removeAttribute('disabled');
-      rbCof.style.pointerEvents = 'auto';
-    }
-
-    // Always hide Credit/Card
-    forceHide(getRadioWrapper(rbCredit));
-
-    // Also unhide the containing form-group in case the server set display:none
-    const anyRb = rbCof || rbCheck || rbCredit;
-    const grp = anyRb ? anyRb.closest('.epi-form-group-acctPayment') : null;
-    forceShow(grp);
-
-    // One more: sometimes the label is what gets display:none
-    const lblCheck = document.querySelector(`label[for="${IDS.rbCheck}"]`);
-    const lblCof   = document.querySelector(`label[for="${IDS.rbCof}"]`);
-    const lblCr    = document.querySelector(`label[for="${IDS.rbCredit}"]`);
-    forceShow(lblCheck);
-    forceShow(lblCof);
-    if (lblCr) forceHide(lblCr);
-  }
-
-  /* ---------------- Email sanitization ---------------- */
-  function extractFirstEmail(raw) {
-    const s = String(raw || '').trim();
-    if (!s) return '';
-
-    // Common formats:
-    // "(name) email@domain.com"
-    // "Name <email@domain.com>"
-    // "email@domain.com"
-    // "Name (email@domain.com)"
-    const m = s.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
-    return m ? m[0] : '';
-  }
-
-  function sanitizeEmailField() {
-    const el = $(IDS.email);
-    if (!el) return;
-
-    const before = String(el.value || '');
-    const email = extractFirstEmail(before);
-
-    // Only change if we found a valid email and the current value isn't already that email
-    if (email && before.trim() !== email) {
-      el.value = email;
-      // do NOT dispatch change here (could trigger another postback loop)
-    }
-  }
-
-  /* ---------------- Wiring ---------------- */
-  function boot() {
-    sanitizeEmailField();
-    normalizePayByVisibility();
-
-    // Some Telerik/UpdatePanel swaps settle after endRequest, so repeat shortly
-    setTimeout(() => { sanitizeEmailField(); normalizePayByVisibility(); }, 30);
-    setTimeout(() => { sanitizeEmailField(); normalizePayByVisibility(); }, 200);
-  }
-
-  // Initial load
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot, { once: true });
-  } else {
-    boot();
-  }
-
-  // Re-apply after async postbacks (email field is a common trigger)
-  try {
-    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
-      const prm = Sys.WebForms.PageRequestManager.getInstance();
-      if (!prm.__wlPayByEmailHarden) {
-        prm.add_initializeRequest(function () {
-          // ensure email is valid BEFORE it gets validated server-side
-          sanitizeEmailField();
-        });
-        prm.add_endRequest(function () {
-          // server re-rendered markup -> re-show radios and re-sanitize email
-          boot();
-        });
-        prm.__wlPayByEmailHarden = true;
-      }
-    }
-  } catch {}
-
-  // Before real form submit, sanitize again
-  try {
-    const form = document.forms[0];
-    if (form && !form.__wlEmailSanSubmit) {
-      form.addEventListener('submit', function () { sanitizeEmailField(); }, true);
-      form.__wlEmailSanSubmit = true;
-    }
-  } catch {}
-
-  // If user types/pastes, keep it clean (no forced events)
-  try {
-    const el = $(IDS.email);
-    if (el && !el.__wlEmailSanBound) {
-      el.addEventListener('blur', sanitizeEmailField, true);
-      el.addEventListener('change', sanitizeEmailField, true);
-      el.__wlEmailSanBound = true;
-    }
-  } catch {}
-})();
-
-
-
-
-
-
-
-
-
-
-
-
-
-/* ============================================================================
-   WL AccountPayment — Pay options keep-displaying after Email async postback
-   Policy:
-   - Show: Check + Check on file (+ dropdown container)
-   - Hide: Card/Credit only
-   - Sanitize email to a real address (strip "(name) " prefix etc.)
-   Paste at VERY BOTTOM of PayByInvoice.js
-   ============================================================================ */
-(function () {
-  'use strict';
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
-
-  const IDS = {
-    rbCheck:  'ctl00_PageBody_RadioButton_PayByCheck',
-    rbCof:    'ctl00_PageBody_RadioButton_PayByCheckOnFile',
-    rbCredit: 'ctl00_PageBody_RadioButton_PayByCredit',
-
-    cofWrap:  'ctl00_PageBody_ChecksOnFileContainer',
-    cofWrap2: 'ctl00_PageBody_ChecksOnFileContainer1',
-
-    // Seen on your page:
-    email: 'ctl00_PageBody_EmailAddressTextBox',
-
-    // Shadow field name WebForms expects for PayBy
-    shadowId:   'wlPayByShadow',
-    shadowName: 'ctl00$PageBody$PayBy'
-  };
-
-  const $ = (id) => document.getElementById(id);
-
-  function isSuccessPage() {
-    const p = document.querySelector('.bodyFlexItem p');
-    const t = (p?.textContent || '');
-    return /account payment was successful/i.test(t) && !!document.querySelector('table.paymentDataTable');
-  }
-
-  /* ---------- Strong CSS override (beats server display:none) ---------- */
-  function injectStrongCSS() {
-    if (document.getElementById('wl-payby-strong-css')) return;
-    const css = `
-      /* If server returns display:none, we still want these visible */
-      .wl-force-show { display:block !important; visibility:visible !important; opacity:1 !important; }
-      #${IDS.cofWrap}, #${IDS.cofWrap2} { display:block !important; visibility:visible !important; opacity:1 !important; }
-      /* Some themes hide radiobutton rows */
-      .epi-form-group-acctPayment .radiobutton { display:block !important; visibility:visible !important; }
-    `;
-    const s = document.createElement('style');
-    s.id = 'wl-payby-strong-css';
-    s.textContent = css;
-    document.head.appendChild(s);
-  }
-
-  /* ---------- DOM helpers ---------- */
-  function hardShow(el, displayValue) {
-    if (!el) return;
-    el.hidden = false;
-    el.classList.add('wl-force-show');
-    el.style.setProperty('display', displayValue || 'block', 'important');
-    el.style.setProperty('visibility', 'visible', 'important');
-    el.style.setProperty('opacity', '1', 'important');
-  }
-
-  function hardHide(el) {
-    if (!el) return;
-    el.hidden = true;
-    el.style.setProperty('display', 'none', 'important');
-  }
-
-  function getRadioWrapper(rb) {
-    if (!rb) return null;
-    return rb.closest('.radiobutton') || rb.parentElement;
-  }
-
-  /* ---------- PayBy shadow (prevents “forgetting” selection) ---------- */
-  function ensureShadowPayBy() {
-    const form = document.forms[0];
-    if (!form) return;
-
-    let h = document.getElementById(IDS.shadowId);
-    if (!h) {
-      h = document.createElement('input');
-      h.type = 'hidden';
-      h.id = IDS.shadowId;
-      h.name = IDS.shadowName;
-      form.appendChild(h);
-    }
-
-    const cof = $(IDS.rbCof);
-    const cr  = $(IDS.rbCredit);
-    const chk = $(IDS.rbCheck);
-
-    h.value =
-      (cof && cof.checked) ? 'RadioButton_PayByCheckOnFile' :
-      (cr  && cr.checked)  ? 'RadioButton_PayByCredit' :
-                             'RadioButton_PayByCheck';
-  }
-
-  /* ---------- Main fix: always re-show pay options after async updates ---------- */
-  function reapplyPayByVisibility() {
-    if (isSuccessPage()) return; // don’t touch receipt view
-
-    injectStrongCSS();
-
-    const chk = $(IDS.rbCheck);
-    const cof = $(IDS.rbCof);
-    const cr  = $(IDS.rbCredit);
-
-    // If the server temporarily removed them, just bail until they exist again
-    if (!chk && !cof && !cr) return;
-
-    // Ensure their overall group is visible too (server sometimes hides the whole group)
-    const any = cof || chk || cr;
-    const grp = any ? any.closest('.epi-form-group-acctPayment') : null;
-    hardShow(grp, 'block');
-
-    // Show Check
-    if (chk) {
-      hardShow(getRadioWrapper(chk), 'block');
-      chk.disabled = false;
-      chk.removeAttribute('disabled');
-    }
-
-    // Show Check on file + dropdown containers (server populates options)
-    if (cof) {
-      hardShow(getRadioWrapper(cof), 'block');
-      cof.disabled = false;
-      cof.removeAttribute('disabled');
-      cof.style.pointerEvents = 'auto';
-    }
-    hardShow($(IDS.cofWrap), 'block');
-    hardShow($(IDS.cofWrap2), 'block');
-
-    // Hide Credit/Card only
-    if (cr) hardHide(getRadioWrapper(cr));
-
-    // Labels sometimes get hidden separately
-    hardShow(document.querySelector(`label[for="${IDS.rbCheck}"]`), 'inline-flex');
-    hardShow(document.querySelector(`label[for="${IDS.rbCof}"]`), 'inline-flex');
-    const lblCr = document.querySelector(`label[for="${IDS.rbCredit}"]`);
-    if (lblCr) hardHide(lblCr);
-
-    // Keep shadow in sync
-    ensureShadowPayBy();
-  }
-
-  /* ---------- Email sanitization ---------- */
-  function extractFirstEmail(raw) {
-    const s = String(raw || '').trim();
-    if (!s) return '';
-    const m = s.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
-    return m ? m[0] : '';
-  }
-
-  function sanitizeEmailField() {
-    const el = $(IDS.email);
-    if (!el) return;
-
-    const cleaned = extractFirstEmail(el.value);
-    // Only replace if we found a valid email and it differs from what’s in the box
-    if (cleaned && el.value.trim() !== cleaned) {
-      el.value = cleaned;
-      el.defaultValue = cleaned;
-      // Don’t trigger a postback here; just fix the value in-place.
-    }
-  }
-
-  /* ---------- Reapply after all async postbacks + DOM swaps ---------- */
-  function hookAjax() {
-    try {
-      if (!(window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager)) return;
-      const prm = Sys.WebForms.PageRequestManager.getInstance();
-      if (prm.__wlPayBySticky) return;
-
-      prm.add_endRequest(function () {
-        // Server may finish DOM swaps slightly after endRequest
-        reapplyPayByVisibility();
-        setTimeout(reapplyPayByVisibility, 50);
-        setTimeout(reapplyPayByVisibility, 250);
-        setTimeout(reapplyPayByVisibility, 700);
-      });
-
-      prm.__wlPayBySticky = true;
-    } catch {}
-  }
-
-  /* ---------- MutationObserver backup (catches weird Telerik swaps) ---------- */
-  function hookObserver() {
-    if (window.__wlPayByObserver) return;
-    window.__wlPayByObserver = true;
-
-    const root = document.querySelector('form') || document.body;
-    if (!root) return;
-
-    const obs = new MutationObserver(function () {
-      // light debounce
-      clearTimeout(obs.__t);
-      obs.__t = setTimeout(reapplyPayByVisibility, 40);
-    });
-    obs.observe(root, { childList: true, subtree: true, attributes: true, attributeFilter: ['style', 'class', 'hidden'] });
-  }
-
-  function boot() {
-    if (isSuccessPage()) return; // this patch is for entry page behavior
-    reapplyPayByVisibility();
-    hookAjax();
-    hookObserver();
-  }
-
-  // Run now
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', boot, { once: true });
-  } else {
-    boot();
-  }
-
-  // Sanitize email on user input AND after changes (even if server prefills weirdly)
-  document.addEventListener('input', function (e) {
-    const t = e?.target;
-    if (!t) return;
-    if (t.id === IDS.email || /Email/i.test(t.name || '')) {
-      sanitizeEmailField();
-    }
-  }, true);
-
-  document.addEventListener('change', function (e) {
-    const t = e?.target;
-    if (!t) return;
-    if (t.id === IDS.email || /Email/i.test(t.name || '')) {
-      sanitizeEmailField();
-      // After email change, server may postback and hide the pay options again
-      setTimeout(reapplyPayByVisibility, 50);
-      setTimeout(reapplyPayByVisibility, 250);
-      setTimeout(reapplyPayByVisibility, 700);
-    }
-  }, true);
-
-})();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/* =============================================================================
-   WL AccountPayment — Payment Method UI (Check vs Account On File) + Postback Fix
-   - Keeps Pay options visible after MS AJAX postbacks (email validation, etc.)
-   - Adds a "Payment Method" select that toggles Check vs Check On File UI
-   - Ensures shadow PayBy includes COF so selection doesn't revert to Check
-   Paste at VERY BOTTOM of PayByInvoice.js
-   ============================================================================ */
-(function () {
-  'use strict';
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
-
-  // prevent double-boot
-  if (window.__WL_AP_PAY_METHOD_UI_V2) return;
-  window.__WL_AP_PAY_METHOD_UI_V2 = true;
-
-  const IDS = {
-    rbCheck:  'ctl00_PageBody_RadioButton_PayByCheck',
-    rbCof:    'ctl00_PageBody_RadioButton_PayByCheckOnFile',
-    rbCredit: 'ctl00_PageBody_RadioButton_PayByCredit',
-
-    cofWrap:  'ctl00_PageBody_ChecksOnFileContainer',
-    cofWrap2: 'ctl00_PageBody_ChecksOnFileContainer1',
-
-    // Where we try to mount the new UI (your rebuilt grid if present)
-    grid: 'wlFormGrid',
-
-    // Shadow field (WebForms expects ctl00$PageBody$PayBy)
-    shadowId:   'wlPayByShadow',
-    shadowName: 'ctl00$PageBody$PayBy',
-
-    // Session key so mode survives postbacks
-    modeKey: 'wl_pay_method_mode'
-  };
-
-  const $ = (id) => document.getElementById(id);
-
-  function isSuccessPage() {
-    const p = document.querySelector('.bodyFlexItem p');
-    return /account payment was successful/i.test((p?.textContent || '')) &&
-           !!document.querySelector('table.paymentDataTable');
-  }
-
-  /* ---------- Strong CSS override (beats inline display:none) ---------- */
-  function injectCSS() {
-    if (document.getElementById('wl-ap-paymethod-css')) return;
-    const css = `
-      /* Force pay options visible even if server returns display:none inline */
-      .wl-force-show { display:block !important; visibility:visible !important; opacity:1 !important; }
-      .wl-force-inline { display:inline-block !important; visibility:visible !important; opacity:1 !important; }
-
-      /* Pay option wrappers are commonly div.radiobutton */
-      .epi-form-group-acctPayment .radiobutton { display:block !important; visibility:visible !important; }
-
-      /* Keep COF containers visible */
-      #${IDS.cofWrap}, #${IDS.cofWrap2} { display:block !important; visibility:visible !important; opacity:1 !important; }
-
-      /* Our Payment Method row */
-      #wlPayMethodRow { grid-column: 1 / -1; }
-      #wlPayMethodRow .wl-paymethod {
-        border:1px solid #e5e7eb; border-radius:14px; background:#fff;
-        padding:12px 14px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;
-        box-shadow:0 4px 14px rgba(15,23,42,.06);
-      }
-      #wlPayMethodRow label { font-weight:900; color:#0f172a; }
-      #wlPayMethodRow select {
-        border:1px solid #e5e7eb; border-radius:12px; padding:10px 12px; min-height:42px;
-        font-weight:800;
-      }
-      #wlPayMethodHelp { color:#475569; font-size:12px; font-weight:700; }
-    `;
-    const s = document.createElement('style');
-    s.id = 'wl-ap-paymethod-css';
-    s.textContent = css;
-    document.head.appendChild(s);
-  }
-
-  function hardShow(el, displayValue) {
-    if (!el) return;
-    el.hidden = false;
-    el.classList.add('wl-force-show');
-    el.style.setProperty('display', displayValue || 'block', 'important');
-    el.style.setProperty('visibility', 'visible', 'important');
-    el.style.setProperty('opacity', '1', 'important');
-  }
-  function hardHide(el) {
-    if (!el) return;
-    el.hidden = true;
-    el.style.setProperty('display', 'none', 'important');
-  }
-  function getRadioWrapper(rb) {
-    if (!rb) return null;
-    return rb.closest('.radiobutton') || rb.parentElement;
-  }
-
-  /* ---------- Keep PayBy options visible (and hide credit) ---------- */
-  function normalizePayByVisibility() {
-    if (isSuccessPage()) return;
-
-    const rbCheck  = $(IDS.rbCheck);
-    const rbCof    = $(IDS.rbCof);
-    const rbCredit = $(IDS.rbCredit);
-
-    // Show check + COF + containers
-    hardShow(getRadioWrapper(rbCheck));
-    hardShow(getRadioWrapper(rbCof));
-    hardShow($(IDS.cofWrap));
-    hardShow($(IDS.cofWrap2));
-
-    if (rbCheck) { rbCheck.disabled = false; rbCheck.removeAttribute('disabled'); }
-    if (rbCof)   { rbCof.disabled   = false; rbCof.removeAttribute('disabled'); rbCof.style.pointerEvents = 'auto'; }
-
-    // Hide credit/card
-    if (rbCredit) hardHide(getRadioWrapper(rbCredit));
-  }
-
-  /* ---------- Shadow PayBy (THIS is what stops it reverting to Check) ---------- */
-  function readPayByValue() {
-    const rbCof = $(IDS.rbCof);
-    const rbCr  = $(IDS.rbCredit);
-    if (rbCof && rbCof.checked) return 'RadioButton_PayByCheckOnFile';
-    if (rbCr  && rbCr.checked)  return 'RadioButton_PayByCredit';
-    return 'RadioButton_PayByCheck';
-  }
-  function ensureShadowPayBy() {
-    const form = document.forms[0];
-    if (!form) return;
-    let h = $(IDS.shadowId);
-    if (!h) {
-      h = document.createElement('input');
-      h.type = 'hidden';
-      h.id   = IDS.shadowId;
-      h.name = IDS.shadowName;
-      form.appendChild(h);
-    }
-    h.value = readPayByValue();
-  }
-
-  // Override any earlier exported ensureShadowPayBy so everything uses COF-aware mapping
-  window.ensureShadowPayBy = ensureShadowPayBy;
-
-  /* ---------- WebForms postback helper ---------- */
-  function postbackForRadio(rb) {
-    const target = rb?.name || rb?.id;
-    if (!target) return;
-    if (typeof window.__doPostBack === 'function') {
-      window.__doPostBack(target, '');
-    } else {
-      // last resort
-      try { rb.click(); } catch {}
-    }
-  }
-
-  /* ---------- COF dropdown helper ---------- */
-  function getCofSelect() {
-    const wrap1 = $(IDS.cofWrap);
-    const wrap2 = $(IDS.cofWrap2);
-    return (wrap1 && wrap1.querySelector('select')) ||
-           (wrap2 && wrap2.querySelector('select')) ||
-           null;
-  }
-  function ensureCofSelection() {
-    const sel = getCofSelect();
-    if (!sel) return true; // some implementations don't use a <select>
-
-    // If already valid, done
-    if (sel.value && sel.value.trim() !== '') return true;
-
-    // Choose first non-empty option
-    for (let i = 0; i < sel.options.length; i++) {
-      const opt = sel.options[i];
-      if (opt && opt.value && opt.value.trim() !== '') {
-        sel.selectedIndex = i;
-        break;
-      }
-    }
-
-    // Trigger change (some pages expect it)
-    try { sel.dispatchEvent(new Event('change', { bubbles: true })); } catch {}
-
-    return !!(sel.value && sel.value.trim() !== '');
-  }
-
-  /* ---------- Payment Method dropdown UI ---------- */
-  function mountPaymentMethodUI() {
-    if (isSuccessPage()) return;
-
-    const rbCheck = $(IDS.rbCheck);
-    const rbCof   = $(IDS.rbCof);
-    if (!rbCheck && !rbCof) return;
-
-    // Choose mount point: your wlFormGrid if present, else near pay radios
-    const grid = $(IDS.grid);
-    const payWrap = getRadioWrapper(rbCheck) || getRadioWrapper(rbCof);
-    const host = grid || payWrap?.parentElement || document.body;
-
-    // Create row once
-    let row = document.getElementById('wlPayMethodRow');
-    if (!row) {
-      row = document.createElement('div');
-      row.id = 'wlPayMethodRow';
-      row.className = 'wl-item';
-
-      row.innerHTML = `
-        <div class="wl-paymethod">
-          <label for="wlPayMethodSelect">Payment Method</label>
-          <select id="wlPayMethodSelect">
-            <option value="check">Pay by Check</option>
-            <option value="cof">Pay with Account on File</option>
-          </select>
-          <span id="wlPayMethodHelp">Choose how you’d like to pay.</span>
+    if (!sel) sel = (remit || notes) ? [remit, notes].filter(Boolean).join(' • ') : '(none)';
+
+    const amtDisp = amtEl?.value ? ('$' + String(amtEl.value).trim()) : '(none)';
+    return `
+      <div class="wl-card" style="margin-bottom:14px;">
+        <div class="wl-card-head">Review</div>
+        <div class="wl-card-body">
+          <div style="display:grid; gap:10px;">
+            <div><b>Amount:</b> <span style="font-weight:1000;">${amtDisp}</span></div>
+            <div><b>Selection:</b> ${sel || '(none)'}</div>
+            <div><b>Email:</b> ${email || '(not provided)'}</div>
+            ${(remit||notes) ? `<div><b>Remit/Notes:</b><div style="white-space:pre-wrap;margin-top:4px;">${[remit,notes].filter(Boolean).join('\n\n')}</div></div>` : ``}
+          </div>
         </div>
-      `;
-
-      // Put it above the pay radios if we can
-      if (payWrap && host.contains(payWrap)) host.insertBefore(row, payWrap);
-      else host.insertBefore(row, host.firstChild);
-    }
-
-    const sel = document.getElementById('wlPayMethodSelect');
-    if (!sel) return;
-
-    // Sync dropdown -> radios -> server UI visibility
-    function applyMode(mode, opts) {
-      opts = opts || {};
-      const shouldPostback = opts.postback !== false;
-
-      normalizePayByVisibility();
-
-      const cofWrap  = $(IDS.cofWrap);
-      const cofWrap2 = $(IDS.cofWrap2);
-
-      // remember user intent across postbacks
-      try { sessionStorage.setItem(IDS.modeKey, mode); } catch {}
-
-      if (mode === 'cof' && rbCof) {
-        // SHOW COF containers
-        hardShow(cofWrap);
-        hardShow(cofWrap2);
-
-        // CRITICAL: set checked states BEFORE any postback
-        rbCof.checked = true;
-        if (rbCheck) rbCheck.checked = false;
-
-        // Make sure COF dropdown has a real selection
-        const ok = ensureCofSelection();
-
-        // CRITICAL: stamp hidden PayBy BEFORE postback
-        ensureShadowPayBy();
-
-        // Trigger the postback ourselves (avoid rbCof.click() which posts too early)
-        if (shouldPostback && ok) setTimeout(() => postbackForRadio(rbCof), 0);
-      } else {
-        // CHECK mode
-        if (rbCheck) rbCheck.checked = true;
-        if (rbCof) rbCof.checked = false;
-
-        // Keep containers shown (WebForms can be touchy)
-        hardShow(cofWrap);
-        hardShow(cofWrap2);
-
-        ensureShadowPayBy();
-
-        if (shouldPostback && rbCheck) setTimeout(() => postbackForRadio(rbCheck), 0);
-      }
-    }
-
-    // Initialize selection from current state OR saved mode
-    let initMode = (rbCof && rbCof.checked) ? 'cof' : 'check';
-    try {
-      const saved = sessionStorage.getItem(IDS.modeKey);
-      if (saved === 'cof' || saved === 'check') initMode = saved;
-    } catch {}
-    sel.value = initMode;
-    applyMode(initMode, { postback: false }); // initial paint without forcing another request
-
-    // On change, switch modes
-    if (!sel.__wlBound) {
-      sel.addEventListener('change', () => applyMode(sel.value, { postback: true }));
-      sel.__wlBound = true;
-    }
-
-    // Also: if user clicks the native radios, keep dropdown synced
-    function syncFromRadios() {
-      sel.value = (rbCof && rbCof.checked) ? 'cof' : 'check';
-      try { sessionStorage.setItem(IDS.modeKey, sel.value); } catch {}
-      ensureShadowPayBy();
-      normalizePayByVisibility();
-    }
-    [rbCheck, rbCof].forEach(rb => {
-      if (rb && !rb.__wlSyncBound) {
-        rb.addEventListener('change', syncFromRadios, true);
-        rb.addEventListener('click',   syncFromRadios, true);
-        rb.__wlSyncBound = true;
-      }
-    });
-
-    // Expose for boot() restore
-    window.__wlApplyPayMode = applyMode;
-  }
-
-  /* ---------- Re-apply after async postbacks ---------- */
-  function boot() {
-    injectCSS();
-    normalizePayByVisibility();
-    mountPaymentMethodUI();
-    ensureShadowPayBy();
-
-    // Restore user's preferred mode after postback render (without looping)
-    try {
-      const saved = sessionStorage.getItem(IDS.modeKey);
-      if (saved === 'cof' && typeof window.__wlApplyPayMode === 'function') {
-        window.__wlApplyPayMode('cof', { postback: false });
-        const sel = document.getElementById('wlPayMethodSelect');
-        if (sel) sel.value = 'cof';
-      }
-    } catch {}
-  }
-
-  boot();
-
-  // MS AJAX hook (WebForms UpdatePanel postbacks)
-  try {
-    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
-      const prm = Sys.WebForms.PageRequestManager.getInstance();
-      if (!prm.__wlPayMethodBound) {
-        prm.add_initializeRequest(() => {
-          // stamp shadow BEFORE request
-          ensureShadowPayBy();
-        });
-        prm.add_endRequest(() => {
-          // rebuild visibility/UI AFTER request
-          boot();
-        });
-        prm.__wlPayMethodBound = true;
-      }
-    }
-  } catch {}
-
-  // Extra safety: if something inline hides these later, re-assert quickly
-  setTimeout(boot, 150);
-  setTimeout(boot, 600);
-})();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/* =============================================================================
-   WL AccountPayment — Guided Wizard + Check-on-File dropdown mirror (NO shadow PayBy)
-   - Turns the rebuilt UI into a step-by-step form (Details → Review → Pay)
-   - Does NOT create hidden inputs with name ctl00$PageBody$PayBy (avoids WebForms binding issues)
-   - Preserves user's PayBy selection across UpdatePanel postbacks
-   - Mirrors ddlChecksOnFile into a nicer select (optional) while keeping the real select functional
-   Paste at VERY BOTTOM of PayByInvoice.js
-   ============================================================================ */
-(function () {
-  'use strict';
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
-
-  // prevent double-boot
-  if (window.__WL_AP_WIZ_V1) return;
-  window.__WL_AP_WIZ_V1 = true;
-
-  const IDS = {
-    // Cards/layout created by your existing upgradeLayout()
-    leftCard: 'wlLeftCard',
-    formGrid: 'wlFormGrid',
-    rightCard: 'wlRightCard',
-    proxySubmit: 'wlProxySubmit',
-
-    // WebForms controls
-    amount: 'ctl00_PageBody_PaymentAmountTextBox',
-    remit:  'ctl00_PageBody_RemittanceAdviceTextBox',
-    email:  'ctl00_PageBody_EmailAddressTextBox',
-
-    rbCheck: 'ctl00_PageBody_RadioButton_PayByCheck',
-    rbCof:   'ctl00_PageBody_RadioButton_PayByCheckOnFile',
-    rbCard:  'ctl00_PageBody_RadioButton_PayByCardOnFile', // if present
-    rbCredit:'ctl00_PageBody_RadioButton_PayByCredit',     // if present
-
-    cofWrap:  'ctl00_PageBody_ChecksOnFileContainer',
-    cofWrap1: 'ctl00_PageBody_ChecksOnFileContainer1',
-    ddlCof:   'ctl00_PageBody_ddlChecksOnFile',
-
-    makePayPanel: 'ctl00_PageBody_MakePaymentPanel'
-  };
-
-  const KEY = {
-    step:  'wl_ap_step_v1',
-    payBy: 'wl_ap_payby_v1',
-    cof:   'wl_ap_cofsel_v1'
-  };
-
-  const $id = (id) => document.getElementById(id);
-  const qs  = (sel, root=document) => root.querySelector(sel);
-  const qsa = (sel, root=document) => Array.from(root.querySelectorAll(sel));
-
-  function isSuccessPage(){
-    const p = document.querySelector('.bodyFlexItem p');
-    return /account payment was successful/i.test((p?.textContent || '')) &&
-           !!document.querySelector('table.paymentDataTable');
-  }
-
-  function safeSetSession(k,v){ try{ sessionStorage.setItem(k, String(v)); }catch{} }
-  function safeGetSession(k, fallback=null){ try{ const v=sessionStorage.getItem(k); return (v===null?fallback:v); }catch{ return fallback; } }
-
-  function injectCSS(){
-    if (document.getElementById('wl-ap-wiz-css')) return;
-    const css = `
-      .wl-steps {
-        display:flex; gap:8px; flex-wrap:wrap;
-        margin:0 0 14px 0;
-      }
-      .wl-stepchip{
-        border:1px solid #e5e7eb;
-        background:#fff;
-        border-radius:999px;
-        padding:7px 12px;
-        font-weight:900;
-        font-size:12px;
-        color:#334155;
-        opacity:.65;
-      }
-      .wl-stepchip.is-active{ opacity:1; box-shadow:0 4px 14px rgba(15,23,42,.06); }
-      .wl-stepchip.is-done{ opacity:1; }
-      .wl-stepwrap{ display:block; }
-      .wl-stepwrap[hidden]{ display:none !important; }
-
-      .wl-wiznav{
-        display:flex; gap:10px; justify-content:space-between; align-items:center;
-        margin-top:16px;
-      }
-      .wl-btn{
-        border:1px solid #e5e7eb;
-        background:#fff;
-        border-radius:12px;
-        padding:10px 12px;
-        font-weight:900;
-        cursor:pointer;
-      }
-      .wl-btn-primary{
-        border:none;
-        background: var(--wl-brand, #6b0016);
-        color:#fff;
-      }
-      .wl-muted{ color:#475569; font-weight:800; font-size:12px; }
-      .wl-divider{ height:1px; background:#e5e7eb; margin:14px 0; }
-
-      /* Payment method block "feel native" */
-      #wlPayMethodBlock{
-        border:1px solid #e5e7eb;
-        border-radius:16px;
-        padding:12px 14px;
-        background:#fff;
-        box-shadow:0 6px 18px rgba(15,23,42,.06);
-      }
-      #wlPayMethodBlock label{
-        font-weight:900;
-        color:#0f172a;
-      }
-      #wlPayMethodBlock .wl-row{
-        display:flex; gap:10px; flex-wrap:wrap; align-items:center;
-        margin-top:10px;
-      }
-      #wlPayMethodBlock select{
-        border:1px solid #e5e7eb;
-        border-radius:12px;
-        padding:10px 12px;
-        min-height:42px;
-        font-weight:800;
-      }
-
-      /* Don't let server inline display:none kill your pay section */
-      .epi-form-group-acctPayment,
-      .epi-form-group-acctPayment .radiobutton,
-      #${IDS.cofWrap}, #${IDS.cofWrap1}{
-        visibility:visible !important;
-      }
-    `;
-    const s = document.createElement('style');
-    s.id = 'wl-ap-wiz-css';
-    s.textContent = css;
-    document.head.appendChild(s);
-  }
-
-  /* ---------------------------
-     Locate the "payment group"
-     --------------------------- */
-  function findPaymentGroup(){
-    // Your layout module uses: MakePaymentPanel.previousElementSibling as payWrap :contentReference[oaicite:1]{index=1}
-    const mp = $id(IDS.makePayPanel);
-    const payWrap = mp?.previousElementSibling || null;
-    if (payWrap && payWrap.classList) return payWrap;
-    // fallback: find group containing rbCheck
-    const rb = $id(IDS.rbCheck);
-    return rb?.closest('.epi-form-group-acctPayment') || null;
-  }
-
-  function findCoreGroups(){
-    // These are moved into #wlFormGrid by your existing upgradeLayout() :contentReference[oaicite:2]{index=2}
-    const grid = $id(IDS.formGrid);
-    if (!grid) return [];
-
-    // Heuristic: all direct children that are legacy groups (epi-form-group-acctPayment)
-    const groups = qsa(':scope > .epi-form-group-acctPayment', grid);
-
-    // payment group is usually last; we separate it explicitly
-    const payGroup = findPaymentGroup();
-    return { grid, groups, payGroup };
-  }
-
-  /* ---------------------------
-     PayBy persistence (NO SHADOW)
-     --------------------------- */
-  function readPayBy(){
-    const rbCof = $id(IDS.rbCof);
-    const rbCard= $id(IDS.rbCard);
-    const rbCr  = $id(IDS.rbCredit);
-    const rbChk = $id(IDS.rbCheck);
-    if (rbCof && rbCof.checked) return 'cof';
-    if (rbCard && rbCard.checked) return 'card_on_file';
-    if (rbCr && rbCr.checked) return 'credit';
-    if (rbChk && rbChk.checked) return 'check';
-    return 'check';
-  }
-
-  function setPayBy(mode){
-    const rbCof = $id(IDS.rbCof);
-    const rbCard= $id(IDS.rbCard);
-    const rbCr  = $id(IDS.rbCredit);
-    const rbChk = $id(IDS.rbCheck);
-
-    // IMPORTANT: do NOT .click() here (that can cause postbacks & fight the user's dropdown postback)
-    if (rbChk)  rbChk.checked  = (mode === 'check');
-    if (rbCof)  rbCof.checked  = (mode === 'cof');
-    if (rbCard) rbCard.checked = (mode === 'card_on_file');
-    if (rbCr)   rbCr.checked   = (mode === 'credit');
-
-    safeSetSession(KEY.payBy, mode);
-  }
-
-  function wirePayByPersistence(){
-    const radios = [IDS.rbCheck, IDS.rbCof, IDS.rbCard, IDS.rbCredit]
-      .map($id).filter(Boolean);
-
-    radios.forEach(r=>{
-      if (r.__wlPayByBound) return;
-      const handler = ()=> safeSetSession(KEY.payBy, readPayBy());
-      r.addEventListener('change', handler, true);
-      r.addEventListener('click', handler, true);
-      r.__wlPayByBound = true;
-    });
-  }
-
-  /* ---------------------------
-     COF dropdown mirror
-     --------------------------- */
-  function mountCofMirrorUI(container){
-    const ddl = $id(IDS.ddlCof);
-    if (!ddl) return;
-
-    // If the page has no choices, don't render mirror
-    if (!ddl.options || ddl.options.length <= 0) return;
-
-    // Build mirror once
-    let block = document.getElementById('wlPayMethodBlock');
-    if (!block){
-      block = document.createElement('div');
-      block.id = 'wlPayMethodBlock';
-      block.innerHTML = `
-        <label for="wlPayMethodSelect">Payment method</label>
-        <div class="wl-row">
-          <select id="wlPayMethodSelect">
-            <option value="check">Pay by check</option>
-            <option value="cof">Check on file</option>
-          </select>
-          <span class="wl-muted">Pick your method, then choose an account if needed.</span>
-        </div>
-
-        <div class="wl-divider"></div>
-
-        <label for="wlCofMirrorSelect">Account on file</label>
-        <div class="wl-row">
-          <select id="wlCofMirrorSelect"></select>
-          <span class="wl-muted" id="wlCofHint"></span>
-        </div>
-      `;
-      container.insertBefore(block, container.firstChild);
-    }
-
-    const methodSel = document.getElementById('wlPayMethodSelect');
-    const mirrorSel = document.getElementById('wlCofMirrorSelect');
-    const hint = document.getElementById('wlCofHint');
-
-    // Populate mirror options from real ddl
-    function syncOptions(){
-      mirrorSel.innerHTML = '';
-      Array.from(ddl.options).forEach(opt=>{
-        const o = document.createElement('option');
-        o.value = opt.value;
-        o.textContent = opt.textContent;
-        if (opt.selected) o.selected = true;
-        mirrorSel.appendChild(o);
-      });
-    }
-
-    function syncFromReal(){
-      syncOptions();
-      safeSetSession(KEY.cof, ddl.value);
-      if (hint) hint.textContent = (ddl.options.length > 1) ? '' : 'Only one account on file';
-    }
-
-    function syncToRealAndPostback(newVal){
-      // set real ddl value and trigger its exact postback hook
-      ddl.value = newVal;
-      safeSetSession(KEY.cof, newVal);
-
-      // Trigger the same postback the server expects
-      // (Matches markup: __doPostBack('ctl00$PageBody$ddlChecksOnFile',''))
-      try{
-        if (typeof window.__doPostBack === 'function'){
-          window.__doPostBack('ctl00$PageBody$ddlChecksOnFile','');
-        } else {
-          // fallback: dispatch change (some builds listen for it)
-          ddl.dispatchEvent(new Event('change', { bubbles:true }));
-        }
-      }catch{}
-    }
-
-    // Method sync (DO NOT click radios)
-    function applyMethodUI(mode){
-      setPayBy(mode === 'cof' ? 'cof' : 'check');
-
-      // Keep original containers visible so WebForms is happy
-      const cw = $id(IDS.cofWrap);
-      const cw1= $id(IDS.cofWrap1);
-      if (cw)  cw.style.removeProperty('display');
-      if (cw1) cw1.style.removeProperty('display');
-
-      // Optional: hide the *real* dropdown visually, keep it in DOM
-      ddl.style.position = 'absolute';
-      ddl.style.left = '-9999px';
-      ddl.style.width = '1px';
-      ddl.style.height = '1px';
-      ddl.style.opacity = '0';
-    }
-
-    // Initial state
-    syncFromReal();
-    const savedPay = safeGetSession(KEY.payBy, null);
-    const initialMode = (savedPay === 'cof' || ($id(IDS.rbCof)?.checked)) ? 'cof' : 'check';
-    methodSel.value = initialMode;
-    applyMethodUI(initialMode);
-
-    // Restore saved COF selection if present (without forcing postback)
-    const savedCof = safeGetSession(KEY.cof, null);
-    if (savedCof && Array.from(ddl.options).some(o=>o.value === savedCof)){
-      ddl.value = savedCof;
-      syncFromReal();
-      mirrorSel.value = savedCof;
-    }
-
-    if (!methodSel.__wlBound){
-      methodSel.addEventListener('change', ()=>{
-        applyMethodUI(methodSel.value);
-      });
-      methodSel.__wlBound = true;
-    }
-
-    if (!mirrorSel.__wlBound){
-      mirrorSel.addEventListener('change', ()=>{
-        applyMethodUI('cof');           // ensure COF chosen
-        methodSel.value = 'cof';
-        syncToRealAndPostback(mirrorSel.value);
-      });
-      mirrorSel.__wlBound = true;
-    }
-
-    // If the server re-renders ddl after postback, resync the mirror
-    if (!ddl.__wlMirrorObserver){
-      ddl.__wlMirrorObserver = true;
-      // lightweight resync after any change
-      ddl.addEventListener('change', syncFromReal, true);
-    }
-  }
-
-  /* ---------------------------
-     Wizard steps
-     --------------------------- */
-  function buildWizardShell(grid){
-    if (document.getElementById('wlWizard')) return;
-
-    const head = document.createElement('div');
-    head.id = 'wlWizard';
-    head.innerHTML = `
-      <div class="wl-steps" id="wlStepChips">
-        <div class="wl-stepchip" data-step="1">1) Details</div>
-        <div class="wl-stepchip" data-step="2">2) Review</div>
-        <div class="wl-stepchip" data-step="3">3) Payment</div>
       </div>
-
-      <div class="wl-stepwrap" id="wlStep1"></div>
-      <div class="wl-stepwrap" id="wlStep2" hidden></div>
-      <div class="wl-stepwrap" id="wlStep3" hidden></div>
     `;
-    grid.insertBefore(head, grid.firstChild);
-
-    // Nav buttons per step
-    function addNav(stepEl, { back=false, next=false, nextLabel='Next', backLabel='Back' }){
-      const nav = document.createElement('div');
-      nav.className = 'wl-wiznav';
-      nav.innerHTML = `
-        <div>
-          ${back ? `<button type="button" class="wl-btn" data-back>${backLabel}</button>` : ``}
-        </div>
-        <div>
-          ${next ? `<button type="button" class="wl-btn wl-btn-primary" data-next>${nextLabel}</button>` : ``}
-        </div>
-      `;
-      stepEl.appendChild(nav);
-      return nav;
-    }
-
-    addNav(document.getElementById('wlStep1'), { next:true, nextLabel:'Review' });
-    addNav(document.getElementById('wlStep2'), { back:true, next:true, nextLabel:'Choose payment method' });
-    addNav(document.getElementById('wlStep3'), { back:true });
-  }
-
-  function setStep(n){
-    safeSetSession(KEY.step, String(n));
-
-    const s1 = document.getElementById('wlStep1');
-    const s2 = document.getElementById('wlStep2');
-    const s3 = document.getElementById('wlStep3');
-    if (!s1 || !s2 || !s3) return;
-
-    s1.hidden = (n !== 1);
-    s2.hidden = (n !== 2);
-    s3.hidden = (n !== 3);
-
-    // chips
-    const chips = qsa('#wlStepChips .wl-stepchip');
-    chips.forEach(c=>{
-      const sn = Number(c.getAttribute('data-step'));
-      c.classList.toggle('is-active', sn === n);
-      c.classList.toggle('is-done', sn < n);
-    });
-
-    // Make Payment button only “active” on step 3
-    const proxy = $id(IDS.proxySubmit);
-    if (proxy){
-      proxy.disabled = (n !== 3);
-      proxy.style.opacity = (n !== 3) ? '0.6' : '1';
-      proxy.style.pointerEvents = (n !== 3) ? 'none' : 'auto';
-    }
-  }
-
-  function validateStep1(){
-    // Minimal: amount > 0 OR remittance has something (your call)
-    const amtEl = $id(IDS.amount);
-    const remEl = $id(IDS.remit);
-    const emailEl = $id(IDS.email);
-
-    const amt = parseFloat(String(amtEl?.value || '').replace(/[^0-9.\-]/g,''));
-    const hasAmt = Number.isFinite(amt) && amt > 0;
-    const hasRem = !!String(remEl?.value || '').trim();
-    const hasEmail = !emailEl || !!String(emailEl.value||'').trim();
-
-    if (!hasEmail){
-      try{ emailEl.focus(); }catch{}
-      alert('Please enter an email address.');
-      return false;
-    }
-    if (!hasAmt && !hasRem){
-      try{ (amtEl || remEl)?.focus(); }catch{}
-      alert('Please enter a payment amount (or include remittance details).');
-      return false;
-    }
-    return true;
-  }
-
-  function wireWizardNav(){
-    const wiz = document.getElementById('wlWizard');
-    if (!wiz || wiz.__wlNavBound) return;
-
-    wiz.addEventListener('click', (e)=>{
-      const back = e.target.closest('[data-back]');
-      const next = e.target.closest('[data-next]');
-      const cur = Number(safeGetSession(KEY.step, '1')) || 1;
-
-      if (back){
-        e.preventDefault();
-        setStep(Math.max(1, cur - 1));
-      }
-      if (next){
-        e.preventDefault();
-        if (cur === 1 && !validateStep1()) return;
-        setStep(Math.min(3, cur + 1));
-      }
-    });
-
-    wiz.__wlNavBound = true;
-  }
-
-  function distributeGroupsIntoSteps(groups, payGroup){
-    const s1 = document.getElementById('wlStep1');
-    const s2 = document.getElementById('wlStep2');
-    const s3 = document.getElementById('wlStep3');
-    if (!s1 || !s2 || !s3) return;
-
-    // Clear (but keep nav at bottom)
-    function clearKeepNav(stepEl){
-      const nav = qs('.wl-wiznav', stepEl);
-      stepEl.innerHTML = '';
-      if (nav) stepEl.appendChild(nav);
-    }
-
-    // If first time, we can rebuild contents:
-    if (!s1.__wlFilled){
-      // remove nav, fill, then add nav back
-      const nav1 = qs('.wl-wiznav', s1);
-      const nav2 = qs('.wl-wiznav', s2);
-      const nav3 = qs('.wl-wiznav', s3);
-
-      s1.innerHTML = ''; s2.innerHTML = ''; s3.innerHTML = '';
-      if (nav1) s1.appendChild(nav1);
-      if (nav2) s2.appendChild(nav2);
-      if (nav3) s3.appendChild(nav3);
-
-      // Split groups: put everything except payment into step1
-      const nonPay = groups.filter(g => g && g !== payGroup);
-
-      // Step1: details inputs
-      nonPay.forEach(g=>{
-        // keep your existing styling classes; just move
-        s1.insertBefore(g, qs('.wl-wiznav', s1));
-      });
-
-      // Step2: review step (we don’t need to move the right card; just add guidance)
-      const reviewHint = document.createElement('div');
-      reviewHint.className = 'wl-muted';
-      reviewHint.style.marginBottom = '12px';
-      reviewHint.textContent = 'Review your payment summary on the right. If everything looks right, continue to payment.';
-      s2.insertBefore(reviewHint, qs('.wl-wiznav', s2));
-
-      // Step3: payment group
-      if (payGroup){
-        s3.insertBefore(payGroup, qs('.wl-wiznav', s3));
-      }
-
-      s1.__wlFilled = true;
-    }
-  }
-
-  /* ---------------------------
-     Boot / Re-boot after postbacks
-     --------------------------- */
-  function boot(){
-    if (isSuccessPage()) return;
-
-    injectCSS();
-
-    const left = $id(IDS.leftCard);
-    const grid = $id(IDS.formGrid);
-    if (!left || !grid) return;
-
-    const { groups, payGroup } = findCoreGroups();
-
-    buildWizardShell(grid);
-    distributeGroupsIntoSteps(groups, payGroup);
-    wireWizardNav();
-    wirePayByPersistence();
-
-    // Mount payment method block only when step3 exists and payGroup is present
-    const step3 = document.getElementById('wlStep3');
-    if (step3 && payGroup){
-      mountCofMirrorUI(step3);
-    }
-
-    // Restore step
-    const savedStep = Number(safeGetSession(KEY.step, '1')) || 1;
-    setStep(Math.min(3, Math.max(1, savedStep)));
-
-    // Restore payby (without clicking)
-    const savedPay = safeGetSession(KEY.payBy, null);
-    if (savedPay) setPayBy(savedPay);
-  }
-
-  boot();
-
-  // MS AJAX hook (UpdatePanel postbacks)
-  try{
-    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
-      const prm = Sys.WebForms.PageRequestManager.getInstance();
-      if (!prm.__wlWizBound){
-        prm.add_initializeRequest(()=> {
-          // Stamp current selections to session before async refresh
-          safeSetSession(KEY.payBy, readPayBy());
-          const ddl = $id(IDS.ddlCof);
-          if (ddl) safeSetSession(KEY.cof, ddl.value);
-        });
-        prm.add_endRequest(()=> {
-          // Rebuild wizard + re-mirror dropdown after server swaps DOM
-          boot();
-        });
-        prm.__wlWizBound = true;
-      }
-    }
-  }catch{}
-})();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/* ============================================================================
-   WL AccountPayment — Full Wizard UI v2 (Info → Select → Review → Pay)
-   Paste at VERY BOTTOM of PayByInvoice.js
-   ============================================================================ */
-(function () {
-  'use strict';
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
-  if (window.__WL_AP_WIZ2) return;
-  window.__WL_AP_WIZ2 = true;
-
-  const IDS = {
-    // Core fields
-    amount:    'ctl00_PageBody_PaymentAmountTextBox',
-    remit:     'ctl00_PageBody_RemittanceAdviceTextBox',
-    notes:     'ctl00_PageBody_NotesTextBox',
-    email:     'ctl00_PageBody_EmailAddressTextBox',
-
-    billWrap:  'ctl00_PageBody_BillingAddressContainer',
-    billBox:   'ctl00_PageBody_BillingAddressTextBox',
-    zip:       'ctl00_PageBody_BillingPostalCodeTextBox',
-
-    // Pay by radios / COF
-    rbCheck:   'ctl00_PageBody_RadioButton_PayByCheck',
-    rbCof:     'ctl00_PageBody_RadioButton_PayByCheckOnFile',
-    rbCredit:  'ctl00_PageBody_RadioButton_PayByCredit',
-    cofWrap:   'ctl00_PageBody_ChecksOnFileContainer',
-    cofWrap2:  'ctl00_PageBody_ChecksOnFileContainer1',
-
-    // Your widget buttons (already created by your script)
-    quickHost: 'wlQuickWidget',
-    btnLast:   'wlLastStmtBtn',
-    btnFill:   'wlFillOwingBtn',
-    btnInv:    'wlOpenTxModalBtn',
-    btnJobs:   'wlOpenJobsModalBtn',
-  };
-
-  const $  = (id) => document.getElementById(id);
-  const $1 = (sel, root=document) => root.querySelector(sel);
-
-  function isSuccessPage(){
-    const p = document.querySelector('.bodyFlexItem p');
-    const t = (p?.textContent || '');
-    return /account payment was successful/i.test(t) && !!document.querySelector('table.paymentDataTable');
-  }
-  if (isSuccessPage()) return; // don’t wizard the receipt page
-
-  function injectCSS(){
-    if ($('wl-ap-wiz2-css')) return;
-    const css = `
-      #wlApWizard2 { border:1px solid #e5e7eb; border-radius:16px; padding:14px; background:#fff; }
-      #wlApWizard2 .wl-head { display:flex; justify-content:space-between; gap:12px; align-items:center; margin-bottom:10px; }
-      #wlApWizard2 .wl-title { font-weight:900; font-size:18px; }
-      #wlApWizard2 .wl-steps { display:flex; gap:6px; flex-wrap:wrap; }
-      #wlApWizard2 .wl-step-pill { font-size:12px; font-weight:800; padding:6px 10px; border-radius:999px; border:1px solid #e5e7eb; background:#f8fafc; }
-      #wlApWizard2 .wl-step-pill.on { background:#111827; color:#fff; border-color:#111827; }
-      #wlApWizard2 .wl-body { margin-top:10px; }
-      #wlApWizard2 .wl-panel { display:none; }
-      #wlApWizard2 .wl-panel.on { display:block; }
-
-      #wlApWizard2 .wl-grid { display:grid; gap:10px; }
-      @media (min-width: 900px){
-        #wlApWizard2 .wl-grid.two { grid-template-columns: 1fr 1fr; }
-      }
-
-      #wlApWizard2 .wl-card { border:1px solid #e5e7eb; border-radius:14px; padding:12px; background:#fff; }
-      #wlApWizard2 .wl-card h3 { margin:0 0 8px 0; font-size:14px; font-weight:900; }
-      #wlApWizard2 .wl-help { font-size:12px; color:#475569; margin-top:6px; line-height:1.35; }
-
-      #wlApWizard2 .wl-nav { display:flex; justify-content:space-between; gap:10px; margin-top:12px; }
-      #wlApWizard2 .wl-btn { border:1px solid #e5e7eb; background:#fff; border-radius:12px; padding:10px 12px; font-weight:900; cursor:pointer; }
-      #wlApWizard2 .wl-btn.primary { background:#111827; color:#fff; border-color:#111827; }
-      #wlApWizard2 .wl-btn[disabled]{ opacity:.5; cursor:not-allowed; }
-
-      /* Force-show COF bits */
-      .wl-force-show { display:block !important; visibility:visible !important; opacity:1 !important; }
-      #${IDS.cofWrap}, #${IDS.cofWrap2} { display:block !important; visibility:visible !important; opacity:1 !important; }
-      .epi-form-group-acctPayment .radiobutton { display:block !important; visibility:visible !important; }
-
-      /* Make COF select usable if theme constrains it */
-      #${IDS.cofWrap} select, #${IDS.cofWrap2} select {
-        width: 100% !important;
-        max-width: 520px;
-        pointer-events:auto !important;
-      }
-    `;
-    const s = document.createElement('style');
-    s.id = 'wl-ap-wiz2-css';
-    s.textContent = css;
-    document.head.appendChild(s);
-  }
-
-  function hardShow(el, displayValue){
-    if (!el) return;
-    el.hidden = false;
-    el.classList.add('wl-force-show');
-    el.style.setProperty('display', displayValue || 'block', 'important');
-    el.style.setProperty('visibility', 'visible', 'important');
-    el.style.setProperty('opacity', '1', 'important');
-  }
-  function hardHide(el){
-    if (!el) return;
-    el.hidden = true;
-    el.style.setProperty('display', 'none', 'important');
-  }
-
-  function normalizePayByForWizard(){
-    // Show check + COF + containers; hide credit
-    const rbCheck  = $(IDS.rbCheck);
-    const rbCof    = $(IDS.rbCof);
-    const rbCredit = $(IDS.rbCredit);
-    const cof1 = $(IDS.cofWrap);
-    const cof2 = $(IDS.cofWrap2);
-
-    hardShow(rbCheck?.closest('.radiobutton') || rbCheck?.parentElement || null);
-    hardShow(rbCof?.closest('.radiobutton')   || rbCof?.parentElement   || null);
-    hardShow(cof1); hardShow(cof2);
-
-    if (rbCredit){
-      hardHide(rbCredit.closest('.radiobutton') || rbCredit.parentElement);
-    }
-
-    if (rbCof){
-      rbCof.disabled = false;
-      rbCof.removeAttribute('disabled');
-      rbCof.style.pointerEvents = 'auto';
-    }
-
-    // If COF is selected, ensure its dropdown is interactable
-    if (rbCof && rbCof.checked){
-      const sel = (cof1?.querySelector('select') || cof2?.querySelector('select'));
-      if (sel){
-        sel.disabled = false;
-        sel.removeAttribute('disabled');
-        sel.style.pointerEvents = 'auto';
-      }
-    }
   }
 
   function findMakePaymentButton(){
-    // Try common patterns first
-    let btn =
-      $1('input[type="submit"][id*="MakePayment"]') ||
-      $1('input[type="submit"][value*="Make Payment"]') ||
-      $1('a.epi-button span:contains("Make Payment")');
+    const inputs = Array.from(document.querySelectorAll('input[type="submit"], input[type="button"], button'));
+    return inputs.find(x => /make\s+payment|process\s+payment|submit\s+payment/i.test((x.value||x.textContent||'').trim())) || null;
+  }
 
-    // Safer scan: look for submit-ish inputs with “Make Payment”
-    if (!btn){
-      const inputs = Array.from(document.querySelectorAll('input[type="submit"], input[type="button"], button'));
-      btn = inputs.find(x => /make\s+payment/i.test((x.value || x.textContent || '').trim())) || null;
+  function ensureCOFLoaded(){
+    window.WLPayMode?.ensureCheckOnFileUI?.();
+
+    const rb = $('ctl00_PageBody_RadioButton_PayByCheckOnFile');
+    if (!rb) return;
+
+    const c1 = $('ctl00_PageBody_ChecksOnFileContainer');
+    const c2 = $('ctl00_PageBody_ChecksOnFileContainer1');
+    const sel = (c1?.querySelector('select') || c2?.querySelector('select'));
+
+    // If select exists but looks empty, force a postback by clicking the radio again.
+    if (sel && sel.options && sel.options.length <= 1){
+      try { rb.click(); } catch {}
+      // Fallback: manual postback
+      try {
+        if (typeof window.__doPostBack === 'function' && rb.name){
+          window.__doPostBack(rb.name, '');
+        }
+      } catch {}
     }
-    return btn;
   }
 
-  function getSelectionSummaryTextSafe(){
-    // Prefer your existing helper if present in scope (some of your patches add one)
-    try {
-      if (typeof window.getSelectionSummaryText === 'function') return window.getSelectionSummaryText();
-    } catch {}
-
-    // Fallback: build from localStorage/sessionStorage + remit + notes
-    const parts = [];
-    try{
-      const selRaw = localStorage.getItem('WL_AP_SelectedDocs');
-      const sel = selRaw ? JSON.parse(selRaw) : null;
-      const docs = sel?.value?.docs || sel?.docs || sel?.value || sel;
-      if (Array.isArray(docs) && docs.length){
-        const firstFew = docs.slice(0,6).map(d=>{
-          const t = (d.type||d.DocType||'').toString().toUpperCase().startsWith('C') ? 'CR' : 'INV';
-          const n = (d.doc || d.Doc || d.docNumber || d.DocumentNumber || '').toString().trim();
-          return n ? `${t} ${n}` : t;
-        }).filter(Boolean);
-        parts.push(`Invoices/Credits: ${firstFew.join(', ')}${docs.length>6?` (+${docs.length-6} more)`:''}`);
-      }
-    }catch{}
-
-    try{
-      const jobsRaw = sessionStorage.getItem('__WL_JobsSelection');
-      const jobs = jobsRaw ? JSON.parse(jobsRaw) : null;
-      if (jobs && typeof jobs === 'object'){
-        const keys = Array.isArray(jobs) ? jobs : Object.keys(jobs);
-        if (keys.length) parts.push(`Jobs: ${keys.slice(0,8).join(', ')}${keys.length>8?` (+${keys.length-8} more)`:''}`);
-      }
-    }catch{}
-
-    const remit = ($(IDS.remit)?.value || '').trim();
-    if (remit) parts.push(`Remit: ${remit}`);
-
-    const notes = ($(IDS.notes)?.value || '').trim();
-    if (notes) parts.push(`Notes: ${notes}`);
-
-    return parts.join(' • ');
-  }
-
-  function mountWizard(){
+  function mount(){
     injectCSS();
 
-    // Where to mount:
-    // Prefer your modern layout card, but fall back to page body.
-    const host =
-      $('wlLeftCard')?.querySelector?.('#wlLeftCardBody') ||
-      $1('.bodyFlexItem') ||
-      document.body;
+    const shell = qs('.wl-shell');
+    const left  = $('wlLeftCard');
+    const right = $('wlRightCard');
+    const tx    = $('wlTxCard');
 
-    if (!host) return;
+    // Wait until the core layout module has created the cards.
+    if (!shell || !left || !right){
+      return false;
+    }
 
-    // Don’t double mount
-    if ($('wlApWizard2')) return;
+    if ($('wlApWizard3')) return true;
 
-    // Hide the noisy legacy blocks (we’ll keep controls but move what we need)
-    // NOTE: we do NOT delete anything; we only hide containers after moving children.
-    const legacyForm = $1('table')?.closest?.('.bodyFlexItem') || $1('.bodyFlexItem');
-    // (We’ll keep this conservative; your earlier scripts already did layout changes.)
-
+    // Build wizard wrapper above shell
     const wiz = document.createElement('div');
-    wiz.id = 'wlApWizard2';
+    wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
-      <div class="wl-head">
-        <div class="wl-title">Make a Payment</div>
-        <div class="wl-steps" aria-label="Payment wizard steps">
-          <span class="wl-step-pill" data-step-pill="0">1) Info</span>
-          <span class="wl-step-pill" data-step-pill="1">2) Select</span>
-          <span class="wl-step-pill" data-step-pill="2">3) Review</span>
-          <span class="wl-step-pill" data-step-pill="3">4) Pay</span>
+      <div class="w3-head">
+        <div class="w3-title">Payment Wizard</div>
+        <div class="w3-steps">
+          <span class="w3-pill" data-pill="0">1) Info</span>
+          <span class="w3-pill" data-pill="1">2) Select</span>
+          <span class="w3-pill" data-pill="2">3) Review</span>
+          <span class="w3-pill" data-pill="3">4) Pay</span>
         </div>
       </div>
-
-      <div class="wl-body">
-        <div class="wl-panel" data-step="0">
-          <div class="wl-grid two">
-            <div class="wl-card">
-              <h3>Your information</h3>
-              <div id="wlStepInfoFields" class="wl-grid"></div>
-              <div class="wl-help">We’ll use this to send confirmation and keep billing details correct.</div>
-            </div>
-            <div class="wl-card">
-              <h3>Notes (optional)</h3>
-              <div id="wlStepInfoNotes" class="wl-grid"></div>
-              <div class="wl-help">If you want to add context for the office (PO, who approved, etc.).</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="wl-panel" data-step="1">
-          <div class="wl-grid two">
-            <div class="wl-card">
-              <h3>Choose what you’re paying</h3>
-              <div id="wlStepSelectActions"></div>
-              <div class="wl-help">Pick invoices, jobs, last statement, or just enter an amount manually.</div>
-            </div>
-            <div class="wl-card">
-              <h3>Amount</h3>
-              <div id="wlStepSelectAmount" class="wl-grid"></div>
-              <div class="wl-help">If you used an action (invoice/job/statement), this will fill automatically.</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="wl-panel" data-step="2">
-          <div class="wl-card">
-            <h3>Review</h3>
-            <div id="wlReviewBox" class="wl-grid"></div>
-            <div class="wl-help">Confirm the amount and what was selected before choosing payment method.</div>
-          </div>
-        </div>
-
-        <div class="wl-panel" data-step="3">
-          <div class="wl-grid two">
-            <div class="wl-card">
-              <h3>Payment method</h3>
-              <div id="wlStepPayBy"></div>
-              <div class="wl-help">If “Check on file” is available, select the account before submitting.</div>
-            </div>
-            <div class="wl-card">
-              <h3>Submit</h3>
-              <div id="wlStepSubmit"></div>
-              <div class="wl-help">When you click Make Payment, the server processes using the real WebForms controls.</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="wl-nav">
-          <button type="button" class="wl-btn" id="wlWizBackBtn">Back</button>
-          <button type="button" class="wl-btn primary" id="wlWizNextBtn">Next</button>
+      <div class="w3-body">
+        <div class="w3-panel" data-step="0"><div id="w3Step0"></div><div class="w3-help">Confirm contact + billing details, then continue.</div></div>
+        <div class="w3-panel" data-step="1"><div id="w3Step1"></div><div class="w3-help">Pick statement / jobs / invoices or set a manual amount.</div></div>
+        <div class="w3-panel" data-step="2"><div id="w3Review"></div></div>
+        <div class="w3-panel" data-step="3"><div id="w3Step3"></div><div class="w3-help">Choose payment method and submit.</div></div>
+        <div class="w3-nav">
+          <button type="button" class="w3-btn" id="w3Back">Back</button>
+          <button type="button" class="w3-btn primary" id="w3Next">Next</button>
         </div>
       </div>
     `;
+    shell.parentNode.insertBefore(wiz, shell);
 
-    host.prepend(wiz);
+    // Move cards into steps (keeps all original logic intact)
+    $('w3Step0').appendChild(left);
+    const step1 = $('w3Step1');
+    step1.appendChild(right);
+    if (tx) step1.appendChild(tx);
 
-    // Move real fields into wizard (do NOT clone)
-    const infoHost  = $('wlStepInfoFields');
-    const notesHost = $('wlStepInfoNotes');
-    const amtHost   = $('wlStepSelectAmount');
+    // Build pay step: move pay-by radios/containers + make payment button into a clean card
+    const payHost = $('w3Step3');
+    const payCard = document.createElement('div');
+    payCard.className = 'wl-card';
+    payCard.innerHTML = `<div class="wl-card-head">Payment method</div><div class="wl-card-body"><div id="w3PayInner" style="display:grid;gap:14px;"></div></div>`;
+    payHost.appendChild(payCard);
 
-    // Helper: move the nearest WebForms “group” wrapper if it exists
-    function moveFieldById(id, to){
-      const el = $(id);
-      if (!el) return;
-      const wrap =
-        el.closest('.epi-form-group-acctPayment') ||
-        el.closest('tr') ||
-        el.parentElement;
-      if (wrap && to) to.appendChild(wrap);
-    }
+    const payInner = $('w3PayInner');
 
-    // Info step: email + billing address container + zip
-    moveFieldById(IDS.email, infoHost);
-    // Billing container sometimes wraps multiple fields
-    const billWrap = $(IDS.billWrap) || $(IDS.billBox)?.closest('.epi-form-group-acctPayment');
-    if (billWrap && infoHost) infoHost.appendChild(billWrap);
-    moveFieldById(IDS.zip, infoHost);
+    // Move pay-by radio wrappers (real controls)
+    const rbCheck = $('ctl00_PageBody_RadioButton_PayByCheck');
+    const rbCof   = $('ctl00_PageBody_RadioButton_PayByCheckOnFile');
+    const rbCred  = $('ctl00_PageBody_RadioButton_PayByCredit');
 
-    // Notes
-    moveFieldById(IDS.notes, notesHost);
-    // Remittance can be shown earlier (optional), but we keep it in “review context” by leaving it available:
-    moveFieldById(IDS.remit, notesHost);
+    const wCheck = rbCheck?.closest('.radiobutton') || rbCheck?.parentElement;
+    const wCof   = rbCof?.closest('.radiobutton')   || rbCof?.parentElement;
+    const wCred  = rbCred?.closest('.radiobutton')  || rbCred?.parentElement;
 
-    // Amount step
-    moveFieldById(IDS.amount, amtHost);
+    if (wCheck) payInner.appendChild(wCheck);
+    if (wCof)   payInner.appendChild(wCof);
+    if (wCred)  payInner.appendChild(wCred);
 
-    // Select step: move your existing Quick Payment widget into the actions box
-    const actionsBox = $('wlStepSelectActions');
-    const quick = $(IDS.quickHost);
-    if (quick && actionsBox) actionsBox.appendChild(quick);
+    const cof1 = $('ctl00_PageBody_ChecksOnFileContainer');
+    const cof2 = $('ctl00_PageBody_ChecksOnFileContainer1');
+    if (cof1) payInner.appendChild(cof1);
+    if (cof2) payInner.appendChild(cof2);
 
-    // Pay step: move real pay-by radios + COF container(s)
-    const payByBox = $('wlStepPayBy');
-    const rbCheck = $(IDS.rbCheck);
-    const rbCof   = $(IDS.rbCof);
-    const rbCredit= $(IDS.rbCredit);
-
-    // Move their wrappers if found
-    const wCheck  = rbCheck?.closest('.radiobutton')  || rbCheck?.parentElement;
-    const wCof    = rbCof?.closest('.radiobutton')    || rbCof?.parentElement;
-    const wCredit = rbCredit?.closest('.radiobutton') || rbCredit?.parentElement;
-
-    if (payByBox){
-      if (wCheck)  payByBox.appendChild(wCheck);
-      if (wCof)    payByBox.appendChild(wCof);
-      // Credit intentionally hidden later, but keep it in DOM if needed:
-      if (wCredit) payByBox.appendChild(wCredit);
-      const cof1 = $(IDS.cofWrap);
-      const cof2 = $(IDS.cofWrap2);
-      if (cof1) payByBox.appendChild(cof1);
-      if (cof2) payByBox.appendChild(cof2);
-    }
-
-    // Submit step: move the Make Payment button (real control)
-    const submitBox = $('wlStepSubmit');
+    // Move Make Payment button
     const mp = findMakePaymentButton();
-    if (mp && submitBox){
+    if (mp){
       const wrap = mp.closest('.epi-form-group-acctPayment') || mp.parentElement;
-      if (wrap) submitBox.appendChild(wrap);
-      else submitBox.appendChild(mp);
+      const submitCard = document.createElement('div');
+      submitCard.className = 'wl-card';
+      submitCard.innerHTML = `<div class="wl-card-head">Submit</div><div class="wl-card-body" id="w3SubmitInner"></div>`;
+      payHost.appendChild(submitCard);
+      const sub = $('w3SubmitInner');
+      if (wrap) sub.appendChild(wrap);
+      else sub.appendChild(mp);
     }
 
-    // Wizard state + navigation
-    const KEY = '__WL_AP_WIZ2_STEP';
-    let step = Math.max(0, Math.min(3, Number(sessionStorage.getItem(KEY) || '0')));
+    // Step state
+    let step = Math.max(0, Math.min(3, Number(sessionStorage.getItem(STEP_KEY) || '0')));
 
     function setStep(n){
       step = Math.max(0, Math.min(3, Number(n||0)));
-      sessionStorage.setItem(KEY, String(step));
+      sessionStorage.setItem(STEP_KEY, String(step));
 
-      // pills
-      wiz.querySelectorAll('[data-step-pill]').forEach(p=>{
-        p.classList.toggle('on', Number(p.getAttribute('data-step-pill')) === step);
+      wiz.querySelectorAll('[data-pill]').forEach(p=>{
+        p.classList.toggle('on', Number(p.getAttribute('data-pill')) === step);
       });
-      // panels
-      wiz.querySelectorAll('.wl-panel').forEach(p=>{
+      wiz.querySelectorAll('.w3-panel').forEach(p=>{
         p.classList.toggle('on', Number(p.getAttribute('data-step')) === step);
       });
 
-      // buttons
-      $('wlWizBackBtn').disabled = (step === 0);
-      $('wlWizNextBtn').textContent = (step === 3) ? 'Review complete' : 'Next';
+      $('w3Back').disabled = (step === 0);
+      $('w3Next').textContent = (step === 3) ? 'Ready' : 'Next';
 
-      // keep pay-by normalized anytime we hit Pay step
-      if (step === 3){
-        normalizePayByForWizard();
-        wirePayByVisibility();
-      }
-
-      // refresh review contents on step 2
       if (step === 2){
-        renderReview();
+        $('w3Review').innerHTML = buildReviewHTML();
+      }
+      if (step === 3){
+        // Make sure COF is actually usable
+        window.WLPayMode?.ensureCheckOnFileUI?.();
+        const rb = $('ctl00_PageBody_RadioButton_PayByCheckOnFile');
+        const ck = $('ctl00_PageBody_RadioButton_PayByCheck');
+        rb?.addEventListener('change', ensureCOFLoaded);
+        ck?.addEventListener('change', ()=>window.WLPayMode?.ensureCheckOnFileUI?.());
+        ensureCOFLoaded();
       }
     }
 
-    function moneyNum(s){
-      const v = parseFloat(String(s||'').replace(/[^0-9.\-]/g,''));
-      return Number.isFinite(v) ? v : 0;
-    }
-
-    function validateStep(n){
-      // Keep it practical: don’t hard-block unless truly broken.
-      if (n === 0){
-        const email = ($(IDS.email)?.value || '').trim();
-        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
-          alert('That email address doesn’t look valid.');
+    function validateStep(){
+      if (step === 1){
+        if (!(getAmount() > 0)){
+          alert('Enter a payment amount (or use statement/jobs/invoices to fill it).');
           return false;
-        }
-      }
-      if (n === 1){
-        const amt = moneyNum($(IDS.amount)?.value || '');
-        if (!(amt > 0)){
-          alert('Enter a payment amount (or use an action like invoices/jobs/statement to fill it).');
-          return false;
-        }
-      }
-      if (n === 3){
-        // If COF selected, ensure a selection exists
-        const rbCofNow = $(IDS.rbCof);
-        if (rbCofNow && rbCofNow.checked){
-          const cof1 = $(IDS.cofWrap), cof2 = $(IDS.cofWrap2);
-          const sel = (cof1?.querySelector('select') || cof2?.querySelector('select'));
-          if (sel && !sel.value){
-            alert('Select the account for “Check on file” before submitting.');
-            return false;
-          }
         }
       }
       return true;
     }
 
-    function renderReview(){
-      const box = $('wlReviewBox');
-      if (!box) return;
-
-      const amtStr = ($(IDS.amount)?.value || '').trim();
-      const email  = ($(IDS.email)?.value || '').trim();
-      const notes  = ($(IDS.notes)?.value || '').trim();
-      const remit  = ($(IDS.remit)?.value || '').trim();
-      const sel    = getSelectionSummaryTextSafe();
-
-      box.innerHTML = `
-        <div class="wl-card">
-          <h3>Amount</h3>
-          <div style="font-weight:1000;font-size:20px;">${amtStr ? '$' + amtStr : '(none)'}</div>
-        </div>
-        <div class="wl-card">
-          <h3>Selected items</h3>
-          <div style="font-weight:800;">${sel || '(none)'}</div>
-        </div>
-        <div class="wl-card">
-          <h3>Contact</h3>
-          <div>${email || '(email not provided)'}</div>
-        </div>
-        <div class="wl-card">
-          <h3>Remittance / Notes</h3>
-          <div style="white-space:pre-wrap;">${(remit || notes) ? `${remit ? remit : ''}${(remit && notes) ? '\n\n' : ''}${notes ? notes : ''}` : '(none)'}</div>
-        </div>
-      `;
-    }
-
-    function wirePayByVisibility(){
-      const rbCofNow = $(IDS.rbCof);
-      const rbChkNow = $(IDS.rbCheck);
-      const cof1 = $(IDS.cofWrap);
-      const cof2 = $(IDS.cofWrap2);
-
-      function sync(){
-        normalizePayByForWizard();
-        const isCof = !!(rbCofNow && rbCofNow.checked);
-        // show COF containers only if COF selected
-        if (isCof){
-          hardShow(cof1); hardShow(cof2);
-          const sel = (cof1?.querySelector('select') || cof2?.querySelector('select'));
-          if (sel){
-            sel.disabled = false;
-            sel.removeAttribute('disabled');
-            sel.style.pointerEvents = 'auto';
-          }
-        } else {
-          // keep them available but not visually noisy
-          // (If you prefer always visible, remove these two hides.)
-          if (cof1) hardHide(cof1);
-          if (cof2) hardHide(cof2);
-        }
-      }
-
-      rbCofNow?.addEventListener('change', sync);
-      rbChkNow?.addEventListener('change', sync);
-      sync();
-    }
-
-    // Nav buttons
-    $('wlWizBackBtn').addEventListener('click', ()=>{
-      setStep(step - 1);
-    });
-    $('wlWizNextBtn').addEventListener('click', ()=>{
-      if (!validateStep(step)) return;
-      setStep(step + 1);
+    $('w3Back').addEventListener('click', ()=>setStep(step-1));
+    $('w3Next').addEventListener('click', ()=>{
+      if (!validateStep()) return;
+      setStep(step+1);
     });
 
-    // Start
     setStep(step);
-
-    // If the user clicks “Pay by Invoice / Pay by Job / Last Statement” inside step 1,
-    // keep the wizard on step 1 and let your existing code fill fields.
-    // (Nothing special needed here — those buttons already wire themselves.)
+    return true;
   }
 
   function boot(){
-    try { mountWizard(); } catch(e){ console.warn('[AP WIZ2] mount error', e); }
-    try { normalizePayByForWizard(); } catch {}
+    // try a few times — layout may build after async scripts
+    let tries = 0;
+    const max = 80; // ~4s at 50ms
+    const t = setInterval(()=>{
+      tries++;
+      const ok = mount();
+      if (ok || tries >= max) clearInterval(t);
+    }, 50);
   }
 
-  // initial
-  if (document.readyState === 'loading') {
+  if (document.readyState === 'loading'){
     document.addEventListener('DOMContentLoaded', boot, { once:true });
   } else {
     boot();
   }
 
-  // re-run after WebForms/Telerik async updates
+  // Re-attach after WebForms async updates (Telerik grids, etc.)
   try {
     if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
       const prm = Sys.WebForms.PageRequestManager.getInstance();
-      prm.add_endRequest(function () {
-        // Ensure wizard still exists and COF remains usable
-        try { mountWizard(); } catch {}
-        try { normalizePayByForWizard(); } catch {}
+      prm.add_endRequest(function(){
+        try { mount(); } catch {}
       });
     }
   } catch {}
