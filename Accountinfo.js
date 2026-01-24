@@ -591,26 +591,26 @@ if (snapshotActions) {
 
 function mountCashAccountReload(container){
   const realBtn = document.getElementById('ctl00_PageBody_btnLoadCashAccountBalance');
-  if (!realBtn) return; // Not a cash account
+  if (!realBtn) return; // Not a cash account (or button not rendered)
 
   // Hide the original BisTrack button but keep it for postback
   realBtn.classList.add('wl-hide');
 
-  const branded = dom(`
-    <button type="button" class="wl-btn primary" id="wl-reload-cash">
-      🔄 Reload Balance
-    </button>
-  `);
+  // Build the branded button without `dom()`
+  const branded = document.createElement('button');
+  branded.type = 'button';
+  branded.className = 'wl-btn primary';
+  branded.id = 'wl-reload-cash';
+  branded.textContent = '🔄 Reload Balance';
 
   branded.addEventListener('click', () => {
     branded.disabled = true;
     branded.textContent = 'Reloading…';
-
-    // Trigger the real ASP.NET postback
-    realBtn.click();
+    realBtn.click(); // Trigger the real ASP.NET postback
   });
 
   container.appendChild(branded);
 }
+
 
 
