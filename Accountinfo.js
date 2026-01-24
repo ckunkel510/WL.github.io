@@ -327,6 +327,13 @@
     const pageBody = $('td.pageContentBody') || document.body;
     pageBody.insertBefore(container, pageBody.firstChild);
 
+     // Mount Cash Account reload button if applicable
+const snapshotActions = container.querySelector('#wl-snapshot .wl-actions');
+if (snapshotActions) {
+  mountCashAccountReload(snapshotActions);
+}
+
+
     /* Cart shell (we’ll fill it after fetch) */
     const cartCard = dom(`
       <div class="wl-card" id="wl-cart" style="display:none">
@@ -581,4 +588,29 @@
     })();
   }
 })();
+
+function mountCashAccountReload(container){
+  const realBtn = document.getElementById('ctl00_PageBody_btnLoadCashAccountBalance');
+  if (!realBtn) return; // Not a cash account
+
+  // Hide the original BisTrack button but keep it for postback
+  realBtn.classList.add('wl-hide');
+
+  const branded = dom(`
+    <button type="button" class="wl-btn primary" id="wl-reload-cash">
+      🔄 Reload Balance
+    </button>
+  `);
+
+  branded.addEventListener('click', () => {
+    branded.disabled = true;
+    branded.textContent = 'Reloading…';
+
+    // Trigger the real ASP.NET postback
+    realBtn.click();
+  });
+
+  container.appendChild(branded);
+}
+
 
