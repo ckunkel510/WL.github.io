@@ -4333,3 +4333,296 @@ if (jobBtn){
 
 })();
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* =============================================================================
+   WL AccountPayment — Payment Method UI (Check vs Account On File) + Postback Fix
+   - Keeps Pay options visible after MS AJAX postbacks (email validation, etc.)
+   - Adds a "Payment Method" select that toggles Check vs Check On File UI
+   - Ensures shadow PayBy includes COF so selection doesn't revert to Check
+   Paste at VERY BOTTOM of PayByInvoice.js
+   ============================================================================ */
+(function () {
+  'use strict';
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+
+  // prevent double-boot
+  if (window.__WL_AP_PAY_METHOD_UI_V1) return;
+  window.__WL_AP_PAY_METHOD_UI_V1 = true;
+
+  const IDS = {
+    rbCheck:  'ctl00_PageBody_RadioButton_PayByCheck',
+    rbCof:    'ctl00_PageBody_RadioButton_PayByCheckOnFile',
+    rbCredit: 'ctl00_PageBody_RadioButton_PayByCredit',
+
+    cofWrap:  'ctl00_PageBody_ChecksOnFileContainer',
+    cofWrap2: 'ctl00_PageBody_ChecksOnFileContainer1',
+
+    // Where we try to mount the new UI (your rebuilt grid if present)
+    grid: 'wlFormGrid',
+
+    // Shadow field (WebForms expects ctl00$PageBody$PayBy)
+    shadowId:   'wlPayByShadow',
+    shadowName: 'ctl00$PageBody$PayBy'
+  };
+
+  const $ = (id) => document.getElementById(id);
+
+  function isSuccessPage() {
+    const p = document.querySelector('.bodyFlexItem p');
+    return /account payment was successful/i.test((p?.textContent || '')) &&
+           !!document.querySelector('table.paymentDataTable');
+  }
+
+  /* ---------- Strong CSS override (beats inline display:none) ---------- */
+  function injectCSS() {
+    if (document.getElementById('wl-ap-paymethod-css')) return;
+    const css = `
+      /* Force pay options visible even if server returns display:none inline */
+      .wl-force-show { display:block !important; visibility:visible !important; opacity:1 !important; }
+      .wl-force-inline { display:inline-block !important; visibility:visible !important; opacity:1 !important; }
+
+      /* Pay option wrappers are commonly div.radiobutton */
+      .epi-form-group-acctPayment .radiobutton { display:block !important; visibility:visible !important; }
+
+      /* Keep COF containers visible */
+      #${IDS.cofWrap}, #${IDS.cofWrap2} { display:block !important; visibility:visible !important; opacity:1 !important; }
+
+      /* Our Payment Method row */
+      #wlPayMethodRow { grid-column: 1 / -1; }
+      #wlPayMethodRow .wl-paymethod {
+        border:1px solid #e5e7eb; border-radius:14px; background:#fff;
+        padding:12px 14px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+        box-shadow:0 4px 14px rgba(15,23,42,.06);
+      }
+      #wlPayMethodRow label { font-weight:900; color:#0f172a; }
+      #wlPayMethodRow select {
+        border:1px solid #e5e7eb; border-radius:12px; padding:10px 12px; min-height:42px;
+        font-weight:800;
+      }
+      #wlPayMethodHelp { color:#475569; font-size:12px; font-weight:700; }
+    `;
+    const s = document.createElement('style');
+    s.id = 'wl-ap-paymethod-css';
+    s.textContent = css;
+    document.head.appendChild(s);
+  }
+
+  function hardShow(el, displayValue) {
+    if (!el) return;
+    el.hidden = false;
+    el.classList.add('wl-force-show');
+    el.style.setProperty('display', displayValue || 'block', 'important');
+    el.style.setProperty('visibility', 'visible', 'important');
+    el.style.setProperty('opacity', '1', 'important');
+  }
+  function hardHide(el) {
+    if (!el) return;
+    el.hidden = true;
+    el.style.setProperty('display', 'none', 'important');
+  }
+  function getRadioWrapper(rb) {
+    if (!rb) return null;
+    return rb.closest('.radiobutton') || rb.parentElement;
+  }
+
+  /* ---------- Keep PayBy options visible (and hide credit) ---------- */
+  function normalizePayByVisibility() {
+    if (isSuccessPage()) return;
+
+    const rbCheck  = $(IDS.rbCheck);
+    const rbCof    = $(IDS.rbCof);
+    const rbCredit = $(IDS.rbCredit);
+
+    // Show check + COF + containers
+    hardShow(getRadioWrapper(rbCheck));
+    hardShow(getRadioWrapper(rbCof));
+    hardShow($(IDS.cofWrap));
+    hardShow($(IDS.cofWrap2));
+
+    if (rbCheck) { rbCheck.disabled = false; rbCheck.removeAttribute('disabled'); }
+    if (rbCof)   { rbCof.disabled   = false; rbCof.removeAttribute('disabled'); rbCof.style.pointerEvents = 'auto'; }
+
+    // Hide credit/card
+    if (rbCredit) hardHide(getRadioWrapper(rbCredit));
+  }
+
+  /* ---------- Shadow PayBy (THIS is what stops it reverting to Check) ---------- */
+  function readPayByValue() {
+    const rbCof = $(IDS.rbCof);
+    const rbCr  = $(IDS.rbCredit);
+    const rbChk = $(IDS.rbCheck);
+    if (rbCof && rbCof.checked) return 'RadioButton_PayByCheckOnFile';
+    if (rbCr  && rbCr.checked)  return 'RadioButton_PayByCredit';
+    return 'RadioButton_PayByCheck';
+  }
+  function ensureShadowPayBy() {
+    const form = document.forms[0];
+    if (!form) return;
+    let h = $(IDS.shadowId);
+    if (!h) {
+      h = document.createElement('input');
+      h.type = 'hidden';
+      h.id   = IDS.shadowId;
+      h.name = IDS.shadowName;
+      form.appendChild(h);
+    }
+    h.value = readPayByValue();
+  }
+
+  // Override any earlier exported ensureShadowPayBy so everything uses COF-aware mapping
+  window.ensureShadowPayBy = ensureShadowPayBy;
+
+  /* ---------- Payment Method dropdown UI ---------- */
+  function mountPaymentMethodUI() {
+    if (isSuccessPage()) return;
+
+    const rbCheck = $(IDS.rbCheck);
+    const rbCof   = $(IDS.rbCof);
+    if (!rbCheck && !rbCof) return;
+
+    // Choose mount point: your wlFormGrid if present, else near pay radios
+    const grid = $(IDS.grid);
+    const payWrap = getRadioWrapper(rbCheck) || getRadioWrapper(rbCof);
+    const host = grid || payWrap?.parentElement || document.body;
+
+    // Create row once
+    let row = document.getElementById('wlPayMethodRow');
+    if (!row) {
+      row = document.createElement('div');
+      row.id = 'wlPayMethodRow';
+      row.className = 'wl-item';
+
+      row.innerHTML = `
+        <div class="wl-paymethod">
+          <label for="wlPayMethodSelect">Payment Method</label>
+          <select id="wlPayMethodSelect">
+            <option value="check">Pay by Check</option>
+            <option value="cof">Pay with Account on File</option>
+          </select>
+          <span id="wlPayMethodHelp">Choose how you’d like to pay.</span>
+        </div>
+      `;
+
+      // Put it above the pay radios if we can
+      if (payWrap && host.contains(payWrap)) host.insertBefore(row, payWrap);
+      else host.insertBefore(row, host.firstChild);
+    }
+
+    const sel = document.getElementById('wlPayMethodSelect');
+    if (!sel) return;
+
+    // Sync dropdown -> radios -> server UI visibility
+    function applyMode(mode) {
+      normalizePayByVisibility();
+
+      const cofWrap  = $(IDS.cofWrap);
+      const cofWrap2 = $(IDS.cofWrap2);
+
+      if (mode === 'cof' && rbCof) {
+        // Click the real radio so any WebForms onchange/onclick hooks still run
+        try { rbCof.click(); } catch { rbCof.checked = true; }
+        if (rbCheck) rbCheck.checked = false;
+
+        hardShow(cofWrap);
+        hardShow(cofWrap2);
+      } else {
+        // Default to check
+        if (rbCheck) {
+          try { rbCheck.click(); } catch { rbCheck.checked = true; }
+        }
+        if (rbCof) rbCof.checked = false;
+
+        // Still keep containers visible if the server expects them, but you can hide visually if you prefer:
+        // hardHide(cofWrap); hardHide(cofWrap2);
+        // For now: show, because some layouts nest the dropdown there and WebForms can get touchy.
+        hardShow(cofWrap);
+        hardShow(cofWrap2);
+      }
+
+      ensureShadowPayBy();
+    }
+
+    // Initialize selection from current state
+    const initMode = (rbCof && rbCof.checked) ? 'cof' : 'check';
+    sel.value = initMode;
+    applyMode(initMode);
+
+    // On change, switch modes
+    if (!sel.__wlBound) {
+      sel.addEventListener('change', () => applyMode(sel.value));
+      sel.__wlBound = true;
+    }
+
+    // Also: if user clicks the native radios, keep dropdown synced
+    function syncFromRadios() {
+      sel.value = (rbCof && rbCof.checked) ? 'cof' : 'check';
+      ensureShadowPayBy();
+      normalizePayByVisibility();
+    }
+    [rbCheck, rbCof].forEach(rb => {
+      if (rb && !rb.__wlSyncBound) {
+        rb.addEventListener('change', syncFromRadios, true);
+        rb.addEventListener('click',   syncFromRadios, true);
+        rb.__wlSyncBound = true;
+      }
+    });
+  }
+
+  /* ---------- Re-apply after async postbacks ---------- */
+  function boot() {
+    injectCSS();
+    normalizePayByVisibility();
+    mountPaymentMethodUI();
+    ensureShadowPayBy();
+  }
+
+  boot();
+
+  // MS AJAX hook (WebForms UpdatePanel postbacks)
+  try {
+    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
+      const prm = Sys.WebForms.PageRequestManager.getInstance();
+      if (!prm.__wlPayMethodBound) {
+        prm.add_initializeRequest(() => {
+          // stamp shadow BEFORE request
+          ensureShadowPayBy();
+        });
+        prm.add_endRequest(() => {
+          // rebuild visibility/UI AFTER request
+          boot();
+        });
+        prm.__wlPayMethodBound = true;
+      }
+    }
+  } catch {}
+
+  // Extra safety: if something inline hides these later, re-assert quickly
+  // (lightweight “self-heal” without a heavy MutationObserver)
+  setTimeout(boot, 150);
+  setTimeout(boot, 600);
+})();
+
