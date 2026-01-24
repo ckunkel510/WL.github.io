@@ -3664,49 +3664,127 @@ function setStep(n){
 
 
 /* ============================================================
-   WL Wizard Patch (STRONG): lock Billing Address into Step 1
+   WL Wizard Patch (ULTRA):
+   - Billing stays visible in Step 1 even after postbacks/re-renders
+   - COF postback keeps you on the Pay step (no reset to Step 1)
    ============================================================ */
 (function () {
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
+  const STEP_KEY = '__WL_AP_WIZ3_STEP';     // used by your wizard code
+  const DESIRED_STEP_KEY = '__WL_AP_DESIRED_STEP'; // our own anchor
+
   function $(id){ return document.getElementById(id); }
 
+  function getWizardRoot(){
+    return (
+      document.getElementById('wlApWizard3') ||
+      document.getElementById('wlApWizard2') ||
+      document.getElementById('wlApWizard')  ||
+      null
+    );
+  }
+
   function getStep1Root(){
-    // Works for both wizard variants you've used
+    // Works for your current wizard variants
     return $('w3Step0') || document.querySelector('.wl-panel[data-step="0"]') || null;
   }
+
+  function getStepIndexFromUI(){
+    const wiz = getWizardRoot();
+    if (!wiz) return 0;
+    const pill = wiz.querySelector('.wl-step-pill.on');
+    if (pill && pill.getAttribute('data-step-pill') != null) {
+      const n = Number(pill.getAttribute('data-step-pill'));
+      return Number.isFinite(n) ? n : 0;
+    }
+    const panel = wiz.querySelector('.wl-panel.on');
+    if (panel && panel.getAttribute('data-step') != null) {
+      const n = Number(panel.getAttribute('data-step'));
+      return Number.isFinite(n) ? n : 0;
+    }
+    return 0;
+  }
+
+  function forceWizardToStep(n){
+    const wiz = getWizardRoot();
+    if (!wiz) return;
+
+    const step = Math.max(0, Math.min(3, Number(n || 0)));
+
+    // Pills
+    wiz.querySelectorAll('[data-step-pill]').forEach(p=>{
+      p.classList.toggle('on', Number(p.getAttribute('data-step-pill')) === step);
+    });
+
+    // Panels
+    wiz.querySelectorAll('.wl-panel').forEach(p=>{
+      p.classList.toggle('on', Number(p.getAttribute('data-step')) === step);
+    });
+
+    // Buttons if present
+    const back = document.getElementById('wlWizBackBtn');
+    const next = document.getElementById('wlWizNextBtn');
+    if (back) back.disabled = (step === 0);
+    if (next) next.textContent = (step === 3) ? 'Review complete' : 'Next';
+
+    try { sessionStorage.setItem(STEP_KEY, String(step)); } catch {}
+    try { sessionStorage.setItem(DESIRED_STEP_KEY, String(step)); } catch {}
+  }
+
+  /* ----------------------------
+     BILLING LOCK (Step 1)
+     ---------------------------- */
 
   function ensureBillingSlot(){
     const step1 = getStep1Root();
     if (!step1) return null;
 
-    // Prefer your existing inner container if present
-    let infoInner = step1.querySelector('#w3InfoInner') || step1;
+    // Prefer existing inner area
+    const infoInner = step1.querySelector('#w3InfoInner') || step1;
 
-    // Create a dedicated "slot" that we will always move billing into
     let slot = step1.querySelector('#wlBillingSlot');
     if (!slot) {
       slot = document.createElement('div');
       slot.id = 'wlBillingSlot';
       slot.style.display = 'grid';
       slot.style.gap = '12px';
-      // Put it AFTER email/address/zip if those exist, otherwise just append
       infoInner.appendChild(slot);
     }
     return slot;
   }
 
+  function forceShow(el){
+    if (!el) return;
+    el.hidden = false;
+    el.style.setProperty('display', 'block', 'important');
+    el.style.setProperty('visibility', 'visible', 'important');
+    el.style.setProperty('opacity', '1', 'important');
+  }
+
   function findBillingWrap(){
-    // Prefer the container that wraps the whole billing block
-    return (
+    // Try exact IDs first
+    const direct =
       $('ctl00_PageBody_BillingAddressContainer') ||
-      $('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment') ||
-      null
-    );
+      $('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment');
+
+    if (direct) return direct;
+
+    // Fuzzy fallback: find any input/textarea whose id/name contains BillingAddress
+    const cand = Array.from(document.querySelectorAll('input, textarea'))
+      .find(el => /BillingAddress/i.test(el.id || '') || /BillingAddress/i.test(el.name || ''));
+
+    return cand ? (cand.closest('.epi-form-group-acctPayment') || cand.closest('tr') || cand.parentElement) : null;
   }
 
   function findBillingZipWrap(){
-    return $('ctl00_PageBody_BillingPostalCodeTextBox')?.closest('.epi-form-group-acctPayment') || null;
+    const direct = $('ctl00_PageBody_BillingPostalCodeTextBox')?.closest('.epi-form-group-acctPayment');
+    if (direct) return direct;
+
+    const cand = Array.from(document.querySelectorAll('input'))
+      .find(el => /BillingPostal/i.test(el.id || '') || /BillingPostal/i.test(el.name || ''));
+
+    return cand ? (cand.closest('.epi-form-group-acctPayment') || cand.closest('tr') || cand.parentElement) : null;
   }
 
   function lockBillingIntoStep1(){
@@ -3717,44 +3795,95 @@ function setStep(n){
       const billWrap = findBillingWrap();
       const billZip  = findBillingZipWrap();
 
-      // If the billing wrapper exists and isn't already in the billing slot, move it back.
-      if (billWrap && billWrap.parentElement !== slot) {
-        slot.appendChild(billWrap);
-      }
+      // Force visible (some re-renders hide it)
+      forceShow(billWrap);
+      forceShow(billZip);
 
-      // Ensure Billing ZIP sits with billing (some templates separate it)
-      if (billZip && billZip.parentElement !== slot) {
-        slot.appendChild(billZip);
+      // Move into dedicated Step 1 slot
+      if (billWrap && billWrap.parentElement !== slot) slot.appendChild(billWrap);
+      if (billZip  && billZip.parentElement  !== slot) slot.appendChild(billZip);
+
+      // Extra: force any billing inputs visible too
+      if (billWrap) {
+        billWrap.querySelectorAll('input, textarea, select, label, div').forEach(forceShow);
       }
-    } catch(e) {}
+    } catch {}
   }
 
-  // Run immediately, then again after common “late moves”
-  setTimeout(lockBillingIntoStep1, 0);
-  setTimeout(lockBillingIntoStep1, 200);
-  setTimeout(lockBillingIntoStep1, 800);
-  setTimeout(lockBillingIntoStep1, 1500);
+  /* ----------------------------
+     KEEP STEP ON COF POSTBACK
+     ---------------------------- */
 
-  // Watch for DOM moves (your script + Telerik/WebForms will re-render / move nodes)
+  function rememberCurrentStep(){
+    const step = getStepIndexFromUI();
+    try { sessionStorage.setItem(DESIRED_STEP_KEY, String(step)); } catch {}
+    try { sessionStorage.setItem(STEP_KEY, String(step)); } catch {}
+  }
+
+  function restoreDesiredStep(){
+    let desired = 0;
+    try { desired = Number(sessionStorage.getItem(DESIRED_STEP_KEY) || sessionStorage.getItem(STEP_KEY) || '0'); } catch {}
+    if (!Number.isFinite(desired)) desired = 0;
+
+    // If user was on Pay step and COF triggers postback, keep them there
+    forceWizardToStep(desired);
+  }
+
+  function bindCOF(){
+    const rbCof = $('ctl00_PageBody_RadioButton_PayByCheckOnFile');
+    const rbChk = $('ctl00_PageBody_RadioButton_PayByCheck');
+
+    if (rbCof && !rbCof.__wlBound){
+      rbCof.addEventListener('mousedown', rememberCurrentStep, true);
+      rbCof.addEventListener('click',      rememberCurrentStep, true);
+      rbCof.addEventListener('change',     rememberCurrentStep, true);
+      rbCof.__wlBound = true;
+    }
+    if (rbChk && !rbChk.__wlBound){
+      rbChk.addEventListener('mousedown', rememberCurrentStep, true);
+      rbChk.addEventListener('click',      rememberCurrentStep, true);
+      rbChk.addEventListener('change',     rememberCurrentStep, true);
+      rbChk.__wlBound = true;
+    }
+  }
+
+  /* ----------------------------
+     RUNNERS
+     ---------------------------- */
+
+  function runAll(){
+    bindCOF();
+    lockBillingIntoStep1();
+  }
+
+  // Initial
+  setTimeout(runAll, 0);
+  setTimeout(runAll, 150);
+  setTimeout(runAll, 400);
+  setTimeout(runAll, 900);
+
+  // Observe DOM swaps (WebForms + Telerik love swapping nodes)
   try {
     const mo = new MutationObserver(function () {
-      lockBillingIntoStep1();
+      runAll();
     });
     mo.observe(document.body, { childList: true, subtree: true });
-  } catch(e){}
+  } catch {}
 
-  // After WebForms partial postbacks (COF radio etc.)
+  // After partial postbacks
   try {
     if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
       const prm = Sys.WebForms.PageRequestManager.getInstance();
-      if (!prm.__wlBillingLockBound) {
+      if (!prm.__wlUltraPatchBound) {
         prm.add_endRequest(function () {
-          setTimeout(lockBillingIntoStep1, 50);
+          // Restore step first, then lock billing back in
+          setTimeout(restoreDesiredStep, 10);
+          setTimeout(lockBillingIntoStep1, 60);
           setTimeout(lockBillingIntoStep1, 250);
+          setTimeout(bindCOF, 250);
         });
-        prm.__wlBillingLockBound = true;
+        prm.__wlUltraPatchBound = true;
       }
     }
-  } catch(e){}
+  } catch {}
 })();
-
