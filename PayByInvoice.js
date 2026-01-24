@@ -3664,3 +3664,294 @@ function setStep(n){
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ============================================================
+   WL PATCH: Keep Billing fields in Step 1 + keep step on COF postback
+   (NO proxy fields; uses real WebForms controls)
+   ============================================================ */
+(function () {
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+  if (window.__WL_LOCK_BILLING_AND_STEP__) return;
+  window.__WL_LOCK_BILLING_AND_STEP__ = true;
+
+  const STEP_KEY = "__WL_AP_WIZ3_STEP";
+  const DESIRED_STEP_KEY = "__WL_AP_DESIRED_STEP";
+
+  const IDS = {
+    billWrap: "ctl00_PageBody_BillingAddressContainer",
+    billBox:  "ctl00_PageBody_BillingAddressTextBox",
+    billZip:  "ctl00_PageBody_BillingPostalCodeTextBox",
+    rbCof:    "ctl00_PageBody_RadioButton_PayByCheckOnFile",
+  };
+
+  const $ = (id) => document.getElementById(id);
+
+  function getWizardRoot() {
+    return (
+      $("wlApWizard3") ||
+      $("wlApWizard2") ||
+      $("wlApWizard") ||
+      null
+    );
+  }
+
+  function getStep1Panel() {
+    // Step 1 panel (Info)
+    return (
+      $("w3Step0") ||
+      document.querySelector('.wl-panel[data-step="0"]') ||
+      null
+    );
+  }
+
+  function getInfoInner() {
+    const step1 = getStep1Panel();
+    if (!step1) return null;
+    return step1.querySelector("#w3InfoInner") || step1;
+  }
+
+  function getCurrentStepFromUI() {
+    const wiz = getWizardRoot();
+    if (!wiz) return 0;
+    const pill = wiz.querySelector(".wl-step-pill.on");
+    if (pill && pill.getAttribute("data-step-pill") != null) {
+      const n = Number(pill.getAttribute("data-step-pill"));
+      return Number.isFinite(n) ? n : 0;
+    }
+    const panel = wiz.querySelector(".wl-panel.on");
+    if (panel && panel.getAttribute("data-step") != null) {
+      const n = Number(panel.getAttribute("data-step"));
+      return Number.isFinite(n) ? n : 0;
+    }
+    return 0;
+  }
+
+  function forceWizardToStep(step) {
+    const wiz = getWizardRoot();
+    if (!wiz) return;
+
+    const s = Math.max(0, Math.min(3, Number(step || 0)));
+
+    // Pills
+    wiz.querySelectorAll("[data-step-pill]").forEach((p) => {
+      p.classList.toggle("on", Number(p.getAttribute("data-step-pill")) === s);
+    });
+
+    // Panels
+    wiz.querySelectorAll(".wl-panel").forEach((p) => {
+      p.classList.toggle("on", Number(p.getAttribute("data-step")) === s);
+    });
+
+    // Buttons if present
+    const back = $("wlWizBackBtn");
+    const next = $("wlWizNextBtn");
+    if (back) back.disabled = (s === 0);
+    if (next) next.textContent = (s === 3) ? "Review complete" : "Next";
+
+    try { sessionStorage.setItem(STEP_KEY, String(s)); } catch {}
+  }
+
+  function forceShow(el) {
+    if (!el) return;
+    el.hidden = false;
+    el.style.setProperty("display", "block", "important");
+    el.style.setProperty("visibility", "visible", "important");
+    el.style.setProperty("opacity", "1", "important");
+  }
+
+  function findBillingWrap() {
+    // Prefer container if exists
+    const c = $(IDS.billWrap);
+    if (c) return c;
+
+    // Otherwise find the billing textbox wrapper
+    const box = $(IDS.billBox);
+    if (!box) return null;
+
+    return box.closest(".epi-form-group-acctPayment") || box.closest("tr") || box.parentElement;
+  }
+
+  function findBillingZipWrap() {
+    const z = $(IDS.billZip);
+    if (!z) return null;
+    return z.closest(".epi-form-group-acctPayment") || z.closest("tr") || z.parentElement;
+  }
+
+  function lockBillingIntoStep1() {
+    const infoInner = getInfoInner();
+    if (!infoInner) return;
+
+    const billWrap = findBillingWrap();
+    const zipWrap = findBillingZipWrap();
+
+    // If WebForms re-rendered, wrappers may have changed; re-grab each time.
+    if (billWrap) {
+      forceShow(billWrap);
+      if (!infoInner.contains(billWrap)) infoInner.appendChild(billWrap);
+    }
+    if (zipWrap) {
+      forceShow(zipWrap);
+      if (!infoInner.contains(zipWrap)) infoInner.appendChild(zipWrap);
+    }
+  }
+
+  function rememberDesiredStep() {
+    try {
+      const s = getCurrentStepFromUI();
+      sessionStorage.setItem(DESIRED_STEP_KEY, String(s));
+      sessionStorage.setItem(STEP_KEY, String(s));
+    } catch {}
+  }
+
+  function restoreDesiredStepAfterPostback() {
+    let desired = 0;
+    try {
+      desired = Number(sessionStorage.getItem(DESIRED_STEP_KEY) || sessionStorage.getItem(STEP_KEY) || "0");
+    } catch {}
+    if (!Number.isFinite(desired)) desired = 0;
+
+    // If COF is checked, we always want to remain on Step 4 (Pay)
+    const cof = $(IDS.rbCof);
+    if (cof && cof.checked) desired = 3;
+
+    forceWizardToStep(desired);
+  }
+
+  function bindCOFRememberStep() {
+    const cof = $(IDS.rbCof);
+    if (!cof || cof.__wlBound) return;
+
+    // Save step BEFORE click triggers postback
+    cof.addEventListener("mousedown", rememberDesiredStep, true);
+    cof.addEventListener("click", rememberDesiredStep, true);
+    cof.addEventListener("change", rememberDesiredStep, true);
+
+    cof.__wlBound = true;
+  }
+
+  function runAll() {
+    bindCOFRememberStep();
+    // Keep billing locked whenever Step 1 exists
+    lockBillingIntoStep1();
+  }
+
+  // Initial
+  setTimeout(runAll, 0);
+  setTimeout(runAll, 150);
+  setTimeout(runAll, 400);
+  setTimeout(runAll, 900);
+
+  // Mutation observer catches YOUR script moving cards + WebForms swaps
+  try {
+    const mo = new MutationObserver(() => {
+      runAll();
+    });
+    mo.observe(document.body, { childList: true, subtree: true });
+  } catch {}
+
+  // WebForms/Telerik partial postbacks
+  try {
+    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
+      const prm = Sys.WebForms.PageRequestManager.getInstance();
+      if (!prm.__wlLockBound) {
+        prm.add_endRequest(function () {
+          // 1) restore wizard step after postback
+          setTimeout(restoreDesiredStepAfterPostback, 60);
+          setTimeout(restoreDesiredStepAfterPostback, 220);
+          setTimeout(restoreDesiredStepAfterPostback, 450);
+
+          // 2) re-lock billing after postback re-render
+          setTimeout(lockBillingIntoStep1, 80);
+          setTimeout(lockBillingIntoStep1, 250);
+          setTimeout(lockBillingIntoStep1, 500);
+
+          // 3) rebind (elements sometimes recreated)
+          setTimeout(bindCOFRememberStep, 250);
+        });
+        prm.__wlLockBound = true;
+      }
+    }
+  } catch {}
+})();
