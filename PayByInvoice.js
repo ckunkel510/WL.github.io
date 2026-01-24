@@ -3748,209 +3748,210 @@ function setStep(n){
 
 
 /* ============================================================
-   WL PATCH: Keep Billing fields in Step 1 + keep step on COF postback
-   (NO proxy fields; uses real WebForms controls)
+   WL Patch: COF postback -> return to Pay step + show Billing in Review
    ============================================================ */
 (function () {
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
-  if (window.__WL_LOCK_BILLING_AND_STEP__) return;
-  window.__WL_LOCK_BILLING_AND_STEP__ = true;
+  if (window.__WL_COF_RETURN_AND_REVIEW_BILLING__) return;
+  window.__WL_COF_RETURN_AND_REVIEW_BILLING__ = true;
 
-  const STEP_KEY = "__WL_AP_WIZ3_STEP";
-  const DESIRED_STEP_KEY = "__WL_AP_DESIRED_STEP";
+  const KEY_WANT_PAY_STEP = "__WL_WANT_PAY_STEP";
+  const KEY_BILL_TEXT = "__WL_BILL_TEXT";
+  const KEY_BILL_ZIP  = "__WL_BILL_ZIP";
 
   const IDS = {
-    billWrap: "ctl00_PageBody_BillingAddressContainer",
-    billBox:  "ctl00_PageBody_BillingAddressTextBox",
-    billZip:  "ctl00_PageBody_BillingPostalCodeTextBox",
-    rbCof:    "ctl00_PageBody_RadioButton_PayByCheckOnFile",
+    rbCof:   "ctl00_PageBody_RadioButton_PayByCheckOnFile",
+    billBox: "ctl00_PageBody_BillingAddressTextBox",
+    billZip: "ctl00_PageBody_BillingPostalCodeTextBox",
   };
 
   const $ = (id) => document.getElementById(id);
 
-  function getWizardRoot() {
-    return (
-      $("wlApWizard3") ||
-      $("wlApWizard2") ||
-      $("wlApWizard") ||
-      null
-    );
+  function getWizardRoot(){
+    return $("wlApWizard3") || $("wlApWizard2") || $("wlApWizard") || null;
   }
 
-  function getStep1Panel() {
-    // Step 1 panel (Info)
-    return (
-      $("w3Step0") ||
-      document.querySelector('.wl-panel[data-step="0"]') ||
-      null
-    );
-  }
-
-  function getInfoInner() {
-    const step1 = getStep1Panel();
-    if (!step1) return null;
-    return step1.querySelector("#w3InfoInner") || step1;
-  }
-
-  function getCurrentStepFromUI() {
-    const wiz = getWizardRoot();
-    if (!wiz) return 0;
-    const pill = wiz.querySelector(".wl-step-pill.on");
-    if (pill && pill.getAttribute("data-step-pill") != null) {
-      const n = Number(pill.getAttribute("data-step-pill"));
-      return Number.isFinite(n) ? n : 0;
-    }
-    const panel = wiz.querySelector(".wl-panel.on");
-    if (panel && panel.getAttribute("data-step") != null) {
-      const n = Number(panel.getAttribute("data-step"));
-      return Number.isFinite(n) ? n : 0;
-    }
-    return 0;
-  }
-
-  function forceWizardToStep(step) {
+  // Force wizard step by toggling "on" classes (matches your existing wizard pattern)
+  function forceWizardToStep(step){
     const wiz = getWizardRoot();
     if (!wiz) return;
 
     const s = Math.max(0, Math.min(3, Number(step || 0)));
 
-    // Pills
-    wiz.querySelectorAll("[data-step-pill]").forEach((p) => {
+    wiz.querySelectorAll("[data-step-pill]").forEach(p => {
       p.classList.toggle("on", Number(p.getAttribute("data-step-pill")) === s);
     });
-
-    // Panels
-    wiz.querySelectorAll(".wl-panel").forEach((p) => {
+    wiz.querySelectorAll(".wl-panel").forEach(p => {
       p.classList.toggle("on", Number(p.getAttribute("data-step")) === s);
     });
 
-    // Buttons if present
-    const back = $("wlWizBackBtn");
-    const next = $("wlWizNextBtn");
-    if (back) back.disabled = (s === 0);
-    if (next) next.textContent = (s === 3) ? "Review complete" : "Next";
-
-    try { sessionStorage.setItem(STEP_KEY, String(s)); } catch {}
+    // best-effort keep any internal state in sync
+    try { sessionStorage.setItem("__WL_AP_WIZ3_STEP", String(s)); } catch {}
   }
 
-  function forceShow(el) {
-    if (!el) return;
-    el.hidden = false;
-    el.style.setProperty("display", "block", "important");
-    el.style.setProperty("visibility", "visible", "important");
-    el.style.setProperty("opacity", "1", "important");
+  // --- 1) COF click -> remember we want to be on Step 4 (Pay) after postback
+  function bindCOF(){
+    const rb = $(IDS.rbCof);
+    if (!rb || rb.__wlBound) return;
+
+    const mark = () => { try { sessionStorage.setItem(KEY_WANT_PAY_STEP, "1"); } catch {} };
+
+    rb.addEventListener("mousedown", mark, true);
+    rb.addEventListener("click", mark, true);
+    rb.addEventListener("change", mark, true);
+
+    rb.__wlBound = true;
   }
 
-  function findBillingWrap() {
-    // Prefer container if exists
-    const c = $(IDS.billWrap);
-    if (c) return c;
+  function returnToPayStepIfNeeded(){
+    let want = false;
+    try { want = sessionStorage.getItem(KEY_WANT_PAY_STEP) === "1"; } catch {}
+    const rb = $(IDS.rbCof);
 
-    // Otherwise find the billing textbox wrapper
-    const box = $(IDS.billBox);
-    if (!box) return null;
+    // Only do this if COF is actually selected (prevents weird jumps)
+    if (!want || !rb || !rb.checked) return;
 
-    return box.closest(".epi-form-group-acctPayment") || box.closest("tr") || box.parentElement;
+    // Force to Step 4 (Pay). Do it multiple times because WebForms may re-mount twice.
+    forceWizardToStep(3);
+    setTimeout(() => forceWizardToStep(3), 120);
+    setTimeout(() => forceWizardToStep(3), 260);
+    setTimeout(() => forceWizardToStep(3), 520);
+
+    // Clear the flag once we've forced it
+    try { sessionStorage.removeItem(KEY_WANT_PAY_STEP); } catch {}
   }
 
-  function findBillingZipWrap() {
-    const z = $(IDS.billZip);
-    if (!z) return null;
-    return z.closest(".epi-form-group-acctPayment") || z.closest("tr") || z.parentElement;
-  }
+  // --- 2) Billing disappears visually -> ensure Review still shows billing values
+  function stashBillingValues(){
+    const bill = $(IDS.billBox);
+    const zip  = $(IDS.billZip);
 
-  function lockBillingIntoStep1() {
-    const infoInner = getInfoInner();
-    if (!infoInner) return;
-
-    const billWrap = findBillingWrap();
-    const zipWrap = findBillingZipWrap();
-
-    // If WebForms re-rendered, wrappers may have changed; re-grab each time.
-    if (billWrap) {
-      forceShow(billWrap);
-      if (!infoInner.contains(billWrap)) infoInner.appendChild(billWrap);
-    }
-    if (zipWrap) {
-      forceShow(zipWrap);
-      if (!infoInner.contains(zipWrap)) infoInner.appendChild(zipWrap);
-    }
-  }
-
-  function rememberDesiredStep() {
     try {
-      const s = getCurrentStepFromUI();
-      sessionStorage.setItem(DESIRED_STEP_KEY, String(s));
-      sessionStorage.setItem(STEP_KEY, String(s));
+      if (bill) sessionStorage.setItem(KEY_BILL_TEXT, String(bill.value || ""));
+      if (zip)  sessionStorage.setItem(KEY_BILL_ZIP,  String(zip.value || ""));
     } catch {}
   }
 
-  function restoreDesiredStepAfterPostback() {
-    let desired = 0;
+  function getBillingValues(){
+    // Prefer live field values; fallback to stash
+    const bill = $(IDS.billBox);
+    const zip  = $(IDS.billZip);
+
+    let b = (bill && bill.value != null) ? String(bill.value || "") : "";
+    let z = (zip  && zip.value  != null) ? String(zip.value  || "") : "";
+
     try {
-      desired = Number(sessionStorage.getItem(DESIRED_STEP_KEY) || sessionStorage.getItem(STEP_KEY) || "0");
+      if (!b) b = sessionStorage.getItem(KEY_BILL_TEXT) || "";
+      if (!z) z = sessionStorage.getItem(KEY_BILL_ZIP)  || "";
     } catch {}
-    if (!Number.isFinite(desired)) desired = 0;
 
-    // If COF is checked, we always want to remain on Step 4 (Pay)
-    const cof = $(IDS.rbCof);
-    if (cof && cof.checked) desired = 3;
-
-    forceWizardToStep(desired);
+    b = b.trim();
+    z = z.trim();
+    return { b, z };
   }
 
-  function bindCOFRememberStep() {
-    const cof = $(IDS.rbCof);
-    if (!cof || cof.__wlBound) return;
+  function injectBillingIntoReview(){
+    const wiz = getWizardRoot();
+    if (!wiz) return;
 
-    // Save step BEFORE click triggers postback
-    cof.addEventListener("mousedown", rememberDesiredStep, true);
-    cof.addEventListener("click", rememberDesiredStep, true);
-    cof.addEventListener("change", rememberDesiredStep, true);
+    // Find the Review panel (step 2)
+    const panel = wiz.querySelector('.wl-panel[data-step="2"]');
+    if (!panel) return;
 
-    cof.__wlBound = true;
+    const { b, z } = getBillingValues();
+    if (!b && !z) return;
+
+    // Find a reasonable place inside review to insert/update (we try several common containers)
+    const host =
+      panel.querySelector("#wlReviewHTML") ||
+      panel.querySelector("#w3ReviewInner") ||
+      panel.querySelector(".wl-card-body") ||
+      panel;
+
+    // Upsert a row
+    let row = panel.querySelector("#wlReviewBillingRow");
+    if (!row) {
+      row = document.createElement("div");
+      row.id = "wlReviewBillingRow";
+      row.style.marginTop = "10px";
+      row.style.paddingTop = "10px";
+      row.style.borderTop = "1px solid #e5e7eb";
+      host.appendChild(row);
+    }
+
+    // Render nicely
+    const safe = (s) => (s || "").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+
+    row.innerHTML = `
+      <div style="font-weight:900;margin-bottom:6px;">Billing address</div>
+      <div style="white-space:pre-wrap;line-height:1.35;">${safe(b || "-")}</div>
+      <div style="margin-top:6px;"><span style="font-weight:800;">Billing zip:</span> ${safe(z || "-")}</div>
+    `;
   }
 
-  function runAll() {
-    bindCOFRememberStep();
-    // Keep billing locked whenever Step 1 exists
-    lockBillingIntoStep1();
+  // Keep billing stash updated as user types (even if it disappears later)
+  function bindBillingInput(){
+    const bill = $(IDS.billBox);
+    const zip  = $(IDS.billZip);
+
+    if (bill && !bill.__wlBound) {
+      bill.addEventListener("input", stashBillingValues, { passive:true });
+      bill.addEventListener("change", stashBillingValues, { passive:true });
+      bill.addEventListener("blur", stashBillingValues, { passive:true });
+      bill.__wlBound = true;
+    }
+    if (zip && !zip.__wlBound) {
+      zip.addEventListener("input", stashBillingValues, { passive:true });
+      zip.addEventListener("change", stashBillingValues, { passive:true });
+      zip.addEventListener("blur", stashBillingValues, { passive:true });
+      zip.__wlBound = true;
+    }
+  }
+
+  // Also stash when user moves forward through steps
+  function bindNextReviewHooks(){
+    const next = document.getElementById("wlWizNextBtn");
+    if (next && !next.__wlReviewBound) {
+      next.addEventListener("click", function(){
+        stashBillingValues();
+        // If they are arriving at review, inject after the UI flips panels
+        setTimeout(injectBillingIntoReview, 80);
+        setTimeout(injectBillingIntoReview, 200);
+      }, true);
+      next.__wlReviewBound = true;
+    }
+  }
+
+  function runAll(){
+    bindCOF();
+    bindBillingInput();
+    bindNextReviewHooks();
+    // If review is visible, keep billing row present
+    injectBillingIntoReview();
   }
 
   // Initial
   setTimeout(runAll, 0);
   setTimeout(runAll, 150);
-  setTimeout(runAll, 400);
+  setTimeout(runAll, 450);
   setTimeout(runAll, 900);
 
-  // Mutation observer catches YOUR script moving cards + WebForms swaps
-  try {
-    const mo = new MutationObserver(() => {
-      runAll();
-    });
-    mo.observe(document.body, { childList: true, subtree: true });
-  } catch {}
-
-  // WebForms/Telerik partial postbacks
+  // After partial postbacks (COF click, billing address event, etc.)
   try {
     if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
       const prm = Sys.WebForms.PageRequestManager.getInstance();
-      if (!prm.__wlLockBound) {
+      if (!prm.__wlCofReturnBound) {
         prm.add_endRequest(function () {
-          // 1) restore wizard step after postback
-          setTimeout(restoreDesiredStepAfterPostback, 60);
-          setTimeout(restoreDesiredStepAfterPostback, 220);
-          setTimeout(restoreDesiredStepAfterPostback, 450);
+          // Rebind elements that may have been re-rendered
+          setTimeout(runAll, 50);
+          setTimeout(runAll, 220);
 
-          // 2) re-lock billing after postback re-render
-          setTimeout(lockBillingIntoStep1, 80);
-          setTimeout(lockBillingIntoStep1, 250);
-          setTimeout(lockBillingIntoStep1, 500);
-
-          // 3) rebind (elements sometimes recreated)
-          setTimeout(bindCOFRememberStep, 250);
+          // If COF triggered this postback, force user back to Pay step
+          setTimeout(returnToPayStepIfNeeded, 80);
+          setTimeout(returnToPayStepIfNeeded, 240);
+          setTimeout(returnToPayStepIfNeeded, 520);
         });
-        prm.__wlLockBound = true;
+        prm.__wlCofReturnBound = true;
       }
     }
   } catch {}
