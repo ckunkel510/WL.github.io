@@ -3871,3 +3871,215 @@ if (jobBtn){
 
 })();
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ============================================================================
+   WL AccountPayment — HARDEN PayBy visibility + Email sanitization
+   Fixes:
+   1) Entering email triggers async postback -> PayBy options become hidden
+   2) Email prefill like "(ckunkel) ckunkel@woodsonlumber.com" fails validation
+   Policy:
+   - Show Check + Check on file
+   - Do NOT show Card/Credit
+   - Do NOT "manage" COF dropdown; just keep it visible and let server render it
+   ============================================================================ */
+(function () {
+  'use strict';
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+
+  if (window.__WL_AP_PAYBY_EMAIL_HARDENED) return;
+  window.__WL_AP_PAYBY_EMAIL_HARDENED = true;
+
+  const IDS = {
+    rbCheck: 'ctl00_PageBody_RadioButton_PayByCheck',
+    rbCof:   'ctl00_PageBody_RadioButton_PayByCheckOnFile',
+    rbCredit:'ctl00_PageBody_RadioButton_PayByCredit',
+
+    cofWrap:  'ctl00_PageBody_ChecksOnFileContainer',
+    cofWrap2: 'ctl00_PageBody_ChecksOnFileContainer1',
+
+    email: 'ctl00_PageBody_EmailAddressTextBox'
+  };
+
+  const $ = (id) => document.getElementById(id);
+
+  function forceShow(el) {
+    if (!el) return;
+    el.hidden = false;
+    el.classList.add('wl-force-show');
+    el.style.removeProperty('display');
+    el.style.removeProperty('visibility');
+    el.style.display = '';
+    el.style.visibility = 'visible';
+    el.style.opacity = '1';
+  }
+
+  function forceHide(el) {
+    if (!el) return;
+    el.style.display = 'none';
+    el.hidden = true;
+  }
+
+  function getRadioWrapper(rb) {
+    if (!rb) return null;
+    // Most WebTrack pay options use a div.radiobutton wrapper
+    return rb.closest('.radiobutton') || rb.parentElement;
+  }
+
+  function normalizePayByVisibility() {
+    // Success page? do nothing.
+    const p = document.querySelector('.bodyFlexItem p');
+    if (p && /account payment was successful/i.test(p.textContent || '')) return;
+
+    const rbCheck  = $(IDS.rbCheck);
+    const rbCof    = $(IDS.rbCof);
+    const rbCredit = $(IDS.rbCredit);
+
+    // Always show Check
+    forceShow(getRadioWrapper(rbCheck));
+    if (rbCheck) {
+      rbCheck.disabled = false;
+      rbCheck.removeAttribute('disabled');
+    }
+
+    // Always show Check on file + its server-rendered containers
+    forceShow(getRadioWrapper(rbCof));
+    forceShow($(IDS.cofWrap));
+    forceShow($(IDS.cofWrap2));
+    if (rbCof) {
+      rbCof.disabled = false;
+      rbCof.removeAttribute('disabled');
+      rbCof.style.pointerEvents = 'auto';
+    }
+
+    // Always hide Credit/Card
+    forceHide(getRadioWrapper(rbCredit));
+
+    // Also unhide the containing form-group in case the server set display:none
+    const anyRb = rbCof || rbCheck || rbCredit;
+    const grp = anyRb ? anyRb.closest('.epi-form-group-acctPayment') : null;
+    forceShow(grp);
+
+    // One more: sometimes the label is what gets display:none
+    const lblCheck = document.querySelector(`label[for="${IDS.rbCheck}"]`);
+    const lblCof   = document.querySelector(`label[for="${IDS.rbCof}"]`);
+    const lblCr    = document.querySelector(`label[for="${IDS.rbCredit}"]`);
+    forceShow(lblCheck);
+    forceShow(lblCof);
+    if (lblCr) forceHide(lblCr);
+  }
+
+  /* ---------------- Email sanitization ---------------- */
+  function extractFirstEmail(raw) {
+    const s = String(raw || '').trim();
+    if (!s) return '';
+
+    // Common formats:
+    // "(name) email@domain.com"
+    // "Name <email@domain.com>"
+    // "email@domain.com"
+    // "Name (email@domain.com)"
+    const m = s.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+    return m ? m[0] : '';
+  }
+
+  function sanitizeEmailField() {
+    const el = $(IDS.email);
+    if (!el) return;
+
+    const before = String(el.value || '');
+    const email = extractFirstEmail(before);
+
+    // Only change if we found a valid email and the current value isn't already that email
+    if (email && before.trim() !== email) {
+      el.value = email;
+      // do NOT dispatch change here (could trigger another postback loop)
+    }
+  }
+
+  /* ---------------- Wiring ---------------- */
+  function boot() {
+    sanitizeEmailField();
+    normalizePayByVisibility();
+
+    // Some Telerik/UpdatePanel swaps settle after endRequest, so repeat shortly
+    setTimeout(() => { sanitizeEmailField(); normalizePayByVisibility(); }, 30);
+    setTimeout(() => { sanitizeEmailField(); normalizePayByVisibility(); }, 200);
+  }
+
+  // Initial load
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
+  } else {
+    boot();
+  }
+
+  // Re-apply after async postbacks (email field is a common trigger)
+  try {
+    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
+      const prm = Sys.WebForms.PageRequestManager.getInstance();
+      if (!prm.__wlPayByEmailHarden) {
+        prm.add_initializeRequest(function () {
+          // ensure email is valid BEFORE it gets validated server-side
+          sanitizeEmailField();
+        });
+        prm.add_endRequest(function () {
+          // server re-rendered markup -> re-show radios and re-sanitize email
+          boot();
+        });
+        prm.__wlPayByEmailHarden = true;
+      }
+    }
+  } catch {}
+
+  // Before real form submit, sanitize again
+  try {
+    const form = document.forms[0];
+    if (form && !form.__wlEmailSanSubmit) {
+      form.addEventListener('submit', function () { sanitizeEmailField(); }, true);
+      form.__wlEmailSanSubmit = true;
+    }
+  } catch {}
+
+  // If user types/pastes, keep it clean (no forced events)
+  try {
+    const el = $(IDS.email);
+    if (el && !el.__wlEmailSanBound) {
+      el.addEventListener('blur', sanitizeEmailField, true);
+      el.addEventListener('change', sanitizeEmailField, true);
+      el.__wlEmailSanBound = true;
+    }
+  } catch {}
+})();
+
