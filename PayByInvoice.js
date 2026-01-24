@@ -4698,3 +4698,615 @@ if (jobBtn){
   setTimeout(boot, 150);
   setTimeout(boot, 600);
 })();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* =============================================================================
+   WL AccountPayment — Guided Wizard + Check-on-File dropdown mirror (NO shadow PayBy)
+   - Turns the rebuilt UI into a step-by-step form (Details → Review → Pay)
+   - Does NOT create hidden inputs with name ctl00$PageBody$PayBy (avoids WebForms binding issues)
+   - Preserves user's PayBy selection across UpdatePanel postbacks
+   - Mirrors ddlChecksOnFile into a nicer select (optional) while keeping the real select functional
+   Paste at VERY BOTTOM of PayByInvoice.js
+   ============================================================================ */
+(function () {
+  'use strict';
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+
+  // prevent double-boot
+  if (window.__WL_AP_WIZ_V1) return;
+  window.__WL_AP_WIZ_V1 = true;
+
+  const IDS = {
+    // Cards/layout created by your existing upgradeLayout()
+    leftCard: 'wlLeftCard',
+    formGrid: 'wlFormGrid',
+    rightCard: 'wlRightCard',
+    proxySubmit: 'wlProxySubmit',
+
+    // WebForms controls
+    amount: 'ctl00_PageBody_PaymentAmountTextBox',
+    remit:  'ctl00_PageBody_RemittanceAdviceTextBox',
+    email:  'ctl00_PageBody_EmailAddressTextBox',
+
+    rbCheck: 'ctl00_PageBody_RadioButton_PayByCheck',
+    rbCof:   'ctl00_PageBody_RadioButton_PayByCheckOnFile',
+    rbCard:  'ctl00_PageBody_RadioButton_PayByCardOnFile', // if present
+    rbCredit:'ctl00_PageBody_RadioButton_PayByCredit',     // if present
+
+    cofWrap:  'ctl00_PageBody_ChecksOnFileContainer',
+    cofWrap1: 'ctl00_PageBody_ChecksOnFileContainer1',
+    ddlCof:   'ctl00_PageBody_ddlChecksOnFile',
+
+    makePayPanel: 'ctl00_PageBody_MakePaymentPanel'
+  };
+
+  const KEY = {
+    step:  'wl_ap_step_v1',
+    payBy: 'wl_ap_payby_v1',
+    cof:   'wl_ap_cofsel_v1'
+  };
+
+  const $id = (id) => document.getElementById(id);
+  const qs  = (sel, root=document) => root.querySelector(sel);
+  const qsa = (sel, root=document) => Array.from(root.querySelectorAll(sel));
+
+  function isSuccessPage(){
+    const p = document.querySelector('.bodyFlexItem p');
+    return /account payment was successful/i.test((p?.textContent || '')) &&
+           !!document.querySelector('table.paymentDataTable');
+  }
+
+  function safeSetSession(k,v){ try{ sessionStorage.setItem(k, String(v)); }catch{} }
+  function safeGetSession(k, fallback=null){ try{ const v=sessionStorage.getItem(k); return (v===null?fallback:v); }catch{ return fallback; } }
+
+  function injectCSS(){
+    if (document.getElementById('wl-ap-wiz-css')) return;
+    const css = `
+      .wl-steps {
+        display:flex; gap:8px; flex-wrap:wrap;
+        margin:0 0 14px 0;
+      }
+      .wl-stepchip{
+        border:1px solid #e5e7eb;
+        background:#fff;
+        border-radius:999px;
+        padding:7px 12px;
+        font-weight:900;
+        font-size:12px;
+        color:#334155;
+        opacity:.65;
+      }
+      .wl-stepchip.is-active{ opacity:1; box-shadow:0 4px 14px rgba(15,23,42,.06); }
+      .wl-stepchip.is-done{ opacity:1; }
+      .wl-stepwrap{ display:block; }
+      .wl-stepwrap[hidden]{ display:none !important; }
+
+      .wl-wiznav{
+        display:flex; gap:10px; justify-content:space-between; align-items:center;
+        margin-top:16px;
+      }
+      .wl-btn{
+        border:1px solid #e5e7eb;
+        background:#fff;
+        border-radius:12px;
+        padding:10px 12px;
+        font-weight:900;
+        cursor:pointer;
+      }
+      .wl-btn-primary{
+        border:none;
+        background: var(--wl-brand, #6b0016);
+        color:#fff;
+      }
+      .wl-muted{ color:#475569; font-weight:800; font-size:12px; }
+      .wl-divider{ height:1px; background:#e5e7eb; margin:14px 0; }
+
+      /* Payment method block "feel native" */
+      #wlPayMethodBlock{
+        border:1px solid #e5e7eb;
+        border-radius:16px;
+        padding:12px 14px;
+        background:#fff;
+        box-shadow:0 6px 18px rgba(15,23,42,.06);
+      }
+      #wlPayMethodBlock label{
+        font-weight:900;
+        color:#0f172a;
+      }
+      #wlPayMethodBlock .wl-row{
+        display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+        margin-top:10px;
+      }
+      #wlPayMethodBlock select{
+        border:1px solid #e5e7eb;
+        border-radius:12px;
+        padding:10px 12px;
+        min-height:42px;
+        font-weight:800;
+      }
+
+      /* Don't let server inline display:none kill your pay section */
+      .epi-form-group-acctPayment,
+      .epi-form-group-acctPayment .radiobutton,
+      #${IDS.cofWrap}, #${IDS.cofWrap1}{
+        visibility:visible !important;
+      }
+    `;
+    const s = document.createElement('style');
+    s.id = 'wl-ap-wiz-css';
+    s.textContent = css;
+    document.head.appendChild(s);
+  }
+
+  /* ---------------------------
+     Locate the "payment group"
+     --------------------------- */
+  function findPaymentGroup(){
+    // Your layout module uses: MakePaymentPanel.previousElementSibling as payWrap :contentReference[oaicite:1]{index=1}
+    const mp = $id(IDS.makePayPanel);
+    const payWrap = mp?.previousElementSibling || null;
+    if (payWrap && payWrap.classList) return payWrap;
+    // fallback: find group containing rbCheck
+    const rb = $id(IDS.rbCheck);
+    return rb?.closest('.epi-form-group-acctPayment') || null;
+  }
+
+  function findCoreGroups(){
+    // These are moved into #wlFormGrid by your existing upgradeLayout() :contentReference[oaicite:2]{index=2}
+    const grid = $id(IDS.formGrid);
+    if (!grid) return [];
+
+    // Heuristic: all direct children that are legacy groups (epi-form-group-acctPayment)
+    const groups = qsa(':scope > .epi-form-group-acctPayment', grid);
+
+    // payment group is usually last; we separate it explicitly
+    const payGroup = findPaymentGroup();
+    return { grid, groups, payGroup };
+  }
+
+  /* ---------------------------
+     PayBy persistence (NO SHADOW)
+     --------------------------- */
+  function readPayBy(){
+    const rbCof = $id(IDS.rbCof);
+    const rbCard= $id(IDS.rbCard);
+    const rbCr  = $id(IDS.rbCredit);
+    const rbChk = $id(IDS.rbCheck);
+    if (rbCof && rbCof.checked) return 'cof';
+    if (rbCard && rbCard.checked) return 'card_on_file';
+    if (rbCr && rbCr.checked) return 'credit';
+    if (rbChk && rbChk.checked) return 'check';
+    return 'check';
+  }
+
+  function setPayBy(mode){
+    const rbCof = $id(IDS.rbCof);
+    const rbCard= $id(IDS.rbCard);
+    const rbCr  = $id(IDS.rbCredit);
+    const rbChk = $id(IDS.rbCheck);
+
+    // IMPORTANT: do NOT .click() here (that can cause postbacks & fight the user's dropdown postback)
+    if (rbChk)  rbChk.checked  = (mode === 'check');
+    if (rbCof)  rbCof.checked  = (mode === 'cof');
+    if (rbCard) rbCard.checked = (mode === 'card_on_file');
+    if (rbCr)   rbCr.checked   = (mode === 'credit');
+
+    safeSetSession(KEY.payBy, mode);
+  }
+
+  function wirePayByPersistence(){
+    const radios = [IDS.rbCheck, IDS.rbCof, IDS.rbCard, IDS.rbCredit]
+      .map($id).filter(Boolean);
+
+    radios.forEach(r=>{
+      if (r.__wlPayByBound) return;
+      const handler = ()=> safeSetSession(KEY.payBy, readPayBy());
+      r.addEventListener('change', handler, true);
+      r.addEventListener('click', handler, true);
+      r.__wlPayByBound = true;
+    });
+  }
+
+  /* ---------------------------
+     COF dropdown mirror
+     --------------------------- */
+  function mountCofMirrorUI(container){
+    const ddl = $id(IDS.ddlCof);
+    if (!ddl) return;
+
+    // If the page has no choices, don't render mirror
+    if (!ddl.options || ddl.options.length <= 0) return;
+
+    // Build mirror once
+    let block = document.getElementById('wlPayMethodBlock');
+    if (!block){
+      block = document.createElement('div');
+      block.id = 'wlPayMethodBlock';
+      block.innerHTML = `
+        <label for="wlPayMethodSelect">Payment method</label>
+        <div class="wl-row">
+          <select id="wlPayMethodSelect">
+            <option value="check">Pay by check</option>
+            <option value="cof">Check on file</option>
+          </select>
+          <span class="wl-muted">Pick your method, then choose an account if needed.</span>
+        </div>
+
+        <div class="wl-divider"></div>
+
+        <label for="wlCofMirrorSelect">Account on file</label>
+        <div class="wl-row">
+          <select id="wlCofMirrorSelect"></select>
+          <span class="wl-muted" id="wlCofHint"></span>
+        </div>
+      `;
+      container.insertBefore(block, container.firstChild);
+    }
+
+    const methodSel = document.getElementById('wlPayMethodSelect');
+    const mirrorSel = document.getElementById('wlCofMirrorSelect');
+    const hint = document.getElementById('wlCofHint');
+
+    // Populate mirror options from real ddl
+    function syncOptions(){
+      mirrorSel.innerHTML = '';
+      Array.from(ddl.options).forEach(opt=>{
+        const o = document.createElement('option');
+        o.value = opt.value;
+        o.textContent = opt.textContent;
+        if (opt.selected) o.selected = true;
+        mirrorSel.appendChild(o);
+      });
+    }
+
+    function syncFromReal(){
+      syncOptions();
+      safeSetSession(KEY.cof, ddl.value);
+      if (hint) hint.textContent = (ddl.options.length > 1) ? '' : 'Only one account on file';
+    }
+
+    function syncToRealAndPostback(newVal){
+      // set real ddl value and trigger its exact postback hook
+      ddl.value = newVal;
+      safeSetSession(KEY.cof, newVal);
+
+      // Trigger the same postback the server expects
+      // (Matches markup: __doPostBack('ctl00$PageBody$ddlChecksOnFile',''))
+      try{
+        if (typeof window.__doPostBack === 'function'){
+          window.__doPostBack('ctl00$PageBody$ddlChecksOnFile','');
+        } else {
+          // fallback: dispatch change (some builds listen for it)
+          ddl.dispatchEvent(new Event('change', { bubbles:true }));
+        }
+      }catch{}
+    }
+
+    // Method sync (DO NOT click radios)
+    function applyMethodUI(mode){
+      setPayBy(mode === 'cof' ? 'cof' : 'check');
+
+      // Keep original containers visible so WebForms is happy
+      const cw = $id(IDS.cofWrap);
+      const cw1= $id(IDS.cofWrap1);
+      if (cw)  cw.style.removeProperty('display');
+      if (cw1) cw1.style.removeProperty('display');
+
+      // Optional: hide the *real* dropdown visually, keep it in DOM
+      ddl.style.position = 'absolute';
+      ddl.style.left = '-9999px';
+      ddl.style.width = '1px';
+      ddl.style.height = '1px';
+      ddl.style.opacity = '0';
+    }
+
+    // Initial state
+    syncFromReal();
+    const savedPay = safeGetSession(KEY.payBy, null);
+    const initialMode = (savedPay === 'cof' || ($id(IDS.rbCof)?.checked)) ? 'cof' : 'check';
+    methodSel.value = initialMode;
+    applyMethodUI(initialMode);
+
+    // Restore saved COF selection if present (without forcing postback)
+    const savedCof = safeGetSession(KEY.cof, null);
+    if (savedCof && Array.from(ddl.options).some(o=>o.value === savedCof)){
+      ddl.value = savedCof;
+      syncFromReal();
+      mirrorSel.value = savedCof;
+    }
+
+    if (!methodSel.__wlBound){
+      methodSel.addEventListener('change', ()=>{
+        applyMethodUI(methodSel.value);
+      });
+      methodSel.__wlBound = true;
+    }
+
+    if (!mirrorSel.__wlBound){
+      mirrorSel.addEventListener('change', ()=>{
+        applyMethodUI('cof');           // ensure COF chosen
+        methodSel.value = 'cof';
+        syncToRealAndPostback(mirrorSel.value);
+      });
+      mirrorSel.__wlBound = true;
+    }
+
+    // If the server re-renders ddl after postback, resync the mirror
+    if (!ddl.__wlMirrorObserver){
+      ddl.__wlMirrorObserver = true;
+      // lightweight resync after any change
+      ddl.addEventListener('change', syncFromReal, true);
+    }
+  }
+
+  /* ---------------------------
+     Wizard steps
+     --------------------------- */
+  function buildWizardShell(grid){
+    if (document.getElementById('wlWizard')) return;
+
+    const head = document.createElement('div');
+    head.id = 'wlWizard';
+    head.innerHTML = `
+      <div class="wl-steps" id="wlStepChips">
+        <div class="wl-stepchip" data-step="1">1) Details</div>
+        <div class="wl-stepchip" data-step="2">2) Review</div>
+        <div class="wl-stepchip" data-step="3">3) Payment</div>
+      </div>
+
+      <div class="wl-stepwrap" id="wlStep1"></div>
+      <div class="wl-stepwrap" id="wlStep2" hidden></div>
+      <div class="wl-stepwrap" id="wlStep3" hidden></div>
+    `;
+    grid.insertBefore(head, grid.firstChild);
+
+    // Nav buttons per step
+    function addNav(stepEl, { back=false, next=false, nextLabel='Next', backLabel='Back' }){
+      const nav = document.createElement('div');
+      nav.className = 'wl-wiznav';
+      nav.innerHTML = `
+        <div>
+          ${back ? `<button type="button" class="wl-btn" data-back>${backLabel}</button>` : ``}
+        </div>
+        <div>
+          ${next ? `<button type="button" class="wl-btn wl-btn-primary" data-next>${nextLabel}</button>` : ``}
+        </div>
+      `;
+      stepEl.appendChild(nav);
+      return nav;
+    }
+
+    addNav(document.getElementById('wlStep1'), { next:true, nextLabel:'Review' });
+    addNav(document.getElementById('wlStep2'), { back:true, next:true, nextLabel:'Choose payment method' });
+    addNav(document.getElementById('wlStep3'), { back:true });
+  }
+
+  function setStep(n){
+    safeSetSession(KEY.step, String(n));
+
+    const s1 = document.getElementById('wlStep1');
+    const s2 = document.getElementById('wlStep2');
+    const s3 = document.getElementById('wlStep3');
+    if (!s1 || !s2 || !s3) return;
+
+    s1.hidden = (n !== 1);
+    s2.hidden = (n !== 2);
+    s3.hidden = (n !== 3);
+
+    // chips
+    const chips = qsa('#wlStepChips .wl-stepchip');
+    chips.forEach(c=>{
+      const sn = Number(c.getAttribute('data-step'));
+      c.classList.toggle('is-active', sn === n);
+      c.classList.toggle('is-done', sn < n);
+    });
+
+    // Make Payment button only “active” on step 3
+    const proxy = $id(IDS.proxySubmit);
+    if (proxy){
+      proxy.disabled = (n !== 3);
+      proxy.style.opacity = (n !== 3) ? '0.6' : '1';
+      proxy.style.pointerEvents = (n !== 3) ? 'none' : 'auto';
+    }
+  }
+
+  function validateStep1(){
+    // Minimal: amount > 0 OR remittance has something (your call)
+    const amtEl = $id(IDS.amount);
+    const remEl = $id(IDS.remit);
+    const emailEl = $id(IDS.email);
+
+    const amt = parseFloat(String(amtEl?.value || '').replace(/[^0-9.\-]/g,''));
+    const hasAmt = Number.isFinite(amt) && amt > 0;
+    const hasRem = !!String(remEl?.value || '').trim();
+    const hasEmail = !emailEl || !!String(emailEl.value||'').trim();
+
+    if (!hasEmail){
+      try{ emailEl.focus(); }catch{}
+      alert('Please enter an email address.');
+      return false;
+    }
+    if (!hasAmt && !hasRem){
+      try{ (amtEl || remEl)?.focus(); }catch{}
+      alert('Please enter a payment amount (or include remittance details).');
+      return false;
+    }
+    return true;
+  }
+
+  function wireWizardNav(){
+    const wiz = document.getElementById('wlWizard');
+    if (!wiz || wiz.__wlNavBound) return;
+
+    wiz.addEventListener('click', (e)=>{
+      const back = e.target.closest('[data-back]');
+      const next = e.target.closest('[data-next]');
+      const cur = Number(safeGetSession(KEY.step, '1')) || 1;
+
+      if (back){
+        e.preventDefault();
+        setStep(Math.max(1, cur - 1));
+      }
+      if (next){
+        e.preventDefault();
+        if (cur === 1 && !validateStep1()) return;
+        setStep(Math.min(3, cur + 1));
+      }
+    });
+
+    wiz.__wlNavBound = true;
+  }
+
+  function distributeGroupsIntoSteps(groups, payGroup){
+    const s1 = document.getElementById('wlStep1');
+    const s2 = document.getElementById('wlStep2');
+    const s3 = document.getElementById('wlStep3');
+    if (!s1 || !s2 || !s3) return;
+
+    // Clear (but keep nav at bottom)
+    function clearKeepNav(stepEl){
+      const nav = qs('.wl-wiznav', stepEl);
+      stepEl.innerHTML = '';
+      if (nav) stepEl.appendChild(nav);
+    }
+
+    // If first time, we can rebuild contents:
+    if (!s1.__wlFilled){
+      // remove nav, fill, then add nav back
+      const nav1 = qs('.wl-wiznav', s1);
+      const nav2 = qs('.wl-wiznav', s2);
+      const nav3 = qs('.wl-wiznav', s3);
+
+      s1.innerHTML = ''; s2.innerHTML = ''; s3.innerHTML = '';
+      if (nav1) s1.appendChild(nav1);
+      if (nav2) s2.appendChild(nav2);
+      if (nav3) s3.appendChild(nav3);
+
+      // Split groups: put everything except payment into step1
+      const nonPay = groups.filter(g => g && g !== payGroup);
+
+      // Step1: details inputs
+      nonPay.forEach(g=>{
+        // keep your existing styling classes; just move
+        s1.insertBefore(g, qs('.wl-wiznav', s1));
+      });
+
+      // Step2: review step (we don’t need to move the right card; just add guidance)
+      const reviewHint = document.createElement('div');
+      reviewHint.className = 'wl-muted';
+      reviewHint.style.marginBottom = '12px';
+      reviewHint.textContent = 'Review your payment summary on the right. If everything looks right, continue to payment.';
+      s2.insertBefore(reviewHint, qs('.wl-wiznav', s2));
+
+      // Step3: payment group
+      if (payGroup){
+        s3.insertBefore(payGroup, qs('.wl-wiznav', s3));
+      }
+
+      s1.__wlFilled = true;
+    }
+  }
+
+  /* ---------------------------
+     Boot / Re-boot after postbacks
+     --------------------------- */
+  function boot(){
+    if (isSuccessPage()) return;
+
+    injectCSS();
+
+    const left = $id(IDS.leftCard);
+    const grid = $id(IDS.formGrid);
+    if (!left || !grid) return;
+
+    const { groups, payGroup } = findCoreGroups();
+
+    buildWizardShell(grid);
+    distributeGroupsIntoSteps(groups, payGroup);
+    wireWizardNav();
+    wirePayByPersistence();
+
+    // Mount payment method block only when step3 exists and payGroup is present
+    const step3 = document.getElementById('wlStep3');
+    if (step3 && payGroup){
+      mountCofMirrorUI(step3);
+    }
+
+    // Restore step
+    const savedStep = Number(safeGetSession(KEY.step, '1')) || 1;
+    setStep(Math.min(3, Math.max(1, savedStep)));
+
+    // Restore payby (without clicking)
+    const savedPay = safeGetSession(KEY.payBy, null);
+    if (savedPay) setPayBy(savedPay);
+  }
+
+  boot();
+
+  // MS AJAX hook (UpdatePanel postbacks)
+  try{
+    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
+      const prm = Sys.WebForms.PageRequestManager.getInstance();
+      if (!prm.__wlWizBound){
+        prm.add_initializeRequest(()=> {
+          // Stamp current selections to session before async refresh
+          safeSetSession(KEY.payBy, readPayBy());
+          const ddl = $id(IDS.ddlCof);
+          if (ddl) safeSetSession(KEY.cof, ddl.value);
+        });
+        prm.add_endRequest(()=> {
+          // Rebuild wizard + re-mirror dropdown after server swaps DOM
+          boot();
+        });
+        prm.__wlWizBound = true;
+      }
+    }
+  }catch{}
+})();
