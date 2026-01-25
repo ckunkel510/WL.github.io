@@ -1,7 +1,7 @@
 
 (function () {
   'use strict';
-  console.log('[AP] PayByInvoice version v16 loaded');
+  console.log('[AP] PayByInvoice version v18 loaded');
 
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
@@ -1080,6 +1080,30 @@ return {
 }
 
 
+  // Jump to a wizard step from outside the wizard module (used by Summary "Edit" buttons)
+  function jumpToWizardStep(n){
+    const wiz = document.getElementById('wlApWizard3');
+    if (!wiz) return false;
+    const step = Math.max(0, Math.min(3, Number(n||0)));
+    try{ sessionStorage.setItem('__WL_AP_WIZ3_STEP', String(step)); }catch(e){}
+    try{
+      wiz.querySelectorAll('[data-pill]').forEach(p=>{
+        p.classList.toggle('on', Number(p.getAttribute('data-pill')) === step);
+      });
+      wiz.querySelectorAll('.w3-panel').forEach(p=>{
+        p.classList.toggle('on', Number(p.getAttribute('data-step')) === step);
+      });
+      const back = wiz.querySelector('#w3Back');
+      const next = wiz.querySelector('#w3Next');
+      if (back) back.disabled = (step === 0);
+      if (next) next.textContent = (step === 3) ? 'Ready' : 'Next';
+    }catch(e){}
+    try{ wiz.scrollIntoView({behavior:'smooth', block:'start'}); }catch(e){}
+    return true;
+  }
+
+
+
   function renderSummary(){
     const byId = (id)=> document.getElementById(id);
     const pills = byId('wlSummaryPills');
@@ -1115,8 +1139,8 @@ return {
         b.addEventListener('click', ()=>{
           const s = Number(b.getAttribute('data-editstep')||'0');
           try{ sessionStorage.setItem(STEP_KEY, String(s)); }catch(e){}
-          try{ setStep(s); }catch(e){}
-          try{ document.getElementById('wlWizard')?.scrollIntoView({behavior:'smooth', block:'start'}); }catch(e){}
+          try{ jumpToWizardStep(s); }catch(e){}
+          try{ document.getElementById('wlApWizard3')?.scrollIntoView({behavior:'smooth', block:'start'}); }catch(e){}
         });
       });
     }catch(e){}
