@@ -1,7 +1,7 @@
 
 (function () {
   'use strict';
-  console.log('[AP] PayByInvoice version v23 loaded');
+  console.log('[AP] PayByInvoice version v24 loaded');
 
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
@@ -4057,7 +4057,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details</div>
+        <div class="w3-title">Payment Details.</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
@@ -4397,25 +4397,22 @@ function setSelectedCard(cardEl, isSelected){
       // Credit availability: only when WebTrack actually offers pay-by-card OR card-on-file on this account (e.g., CAB)
       const cardAvail = isRadioAvailable(rbCred) || isRadioAvailable(rbCardOnFile);
 
-      // We always show bank accounts UI; card UI is gated by cardAvail.
-      // Top-level method row only appears when Card is available; otherwise Bank is the only method.
-      if (cardAvail){
-        methodMount.style.display = 'grid';
-        methodMount.style.gridTemplateColumns = 'repeat(auto-fit, minmax(0, 1fr))';
-        methodMount.innerHTML = `
-          <button type="button" class="wl-pay-card" data-method="bank">
-            <div class="wl-pay-title">Pay by Bank (ACH)</div>
-            <div class="wl-pay-sub">Use a bank account (new or saved).</div>
-          </button>
-          <button type="button" class="wl-pay-card" data-method="card">
-            <div class="wl-pay-title">Pay by Card</div>
-            <div class="wl-pay-sub">Available for select accounts.</div>
-          </button>
-        `;
-      } else {
-        methodMount.style.display = 'none';
-        methodMount.innerHTML = '';
-      }
+      // Top-level method row:
+      // - Always show Bank
+      // - Only show Card when WebTrack actually offers it for this account (e.g., CAB)
+      methodMount.style.display = 'grid';
+      methodMount.style.gridTemplateColumns = 'repeat(auto-fit, minmax(0, 1fr))';
+      methodMount.innerHTML = `
+        <button type="button" class="wl-pay-card" data-method="bank">
+          <div class="wl-pay-title">Pay by Bank (ACH)</div>
+          <div class="wl-pay-sub">Use a bank account (new or saved).</div>
+        </button>
+        ${cardAvail ? `
+        <button type="button" class="wl-pay-card" data-method="card">
+          <div class="wl-pay-title">Pay by Card</div>
+          <div class="wl-pay-sub">Available for select accounts.</div>
+        </button>` : ``}
+      `;
 
       // ----- Detect current mode (persisted intent wins) -----
       function currentMode2(){
@@ -4454,28 +4451,25 @@ function setSelectedCard(cardEl, isSelected){
       // ----- Top-level selection styles -----
       const bankMethodCard = methodMount.querySelector?.('[data-method="bank"]');
       const cardMethodCard = methodMount.querySelector?.('[data-method="card"]');
-      setSelectedCard(bankMethodCard, !isCardMode);
-      setSelectedCard(cardMethodCard, isCardMode);
+      const stSel = loadPayState() || {};
+      const userPicked = !!stSel.__userPicked;
 
-      // ----- BANK second level (always visible when bank selected; default shows it) -----
-      bankMount.style.display = (!isCardMode) ? 'grid' : 'none';
-      // If Bank is selected and saved bank accounts exist, WebTrack often only populates the COF dropdown
-      // after the PayByCheckOnFile radio is selected (postback). Bootstrap that once so saved accounts
-      // show by default without requiring the user to click the Bank method card.
-      if (!isCardMode && rbCof && cofSel && cofSel.options && cofSel.options.length <= 1){
-        try{
-          const st0 = loadPayState() || {};
-          if (!st0.__cofBootstrapped){
-            st0.__cofBootstrapped = Date.now();
-            st0.method = 'bank';
-            st0.bank = st0.bank || {};
-            st0.bank.mode = 'saved';
-            savePayState(st0);
-            clickWebFormsRadio(rbCof); // triggers the server to populate checks-on-file list
-          }
-        }catch(e){}
+      if (!userPicked){
+        setSelectedCard(bankMethodCard, false);
+        setSelectedCard(cardMethodCard, false);
+      } else {
+        setSelectedCard(bankMethodCard, !isCardMode);
+        setSelectedCard(cardMethodCard, isCardMode);
       }
+      // ----- Second level visibility -----
+      // Keep everything visually unselected at first load. Once the customer picks a method,
+      // show the appropriate second level (Bank accounts or Cards) and let the native radios postback
+      // to populate the saved lists.
+      const stPick = loadPayState() || {};
+      const userPicked2 = !!stPick.__userPicked;
 
+      bankMount.style.display = (userPicked2 && !isCardMode) ? 'grid' : 'none';
+      cardMount.style.display = (userPicked2 && isCardMode) ? 'grid' : 'none';
 
       // Bank account cards (Add new + saved)
       const bankOpts = [];
@@ -4590,7 +4584,7 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
 
           if (kind === 'new'){
             if (!isRadioAvailable(rbCred)) return;
-            savePayState({ method:'card', card:{ mode:'new' } });
+            savePayState({ __userPicked:true, method:'card', card:{ mode:'new' } });
             try{ if (window.WLPayPending){ window.WLPayPending.__cardPendingVal = null; window.WLPayPending.__cardPendingText = null; } }catch(e){}
             try{ clickWebFormsRadio(rbCred); }catch(e){}
             setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 80);
@@ -4600,7 +4594,7 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
           const val = btn.getAttribute('data-value') || '';
           if (!val) return;
           const text = (btn.querySelector('.wl-pay-title')?.textContent || '').trim();
-          savePayState({ method:'card', card:{ mode:'saved', value: val, text } });
+          savePayState({ __userPicked:true, method:'card', card:{ mode:'saved', value: val, text } });
 
           // Store intended selection and let MS AJAX endRequest apply it after the postback replaces the select.
           try{
@@ -4637,7 +4631,7 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
           // If they have saved cards but no prior intent, default to "Add new card" (if available)
           const newOk = isRadioAvailable(rbCred);
 
-          savePayState({ method:'card', card: preferSaved ? st.card : { mode: newOk ? 'new' : 'saved' } });
+          savePayState({ __userPicked:true, method:'card', card: preferSaved ? st.card : { mode: newOk ? 'new' : 'saved' } });
 
           try{
             if (preferSaved && isRadioAvailable(rbCardOnFile)) clickWebFormsRadio(rbCardOnFile);
@@ -4648,7 +4642,7 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
           // Bank is the default
           const st = loadPayState() || {};
           const preferSaved = !!(st?.bank?.mode === 'saved' && st?.bank?.value);
-          savePayState({ method:'bank', bank: preferSaved ? st.bank : { mode:'new' } });
+          savePayState({ __userPicked:true, method:'bank', bank: preferSaved ? st.bank : { mode:'new' } });
 
           try{
             if (preferSaved) clickWebFormsRadio(rbCof);
@@ -4668,7 +4662,7 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
         const kind = btn.getAttribute('data-bank');
 
         if (kind === 'new'){
-          savePayState({ method:'bank', bank:{ mode:'new' } });
+          savePayState({ __userPicked:true, method:'bank', bank:{ mode:'new' } });
 
           // Clear any prior COF selection so UI and server agree that we're entering a new account
           try{
@@ -4692,7 +4686,7 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
         if (!val) return;
 
         const text = (btn.querySelector('.wl-pay-title')?.textContent || '').trim();
-        savePayState({ method:'bank', bank:{ mode:'saved', value: val, text } });
+        savePayState({ __userPicked:true, method:'bank', bank:{ mode:'saved', value: val, text } });
 
         ensureCofVisible();
 
