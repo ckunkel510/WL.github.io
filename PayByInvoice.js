@@ -18,6 +18,11 @@
   function savePref(p){ try{ sessionStorage.setItem(KEY, JSON.stringify(p)); }catch{} }
   function loadPref(){ try{ return JSON.parse(sessionStorage.getItem(KEY) || '{}'); }catch{ return {}; } }
 
+  const BILL_DRAFT_KEY = 'wl_billDraft_v3';
+  function saveBillDraft(v){ try{ sessionStorage.setItem(BILL_DRAFT_KEY, String(v||'')); }catch{} }
+  function loadBillDraft(){ try{ return sessionStorage.getItem(BILL_DRAFT_KEY) || ''; }catch{ return ''; } }
+  function clearBillDraft(){ try{ sessionStorage.removeItem(BILL_DRAFT_KEY); }catch{} }
+
   /* ---------- parsing helpers ---------- */
   function trim(s){ return String(s||'').trim(); }
   function isTruthyFlag(v){
@@ -1931,6 +1936,12 @@ wireFieldPersistence();
       // Wire sync behavior
       const proxyInput = proxyWrap.querySelector('#wlProxyBillingInput');
 
+      // Restore draft after reload (if WebForms didn't keep it)
+      try{
+        const draft = loadBillDraft();
+        if (draft && !realInput.value) realInput.value = draft;
+      }catch{}
+
       // Initial mirror
       proxyInput.value = realInput.value || '';
 
@@ -1946,10 +1957,22 @@ wireFieldPersistence();
 
       // On blur/change, trigger the REAL control's change to allow native postback
       const commit = () => {
-        try { realInput.value = proxyInput.value; } catch {}
+        const v = proxyInput.value || '';
+        try { realInput.value = v; } catch {}
+        // Instead of triggering the WebForms onchange postback (which keeps causing the control to jump),
+        // persist the value and do a simple page reload so the wizard can re-mount Step 1 reliably.
         try {
-          // This will invoke the inline onchange handler on the real input (WebForm_DoPostBackWithOptions...)
-          realInput.dispatchEvent(new Event('change', { bubbles: true }));
+          const prev = loadBillDraft();
+          if (v && v !== prev){
+            saveBillDraft(v);
+            // prevent rapid reload loops
+            if (!sessionStorage.getItem('wl_billDraft_reloading')){
+              sessionStorage.setItem('wl_billDraft_reloading','1');
+              location.reload();
+            }
+          } else {
+            saveBillDraft(v);
+          }
         } catch {}
       };
       proxyInput.addEventListener('blur', commit);
@@ -3640,6 +3663,13 @@ step0.appendChild(infoCard);
 
 const infoInner = $('w3InfoInner');
 
+// Hide Address dropdown (not needed in Step 1)
+(function hideAddressDropdownOnStep1(){
+  const ddl = $('ctl00_PageBody_AddressDropdownList');
+  const wrap = ddl ? (ddl.closest('.epi-form-group-acctPayment') || ddl.closest('tr') || ddl.closest('.wl-field') || ddl.parentElement) : null;
+  if (wrap) wrap.style.display = 'none';
+})();
+
 function moveFieldGroupById(id, to){
   const el = $(id);
   if (!el || !to) return;
@@ -3789,6 +3819,8 @@ function setStep(n){
     return true;
   
     try { pinBillingToStep1({ attempt: 0 }); } catch {}
+
+    try{ sessionStorage.removeItem('wl_billDraft_reloading'); }catch{}
 }
 
   function boot(){
