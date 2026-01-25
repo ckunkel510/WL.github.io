@@ -19,6 +19,7 @@
   function loadPref(){ try{ return JSON.parse(sessionStorage.getItem(KEY) || '{}'); }catch{ return {}; } }
 
   const BILL_DRAFT_KEY = 'wl_billDraft_v3';
+  const STEP_ADV_KEY  = 'wl_ap_forceStep_v3';
   function saveBillDraft(v){ try{ sessionStorage.setItem(BILL_DRAFT_KEY, String(v||'')); }catch{} }
   function loadBillDraft(){ try{ return sessionStorage.getItem(BILL_DRAFT_KEY) || ''; }catch{ return ''; } }
   function clearBillDraft(){ try{ sessionStorage.removeItem(BILL_DRAFT_KEY); }catch{} }
@@ -1955,25 +1956,11 @@ wireFieldPersistence();
         try { realInput.value = proxyInput.value; } catch {}
       });
 
-      // On blur/change, trigger the REAL control's change to allow native postback
+      // On blur/change: save a draft; do NOT trigger WebForms onchange (it causes the control to jump)
       const commit = () => {
         const v = proxyInput.value || '';
         try { realInput.value = v; } catch {}
-        // Instead of triggering the WebForms onchange postback (which keeps causing the control to jump),
-        // persist the value and do a simple page reload so the wizard can re-mount Step 1 reliably.
-        try {
-          const prev = loadBillDraft();
-          if (v && v !== prev){
-            saveBillDraft(v);
-            // prevent rapid reload loops
-            if (!sessionStorage.getItem('wl_billDraft_reloading')){
-              sessionStorage.setItem('wl_billDraft_reloading','1');
-              location.reload();
-            }
-          } else {
-            saveBillDraft(v);
-          }
-        } catch {}
+        try { saveBillDraft(v); } catch {}
       };
       proxyInput.addEventListener('blur', commit);
       proxyInput.addEventListener('change', commit);
@@ -3631,7 +3618,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details</div>
+        <div class="w3-title">Payment Wizard</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
@@ -3666,7 +3653,7 @@ const infoInner = $('w3InfoInner');
 // Hide Address dropdown (not needed in Step 1)
 (function hideAddressDropdownOnStep1(){
   const ddl = $('ctl00_PageBody_AddressDropdownList');
-  const wrap = ddl ? (ddl.closest('.epi-form-group-acctPayment') || ddl.closest('tr') || ddl.closest('.wl-field') || ddl.parentElement) : null;
+  const wrap = ddl ? (ddl.closest('.wl-field') || ddl.closest('.epi-form-group-acctPayment') || ddl.closest('tr') || ddl.parentElement) : null;
   if (wrap) wrap.style.display = 'none';
 })();
 
@@ -3812,10 +3799,33 @@ function setStep(n){
     $('w3Back').addEventListener('click', ()=>setStep(step-1));
     $('w3Next').addEventListener('click', ()=>{
       if (!validateStep()) return;
+
+      // Step 0 -> Step 1: persist Billing and reload to avoid WebForms onchange jump
+      if (step === 0){
+        try{
+          const real = $('ctl00_PageBody_BillingAddressTextBox');
+          const proxy = document.getElementById('wlProxyBillingInput');
+          const v = (proxy?.value || real?.value || '').trim();
+          saveBillDraft(v);
+          sessionStorage.setItem(STEP_ADV_KEY, '1');
+        }catch{}
+        try{ location.reload(); }catch{}
+        return;
+      }
+
       setStep(step+1);
     });
 
     setStep(step);
+
+    // If we reloaded from Step 0, jump straight to Step 1
+    try{
+      if (sessionStorage.getItem(STEP_ADV_KEY) === '1'){
+        sessionStorage.removeItem(STEP_ADV_KEY);
+        setStep(1);
+      }
+    }catch{}
+
     return true;
   
     try { pinBillingToStep1({ attempt: 0 }); } catch {}
