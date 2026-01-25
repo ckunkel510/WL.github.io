@@ -19,6 +19,11 @@
   function loadPref(){ try{ return JSON.parse(sessionStorage.getItem(KEY) || '{}'); }catch{ return {}; } }
 
   const BILL_DRAFT_KEY = 'wl_billDraft_v3';
+  const BILL_LOCK_KEY  = 'wl_billLocked_v1';
+  function lockBilling(v){ try{ sessionStorage.setItem(BILL_LOCK_KEY, String(v||'')); }catch{} }
+  function loadBillingLock(){ try{ return sessionStorage.getItem(BILL_LOCK_KEY) || ''; }catch{ return ''; } }
+  function clearBillingLock(){ try{ sessionStorage.removeItem(BILL_LOCK_KEY); }catch{} }
+
   const STEP_ADV_KEY  = 'wl_ap_forceStep_v3';
   function saveBillDraft(v){ try{ sessionStorage.setItem(BILL_DRAFT_KEY, String(v||'')); }catch{} }
   function loadBillDraft(){ try{ return sessionStorage.getItem(BILL_DRAFT_KEY) || ''; }catch{ return ''; } }
@@ -1970,14 +1975,34 @@ const IDS = {
         try { realInput.value = proxyInput.value; } catch {}
       });
 
-      // On blur/change: save a draft; do NOT trigger WebForms onchange (it causes the control to jump)
-      const commit = () => {
+      // On blur/change/enter: save a draft and (once) trigger the native WebForms postback so the server captures it.
+// After that postback completes, we replace the entry UI with a read-only display + Edit button.
+      const commit = (optsCommit) => {
+        optsCommit = optsCommit || {};
         const v = proxyInput.value || '';
         try { realInput.value = v; } catch {}
         try { saveBillDraft(v); } catch {}
+
+        // Only lock + postback once per entry, to avoid loops
+        const alreadyLocked = !!loadBillingLock();
+        if (!alreadyLocked && String(v).trim()){
+          try { lockBilling(v); } catch {}
+          // Prefer the control's UniqueID/name so event validation is satisfied
+          const unique = realInput.name || 'ctl00$PageBody$BillingAddressTextBox';
+          if (typeof window.__doPostBack === 'function' && !optsCommit.skipPostback){
+            setTimeout(()=>{ try{ window.__doPostBack(unique, ''); }catch{} }, 0);
+          }
+        }
       };
-      proxyInput.addEventListener('blur', commit);
-      proxyInput.addEventListener('change', commit);
+      proxyInput.addEventListener('blur', ()=>commit());
+      proxyInput.addEventListener('change', ()=>commit());
+      proxyInput.addEventListener('keydown', (e)=>{
+        if (e.key === 'Enter'){
+          // Let the postback handle the reload; prevent accidental form submit
+          e.preventDefault();
+          commit();
+        }
+      });
     } else {
       // Ensure proxy stays in Step 1, before Email
       const proxyInput = proxyWrap.querySelector('#wlProxyBillingInput');
@@ -1996,6 +2021,60 @@ const IDS = {
           }
         }
       }
+    }
+
+    // If we have a locked billing value (postback happened), swap proxy input for a display + Edit button.
+    const lockedVal = trim(loadBillingLock());
+    if (lockedVal){
+      let disp = document.getElementById('wlBillingDisplayWrap');
+      if (!disp){
+        disp = document.createElement('div');
+        disp.id = 'wlBillingDisplayWrap';
+        disp.className = proxyWrap.className || 'epi-form-group-acctPayment';
+        disp.innerHTML = `
+          <div class="wl-bill-display">
+            <div class="wl-bill-head">
+              <div class="wl-bill-title">Billing Address</div>
+              <button type="button" class="w3-btn ghost sm" id="wlBillingEditBtn">Edit</button>
+            </div>
+            <input type="text" class="${realInput.className || 'form-control'}" readonly value="">
+            <div class="wl-bill-note">To change this, click Edit.</div>
+          </div>
+        `;
+      }
+      // Place display where proxyWrap is
+      if (disp.parentElement !== infoInner){
+        infoInner.insertBefore(disp, proxyWrap);
+      } else {
+        // keep in same relative spot
+        if (disp.nextElementSibling !== proxyWrap){
+          infoInner.insertBefore(disp, proxyWrap);
+        }
+      }
+      const ro = disp.querySelector('input[readonly]');
+      if (ro) ro.value = lockedVal;
+
+      // Hide proxy input when locked
+      proxyWrap.style.display = 'none';
+      proxyWrap.setAttribute('aria-hidden','true');
+
+      // Wire edit: clear lock and hard reload to show native entry again
+      const btn = disp.querySelector('#wlBillingEditBtn');
+      if (btn && !btn.__wlBound){
+        btn.__wlBound = true;
+        btn.addEventListener('click', ()=>{
+          try { clearBillingLock(); } catch {}
+          try { clearBillDraft(); } catch {}
+          // Hard reload so WebForms rerenders the real billing entry state cleanly
+          try { location.reload(); } catch {}
+        });
+      }
+    } else {
+      // Ensure proxy input is visible when not locked
+      const disp = document.getElementById('wlBillingDisplayWrap');
+      if (disp) disp.remove();
+      proxyWrap.style.removeProperty('display');
+      proxyWrap.removeAttribute('aria-hidden');
     }
 
     // Keep REAL billing control present but hidden (so it doesn't appear on Step 2)
@@ -3635,7 +3714,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Wizard</div>
+        <div class="w3-title">Payment Details</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
