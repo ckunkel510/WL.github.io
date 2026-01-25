@@ -1213,33 +1213,85 @@ const IDS = {
     return (cr && cr.checked) ? 'credit' : 'check';
   }
 
+  // Force a FULL WebForms postback (not MS Ajax async) by setting __EVENTTARGET/ARGUMENT
+  // and calling form.submit() directly. This is the most reliable way to "reload the form"
+  // when using a proxy button.
+  function forceFullPostback(eventTarget, eventArgument){
+    const form = document.forms && document.forms[0];
+    if (!form) return false;
+
+    // WebForms normally provides these, but if the DOM was partially rebuilt or
+    // something stripped them, create them so we can still submit a proper postback.
+    let et = form.querySelector('input[name="__EVENTTARGET"]');
+    let ea = form.querySelector('input[name="__EVENTARGUMENT"]');
+    if (!et){
+      et = document.createElement('input');
+      et.type = 'hidden';
+      et.name = '__EVENTTARGET';
+      form.appendChild(et);
+      log.warn('forceFullPostback: __EVENTTARGET missing; created');
+    }
+    if (!ea){
+      ea = document.createElement('input');
+      ea.type = 'hidden';
+      ea.name = '__EVENTARGUMENT';
+      form.appendChild(ea);
+      log.warn('forceFullPostback: __EVENTARGUMENT missing; created');
+    }
+
+    et.value = String(eventTarget || '');
+    ea.value = String(eventArgument || '');
+
+    // Bypass any JS submit guards by calling native submit directly.
+    log.info('forceFullPostback: form.submit()', { eventTarget: et.value, eventArgument: ea.value });
+    try{ form.submit(); return true; }catch(e){ log.warn('forceFullPostback failed', e); return false; }
+  }
+
   function proxyFire(){
     const mode = currentPayMode();
     try{ window.ensureShadowPayBy?.(); }catch{}
+
+    // For PAY-BY-CHECK we want a hard server round-trip. Some WebForms setups will try to
+    // do an async postback (UpdatePanel) which can leave the UI in a stale state. So we
+    // force a FULL postback whenever we can.
+    if (mode === 'check'){
+      const pb = document.querySelector('#ctl00_PageBody_MakePaymentPanel .submit-button-panel [onclick*="__doPostBack"]');
+      if (pb){
+        const m = (pb.getAttribute('onclick')||'').match(/__doPostBack\(['"]([^'"]+)['"],\s*['"]([^'"]*)['"]\)/);
+        if (m){
+          const ok = forceFullPostback(m[1], m[2]||'');
+          if (ok) return true;
+          if (window.__doPostBack){
+            log.info('proxy fallback using __doPostBack', { mode, target: m[1], arg: m[2] });
+            window.__doPostBack(m[1], m[2]||'');
+            return true;
+          }
+        }
+      }
+    }
+
     const real = findNativeTrigger();
     if (real){
       log.info('proxy firing native trigger', { mode, tag: real.tagName, id: real.id, name: real.name, value: real.value });
-      real.click(); // Credit → Forte modal; Check → normal postback hooked to this control
-      return true;
-    }
-    // Fallback to __doPostBack if present
-    const pb = document.querySelector('#ctl00_PageBody_MakePaymentPanel .submit-button-panel [onclick*="__doPostBack"]');
-    if (pb){
-      const m = (pb.getAttribute('onclick')||'').match(/__doPostBack\(['"]([^'"]+)['"],\s*['"]([^'"]*)['"]\)/);
-      if (m && window.__doPostBack){
-        log.info('proxy using __doPostBack', { mode, target: m[1], arg: m[2] });
-        window.__doPostBack(m[1], m[2]||'');
-        return true;
+      if (mode === 'check'){
+        // Prefer full postback by deriving the eventTarget from the native control.
+        const target = real.name || (real.id ? real.id.replace(/_/g,'$') : '');
+        if (target){
+          const ok = forceFullPostback(target, '');
+          if (ok) return true;
+        }
       }
-    }
-    // Last resort: submit the form
-    const form = document.forms[0];
-    if (form){
-      log.warn('proxy fallback form.submit()', { mode });
-      const ev = new Event('submit', { bubbles:true, cancelable:true });
-      form.dispatchEvent(ev);
-      if (!ev.defaultPrevented){ form.submit(); }
+      // Otherwise fall back to the native click (credit modal or normal postback)
+      real.click();
       return true;
+    }
+    // Last resort: submit the form (full round-trip). We intentionally bypass submit-event
+    // guards here because the whole point of the proxy button is to behave like the native
+    // WebForms submit.
+    const form = document.forms && document.forms[0];
+    if (form){
+      log.warn('proxy last resort: form.submit()', { mode });
+      try{ form.submit(); return true; }catch(e){ log.warn('proxy last resort submit failed', e); }
     }
     log.error('proxy could not find any submit mechanism');
     return false;
@@ -3755,7 +3807,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Wizard</div>
+        <div class="w3-title">Payment Details</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
