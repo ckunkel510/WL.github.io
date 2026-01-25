@@ -3910,8 +3910,12 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
     }
 
     // Step state
-    let step = 0; // always start fresh on full page load
-    sessionStorage.setItem(STEP_KEY, '0');
+    // Preserve wizard step across full postbacks/reloads so a delayed WebForms postback
+    // (like Billing onchange) doesn't yank the user back to Step 1 later.
+    let step = Number(sessionStorage.getItem(STEP_KEY) || '0');
+    if (!Number.isFinite(step)) step = 0;
+    step = Math.max(0, Math.min(3, step));
+    sessionStorage.setItem(STEP_KEY, String(step));
 
 let __wlSubmitted = false;
 // Warn only on real navigation (not WebForms postbacks)
