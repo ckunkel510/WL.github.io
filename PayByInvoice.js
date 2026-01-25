@@ -21,6 +21,8 @@
   const BILL_DRAFT_KEY = 'wl_billDraft_v3';
   const BILL_LOCK_KEY  = 'wl_billLocked_v1';
   const BILL_PB_PENDING_KEY = 'wl_billPostbackPending_v1';
+  const WL_FORCE_WIZ_PB_KEY = 'wl_forceWizardPostback_v1';
+
   function lockBilling(v){ try{ sessionStorage.setItem(BILL_LOCK_KEY, String(v||'')); }catch{} }
   function loadBillingLock(){ try{ return sessionStorage.getItem(BILL_LOCK_KEY) || ''; }catch{ return ''; } }
   function clearBillingLock(){ try{ sessionStorage.removeItem(BILL_LOCK_KEY); }catch{} }
@@ -33,6 +35,40 @@
   }
   function hasBillPostbackPending(){
     try{ return !!sessionStorage.getItem(BILL_PB_PENDING_KEY); }catch{ return false; }
+
+
+function shouldForceWizardPostback(){
+  try{
+    const t = Number(sessionStorage.getItem(WL_FORCE_WIZ_PB_KEY) || 0);
+    return !(t && (Date.now() - t) < 8000);
+  }catch{ return true; }
+}
+function markWizardPostback(){
+  try{ sessionStorage.setItem(WL_FORCE_WIZ_PB_KEY, String(Date.now())); }catch{}
+}
+function clearWizardPostback(){
+  try{ sessionStorage.removeItem(WL_FORCE_WIZ_PB_KEY); }catch{}
+}
+// Force a "real" WebForms round-trip by simulating the same action as the Step 4 proxy submit.
+// This is used ONLY to get the server to re-render controls after Billing entry.
+function forceWizardRoundTrip(reason){
+  try{
+    if (!shouldForceWizardPostback()) return false;
+    markWizardPostback();
+    const proxy = document.getElementById('wlProxySubmit');
+    if (proxy){
+      try{ proxy.click(); }catch{}
+      return true;
+    }
+    const real = document.querySelector('#wlSubmitMount .submit-button-panel button, #wlSubmitMount .submit-button-panel input[type="submit"], #wlSubmitMount .submit-button-panel input[type="button"]')
+      || document.querySelector('#ctl00_PageBody_MakePaymentPanel .submit-button-panel button, #ctl00_PageBody_MakePaymentPanel .submit-button-panel input[type="submit"], #ctl00_PageBody_MakePaymentPanel .submit-button-panel input[type="button"]');
+    if (real){
+      try{ real.click(); }catch{}
+      return true;
+    }
+  }catch{}
+  return false;
+}
   }
 
   const STEP_ADV_KEY  = 'wl_ap_forceStep_v3';
@@ -941,6 +977,7 @@ wireFieldPersistence();
 
   /* =============== Boot =============== */
   (function boot(){
+    try{ clearWizardPostback(); }catch{}
     if (document.readyState === 'loading'){
       document.addEventListener('DOMContentLoaded', ()=>{
         log.info('BOOT (DOMContentLoaded)');
@@ -1213,85 +1250,33 @@ const IDS = {
     return (cr && cr.checked) ? 'credit' : 'check';
   }
 
-  // Force a FULL WebForms postback (not MS Ajax async) by setting __EVENTTARGET/ARGUMENT
-  // and calling form.submit() directly. This is the most reliable way to "reload the form"
-  // when using a proxy button.
-  function forceFullPostback(eventTarget, eventArgument){
-    const form = document.forms && document.forms[0];
-    if (!form) return false;
-
-    // WebForms normally provides these, but if the DOM was partially rebuilt or
-    // something stripped them, create them so we can still submit a proper postback.
-    let et = form.querySelector('input[name="__EVENTTARGET"]');
-    let ea = form.querySelector('input[name="__EVENTARGUMENT"]');
-    if (!et){
-      et = document.createElement('input');
-      et.type = 'hidden';
-      et.name = '__EVENTTARGET';
-      form.appendChild(et);
-      log.warn('forceFullPostback: __EVENTTARGET missing; created');
-    }
-    if (!ea){
-      ea = document.createElement('input');
-      ea.type = 'hidden';
-      ea.name = '__EVENTARGUMENT';
-      form.appendChild(ea);
-      log.warn('forceFullPostback: __EVENTARGUMENT missing; created');
-    }
-
-    et.value = String(eventTarget || '');
-    ea.value = String(eventArgument || '');
-
-    // Bypass any JS submit guards by calling native submit directly.
-    log.info('forceFullPostback: form.submit()', { eventTarget: et.value, eventArgument: ea.value });
-    try{ form.submit(); return true; }catch(e){ log.warn('forceFullPostback failed', e); return false; }
-  }
-
   function proxyFire(){
     const mode = currentPayMode();
     try{ window.ensureShadowPayBy?.(); }catch{}
-
-    // For PAY-BY-CHECK we want a hard server round-trip. Some WebForms setups will try to
-    // do an async postback (UpdatePanel) which can leave the UI in a stale state. So we
-    // force a FULL postback whenever we can.
-    if (mode === 'check'){
-      const pb = document.querySelector('#ctl00_PageBody_MakePaymentPanel .submit-button-panel [onclick*="__doPostBack"]');
-      if (pb){
-        const m = (pb.getAttribute('onclick')||'').match(/__doPostBack\(['"]([^'"]+)['"],\s*['"]([^'"]*)['"]\)/);
-        if (m){
-          const ok = forceFullPostback(m[1], m[2]||'');
-          if (ok) return true;
-          if (window.__doPostBack){
-            log.info('proxy fallback using __doPostBack', { mode, target: m[1], arg: m[2] });
-            window.__doPostBack(m[1], m[2]||'');
-            return true;
-          }
-        }
-      }
-    }
-
     const real = findNativeTrigger();
     if (real){
       log.info('proxy firing native trigger', { mode, tag: real.tagName, id: real.id, name: real.name, value: real.value });
-      if (mode === 'check'){
-        // Prefer full postback by deriving the eventTarget from the native control.
-        const target = real.name || (real.id ? real.id.replace(/_/g,'$') : '');
-        if (target){
-          const ok = forceFullPostback(target, '');
-          if (ok) return true;
-        }
-      }
-      // Otherwise fall back to the native click (credit modal or normal postback)
-      real.click();
+      real.click(); // Credit → Forte modal; Check → normal postback hooked to this control
       return true;
     }
-    // Last resort: submit the form (full round-trip). We intentionally bypass submit-event
-    // guards here because the whole point of the proxy button is to behave like the native
-    // WebForms submit.
-    const form = document.forms && document.forms[0];
+    // Fallback to __doPostBack if present
+    const pb = document.querySelector('#ctl00_PageBody_MakePaymentPanel .submit-button-panel [onclick*="__doPostBack"]');
+    if (pb){
+      const m = (pb.getAttribute('onclick')||'').match(/__doPostBack\(['"]([^'"]+)['"],\s*['"]([^'"]*)['"]\)/);
+      if (m && window.__doPostBack){
+        log.info('proxy using __doPostBack', { mode, target: m[1], arg: m[2] });
+        window.__doPostBack(m[1], m[2]||'');
+        return true;
+      }
+    }
+    // Last resort: submit the form
+    const form = document.forms[0];
     if (form){
-      log.warn('proxy last resort: form.submit()', { mode });
-      try{ form.submit(); return true; }catch(e){ log.warn('proxy last resort submit failed', e); }
+      log.warn('proxy fallback form.submit()', { mode });
+      const ev = new Event('submit', { bubbles:true, cancelable:true });
+      form.dispatchEvent(ev);
+      if (!ev.defaultPrevented){ form.submit(); }
+      return true;
     }
     log.error('proxy could not find any submit mechanism');
     return false;
@@ -1926,161 +1911,13 @@ const IDS = {
       a.dispatchEvent(new Event('change', { bubbles:true }));
     } catch {}
     try {
-      if (typeof window.__doPostBack === 'function'){
-        const uniqueId = a.id.replace(/_/g, '$');
-        setTimeout(() => window.__doPostBack(uniqueId, ''), 0);
-      }
-    } catch {}
-  }
-
-  // Persist and clear invoice selections so modes don't stack
-  try { sessionStorage.setItem('__WL_JobsSelection', JSON.stringify(newSel)); } catch {}
-  try { window.WL_AP?.invoice?.clearSelection?.(); } catch {}
-
-  closeJobsModal();
+      
+// Instead of trying to reload manually (which can be ignored by WebForms/MSAjax),
+// force the same server round-trip as the "Make Payment" action. This causes the
+// form to re-render and brings the Billing UI back reliably.
+if (!optsCommit.skipPostback){
+  setTimeout(()=>{ try{ forceWizardRoundTrip('billing-commit'); }catch{} }, 0);
 }
-
-
-
-
-
-
-  // Export clearer for cross-mode wipes
-  window.WL_AP = window.WL_AP || {};
-  window.WL_AP.jobs = {
-    clearSelection(){
-      try{ sessionStorage.removeItem(SESS_JOBS_SEL); }catch{}
-      const list = $id('wlJobsList');
-      if (list){
-        list.querySelectorAll('input[type="checkbox"]').forEach(cb=> cb.checked = false);
-        jobsUpdateSummary();
-      }
-      const r = remEl();
-      if (r){
-        const kept = (r.value||'').split(/\r?\n/).filter(Boolean).filter(l=> !/^\s*JOB\s+/i.test(l));
-        r.value = kept.join('\n');
-        triggerChange(r);
-      }
-    }
-  };
-
-  /* ---------- Build the widget ---------- */
-  
-  /* =======================
-     PATCH: keep Billing on Step 1 (Info)
-     ======================= */
-  function pinBillingToStep1(opts){
-    // Proxy workaround:
-    // Keep the REAL WebForms BillingAddressTextBox in its native location so its onchange postback works.
-    // Render a proxy input on Step 1 that mirrors/syncs to the real control.
-    opts = opts || {};
-    const attempt = opts.attempt || 0;
-
-    const infoInner = document.getElementById('w3InfoInner');
-    const realInput = document.getElementById('ctl00_PageBody_BillingAddressTextBox');
-
-    if (!infoInner || !realInput){
-      // After a billing postback, WebForms can take longer to repaint the billing controls.
-      // Retry more times (with a capped backoff) so Step 1 doesn't end up blank.
-      if (attempt < 40){
-        const delay = Math.min(1200, 80 * (attempt + 1));
-        setTimeout(()=>{ try{ pinBillingToStep1({ attempt: attempt + 1 }); }catch{} }, delay);
-      }
-      return;
-    }
-
-    const realWrap = realInput.closest('.epi-form-group-acctPayment') || realInput.parentElement;
-    const emailWrap = document.getElementById('ctl00_PageBody_EmailTextBox')?.closest('.epi-form-group-acctPayment') || null;
-
-    // Create proxy wrapper once
-    let proxyWrap = document.getElementById('wlProxyBillingWrap');
-    if (!proxyWrap){
-      proxyWrap = document.createElement('div');
-      proxyWrap.id = 'wlProxyBillingWrap';
-      proxyWrap.className = (realWrap && realWrap.className) ? realWrap.className : 'epi-form-group-acctPayment';
-
-      // Try to reuse existing label text if present
-      let labelHtml = '';
-      const realLabel = realWrap ? realWrap.querySelector('label') : null;
-      if (realLabel){
-        labelHtml = `<label class="${realLabel.className}">${realLabel.textContent || 'Billing Address'}</label>`;
-      } else {
-        labelHtml = `<label>Billing Address</label>`;
-      }
-
-      proxyWrap.innerHTML = `${labelHtml}
-        <input id="wlProxyBillingInput" type="text" maxlength="${realInput.getAttribute('maxlength')||'30'}"
-               class="${realInput.className || 'form-control'}" autocomplete="billing address-line1">`;
-
-      // Insert proxy before Email when possible
-      if (emailWrap && emailWrap.parentElement === infoInner){
-        infoInner.insertBefore(proxyWrap, emailWrap);
-      } else {
-        infoInner.appendChild(proxyWrap);
-      }
-
-      // Wire sync behavior
-      const proxyInput = proxyWrap.querySelector('#wlProxyBillingInput');
-
-      // Restore draft after reload (if WebForms didn't keep it)
-      try{
-        const draft = loadBillDraft();
-        if (draft && !realInput.value) realInput.value = draft;
-      }catch{}
-
-      // Initial mirror
-      proxyInput.value = realInput.value || '';
-
-      // Keep proxy updated after postbacks (when real input value might change)
-      proxyInput.addEventListener('focus', () => {
-        try { proxyInput.value = realInput.value || ''; } catch {}
-      });
-
-      // On typing, just mirror value (no postback)
-      proxyInput.addEventListener('input', () => {
-        try { realInput.value = proxyInput.value; } catch {}
-      });
-
-      // On blur/change/enter: save a draft and (once) trigger the native WebForms postback so the server captures it.
-// After that postback completes, we replace the entry UI with a read-only display + Edit button.
-      const commit = (optsCommit) => {
-        optsCommit = optsCommit || {};
-        const v = proxyInput.value || '';
-        try { realInput.value = v; } catch {}
-        try { saveBillDraft(v); } catch {}
-
-        // Only lock + postback once per entry, to avoid loops
-        const alreadyLocked = !!loadBillingLock();
-        if (!alreadyLocked && String(v).trim()){
-          try { lockBilling(v); } catch {}
-
-          // Mark that a billing postback is expected. If (for any reason) the postback doesn't
-          // result in a full navigation, we'll hard-reload so Step 1 re-renders cleanly.
-          try { setBillPostbackPending(); } catch {}
-
-          // Keep the user on Step 1 after the round-trip.
-          try { sessionStorage.setItem(STEP_KEY, '0'); } catch {}
-
-          // Prefer the control's UniqueID/name so event validation is satisfied
-          const unique = realInput.name || 'ctl00$PageBody$BillingAddressTextBox';
-
-          let willUnload = false;
-          const onUnload = () => { willUnload = true; };
-          window.addEventListener('beforeunload', onUnload, { once:true });
-
-          if (typeof window.__doPostBack === 'function' && !optsCommit.skipPostback){
-            setTimeout(()=>{ try{ window.__doPostBack(unique, ''); }catch{} }, 0);
-          }
-
-          // Fallback: if we didn't actually navigate away (blocked postback, partial update, etc),
-          // force a hard reload to restore the billing UI and prevent a blank gap.
-          setTimeout(()=>{
-            try{
-              if (!willUnload && hasBillPostbackPending()){
-                location.reload();
-              }
-            }catch{}
-          }, 1200);
         }
       };
       proxyInput.addEventListener('blur', ()=>commit());
@@ -3807,7 +3644,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details</div>
+        <div class="w3-title">Payment Wizard</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
@@ -3989,17 +3826,23 @@ function setStep(n){
     $('w3Next').addEventListener('click', ()=>{
       if (!validateStep()) return;
 
-      // Step 0 -> Step 1: persist Billing; advance immediately
-      if (step === 0){
-        try{
-          const real = $('ctl00_PageBody_BillingAddressTextBox');
-          const proxy = document.getElementById('wlProxyBillingInput');
-          const v = (proxy?.value || real?.value || '').trim();
-          saveBillDraft(v);
-        }catch{}
-        setStep(1);
-        return;
-      }
+      // Step 0 -> Step 1: persist Billing; force server round-trip so Billing control reappears reliably
+if (step === 0){
+  let v = '';
+  try{
+    const real = $('ctl00_PageBody_BillingAddressTextBox');
+    const proxy = document.getElementById('wlProxyBillingInput');
+    v = (proxy?.value || real?.value || '').trim();
+    saveBillDraft(v);
+  }catch{}
+  // If they entered Billing, trigger the same postback as the native submit to re-render the form.
+  if (v){
+    try{ sessionStorage.setItem(STEP_KEY, '0'); }catch{}
+    try{ forceWizardRoundTrip('step0-next'); }catch{}
+  }
+  setStep(1);
+  return;
+}
 
       setStep(step+1);
     });
