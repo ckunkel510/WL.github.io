@@ -4358,6 +4358,10 @@ function reconcileNativeFromState(){
     } else {
       if (rbCheck) rbCheck.checked = true;
       if (rbCof) rbCof.checked = false;
+      try{
+        const sel = getCofSel();
+        if (sel) clearSelectToPlaceholder(sel, false);
+      }catch(e){}
     }
   }catch(e){}
 }
@@ -4369,9 +4373,10 @@ function clickWebFormsRadio(rb){
     rb.click();
   }catch(e){}
   try{
-    // fallback: explicitly invoke postback for this control
-    if (window.__doPostBack && rb && rb.name){
-      setTimeout(()=>{ try{ __doPostBack(rb.name,''); }catch(e){} }, 0);
+    // fallback: explicitly invoke postback for this control using its UniqueID
+    if (window.__doPostBack && rb && rb.id){
+      const target = String(rb.id).replace(/_/g,'$');
+      setTimeout(function(){ try{ __doPostBack(target,''); }catch(e){} }, 0);
     }
   }catch(e){}
 }
@@ -4381,9 +4386,14 @@ function clearSelectToPlaceholder(sel, fireChange){
   try{
     if (!sel) return;
     const opts = Array.from(sel.options || []);
-    const hasMinus1 = opts.some(o => String(o.value) === '-1');
-    if (hasMinus1) sel.value = '-1';
-    else if (opts.length) sel.selectedIndex = 0;
+    let minus1 = opts.find(o => String(o.value) === '-1');
+    if (!minus1){
+      minus1 = document.createElement('option');
+      minus1.value = '-1';
+      minus1.text = 'Select a saved account';
+      try{ sel.insertBefore(minus1, sel.firstChild); }catch(e){}
+    }
+    sel.value = '-1';
     if (fireChange){
       try{ sel.dispatchEvent(new Event('change', { bubbles:true })); }catch(e){}
     }
@@ -4416,8 +4426,10 @@ function setSelectedCard(cardEl, isSelected){
 
       // Fallback inference (no saved state)
       const hasCofSelection = !!(cofSel && cofSel.value && cofSel.value !== '-1');
-      if (rbCof?.checked || hasCofSelection) return 'bank_saved';
+      // If PayByCheck is checked, treat as NEW regardless of COF select retaining a value
       if (rbCheck?.checked) return 'bank_new';
+      if (rbCof?.checked) return 'bank_saved';
+      if (hasCofSelection) return 'bank_saved';
 
       return 'bank_new';
     }
