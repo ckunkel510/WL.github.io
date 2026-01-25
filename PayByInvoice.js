@@ -780,9 +780,7 @@ wireFieldPersistence();
   const email   = (emailEl?.value || '').trim();
 
   const invs = String((remEl?.value || '').trim())
-    .split(/[,
-
-	 ]+/)
+    .split(/[\s,]+/)
     .map(x => x.trim())
     .filter(Boolean);
 
