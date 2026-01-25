@@ -1453,6 +1453,7 @@ const IDS = {
             ensureShadowPayBy(); // keep mirrored
             showBilling();
             removeShadowPayBy();
+            try{ if (window.WLPayPending && typeof window.WLPayPending.apply === 'function') window.WLPayPending.apply(); }catch(e){}
             window.WLPayDiag?.snap?.();
           });
           prm.__wlPayGuard = true;
@@ -4179,6 +4180,28 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
       }catch(e){ return null; }
     }
 
+    // Pending selection bridge: selecting a saved card often triggers a partial postback that replaces the <select>.
+    // We store the intended value and apply it on MS AJAX endRequest.
+    window.WLPayPending = window.WLPayPending || {};
+    if (typeof window.WLPayPending.apply !== 'function'){
+      window.WLPayPending.apply = function(){
+        try{
+          if (!this.__cardPendingVal) return;
+          const val = this.__cardPendingVal;
+          const sel = getCardSel();
+          if (sel){
+            sel.value = val;
+            // trigger WebForms onchange handler (often calls __doPostBack)
+            sel.dispatchEvent(new Event('change', { bubbles:true }));
+            // clear only after we successfully found the select
+            this.__cardPendingVal = null;
+            this.__cardPendingText = null;
+          }
+        }catch(e){}
+      };
+    }
+
+
     // Wrap the native WebForms controls off-screen (NOT display:none)
     let nativeHost = $('wlPayNativeHost');
     if (!nativeHost){
@@ -4551,6 +4574,7 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
           if (kind === 'new'){
             if (!isRadioAvailable(rbCred)) return;
             savePayState({ method:'card', card:{ mode:'new' } });
+            try{ if (window.WLPayPending){ window.WLPayPending.__cardPendingVal = null; window.WLPayPending.__cardPendingText = null; } }catch(e){}
             try{ clickWebFormsRadio(rbCred); }catch(e){}
             setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 80);
             return;
@@ -4561,18 +4585,20 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
           const text = (btn.querySelector('.wl-pay-title')?.textContent || '').trim();
           savePayState({ method:'card', card:{ mode:'saved', value: val, text } });
 
+          // Store intended selection and let MS AJAX endRequest apply it after the postback replaces the select.
+          try{
+            window.WLPayPending = window.WLPayPending || {};
+            window.WLPayPending.__cardPendingVal = val;
+            window.WLPayPending.__cardPendingText = text;
+          }catch(e){}
+
           try{
             if (rbCardOnFile && !rbCardOnFile.checked) clickWebFormsRadio(rbCardOnFile);
           }catch(e){}
 
+          // Try applying immediately as well (covers no-postback cases)
           setTimeout(()=>{
-            try{
-              const sel = getCardSel();
-              if (sel){
-                sel.value = val;
-                sel.dispatchEvent(new Event('change', { bubbles:true }));
-              }
-            }catch(e){}
+            try{ if (window.WLPayPending && typeof window.WLPayPending.apply === 'function') window.WLPayPending.apply(); }catch(e){}
             setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 120);
           }, 80);
         };
