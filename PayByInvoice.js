@@ -1911,16 +1911,16 @@ const IDS = {
       a.dispatchEvent(new Event('change', { bubbles:true }));
     } catch {}
     try {
-      
-// Instead of trying to reload manually (which can be ignored by WebForms/MSAjax),
-// force the same server round-trip as the "Make Payment" action. This causes the
-// form to re-render and brings the Billing UI back reliably.
-if (!optsCommit.skipPostback){
-  setTimeout(()=>{ try{ forceWizardRoundTrip('billing-commit'); }catch{} }, 0);
-}
-        }
-      } catch {}
-      };
+      // Instead of trying to reload manually (which can be ignored by WebForms/MSAjax),
+      // force the same server round-trip as the "Make Payment" action. This causes the
+      // form to re-render and brings the Billing UI back reliably.
+      if (!optsCommit.skipPostback){
+        setTimeout(() => { 
+          try { forceWizardRoundTrip('billing-commit'); } catch {}
+        }, 0);
+      }
+    } catch {}
+
       proxyInput.addEventListener('blur', ()=>commit());
       proxyInput.addEventListener('change', ()=>commit());
       proxyInput.addEventListener('keydown', (e)=>{
