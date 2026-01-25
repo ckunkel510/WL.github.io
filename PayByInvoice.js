@@ -4057,7 +4057,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details.</div>
+        <div class="w3-title">Payment Details</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
@@ -4523,10 +4523,12 @@ function setSelectedCard(cardEl, isSelected){
   }catch(e){ return false; }
 }
 
-const cardAvail = isCardSupported();
+const hasSavedCards = !!(rbCardSaved || cardSel0 || card1 || card2);
 
+      // Only allow CARDS ON FILE (no adding new card here)
+      const cardAvail = hasSavedCards;
 
-      // Top-level method row:
+// Top-level method row:
       // - Always show Bank
       // - Only show Card when WebTrack actually offers it for this account (e.g., CAB)
       methodMount.style.display = 'grid';
@@ -4538,8 +4540,8 @@ const cardAvail = isCardSupported();
         </button>
         ${cardAvail ? `
         <button type="button" class="wl-pay-card" data-method="card">
-          <div class="wl-pay-title">Pay by Card</div>
-          <div class="wl-pay-sub">Available for select accounts.</div>
+          <div class="wl-pay-title">Pay by Card (On File)</div>
+          <div class="wl-pay-sub">Use a saved card on file.</div>
         </button>` : ``}
       `;
 
@@ -4558,10 +4560,8 @@ const cardAvail = isCardSupported();
         // Native radios may be set by server on CAB loads. ONLY honor them if the user actually chose Card.
 // Otherwise, keep Bank (ACH) as the default even when Card is available.
         if (cardAvail && st.method === 'card'){
-          if (rbCardNew?.checked) return 'card_new';
           if (rbCardSaved?.checked) return 'card_saved';
           if (st.card?.mode === 'saved') return 'card_saved';
-          if (st.card?.mode === 'new') return 'card_new';
         }
         if (st.method === 'bank' && st.bank?.mode === 'saved') return 'bank_saved';
         if (st.method === 'bank' && st.bank?.mode === 'new') return 'bank_new';
@@ -4576,7 +4576,7 @@ const cardAvail = isCardSupported();
       }
 
       const mode = currentMode2();
-      const isCardMode = (mode === 'card_new' || mode === 'card_saved');
+      const isCardMode = (mode === 'card_saved');
 
       // ----- Top-level selection styles -----
       const bankMethodCard = methodMount.querySelector?.('[data-method="bank"]');
@@ -4679,12 +4679,11 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
         const selectedCardVal = (cardSel && cardSel.value) ? String(cardSel.value) : '';
         const cardMatchVal = desiredCardVal || selectedCardVal;
 
-        const showAddNewCard = isRadioAvailable(rbCardNew); // new card entry
+        const showAddNewCard = false; // disabled: only allow cards on file
         const showSavedCards = isRadioAvailable(rbCardSaved) && cardOpts.length > 0;
 
-        const addNewCardSelected = (mode === 'card_new' || (!showSavedCards && showAddNewCard));
-
-        const savedCardCards = cardOpts.map(o=>{
+        const addNewCardSelected = false;
+const savedCardCards = cardOpts.map(o=>{
           const selected = (mode === 'card_saved' && cardMatchVal && cardMatchVal === o.value);
           return `
             <button type="button" class="wl-pay-card wl-card-card ${selected ? 'is-selected':''}"
@@ -4713,10 +4712,10 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
           const kind = btn.getAttribute('data-card');
 
           if (kind === 'new'){
-            if (!isCardSupported()) return;
-            savePayState({ __userPicked:true, method:'card', card:{ mode:'new' } });
-            try{ if (window.WLPayPending){ window.WLPayPending.__cardPendingVal = null; window.WLPayPending.__cardPendingText = null; } }catch(e){}
-            try{ clickWebFormsRadio(rbCardNew); }catch(e){}
+            // "Add new card" is disabled. If this ever appears (legacy), treat it as NEW BANK (ACH).
+            savePayState({ __userPicked:true, method:'bank', bank:{ mode:'new' } });
+            try{ clickWebFormsRadio(rbBankNew); }catch(e){}
+            ensureCofVisible();
             setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 80);
             return;
           }
@@ -4755,18 +4754,15 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
         const method = btn.getAttribute('data-method');
 
         if (method === 'card'){
+          // Cards: ONLY allow Cards On File here.
           if (!cardAvail) return;
+
           const st = loadPayState() || {};
           const preferSaved = !!(st?.card?.mode === 'saved' && st?.card?.value);
-          // If they have saved cards but no prior intent, default to "Add new card" (if available)
-          const newOk = isRadioAvailable(rbCardNew);
-
-          savePayState({ __userPicked:true, method:'card', card: preferSaved ? st.card : { mode: newOk ? 'new' : 'saved' } });
+          savePayState({ __userPicked:true, method:'card', card: preferSaved ? st.card : { mode:'saved' } });
 
           try{
-            if (preferSaved && isRadioAvailable(rbCardSaved)) clickWebFormsRadio(rbCardSaved);
-            else if (newOk) clickWebFormsRadio(rbCardNew);
-            else if (isRadioAvailable(rbCardSaved)) clickWebFormsRadio(rbCardSaved);
+            if (isRadioAvailable(rbCardSaved)) clickWebFormsRadio(rbCardSaved);
           }catch(e){}
         } else {
           // Bank is the default
