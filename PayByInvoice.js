@@ -956,7 +956,21 @@ wireFieldPersistence();
     debug(...a){ if (LOG>=LVL.debug) console.log  ('[AP:GRD]', ...a); },
   };
 
-  const IDS = {
+  
+  // Shadow pay-by selection used by legacy paths. Some builds omitted the helper; keep it safe.
+  // This prevents a hard crash that breaks wizard navigation.
+  function ensureShadowPayBy(mode){
+    try{
+      // Prefer a hidden input if present; otherwise store in sessionStorage
+      const hid = document.getElementById('wlShadowPayBy');
+      if (hid) hid.value = String(mode||'');
+      sessionStorage.setItem('wl_shadowPayBy', String(mode||''));
+      return true;
+    }catch{}
+    return false;
+  }
+
+const IDS = {
     rbCheck: 'ctl00_PageBody_RadioButton_PayByCheck',
     rbCredit:'ctl00_PageBody_RadioButton_PayByCredit',
     amount:  'ctl00_PageBody_PaymentAmountTextBox',
@@ -3618,7 +3632,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details</div>
+        <div class="w3-title">Payment Wizard</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
