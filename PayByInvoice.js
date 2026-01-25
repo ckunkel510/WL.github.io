@@ -1,7 +1,7 @@
 
 (function () {
   'use strict';
-  console.log('[AP] PayByInvoice version v18 loaded');
+  console.log('[AP] PayByInvoice version v20 loaded');
 
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
@@ -4158,6 +4158,27 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
     const cof2 = $('ctl00_PageBody_ChecksOnFileContainer1');
     const cofSel = (cof1?.querySelector('select') || cof2?.querySelector('select')) || null;
 
+    // Saved cards-on-file controls (only appear for some Cash Account Balance scenarios)
+    const card1 = $('ctl00_PageBody_CardsOnFileContainer') || $('ctl00_PageBody_CardOnFileContainer');
+    const card2 = $('ctl00_PageBody_CardsOnFileContainer1') || $('ctl00_PageBody_CardOnFileContainer1');
+    const cardSel0 =
+      (card1?.querySelector('select') || card2?.querySelector('select'))
+      || $('ctl00_PageBody_CardOnFileList')
+      || document.querySelector('select[id*="CardOnFile"],select[name*="CardOnFile"],select[id*="CardsOnFile"],select[name*="CardsOnFile"],select[id*="PayByCardOnFile"],select[name*="PayByCardOnFile"]')
+      || null;
+
+    function getCardSel(){
+      // On WebForms postbacks, the select element can be replaced; always re-resolve when needed.
+      try{
+        const s =
+          $('ctl00_PageBody_CardOnFileList')
+          || (card1?.querySelector?.('select') || card2?.querySelector?.('select') || null)
+          || cardSel0
+          || document.querySelector('select[id*="CardOnFile"],select[name*="CardOnFile"],select[id*="CardsOnFile"],select[name*="CardsOnFile"],select[id*="PayByCardOnFile"],select[name*="PayByCardOnFile"]');
+        return s || null;
+      }catch(e){ return null; }
+    }
+
     // Wrap the native WebForms controls off-screen (NOT display:none)
     let nativeHost = $('wlPayNativeHost');
     if (!nativeHost){
@@ -4172,7 +4193,7 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
     const wCof   = rbCof?.closest('.radiobutton')   || rbCof?.parentElement;
     const wCred  = rbCred?.closest('.radiobutton')  || rbCred?.parentElement;
 
-    [wCheck, wCof, wCred, cof1, cof2].forEach(el=>{
+    [wCheck, wCof, wCred, cof1, cof2, card1, card2, (getCardSel() ? getCardSel().closest('tr,div,span') : null)].forEach(el=>{
       if (el && el.parentElement !== nativeHost) nativeHost.appendChild(el);
     });
 
@@ -4255,10 +4276,22 @@ function reconcileNativeFromState(){
   const st = loadPayState();
   if (!st) return;
   try{
+    // CARD (new card) selected
     if ((st.method === 'credit' || st.method === 'card') && isCreditAvailable() && rbCred){
       rbCred.checked = true;
       if (rbCheck) rbCheck.checked = false;
       if (rbCof) rbCof.checked = false;
+      if (rbCardOnFile) rbCardOnFile.checked = false;
+
+      // If we're using a saved card, ensure CardOnFile radio + dropdown are set after any postback
+      if (st.card?.mode === 'saved' && rbCardOnFile){
+        rbCardOnFile.checked = true;
+        rbCred.checked = false;
+        const sel = getCardSel();
+        if (sel && st.card?.value && sel.value !== st.card.value){
+          try{ sel.value = st.card.value; }catch(e){}
+        }
+      }
       return;
     }
     // default bank
@@ -4461,11 +4494,8 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
       // ----- CARD second level (only shown when card selected) -----
       cardMount.style.display = (isCardMode && cardAvail) ? 'grid' : 'none';
       if (cardAvail){
-        // Try to find a "cards on file" select control (WebTrack varies by account/config)
-        const cardSel =
-          $('ctl00_PageBody_CardOnFileList')
-          || document.querySelector('select[id*="CardOnFile"],select[name*="CardOnFile"],select[id*="CardsOnFile"],select[name*="CardsOnFile"],select[id*="PayByCardOnFile"],select[name*="PayByCardOnFile"]')
-          || (rbCardOnFile ? (rbCardOnFile.closest('tr,div,span')?.querySelector?.('select') || null) : null);
+        // Resolve cards-on-file select (can be replaced during partial postbacks)
+        const cardSel = getCardSel();
 
         const cardOpts = [];
         try{
@@ -4537,9 +4567,10 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
 
           setTimeout(()=>{
             try{
-              if (cardSel){
-                cardSel.value = val;
-                cardSel.dispatchEvent(new Event('change', { bubbles:true }));
+              const sel = getCardSel();
+              if (sel){
+                sel.value = val;
+                sel.dispatchEvent(new Event('change', { bubbles:true }));
               }
             }catch(e){}
             setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 120);
