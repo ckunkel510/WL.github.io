@@ -3662,7 +3662,13 @@ if (jobBtn){
       return !/AccountPayment_r\.aspx/i.test(ref);
     }catch{ return true; }
   }
-  function resetWizardState()
+  function resetWizardState(){
+    try{ sessionStorage.removeItem(STEP_KEY); }catch{}
+    try{ localStorage.removeItem(STEP_KEY); }catch{}
+    try{ sessionStorage.removeItem('wl_bill_lock'); }catch{}
+    try{ sessionStorage.removeItem('wl_bill_draft'); }catch{}
+    try{ sessionStorage.removeItem('wl_bill_postback_pending'); }catch{}
+  }
   // --- Billing UI persistence helpers (prevents "it disappeared" confusion) ---
   function renderBillingSticky(infoInner, value){
     try{
