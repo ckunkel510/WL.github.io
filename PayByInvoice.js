@@ -689,7 +689,15 @@ wireFieldPersistence();
         box-shadow:0 0 0 3px rgba(107,0,21,.25);
       }
 
-    `;
+    
+      /* Billing saved inline confirm */
+      .wl-inline-confirm{margin-top:8px;font-size:12px;padding:8px 10px;border-radius:10px;border:1px solid rgba(107,0,21,.35);background:rgba(107,0,21,.06);color:#111;display:none}
+      .wl-inline-confirm.on{display:block}
+      .wl-inline-confirm.ok{border-color:rgba(46,125,50,.35);background:rgba(46,125,50,.08)}
+      .wl-inline-confirm.bad{border-color:rgba(183,28,28,.35);background:rgba(183,28,28,.06)}
+      .wl-edit-btn{margin-left:8px}
+
+`;
     const el = document.createElement('style'); el.id='wl-ap-polish-css'; el.textContent = css; document.head.appendChild(el);
     log.info('injectCSS: styles injected');
   })();
@@ -1057,13 +1065,13 @@ return {
     `;
     const remShort = d.invs.slice(0,6).join(', ');
     list.innerHTML = `
-      <div class="wl-row"><div class="wl-key">Invoices</div><div class="wl-val">${d.invCount} item${d.invCount===1?'':'s'} ${d.invCount>6?`<button type="button" class="wl-link" id="wlShowAllInv">View all</button>`:''}</div></div>
-      <div class="wl-row"><div class="wl-key">Total</div><div class="wl-val">${d.total || '<small>—</small>'}</div></div>
+      <div class="wl-row"><div class="wl-key">Invoices</div><div class="wl-val">${d.invCount} item${d.invCount===1?'':'s'} <button type="button" class="wl-link wl-edit-btn" data-editstep="1">Edit</button> ${d.invCount>6?`<button type="button" class="wl-link" id="wlShowAllInv">View all</button>`:''}</div></div>
+      <div class="wl-row"><div class="wl-key">Total</div><div class="wl-val">${d.total || '<small>—</small>'} <button type="button" class="wl-link wl-edit-btn" data-editstep="1">Edit</button></div></div>
       <div class="wl-row"><div class="wl-key">Payment</div><div class="wl-val">${(d.payMethod || '<small>—</small>')}${d.payAccount ? `<br><small>${d.payAccount}</small>` : ''}</div></div>
       <div class="wl-row"><div class="wl-key">Address</div><div class="wl-val">${d.addrSelText || '<small>(none)</small>'}</div></div>
-      <div class="wl-row"><div class="wl-key">Billing</div><div class="wl-val">${d.billing || '<small>—</small>'}<br>${d.zip ? `<small>ZIP ${d.zip}</small>` : ''}</div></div>
+      <div class="wl-row"><div class="wl-key">Billing</div><div class="wl-val">${d.billing || '<small>—</small>'} <button type="button" class="wl-link wl-edit-btn" data-editstep="0">Edit</button><br>${d.zip ? `<small>ZIP ${d.zip}</small>` : ''}</div></div>
       <div class="wl-row"><div class="wl-key">Email</div><div class="wl-val">${d.email || '<small>—</small>'}</div></div>
-      <div class="wl-row"><div class="wl-key">Remittance</div><div class="wl-val"><span id="wlRemShort">${remShort || '<small>—</small>'}</span></div></div>
+      <div class="wl-row"><div class="wl-key">Remittance</div><div class="wl-val"><span id="wlRemShort">${remShort || '<small>—</small>'}</span> <button type="button" class="wl-link wl-edit-btn" data-editstep="1">Edit</button></div></div>
     `;
     const btn = byId('wlShowAllInv');
     if (btn){
@@ -1073,6 +1081,17 @@ return {
         else { el.textContent = d.invs.join(', '); el.dataset.expanded='1'; btn.textContent='Collapse'; }
       });
     }
+    // Edit buttons (jump back into wizard)
+    try{
+      list.querySelectorAll('[data-editstep]').forEach(b=>{
+        b.addEventListener('click', ()=>{
+          const s = Number(b.getAttribute('data-editstep')||'0');
+          try{ sessionStorage.setItem(STEP_KEY, String(s)); }catch{}
+          try{ setStep(s); }catch{}
+          try{ document.getElementById('wlWizard')?.scrollIntoView({behavior:'smooth', block:'start'}); }catch{}
+        });
+      });
+    }catch{}
     log.debug('renderSummary: data', d);
   }
 
@@ -2162,6 +2181,30 @@ const IDS = {
       // Wire sync behavior
       const proxyInput = proxyWrap.querySelector('#wlProxyBillingInput');
 
+      // Inline confirmation message (reassures billing saved)
+      let billConfirm = document.getElementById('wlBillingInlineConfirm');
+      if (!billConfirm){
+        billConfirm = document.createElement('div');
+        billConfirm.id = 'wlBillingInlineConfirm';
+        billConfirm.className = 'wl-inline-confirm';
+        billConfirm.textContent = '';
+        // Place it right under the billing input
+        proxyWrap.appendChild(billConfirm);
+      }
+      let billConfirmTimer = 0;
+      function showBillConfirm(msg, ok){
+        try{
+          if (!billConfirm) return;
+          billConfirm.textContent = String(msg||'');
+          billConfirm.classList.add('on');
+          billConfirm.classList.toggle('ok', !!ok);
+          billConfirm.classList.toggle('bad', ok===false);
+          if (billConfirmTimer) clearTimeout(billConfirmTimer);
+          billConfirmTimer = setTimeout(()=>{ try{ billConfirm.classList.remove('on'); }catch{} }, ok===false ? 6500 : 3500);
+        }catch{}
+      }
+
+
       // Restore draft after reload (if WebForms didn't keep it)
       try{
         const draft = loadBillDraft();
@@ -2205,7 +2248,9 @@ const IDS = {
         try { saveBillDraft(v); } catch {}
         try { if (v) lockBilling(v); } catch {}
 
-        // If we have a value, show the read-only display immediately and hide the proxy input.
+        
+        try{ if (v) showBillConfirm('Billing address saved ✔', true); else showBillConfirm('Billing address is blank — please enter it before continuing.', false); }catch{}
+// If we have a value, show the read-only display immediately and hide the proxy input.
         try{
           if (v){
             renderBillingDisplay(infoInner, v, realInput.className || 'form-control');
@@ -3912,7 +3957,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Wizard</div>
+        <div class="w3-title">Payment Details</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
