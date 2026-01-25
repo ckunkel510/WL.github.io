@@ -603,7 +603,7 @@ wireFieldPersistence();
       leftCard = document.createElement('div');
       leftCard.id = 'wlLeftCard';
       leftCard.className = 'wl-card';
-      leftCard.innerHTML = `<div class="wl-card-head">Payment details</div><div class="wl-card-body"><div id="wlFormGrid" class="wl-form-grid"></div></div>`;
+      leftCard.innerHTML = `<div class="wl-card-head">Payment Detail</div><div class="wl-card-body"><div id="wlFormGrid" class="wl-form-grid"></div></div>`;
       shell.appendChild(leftCard);
       log.debug('leftCard: created');
     }
@@ -674,9 +674,33 @@ wireFieldPersistence();
       group.style.removeProperty('display');
     });
 
-    // Place fields
-    [grp.owing, grp.amount, grp.addrDDL, grp.billAddr, grp.zip, grp.email, grp.notes, grp.remit, grp.payWrap]
-      .filter(Boolean).forEach(el=>{ if (!grid.contains(el)) { grid.appendChild(el); log.debug('moved to grid', el.id||'(no-id)'); }});
+    // Place fields (explicit order; keep Billing before Email even after postbacks)
+    const ordered = [grp.owing, grp.amount, grp.addrDDL, grp.billAddr, grp.zip, grp.email, grp.notes, grp.remit, grp.payWrap]
+      .filter(Boolean);
+
+    ordered.forEach(el=>{
+      if (!grid.contains(el)) { grid.appendChild(el); log.debug('moved to grid', el.id||'(no-id)'); }
+    });
+
+    // Billing must appear before Email in Step 1 (users fill billing first)
+    (function enforceBillingBeforeEmail(){
+      const bill = grp.billAddr
+        || byId('ctl00_PageBody_BillingAddressContainer')
+        || byId('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment');
+      const email = grp.email
+        || byId('ctl00_PageBody_EmailAddressTextBox')?.closest('.epi-form-group-acctPayment');
+
+      if (!grid || !bill || !email) return;
+      if (!grid.contains(bill) || !grid.contains(email)) return;
+
+      // If Billing is after Email, move it just before Email (do not interfere with postbacks)
+      const pos = bill.compareDocumentPosition(email);
+      if (pos & Node.DOCUMENT_POSITION_PRECEDING){
+        grid.insertBefore(bill, email);
+        log.info('enforceBillingBeforeEmail: moved Billing before Email');
+      }
+    })();
+
     if (grp.payWrap) grp.payWrap.classList.add('wl-span-2');
 
     // Radios: ensure visible only (selection handled in guards)
@@ -3485,9 +3509,7 @@ const billWrap =
 sanitizeEmailInPlace();
 
 // Address / billing / zip / email (only) on Step 0
-moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
-
-// If there is a delivery/address selector + postal code, keep it on Step 0 too
+// Put Billing BEFORE Email so users can complete address details first.
 moveFieldGroupById('ctl00_PageBody_AddressDropdownList', infoInner);
 moveFieldGroupById('ctl00_PageBody_PostalCodeTextBox', infoInner);
 
@@ -3496,6 +3518,9 @@ if (billWrap) infoInner.appendChild(billWrap);
 
 // Billing zip (if separate)
 moveFieldGroupById('ctl00_PageBody_BillingPostalCodeTextBox', infoInner);
+
+// Email last (after billing info)
+moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
 
 // Keep the rest of the original UI (amount/quick-pay/remit/etc.) out of Step 0:
 // put the existing cards into Step 1 instead.
