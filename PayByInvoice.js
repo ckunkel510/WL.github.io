@@ -4057,7 +4057,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details</div>
+        <div class="w3-title">Payment Details.</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
@@ -4423,34 +4423,43 @@ function clickWebFormsRadio(rb){
     // Always click so the browser state updates.
     rb.click();
 
-    // WebTrack renders explicit __doPostBack targets on some radios (Card on file / Check on file),
-    // but NOT on "Pay by check" in your markup. We must postback to the SAME target format
-    // WebTrack uses: ctl00$PageBody$RadioButton_<ControlName>.
     if (!window.__doPostBack) return;
 
-    // 1) If the element already has an onclick with __doPostBack('target',''), reuse that target.
-    const oc = rb.getAttribute('onclick') || '';
-    const m = oc.match(/__doPostBack\(\s*'([^']+)'\s*,\s*'[^']*'\s*\)/i);
-    let target = m ? m[1] : null;
+    // Some WebTrack skins render these as a RadioButtonList named PayBy:
+    //   name="ctl00$PageBody$PayBy"
+    //   value="RadioButton_PayByCheck"
+    // In that case, the most reliable postback is: __doPostBack(name, value)
+    const nm = rb.getAttribute('name') || rb.name || '';
+    const val = rb.getAttribute('value') || rb.value || '';
+    if (nm && val && /\$PayBy$/i.test(nm)){
+      setTimeout(function(){
+        try{ __doPostBack(nm, val); }catch(e){}
+      }, 0);
+      return;
+    }
 
-    // 2) Otherwise build the correct target from the client id.
-    //    Example id: ctl00_PageBody_RadioButton_PayByCheck
-    //    Target:     ctl00$PageBody$RadioButton_PayByCheck
-    if (!target && rb.id && /^ctl\d+_/.test(rb.id)){
+    // Otherwise, if the element already has an onclick with __doPostBack('target','arg'), reuse that target.
+    const oc = rb.getAttribute('onclick') || '';
+    const m = oc.match(/__doPostBack\(\s*'([^']+)'\s*,\s*'([^']*)'\s*\)/i);
+    if (m && m[1]){
+      const target = m[1];
+      const arg = (m[2] != null) ? m[2] : '';
+      setTimeout(function(){
+        try{ __doPostBack(target, arg); }catch(e){}
+      }, 0);
+      return;
+    }
+
+    // Otherwise build target from client id in the same format WebTrack uses:
+    //   ctl00_PageBody_RadioButton_PayByCheck -> ctl00$PageBody$RadioButton_PayByCheck
+    let target = null;
+    if (rb.id && /^ctl\d+_/.test(rb.id)){
       const parts = String(rb.id).split('_');
       if (parts.length >= 3){
         const a = parts[0];
         const b = parts[1];
         const rest = parts.slice(2).join('_'); // keep internal underscores intact
         target = a + '$' + b + '$' + rest;
-      }
-    }
-
-    // 3) Final fallback: try name ONLY if it already looks like a WebForms UniqueID.
-    if (!target){
-      const nm = rb.getAttribute('name') || rb.name || '';
-      if (typeof nm === 'string' && nm.indexOf('$') !== -1){
-        target = nm;
       }
     }
 
