@@ -1,10 +1,21 @@
 // Global helper for legacy blocks (some functions run outside the main IIFE)
-window.byId = window.byId || function byId(id){ return document.getElementById(id); };
+window.byId = window.byId || function byId(sel){
+  // Back-compat helper: accepts either a DOM id ("foo") or a selector (".class", "#id", "div.foo", etc.)
+  try{
+    if (!sel) return null;
+    const s = String(sel);
+    // Heuristic: treat common selector starts / characters as selector
+    if (/^[.#\[]/.test(s) || /[ >:+~]/.test(s)) return document.querySelector(s);
+    return document.getElementById(s) || document.querySelector('#' + CSS.escape(s));
+  }catch{
+    try { return document.getElementById(String(sel)); } catch { return null; }
+  }
+};
 
 
 (function () {
   // Ensure byId helper exists (used throughout patches)
-  function byId(id){ return document.getElementById(id); }
+  const byId = window.byId;
 
 
   'use strict';
