@@ -20,9 +20,20 @@
 
   const BILL_DRAFT_KEY = 'wl_billDraft_v3';
   const BILL_LOCK_KEY  = 'wl_billLocked_v1';
+  const BILL_PB_PENDING_KEY = 'wl_billPostbackPending_v1';
   function lockBilling(v){ try{ sessionStorage.setItem(BILL_LOCK_KEY, String(v||'')); }catch{} }
   function loadBillingLock(){ try{ return sessionStorage.getItem(BILL_LOCK_KEY) || ''; }catch{ return ''; } }
   function clearBillingLock(){ try{ sessionStorage.removeItem(BILL_LOCK_KEY); }catch{} }
+
+  function setBillPostbackPending(){
+    try{ sessionStorage.setItem(BILL_PB_PENDING_KEY, String(Date.now())); }catch{}
+  }
+  function clearBillPostbackPending(){
+    try{ sessionStorage.removeItem(BILL_PB_PENDING_KEY); }catch{}
+  }
+  function hasBillPostbackPending(){
+    try{ return !!sessionStorage.getItem(BILL_PB_PENDING_KEY); }catch{ return false; }
+  }
 
   const STEP_ADV_KEY  = 'wl_ap_forceStep_v3';
   function saveBillDraft(v){ try{ sessionStorage.setItem(BILL_DRAFT_KEY, String(v||'')); }catch{} }
@@ -1917,8 +1928,11 @@ const IDS = {
     const realInput = document.getElementById('ctl00_PageBody_BillingAddressTextBox');
 
     if (!infoInner || !realInput){
-      if (attempt < 10){
-        setTimeout(()=>{ try{ pinBillingToStep1({ attempt: attempt + 1 }); }catch{} }, 80 * (attempt + 1));
+      // After a billing postback, WebForms can take longer to repaint the billing controls.
+      // Retry more times (with a capped backoff) so Step 1 doesn't end up blank.
+      if (attempt < 40){
+        const delay = Math.min(1200, 80 * (attempt + 1));
+        setTimeout(()=>{ try{ pinBillingToStep1({ attempt: attempt + 1 }); }catch{} }, delay);
       }
       return;
     }
@@ -1987,11 +2001,34 @@ const IDS = {
         const alreadyLocked = !!loadBillingLock();
         if (!alreadyLocked && String(v).trim()){
           try { lockBilling(v); } catch {}
+
+          // Mark that a billing postback is expected. If (for any reason) the postback doesn't
+          // result in a full navigation, we'll hard-reload so Step 1 re-renders cleanly.
+          try { setBillPostbackPending(); } catch {}
+
+          // Keep the user on Step 1 after the round-trip.
+          try { sessionStorage.setItem(STEP_KEY, '0'); } catch {}
+
           // Prefer the control's UniqueID/name so event validation is satisfied
           const unique = realInput.name || 'ctl00$PageBody$BillingAddressTextBox';
+
+          let willUnload = false;
+          const onUnload = () => { willUnload = true; };
+          window.addEventListener('beforeunload', onUnload, { once:true });
+
           if (typeof window.__doPostBack === 'function' && !optsCommit.skipPostback){
             setTimeout(()=>{ try{ window.__doPostBack(unique, ''); }catch{} }, 0);
           }
+
+          // Fallback: if we didn't actually navigate away (blocked postback, partial update, etc),
+          // force a hard reload to restore the billing UI and prevent a blank gap.
+          setTimeout(()=>{
+            try{
+              if (!willUnload && hasBillPostbackPending()){
+                location.reload();
+              }
+            }catch{}
+          }, 1200);
         }
       };
       proxyInput.addEventListener('blur', ()=>commit());
@@ -2026,6 +2063,8 @@ const IDS = {
     // If we have a locked billing value (postback happened), swap proxy input for a display + Edit button.
     const lockedVal = trim(loadBillingLock());
     if (lockedVal){
+      // Billing captured by server; clear the pending flag so we don't trigger the fallback reload.
+      try { clearBillPostbackPending(); } catch {}
       let disp = document.getElementById('wlBillingDisplayWrap');
       if (!disp){
         disp = document.createElement('div');
@@ -2070,6 +2109,8 @@ const IDS = {
         });
       }
     } else {
+      // If we expected a billing postback but didn't get a locked value, don't keep reloading forever.
+      try { if (hasBillPostbackPending()) clearBillPostbackPending(); } catch {}
       // Ensure proxy input is visible when not locked
       const disp = document.getElementById('wlBillingDisplayWrap');
       if (disp) disp.remove();
@@ -3714,7 +3755,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details</div>
+        <div class="w3-title">Payment Wizard</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
