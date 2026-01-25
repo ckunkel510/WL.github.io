@@ -52,16 +52,54 @@
     return false;
   }
 
+  // Force a server round-trip using the Pay By Check ("Check on File") radio postback.
+  // This is useful to re-render the Step 1 billing UI after the user commits billing.
+  const WL_FORCE_CHECK_PB_KEY = 'wl_forcePayByCheckPostback_v1';
+  function shouldForceCheckPostback(){
+    try{
+      const t = Number(sessionStorage.getItem(WL_FORCE_CHECK_PB_KEY) || 0);
+      return !(t && (Date.now() - t) < 8000);
+    }catch{ return true; }
+  }
+  function markCheckPostback(){ try{ sessionStorage.setItem(WL_FORCE_CHECK_PB_KEY, String(Date.now())); }catch{} }
+
+  function forcePayByCheckRoundTrip(reason){
+    try{
+      if (!shouldForceCheckPostback()) return false;
+      markCheckPostback();
+
+      // Try click first (lets WebForms emit whatever it normally does)
+      const rb = document.getElementById('ctl00_PageBody_RadioButton_PayByCheck');
+      if (rb){
+        rb.click();
+        return true;
+      }
+
+      // Fallback to explicit __doPostBack with common UniqueID
+      if (typeof window.__doPostBack === 'function'){
+        window.__doPostBack('ctl00$PageBody$RadioButton_PayByCheck','');
+        return true;
+      }
+
+      // Last resort: use the Make Payment proxy (if present)
+      return forceWizardRoundTrip('fallback-from-check:' + (reason||''));
+    }catch{}
+    return false;
+  }
+
+
   function renderBillingDisplay(infoInner, value, inputClass){
     try{
       const v = String(value||'').trim();
       if (!v) return null;
 
       let disp = document.getElementById('wlBillingDisplayWrap');
+      if (disp) { try{ disp.classList.add('wl-force-show'); }catch{} }
       if (!disp){
         disp = document.createElement('div');
         disp.id = 'wlBillingDisplayWrap';
         disp.className = 'epi-form-group-acctPayment';
+        disp.classList.add('wl-force-show');
         disp.innerHTML = `
           <div class="wl-bill-display">
             <div class="wl-bill-head">
@@ -2087,7 +2125,7 @@ const IDS = {
             try { sessionStorage.setItem(STEP_KEY, '1'); } catch {}
             // Trigger once (throttled) — same path as native Make Payment.
             if (!opts.skipPostback){
-              setTimeout(()=>{ try{ forceWizardRoundTrip('billing-commit'); }catch{} }, 0);
+              setTimeout(()=>{ try{ forcePayByCheckRoundTrip('billing-commit'); }catch{} }, 0);
             }
           }
         }catch{}
@@ -3757,7 +3795,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details</div>
+        <div class="w3-title">Payment Wizard</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
