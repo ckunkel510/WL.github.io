@@ -1169,9 +1169,9 @@ function readPayMode(){
     const pb = document.querySelector('#ctl00_PageBody_MakePaymentPanel .submit-button-panel [onclick*="__doPostBack"]');
     if (pb){
       const m = (pb.getAttribute('onclick')||'').match(/__doPostBack\(['"]([^'"]+)['"],\s*['"]([^'"]*)['"]\)/);
-      if (m && window.__doPostBack){
-        log.info('proxy using __doPostBack', { mode, target: m[1], arg: m[2] });
-        window.__doPostBack(m[1], m[2]||'');
+      if (m){
+        // Native-controls only: click the real server control rather than calling __doPostBack
+        try { pb.click(); } catch {}
         return true;
       }
     }
@@ -1817,12 +1817,9 @@ function readPayMode(){
       a.dispatchEvent(new Event('change', { bubbles:true }));
     } catch {}
     try {
-      if (typeof window.__doPostBack === 'function'){
-        const uniqueId = a.id.replace(/_/g, '$');
-        setTimeout(() => window.__doPostBack(uniqueId, ''), 0);
-      }
+      // Native-controls only: avoid synthetic __doPostBack (can trigger EventValidation)
+      a && a.click && a.click();
     } catch {}
-  }
 
   // Persist and clear invoice selections so modes don't stack
   try { sessionStorage.setItem('__WL_JobsSelection', JSON.stringify(newSel)); } catch {}
@@ -2319,13 +2316,10 @@ if (jobBtn){
     const a = document.getElementById('ctl00_PageBody_PaymentAmountTextBox');
     if (!a) return;
     try{ a.dispatchEvent(new Event('input', { bubbles:true })); a.dispatchEvent(new Event('change', { bubbles:true })); }catch{}
-    try{
-      if (typeof window.__doPostBack === 'function'){
-        const uniqueId = a.id.replace(/_/g,'$');
-        setTimeout(()=> window.__doPostBack(uniqueId, ''), 0);
-      }
-    }catch{}
-  }
+    try {
+      // Native-controls only: avoid synthetic __doPostBack (can trigger EventValidation)
+      a && a.click && a.click();
+    } catch {}
 
   function loadFromCurrentDOM(){
     const tbody = document.getElementById('wlInvTbody');
@@ -2652,13 +2646,10 @@ if (jobBtn){
 
     if (changed) {
       try{ window.WL_AP?.remit?.defer(remString); }catch{}
-      try{
-        if (typeof window.__doPostBack === 'function'){
-          const uniqueId = aEl.id.replace(/_/g,'$');
-          setTimeout(()=> window.__doPostBack(uniqueId, ''), 0);
-        }
-      }catch{}
-    } else {
+      try {
+      // Native-controls only: avoid synthetic __doPostBack (can trigger EventValidation)
+      aEl && aEl.click && aEl.click();
+    } catch {} else {
       try {
         window.WL_AP?.remit?._setNow?.(remString, /*fireInputOnly*/true);
         try{ sessionStorage.removeItem('__WL_PendingRemitV2'); }catch{}
@@ -3421,42 +3412,11 @@ function buildReviewHTML(){
   }
 
   function ensureCOFLoaded(){
-  // Only attempt to load COF accounts when COF is actually selected.
-  window.WLPayMode?.ensureCheckOnFileUI?.();
-
-  const rb = $('ctl00_PageBody_RadioButton_PayByCheckOnFile');
-  // If COF triggers an async postback, preserve that we're on Step 3.
-  try { sessionStorage.setItem(STEP_KEY, '3'); } catch {}
-  if (!rb || !rb.checked) return;
-
-  const c1 = $('ctl00_PageBody_ChecksOnFileContainer');
-  const c2 = $('ctl00_PageBody_ChecksOnFileContainer1');
-  const sel = (c1?.querySelector('select') || c2?.querySelector('select'));
-
-  // Throttle retries to avoid infinite postback loops
-  const TRY_KEY = '__WL_COF_LOAD_TRIES';
-  const TS_KEY  = '__WL_COF_LOAD_LAST_TS';
-  const tries = Number(sessionStorage.getItem(TRY_KEY) || '0');
-  const lastTs = Number(sessionStorage.getItem(TS_KEY) || '0');
-  const now = Date.now();
-
-  // If select looks empty, try at most 2 times, no more than once per 2 seconds
-  const looksEmpty = !!(sel && sel.options && sel.options.length <= 1);
-  if (!looksEmpty) return;
-
-  if (tries >= 2) return;
-  if (now - lastTs < 2000) return;
-
-  sessionStorage.setItem(TRY_KEY, String(tries + 1));
-  sessionStorage.setItem(TS_KEY, String(now));
-
-  try { rb.click(); } catch {}
-  // Fallback: manual postback
-  try {
-    if (typeof window.__doPostBack === 'function' && rb.name){
-      window.__doPostBack(rb.name, '');
-    }
-  } catch {}
+  // Native-controls only: do not force clicks or manual __doPostBack.
+  // If the user selects "Check on File", WebForms will handle loading the stored accounts via its own AutoPostBack.
+  try { window.WLPayMode?.ensureCheckOnFileUI?.(); } catch {}
+  try { sessionStorage.setItem(STEP_KEY, '3'); } catch {} // keep wizard on payment step
+  return;
 }
 
   function mount(){
@@ -3801,363 +3761,3 @@ function setStep(n){
 
 
 
-
-/* ============================================================
-   WL PATCH: Billing Address PROXY (Step 1) — Source of Truth
-   - DO NOT move server controls (prevents EventValidation errors)
-   - Create proxy Billing Address input in Step 1
-   - Hide the real Billing Address field off-screen (kept in DOM)
-   - Persist proxy value in sessionStorage
-   - After every partial postback: re-apply proxy value to real billing field
-   - ZIP is NOT duplicated (remove proxy ZIP)
-   ============================================================ */
-(function () {
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
-  if (window.__WL_BILLING_PROXY_STEP1_V2__) return;
-  window.__WL_BILLING_PROXY_STEP1_V2__ = true;
-
-  const SS_KEY = "wl_ap_billing_proxy_addr";
-
-  const IDS = {
-    billText: "ctl00_PageBody_BillingAddressTextBox",
-    billWrap: "ctl00_PageBody_BillingAddressContainer", // may or may not exist
-    addrDD:   "ctl00_PageBody_AddressDropdownList",
-  };
-
-  const $ = (id) => document.getElementById(id);
-
-  function ssGet(){ try { return sessionStorage.getItem(SS_KEY) || ""; } catch { return ""; } }
-  function ssSet(v){ try { sessionStorage.setItem(SS_KEY, v || ""); } catch {} }
-
-  function stepPanel(stepNum) {
-    return (
-      $("w3Step" + stepNum) ||
-      document.querySelector('.wl-panel[data-step="' + stepNum + '"]') ||
-      null
-    );
-  }
-
-  function step1Host() {
-    const s1 = stepPanel(0);
-    if (!s1) return null;
-    return s1.querySelector("#w3InfoInner") || s1;
-  }
-
-  function realBillingWrap() {
-    const c = $(IDS.billWrap);
-    if (c) return c;
-
-    const b = $(IDS.billText);
-    if (!b) return null;
-
-    return b.closest(".epi-form-group-acctPayment") || b.closest("tr") || b.parentElement;
-  }
-
-  function hideOffscreen(el) {
-    if (!el) return;
-    el.style.position = "absolute";
-    el.style.left = "-10000px";
-    el.style.top = "0";
-    el.style.width = "1px";
-    el.style.height = "1px";
-    el.style.overflow = "hidden";
-  }
-
-  function ensureProxyUI() {
-    const host = step1Host();
-    if (!host) return null;
-
-    let box = document.getElementById("wlBillingProxyBox");
-    if (box) return box;
-
-    box = document.createElement("div");
-    box.id = "wlBillingProxyBox";
-    box.style.marginTop = "12px";
-    box.style.padding = "12px";
-    box.style.border = "1px solid rgba(0,0,0,0.12)";
-    box.style.borderRadius = "10px";
-
-    box.innerHTML = `
-      <div style="font-weight:600; margin-bottom:8px;">Billing Address</div>
-      <label style="display:block; font-size:12px; margin-bottom:4px;">Address</label>
-      <input id="wlBillingProxyAddress" type="text"
-             autocomplete="street-address"
-             style="width:100%; padding:10px; border:1px solid rgba(0,0,0,0.2); border-radius:8px;" />
-      <div id="wlBillingProxyHint" style="font-size:12px; opacity:0.7; margin-top:8px;"></div>
-    `;
-
-    host.appendChild(box);
-    return box;
-  }
-
-  function applyProxyToReal() {
-    const realAddr = $(IDS.billText);
-    if (!realAddr) return;
-
-    const proxyVal = ssGet();
-    if (!proxyVal) return;
-
-    // Always re-apply after rerenders, even if server blanked it.
-    if (realAddr.value !== proxyVal) {
-      realAddr.value = proxyVal;
-    }
-  }
-
-  function applyRealToProxyOnlyIfEmpty() {
-    // Only seed proxy from real on first load if proxy storage is empty
-    const proxyVal = ssGet();
-    if (proxyVal) return;
-
-    const realAddr = $(IDS.billText);
-    const realVal = realAddr ? String(realAddr.value || "") : "";
-    if (realVal.trim()) ssSet(realVal);
-  }
-
-  // Optional: controlled sync postback (use sparingly)
-  function safeSyncPostback() {
-    if (typeof window.__doPostBack !== "function") return;
-
-    const addrDD = $(IDS.addrDD);
-    const realAddr = $(IDS.billText);
-
-    const target = (addrDD && (addrDD.name || addrDD.id)) || (realAddr && (realAddr.name || realAddr.id));
-    if (!target) return;
-
-    try { window.__doPostBack(target, ""); } catch {}
-  }
-
-  function bindProxyHandlers() {
-    const pAddr = document.getElementById("wlBillingProxyAddress");
-    if (!pAddr || pAddr.__wlBound) return;
-
-    // Load from sessionStorage
-    pAddr.value = ssGet();
-
-    let t = null;
-    function debouncedWrite() {
-      clearTimeout(t);
-      t = setTimeout(() => {
-        ssSet(pAddr.value || "");
-        applyProxyToReal();
-      }, 80);
-    }
-
-    pAddr.addEventListener("input", debouncedWrite);
-    pAddr.addEventListener("change", debouncedWrite);
-
-    // On blur: persist + push to real + optionally sync server
-    pAddr.addEventListener("blur", () => {
-      ssSet(pAddr.value || "");
-      applyProxyToReal();
-      // If you WANT the server to process billing immediately, uncomment:
-      // safeSyncPostback();
-    });
-
-    pAddr.__wlBound = true;
-  }
-
-  function hideRealBillingUI() {
-    hideOffscreen(realBillingWrap());
-  }
-
-  function boot() {
-    // Create proxy UI
-    ensureProxyUI();
-
-    // Keep real controls in DOM but hidden
-    hideRealBillingUI();
-
-    // Seed proxy from real ONLY if proxy empty
-    applyRealToProxyOnlyIfEmpty();
-
-    // Bind handlers + push proxy value into real
-    bindProxyHandlers();
-    applyProxyToReal();
-
-    // Hint text (optional)
-    const hint = document.getElementById("wlBillingProxyHint");
-    if (hint) hint.textContent = "We’ll use this for billing verification.";
-  }
-
-  // Initial
-  setTimeout(boot, 50);
-  setTimeout(boot, 250);
-  setTimeout(boot, 800);
-
-  // After partial postbacks
-  try {
-    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
-      const prm = Sys.WebForms.PageRequestManager.getInstance();
-      if (!prm.__wlBillingProxyBoundV2) {
-        prm.add_endRequest(function () {
-          // After server rerender, re-create proxy if needed, then re-apply value to real
-          setTimeout(boot, 40);
-          setTimeout(applyProxyToReal, 120);
-          setTimeout(applyProxyToReal, 320);
-        });
-        prm.__wlBillingProxyBoundV2 = true;
-      }
-    }
-  } catch {}
-
-})();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/* ============================================================
-   WL PATCH: Prime before "Check on File" (prevents EventValidation)
-   - Intercepts COF click
-   - Runs a safe priming postback first (AddressDropdown preferred)
-   - After endRequest, re-click COF
-   ============================================================ */
-(function () {
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
-  if (window.__WL_COF_PRIME_PATCH__) return;
-  window.__WL_COF_PRIME_PATCH__ = true;
-
-  const IDS = {
-    rbCof: "ctl00_PageBody_RadioButton_PayByCheckOnFile",
-    addrDD: "ctl00_PageBody_AddressDropdownList",
-    // fallback stable target if needed:
-    email: "ctl00_PageBody_EmailTextBox"
-  };
-
-  const SS = {
-    priming: "__WL_COF_PRIMING",
-    wantCof: "__WL_COF_RECLICK"
-  };
-
-  const $ = (id) => document.getElementById(id);
-  function ssGet(k){ try { return sessionStorage.getItem(k); } catch { return null; } }
-  function ssSet(k,v){ try { sessionStorage.setItem(k,v); } catch {} }
-  function ssDel(k){ try { sessionStorage.removeItem(k); } catch {} }
-
-  function getPrimeTarget() {
-    const dd = $(IDS.addrDD);
-    if (dd && (dd.name || dd.id)) return (dd.name || dd.id);
-
-    const em = $(IDS.email);
-    if (em && (em.name || em.id)) return (em.name || em.id);
-
-    return null;
-  }
-
-  function doPrimePostback() {
-    if (typeof window.__doPostBack !== "function") return false;
-    const target = getPrimeTarget();
-    if (!target) return false;
-
-    ssSet(SS.priming, "1");
-    try {
-      window.__doPostBack(target, "");
-      return true;
-    } catch {
-      ssDel(SS.priming);
-      return false;
-    }
-  }
-
-  function armCofIntercept() {
-    const rb = $(IDS.rbCof);
-    if (!rb || rb.__wlArmed) return;
-
-    rb.addEventListener("click", function (e) {
-      // If we're already priming, let it happen
-      if (ssGet(SS.priming) === "1") return;
-
-      // Intercept first COF click, prime, then re-click
-      e.preventDefault();
-      e.stopPropagation();
-
-      ssSet(SS.wantCof, "1");
-      doPrimePostback();
-      return false;
-    }, true);
-
-    rb.__wlArmed = true;
-  }
-
-  function afterEndRequest() {
-    // If we just primed, clear flag and re-click COF
-    if (ssGet(SS.priming) === "1") {
-      ssDel(SS.priming);
-    }
-
-    if (ssGet(SS.wantCof) === "1") {
-      ssDel(SS.wantCof);
-      const rb = $(IDS.rbCof);
-      setTimeout(() => {
-        try { rb && rb.click(); } catch {}
-      }, 120);
-    }
-  }
-
-  // boot
-  setTimeout(armCofIntercept, 0);
-  setTimeout(armCofIntercept, 250);
-  setTimeout(armCofIntercept, 800);
-
-  // hook endRequest
-  try {
-    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
-      const prm = Sys.WebForms.PageRequestManager.getInstance();
-      if (!prm.__wlCofPrimeBound) {
-        prm.add_endRequest(function () {
-          setTimeout(armCofIntercept, 50);
-          setTimeout(afterEndRequest, 120);
-          setTimeout(afterEndRequest, 260);
-        });
-        prm.__wlCofPrimeBound = true;
-      }
-    }
-  } catch {}
-})();
