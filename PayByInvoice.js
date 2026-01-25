@@ -1041,7 +1041,7 @@ try{
   const raw = sessionStorage.getItem('wlPayState');
   if (raw){
     const st = JSON.parse(raw);
-    if (st?.method === 'credit') payMethod = 'Credit Card';
+    if (st?.method === 'credit' || st?.method === 'card') payMethod = 'Credit Card';
     if (st?.method === 'bank')   payMethod = 'Bank (ACH)';
     if (st?.method === 'bank'){
       if (st?.bank?.mode === 'new') payAccount = 'Add new bank account';
@@ -1123,7 +1123,7 @@ return {
       <div class="wl-row"><div class="wl-key">Address</div><div class="wl-val">${d.addrSelText || '<small>(none)</small>'}</div></div>
       <div class="wl-row"><div class="wl-key">Billing</div><div class="wl-val">${d.billing || '<small>—</small>'} <button type="button" class="wl-link wl-edit-btn" data-editstep="0">Edit</button><br>${d.zip ? `<small>ZIP ${d.zip}</small>` : ''}</div></div>
       <div class="wl-row"><div class="wl-key">Email</div><div class="wl-val">${d.email || '<small>—</small>'}</div></div>
-      <div class="wl-row"><div class="wl-key">Remittance</div><div class="wl-val"><span id="wlRemShort">${remShort || '<small>—</small>'}</span> <button type="button" class="wl-link wl-edit-btn" data-editstep="1">Edit</button></div></div>
+      <div class="wl-row"><div class="wl-key">Remittance</div><div class="wl-val"><span id="wlRemShort">${remShort || '<small>—</small>'}</span></div></div>
     `;
     const btn = byId('wlShowAllInv');
     if (btn){
@@ -4255,7 +4255,7 @@ function reconcileNativeFromState(){
   const st = loadPayState();
   if (!st) return;
   try{
-    if (st.method === 'credit' && isCreditAvailable() && rbCred){
+    if ((st.method === 'credit' || st.method === 'card') && isCreditAvailable() && rbCred){
       rbCred.checked = true;
       if (rbCheck) rbCheck.checked = false;
       if (rbCof) rbCof.checked = false;
@@ -4644,7 +4644,7 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
       savePayState({ method:'bank', bank:{ mode:'new' } });
     } else {
       const st0 = loadPayState();
-      if (st0?.method === 'credit' && !isCreditAvailable()){
+      if ((st0?.method === 'credit' || st0?.method === 'card') && !isCreditAvailable()){
         savePayState({ method:'bank', bank:{ mode:'new' } });
       }
     }
