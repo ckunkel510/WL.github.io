@@ -3957,7 +3957,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details</div>
+        <div class="w3-title">Payment Details.</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
@@ -4104,17 +4104,23 @@ function savePayState(st){
 }
 
 function isElementVisible(el){
+  // Native controls are moved into an off-screen host for WebForms,
+  // so bounding-rect checks will incorrectly report "not visible".
+  // Only honor explicit hiding (display:none/visibility:hidden/hidden attr).
   if (!el) return false;
-  const cs = window.getComputedStyle(el);
-  if (cs.display === 'none' || cs.visibility === 'hidden') return false;
-  const r = el.getBoundingClientRect();
-  return r.width > 0 && r.height > 0;
+  try{
+    if (el.hasAttribute && el.hasAttribute('hidden')) return false;
+    const cs = window.getComputedStyle(el);
+    if (!cs) return true;
+    return cs.display !== 'none' && cs.visibility !== 'hidden';
+  }catch{ return true; }
 }
 
 function isCreditAvailable(){
   if (!rbCred) return false;
   if (rbCred.disabled) return false;
   const wrap = rbCred.closest('.radiobutton') || rbCred.parentElement;
+  // If server hid the option, the wrapper will be display:none. Otherwise it is available.
   return isElementVisible(wrap);
 }
 
