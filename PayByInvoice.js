@@ -1841,7 +1841,29 @@ wireFieldPersistence();
   };
 
   /* ---------- Build the widget ---------- */
-  function mountWidget(){
+  
+  /* =======================
+     PATCH: keep Billing on Step 1 (Info)
+     ======================= */
+  function pinBillingToStep1(){
+    const infoInner = document.getElementById('w3InfoInner');
+    if (!infoInner) return;
+
+    const billWrap =
+      document.getElementById('ctl00_PageBody_BillingAddressContainer') ||
+      document.getElementById('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment');
+
+    if (!billWrap) return;
+
+    if (billWrap.parentElement !== infoInner) {
+      infoInner.appendChild(billWrap);
+    }
+
+    billWrap.style.removeProperty('display');
+    billWrap.classList.add('wl-force-show');
+  }
+
+function mountWidget(){
     const grid = $id('wlFormGrid') || $1('.bodyFlexItem') || document.body;
     if (!grid){ log.warn('No grid found for widget'); return; }
 
@@ -3641,7 +3663,9 @@ function setStep(n){
 
     setStep(step);
     return true;
-  }
+  
+    try { pinBillingToStep1(); } catch {}
+}
 
   function boot(){
     sanitizeEmailInPlace();
@@ -3667,6 +3691,8 @@ function setStep(n){
     if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
       const prm = Sys.WebForms.PageRequestManager.getInstance();
       prm.add_endRequest(function(){
+      try { pinBillingToStep1(); } catch {};
+
         try { mount(); } catch {}
       });
     }
