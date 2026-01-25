@@ -3499,11 +3499,11 @@ if (jobBtn){
       #wlApWizard3 .w3-steps{ display:flex; gap:6px; flex-wrap:wrap; }
       #wlApWizard3 .w3-pill{ font-size:12px; font-weight:900; padding:6px 10px; border-radius:999px; border:1px solid #e5e7eb; background:#f8fafc; }
       #wlApWizard3 .w3-pill.on{ background:#111827; color:#fff; border-color:#111827; }
-      #wlApWizard3 .w3-body{ padding:14px; }
+      #wlApWizard3 .w3-body{ padding:14px; padding-bottom:96px; }
       #wlApWizard3 .w3-panel{ display:none; }
       #wlApWizard3 .w3-panel.on{ display:block; }
-      #wlApWizard3 .w3-nav{ display:flex; justify-content:space-between; gap:10px; margin-top:14px; position:sticky; bottom:0; background:#fff; padding-top:12px; z-index:6000; }
-      #wlApWizard3 .w3-btn{ border:1px solid #e5e7eb; background:#fff; border-radius:12px; padding:10px 12px; font-weight:1000; cursor:pointer; }
+      #wlApWizard3 .w3-nav{ display:flex; justify-content:space-between; gap:10px; margin-top:14px; position:fixed; left:50%; transform:translateX(-50%); bottom:18px; width:min(1000px, calc(100vw - 24px)); background:#fff; padding:12px 14px; border:1px solid #e5e7eb; border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.08); z-index:2147483647; pointer-events:auto; }
+      #wlApWizard3 .w3-btn{ pointer-events:auto;  border:1px solid #e5e7eb; background:#fff; border-radius:12px; padding:10px 12px; font-weight:1000; cursor:pointer; }
       #wlApWizard3 .w3-btn.primary{ background:#111827; color:#fff; border-color:#111827; }
       #wlApWizard3 .w3-btn[disabled]{ opacity:.5; cursor:not-allowed; }
       #wlApWizard3 .w3-help{ font-size:12px; color:#475569; margin-top:8px; line-height:1.35; }
