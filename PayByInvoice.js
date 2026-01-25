@@ -3747,24 +3747,31 @@ function setStep(n){
 
 
 /* ============================================================
-   WL PATCH: Proxy Billing UI in Step 1 (do NOT move server controls)
-   - Keeps original Billing controls where WebForms expects them
-   - Adds proxy inputs to Step 1 and syncs values into real fields
-   - Hides the real Billing row visually (off-screen, not display:none)
+   WL PATCH: Billing Address PROXY (Step 1) — Source of Truth
+   - DO NOT move server controls (prevents EventValidation errors)
+   - Create proxy Billing Address input in Step 1
+   - Hide the real Billing Address field off-screen (kept in DOM)
+   - Persist proxy value in sessionStorage
+   - After every partial postback: re-apply proxy value to real billing field
+   - ZIP is NOT duplicated (remove proxy ZIP)
    ============================================================ */
 (function () {
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
-  if (window.__WL_BILLING_PROXY_STEP1__) return;
-  window.__WL_BILLING_PROXY_STEP1__ = true;
+  if (window.__WL_BILLING_PROXY_STEP1_V2__) return;
+  window.__WL_BILLING_PROXY_STEP1_V2__ = true;
+
+  const SS_KEY = "wl_ap_billing_proxy_addr";
 
   const IDS = {
     billText: "ctl00_PageBody_BillingAddressTextBox",
-    billZip:  "ctl00_PageBody_BillingPostalCodeTextBox",
     billWrap: "ctl00_PageBody_BillingAddressContainer", // may or may not exist
     addrDD:   "ctl00_PageBody_AddressDropdownList",
   };
 
   const $ = (id) => document.getElementById(id);
+
+  function ssGet(){ try { return sessionStorage.getItem(SS_KEY) || ""; } catch { return ""; } }
+  function ssSet(v){ try { sessionStorage.setItem(SS_KEY, v || ""); } catch {} }
 
   function stepPanel(stepNum) {
     return (
@@ -3783,15 +3790,11 @@ function setStep(n){
   function realBillingWrap() {
     const c = $(IDS.billWrap);
     if (c) return c;
+
     const b = $(IDS.billText);
     if (!b) return null;
-    return b.closest(".epi-form-group-acctPayment") || b.closest("tr") || b.parentElement;
-  }
 
-  function realZipWrap() {
-    const z = $(IDS.billZip);
-    if (!z) return null;
-    return z.closest(".epi-form-group-acctPayment") || z.closest("tr") || z.parentElement;
+    return b.closest(".epi-form-group-acctPayment") || b.closest("tr") || b.parentElement;
   }
 
   function hideOffscreen(el) {
@@ -3806,7 +3809,7 @@ function setStep(n){
 
   function ensureProxyUI() {
     const host = step1Host();
-    if (!host) return;
+    if (!host) return null;
 
     let box = document.getElementById("wlBillingProxyBox");
     if (box) return box;
@@ -3822,9 +3825,7 @@ function setStep(n){
       <div style="font-weight:600; margin-bottom:8px;">Billing Address</div>
       <label style="display:block; font-size:12px; margin-bottom:4px;">Address</label>
       <input id="wlBillingProxyAddress" type="text"
-             style="width:100%; padding:10px; border:1px solid rgba(0,0,0,0.2); border-radius:8px; margin-bottom:10px;" />
-      <label style="display:block; font-size:12px; margin-bottom:4px;">ZIP</label>
-      <input id="wlBillingProxyZip" type="text" inputmode="numeric"
+             autocomplete="street-address"
              style="width:100%; padding:10px; border:1px solid rgba(0,0,0,0.2); border-radius:8px;" />
       <div id="wlBillingProxyHint" style="font-size:12px; opacity:0.7; margin-top:8px;"></div>
     `;
@@ -3833,43 +3834,36 @@ function setStep(n){
     return box;
   }
 
-  function syncProxyFromReal() {
+  function applyProxyToReal() {
     const realAddr = $(IDS.billText);
-    const realZip  = $(IDS.billZip);
-    const pAddr = document.getElementById("wlBillingProxyAddress");
-    const pZip  = document.getElementById("wlBillingProxyZip");
-    if (!pAddr || !pZip) return;
+    if (!realAddr) return;
 
-    if (realAddr && (!pAddr.value || pAddr.__wlLastSyncFromReal !== realAddr.value)) {
-      pAddr.value = realAddr.value || "";
-      pAddr.__wlLastSyncFromReal = pAddr.value;
-    }
-    if (realZip && (!pZip.value || pZip.__wlLastSyncFromReal !== realZip.value)) {
-      pZip.value = realZip.value || "";
-      pZip.__wlLastSyncFromReal = pZip.value;
+    const proxyVal = ssGet();
+    if (!proxyVal) return;
+
+    // Always re-apply after rerenders, even if server blanked it.
+    if (realAddr.value !== proxyVal) {
+      realAddr.value = proxyVal;
     }
   }
 
-  function syncRealFromProxy() {
-    const realAddr = $(IDS.billText);
-    const realZip  = $(IDS.billZip);
-    const pAddr = document.getElementById("wlBillingProxyAddress");
-    const pZip  = document.getElementById("wlBillingProxyZip");
-    if (!pAddr || !pZip) return;
+  function applyRealToProxyOnlyIfEmpty() {
+    // Only seed proxy from real on first load if proxy storage is empty
+    const proxyVal = ssGet();
+    if (proxyVal) return;
 
-    if (realAddr) realAddr.value = pAddr.value || "";
-    if (realZip)  realZip.value  = pZip.value || "";
+    const realAddr = $(IDS.billText);
+    const realVal = realAddr ? String(realAddr.value || "") : "";
+    if (realVal.trim()) ssSet(realVal);
   }
 
-  // Optional: controlled "safe sync postback" when leaving Step 1 or selecting COF.
-  // This avoids the “EventValidation” mismatch by letting the server process changes.
+  // Optional: controlled sync postback (use sparingly)
   function safeSyncPostback() {
     if (typeof window.__doPostBack !== "function") return;
 
     const addrDD = $(IDS.addrDD);
     const realAddr = $(IDS.billText);
 
-    // Prefer address dropdown as the safer event target
     const target = (addrDD && (addrDD.name || addrDD.id)) || (realAddr && (realAddr.name || realAddr.id));
     if (!target) return;
 
@@ -3878,63 +3872,78 @@ function setStep(n){
 
   function bindProxyHandlers() {
     const pAddr = document.getElementById("wlBillingProxyAddress");
-    const pZip  = document.getElementById("wlBillingProxyZip");
     if (!pAddr || pAddr.__wlBound) return;
 
-    const debounced = (() => {
-      let t = null;
-      return () => {
-        clearTimeout(t);
-        t = setTimeout(() => {
-          syncRealFromProxy();
-          // Don’t spam postbacks; only sync server on blur / step change / COF click
-        }, 120);
-      };
-    })();
+    // Load from sessionStorage
+    pAddr.value = ssGet();
 
-    pAddr.addEventListener("input", debounced);
-    pZip.addEventListener("input", debounced);
+    let t = null;
+    function debouncedWrite() {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        ssSet(pAddr.value || "");
+        applyProxyToReal();
+      }, 80);
+    }
 
-    pAddr.addEventListener("blur", () => { syncRealFromProxy(); /* optional */ safeSyncPostback(); });
-    pZip.addEventListener("blur",  () => { syncRealFromProxy(); /* optional */ safeSyncPostback(); });
+    pAddr.addEventListener("input", debouncedWrite);
+    pAddr.addEventListener("change", debouncedWrite);
+
+    // On blur: persist + push to real + optionally sync server
+    pAddr.addEventListener("blur", () => {
+      ssSet(pAddr.value || "");
+      applyProxyToReal();
+      // If you WANT the server to process billing immediately, uncomment:
+      // safeSyncPostback();
+    });
 
     pAddr.__wlBound = true;
   }
 
   function hideRealBillingUI() {
     hideOffscreen(realBillingWrap());
-    hideOffscreen(realZipWrap());
   }
 
   function boot() {
-    // 1) Ensure proxy exists
+    // Create proxy UI
     ensureProxyUI();
 
-    // 2) Hide real controls (but keep in DOM)
+    // Keep real controls in DOM but hidden
     hideRealBillingUI();
 
-    // 3) Keep values in sync
-    syncProxyFromReal();
+    // Seed proxy from real ONLY if proxy empty
+    applyRealToProxyOnlyIfEmpty();
+
+    // Bind handlers + push proxy value into real
     bindProxyHandlers();
+    applyProxyToReal();
+
+    // Hint text (optional)
+    const hint = document.getElementById("wlBillingProxyHint");
+    if (hint) hint.textContent = "We’ll use this for billing verification.";
   }
 
-  // Initial + after postbacks
+  // Initial
   setTimeout(boot, 50);
-  setTimeout(boot, 300);
-  setTimeout(boot, 900);
+  setTimeout(boot, 250);
+  setTimeout(boot, 800);
 
+  // After partial postbacks
   try {
     if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
       const prm = Sys.WebForms.PageRequestManager.getInstance();
-      if (!prm.__wlBillingProxyBound) {
+      if (!prm.__wlBillingProxyBoundV2) {
         prm.add_endRequest(function () {
-          setTimeout(boot, 50);
-          setTimeout(syncProxyFromReal, 220);
+          // After server rerender, re-create proxy if needed, then re-apply value to real
+          setTimeout(boot, 40);
+          setTimeout(applyProxyToReal, 120);
+          setTimeout(applyProxyToReal, 320);
         });
-        prm.__wlBillingProxyBound = true;
+        prm.__wlBillingProxyBoundV2 = true;
       }
     }
   } catch {}
 
 })();
+
 
