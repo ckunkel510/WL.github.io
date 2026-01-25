@@ -1,6 +1,8 @@
 
 (function () {
   'use strict';
+  console.log('[AP] PayByInvoice version v11 loaded');
+
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
   /* =============================
@@ -3979,7 +3981,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details.</div>
+        <div class="w3-title">Payment Details</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
@@ -4139,14 +4141,22 @@ function isElementVisible(el){
 }
 
 function isCreditAvailable(){
-  if (!rbCred) return false;
-  if (rbCred.disabled) return false;
+      if (!rbCred) return false;
+      if (rbCred.disabled) return false;
 
-  // If server truly hides it, either the input or its wrapper will be display:none.
-  try{
-    const csI = window.getComputedStyle(rbCred);
-    if (csI && (csI.display === 'none' || csI.visibility === 'hidden')) return false;
-  }catch{}
+      // If server explicitly hid the credit option, its wrapper is usually display:none
+      const wrap = rbCred.closest('.radiobutton') || rbCred.closest('tr') || rbCred.parentElement;
+      const hiddenByStyle = (el)=>{
+        if (!el) return false;
+        if (el.hidden) return true;
+        const s = window.getComputedStyle(el);
+        return (s.display === 'none' || s.visibility === 'hidden');
+      };
+
+      if (hiddenByStyle(wrap) || hiddenByStyle(rbCred)) return false;
+
+      return true;
+    }catch{}
 
   const wrap = rbCred.closest('.radiobutton') || rbCred.parentElement;
   try{
@@ -4249,25 +4259,24 @@ function setSelectedCard(cardEl, isSelected){
       // Met// 1) Method cards (Bank vs Credit)
       const creditAvail = isCreditAvailable();
 
-      // Render only the methods that are actually allowed.
-// Credit Card should ONLY be offered when the server allows it (e.g., Cash Account Balance).
-      methodMount.innerHTML = creditAvail ? `
-        <button type="button" class="wl-pay-card" data-method="bank">
-          <div class="wl-pay-title">Pay by Bank (ACH)</div>
-          <div class="wl-pay-sub">Use a bank account (new or saved).</div>
-        </button>
-        <button type="button" class="wl-pay-card" data-method="credit">
-          <div class="wl-pay-title">Pay by Credit Card</div>
-          <div class="wl-pay-sub">Secure card payment.</div>
-        </button>
-      ` : `
-        <button type="button" class="wl-pay-card" data-method="bank">
-          <div class="wl-pay-title">Pay by Bank (ACH)</div>
-          <div class="wl-pay-sub">Use a bank account (new or saved).</div>
-        </button>
-      `;
-
-      // Match layout to availability
+      // Only show the ACH vs Card method toggle when Card is actually available.
+      if (creditAvail){
+        methodMount.style.display = 'grid';
+        methodMount.innerHTML = `
+          <button type="button" class="wl-pay-card" data-method="bank">
+            <div class="wl-pay-title">Pay by Bank (ACH)</div>
+            <div class="wl-pay-sub">Use a bank account (new or saved).</div>
+          </button>
+          <button type="button" class="wl-pay-card" data-method="credit">
+            <div class="wl-pay-title">Pay by Card</div>
+            <div class="wl-pay-sub">Available for select accounts.</div>
+          </button>
+        `;
+      } else {
+        methodMount.style.display = 'none';
+        methodMount.innerHTML = '';
+      }
+// Match layout to availability
       try{ methodMount.style.gridTemplateColumns = creditAvail ? '1fr 1fr' : '1fr'; }catch{};
 
       const bankMethodCard   = methodMount.querySelector('[data-method="bank"]');
@@ -4277,7 +4286,7 @@ function setSelectedCard(cardEl, isSelected){
       setSelectedCard(bankMethodCard, !isCredit);
       setSelectedCard(creditMethodCard, isCredit);
 
-      bankMount.style.display = isCredit ? 'none' : 'grid';
+      bankMount.style.display = 'grid';
 
       // Bank account cards (Add new + saved)
       const opts = [];
