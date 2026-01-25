@@ -3947,3 +3947,162 @@ function setStep(n){
 })();
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ============================================================
+   WL PATCH: Prime before "Check on File" (prevents EventValidation)
+   - Intercepts COF click
+   - Runs a safe priming postback first (AddressDropdown preferred)
+   - After endRequest, re-click COF
+   ============================================================ */
+(function () {
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+  if (window.__WL_COF_PRIME_PATCH__) return;
+  window.__WL_COF_PRIME_PATCH__ = true;
+
+  const IDS = {
+    rbCof: "ctl00_PageBody_RadioButton_PayByCheckOnFile",
+    addrDD: "ctl00_PageBody_AddressDropdownList",
+    // fallback stable target if needed:
+    email: "ctl00_PageBody_EmailTextBox"
+  };
+
+  const SS = {
+    priming: "__WL_COF_PRIMING",
+    wantCof: "__WL_COF_RECLICK"
+  };
+
+  const $ = (id) => document.getElementById(id);
+  function ssGet(k){ try { return sessionStorage.getItem(k); } catch { return null; } }
+  function ssSet(k,v){ try { sessionStorage.setItem(k,v); } catch {} }
+  function ssDel(k){ try { sessionStorage.removeItem(k); } catch {} }
+
+  function getPrimeTarget() {
+    const dd = $(IDS.addrDD);
+    if (dd && (dd.name || dd.id)) return (dd.name || dd.id);
+
+    const em = $(IDS.email);
+    if (em && (em.name || em.id)) return (em.name || em.id);
+
+    return null;
+  }
+
+  function doPrimePostback() {
+    if (typeof window.__doPostBack !== "function") return false;
+    const target = getPrimeTarget();
+    if (!target) return false;
+
+    ssSet(SS.priming, "1");
+    try {
+      window.__doPostBack(target, "");
+      return true;
+    } catch {
+      ssDel(SS.priming);
+      return false;
+    }
+  }
+
+  function armCofIntercept() {
+    const rb = $(IDS.rbCof);
+    if (!rb || rb.__wlArmed) return;
+
+    rb.addEventListener("click", function (e) {
+      // If we're already priming, let it happen
+      if (ssGet(SS.priming) === "1") return;
+
+      // Intercept first COF click, prime, then re-click
+      e.preventDefault();
+      e.stopPropagation();
+
+      ssSet(SS.wantCof, "1");
+      doPrimePostback();
+      return false;
+    }, true);
+
+    rb.__wlArmed = true;
+  }
+
+  function afterEndRequest() {
+    // If we just primed, clear flag and re-click COF
+    if (ssGet(SS.priming) === "1") {
+      ssDel(SS.priming);
+    }
+
+    if (ssGet(SS.wantCof) === "1") {
+      ssDel(SS.wantCof);
+      const rb = $(IDS.rbCof);
+      setTimeout(() => {
+        try { rb && rb.click(); } catch {}
+      }, 120);
+    }
+  }
+
+  // boot
+  setTimeout(armCofIntercept, 0);
+  setTimeout(armCofIntercept, 250);
+  setTimeout(armCofIntercept, 800);
+
+  // hook endRequest
+  try {
+    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
+      const prm = Sys.WebForms.PageRequestManager.getInstance();
+      if (!prm.__wlCofPrimeBound) {
+        prm.add_endRequest(function () {
+          setTimeout(armCofIntercept, 50);
+          setTimeout(afterEndRequest, 120);
+          setTimeout(afterEndRequest, 260);
+        });
+        prm.__wlCofPrimeBound = true;
+      }
+    }
+  } catch {}
+})();
+
