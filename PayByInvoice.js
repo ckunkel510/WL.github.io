@@ -3780,9 +3780,152 @@ if (jobBtn){
     }
   }
 
+  function hideWizardOnSuccess(){
+    try{
+      // Hide any injected wizard(s) and related chrome
+      document.querySelectorAll('#wlApWizard3, .wl-shell, #wlTopBar').forEach(el=>{ try{ el.style.display='none'; }catch(e){} });
+      // Some builds can accidentally duplicate the wizard markup (invalid duplicate ids). Hide all occurrences.
+      document.querySelectorAll('[id="wlApWizard3"]').forEach(el=>{ try{ el.style.display='none'; }catch(e){} });
+    }catch(e){}
+  }
+
+  function injectSuccessStyles(){
+    if (document.getElementById('wl-success-css')) return;
+    const css = document.createElement('style');
+    css.id = 'wl-success-css';
+    css.textContent = `
+      .wl-confirm-wrap{ max-width: 980px; margin: 0 auto 24px; }
+      .wl-confirm-card{ border:1px solid #e5e7eb; border-radius:16px; background:#fff; box-shadow:0 1px 2px rgba(0,0,0,.04); overflow:hidden; }
+      .wl-confirm-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:12px; padding:14px 16px; border-bottom:1px solid #e5e7eb; }
+      .wl-confirm-title{ font-weight:1000; font-size:18px; line-height:1.2; }
+      .wl-confirm-sub{ color:#475569; font-size:12px; margin-top:2px; }
+      .wl-confirm-actions{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:flex-end; }
+      .wl-btn{ display:inline-flex; align-items:center; justify-content:center; gap:8px; border-radius:12px; padding:10px 12px; font-weight:900; border:1px solid #e5e7eb; background:#fff; cursor:pointer; text-decoration:none; color:#111827; }
+      .wl-btn.primary{ background:#111827; color:#fff; border-color:#111827; }
+      .wl-btn:hover{ filter:brightness(.97); }
+      .wl-confirm-body{ padding:14px 16px 16px; }
+      .wl-grid{ display:grid; gap:10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .wl-field{ border:1px solid #e5e7eb; border-radius:14px; padding:10px 12px; background:#f8fafc; }
+      .wl-k{ color:#475569; font-size:12px; font-weight:900; text-transform:uppercase; letter-spacing:.02em; }
+      .wl-v{ margin-top:4px; font-weight:900; color:#0f172a; }
+      .wl-v small{ font-weight:800; color:#475569; }
+      .wl-wide{ grid-column: 1 / -1; }
+      .wl-store{ line-height:1.25rem; font-weight:800; }
+      .wl-muted{ color:#475569; font-weight:700; }
+      .wl-raw{ margin-top:14px; border-top:1px dashed #e5e7eb; padding-top:12px; }
+      .wl-raw summary{ cursor:pointer; font-weight:900; }
+      .wl-hide-print{ display:block; }
+      @media (max-width: 720px){ .wl-grid{ grid-template-columns: 1fr; } }
+      @media print{
+        .wl-confirm-actions, .wl-hide-print{ display:none !important; }
+        .wl-confirm-wrap{ max-width:none; margin:0; }
+        body{ background:#fff !important; }
+      }
+    `;
+    document.head.appendChild(css);
+  }
+
+  function normalizeLines(s){
+    const CR = String.fromCharCode(13);
+    return String(s||'')
+      .split('\n')
+      .map(x=>String(x||'').replaceAll(CR,'').trim())
+      .filter(Boolean);
+  }
+
+  function renderSuccessConfirmation(selectionSummaryText){
+    const host = document.querySelector('.bodyFlexItem');
+    if (!host) return;
+
+    // Avoid double-build
+    if (document.getElementById('wlConfirmV3')) return;
+
+    injectSuccessStyles();
+
+    const payment = parsePaymentDataTable();
+    if (!payment) return;
+
+    // Clean/derive values
+    const locLines = normalizeLines(payment.LocationBlock);
+    const storeLine = locLines.shift() || 'Woodson Lumber';
+    const addrHtml = locLines.length ? locLines.join('<br>') : '';
+    const email = (payment.Email || '').trim();
+
+    // Hide original paragraph + raw table area (we'll rehost them below as "Raw details")
+    const p = host.querySelector('p');
+    if (p) p.style.display = 'none';
+
+    const rawTable = host.querySelector('table.paymentDataTable');
+    if (rawTable) rawTable.style.display = 'none';
+
+    // Button table (original print/save area)
+    const legacyBtnTable = host.querySelector('a[onclick*="window.print"]')?.closest('div[style*="display: table"]') || null;
+    if (legacyBtnTable) legacyBtnTable.style.display = 'none';
+
+    const wrap = document.createElement('div');
+    wrap.id = 'wlConfirmV3';
+    wrap.className = 'wl-confirm-wrap';
+    wrap.innerHTML = `
+      <div class="wl-confirm-card">
+        <div class="wl-confirm-head">
+          <div>
+            <div class="wl-confirm-title">Payment Confirmation</div>
+            <div class="wl-confirm-sub">Your payment was successful. Keep this page for your records.</div>
+          </div>
+          <div class="wl-confirm-actions wl-hide-print">
+            <a class="wl-btn" href="AccountInfo_R.aspx" title="Back to My Account">Back to My Account</a>
+            <button type="button" class="wl-btn primary" id="wlConfirmPrint">Print Receipt</button>
+          </div>
+        </div>
+        <div class="wl-confirm-body">
+          <div class="wl-grid">
+            <div class="wl-field"><div class="wl-k">Amount</div><div class="wl-v">${escapeHtml(payment.Amount || '—')}</div></div>
+            <div class="wl-field"><div class="wl-k">Date &amp; Time</div><div class="wl-v">${escapeHtml(payment.DateAndTime || '—')}</div></div>
+            <div class="wl-field"><div class="wl-k">Payment Method</div><div class="wl-v">${escapeHtml(payment.Method || '—')}</div></div>
+            <div class="wl-field"><div class="wl-k">Authorization Code</div><div class="wl-v">${escapeHtml(payment.AuthorizationCode || '—')}</div></div>
+            <div class="wl-field"><div class="wl-k">Payment Confirmation #</div><div class="wl-v">${escapeHtml(payment.PaymentConfirmation || '—')}</div></div>
+            <div class="wl-field"><div class="wl-k">Selected Items</div><div class="wl-v">${escapeHtml(selectionSummaryText || '(not available)')}</div></div>
+            <div class="wl-field wl-wide"><div class="wl-k">Store</div><div class="wl-v wl-store">${escapeHtml(storeLine)}<br><span class="wl-muted">${addrHtml || ''}</span></div></div>
+            ${email ? `<div class="wl-field wl-wide"><div class="wl-k">Email Receipt Sent To</div><div class="wl-v">${escapeHtml(email)}</div></div>` : ``}
+            ${(payment.Notes && String(payment.Notes).trim()) ? `<div class="wl-field wl-wide"><div class="wl-k">Notes</div><div class="wl-v">${escapeHtml(payment.Notes)}</div></div>` : ``}
+            ${(payment.RemittanceAdvice && String(payment.RemittanceAdvice).trim()) ? `<div class="wl-field wl-wide"><div class="wl-k">Remittance Advice</div><div class="wl-v">${escapeHtml(payment.RemittanceAdvice)}</div></div>` : ``}
+          </div>
+
+          <details class="wl-raw">
+            <summary>Show raw payment details</summary>
+            <div style="margin-top:10px;"></div>
+          </details>
+        </div>
+      </div>
+    `;
+
+    // Insert at top of the content area
+    host.prepend(wrap);
+
+    // Re-host the original payment table inside details (so nothing is lost)
+    const details = wrap.querySelector('details.wl-raw > div');
+    if (details && rawTable){
+      try{
+        rawTable.style.display = '';
+        details.appendChild(rawTable);
+      }catch(e){}
+    }
+
+    // Wire print (use the same receipt builder as the Print Receipt button)
+    const printBtn = wrap.querySelector('#wlConfirmPrint');
+    if (printBtn){
+      printBtn.addEventListener('click', function(){
+        const p2 = parsePaymentDataTable();
+        if (!p2) { window.print(); return; }
+        const html = buildReceiptHTML(p2, selectionSummaryText || '(not available)');
+        openPrintWindow(html);
+      });
+    }
+  }
+
   function applySuccessEnhancements() {
     const table = document.querySelector('table.paymentDataTable');
-    if (!table) return;
+    if (!table) return '';
 
     // Get selection info from sessionStorage pref object
     const pref = loadPrefSafe();
@@ -3796,11 +3939,15 @@ if (jobBtn){
 
     // 3) Patch buttons (Print Receipt + Save payment for future)
     patchButtons(sel.text);
+
+    return sel.text || '';
   }
 
   function boot() {
     if (!isSuccessView()) return;
-    applySuccessEnhancements();
+    const selText = applySuccessEnhancements();
+    hideWizardOnSuccess();
+    renderSuccessConfirmation(selText);
   }
 
   // Initial
@@ -3877,6 +4024,15 @@ if (jobBtn){
 (function () {
   'use strict';
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+
+  // If we're on the success/receipt view, do NOT mount the wizard UI.
+  // The success patch will render a clean confirmation + printable receipt.
+  try{
+    const t = document.querySelector('table.paymentDataTable');
+    const txt = (document.querySelector('.bodyFlexItem')?.innerText || document.body.innerText || '');
+    if (t && (/account payment was successful/i.test(txt) || /payment was successful/i.test(txt))) return;
+  }catch(e){}
+
   if (window.__WL_AP_WIZ3) return;
   window.__WL_AP_WIZ3 = true;
 
@@ -4057,7 +4213,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details</div>
+        <div class="w3-title">Payment Details.</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
