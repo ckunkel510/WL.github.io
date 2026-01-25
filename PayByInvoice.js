@@ -3618,7 +3618,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Wizard</div>
+        <div class="w3-title">Payment Details</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
@@ -3800,16 +3800,22 @@ function setStep(n){
     $('w3Next').addEventListener('click', ()=>{
       if (!validateStep()) return;
 
-      // Step 0 -> Step 1: persist Billing and reload to avoid WebForms onchange jump
+      // Step 0 -> Step 1: persist Billing; advance immediately; then reload (optional) to stabilize WebForms rendering
       if (step === 0){
         try{
           const real = $('ctl00_PageBody_BillingAddressTextBox');
           const proxy = document.getElementById('wlProxyBillingInput');
           const v = (proxy?.value || real?.value || '').trim();
           saveBillDraft(v);
+
+          // Advance now so the user lands on Step 2 behavior even if reload is blocked
           sessionStorage.setItem(STEP_ADV_KEY, '1');
+          sessionStorage.setItem(STEP_KEY, '1');
+          setStep(1);
+
+          // Reload shortly after to rebuild DOM cleanly (won't run if navigation is blocked)
+          setTimeout(()=>{ try{ location.reload(); }catch{} }, 50);
         }catch{}
-        try{ location.reload(); }catch{}
         return;
       }
 
