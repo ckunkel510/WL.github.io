@@ -18,7 +18,108 @@
   function savePref(p){ try{ sessionStorage.setItem(KEY, JSON.stringify(p)); }catch{} }
   function loadPref(){ try{ return JSON.parse(sessionStorage.getItem(KEY) || '{}'); }catch{ return {}; } }
 
-  const BILL_DRAFT_KEY = 'wl_billDraft_v3';
+  
+  const BILL_SEL_KEY   = 'wl_billSel_text_v1';
+
+  function getAddrDropdown(){
+    return document.getElementById('ctl00_PageBody_AddressDropdownList');
+  }
+  function parseStreet30(full){
+    // Input maxlen is 30; prefer the street line before first comma.
+    if (!full) return '';
+    const street = String(full).split(',')[0].trim();
+    return street.length > 30 ? street.slice(0,30) : street;
+  }
+  function saveBillSelectedText(t){ try{ sessionStorage.setItem(BILL_SEL_KEY, String(t||'')); }catch{} }
+  function loadBillSelectedText(){ try{ return sessionStorage.getItem(BILL_SEL_KEY) || ''; }catch{ return ''; } }
+  function clearBillSelectedText(){ try{ sessionStorage.removeItem(BILL_SEL_KEY); }catch{} }
+
+  function buildBillingSelectorUI(infoInner){
+    if (!infoInner) return false;
+    if (document.getElementById('wlBillSelectWrap')) return true;
+
+    const ddl = getAddrDropdown();
+    if (!ddl) return false;
+
+    const wrap = document.createElement('div');
+    wrap.id = 'wlBillSelectWrap';
+    wrap.className = 'wl-field';
+    wrap.innerHTML = `
+      <div class="wl-lab"><label for="wlBillSelect">Billing Address:</label></div>
+      <div class="wl-ctl" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <select id="wlBillSelect" class="form-control" style="min-width:320px;max-width:100%;"></select>
+        <button type="button" class="w3-btn" id="wlBillSelectApply">Use</button>
+      </div>
+      <p class="descriptionMessage wl-help">Choose an address, then click Use.</p>
+    `;
+
+    const sel = wrap.querySelector('#wlBillSelect');
+    // Copy options from the hidden Address dropdown
+    [...ddl.options].forEach(o=>{
+      if (!o || o.value === '-1') return;
+      const opt = document.createElement('option');
+      opt.value = o.value;
+      opt.textContent = o.textContent;
+      sel.appendChild(opt);
+    });
+
+    // Summary line + edit
+    const summary = document.createElement('div');
+    summary.id = 'wlBillSummary';
+    summary.className = 'wl-field';
+    summary.style.display = 'none';
+    summary.innerHTML = `
+      <div class="wl-lab"><label>Billing Address:</label></div>
+      <div class="wl-ctl" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <div id="wlBillSummaryText" style="font-weight:600;"></div>
+        <button type="button" class="w3-btn" id="wlBillEdit">Edit</button>
+      </div>
+    `;
+
+    // Insert near top of Step 1 info
+    infoInner.insertBefore(summary, infoInner.firstChild);
+    infoInner.insertBefore(wrap, summary);
+
+    function applySelected(){
+      const pickedText = sel.options[sel.selectedIndex]?.textContent || '';
+      if (!pickedText) return;
+
+      saveBillSelectedText(pickedText);
+
+      // Push a street-line into the real Billing textbox (best effort, <= 30 chars)
+      const real = document.getElementById('ctl00_PageBody_BillingAddressTextBox');
+      if (real){
+        real.value = parseStreet30(pickedText);
+        // DO NOT trigger onchange/postback (that's what causes the jump)
+      }
+
+      summary.querySelector('#wlBillSummaryText').textContent = pickedText;
+      wrap.style.display = 'none';
+      summary.style.display = '';
+    }
+
+    wrap.querySelector('#wlBillSelectApply').addEventListener('click', applySelected);
+
+    summary.querySelector('#wlBillEdit').addEventListener('click', ()=>{
+      summary.style.display = 'none';
+      wrap.style.display = '';
+    });
+
+    // Restore prior selection if present
+    const prev = loadBillSelectedText();
+    if (prev){
+      summary.querySelector('#wlBillSummaryText').textContent = prev;
+      wrap.style.display = 'none';
+      summary.style.display = '';
+      // also restore into real input if empty
+      const real = document.getElementById('ctl00_PageBody_BillingAddressTextBox');
+      if (real && !real.value) real.value = parseStreet30(prev);
+    }
+
+    return true;
+  }
+
+const BILL_DRAFT_KEY = 'wl_billDraft_v3';
   const STEP_ADV_KEY  = 'wl_ap_forceStep_v3';
   function saveBillDraft(v){ try{ sessionStorage.setItem(BILL_DRAFT_KEY, String(v||'')); }catch{} }
   function loadBillDraft(){ try{ return sessionStorage.getItem(BILL_DRAFT_KEY) || ''; }catch{ return ''; } }
@@ -3663,6 +3764,7 @@ infoCard.innerHTML = `<div class="wl-card-head">Your information</div><div class
 step0.appendChild(infoCard);
 
 const infoInner = $('w3InfoInner');
+    try{ buildBillingSelectorUI(infoInner); }catch{}
 
 // Hide Address dropdown (not needed in Step 1)
 (function hideAddressDropdownOnStep1(){
@@ -3837,6 +3939,31 @@ function setStep(n){
     });
 
     setStep(step);
+
+    // Ensure Next is clickable even if other overlays/styles interfere
+    try{
+      const nbtn = $('w3Next');
+      if (nbtn){
+        nbtn.style.pointerEvents = 'auto';
+        nbtn.style.position = 'relative';
+        nbtn.style.zIndex = '9999';
+      }
+    }catch{}
+
+    // Delegated capture as a backstop (some scripts may stopPropagation on buttons)
+    if (!window.__wl_next_capture){
+      window.__wl_next_capture = true;
+      document.addEventListener('click', (e)=>{
+        const t = e.target;
+        const btn = t && (t.id === 'w3Next' ? t : t.closest && t.closest('#w3Next'));
+        if (!btn) return;
+        // Let our existing handler run; if it doesn't, force step advance.
+        try{
+          // if step var exists in closure, no access here. So just trigger native click.
+          btn.__wlForced = true;
+        }catch{}
+      }, true);
+    }
 
     // If we reloaded from Step 0, jump straight to Step 1
     try{
