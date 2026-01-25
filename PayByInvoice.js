@@ -17,20 +17,20 @@
   const $ = (id)=> document.getElementById(id);
   const KEY = 'wl_ap_prefill_v3';
 
-  function savePref(p){ try{ sessionStorage.setItem(KEY, JSON.stringify(p)); }catch{} }
+  function savePref(p){ try{ sessionStorage.setItem(KEY, JSON.stringify(p)); }catch(e){} }
   function loadPref(){ try{ return JSON.parse(sessionStorage.getItem(KEY) || '{}'); }catch{ return {}; } }
 
   const BILL_DRAFT_KEY = 'wl_billDraft_v3';
   const STEP_ADV_KEY  = 'wl_ap_forceStep_v3';
-  function saveBillDraft(v){ try{ sessionStorage.setItem(BILL_DRAFT_KEY, String(v||'')); }catch{} }
+  function saveBillDraft(v){ try{ sessionStorage.setItem(BILL_DRAFT_KEY, String(v||'')); }catch(e){} }
   function loadBillDraft(){ try{ return sessionStorage.getItem(BILL_DRAFT_KEY) || ''; }catch{ return ''; } }
 
   const BILL_LOCK_KEY  = 'wl_billLocked_v1';
   const WL_FORCE_WIZ_PB_KEY = 'wl_forceWizardPostback_v1';
 
-  function lockBilling(v){ try{ sessionStorage.setItem(BILL_LOCK_KEY, String(v||'')); }catch{} }
+  function lockBilling(v){ try{ sessionStorage.setItem(BILL_LOCK_KEY, String(v||'')); }catch(e){} }
   function loadBillingLock(){ try{ return sessionStorage.getItem(BILL_LOCK_KEY) || ''; }catch{ return ''; } }
-  function clearBillingLock(){ try{ sessionStorage.removeItem(BILL_LOCK_KEY); }catch{} }
+  function clearBillingLock(){ try{ sessionStorage.removeItem(BILL_LOCK_KEY); }catch(e){} }
 
   function shouldForceWizardPostback(){
     try{
@@ -38,7 +38,7 @@
       return !(t && (Date.now() - t) < 8000);
     }catch{ return true; }
   }
-  function markWizardPostback(){ try{ sessionStorage.setItem(WL_FORCE_WIZ_PB_KEY, String(Date.now())); }catch{} }
+  function markWizardPostback(){ try{ sessionStorage.setItem(WL_FORCE_WIZ_PB_KEY, String(Date.now())); }catch(e){} }
 
   // Force a server round-trip using the same path as "Make Payment"
   function forceWizardRoundTrip(reason){
@@ -46,11 +46,11 @@
       if (!shouldForceWizardPostback()) return false;
       markWizardPostback();
       const proxy = document.getElementById('wlProxySubmit');
-      if (proxy){ try{ proxy.click(); }catch{} return true; }
+      if (proxy){ try{ proxy.click(); }catch(e){} return true; }
       const real = document.querySelector('#wlSubmitMount .submit-button-panel button, #wlSubmitMount .submit-button-panel input[type="submit"], #wlSubmitMount .submit-button-panel input[type="button"]')
         || document.querySelector('#ctl00_PageBody_MakePaymentPanel .submit-button-panel button, #ctl00_PageBody_MakePaymentPanel .submit-button-panel input[type="submit"], #ctl00_PageBody_MakePaymentPanel .submit-button-panel input[type="button"]');
-      if (real){ try{ real.click(); }catch{} return true; }
-    }catch{}
+      if (real){ try{ real.click(); }catch(e){} return true; }
+    }catch(e){}
     return false;
   }
 
@@ -63,7 +63,7 @@
       return !(t && (Date.now() - t) < 8000);
     }catch{ return true; }
   }
-  function markCheckPostback(){ try{ sessionStorage.setItem(WL_FORCE_CHECK_PB_KEY, String(Date.now())); }catch{} }
+  function markCheckPostback(){ try{ sessionStorage.setItem(WL_FORCE_CHECK_PB_KEY, String(Date.now())); }catch(e){} }
 
   function forcePayByCheckRoundTrip(reason){
     try{
@@ -85,7 +85,7 @@
 
       // Last resort: use the Make Payment proxy (if present)
       return forceWizardRoundTrip('fallback-from-check:' + (reason||''));
-    }catch{}
+    }catch(e){}
     return false;
   }
 
@@ -96,7 +96,7 @@
       if (!v) return null;
 
       let disp = document.getElementById('wlBillingDisplayWrap');
-      if (disp) { try{ disp.classList.add('wl-force-show'); }catch{} }
+      if (disp) { try{ disp.classList.add('wl-force-show'); }catch(e){} }
       if (!disp){
         disp = document.createElement('div');
         disp.id = 'wlBillingDisplayWrap';
@@ -135,10 +135,10 @@
         });
       }
       return disp;
-    }catch{}
+    }catch(e){}
     return null;
   }
-  function clearBillDraft(){ try{ sessionStorage.removeItem(BILL_DRAFT_KEY); }catch{} }
+  function clearBillDraft(){ try{ sessionStorage.removeItem(BILL_DRAFT_KEY); }catch(e){} }
 
   /* ---------- parsing helpers ---------- */
   function trim(s){ return String(s||'').trim(); }
@@ -383,7 +383,7 @@ function startSelectionSync(){
         savePref(next);
         applyPrefill();
       }
-    }catch{}
+    }catch(e){}
   }, 700);
 }
 
@@ -398,7 +398,7 @@ function startSelectionSync(){
           prm.__wlPrefillBound = true;
         }
       }
-    }catch{}
+    }catch(e){}
   }
 
   // Persist user edits too (keeps docs clean + total)
@@ -754,21 +754,43 @@ wireFieldPersistence();
     const wizInfo = byId('w3InfoInner'); // Wizard v3 Step 1
     const grid    = byId('wlFormGrid') || document; // Payment step container (legacy)
 
-    const billContainer = byId('ctl00_PageBody_BillingAddressContainer') ||
-                          byId('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment') ||
-                          byId('ctl00_PageBody_BillingAddressTextBox')?.closest('.wl-field'); // your custom wrapper
+    // Primary known IDs
+    let billBox = byId('ctl00_PageBody_BillingAddressTextBox') ||
+                  byId('ctl00_PageBody_BillingAddress') ||
+                  byId('ctl00$PageBody$BillingAddressTextBox');
+
+    // Broad fallback (WebTrack markup varies by patch/version)
+    if (!billBox){
+      billBox = document.querySelector('input[id*="Billing"][id*="Address"], textarea[id*="Billing"][id*="Address"], input[name*="Billing"][name*="Address"], textarea[name*="Billing"][name*="Address"]');
+    }
+
+    let billContainer =
+      byId('ctl00_PageBody_BillingAddressContainer') ||
+      (billBox && (billBox.closest('.epi-form-group-acctPayment') || billBox.closest('.epi-form-group') || billBox.closest('.wl-field') || billBox.closest('tr') || billBox.parentElement));
 
     if (billContainer){
-      const before = { parent: billContainer.parentElement?.id || '(none)' };
-
       billContainer.classList.add('wl-force-show');
       billContainer.style.removeProperty('display');
 
-      if (wizInfo){
-        // Wizard v3 active: Billing must live on Step 1, never in payment grid.
-        if (!wizInfo.contains(billContainer)) {
-          wizInfo.appendChild(billContainer);
-        }
+      // If it's a table row, force correct display
+      if (billContainer.tagName === 'TR'){
+        billContainer.style.display = 'table-row';
+      }
+
+      // Only relocate non-table-row containers (moving TR breaks DOM)
+      if (wizInfo && billContainer.tagName !== 'TR'){
+        if (!wizInfo.contains(billContainer)) wizInfo.appendChild(billContainer);
+      } else if (!wizInfo){
+        if (grid && billContainer.tagName !== 'TR' && !grid.contains(billContainer)) grid.appendChild(billContainer);
+      }
+
+      log.info('ensureBillingVisible: ensured', { id: billContainer.id || '(no-id)', box: billBox?.id || '(no-box)' });
+      return true;
+    }
+
+    log.warn('ensureBillingVisible: NOT FOUND');
+    return false;
+  }
       } else {
         // No wizard: keep legacy behavior
         if (grid && !grid.contains(billContainer)) grid.appendChild(billContainer);
@@ -1028,7 +1050,7 @@ try{
       if (st?.bank?.mode === 'saved') payAccount = st?.bank?.text || 'Saved bank account';
     }
   }
-}catch{}
+}catch(e){}
 // Fallback: infer from native controls if state missing
 try{
   const rbCheck = byId('ctl00_PageBody_RadioButton_PayByCheck');
@@ -1048,7 +1070,7 @@ try{
       payAccount = cofSel.options[cofSel.selectedIndex]?.text || 'Saved bank account';
     }
   }
-}catch{}
+}catch(e){}
 
 return {
   total: totalStr ? formatUSD(parseMoney(totalStr)) : '',
@@ -1094,12 +1116,12 @@ return {
       list.querySelectorAll('[data-editstep]').forEach(b=>{
         b.addEventListener('click', ()=>{
           const s = Number(b.getAttribute('data-editstep')||'0');
-          try{ sessionStorage.setItem(STEP_KEY, String(s)); }catch{}
-          try{ setStep(s); }catch{}
-          try{ document.getElementById('wlWizard')?.scrollIntoView({behavior:'smooth', block:'start'}); }catch{}
+          try{ sessionStorage.setItem(STEP_KEY, String(s)); }catch(e){}
+          try{ setStep(s); }catch(e){}
+          try{ document.getElementById('wlWizard')?.scrollIntoView({behavior:'smooth', block:'start'}); }catch(e){}
         });
       });
-    }catch{}
+    }catch(e){}
     log.debug('renderSummary: data', d);
   }
 
@@ -1197,7 +1219,7 @@ return {
       if (hid) hid.value = String(mode||'');
       sessionStorage.setItem('wl_shadowPayBy', String(mode||''));
       return true;
-    }catch{}
+    }catch(e){}
     return false;
   }
 
@@ -1454,7 +1476,7 @@ const IDS = {
 
   function proxyFire(){
     const mode = currentPayMode();
-    try{ window.ensureShadowPayBy?.(); }catch{}
+    try{ window.ensureShadowPayBy?.(); }catch(e){}
     const real = findNativeTrigger();
     if (real){
       log.info('proxy firing native trigger', { mode, tag: real.tagName, id: real.id, name: real.name, value: real.value });
@@ -1762,7 +1784,7 @@ const IDS = {
           prm.__wlAmtInlineBound = true;
         }
       }
-    }catch{}
+    }catch(e){}
   }
 
   if (document.readyState === 'loading'){
@@ -1867,7 +1889,7 @@ const IDS = {
   const amtEl = ()=> $id('ctl00_PageBody_PaymentAmountTextBox');
   const remEl = ()=> $id('ctl00_PageBody_RemittanceAdviceTextBox');
   const owingVal = ()=> { const el = $id('ctl00_PageBody_AmountOwingLiteral'); return el ? parseMoney(el.value || el.textContent) : 0; };
-  function triggerChange(el){ try{ el.dispatchEvent(new Event('change',{bubbles:true})); }catch{} }
+  function triggerChange(el){ try{ el.dispatchEvent(new Event('change',{bubbles:true})); }catch(e){} }
 
   /* ---------- cross-mode clearing ---------- */
   const MODE = { STATEMENT:'statement', INVOICE:'invoice', JOB:'job', FILL:'fill' };
@@ -1886,10 +1908,10 @@ const IDS = {
   function clearLastStmtRadio(){ const r = $id('lastStatementRadio'); if (r) r.checked = false; }
 
   function clearInvoiceSelectionUI(){
-    try{ window.WL_AP?.invoice?.clearSelection?.(); }catch{}
+    try{ window.WL_AP?.invoice?.clearSelection?.(); }catch(e){}
   }
   function clearJobsSelectionUI(){
-    try{ window.WL_AP?.jobs?.clearSelection?.(); }catch{}
+    try{ window.WL_AP?.jobs?.clearSelection?.(); }catch(e){}
   }
   function clearQuickState(exceptMode){
     clearAmount();
@@ -2136,7 +2158,7 @@ const IDS = {
   window.WL_AP = window.WL_AP || {};
   window.WL_AP.jobs = {
     clearSelection(){
-      try{ sessionStorage.removeItem(SESS_JOBS_SEL); }catch{}
+      try{ sessionStorage.removeItem(SESS_JOBS_SEL); }catch(e){}
       const list = $id('wlJobsList');
       if (list){
         list.querySelectorAll('input[type="checkbox"]').forEach(cb=> cb.checked = false);
@@ -2173,9 +2195,9 @@ const IDS = {
         if (infoInner && locked){
           renderBillingDisplay(infoInner, locked, 'form-control');
         }
-      }catch{}
+      }catch(e){}
       if (attempt < 10){
-        setTimeout(()=>{ try{ pinBillingToStep1({ attempt: attempt + 1 }); }catch{} }, 80 * (attempt + 1));
+        setTimeout(()=>{ try{ pinBillingToStep1({ attempt: attempt + 1 }); }catch(e){} }, 80 * (attempt + 1));
       }
       return;
     }
@@ -2232,8 +2254,8 @@ const IDS = {
           billConfirm.classList.toggle('ok', !!ok);
           billConfirm.classList.toggle('bad', ok===false);
           if (billConfirmTimer) clearTimeout(billConfirmTimer);
-          billConfirmTimer = setTimeout(()=>{ try{ billConfirm.classList.remove('on'); }catch{} }, ok===false ? 6500 : 3500);
-        }catch{}
+          billConfirmTimer = setTimeout(()=>{ try{ billConfirm.classList.remove('on'); }catch(e){} }, ok===false ? 6500 : 3500);
+        }catch(e){}
       }
 
 
@@ -2241,7 +2263,7 @@ const IDS = {
       try{
         const draft = loadBillDraft();
         if (draft && !realInput.value) realInput.value = draft;
-      }catch{}
+      }catch(e){}
 
       // Initial mirror
       proxyInput.value = realInput.value || '';
@@ -2259,7 +2281,7 @@ const IDS = {
           proxyWrap.style.removeProperty('display');
           proxyWrap.removeAttribute('aria-hidden');
         }
-      }catch{}
+      }catch(e){}
 
       // Keep proxy updated after postbacks (when real input value might change)
       proxyInput.addEventListener('focus', () => {
@@ -2283,7 +2305,7 @@ const IDS = {
         try{
           if (v) showBillConfirm('Billing address saved ✔', true);
           else showBillConfirm('Billing address is blank — please enter it before continuing.', false);
-        }catch{}
+        }catch(e){}
 
         // fire events so any existing listeners still run
         try { realInput.dispatchEvent(new Event('input', {bubbles:true})); } catch {}
@@ -2411,7 +2433,7 @@ if (jobBtn){
           prm.__wlQuickWidBound = true;
         }
       }
-    }catch{} 
+    }catch(e){} 
   }
 
   if (document.readyState === 'loading'){
@@ -2466,7 +2488,7 @@ if (jobBtn){
     try{
       const rec = { v: value, exp: Date.now() + ttlMinutes * 60 * 1000 };
       localStorage.setItem(key, JSON.stringify(rec));
-    }catch{}
+    }catch(e){}
   }
   function lsGetWithExpiry(key){
     const raw = localStorage.getItem(key);
@@ -2489,7 +2511,7 @@ if (jobBtn){
       return null;
     }
   }
-  function lsRemove(key){ try{ localStorage.removeItem(key); }catch{} }
+  function lsRemove(key){ try{ localStorage.removeItem(key); }catch(e){} }
   function lsTouch(key, ttlMinutes = LS_TTL_MIN){
     const v = lsGetWithExpiry(key);
     if (v == null) return false;
@@ -2595,7 +2617,7 @@ if (jobBtn){
       const ctl = typeof $find==='function' ? $find(idGuess) : null;
       if (ctl && typeof ctl.get_value === 'function'){ return String(ctl.get_value()||''); }
       if (ctl && typeof ctl.get_text === 'function'){ return String(ctl.get_text()||''); }
-    }catch{}
+    }catch(e){}
     const el = findFieldByHints({
       id: 'ctl00_PageBody_RemittanceAdviceTextBox',
       fuzzy: 'Remittance',
@@ -2792,13 +2814,13 @@ if (jobBtn){
   function forceAmountPostback(){
     const a = document.getElementById('ctl00_PageBody_PaymentAmountTextBox');
     if (!a) return;
-    try{ a.dispatchEvent(new Event('input', { bubbles:true })); a.dispatchEvent(new Event('change', { bubbles:true })); }catch{}
+    try{ a.dispatchEvent(new Event('input', { bubbles:true })); a.dispatchEvent(new Event('change', { bubbles:true })); }catch(e){}
     try{
       if (typeof window.__doPostBack === 'function'){
         const uniqueId = a.id.replace(/_/g,'$');
         setTimeout(()=> window.__doPostBack(uniqueId, ''), 0);
       }
-    }catch{}
+    }catch(e){}
   }
 
   function loadFromCurrentDOM(){
@@ -2846,7 +2868,7 @@ if (jobBtn){
         const idx = parseInt(u.searchParams.get('pageIndex')||'0',10);
         if (!Number.isFinite(idx)) return;
         links.set(idx, u.toString());
-      }catch{}
+      }catch(e){}
     });
     if (!links.has(0)) links.set(0, new URL(location.href).toString());
     return Array.from(links.entries()).sort((a,b)=> a[0]-b[0]).map(([_, url])=> url);
@@ -2974,7 +2996,7 @@ if (jobBtn){
     try{
       const docs = Array.from(state.selected.keys());
       saveSelectedDocs(docs); // with TTL
-    }catch{}
+    }catch(e){}
   }
   function seedSelectionKeys(){
     const docs = new Set();
@@ -2996,7 +3018,7 @@ if (jobBtn){
     try{
       const a = loadSelectedDocs();
       if (Array.isArray(a)) a.forEach(k=> docs.add(k));
-    }catch{}
+    }catch(e){}
 
     docs.forEach(k=> { if (!state.selected.has(k)) state.selected.set(k, 0); });
   }
@@ -3117,7 +3139,7 @@ if (jobBtn){
       try{
         aEl.dispatchEvent(new Event('input',  { bubbles:true }));
         aEl.dispatchEvent(new Event('change', { bubbles:true }));
-      }catch{}
+      }catch(e){}
     }
 
     setAmountField(payTotal);
@@ -3125,17 +3147,17 @@ if (jobBtn){
     const changed = Number(currNum.toFixed(2)) !== Number(payTotal.toFixed(2));
 
     if (changed) {
-      try{ window.WL_AP?.remit?.defer(remString); }catch{}
+      try{ window.WL_AP?.remit?.defer(remString); }catch(e){}
       try{
         if (typeof window.__doPostBack === 'function'){
           const uniqueId = aEl.id.replace(/_/g,'$');
           setTimeout(()=> window.__doPostBack(uniqueId, ''), 0);
         }
-      }catch{}
+      }catch(e){}
     } else {
       try {
         window.WL_AP?.remit?._setNow?.(remString, /*fireInputOnly*/true);
-        try{ sessionStorage.removeItem('__WL_PendingRemitV2'); }catch{}
+        try{ sessionStorage.removeItem('__WL_PendingRemitV2'); }catch(e){}
       } catch {}
     }
 
@@ -3174,7 +3196,7 @@ if (jobBtn){
   window.WL_AP.invoice = Object.assign(window.WL_AP.invoice || {}, {
     clearSelection(){
       state.selected.clear();
-      try{ clearSelectedDocs(); }catch{}
+      try{ clearSelectedDocs(); }catch(e){}
       renderRows(); renderStats();
       const current = getRemittanceText();
       const kept = String(current||'').split(/\r?\n/)
@@ -3196,7 +3218,7 @@ if (jobBtn){
           prm.__wlTxPickBound = true;
         }
       }
-    }catch{}
+    }catch(e){}
   }
 
   if (document.readyState === 'loading'){ document.addEventListener('DOMContentLoaded', boot, { once:true }); }
@@ -3246,7 +3268,7 @@ if (jobBtn){
       const idGuess = 'ctl00_PageBody_RemittanceAdviceTextBox';
       const ctl = typeof $find==='function' ? $find(idGuess) : null;
       if (ctl && (typeof ctl.get_value === 'function' || typeof ctl.get_text === 'function')) return { telerik: ctl };
-    }catch{}
+    }catch(e){}
 
     // 2) Direct / wrapper / fuzzy
     const id = 'ctl00_PageBody_RemittanceAdviceTextBox';
@@ -3274,7 +3296,7 @@ if (jobBtn){
       try{
         if (typeof ref.telerik.set_value === 'function'){ ref.telerik.set_value(val); return true; }
         if (typeof ref.telerik.set_text  === 'function'){ ref.telerik.set_text(val);  return true; }
-      }catch{}
+      }catch(e){}
     }
 
     // Native element
@@ -3288,7 +3310,7 @@ if (jobBtn){
         // Update UI without triggering a change-postback
         if (fireInputOnly) el.dispatchEvent(new Event('input', { bubbles:true }));
         return true;
-      }catch{}
+      }catch(e){}
     }
     return false;
   }
@@ -3296,7 +3318,7 @@ if (jobBtn){
   function applyPending(){
     // Try sessionStorage first; if we had a full reload, sessionStorage survives in-tab.
     let raw = null;
-    try{ raw = sessionStorage.getItem(KEY) || localStorage.getItem(KEY); }catch{}
+    try{ raw = sessionStorage.getItem(KEY) || localStorage.getItem(KEY); }catch(e){}
     if (!raw) return;
 
     let val = '';
@@ -3305,7 +3327,7 @@ if (jobBtn){
 
     setRemittanceValue(val, /*fireInputOnly*/true);
 
-    try{ sessionStorage.removeItem(KEY); localStorage.removeItem(KEY); }catch{}
+    try{ sessionStorage.removeItem(KEY); localStorage.removeItem(KEY); }catch(e){}
   }
 
   function bindPRM(){
@@ -3317,12 +3339,12 @@ if (jobBtn){
           prm.__wlRemitBound = true;
         }
       }
-    }catch{}
+    }catch(e){}
   }
 
   window.WL_AP.remit = {
     defer(val){
-      try{ sessionStorage.setItem(KEY, JSON.stringify({ value: String(val||''), t: Date.now() })); }catch{}
+      try{ sessionStorage.setItem(KEY, JSON.stringify({ value: String(val||''), t: Date.now() })); }catch(e){}
     },
     applyNow: applyPending,
     _setNow: setRemittanceValue
@@ -3821,19 +3843,19 @@ if (jobBtn){
     }catch{ return true; }
   }
   function resetWizardState(){
-    try{ sessionStorage.removeItem(STEP_KEY); }catch{}
-    try{ localStorage.removeItem(STEP_KEY); }catch{}
-    try{ sessionStorage.removeItem("wl_bill_lock"); }catch{}
-    try{ sessionStorage.removeItem("wl_bill_draft"); }catch{}
-    try{ sessionStorage.removeItem("wl_bill_postback_pending"); }catch{}
+    try{ sessionStorage.removeItem(STEP_KEY); }catch(e){}
+    try{ localStorage.removeItem(STEP_KEY); }catch(e){}
+    try{ sessionStorage.removeItem("wl_bill_lock"); }catch(e){}
+    try{ sessionStorage.removeItem("wl_bill_draft"); }catch(e){}
+    try{ sessionStorage.removeItem("wl_bill_postback_pending"); }catch(e){}
   }
   // If we navigated in from elsewhere, clear step so customers start at Step 1.
   try{
     if (cameFromOtherPage()){
       resetWizardState();
     }
-    try{ sessionStorage.setItem(PAGE_KEY, location.pathname + location.search); }catch{}
-  }catch{}
+    try{ sessionStorage.setItem(PAGE_KEY, location.pathname + location.search); }catch(e){}
+  }catch(e){}
 
 
   function injectCSS(){
@@ -4100,7 +4122,7 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
     try{
       const lbl = document.querySelector('label[for="ctl00_PageBody_RadioButton_PayByCheck"]');
       if (lbl) lbl.textContent = 'Pay by Bank (ACH)';
-    }catch{}
+    }catch(e){}
 
     // Visible card UI mount
     let cardHost = $('wlPayCardsHost');
@@ -4124,7 +4146,7 @@ function loadPayState(){
   }catch{ return null; }
 }
 function savePayState(st){
-  try{ sessionStorage.setItem(PAY_STATE_KEY, JSON.stringify(st||{})); }catch{}
+  try{ sessionStorage.setItem(PAY_STATE_KEY, JSON.stringify(st||{})); }catch(e){}
 }
 
 function isElementVisible(el){
@@ -4141,33 +4163,28 @@ function isElementVisible(el){
 }
 
 function isCreditAvailable(){
-      if (!rbCred) return false;
-      if (rbCred.disabled) return false;
-
-      // If server explicitly hid the credit option, its wrapper is usually display:none
-      const wrap = rbCred.closest('.radiobutton') || rbCred.closest('tr') || rbCred.parentElement;
-      const hiddenByStyle = (el)=>{
-        if (!el) return false;
-        if (el.hidden) return true;
-        const s = window.getComputedStyle(el);
-        return (s.display === 'none' || s.visibility === 'hidden');
-      };
-
-      if (hiddenByStyle(wrap) || hiddenByStyle(rbCred)) return false;
-
-      return true;
-    }catch{}
-
-  const wrap = rbCred.closest('.radiobutton') || rbCred.parentElement;
+  // Credit is only available when WebTrack actually enables/renders the credit radio.
+  // NOTE: We move native controls off-screen, so we cannot use layout/rect checks here.
   try{
-    if (wrap){
-      const csW = window.getComputedStyle(wrap);
-      if (csW && (csW.display === 'none' || csW.visibility === 'hidden')) return false;
-    }
-  }catch{}
+    if (!rbCred) return false;
+    if (rbCred.disabled) return false;
+    const aria = rbCred.getAttribute('aria-disabled');
+    if (aria && String(aria).toLowerCase() === 'true') return false;
 
-  return true;
+    // If the wrapper is explicitly hidden by the server, respect that.
+    const wrap = rbCred.closest('.radiobutton') || rbCred.parentElement;
+    if (wrap){
+      const cs = window.getComputedStyle(wrap);
+      if (cs && (cs.display === 'none' || cs.visibility === 'hidden')) return false;
+    }
+    const csI = window.getComputedStyle(rbCred);
+    if (csI && (csI.display === 'none' || csI.visibility === 'hidden')) return false;
+
+    return true;
+  }catch(e){}
+  return false;
 }
+
 
 function reconcileNativeFromState(){
   const st = loadPayState();
@@ -4193,7 +4210,7 @@ function reconcileNativeFromState(){
       if (rbCheck) rbCheck.checked = true;
       if (rbCof) rbCof.checked = false;
     }
-  }catch{}
+  }catch(e){}
 }
 
 function clickWebFormsRadio(rb){
@@ -4201,13 +4218,13 @@ function clickWebFormsRadio(rb){
     if (!rb) return;
     // click the actual input so WebForms validation stays happy
     rb.click();
-  }catch{}
+  }catch(e){}
   try{
     // fallback: explicitly invoke postback for this control
     if (window.__doPostBack && rb && rb.name){
-      setTimeout(()=>{ try{ __doPostBack(rb.name,''); }catch{} }, 0);
+      setTimeout(()=>{ try{ __doPostBack(rb.name,''); }catch(e){} }, 0);
     }
-  }catch{}
+  }catch(e){}
 }
 
 function setSelectedCard(cardEl, isSelected){
@@ -4243,10 +4260,10 @@ function setSelectedCard(cardEl, isSelected){
     }
 
     function ensureCofVisible(){
-      try{ window.WLPayMode?.ensureCheckOnFileUI?.(); }catch{}
+      try{ window.WLPayMode?.ensureCheckOnFileUI?.(); }catch(e){}
       try{
         if (rbCof && !rbCof.checked) clickWebFormsRadio(rbCof);
-      }catch{}
+      }catch(e){}
     }
 
     function renderPayCards(){
@@ -4277,7 +4294,7 @@ function setSelectedCard(cardEl, isSelected){
         methodMount.innerHTML = '';
       }
 // Match layout to availability
-      try{ methodMount.style.gridTemplateColumns = creditAvail ? '1fr 1fr' : '1fr'; }catch{};
+      try{ methodMount.style.gridTemplateColumns = creditAvail ? '1fr 1fr' : '1fr'; }catch(e){};
 
       const bankMethodCard   = methodMount.querySelector('[data-method="bank"]');
       const creditMethodCard = methodMount.querySelector('[data-method="credit"]');
@@ -4300,7 +4317,7 @@ function setSelectedCard(cardEl, isSelected){
             opts.push({ value: val, text: txt });
           }
         }
-      }catch{}
+      }catch(e){}
 
       const stSel = loadPayState();
       const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
@@ -4346,11 +4363,11 @@ function setSelectedCard(cardEl, isSelected){
     try{
       if (preferSaved) clickWebFormsRadio(rbCof);
       else clickWebFormsRadio(rbCheck);
-    }catch{}
+    }catch(e){}
     ensureCofVisible();
   }
 
-  setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch{} }, 80);
+  setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 80);
 };
 
       bankMount.onclick = (e)=>{
@@ -4369,15 +4386,15 @@ function setSelectedCard(cardEl, isSelected){
               const hasMinus1 = Array.from(cofSel.options || []).some(o => String(o.value) === '-1');
               cofSel.value = hasMinus1 ? '-1' : (cofSel.options?.[0]?.value || '');
             }
-          }catch{}
+          }catch(e){}
 
           // Immediate visual update
           renderPayCards();
-          try{ renderSummary(); }catch{}
+          try{ renderSummary(); }catch(e){}
 
           // Trigger the real WebForms control behind the card
-          try{ clickWebFormsRadio(rbCheck); }catch{}
-          setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch{} }, 80);
+          try{ clickWebFormsRadio(rbCheck); }catch(e){}
+          setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 80);
           return;
         }
 
@@ -4392,7 +4409,7 @@ function setSelectedCard(cardEl, isSelected){
         setTimeout(()=>{
           try{
             if (rbCof && !rbCof.checked) clickWebFormsRadio(rbCof);
-          }catch{}
+          }catch(e){}
 
           setTimeout(()=>{
             try{
@@ -4400,8 +4417,8 @@ function setSelectedCard(cardEl, isSelected){
                 cofSel.value = val;
                 cofSel.dispatchEvent(new Event('change', { bubbles:true }));
               }
-            }catch{}
-            setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch{} }, 80);
+            }catch(e){}
+            setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 80);
           }, 80);
         }, 80);
       };
@@ -4418,16 +4435,16 @@ function setSelectedCard(cardEl, isSelected){
     }
     reconcileNativeFromState();
     renderPayCards();
-    try{ renderSummary(); }catch{}
+    try{ renderSummary(); }catch(e){}
     try{
       if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
         const prm = Sys.WebForms.PageRequestManager.getInstance();
         if (!prm.__wlPayCardsBound){
-          prm.add_endRequest(()=>{ setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch{} }, 0); });
+          prm.add_endRequest(()=>{ setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 0); });
           prm.__wlPayCardsBound = true;
         }
       }
-    }catch{}
+    }catch(e){}
 
 
     // Move Make Payment button
@@ -4524,14 +4541,14 @@ function setStep(n){
           v = (proxy?.value || real?.value || '').trim();
           saveBillDraft(v);
           if (v) lockBilling(v);
-        }catch{}
+        }catch(e){}
 
         // Keep them on Step 1 after any round-trip.
-        try{ sessionStorage.setItem(STEP_KEY, '1'); }catch{}
+        try{ sessionStorage.setItem(STEP_KEY, '1'); }catch(e){}
 
         // If they already typed billing, trigger the same postback path as "Make Payment" (throttled).
         if (v){
-          try{ forceWizardRoundTrip('step0-next'); }catch{}
+          try{ forceWizardRoundTrip('step0-next'); }catch(e){}
         }
 
         setStep(1);
@@ -4546,7 +4563,7 @@ function setStep(n){
   
     try { pinBillingToStep1({ attempt: 0 }); } catch {}
 
-    try{ sessionStorage.removeItem('wl_billDraft_reloading'); }catch{}
+    try{ sessionStorage.removeItem('wl_billDraft_reloading'); }catch(e){}
 }
 
   function boot(){
