@@ -321,6 +321,25 @@ function startSelectionSync(){
     renderSummary(loadPref());
   }
 
+
+  function triggerAmountChangeOnce(){
+    // Some WebForms pages calculate/validate amount only after change/blur.
+    // Trigger a single synthetic change to ensure server-side amount logic is aware.
+    const amt = $('ctl00_PageBody_AmountTextBox') || $('ctl00_PageBody_PaymentAmountTextBox') || null;
+    if (!amt) return;
+    if (amt.__wlChangePrimed) return;
+    amt.__wlChangePrimed = true;
+    try{
+      const ev = new Event('change', { bubbles:true });
+      amt.dispatchEvent(ev);
+    } catch {}
+    try{
+      const ev2 = document.createEvent('HTMLEvents');
+      ev2.initEvent('change', true, false);
+      amt.dispatchEvent(ev2);
+    } catch {}
+  }
+
   /* =============================
      Boot
      ============================= */
@@ -898,7 +917,7 @@ wireFieldPersistence();
     billWrap:'ctl00_PageBody_BillingAddressContainer'
   };
 
-  function readPayMode(){
+  function readPayModeLegacy(){
     const cr  = document.getElementById(IDS.rbCredit);
     return (cr && cr.checked) ? 'credit' : 'check';
   }
@@ -930,14 +949,34 @@ wireFieldPersistence();
   }
 
   // Hidden input mirrors the CURRENT pay mode (does not force a mode)
-  function readPayMode(){
+  
+  function ensureShadowPayBy(mode){
+    // Keep a shadow copy of pay-by choice so we can restore after async updates.
+    // mode: 'credit' | 'check' | 'check_on_file'
+    try { sessionStorage.setItem('__WL_PAYMODE_SHADOW__', String(mode||'')); } catch {}
+  }
+  function removeShadowPayBy(){
+    try { sessionStorage.removeItem('__WL_PAYMODE_SHADOW__'); } catch {}
+  }
+  function readShadowPayBy(){
+    try { return sessionStorage.getItem('__WL_PAYMODE_SHADOW__') || ''; } catch { return ''; }
+  }
+
+function readPayMode(){
     // Prefer real radios on the page (Check, Check-on-file, Credit)
-    const cof = document.getElementById('ctl00_PageBody_RadioButton_PayByCheckOnFile');
-    const cr  = document.getElementById('ctl00_PageBody_RadioButton_PayByCredit');
-    const ck  = document.getElementById('ctl00_PageBody_RadioButton_PayByCheck');
+    const cr  = document.getElementById(IDS.rbCredit);
+    const chk = document.getElementById(IDS.rbCheck);
+    const cof = document.getElementById(IDS.rbCof);
+
     if (cof && cof.checked) return 'check_on_file';
-    if (cr  && cr.checked)  return 'credit';
-    return 'check';
+    if (chk && chk.checked) return 'check';
+    if (cr && cr.checked)   return 'credit';
+
+    // If async updates briefly uncheck things, fall back to shadow
+    const shadow = readShadowPayBy();
+    if (shadow) return shadow;
+
+    return 'credit'; // safest default
   }
 
   function setPayMode(mode){
@@ -3386,6 +3425,8 @@ function buildReviewHTML(){
   window.WLPayMode?.ensureCheckOnFileUI?.();
 
   const rb = $('ctl00_PageBody_RadioButton_PayByCheckOnFile');
+  // If COF triggers an async postback, preserve that we're on Step 3.
+  try { sessionStorage.setItem(STEP_KEY, '3'); } catch {}
   if (!rb || !rb.checked) return;
 
   const c1 = $('ctl00_PageBody_ChecksOnFileContainer');
@@ -3502,7 +3543,7 @@ moveFieldGroupById('ctl00_PageBody_BillingPostalCodeTextBox', infoInner);
     const step1 = $('w3Step1');
     step1.appendChild(left);
     step1.appendChild(right);
-    if (tx) step1.appendChild(tx);
+    if (tx){ tx.style.position='absolute'; tx.style.left='-99999px'; tx.style.top='0'; tx.style.width='1px'; tx.style.height='1px'; tx.style.overflow='hidden'; step1.appendChild(tx); }
 
     // Build pay step: move pay-by radios/containers + make payment button into a clean card
     const payHost = $('w3Step3');
@@ -3545,15 +3586,29 @@ moveFieldGroupById('ctl00_PageBody_BillingPostalCodeTextBox', infoInner);
     }
 
     // Step state
-    let step = 0; // always start fresh on full page load
-    sessionStorage.setItem(STEP_KEY, '0');
+    // On full page navigations, restart at Step 0.
+    // On WebForms async postbacks (UpdatePanel), preserve the current step.
+    const isAsyncMount = !!window.__WL_AP_ASYNC_MOUNT__;
+    window.__WL_AP_ASYNC_MOUNT__ = false;
+
+    let step = 0;
+    if (isAsyncMount){
+      const saved = Number(sessionStorage.getItem(STEP_KEY) || '0');
+      step = Number.isFinite(saved) ? saved : 0;
+    } else {
+      sessionStorage.setItem(STEP_KEY, '0');
+      step = 0;
+    }
 
 let __wlSubmitted = false;
 // Warn only on real navigation (not WebForms postbacks)
 document.addEventListener('click', function (ev) {
   try {
     if (__wlSubmitted) return;
-    const a = ev.target?.closest?.('a[href]');
+    const t = ev.target;
+    // Ignore clicks on form controls (including radios that trigger async postbacks)
+    if (t && t.closest && t.closest('form') && t.closest('input,button,select,textarea,label')) return;
+    const a = t?.closest?.('a[href]');
     if (!a) return;
 
     const href = (a.getAttribute('href') || '').trim();
@@ -3642,6 +3697,7 @@ function setStep(n){
     if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
       const prm = Sys.WebForms.PageRequestManager.getInstance();
       prm.add_endRequest(function(){
+        try { window.__WL_AP_ASYNC_MOUNT__ = true; } catch {}
         try { mount(); } catch {}
       });
     }
@@ -4105,4 +4161,3 @@ function setStep(n){
     }
   } catch {}
 })();
-
