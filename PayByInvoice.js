@@ -1919,6 +1919,7 @@ if (!optsCommit.skipPostback){
   setTimeout(()=>{ try{ forceWizardRoundTrip('billing-commit'); }catch{} }, 0);
 }
         }
+      } catch {}
       };
       proxyInput.addEventListener('blur', ()=>commit());
       proxyInput.addEventListener('change', ()=>commit());
