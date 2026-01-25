@@ -1224,6 +1224,7 @@ return {
 const IDS = {
     rbCheck: 'ctl00_PageBody_RadioButton_PayByCheck',
     rbCredit:'ctl00_PageBody_RadioButton_PayByCredit',
+    rbCOF:  'ctl00_PageBody_RadioButton_PayByCheckOnFile',
     amount:  'ctl00_PageBody_PaymentAmountTextBox',
     billBox: 'ctl00_PageBody_BillingAddressTextBox',
     billWrap:'ctl00_PageBody_BillingAddressContainer'
@@ -1238,25 +1239,55 @@ const IDS = {
   function setPayByCheckDefaultIfUnset(evtLabel){
     const chk = document.getElementById(IDS.rbCheck);
     const cr  = document.getElementById(IDS.rbCredit);
-    if (!chk && !cr){ log.warn('setPayByCheckDefaultIfUnset: radios missing'); return false; }
+    const cof = document.getElementById(IDS.rbCOF);
 
+    // If the user already made a choice this session, don't override defaults.
+    try{
+      if (sessionStorage.getItem('wlPayState')) return false;
+    }catch(e){}
+
+    const cofSel = document.querySelector('#ctl00_PageBody_ChecksOnFileContainer select, #ctl00_PageBody_ChecksOnFileContainer1 select');
+    const hasSaved = !!(cofSel && Array.from(cofSel.options||[]).some(o=>{
+      const v = String(o.value||'').trim();
+      return v && v !== '-1';
+    }));
+
+    if (!chk && !cr && !cof){ log.warn('setPayByCheckDefaultIfUnset: radios missing'); return false; }
+
+    // If credit is already selected, honor it.
     if (cr && cr.checked){
       ensureShadowPayBy('credit');
       log.info('setPayByCheckDefaultIfUnset:', evtLabel||'(boot)', { honored:'credit' });
       return true;
     }
+
+    // Prefer "Check on File" (saved bank) when available so saved accounts are visible by default.
+    if (cof && (cof.checked || (!chk?.checked && hasSaved))){
+      if (!cof.checked) cof.checked = true;
+      if (chk) chk.checked = false;
+      if (cr) cr.checked = false;
+      ensureShadowPayBy('cof');
+      log.info('setPayByCheckDefaultIfUnset:', evtLabel||'(boot)', { set:'cof' });
+      return true;
+    }
+
+    // Otherwise honor check if already selected
     if (chk && chk.checked){
       ensureShadowPayBy('check');
       log.info('setPayByCheckDefaultIfUnset:', evtLabel||'(boot)', { honored:'check' });
       return true;
     }
+
+    // Default to check
     if (chk){
       chk.checked = true;
+      if (cof) cof.checked = false;
       if (cr) cr.checked = false;
       ensureShadowPayBy('check');
       log.info('setPayByCheckDefaultIfUnset:', evtLabel||'(boot)', { set:'check' });
       return true;
     }
+
     return false;
   }
 
@@ -4001,7 +4032,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details.</div>
+        <div class="w3-title">Payment Details</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
@@ -4364,7 +4395,21 @@ function setSelectedCard(cardEl, isSelected){
       }catch(e){}
 
       const stBank = loadPayState() || {};
-      const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
+      
+      // If we're in ACH mode and saved accounts exist but aren't visible yet (common until COF mode is activated),
+      // prefer showing saved accounts by default.
+      if (!isCardMode && (!bankOpts.length) && rbCof && !rbCof.checked){
+        try{
+          // Switch to COF behind the scenes so the select options populate.
+          clickWebFormsRadio(rbCof);
+          const st = loadPayState() || {};
+          st.method = 'bank';
+          st.bank = st.bank || {};
+          st.bank.mode = 'saved';
+          savePayState(st);
+        }catch(e){}
+      }
+const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
       const desiredSavedVal = (stBank?.method === 'bank' && stBank?.bank?.mode === 'saved' && stBank?.bank?.value) ? String(stBank.bank.value) : '';
       const bankMatchVal = desiredSavedVal || selectedCofVal;
 
