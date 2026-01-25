@@ -603,7 +603,7 @@ wireFieldPersistence();
       leftCard = document.createElement('div');
       leftCard.id = 'wlLeftCard';
       leftCard.className = 'wl-card';
-      leftCard.innerHTML = `<div class="wl-card-head">Payment Detail</div><div class="wl-card-body"><div id="wlFormGrid" class="wl-form-grid"></div></div>`;
+      leftCard.innerHTML = `<div class="wl-card-head">Payment Details</div><div class="wl-card-body"><div id="wlFormGrid" class="wl-form-grid"></div></div>`;
       shell.appendChild(leftCard);
       log.debug('leftCard: created');
     }
@@ -1845,21 +1845,46 @@ wireFieldPersistence();
   /* =======================
      PATCH: keep Billing on Step 1 (Info)
      ======================= */
-  function pinBillingToStep1(){
-    const infoInner = document.getElementById('w3InfoInner');
-    if (!infoInner) return;
+  function pinBillingToStep1(opts){
+    opts = opts || {};
+    const attempt = opts.attempt || 0;
 
+    const infoInner = document.getElementById('w3InfoInner');
     const billWrap =
       document.getElementById('ctl00_PageBody_BillingAddressContainer') ||
-      document.getElementById('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment');
+      (document.getElementById('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment') || null);
 
-    if (!billWrap) return;
-
-    if (billWrap.parentElement !== infoInner) {
-      infoInner.appendChild(billWrap);
+    // Retry because UpdatePanel/Telerik often re-renders after endRequest
+    if (!infoInner || !billWrap){
+      if (attempt < 8){
+        setTimeout(()=>{ try{ pinBillingToStep1({ attempt: attempt + 1 }); }catch{} }, 60 * (attempt + 1));
+      }
+      return;
     }
 
+    // Prefer to place Billing before Email (Step 1 stack)
+    const emailWrap = document.getElementById('ctl00_PageBody_EmailTextBox')?.closest('.epi-form-group-acctPayment') || null;
+
+    // Move (or re-move) Billing into Step 1
+    if (billWrap.parentElement !== infoInner){
+      if (emailWrap && emailWrap.parentElement === infoInner){
+        infoInner.insertBefore(billWrap, emailWrap);
+      } else {
+        infoInner.appendChild(billWrap);
+      }
+    } else {
+      // Already in infoInner, ensure it stays before Email
+      if (emailWrap && emailWrap.parentElement === infoInner){
+        if (billWrap.nextElementSibling !== emailWrap){
+          infoInner.insertBefore(billWrap, emailWrap);
+        }
+      }
+    }
+
+    // Ensure interactable
     billWrap.style.removeProperty('display');
+    billWrap.style.removeProperty('visibility');
+    billWrap.style.pointerEvents = 'auto';
     billWrap.classList.add('wl-force-show');
   }
 
@@ -3664,7 +3689,7 @@ function setStep(n){
     setStep(step);
     return true;
   
-    try { pinBillingToStep1(); } catch {}
+    try { pinBillingToStep1({ attempt: 0 }); } catch {}
 }
 
   function boot(){
@@ -3691,9 +3716,8 @@ function setStep(n){
     if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
       const prm = Sys.WebForms.PageRequestManager.getInstance();
       prm.add_endRequest(function(){
-      try { pinBillingToStep1(); } catch {};
-
         try { mount(); } catch {}
+        try { pinBillingToStep1({ attempt: 0 }); } catch {}
       });
     }
   } catch {}
