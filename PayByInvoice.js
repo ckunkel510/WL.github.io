@@ -1059,12 +1059,12 @@ try{
   const cofSel = (cof1?.querySelector('select') || cof2?.querySelector('select')) || null;
 
   if (!payMethod){
-    if (rbCred?.checked) payMethod = 'Credit Card';
+    if (rbCardNew?.checked) payMethod = 'Credit Card';
     else payMethod = 'Bank (ACH)';
   }
   if (!payAccount && payMethod === 'Bank (ACH)'){
-    if (rbCheck?.checked) payAccount = 'Add new bank account';
-    else if (rbCof?.checked && cofSel && cofSel.value && cofSel.value !== '-1'){
+    if (rbBankNew?.checked) payAccount = 'Add new bank account';
+    else if (rbBankSaved?.checked && cofSel && cofSel.value && cofSel.value !== '-1'){
       payAccount = cofSel.options[cofSel.selectedIndex]?.text || 'Saved bank account';
     }
   }
@@ -4057,7 +4057,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details</div>
+        <div class="w3-title">Payment Details.</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
@@ -4153,7 +4153,57 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
     const rbCred  = $('ctl00_PageBody_RadioButton_PayByCredit')
       || document.querySelector('input[type="radio"][id*="PayByCredit"], input[type="radio"][name*="PayByCredit"], input[type="radio"][id*="PayByCard"], input[type="radio"][name*="PayByCard"]');       // pay by card (new card)
     const rbCardOnFile = $('ctl00_PageBody_RadioButton_PayByCardOnFile')
-      || document.querySelector('input[type="radio"][id*="CardOnFile"], input[type="radio"][name*="CardOnFile"], input[type="radio"][id*="PayByCardOnFile"], input[type="radio"][name*="PayByCardOnFile"]'); // saved card on file (CAB)
+      || document.querySelector('input[type="radio"][id*="CardOnFile"], input[type="radio"][name*="CardOnFile"], input[type="radio"][id*="PayByCardOnFile"], input[type="radio"][name*="PayByCardOnFile"]');
+
+    // -------------------------------------------------------------------
+    // Radio wiring sanity-check:
+    // WebTrack patches sometimes swap which underlying radio triggers which
+    // payment UI (ACH vs Card). We infer intent from the LABEL text so that
+    // "Add new card" actually triggers the card radio, and "Add new bank"
+    // triggers the bank/ACH radio, even if IDs are mis-wired by a patch.
+    // -------------------------------------------------------------------
+    const __wlLabelText = (rb)=>{
+      try{
+        if (!rb) return '';
+        const byFor = document.querySelector(`label[for="${rb.id}"]`);
+        const txt = (byFor?.textContent || rb.closest?.('label')?.textContent || '').trim();
+        return txt.toLowerCase();
+      }catch(e){ return ''; }
+    };
+    const __wlLooksBank = (t)=> /\bach\b|bank|check|routing|account\b|e-?check|eft/.test(t||'');
+    const __wlLooksCard = (t)=> /card|credit|debit|visa|mastercard|amex|discover/.test(t||'');
+
+    let rbBankNew   = rbCheck;
+    let rbBankSaved = rbCof;
+    let rbCardNew   = rbCred;
+    let rbCardSaved = rbCardOnFile;
+
+    try{
+      const tCheck = __wlLabelText(rbCheck);
+      const tCred  = __wlLabelText(rbCred);
+
+      // If "PayByCredit" looks like ACH/Bank and "PayByCheck" looks like Card, swap.
+      if (__wlLooksBank(tCred) && __wlLooksCard(tCheck) && !__wlLooksBank(tCheck)){
+        rbBankNew = rbCred;
+        rbCardNew = rbCheck;
+      }
+
+      const tCof  = __wlLabelText(rbCof);
+      const tCof2 = __wlLabelText(rbCardOnFile);
+
+      // If the on-file radios appear swapped, fix those too.
+      if (__wlLooksBank(tCof2) && __wlLooksCard(tCof) && !__wlLooksBank(tCof)){
+        rbBankSaved = rbCardOnFile;
+        rbCardSaved = rbCof;
+      }
+
+      log.debug('WL Pay wiring:', {
+        bankNew: rbBankNew?.id, bankSaved: rbBankSaved?.id,
+        cardNew: rbCardNew?.id, cardSaved: rbCardSaved?.id,
+        labels: { rbCheck:tCheck, rbCred:tCred, rbCof:tCof, rbCardOnFile:tCof2 }
+      });
+    }catch(e){}
+ // saved card on file (CAB)
 
     const cof1 = $('ctl00_PageBody_ChecksOnFileContainer');
     const cof2 = $('ctl00_PageBody_ChecksOnFileContainer1');
@@ -4319,7 +4369,7 @@ function isRadioAvailable(r){
 function isCreditAvailable(){
   // "Card" methods are only available when WebTrack actually enables/renders them for the account.
   // We move natives off-screen, so do NOT use layout/rect checks.
-  return isRadioAvailable(rbCred) || isRadioAvailable(rbCardOnFile);
+  return isRadioAvailable(rbCardNew) || isRadioAvailable(rbCardSaved);
 }
 
 
@@ -4331,7 +4381,7 @@ function reconcileNativeFromState(){
     if ((st.method === 'credit' || st.method === 'card') && isCreditAvailable() && rbCred){
       rbCred.checked = true;
       if (rbCheck) rbCheck.checked = false;
-      if (rbCof) rbCof.checked = false;
+      if (rbBankSaved) rbBankSaved.checked = false;
       if (rbCardOnFile) rbCardOnFile.checked = false;
 
       // If we're using a saved card, ensure CardOnFile radio + dropdown are set after any postback
@@ -4357,7 +4407,7 @@ function reconcileNativeFromState(){
       }
     } else {
       if (rbCheck) rbCheck.checked = true;
-      if (rbCof) rbCof.checked = false;
+      if (rbBankSaved) rbBankSaved.checked = false;
       try{
         const sel = getCofSel();
         if (sel) clearSelectToPlaceholder(sel, false);
@@ -4417,7 +4467,7 @@ function setSelectedCard(cardEl, isSelected){
       }
 
       // If native radios say Credit and it's allowed, honor that
-      if (rbCred?.checked && isCreditAvailable()) return 'credit';
+      if (rbCardNew?.checked && isCreditAvailable()) return 'credit';
 
       // Prefer persisted intent to avoid "snapping back" due to COF select retaining a value
       if (st?.method === 'credit' && isCreditAvailable()) return 'credit';
@@ -4427,8 +4477,8 @@ function setSelectedCard(cardEl, isSelected){
       // Fallback inference (no saved state)
       const hasCofSelection = !!(cofSel && cofSel.value && cofSel.value !== '-1');
       // If PayByCheck is checked, treat as NEW regardless of COF select retaining a value
-      if (rbCheck?.checked) return 'bank_new';
-      if (rbCof?.checked) return 'bank_saved';
+      if (rbBankNew?.checked) return 'bank_new';
+      if (rbBankSaved?.checked) return 'bank_saved';
       if (hasCofSelection) return 'bank_saved';
 
       return 'bank_new';
@@ -4449,7 +4499,7 @@ function setSelectedCard(cardEl, isSelected){
       if (!methodMount || !bankMount || !cardMount) return;
 
       // Credit availability: only when WebTrack actually offers pay-by-card OR card-on-file on this account (e.g., CAB)
-      const cardAvail = isRadioAvailable(rbCred) || isRadioAvailable(rbCardOnFile);
+      const cardAvail = isRadioAvailable(rbCardNew) || isRadioAvailable(rbCardSaved);
 
       // Top-level method row:
       // - Always show Bank
@@ -4483,8 +4533,8 @@ function setSelectedCard(cardEl, isSelected){
         // Native radios may be set by server on CAB loads. ONLY honor them if the user actually chose Card.
 // Otherwise, keep Bank (ACH) as the default even when Card is available.
         if (cardAvail && st.method === 'card'){
-          if (rbCred?.checked) return 'card_new';
-          if (rbCardOnFile?.checked) return 'card_saved';
+          if (rbCardNew?.checked) return 'card_new';
+          if (rbCardSaved?.checked) return 'card_saved';
           if (st.card?.mode === 'saved') return 'card_saved';
           if (st.card?.mode === 'new') return 'card_new';
         }
@@ -4494,8 +4544,8 @@ function setSelectedCard(cardEl, isSelected){
         // Fallback inference (no saved state)
         const hasCofSelection = !!(cofSel && cofSel.value && cofSel.value !== '-1');
         // If "Add new" is selected (PayByCheck), treat as NEW regardless of COF select retaining a value
-        if (rbCheck?.checked) return 'bank_new';
-        if (rbCof?.checked || hasCofSelection) return 'bank_saved';
+        if (rbBankNew?.checked) return 'bank_new';
+        if (rbBankSaved?.checked || hasCofSelection) return 'bank_saved';
 
         return 'bank_new';
       }
@@ -4604,8 +4654,8 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
         const selectedCardVal = (cardSel && cardSel.value) ? String(cardSel.value) : '';
         const cardMatchVal = desiredCardVal || selectedCardVal;
 
-        const showAddNewCard = isRadioAvailable(rbCred); // new card entry
-        const showSavedCards = isRadioAvailable(rbCardOnFile) && cardOpts.length > 0;
+        const showAddNewCard = isRadioAvailable(rbCardNew); // new card entry
+        const showSavedCards = isRadioAvailable(rbCardSaved) && cardOpts.length > 0;
 
         const addNewCardSelected = (mode === 'card_new' || (!showSavedCards && showAddNewCard));
 
@@ -4638,10 +4688,10 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
           const kind = btn.getAttribute('data-card');
 
           if (kind === 'new'){
-            if (!isRadioAvailable(rbCred)) return;
+            if (!isRadioAvailable(rbCardNew)) return;
             savePayState({ __userPicked:true, method:'card', card:{ mode:'new' } });
             try{ if (window.WLPayPending){ window.WLPayPending.__cardPendingVal = null; window.WLPayPending.__cardPendingText = null; } }catch(e){}
-            try{ clickWebFormsRadio(rbCred); }catch(e){}
+            try{ clickWebFormsRadio(rbCardNew); }catch(e){}
             setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 80);
             return;
           }
@@ -4659,7 +4709,7 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
           }catch(e){}
 
           try{
-            if (rbCardOnFile && !rbCardOnFile.checked) clickWebFormsRadio(rbCardOnFile);
+            if (rbCardOnFile && !rbCardOnFile.checked) clickWebFormsRadio(rbCardSaved);
           }catch(e){}
 
           // Try applying immediately as well (covers no-postback cases)
@@ -4684,14 +4734,14 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
           const st = loadPayState() || {};
           const preferSaved = !!(st?.card?.mode === 'saved' && st?.card?.value);
           // If they have saved cards but no prior intent, default to "Add new card" (if available)
-          const newOk = isRadioAvailable(rbCred);
+          const newOk = isRadioAvailable(rbCardNew);
 
           savePayState({ __userPicked:true, method:'card', card: preferSaved ? st.card : { mode: newOk ? 'new' : 'saved' } });
 
           try{
-            if (preferSaved && isRadioAvailable(rbCardOnFile)) clickWebFormsRadio(rbCardOnFile);
-            else if (newOk) clickWebFormsRadio(rbCred);
-            else if (isRadioAvailable(rbCardOnFile)) clickWebFormsRadio(rbCardOnFile);
+            if (preferSaved && isRadioAvailable(rbCardSaved)) clickWebFormsRadio(rbCardSaved);
+            else if (newOk) clickWebFormsRadio(rbCardNew);
+            else if (isRadioAvailable(rbCardSaved)) clickWebFormsRadio(rbCardSaved);
           }catch(e){}
         } else {
           // Bank is the default
@@ -4701,7 +4751,7 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
 
           try{
             if (preferSaved) clickWebFormsRadio(rbCof);
-            else clickWebFormsRadio(rbCheck);
+            else clickWebFormsRadio(rbBankNew);
           }catch(e){}
           ensureCofVisible();
         }
@@ -4742,8 +4792,8 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
 
           // Trigger the REAL WebForms radio for "Pay by Bank (new)"
           try{
-            if (rbCof) rbCof.checked = false;
-            clickWebFormsRadio(rbCheck);
+            if (rbBankSaved) rbBankSaved.checked = false;
+            clickWebFormsRadio(rbBankNew);
           }catch(e){}
 
           // After postback, ensure COF selection is cleared and UI/summary match the true native state
