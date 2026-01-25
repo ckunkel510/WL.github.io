@@ -3639,15 +3639,23 @@ if (jobBtn){
   }
 
   function sanitizeEmailInPlace(){
-  const el = byId('ctl00_PageBody_EmailAddressTextBox');
-  if (!el) return;
-  const raw = String(el.value || '').trim();
-  if (!raw) return;
-  // If something like "(ckunkel) ckunkel@woodsonlumber.com", extract the first valid email token.
-  const tokens = raw.split(/[\s,;<>\(\)]+/).filter(Boolean);
-  const email = tokens.find(t => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)) || '';
-  if (email && email !== raw) el.value = email;
-}
+    // Avoid dependency on helper functions (this runs late and must never crash)
+    const el = document.getElementById('ctl00_PageBody_EmailAddressTextBox') ||
+               document.getElementById('ctl00_PageBody_EmailTextBox') ||
+               document.getElementById('wlProxyEmail');
+    if (!el) return false;
+
+    const raw = String(el.value || '').trim();
+    // If user has something like "(name) email@domain.com", keep the last token that looks like an email
+    const parts = raw.split(/\s+/).filter(Boolean);
+    let email = raw;
+    for (let i = parts.length - 1; i >= 0; i--){
+      if (/@/.test(parts[i])) { email = parts[i]; break; }
+    }
+    const cleaned = email.replace(/[<>()[\]{}'"]/g,'').trim();
+    if (cleaned && cleaned !== el.value) el.value = cleaned;
+    return true;
+  }
 
 function buildReviewHTML(){
     const amtEl = byId('ctl00_PageBody_PaymentAmountTextBox');
