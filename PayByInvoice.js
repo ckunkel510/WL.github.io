@@ -791,18 +791,6 @@ wireFieldPersistence();
     log.warn('ensureBillingVisible: NOT FOUND');
     return false;
   }
-      } else {
-        // No wizard: keep legacy behavior
-        if (grid && !grid.contains(billContainer)) grid.appendChild(billContainer);
-      }
-
-      const after  = { parent: billContainer.parentElement?.id || '(none)' };
-      log.info('ensureBillingVisible: ensured', { before, after, id: billContainer.id });
-      return true;
-    }
-    log.warn('ensureBillingVisible: NOT FOUND');
-    return false;
-  }
 
 
   /* =============== build layout =============== */
@@ -4091,10 +4079,15 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
        (keeps real radios/selects for WebForms postbacks)
        =========================== */
 
-    // Grab the real controls
-    const rbCheck = $('ctl00_PageBody_RadioButton_PayByCheck');        // treat as "Add new bank account (ACH)"
-    const rbCof   = $('ctl00_PageBody_RadioButton_PayByCheckOnFile');  // saved bank accounts
-    const rbCred  = $('ctl00_PageBody_RadioButton_PayByCredit');       // credit card
+    // Grab the real controls (WebTrack IDs can vary by patch; include robust fallbacks)
+    const rbCheck = $('ctl00_PageBody_RadioButton_PayByCheck')
+      || document.querySelector('input[type="radio"][id*="PayByCheck"], input[type="radio"][name*="PayByCheck"]');        // add new bank account (ACH)
+    const rbCof   = $('ctl00_PageBody_RadioButton_PayByCheckOnFile')
+      || document.querySelector('input[type="radio"][id*="CheckOnFile"], input[type="radio"][name*="CheckOnFile"], input[type="radio"][id*="PayByCheckOnFile"], input[type="radio"][name*="PayByCheckOnFile"]');  // saved bank accounts
+    const rbCred  = $('ctl00_PageBody_RadioButton_PayByCredit')
+      || document.querySelector('input[type="radio"][id*="PayByCredit"], input[type="radio"][name*="PayByCredit"], input[type="radio"][id*="PayByCard"], input[type="radio"][name*="PayByCard"]');       // pay by card (new card)
+    const rbCardOnFile = $('ctl00_PageBody_RadioButton_PayByCardOnFile')
+      || document.querySelector('input[type="radio"][id*="CardOnFile"], input[type="radio"][name*="CardOnFile"], input[type="radio"][id*="PayByCardOnFile"], input[type="radio"][name*="PayByCardOnFile"]'); // saved card on file (CAB)
 
     const cof1 = $('ctl00_PageBody_ChecksOnFileContainer');
     const cof2 = $('ctl00_PageBody_ChecksOnFileContainer1');
@@ -4162,27 +4155,33 @@ function isElementVisible(el){
   }catch{ return true; }
 }
 
-function isCreditAvailable(){
-  // Credit is only available when WebTrack actually enables/renders the credit radio.
-  // NOTE: We move native controls off-screen, so we cannot use layout/rect checks here.
+function isRadioAvailable(r){
   try{
-    if (!rbCred) return false;
-    if (rbCred.disabled) return false;
-    const aria = rbCred.getAttribute('aria-disabled');
+    if (!r) return false;
+    if (r.disabled) return false;
+    const aria = r.getAttribute && r.getAttribute('aria-disabled');
     if (aria && String(aria).toLowerCase() === 'true') return false;
 
-    // If the wrapper is explicitly hidden by the server, respect that.
-    const wrap = rbCred.closest('.radiobutton') || rbCred.parentElement;
+    // Respect explicit hiding (server-side gating)
+    const wrap = r.closest ? (r.closest('.radiobutton') || r.parentElement) : r.parentElement;
     if (wrap){
       const cs = window.getComputedStyle(wrap);
       if (cs && (cs.display === 'none' || cs.visibility === 'hidden')) return false;
+      if (wrap.hasAttribute && wrap.hasAttribute('hidden')) return false;
     }
-    const csI = window.getComputedStyle(rbCred);
+    const csI = window.getComputedStyle(r);
     if (csI && (csI.display === 'none' || csI.visibility === 'hidden')) return false;
 
     return true;
-  }catch(e){}
-  return false;
+  }catch(e){
+    return !!r;
+  }
+}
+
+function isCreditAvailable(){
+  // "Card" methods are only available when WebTrack actually enables/renders them for the account.
+  // We move natives off-screen, so do NOT use layout/rect checks.
+  return isRadioAvailable(rbCred) || isRadioAvailable(rbCardOnFile);
 }
 
 
@@ -4279,29 +4278,49 @@ function setSelectedCard(cardEl, isSelected){
       // Only show the ACH vs Card method toggle when Card is actually available.
       if (creditAvail){
         methodMount.style.display = 'grid';
-        methodMount.innerHTML = `
+        const parts = [];
+        parts.push(`
           <button type="button" class="wl-pay-card" data-method="bank">
             <div class="wl-pay-title">Pay by Bank (ACH)</div>
             <div class="wl-pay-sub">Use a bank account (new or saved).</div>
           </button>
-          <button type="button" class="wl-pay-card" data-method="credit">
-            <div class="wl-pay-title">Pay by Card</div>
-            <div class="wl-pay-sub">Available for select accounts.</div>
-          </button>
-        `;
+        `);
+
+        if (isRadioAvailable(rbCred)){
+          parts.push(`
+            <button type="button" class="wl-pay-card" data-method="credit">
+              <div class="wl-pay-title">Pay by Card</div>
+              <div class="wl-pay-sub">Available for select accounts.</div>
+            </button>
+          `);
+        }
+        if (isRadioAvailable(rbCardOnFile)){
+          parts.push(`
+            <button type="button" class="wl-pay-card" data-method="card_on_file">
+              <div class="wl-pay-title">Card on File</div>
+              <div class="wl-pay-sub">Use a saved card.</div>
+            </button>
+          `);
+        }
+
+        methodMount.innerHTML = parts.join('');
       } else {
         methodMount.style.display = 'none';
         methodMount.innerHTML = '';
       }
 // Match layout to availability
-      try{ methodMount.style.gridTemplateColumns = creditAvail ? '1fr 1fr' : '1fr'; }catch(e){};
+      try{ methodMount.style.gridTemplateColumns = creditAvail ? 'repeat(auto-fit, minmax(0, 1fr))' : '1fr'; }catch(e){};
 
       const bankMethodCard   = methodMount.querySelector('[data-method="bank"]');
       const creditMethodCard = methodMount.querySelector('[data-method="credit"]');
+      const cofCardMethod    = methodMount.querySelector('[data-method="card_on_file"]');
 
       const isCredit = (mode === 'credit');
-      setSelectedCard(bankMethodCard, !isCredit);
+      const isCofCard = (mode === 'card_on_file');
+
+      setSelectedCard(bankMethodCard, (!isCredit && !isCofCard));
       setSelectedCard(creditMethodCard, isCredit);
+      setSelectedCard(cofCardMethod, isCofCard);
 
       bankMount.style.display = 'grid';
 
@@ -4350,10 +4369,13 @@ function setSelectedCard(cardEl, isSelected){
   const method = btn.getAttribute('data-method');
 
   if (method === 'credit'){
-    if (btn.getAttribute('data-disabled') === '1') return;
-    if (!isCreditAvailable()) return;
+    if (!isRadioAvailable(rbCred)) return;
     savePayState({ method:'credit' });
-    clickWebFormsRadio(rbCred)
+    clickWebFormsRadio(rbCred);
+  } else if (method === 'card_on_file'){
+    if (!isRadioAvailable(rbCardOnFile)) return;
+    savePayState({ method:'card_on_file' });
+    clickWebFormsRadio(rbCardOnFile);
   } else {
     // Bank is the default
     const st = loadPayState();
@@ -4367,7 +4389,7 @@ function setSelectedCard(cardEl, isSelected){
     ensureCofVisible();
   }
 
-  setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 80);
+  setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ if (typeof renderSummary==='function') renderSummary(); }catch(e){} }, 50);
 };
 
       bankMount.onclick = (e)=>{
