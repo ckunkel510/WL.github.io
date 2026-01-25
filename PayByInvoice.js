@@ -1,7 +1,7 @@
 
 (function () {
   'use strict';
-  console.log('[AP] PayByInvoice version v20 loaded');
+  console.log('[AP] PayByInvoice version v23 loaded');
 
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
@@ -4429,14 +4429,14 @@ function setSelectedCard(cardEl, isSelected){
           savePayState(st);
         }
 
-        // Native radios may be set by server on CAB loads; honor ONLY if card is available and user intent is not bank.
-        if (cardAvail){
+        // Native radios may be set by server on CAB loads. ONLY honor them if the user actually chose Card.
+// Otherwise, keep Bank (ACH) as the default even when Card is available.
+        if (cardAvail && st.method === 'card'){
           if (rbCred?.checked) return 'card_new';
           if (rbCardOnFile?.checked) return 'card_saved';
-          if (st.method === 'card' && st.card?.mode === 'saved') return 'card_saved';
-          if (st.method === 'card' && st.card?.mode === 'new') return 'card_new';
+          if (st.card?.mode === 'saved') return 'card_saved';
+          if (st.card?.mode === 'new') return 'card_new';
         }
-
         if (st.method === 'bank' && st.bank?.mode === 'saved') return 'bank_saved';
         if (st.method === 'bank' && st.bank?.mode === 'new') return 'bank_new';
 
@@ -4459,6 +4459,23 @@ function setSelectedCard(cardEl, isSelected){
 
       // ----- BANK second level (always visible when bank selected; default shows it) -----
       bankMount.style.display = (!isCardMode) ? 'grid' : 'none';
+      // If Bank is selected and saved bank accounts exist, WebTrack often only populates the COF dropdown
+      // after the PayByCheckOnFile radio is selected (postback). Bootstrap that once so saved accounts
+      // show by default without requiring the user to click the Bank method card.
+      if (!isCardMode && rbCof && cofSel && cofSel.options && cofSel.options.length <= 1){
+        try{
+          const st0 = loadPayState() || {};
+          if (!st0.__cofBootstrapped){
+            st0.__cofBootstrapped = Date.now();
+            st0.method = 'bank';
+            st0.bank = st0.bank || {};
+            st0.bank.mode = 'saved';
+            savePayState(st0);
+            clickWebFormsRadio(rbCof); // triggers the server to populate checks-on-file list
+          }
+        }catch(e){}
+      }
+
 
       // Bank account cards (Add new + saved)
       const bankOpts = [];
