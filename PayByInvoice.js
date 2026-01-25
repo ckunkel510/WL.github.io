@@ -4057,7 +4057,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details</div>
+        <div class="w3-title">Payment Details.</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
@@ -4957,4 +4957,132 @@ function setStep(n){
       });
     }
   } catch {}
+
+  /* =============================
+     Forte loading feedback (Make Payment)
+     - Dims/locks the proxy button
+     - Shows a spinner + "Loading secure payment…"
+     - Auto-clears when a payment modal/dialog appears (best-effort)
+     ============================= */
+  function ensureProxyLoadingStyles(){
+    if (document.getElementById('wl-loading-style')) return;
+    const css = `
+      #wlProxySubmit.is-loading{
+        background:#999 !important;
+        opacity:.6 !important;
+        cursor:wait !important;
+        pointer-events:none;
+        position:relative;
+      }
+      #wlProxySubmit.is-loading::after{
+        content:'';
+        width:16px;
+        height:16px;
+        border:2px solid #fff;
+        border-top-color:transparent;
+        border-radius:50%;
+        position:absolute;
+        right:12px;
+        top:50%;
+        transform:translateY(-50%);
+        animation:wlspin .8s linear infinite;
+      }
+      @keyframes wlspin{ to{ transform:translateY(-50%) rotate(360deg); } }
+      #wlProxySubmit .wl-pay-loading-text{
+        margin-left:10px;
+        font-size:12px;
+        color:#555;
+      }
+    `;
+    const s = document.createElement('style');
+    s.id = 'wl-loading-style';
+    s.textContent = css;
+    document.head.appendChild(s);
+  }
+
+  function setProxyLoading(on, msg){
+    const btn = document.getElementById('wlProxySubmit');
+    if (!btn) return;
+
+    if (on){
+      ensureProxyLoadingStyles();
+      if (btn.classList.contains('is-loading')) return;
+
+      btn.classList.add('is-loading');
+      btn.disabled = true;
+
+      // label
+      let label = btn.querySelector('.wl-pay-loading-text');
+      if (!label){
+        label = document.createElement('span');
+        label.className = 'wl-pay-loading-text';
+        btn.appendChild(label);
+      }
+      label.textContent = msg || 'Loading secure payment…';
+
+      try{ log.debug('proxy submit loading ON'); }catch(e){}
+    } else {
+      btn.classList.remove('is-loading');
+      btn.disabled = false;
+      const label = btn.querySelector('.wl-pay-loading-text');
+      if (label) label.remove();
+      try{ log.debug('proxy submit loading OFF'); }catch(e){}
+    }
+  }
+
+  function startProxyLoadingWatcher(){
+    // Best-effort: clear loading when a modal/dialog (Forte/DEX) appears
+    // (ACH flow will typically post back / navigate; leaving loading on is fine.)
+    let cleared = false;
+
+    function maybeClear(){
+      if (cleared) return;
+      const hit = document.querySelector(
+        '[role="dialog"], [aria-modal="true"], .modal, .Modal, [class*="forte"], [id*="Forte"], [class*="dex"], [id*="dex"], iframe'
+      );
+      if (hit){
+        cleared = true;
+        setProxyLoading(false);
+        try{ obs.disconnect(); }catch(e){}
+      }
+    }
+
+    const obs = new MutationObserver(()=>{ maybeClear(); });
+    try{ obs.observe(document.body, { childList:true, subtree:true }); }catch(e){}
+
+    // Also check a couple times on a short timer (covers cases where modal is already in DOM but hidden)
+    const t0 = Date.now();
+    const timer = setInterval(()=>{
+      maybeClear();
+      if (cleared || (Date.now() - t0) > 12000){
+        clearInterval(timer);
+        // keep disabled if still loading after 12s, but update message to reduce uncertainty
+        if (!cleared){
+          setProxyLoading(true, 'Still loading secure payment…');
+        }
+        try{ obs.disconnect(); }catch(e){}
+      }
+    }, 300);
+  }
+
+  // Delegate click so it works regardless of when the button is rendered
+  document.addEventListener('click', function(e){
+    const t = e.target;
+    if (!t) return;
+    const btn = (t.id === 'wlProxySubmit') ? t : (t.closest ? t.closest('#wlProxySubmit') : null);
+    if (!btn) return;
+
+    // Only if not already loading
+    if (btn.classList.contains('is-loading')) return;
+
+    setProxyLoading(true);
+    startProxyLoadingWatcher();
+  }, true);
+
+  // Expose manual clear hook (handy if you tie into Forte callbacks later)
+  try{
+    window.WLPayUI = window.WLPayUI || {};
+    window.WLPayUI.clearLoading = function(){ setProxyLoading(false); };
+  }catch(e){}
+
 })();
