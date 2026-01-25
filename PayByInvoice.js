@@ -1846,46 +1846,109 @@ wireFieldPersistence();
      PATCH: keep Billing on Step 1 (Info)
      ======================= */
   function pinBillingToStep1(opts){
+    // Proxy workaround:
+    // Keep the REAL WebForms BillingAddressTextBox in its native location so its onchange postback works.
+    // Render a proxy input on Step 1 that mirrors/syncs to the real control.
     opts = opts || {};
     const attempt = opts.attempt || 0;
 
     const infoInner = document.getElementById('w3InfoInner');
-    const billWrap =
-      document.getElementById('ctl00_PageBody_BillingAddressContainer') ||
-      (document.getElementById('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment') || null);
+    const realInput = document.getElementById('ctl00_PageBody_BillingAddressTextBox');
 
-    // Retry because UpdatePanel/Telerik often re-renders after endRequest
-    if (!infoInner || !billWrap){
-      if (attempt < 8){
-        setTimeout(()=>{ try{ pinBillingToStep1({ attempt: attempt + 1 }); }catch{} }, 60 * (attempt + 1));
+    if (!infoInner || !realInput){
+      if (attempt < 10){
+        setTimeout(()=>{ try{ pinBillingToStep1({ attempt: attempt + 1 }); }catch{} }, 80 * (attempt + 1));
       }
       return;
     }
 
-    // Prefer to place Billing before Email (Step 1 stack)
+    const realWrap = realInput.closest('.epi-form-group-acctPayment') || realInput.parentElement;
     const emailWrap = document.getElementById('ctl00_PageBody_EmailTextBox')?.closest('.epi-form-group-acctPayment') || null;
 
-    // Move (or re-move) Billing into Step 1
-    if (billWrap.parentElement !== infoInner){
-      if (emailWrap && emailWrap.parentElement === infoInner){
-        infoInner.insertBefore(billWrap, emailWrap);
+    // Create proxy wrapper once
+    let proxyWrap = document.getElementById('wlProxyBillingWrap');
+    if (!proxyWrap){
+      proxyWrap = document.createElement('div');
+      proxyWrap.id = 'wlProxyBillingWrap';
+      proxyWrap.className = (realWrap && realWrap.className) ? realWrap.className : 'epi-form-group-acctPayment';
+
+      // Try to reuse existing label text if present
+      let labelHtml = '';
+      const realLabel = realWrap ? realWrap.querySelector('label') : null;
+      if (realLabel){
+        labelHtml = `<label class="${realLabel.className}">${realLabel.textContent || 'Billing Address'}</label>`;
       } else {
-        infoInner.appendChild(billWrap);
+        labelHtml = `<label>Billing Address</label>`;
       }
-    } else {
-      // Already in infoInner, ensure it stays before Email
+
+      proxyWrap.innerHTML = `${labelHtml}
+        <input id="wlProxyBillingInput" type="text" maxlength="${realInput.getAttribute('maxlength')||'30'}"
+               class="${realInput.className || 'form-control'}" autocomplete="billing address-line1">`;
+
+      // Insert proxy before Email when possible
       if (emailWrap && emailWrap.parentElement === infoInner){
-        if (billWrap.nextElementSibling !== emailWrap){
-          infoInner.insertBefore(billWrap, emailWrap);
+        infoInner.insertBefore(proxyWrap, emailWrap);
+      } else {
+        infoInner.appendChild(proxyWrap);
+      }
+
+      // Wire sync behavior
+      const proxyInput = proxyWrap.querySelector('#wlProxyBillingInput');
+
+      // Initial mirror
+      proxyInput.value = realInput.value || '';
+
+      // Keep proxy updated after postbacks (when real input value might change)
+      proxyInput.addEventListener('focus', () => {
+        try { proxyInput.value = realInput.value || ''; } catch {}
+      });
+
+      // On typing, just mirror value (no postback)
+      proxyInput.addEventListener('input', () => {
+        try { realInput.value = proxyInput.value; } catch {}
+      });
+
+      // On blur/change, trigger the REAL control's change to allow native postback
+      const commit = () => {
+        try { realInput.value = proxyInput.value; } catch {}
+        try {
+          // This will invoke the inline onchange handler on the real input (WebForm_DoPostBackWithOptions...)
+          realInput.dispatchEvent(new Event('change', { bubbles: true }));
+        } catch {}
+      };
+      proxyInput.addEventListener('blur', commit);
+      proxyInput.addEventListener('change', commit);
+    } else {
+      // Ensure proxy stays in Step 1, before Email
+      const proxyInput = proxyWrap.querySelector('#wlProxyBillingInput');
+      if (proxyInput) proxyInput.value = realInput.value || '';
+
+      if (proxyWrap.parentElement !== infoInner){
+        if (emailWrap && emailWrap.parentElement === infoInner){
+          infoInner.insertBefore(proxyWrap, emailWrap);
+        } else {
+          infoInner.appendChild(proxyWrap);
+        }
+      } else {
+        if (emailWrap && emailWrap.parentElement === infoInner){
+          if (proxyWrap.nextElementSibling !== emailWrap){
+            infoInner.insertBefore(proxyWrap, emailWrap);
+          }
         }
       }
     }
 
-    // Ensure interactable
-    billWrap.style.removeProperty('display');
-    billWrap.style.removeProperty('visibility');
-    billWrap.style.pointerEvents = 'auto';
-    billWrap.classList.add('wl-force-show');
+    // Keep REAL billing control present but hidden (so it doesn't appear on Step 2)
+    if (realWrap){
+      realWrap.style.display = 'none';
+      realWrap.setAttribute('aria-hidden', 'true');
+    }
+
+    // Make proxy interactable
+    proxyWrap.style.removeProperty('display');
+    proxyWrap.style.removeProperty('visibility');
+    proxyWrap.style.pointerEvents = 'auto';
+    proxyWrap.classList.add('wl-force-show');
   }
 
 function mountWidget(){
