@@ -284,9 +284,7 @@ function startSelectionSync(){
     const ids = [
       'ctl00_PageBody_RemittanceAdviceTextBox',
       'ctl00_PageBody_PaymentAmountTextBox',
-      'ctl00_PageBody_BillingAddressTextBox',
-      'ctl00_PageBody_AddressDropdownList',
-      'ctl00_PageBody_PostalCodeTextBox'
+      'ctl00_PageBody_AddressDropdownList'
     ];
     ids.forEach(id=>{
       const el = $(id);
@@ -530,9 +528,7 @@ wireFieldPersistence();
       .wl-cta{ appearance:none; border:none; border-radius:12px; padding:12px 16px; background:var(--wl-brand); color:#fff; font-weight:900; cursor:pointer; width:100%; }
       .wl-cta:focus-visible{ outline:0; box-shadow:0 0 0 3px var(--wl-focus); }
       .wl-link{ background:none; border:none; padding:0; color:#0ea5e9; font-weight:800; cursor:pointer; }
-
-      #ctl00_PageBody_BillingAddressContainer.wl-force-show{ display:block !important; visibility:visible !important; }
-      .epi-form-group-acctPayment.wl-force-show{ display:block !important; visibility:visible !important; }
+      .wl-hide-billing{ position:absolute!important; left:-20000px!important; top:auto!important; width:1px!important; height:1px!important; overflow:hidden!important; }
 
       #ctl00_PageBody_RadioButton_PayByCheck{ display:inline-block !important; }
       label[for="ctl00_PageBody_RadioButton_PayByCheck"]{ display:inline-block !important; }
@@ -581,22 +577,29 @@ wireFieldPersistence();
     }
   }
 
-  function ensureBillingVisible(){
-    const grid = byId('wlFormGrid') || document;
+  function hideBillingUI(){
+    // Billing fields are still required by the server, but we don't want them in the UI.
+    // Keep them in the DOM (not display:none) to avoid WebForms/event-validation quirks.
     const billContainer = byId('ctl00_PageBody_BillingAddressContainer') ||
                           byId('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment');
-    if (billContainer){
-      const before = { parent: billContainer.parentElement?.id || '(none)' };
-      billContainer.classList.add('wl-force-show');
-      billContainer.style.removeProperty('display');
-      if (grid && !grid.contains(billContainer)) grid.appendChild(billContainer);
-      const after  = { parent: billContainer.parentElement?.id || '(none)' };
-      log.info('ensureBillingVisible: ensured', { before, after, id: billContainer.id });
+    const zipGroup = byId('ctl00_PageBody_PostalCodeTextBox')?.closest('.epi-form-group-acctPayment') || null;
+
+    let found = false;
+    [billContainer, zipGroup].forEach(el=>{
+      if (!el) return;
+      found = true;
+      el.classList.add('wl-hide-billing');
+      el.style.removeProperty('display');
+    });
+
+    if (found){
+      log.info('hideBillingUI: billing UI hidden (kept in DOM)');
       return true;
     }
-    log.warn('ensureBillingVisible: NOT FOUND');
+    log.warn('hideBillingUI: billing elements not found');
     return false;
   }
+
 
   /* =============== build layout =============== */
   async function upgradeLayout(){
@@ -694,7 +697,7 @@ wireFieldPersistence();
     });
 
     // Place fields
-    [grp.owing, grp.amount, grp.addrDDL, grp.billAddr, grp.zip, grp.email, grp.notes, grp.remit, grp.payWrap]
+    [grp.owing, grp.amount, grp.addrDDL, grp.email, grp.notes, grp.remit, grp.payWrap]
       .filter(Boolean).forEach(el=>{ if (!grid.contains(el)) { grid.appendChild(el); log.debug('moved to grid', el.id||'(no-id)'); }});
     if (grp.payWrap) grp.payWrap.classList.add('wl-span-2');
 
@@ -753,7 +756,7 @@ wireFieldPersistence();
     }
 
     // Ensure Billing is present/visible
-    ensureBillingVisible();
+    hideBillingUI();
 
     // Summary
     wireSummaryBindings();
@@ -767,8 +770,6 @@ wireFieldPersistence();
   const byId = (id)=> document.getElementById(id);
   const amtEl   = byId('ctl00_PageBody_PaymentAmountTextBox');
   const addrDDL = byId('ctl00_PageBody_AddressDropdownList');
-  const billEl  = byId('ctl00_PageBody_BillingAddressTextBox');
-  const zipEl   = byId('ctl00_PageBody_PostalCodeTextBox');
   const emailEl = byId('ctl00_PageBody_EmailAddressTextBox');
   const remEl   = byId('ctl00_PageBody_RemittanceAdviceTextBox');
 
@@ -776,18 +777,18 @@ wireFieldPersistence();
   const addrSelText = (addrDDL && addrDDL.value !== '-1')
     ? (addrDDL.options[addrDDL.selectedIndex]?.text || '')
     : '';
-  const billing = (billEl?.value || '').trim();
-  const zip     = (zipEl?.value || '').trim();
   const email   = (emailEl?.value || '').trim();
 
   const invs = String((remEl?.value || '').trim())
-    .split(/[,\n\r\t ]+/)
+    .split(/[,
+
+	 ]+/)
     .map(x => x.trim())
     .filter(Boolean);
 
   return {
     total: totalStr ? formatUSD(parseMoney(totalStr)) : '',
-    addrSelText, billing, zip, email,
+    addrSelText, email,
     invCount: invs.length,
     invs
   };
@@ -810,7 +811,6 @@ wireFieldPersistence();
       <div class="wl-row"><div class="wl-key">Invoices</div><div class="wl-val">${d.invCount} item${d.invCount===1?'':'s'} ${d.invCount>6?`<button type="button" class="wl-link" id="wlShowAllInv">View all</button>`:''}</div></div>
       <div class="wl-row"><div class="wl-key">Total</div><div class="wl-val">${d.total || '<small>—</small>'}</div></div>
       <div class="wl-row"><div class="wl-key">Address</div><div class="wl-val">${d.addrSelText || '<small>(none)</small>'}</div></div>
-      <div class="wl-row"><div class="wl-key">Billing</div><div class="wl-val">${d.billing || '<small>—</small>'}<br>${d.zip ? `<small>ZIP ${d.zip}</small>` : ''}</div></div>
       <div class="wl-row"><div class="wl-key">Email</div><div class="wl-val">${d.email || '<small>—</small>'}</div></div>
       <div class="wl-row"><div class="wl-key">Remittance</div><div class="wl-val"><span id="wlRemShort">${remShort || '<small>—</small>'}</span></div></div>
     `;
@@ -831,8 +831,6 @@ wireFieldPersistence();
     [
       'ctl00_PageBody_PaymentAmountTextBox',
       'ctl00_PageBody_AddressDropdownList',
-      'ctl00_PageBody_BillingAddressTextBox',
-      'ctl00_PageBody_PostalCodeTextBox',
       'ctl00_PageBody_EmailAddressTextBox',
       'ctl00_PageBody_RemittanceAdviceTextBox'
     ].forEach(id=>{
@@ -862,7 +860,7 @@ wireFieldPersistence();
             log.info('MSAjax end   #' + seq + ' — re-applying layout');
             upgradeLayout();
             ensurePayByCheckVisibleAndSelected(); // visibility only
-            ensureBillingVisible();
+            hideBillingUI();
             window.WLPayDiag?.snap?.();
           });
           prm.__wlPolishBound = true;
@@ -1029,22 +1027,27 @@ function readPayMode(){
   // expose for other modules
   window.WLPayMode = { readPayMode, setPayMode, ensureCheckOnFileUI };
 
-  function showBilling(){
+  function hideBillingUI(){
     const wrap = document.getElementById(IDS.billWrap) ||
-                 document.getElementById(IDS.billBox)?.closest('.epi-form-group-acctPayment');
-    if (wrap){
-      const before = { parent: wrap.parentElement?.id || '(none)' };
-      wrap.style.removeProperty('display');
-      wrap.classList.add('wl-force-show');
-      const grid = document.getElementById('wlFormGrid');
-      if (grid && !grid.contains(wrap)) grid.appendChild(wrap);
-      const after  = { parent: wrap.parentElement?.id || '(none)' };
-      log.info('showBilling: ensured', { before, after, id: wrap.id });
+                 document.getElementById(IDS.billBox)?.closest('.epi-form-group-acctPayment') ||
+                 null;
+    const zip = document.getElementById('ctl00_PageBody_PostalCodeTextBox')?.closest('.epi-form-group-acctPayment') || null;
+
+    let found = false;
+    [wrap, zip].forEach(el=>{
+      if (!el) return;
+      found = true;
+      el.classList.add('wl-hide-billing');
+      el.style.removeProperty('display');
+    });
+    if (found){
+      log.info('hideBillingUI: billing UI hidden (kept in DOM)');
       return true;
     }
-    log.warn('showBilling: NOT FOUND');
+    log.warn('hideBillingUI: billing elements not found');
     return false;
   }
+
 
   function wireGuards(){
     const amt = document.getElementById(IDS.amount);
@@ -1060,7 +1063,7 @@ function readPayMode(){
 
     const form = document.forms[0];
     if (form && !form.__wlPayGuard){
-      form.addEventListener('submit', ()=>{ log.info('form submit: syncing pay mode'); ensureShadowPayBy(); showBilling(); });
+      form.addEventListener('submit', ()=>{ log.info('form submit: syncing pay mode'); ensureShadowPayBy(); hideBillingUI(); });
       form.__wlPayGuard = true;
       log.info('wireGuards: form submit guard attached');
     }
@@ -1080,7 +1083,7 @@ function readPayMode(){
             if (err){ log.error('GRD end error:', err); if (args?.set_errorHandled) args.set_errorHandled(true); }
             log.info(`GRD end  #${seq} — re-ensure billing + shadow`);
             ensureShadowPayBy(); // keep mirrored
-            showBilling();
+            hideBillingUI();
             removeShadowPayBy();
             window.WLPayDiag?.snap?.();
           });
@@ -1099,7 +1102,7 @@ function readPayMode(){
     log.info('GRD BOOT');
     setPayByCheckDefaultIfUnset('boot'); // default only if unset
     ensureShadowPayBy();                 // mirror whatever is selected
-    showBilling();
+    hideBillingUI();
     wireGuards();
     window.WLPayDiag?.snap?.();
   }
