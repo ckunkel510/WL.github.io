@@ -637,6 +637,58 @@ wireFieldPersistence();
 
       #ctl00_PageBody_RadioButton_PayByCheck{ display:inline-block !important; }
       label[for="ctl00_PageBody_RadioButton_PayByCheck"]{ display:inline-block !important; }
+
+
+      /* ===========================
+         Pay Method Cards
+         =========================== */
+      .wl-hidden-native{
+        position:absolute!important;
+        left:-20000px!important;
+        top:auto!important;
+        width:1px!important;
+        height:1px!important;
+        overflow:hidden!important;
+      }
+      #w3PayInner .wl-pay-methods{
+        display:grid;
+        grid-template-columns: 1fr 1fr;
+        gap:12px;
+      }
+      @media (max-width:720px){
+        #w3PayInner .wl-pay-methods{ grid-template-columns: 1fr; }
+      }
+      #w3PayInner .wl-pay-bank{
+        display:grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap:12px;
+        margin-top:12px;
+      }
+      @media (max-width:720px){
+        #w3PayInner .wl-pay-bank{ grid-template-columns: 1fr; }
+      }
+      #w3PayInner .wl-pay-card{
+        appearance:none;
+        border:2px solid #6b0015;
+        border-radius:14px;
+        background:#fff;
+        color:#000;
+        text-align:left;
+        padding:14px 14px;
+        cursor:pointer;
+        display:block;
+      }
+      #w3PayInner .wl-pay-title{ font-weight:900; }
+      #w3PayInner .wl-pay-sub{ margin-top:4px; opacity:.85; font-size:12px; }
+      #w3PayInner .wl-pay-card.is-selected{
+        background:#6b0015;
+        color:#fff;
+      }
+      #w3PayInner .wl-pay-card:focus-visible{
+        outline:0;
+        box-shadow:0 0 0 3px rgba(107,0,21,.25);
+      }
+
     `;
     const el = document.createElement('style'); el.id='wl-ap-polish-css'; el.textContent = css; document.head.appendChild(el);
     log.info('injectCSS: styles injected');
@@ -3905,23 +3957,203 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
 
     const payInner = $('w3PayInner');
 
-    // Move pay-by radio wrappers (real controls)
-    const rbCheck = $('ctl00_PageBody_RadioButton_PayByCheck');
-    const rbCof   = $('ctl00_PageBody_RadioButton_PayByCheckOnFile');
-    const rbCred  = $('ctl00_PageBody_RadioButton_PayByCredit');
+    /* ===========================
+       Pay Method UI -> Card UI
+       (keeps real radios/selects for WebForms postbacks)
+       =========================== */
 
+    // Grab the real controls
+    const rbCheck = $('ctl00_PageBody_RadioButton_PayByCheck');        // treat as "Add new bank account (ACH)"
+    const rbCof   = $('ctl00_PageBody_RadioButton_PayByCheckOnFile');  // saved bank accounts
+    const rbCred  = $('ctl00_PageBody_RadioButton_PayByCredit');       // credit card
+
+    const cof1 = $('ctl00_PageBody_ChecksOnFileContainer');
+    const cof2 = $('ctl00_PageBody_ChecksOnFileContainer1');
+    const cofSel = (cof1?.querySelector('select') || cof2?.querySelector('select')) || null;
+
+    // Wrap the native WebForms controls off-screen (NOT display:none)
+    let nativeHost = $('wlPayNativeHost');
+    if (!nativeHost){
+      nativeHost = document.createElement('div');
+      nativeHost.id = 'wlPayNativeHost';
+      nativeHost.className = 'wl-hidden-native';
+      payInner.appendChild(nativeHost);
+    }
+
+    // Move the native radio wrappers + COF containers into nativeHost (so they stay functional)
     const wCheck = rbCheck?.closest('.radiobutton') || rbCheck?.parentElement;
     const wCof   = rbCof?.closest('.radiobutton')   || rbCof?.parentElement;
     const wCred  = rbCred?.closest('.radiobutton')  || rbCred?.parentElement;
 
-    if (wCheck) payInner.appendChild(wCheck);
-    if (wCof)   payInner.appendChild(wCof);
-    if (wCred)  payInner.appendChild(wCred);
+    [wCheck, wCof, wCred, cof1, cof2].forEach(el=>{
+      if (el && el.parentElement !== nativeHost) nativeHost.appendChild(el);
+    });
 
-    const cof1 = $('ctl00_PageBody_ChecksOnFileContainer');
-    const cof2 = $('ctl00_PageBody_ChecksOnFileContainer1');
-    if (cof1) payInner.appendChild(cof1);
-    if (cof2) payInner.appendChild(cof2);
+    // Rename the *label text* for PayByCheck (optional, but nice if it ever shows)
+    try{
+      const lbl = document.querySelector('label[for="ctl00_PageBody_RadioButton_PayByCheck"]');
+      if (lbl) lbl.textContent = 'Pay by Bank (ACH)';
+    }catch{}
+
+    // Visible card UI mount
+    let cardHost = $('wlPayCardsHost');
+    if (!cardHost){
+      cardHost = document.createElement('div');
+      cardHost.id = 'wlPayCardsHost';
+      cardHost.innerHTML = `
+        <div class="wl-pay-methods" id="wlPayMethodCards"></div>
+        <div class="wl-pay-bank" id="wlPayBankCards" style="display:none;"></div>
+      `;
+      payInner.appendChild(cardHost);
+    }
+
+    function setSelectedCard(cardEl, isSelected){
+      if (!cardEl) return;
+      cardEl.classList.toggle('is-selected', !!isSelected);
+      cardEl.setAttribute('aria-pressed', !!isSelected ? 'true' : 'false');
+    }
+
+    function currentMode(){
+      if (rbCred?.checked) return 'credit';
+      if (rbCof?.checked) return 'bank_saved';
+      if (rbCheck?.checked) return 'bank_new';
+      return 'bank_new';
+    }
+
+    function ensureCofVisible(){
+      try{ window.WLPayMode?.ensureCheckOnFileUI?.(); }catch{}
+      try{
+        if (rbCof && !rbCof.checked) rbCof.click();
+      }catch{}
+    }
+
+    function renderPayCards(){
+      const methodMount = $('wlPayMethodCards');
+      const bankMount   = $('wlPayBankCards');
+      if (!methodMount || !bankMount) return;
+
+      const mode = currentMode();
+
+      // Method cards (Bank vs Credit)
+      methodMount.innerHTML = `
+        <button type="button" class="wl-pay-card" data-method="bank">
+          <div class="wl-pay-title">Pay by Bank (ACH)</div>
+          <div class="wl-pay-sub">Use a bank account (new or saved).</div>
+        </button>
+        <button type="button" class="wl-pay-card" data-method="credit">
+          <div class="wl-pay-title">Pay by Credit Card</div>
+          <div class="wl-pay-sub">Secure card payment.</div>
+        </button>
+      `;
+
+      const bankMethodCard   = methodMount.querySelector('[data-method="bank"]');
+      const creditMethodCard = methodMount.querySelector('[data-method="credit"]');
+
+      const isCredit = (mode === 'credit');
+      setSelectedCard(creditMethodCard, isCredit);
+      setSelectedCard(bankMethodCard, !isCredit);
+
+      bankMount.style.display = isCredit ? 'none' : 'grid';
+
+      // Bank account cards (Add new + saved)
+      const opts = [];
+      try{
+        if (cofSel && cofSel.options){
+          for (const o of Array.from(cofSel.options)){
+            const val = String(o.value || '').trim();
+            const txt = String(o.text || '').trim();
+            if (!val || val === '-1') continue;
+            if (!txt || /select/i.test(txt)) continue;
+            opts.push({ value: val, text: txt });
+          }
+        }
+      }catch{}
+
+      const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
+
+      const savedCards = opts.map(o=>{
+        const selected = (mode === 'bank_saved' && selectedCofVal && selectedCofVal === o.value);
+        return `
+          <button type="button" class="wl-pay-card wl-bank-card ${selected ? 'is-selected':''}"
+                  data-bank="saved" data-value="${o.value}">
+            <div class="wl-pay-title">${o.text}</div>
+            <div class="wl-pay-sub">Saved bank account</div>
+          </button>
+        `;
+      }).join('');
+
+      const addNewSelected = (mode === 'bank_new' || (mode !== 'credit' && opts.length === 0));
+      bankMount.innerHTML = `
+        <button type="button" class="wl-pay-card wl-bank-card ${addNewSelected ? 'is-selected':''}"
+                data-bank="new">
+          <div class="wl-pay-title">Add new bank account</div>
+          <div class="wl-pay-sub">Enter bank details (ACH).</div>
+        </button>
+        ${savedCards || ''}
+      `;
+
+      methodMount.onclick = (e)=>{
+        const btn = e.target.closest('.wl-pay-card[data-method]');
+        if (!btn) return;
+        const method = btn.getAttribute('data-method');
+
+        if (method === 'credit'){
+          try{ rbCred?.click(); }catch{}
+        } else {
+          try{ rbCheck?.click(); }catch{}
+          ensureCofVisible();
+        }
+
+        setTimeout(renderPayCards, 50);
+      };
+
+      bankMount.onclick = (e)=>{
+        const btn = e.target.closest('.wl-pay-card[data-bank]');
+        if (!btn) return;
+
+        const kind = btn.getAttribute('data-bank');
+
+        if (kind === 'new'){
+          try{ rbCheck?.click(); }catch{}
+          setTimeout(renderPayCards, 50);
+          return;
+        }
+
+        const val = btn.getAttribute('data-value') || '';
+        if (!val) return;
+
+        ensureCofVisible();
+
+        setTimeout(()=>{
+          try{
+            if (rbCof && !rbCof.checked) rbCof.click();
+          }catch{}
+
+          setTimeout(()=>{
+            try{
+              if (cofSel){
+                cofSel.value = val;
+                cofSel.dispatchEvent(new Event('change', { bubbles:true }));
+              }
+            }catch{}
+            setTimeout(renderPayCards, 50);
+          }, 80);
+        }, 80);
+      };
+    }
+
+    // Initial render + rerender after MS AJAX updates
+    renderPayCards();
+    try{
+      if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
+        const prm = Sys.WebForms.PageRequestManager.getInstance();
+        if (!prm.__wlPayCardsBound){
+          prm.add_endRequest(()=>{ setTimeout(renderPayCards, 0); });
+          prm.__wlPayCardsBound = true;
+        }
+      }
+    }catch{}
+
 
     // Move Make Payment button
     const mp = findMakePaymentButton();
