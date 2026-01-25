@@ -563,14 +563,29 @@ wireFieldPersistence();
   }
 
   function ensureBillingVisible(){
-    const grid = byId('wlFormGrid') || document;
+    const wizInfo = byId('w3InfoInner'); // Wizard v3 Step 1
+    const grid    = byId('wlFormGrid') || document; // Payment step container (legacy)
+
     const billContainer = byId('ctl00_PageBody_BillingAddressContainer') ||
-                          byId('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment');
+                          byId('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment') ||
+                          byId('ctl00_PageBody_BillingAddressTextBox')?.closest('.wl-field'); // your custom wrapper
+
     if (billContainer){
       const before = { parent: billContainer.parentElement?.id || '(none)' };
+
       billContainer.classList.add('wl-force-show');
       billContainer.style.removeProperty('display');
-      if (grid && !grid.contains(billContainer)) grid.appendChild(billContainer);
+
+      if (wizInfo){
+        // Wizard v3 active: Billing must live on Step 1, never in payment grid.
+        if (!wizInfo.contains(billContainer)) {
+          wizInfo.appendChild(billContainer);
+        }
+      } else {
+        // No wizard: keep legacy behavior
+        if (grid && !grid.contains(billContainer)) grid.appendChild(billContainer);
+      }
+
       const after  = { parent: billContainer.parentElement?.id || '(none)' };
       log.info('ensureBillingVisible: ensured', { before, after, id: billContainer.id });
       return true;
@@ -578,6 +593,7 @@ wireFieldPersistence();
     log.warn('ensureBillingVisible: NOT FOUND');
     return false;
   }
+
 
   /* =============== build layout =============== */
   async function upgradeLayout(){
@@ -3592,7 +3608,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details</div>
+        <div class="w3-title">Payment Wizard</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
