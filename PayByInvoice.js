@@ -4057,7 +4057,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details.</div>
+        <div class="w3-title">Payment Details</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
@@ -4178,7 +4178,18 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
           || document.querySelector('select[id*="CardOnFile"],select[name*="CardOnFile"],select[id*="CardsOnFile"],select[name*="CardsOnFile"],select[id*="PayByCardOnFile"],select[name*="PayByCardOnFile"]');
         return s || null;
       }catch(e){ return null; }
+    
+function getCofSel(){
+      try{
+        // Common selectors for "Checks on File" dropdown
+        const sel =
+          document.querySelector('select[id*="ChecksOnFile"], select[id*="CheckOnFile"], select[name*="ChecksOnFile"], select[name*="CheckOnFile"]') ||
+          (typeof cofSel !== 'undefined' ? cofSel : null);
+        return sel || null;
+      }catch(e){ return null; }
     }
+
+}
 
     // Pending selection bridge: selecting a saved card often triggers a partial postback that replaces the <select>.
     // We store the intended value and apply it on MS AJAX endRequest.
@@ -4186,16 +4197,33 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
     if (typeof window.WLPayPending.apply !== 'function'){
       window.WLPayPending.apply = function(){
         try{
-          if (!this.__cardPendingVal) return;
-          const val = this.__cardPendingVal;
-          const sel = getCardSel();
-          if (sel){
-            sel.value = val;
-            // trigger WebForms onchange handler (often calls __doPostBack)
-            sel.dispatchEvent(new Event('change', { bubbles:true }));
-            // clear only after we successfully found the select
-            this.__cardPendingVal = null;
-            this.__cardPendingText = null;
+          // Apply pending saved-card selection (postback can replace the <select>)
+          if (this.__cardPendingVal){
+            const val = this.__cardPendingVal;
+            const sel = getCardSel();
+            if (sel){
+              sel.value = val;
+              sel.dispatchEvent(new Event('change', { bubbles:true }));
+              this.__cardPendingVal = null;
+              this.__cardPendingText = null;
+            }
+          }
+
+          // Apply pending bank (check-on-file) selection or clear (postback can replace the <select>)
+          if (this.__cofPendingVal !== undefined){
+            const sel2 = (typeof getCofSel === 'function') ? getCofSel() : (window.cofSel || null);
+            if (sel2){
+              if (String(this.__cofPendingVal) === '__CLEAR__'){
+                clearSelectToPlaceholder(sel2, true);
+              } else {
+                try{
+                  sel2.value = String(this.__cofPendingVal);
+                  sel2.dispatchEvent(new Event('change', { bubbles:true }));
+                }catch(e){}
+              }
+              this.__cofPendingVal = undefined;
+              this.__cofPendingText = null;
+            }
           }
         }catch(e){}
       };
@@ -4344,6 +4372,20 @@ function clickWebFormsRadio(rb){
     // fallback: explicitly invoke postback for this control
     if (window.__doPostBack && rb && rb.name){
       setTimeout(()=>{ try{ __doPostBack(rb.name,''); }catch(e){} }, 0);
+    }
+  }catch(e){}
+}
+
+
+function clearSelectToPlaceholder(sel, fireChange){
+  try{
+    if (!sel) return;
+    const opts = Array.from(sel.options || []);
+    const hasMinus1 = opts.some(o => String(o.value) === '-1');
+    if (hasMinus1) sel.value = '-1';
+    else if (opts.length) sel.selectedIndex = 0;
+    if (fireChange){
+      try{ sel.dispatchEvent(new Event('change', { bubbles:true })); }catch(e){}
     }
   }catch(e){}
 }
@@ -4662,23 +4704,34 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
         const kind = btn.getAttribute('data-bank');
 
         if (kind === 'new'){
+          // User intends to enter a NEW bank account
           savePayState({ __userPicked:true, method:'bank', bank:{ mode:'new' } });
 
-          // Clear any prior COF selection so UI and server agree that we're entering a new account
+          // Clear any pending selections so we don't "snap back" to a saved method after postback
           try{
-            if (cofSel){
-              const hasMinus1 = Array.from(cofSel.options || []).some(o => String(o.value) === '-1');
-              cofSel.value = hasMinus1 ? '-1' : (cofSel.options?.[0]?.value || '');
-            }
+            window.WLPayPending = window.WLPayPending || {};
+            window.WLPayPending.__cofPendingVal = '__CLEAR__';
+            window.WLPayPending.__cofPendingText = null;
           }catch(e){}
+
+          // Clear current COF dropdown value immediately (if present)
+          try{ clearSelectToPlaceholder(getCofSel(), false); }catch(e){}
 
           // Immediate visual update
           renderPayCards();
           try{ renderSummary(); }catch(e){}
 
-          // Trigger real WebForms control
+          // Trigger the REAL WebForms radio for "Pay by Bank (new)"
           try{ clickWebFormsRadio(rbCheck); }catch(e){}
-          setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 120);
+
+          // After postback, ensure COF selection is cleared and UI/summary match the true native state
+          setTimeout(()=>{
+            try{ if (window.WLPayPending && typeof window.WLPayPending.apply === 'function') window.WLPayPending.apply(); }catch(e){}
+            reconcileNativeFromState();
+            renderPayCards();
+            try{ renderSummary(); }catch(e){}
+          }, 180);
+
           return;
         }
 
@@ -4690,20 +4743,27 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
 
         ensureCofVisible();
 
+        // Store intended COF selection; applying after MS AJAX endRequest is more reliable
+        try{
+          window.WLPayPending = window.WLPayPending || {};
+          window.WLPayPending.__cofPendingVal = val;
+          window.WLPayPending.__cofPendingText = text;
+        }catch(e){}
+
         setTimeout(()=>{
           try{
             if (rbCof && !rbCof.checked) clickWebFormsRadio(rbCof);
+            else if (rbCof && rbCof.checked){
+              // even if already checked, a change in dropdown may still require a postback
+              // apply will dispatch change on the select
+            }
           }catch(e){}
 
+          // Try applying immediately, and endRequest will re-apply if the select gets replaced
           setTimeout(()=>{
-            try{
-              if (cofSel){
-                cofSel.value = val;
-                cofSel.dispatchEvent(new Event('change', { bubbles:true }));
-              }
-            }catch(e){}
-            setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 120);
-          }, 80);
+            try{ if (window.WLPayPending && typeof window.WLPayPending.apply === 'function') window.WLPayPending.apply(); }catch(e){}
+            setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 160);
+          }, 120);
         }, 80);
       };
     }
