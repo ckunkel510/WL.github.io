@@ -4057,7 +4057,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details</div>
+        <div class="w3-title">Payment Details.</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
@@ -4419,14 +4419,24 @@ function reconcileNativeFromState(){
 function clickWebFormsRadio(rb){
   try{
     if (!rb) return;
-    // click the actual input so WebForms validation stays happy
+
+    // 1) Prefer the element's "name" attribute (WebForms UniqueID) for postback targets.
+    const uniqueTarget = rb.getAttribute('name') || rb.name || null;
+
+    // 2) Click the actual input so the UI state updates immediately.
     rb.click();
-  }catch(e){}
-  try{
-    // fallback: explicitly invoke postback for this control using its UniqueID
-    if (window.__doPostBack && rb && rb.id){
-      const target = String(rb.id).replace(/_/g,'$');
-      setTimeout(function(){ try{ __doPostBack(target,''); }catch(e){} }, 0);
+
+    // 3) If WebForms is expecting a postback to switch payment panes, trigger it explicitly.
+    if (window.__doPostBack){
+      const target = uniqueTarget
+        ? String(uniqueTarget)
+        : (rb.id ? String(rb.id).replace(/_/g,'$') : null);
+
+      if (target){
+        setTimeout(function(){
+          try{ __doPostBack(target,''); }catch(e){}
+        }, 0);
+      }
     }
   }catch(e){}
 }
