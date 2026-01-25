@@ -1044,7 +1044,8 @@ try{
     if (st?.method === 'credit' || st?.method === 'card') payMethod = 'Credit Card';
     if (st?.method === 'bank')   payMethod = 'Bank (ACH)';
     if (st?.method === 'bank'){
-      if (st?.bank?.mode === 'new') payAccount = 'Add new bank account';
+      if (st?.bank?.mode === 'new')   payAccount = 'Add new bank account';
+      if (st?.bank?.mode === 'forte') payAccount = 'Add bank account';
       if (st?.bank?.mode === 'saved') payAccount = st?.bank?.text || 'Saved bank account';
     }
   }
@@ -4327,6 +4328,15 @@ function reconcileNativeFromState(){
   const st = loadPayState();
   if (!st) return;
   try{
+    // BANK (secure entry / bank-on-file enrollment) selected via rbCred in this build
+    if (st.method === 'bank' && st.bank?.mode === 'forte' && rbCred){
+      rbCred.checked = true;
+      if (rbCheck) rbCheck.checked = false;
+      if (rbCof) rbCof.checked = false;
+      if (rbCardOnFile) rbCardOnFile.checked = false;
+      return;
+    }
+
     // CARD (new card) selected
     if ((st.method === 'credit' || st.method === 'card') && isCreditAvailable() && rbCred){
       rbCred.checked = true;
@@ -4489,6 +4499,7 @@ function setSelectedCard(cardEl, isSelected){
           if (st.card?.mode === 'new') return 'card_new';
         }
         if (st.method === 'bank' && st.bank?.mode === 'saved') return 'bank_saved';
+        if (st.method === 'bank' && st.bank?.mode === 'forte') return 'bank_forte';
         if (st.method === 'bank' && st.bank?.mode === 'new') return 'bank_new';
 
         // Fallback inference (no saved state)
@@ -4570,13 +4581,25 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
         `;
       }).join('');
 
-      const bankAddNewSelected = (mode === 'bank_new' || (!cardAvail && bankOpts.length === 0));
+      const bankAddNewSelected   = (mode === 'bank_new' || (!cardAvail && bankOpts.length === 0));
+      const bankForteSelected    = (mode === 'bank_forte');
+      const showAddNewBankForte  = isRadioAvailable(rbCred); // this build's "Add new card" actually opens bank account entry
+
       bankMount.innerHTML = `
         <button type="button" class="wl-pay-card wl-bank-card ${bankAddNewSelected ? 'is-selected':''}"
                 data-bank="new">
           <div class="wl-pay-title">Add new bank account</div>
           <div class="wl-pay-sub">Enter bank details (ACH).</div>
         </button>
+
+        ${showAddNewBankForte ? `
+          <button type="button" class="wl-pay-card wl-bank-card ${bankForteSelected ? 'is-selected':''}"
+                  data-bank="forte">
+            <div class="wl-pay-title">Add bank account</div>
+            <div class="wl-pay-sub">Secure entry (bank on file).</div>
+          </button>
+        ` : ''}
+
         ${bankSavedCards || ''}
       `;
 
@@ -4621,13 +4644,6 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
         }).join('');
 
         cardMount.innerHTML = `
-          ${showAddNewCard ? `
-            <button type="button" class="wl-pay-card wl-card-card ${addNewCardSelected ? 'is-selected':''}"
-                    data-card="new">
-              <div class="wl-pay-title">Add new card</div>
-              <div class="wl-pay-sub">Enter card details.</div>
-            </button>
-          ` : ''}
           ${showSavedCards ? savedCardCards : ''}
         `;
 
@@ -4749,6 +4765,38 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
           // After postback, ensure COF selection is cleared and UI/summary match the true native state
           setTimeout(()=>{
             try{ if (window.WLPayPending && typeof window.WLPayPending.apply === 'function') window.WLPayPending.apply(); }catch(e){}
+            reconcileNativeFromState();
+            renderPayCards();
+            try{ renderSummary(); }catch(e){}
+          }, 180);
+
+          return;
+        }
+
+        if (kind === 'forte'){
+          // This build's "Add new card" is actually the bank-on-file enrollment / entry flow.
+          savePayState({ __userPicked:true, method:'bank', bank:{ mode:'forte' } });
+
+          // Clear any pending COF selection; we're about to open the enrollment/entry flow.
+          try{
+            window.WLPayPending = window.WLPayPending || {};
+            window.WLPayPending.__cofPendingVal = '__CLEAR__';
+            window.WLPayPending.__cofPendingText = null;
+          }catch(e){}
+
+          // Visual update immediately
+          renderPayCards();
+          try{ renderSummary(); }catch(e){}
+
+          // Trigger the underlying WebForms radio that launches the secure entry flow
+          try{
+            if (rbCheck) rbCheck.checked = false;
+            if (rbCof) rbCof.checked = false;
+            if (rbCardOnFile) rbCardOnFile.checked = false;
+            clickWebFormsRadio(rbCred);
+          }catch(e){}
+
+          setTimeout(()=>{
             reconcileNativeFromState();
             renderPayCards();
             try{ renderSummary(); }catch(e){}
