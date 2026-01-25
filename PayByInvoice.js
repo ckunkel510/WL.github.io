@@ -675,8 +675,27 @@ wireFieldPersistence();
     });
 
     // Place fields (explicit order; keep Billing before Email even after postbacks)
-    const ordered = [grp.owing, grp.amount, grp.addrDDL, grp.billAddr, grp.zip, grp.email, grp.notes, grp.remit, grp.payWrap]
+
+    const WIZ_V3_ACTIVE = !!document.getElementById('w3InfoInner');
+
+    function isWizardInfoField(el){
+      if (!el) return false;
+      // Any wrapper containing these server controls belongs on Step 1 in Wizard v3
+      return !!(el.querySelector && (
+        el.querySelector('#ctl00_PageBody_BillingAddressTextBox') ||
+        el.querySelector('#ctl00_PageBody_PostalCodeTextBox') ||
+        el.querySelector('#ctl00_PageBody_EmailAddressTextBox') ||
+        el.id === 'ctl00_PageBody_BillingAddressContainer'
+      ));
+    }
+
+    let ordered = [grp.owing, grp.amount, grp.addrDDL, grp.billAddr, grp.zip, grp.email, grp.notes, grp.remit, grp.payWrap]
       .filter(Boolean);
+
+    if (WIZ_V3_ACTIVE){
+      // Wizard v3 renders Billing/ZIP/Email on Step 1; don't let legacy placer pull them into payment step.
+      ordered = ordered.filter(el => !isWizardInfoField(el));
+    }
 
     ordered.forEach(el=>{
       if (!grid.contains(el)) { grid.appendChild(el); log.debug('moved to grid', el.id||'(no-id)'); }
@@ -684,6 +703,7 @@ wireFieldPersistence();
 
     // Billing must appear before Email in Step 1 (users fill billing first)
     (function enforceBillingBeforeEmail(){
+      if (WIZ_V3_ACTIVE) return;
       const bill = grp.billAddr
         || byId('ctl00_PageBody_BillingAddressContainer')
         || byId('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment');
