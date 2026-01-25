@@ -107,7 +107,7 @@
               <button type="button" class="w3-btn ghost sm" id="wlBillingEditBtn">Edit</button>
             </div>
             <input type="text" class="${inputClass || 'form-control'}" readonly value="">
-            <div class="wl-bill-note">To change this, click Edit.</div>
+            <div class="wl-bill-note">Saved. To change this, click Edit.</div>
           </div>
         `;
       }
@@ -3650,6 +3650,33 @@ if (jobBtn){
 
   const STEP_KEY = '__WL_AP_WIZ3_STEP';
 
+  // Reset wizard state when arriving from another page (but keep state across same-page postbacks).
+  const PAGE_KEY = "wl_ap_lastPath";
+  function cameFromOtherPage(){
+    try{
+      const ref = document.referrer || "";
+      // If referrer is empty (direct open) treat as fresh.
+      if (!ref) return true;
+      // If coming from another page (not AccountPayment), reset.
+      return !/AccountPayment_r\.aspx/i.test(ref);
+    }catch{ return true; }
+  }
+  function resetWizardState(){
+    try{ sessionStorage.removeItem(STEP_KEY); }catch{}
+    try{ localStorage.removeItem(STEP_KEY); }catch{}
+    try{ sessionStorage.removeItem("wl_bill_lock"); }catch{}
+    try{ sessionStorage.removeItem("wl_bill_draft"); }catch{}
+    try{ sessionStorage.removeItem("wl_bill_postback_pending"); }catch{}
+  }
+  // If we navigated in from elsewhere, clear step so customers start at Step 1.
+  try{
+    if (cameFromOtherPage()){
+      resetWizardState();
+    }
+    try{ sessionStorage.setItem(PAGE_KEY, location.pathname + location.search); }catch{}
+  }catch{}
+
+
   function injectCSS(){
     if ($('wl-ap-wiz3-css')) return;
     const css = `
@@ -3795,7 +3822,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details</div>
+        <div class="w3-title">Payment Wizard</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
