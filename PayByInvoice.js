@@ -2252,24 +2252,16 @@ const IDS = {
         const v = (proxyInput.value || '').trim();
         try { realInput.value = v; } catch {}
         try { saveBillDraft(v); } catch {}
-        try { if (v) lockBilling(v); } catch {}
 
-        
-        try{ if (v) showBillConfirm('Billing address saved ✔', true); else showBillConfirm('Billing address is blank — please enter it before continuing.', false); }catch{}
-// If we have a value, show the read-only display immediately and hide the proxy input.
+        // Reassure the user the value is captured (no forced postback here)
         try{
-          if (v){
-            renderBillingDisplay(infoInner, v, realInput.className || 'form-control');
-            proxyWrap.style.display = 'none';
-            proxyWrap.setAttribute('aria-hidden','true');
-            // Keep them on Step 1 after the round-trip.
-            try { sessionStorage.setItem(STEP_KEY, '1'); } catch {}
-            // Trigger once (throttled) — same path as native Make Payment.
-            if (!opts.skipPostback){
-              setTimeout(()=>{ try{ forcePayByCheckRoundTrip('billing-commit'); }catch{} }, 0);
-            }
-          }
+          if (v) showBillConfirm('Billing address saved ✔', true);
+          else showBillConfirm('Billing address is blank — please enter it before continuing.', false);
         }catch{}
+
+        // fire events so any existing listeners still run
+        try { realInput.dispatchEvent(new Event('input', {bubbles:true})); } catch {}
+        try { realInput.dispatchEvent(new Event('change', {bubbles:true})); } catch {}
       };
       proxyInput.addEventListener('blur', ()=>commit());
       proxyInput.addEventListener('change', ()=>commit());
@@ -3963,7 +3955,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details.</div>
+        <div class="w3-title">Payment Details</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
@@ -4157,6 +4149,20 @@ function reconcileNativeFromState(){
   }catch{}
 }
 
+function clickWebFormsRadio(rb){
+  try{
+    if (!rb) return;
+    // click the actual input so WebForms validation stays happy
+    rb.click();
+  }catch{}
+  try{
+    // fallback: explicitly invoke postback for this control
+    if (window.__doPostBack && rb && rb.name){
+      setTimeout(()=>{ try{ __doPostBack(rb.name,''); }catch{} }, 0);
+    }
+  }catch{}
+}
+
 function setSelectedCard(cardEl, isSelected){
       if (!cardEl) return;
       cardEl.classList.toggle('is-selected', !!isSelected);
@@ -4192,7 +4198,7 @@ function setSelectedCard(cardEl, isSelected){
     function ensureCofVisible(){
       try{ window.WLPayMode?.ensureCheckOnFileUI?.(); }catch{}
       try{
-        if (rbCof && !rbCof.checked) rbCof.click();
+        if (rbCof && !rbCof.checked) clickWebFormsRadio(rbCof);
       }catch{}
     }
 
@@ -4284,7 +4290,7 @@ function setSelectedCard(cardEl, isSelected){
     if (btn.getAttribute('data-disabled') === '1') return;
     if (!isCreditAvailable()) return;
     savePayState({ method:'credit' });
-    try{ rbCred?.click(); }catch{}
+    clickWebFormsRadio(rbCred)
   } else {
     // Bank is the default
     const st = loadPayState();
@@ -4292,8 +4298,8 @@ function setSelectedCard(cardEl, isSelected){
     savePayState({ method:'bank', bank: preferSaved ? st.bank : { mode:'new' } });
 
     try{
-      if (preferSaved) rbCof?.click();
-      else rbCheck?.click();
+      if (preferSaved) clickWebFormsRadio(rbCof);
+      else clickWebFormsRadio(rbCheck);
     }catch{}
     ensureCofVisible();
   }
@@ -4324,7 +4330,7 @@ function setSelectedCard(cardEl, isSelected){
           try{ renderSummary(); }catch{}
 
           // Trigger the real WebForms control behind the card
-          try{ rbCheck?.click(); }catch{}
+          try{ clickWebFormsRadio(rbCheck); }catch{}
           setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch{} }, 80);
           return;
         }
@@ -4339,7 +4345,7 @@ function setSelectedCard(cardEl, isSelected){
 
         setTimeout(()=>{
           try{
-            if (rbCof && !rbCof.checked) rbCof.click();
+            if (rbCof && !rbCof.checked) clickWebFormsRadio(rbCof);
           }catch{}
 
           setTimeout(()=>{
