@@ -4057,7 +4057,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details.</div>
+        <div class="w3-title">Payment Details</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
@@ -4493,8 +4493,9 @@ function setSelectedCard(cardEl, isSelected){
 
         // Fallback inference (no saved state)
         const hasCofSelection = !!(cofSel && cofSel.value && cofSel.value !== '-1');
-        if (rbCof?.checked || hasCofSelection) return 'bank_saved';
+        // If "Add new" is selected (PayByCheck), treat as NEW regardless of COF select retaining a value
         if (rbCheck?.checked) return 'bank_new';
+        if (rbCof?.checked || hasCofSelection) return 'bank_saved';
 
         return 'bank_new';
       }
