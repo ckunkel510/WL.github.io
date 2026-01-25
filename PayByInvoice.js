@@ -3747,89 +3747,25 @@ function setStep(n){
 
 
 /* ============================================================
-   WL PATCH: Embrace postbacks + persist wizard state + restore after every refresh
-   - Always restart wizard on fresh page load (new payment session)
-   - Persist step + key fields
-   - After every async postback: re-pin billing + restore fields + restore step
+   WL PATCH: Proxy Billing UI in Step 1 (do NOT move server controls)
+   - Keeps original Billing controls where WebForms expects them
+   - Adds proxy inputs to Step 1 and syncs values into real fields
+   - Hides the real Billing row visually (off-screen, not display:none)
    ============================================================ */
-(function WL_AP_STATEFUL_WIZ() {
+(function () {
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
-  if (window.__WL_AP_STATEFUL_WIZ__) return;
-  window.__WL_AP_STATEFUL_WIZ__ = true;
-
-  const SS_PREFIX = "wl_apwiz:";
-  const KEY = {
-    sessionId: SS_PREFIX + "sessionId",
-    step:      SS_PREFIX + "step",
-    wantPay:   SS_PREFIX + "wantPayStep", // set when COF clicked
-    bill:      SS_PREFIX + "bill",
-    billZip:   SS_PREFIX + "billZip",
-  };
+  if (window.__WL_BILLING_PROXY_STEP1__) return;
+  window.__WL_BILLING_PROXY_STEP1__ = true;
 
   const IDS = {
-    billBox: "ctl00_PageBody_BillingAddressTextBox",
-    billZip: "ctl00_PageBody_BillingPostalCodeTextBox",
-    billContainer: "ctl00_PageBody_BillingAddressContainer",
-    rbCof: "ctl00_PageBody_RadioButton_PayByCheckOnFile",
+    billText: "ctl00_PageBody_BillingAddressTextBox",
+    billZip:  "ctl00_PageBody_BillingPostalCodeTextBox",
+    billWrap: "ctl00_PageBody_BillingAddressContainer", // may or may not exist
+    addrDD:   "ctl00_PageBody_AddressDropdownList",
   };
 
   const $ = (id) => document.getElementById(id);
 
-  function ssGet(k){ try { return sessionStorage.getItem(k); } catch { return null; } }
-  function ssSet(k,v){ try { sessionStorage.setItem(k, v); } catch {} }
-  function ssDel(k){ try { sessionStorage.removeItem(k); } catch {} }
-
-  // ---------- 0) Start new payment session on each full page load ----------
-  // This prevents “resume at summary with broken earlier fields”
-  const newSessionId = String(Date.now()) + ":" + Math.random().toString(16).slice(2);
-  const oldSessionId = ssGet(KEY.sessionId);
-
-  // Always restart on hard load (your requirement)
-  ssSet(KEY.sessionId, newSessionId);
-  ssSet(KEY.step, "0");
-  ssDel(KEY.wantPay);
-
-  // ---------- 1) Persist critical fields on input ----------
-  function persistFields(){
-    const b = $(IDS.billBox);
-    const z = $(IDS.billZip);
-    if (b) ssSet(KEY.bill, String(b.value || ""));
-    if (z) ssSet(KEY.billZip, String(z.value || ""));
-  }
-
-  function restoreFieldsIfBlank(){
-    const b = $(IDS.billBox);
-    const z = $(IDS.billZip);
-
-    // Only overwrite if server re-rendered blank (avoids fighting server)
-    if (b && !String(b.value || "").trim()) {
-      const sv = ssGet(KEY.bill);
-      if (sv) b.value = sv;
-    }
-    if (z && !String(z.value || "").trim()) {
-      const sv = ssGet(KEY.billZip);
-      if (sv) z.value = sv;
-    }
-  }
-
-  function bindFieldWatchers(){
-    const b = $(IDS.billBox);
-    const z = $(IDS.billZip);
-    if (b && !b.__wlBound) {
-      b.addEventListener("input", persistFields, { passive:true });
-      b.addEventListener("change", persistFields, { passive:true });
-      b.addEventListener("blur", persistFields, { passive:true });
-      b.__wlBound = true;
-    }
-    if (z && !z.__wlBound) {
-      z.addEventListener("input", persistFields, { passive:true });
-      z.addEventListener("change", persistFields, { passive:true });
-      z.addEventListener("blur", persistFields, { passive:true });
-      z.__wlBound = true;
-    }
-  }
-
-  // ---------- 2) Pin billing to Step 1 after any rerender ----------
   function stepPanel(stepNum) {
     return (
       $("w3Step" + stepNum) ||
@@ -3837,133 +3773,168 @@ function setStep(n){
       null
     );
   }
-  function getStep1Host() {
+
+  function step1Host() {
     const s1 = stepPanel(0);
     if (!s1) return null;
     return s1.querySelector("#w3InfoInner") || s1;
   }
-  function findBillingWrap(){
-    const c = $(IDS.billContainer);
+
+  function realBillingWrap() {
+    const c = $(IDS.billWrap);
     if (c) return c;
-    const box = $(IDS.billBox);
-    if (!box) return null;
-    return box.closest(".epi-form-group-acctPayment") || box.closest("tr") || box.parentElement;
+    const b = $(IDS.billText);
+    if (!b) return null;
+    return b.closest(".epi-form-group-acctPayment") || b.closest("tr") || b.parentElement;
   }
-  function findBillingZipWrap(){
+
+  function realZipWrap() {
     const z = $(IDS.billZip);
     if (!z) return null;
     return z.closest(".epi-form-group-acctPayment") || z.closest("tr") || z.parentElement;
   }
-  function pinBillingToStep1(){
-    const host = getStep1Host();
+
+  function hideOffscreen(el) {
+    if (!el) return;
+    el.style.position = "absolute";
+    el.style.left = "-10000px";
+    el.style.top = "0";
+    el.style.width = "1px";
+    el.style.height = "1px";
+    el.style.overflow = "hidden";
+  }
+
+  function ensureProxyUI() {
+    const host = step1Host();
     if (!host) return;
-    const bw = findBillingWrap();
-    const zw = findBillingZipWrap();
-    if (bw && !host.contains(bw)) host.appendChild(bw);
-    if (zw && !host.contains(zw)) host.appendChild(zw);
+
+    let box = document.getElementById("wlBillingProxyBox");
+    if (box) return box;
+
+    box = document.createElement("div");
+    box.id = "wlBillingProxyBox";
+    box.style.marginTop = "12px";
+    box.style.padding = "12px";
+    box.style.border = "1px solid rgba(0,0,0,0.12)";
+    box.style.borderRadius = "10px";
+
+    box.innerHTML = `
+      <div style="font-weight:600; margin-bottom:8px;">Billing Address</div>
+      <label style="display:block; font-size:12px; margin-bottom:4px;">Address</label>
+      <input id="wlBillingProxyAddress" type="text"
+             style="width:100%; padding:10px; border:1px solid rgba(0,0,0,0.2); border-radius:8px; margin-bottom:10px;" />
+      <label style="display:block; font-size:12px; margin-bottom:4px;">ZIP</label>
+      <input id="wlBillingProxyZip" type="text" inputmode="numeric"
+             style="width:100%; padding:10px; border:1px solid rgba(0,0,0,0.2); border-radius:8px;" />
+      <div id="wlBillingProxyHint" style="font-size:12px; opacity:0.7; margin-top:8px;"></div>
+    `;
+
+    host.appendChild(box);
+    return box;
   }
 
-  // ---------- 3) Wizard step persistence + restore ----------
-  // Adjust selectors if needed to match your wizard markup
-  function forceStep(step){
-    step = Math.max(0, Math.min(3, Number(step||0)));
+  function syncProxyFromReal() {
+    const realAddr = $(IDS.billText);
+    const realZip  = $(IDS.billZip);
+    const pAddr = document.getElementById("wlBillingProxyAddress");
+    const pZip  = document.getElementById("wlBillingProxyZip");
+    if (!pAddr || !pZip) return;
 
-    const wiz = document.getElementById("wlApWizard3") ||
-                document.getElementById("wlApWizard2") ||
-                document.getElementById("wlApWizard");
-
-    if (!wiz) return;
-
-    wiz.querySelectorAll("[data-step-pill]").forEach(p => {
-      p.classList.toggle("on", Number(p.getAttribute("data-step-pill")) === step);
-    });
-    wiz.querySelectorAll(".wl-panel").forEach(p => {
-      p.classList.toggle("on", Number(p.getAttribute("data-step")) === step);
-    });
-
-    try { sessionStorage.setItem(KEY.step, String(step)); } catch {}
-  }
-
-  function restoreStep(){
-    const s = Number(ssGet(KEY.step) || "0");
-    forceStep(s);
-  }
-
-  // Mark “want pay step” when COF is clicked (because COF postback tends to reset wizard)
-  function bindCOFIntent(){
-    const rb = $(IDS.rbCof);
-    if (!rb || rb.__wlCofIntent) return;
-    rb.addEventListener("click", function(){
-      // Pay step is step index 3 in our wizard
-      ssSet(KEY.wantPay, "1");
-      // We also persist fields right before COF triggers any postback
-      persistFields();
-    }, true);
-    rb.__wlCofIntent = true;
-  }
-
-  function applyPostbackRecovery(){
-    // Always re-pin billing + restore fields
-    pinBillingToStep1();
-    restoreFieldsIfBlank();
-
-    // Restore wizard step
-    restoreStep();
-
-    // If COF was clicked, force pay step for a short window
-    const wantPay = ssGet(KEY.wantPay) === "1";
-    const rb = $(IDS.rbCof);
-    if (wantPay && rb && rb.checked) {
-      // force repeatedly to beat re-mount code
-      forceStep(3);
-      setTimeout(() => forceStep(3), 120);
-      setTimeout(() => forceStep(3), 260);
-      setTimeout(() => forceStep(3), 520);
-      setTimeout(() => ssDel(KEY.wantPay), 1500);
+    if (realAddr && (!pAddr.value || pAddr.__wlLastSyncFromReal !== realAddr.value)) {
+      pAddr.value = realAddr.value || "";
+      pAddr.__wlLastSyncFromReal = pAddr.value;
+    }
+    if (realZip && (!pZip.value || pZip.__wlLastSyncFromReal !== realZip.value)) {
+      pZip.value = realZip.value || "";
+      pZip.__wlLastSyncFromReal = pZip.value;
     }
   }
 
-  // ---------- 4) Hook PRM endRequest (every partial postback) ----------
-  function bindPRM(){
-    try {
-      if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
-        const prm = Sys.WebForms.PageRequestManager.getInstance();
-        if (prm.__wlStatefulBound) return;
+  function syncRealFromProxy() {
+    const realAddr = $(IDS.billText);
+    const realZip  = $(IDS.billZip);
+    const pAddr = document.getElementById("wlBillingProxyAddress");
+    const pZip  = document.getElementById("wlBillingProxyZip");
+    if (!pAddr || !pZip) return;
 
-        prm.add_endRequest(function(){
-          // Re-bind (controls get recreated)
-          bindFieldWatchers();
-          bindCOFIntent();
+    if (realAddr) realAddr.value = pAddr.value || "";
+    if (realZip)  realZip.value  = pZip.value || "";
+  }
 
-          // Recover flow after the server re-render
-          setTimeout(applyPostbackRecovery, 30);
-          setTimeout(applyPostbackRecovery, 180);
-          setTimeout(applyPostbackRecovery, 450);
+  // Optional: controlled "safe sync postback" when leaving Step 1 or selecting COF.
+  // This avoids the “EventValidation” mismatch by letting the server process changes.
+  function safeSyncPostback() {
+    if (typeof window.__doPostBack !== "function") return;
+
+    const addrDD = $(IDS.addrDD);
+    const realAddr = $(IDS.billText);
+
+    // Prefer address dropdown as the safer event target
+    const target = (addrDD && (addrDD.name || addrDD.id)) || (realAddr && (realAddr.name || realAddr.id));
+    if (!target) return;
+
+    try { window.__doPostBack(target, ""); } catch {}
+  }
+
+  function bindProxyHandlers() {
+    const pAddr = document.getElementById("wlBillingProxyAddress");
+    const pZip  = document.getElementById("wlBillingProxyZip");
+    if (!pAddr || pAddr.__wlBound) return;
+
+    const debounced = (() => {
+      let t = null;
+      return () => {
+        clearTimeout(t);
+        t = setTimeout(() => {
+          syncRealFromProxy();
+          // Don’t spam postbacks; only sync server on blur / step change / COF click
+        }, 120);
+      };
+    })();
+
+    pAddr.addEventListener("input", debounced);
+    pZip.addEventListener("input", debounced);
+
+    pAddr.addEventListener("blur", () => { syncRealFromProxy(); /* optional */ safeSyncPostback(); });
+    pZip.addEventListener("blur",  () => { syncRealFromProxy(); /* optional */ safeSyncPostback(); });
+
+    pAddr.__wlBound = true;
+  }
+
+  function hideRealBillingUI() {
+    hideOffscreen(realBillingWrap());
+    hideOffscreen(realZipWrap());
+  }
+
+  function boot() {
+    // 1) Ensure proxy exists
+    ensureProxyUI();
+
+    // 2) Hide real controls (but keep in DOM)
+    hideRealBillingUI();
+
+    // 3) Keep values in sync
+    syncProxyFromReal();
+    bindProxyHandlers();
+  }
+
+  // Initial + after postbacks
+  setTimeout(boot, 50);
+  setTimeout(boot, 300);
+  setTimeout(boot, 900);
+
+  try {
+    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
+      const prm = Sys.WebForms.PageRequestManager.getInstance();
+      if (!prm.__wlBillingProxyBound) {
+        prm.add_endRequest(function () {
+          setTimeout(boot, 50);
+          setTimeout(syncProxyFromReal, 220);
         });
-
-        prm.__wlStatefulBound = true;
+        prm.__wlBillingProxyBound = true;
       }
-    } catch {}
-  }
+    }
+  } catch {}
 
-  // ---------- 5) Boot ----------
-  function boot(){
-    bindFieldWatchers();
-    bindCOFIntent();
-
-    // On initial load, pin + restore step (starts at 0)
-    setTimeout(() => {
-      pinBillingToStep1();
-      restoreFieldsIfBlank();
-      restoreStep();
-    }, 80);
-
-    // After the wizard’s own DOM rearrange finishes
-    setTimeout(() => pinBillingToStep1(), 300);
-    setTimeout(() => pinBillingToStep1(), 800);
-
-    bindPRM();
-  }
-
-  boot();
 })();
+
