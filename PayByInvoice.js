@@ -684,6 +684,12 @@ wireFieldPersistence();
         background:#6b0015;
         color:#fff;
       }
+
+      #w3PayInner .wl-pay-card.is-disabled{
+        opacity:.55;
+        cursor:not-allowed;
+      }
+      #w3PayInner .wl-pay-card.is-disabled *{ pointer-events:none; }
       #w3PayInner .wl-pay-card:focus-visible{
         outline:0;
         box-shadow:0 0 0 3px rgba(107,0,21,.25);
@@ -3957,7 +3963,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details.</div>
+        <div class="w3-title">Payment Details</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
@@ -4193,25 +4199,23 @@ function setSelectedCard(cardEl, isSelected){
 
       const mode = currentMode();
 
-      // Method cards (Bank vs Credit)
+      // Met// 1) Method cards (Bank vs Credit)
       const creditAvail = isCreditAvailable();
-      methodMount.innerHTML = creditAvail ? `
+
+      // Always render both cards; disable Credit when server doesn't allow it (non-CAB loads).
+      methodMount.innerHTML = `
         <button type="button" class="wl-pay-card" data-method="bank">
           <div class="wl-pay-title">Pay by Bank (ACH)</div>
           <div class="wl-pay-sub">Use a bank account (new or saved).</div>
         </button>
-        <button type="button" class="wl-pay-card" data-method="credit">
+        <button type="button" class="wl-pay-card ${creditAvail ? '' : 'is-disabled'}" data-method="credit" ${creditAvail ? '' : 'aria-disabled="true" data-disabled="1"'}>
           <div class="wl-pay-title">Pay by Credit Card</div>
-          <div class="wl-pay-sub">Secure card payment.</div>
+          <div class="wl-pay-sub">${creditAvail ? 'Secure card payment.' : 'Credit card is available for Cash Account Balance only.'}</div>
         </button>
-      ` : `
-        <div class="wl-pay-methods" style="grid-template-columns:1fr;">
-          <button type="button" class="wl-pay-card" data-method="bank">
-            <div class="wl-pay-title">Pay by Bank (ACH)</div>
-            <div class="wl-pay-sub">Use a bank account (new or saved).</div>
-          </button>
-        </div>
       `;
+
+      // Match layout to availability
+      try{ methodMount.style.gridTemplateColumns = creditAvail ? '1fr 1fr' : '1fr'; }catch{}`;
 
       const bankMethodCard   = methodMount.querySelector('[data-method="bank"]');
       const creditMethodCard = methodMount.querySelector('[data-method="credit"]');
@@ -4265,6 +4269,7 @@ function setSelectedCard(cardEl, isSelected){
   const method = btn.getAttribute('data-method');
 
   if (method === 'credit'){
+    if (btn.getAttribute('data-disabled') === '1') return;
     if (!isCreditAvailable()) return;
     savePayState({ method:'credit' });
     try{ rbCred?.click(); }catch{}
@@ -4291,8 +4296,10 @@ function setSelectedCard(cardEl, isSelected){
         const kind = btn.getAttribute('data-bank');
 
         if (kind === 'new'){
+          // Force "Add new bank account" -> PayByCheck radio
+          savePayState({ method:'bank', bank:{ mode:'new' } });
           try{ rbCheck?.click(); }catch{}
-          setTimeout(renderPayCards, 50);
+          setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch{} }, 80);
           return;
         }
 
