@@ -998,12 +998,49 @@ wireFieldPersistence();
     .map(x => x.trim())
     .filter(Boolean);
 
-  return {
-    total: totalStr ? formatUSD(parseMoney(totalStr)) : '',
-    addrSelText, billing, zip, email,
-    invCount: invs.length,
-    invs
-  };
+  // Payment method / bank account selection (from cards state first)
+let payMethod = '';
+let payAccount = '';
+try{
+  const raw = sessionStorage.getItem('wlPayState');
+  if (raw){
+    const st = JSON.parse(raw);
+    if (st?.method === 'credit') payMethod = 'Credit Card';
+    if (st?.method === 'bank')   payMethod = 'Bank (ACH)';
+    if (st?.method === 'bank'){
+      if (st?.bank?.mode === 'new') payAccount = 'Add new bank account';
+      if (st?.bank?.mode === 'saved') payAccount = st?.bank?.text || 'Saved bank account';
+    }
+  }
+}catch{}
+// Fallback: infer from native controls if state missing
+try{
+  const rbCheck = byId('ctl00_PageBody_RadioButton_PayByCheck');
+  const rbCof   = byId('ctl00_PageBody_RadioButton_PayByCheckOnFile');
+  const rbCred  = byId('ctl00_PageBody_RadioButton_PayByCredit');
+  const cof1 = byId('ctl00_PageBody_ChecksOnFileContainer');
+  const cof2 = byId('ctl00_PageBody_ChecksOnFileContainer1');
+  const cofSel = (cof1?.querySelector('select') || cof2?.querySelector('select')) || null;
+
+  if (!payMethod){
+    if (rbCred?.checked) payMethod = 'Credit Card';
+    else payMethod = 'Bank (ACH)';
+  }
+  if (!payAccount && payMethod === 'Bank (ACH)'){
+    if (rbCheck?.checked) payAccount = 'Add new bank account';
+    else if (rbCof?.checked && cofSel && cofSel.value && cofSel.value !== '-1'){
+      payAccount = cofSel.options[cofSel.selectedIndex]?.text || 'Saved bank account';
+    }
+  }
+}catch{}
+
+return {
+  total: totalStr ? formatUSD(parseMoney(totalStr)) : '',
+  addrSelText, billing, zip, email,
+  payMethod, payAccount,
+  invCount: invs.length,
+  invs
+};
 }
 
 
@@ -1022,6 +1059,7 @@ wireFieldPersistence();
     list.innerHTML = `
       <div class="wl-row"><div class="wl-key">Invoices</div><div class="wl-val">${d.invCount} item${d.invCount===1?'':'s'} ${d.invCount>6?`<button type="button" class="wl-link" id="wlShowAllInv">View all</button>`:''}</div></div>
       <div class="wl-row"><div class="wl-key">Total</div><div class="wl-val">${d.total || '<small>—</small>'}</div></div>
+      <div class="wl-row"><div class="wl-key">Payment</div><div class="wl-val">${(d.payMethod || '<small>—</small>')}${d.payAccount ? `<br><small>${d.payAccount}</small>` : ''}</div></div>
       <div class="wl-row"><div class="wl-key">Address</div><div class="wl-val">${d.addrSelText || '<small>(none)</small>'}</div></div>
       <div class="wl-row"><div class="wl-key">Billing</div><div class="wl-val">${d.billing || '<small>—</small>'}<br>${d.zip ? `<small>ZIP ${d.zip}</small>` : ''}</div></div>
       <div class="wl-row"><div class="wl-key">Email</div><div class="wl-val">${d.email || '<small>—</small>'}</div></div>
@@ -3874,7 +3912,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details</div>
+        <div class="w3-title">Payment Wizard</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
@@ -4007,16 +4045,86 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
       payInner.appendChild(cardHost);
     }
 
-    function setSelectedCard(cardEl, isSelected){
+    
+// Persist selection so cards stay highlighted even after WebForms partial postbacks
+const PAY_STATE_KEY = 'wlPayState';
+function loadPayState(){
+  try{
+    const raw = sessionStorage.getItem(PAY_STATE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  }catch{ return null; }
+}
+function savePayState(st){
+  try{ sessionStorage.setItem(PAY_STATE_KEY, JSON.stringify(st||{})); }catch{}
+}
+
+function isElementVisible(el){
+  if (!el) return false;
+  const cs = window.getComputedStyle(el);
+  if (cs.display === 'none' || cs.visibility === 'hidden') return false;
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0;
+}
+
+function isCreditAvailable(){
+  if (!rbCred) return false;
+  if (rbCred.disabled) return false;
+  const wrap = rbCred.closest('.radiobutton') || rbCred.parentElement;
+  return isElementVisible(wrap);
+}
+
+function reconcileNativeFromState(){
+  const st = loadPayState();
+  if (!st) return;
+  try{
+    if (st.method === 'credit' && isCreditAvailable() && rbCred){
+      rbCred.checked = true;
+      if (rbCheck) rbCheck.checked = false;
+      if (rbCof) rbCof.checked = false;
+      return;
+    }
+    // default bank
+    if (rbCred) rbCred.checked = false;
+    if (st.method !== 'bank') st.method = 'bank';
+
+    if (st.bank?.mode === 'saved'){
+      if (rbCof) rbCof.checked = true;
+      if (rbCheck) rbCheck.checked = false;
+      if (cofSel && st.bank?.value && cofSel.value !== st.bank.value){
+        cofSel.value = st.bank.value;
+      }
+    } else {
+      if (rbCheck) rbCheck.checked = true;
+      if (rbCof) rbCof.checked = false;
+    }
+  }catch{}
+}
+
+function setSelectedCard(cardEl, isSelected){
       if (!cardEl) return;
       cardEl.classList.toggle('is-selected', !!isSelected);
       cardEl.setAttribute('aria-pressed', !!isSelected ? 'true' : 'false');
     }
 
     function currentMode(){
-      if (rbCred?.checked) return 'credit';
-      if (rbCof?.checked) return 'bank_saved';
+      const st = loadPayState();
+
+      // If credit isn't available, force bank
+      if (st && st.method === 'credit' && !isCreditAvailable()){
+        st.method = 'bank';
+        st.bank = st.bank || { mode:'new' };
+        savePayState(st);
+      }
+
+      if (rbCred?.checked && isCreditAvailable()) return 'credit';
+
+      // Saved COF can lose the checked flag after partial postbacks; infer from select value/state
+      const hasCofSelection = !!(cofSel && cofSel.value && cofSel.value !== '-1');
+      if (rbCof?.checked || hasCofSelection) return 'bank_saved';
       if (rbCheck?.checked) return 'bank_new';
+
+      if (st?.method === 'credit' && isCreditAvailable()) return 'credit';
+      if (st?.method === 'bank' && st?.bank?.mode === 'saved') return 'bank_saved';
       return 'bank_new';
     }
 
@@ -4035,7 +4143,8 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
       const mode = currentMode();
 
       // Method cards (Bank vs Credit)
-      methodMount.innerHTML = `
+      const creditAvail = isCreditAvailable();
+      methodMount.innerHTML = creditAvail ? `
         <button type="button" class="wl-pay-card" data-method="bank">
           <div class="wl-pay-title">Pay by Bank (ACH)</div>
           <div class="wl-pay-sub">Use a bank account (new or saved).</div>
@@ -4044,14 +4153,21 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
           <div class="wl-pay-title">Pay by Credit Card</div>
           <div class="wl-pay-sub">Secure card payment.</div>
         </button>
+      ` : `
+        <div class="wl-pay-methods" style="grid-template-columns:1fr;">
+          <button type="button" class="wl-pay-card" data-method="bank">
+            <div class="wl-pay-title">Pay by Bank (ACH)</div>
+            <div class="wl-pay-sub">Use a bank account (new or saved).</div>
+          </button>
+        </div>
       `;
 
       const bankMethodCard   = methodMount.querySelector('[data-method="bank"]');
       const creditMethodCard = methodMount.querySelector('[data-method="credit"]');
 
       const isCredit = (mode === 'credit');
-      setSelectedCard(creditMethodCard, isCredit);
       setSelectedCard(bankMethodCard, !isCredit);
+      setSelectedCard(creditMethodCard, isCredit);
 
       bankMount.style.display = isCredit ? 'none' : 'grid';
 
@@ -4093,19 +4209,29 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
       `;
 
       methodMount.onclick = (e)=>{
-        const btn = e.target.closest('.wl-pay-card[data-method]');
-        if (!btn) return;
-        const method = btn.getAttribute('data-method');
+  const btn = e.target.closest('.wl-pay-card[data-method]');
+  if (!btn) return;
+  const method = btn.getAttribute('data-method');
 
-        if (method === 'credit'){
-          try{ rbCred?.click(); }catch{}
-        } else {
-          try{ rbCheck?.click(); }catch{}
-          ensureCofVisible();
-        }
+  if (method === 'credit'){
+    if (!isCreditAvailable()) return;
+    savePayState({ method:'credit' });
+    try{ rbCred?.click(); }catch{}
+  } else {
+    // Bank is the default
+    const st = loadPayState();
+    const preferSaved = !!(st?.bank?.mode === 'saved' && st?.bank?.value);
+    savePayState({ method:'bank', bank: preferSaved ? st.bank : { mode:'new' } });
 
-        setTimeout(renderPayCards, 50);
-      };
+    try{
+      if (preferSaved) rbCof?.click();
+      else rbCheck?.click();
+    }catch{}
+    ensureCofVisible();
+  }
+
+  setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch{} }, 80);
+};
 
       bankMount.onclick = (e)=>{
         const btn = e.target.closest('.wl-pay-card[data-bank]');
@@ -4122,6 +4248,9 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
         const val = btn.getAttribute('data-value') || '';
         if (!val) return;
 
+        const text = (btn.querySelector('.wl-pay-title')?.textContent || '').trim();
+        savePayState({ method:'bank', bank:{ mode:'saved', value: val, text } });
+
         ensureCofVisible();
 
         setTimeout(()=>{
@@ -4136,19 +4265,29 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
                 cofSel.dispatchEvent(new Event('change', { bubbles:true }));
               }
             }catch{}
-            setTimeout(renderPayCards, 50);
+            setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch{} }, 80);
           }, 80);
         }, 80);
       };
     }
 
     // Initial render + rerender after MS AJAX updates
+    if (!loadPayState()){
+      savePayState({ method:'bank', bank:{ mode:'new' } });
+    } else {
+      const st0 = loadPayState();
+      if (st0?.method === 'credit' && !isCreditAvailable()){
+        savePayState({ method:'bank', bank:{ mode:'new' } });
+      }
+    }
+    reconcileNativeFromState();
     renderPayCards();
+    try{ renderSummary(); }catch{}
     try{
       if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
         const prm = Sys.WebForms.PageRequestManager.getInstance();
         if (!prm.__wlPayCardsBound){
-          prm.add_endRequest(()=>{ setTimeout(renderPayCards, 0); });
+          prm.add_endRequest(()=>{ setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch{} }, 0); });
           prm.__wlPayCardsBound = true;
         }
       }
