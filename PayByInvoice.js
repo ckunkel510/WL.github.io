@@ -1300,16 +1300,40 @@ const IDS = {
   window.WLPayMode = { readPayMode, setPayMode, ensureCheckOnFileUI };
 
   function showBilling(){
-    const wrap = document.getElementById(IDS.billWrap) ||
-                 document.getElementById(IDS.billBox)?.closest('.epi-form-group-acctPayment');
+    const box = document.getElementById(IDS.billBox);
+    // try explicit container first
+    let wrap = document.getElementById(IDS.billWrap) || null;
+
+    // fall back to closest reasonable wrapper around the textbox
+    if (!wrap && box){
+      wrap =
+        box.closest('#'+IDS.billWrap) ||
+        box.closest('.epi-form-group-acctPayment') ||
+        box.closest('.epi-form-group') ||
+        box.closest('.form-group') ||
+        box.closest('tr') ||
+        box.parentElement;
+    }
+
     if (wrap){
-      const before = { parent: wrap.parentElement?.id || '(none)' };
       wrap.style.removeProperty('display');
       wrap.classList.add('wl-force-show');
-      const grid = document.getElementById('wlFormGrid');
+
+      // Ensure our Step 1 grid exists so the field has a stable home
+      let grid = document.getElementById('wlFormGrid');
+      if (!grid){
+        const s1 = document.getElementById('wlStep1') || document.querySelector('[data-wl-step="1"]') || document.getElementById('w1') || null;
+        if (s1){
+          grid = document.createElement('div');
+          grid.id = 'wlFormGrid';
+          grid.className = 'wl-form-grid';
+          s1.appendChild(grid);
+        }
+      }
+
       if (grid && !grid.contains(wrap)) grid.appendChild(wrap);
-      const after  = { parent: wrap.parentElement?.id || '(none)' };
-      log.info('showBilling: ensured', { before, after, id: wrap.id });
+
+      log.info('showBilling: ensured', { id: wrap.id || '(no id)', parent: wrap.parentElement?.id || '(none)' });
       return true;
     }
     log.warn('showBilling: NOT FOUND');
@@ -3955,7 +3979,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details</div>
+        <div class="w3-title">Payment Details.</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
@@ -4083,7 +4107,7 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
       cardHost.id = 'wlPayCardsHost';
       cardHost.innerHTML = `
         <div class="wl-pay-methods" id="wlPayMethodCards"></div>
-        <div class="wl-pay-bank" id="wlPayBankCards" style="display:none;"></div>
+        <div class="wl-pay-bank" id="wlPayBankCards" style="display:grid;"></div>
       `;
       payInner.appendChild(cardHost);
     }
@@ -4117,9 +4141,22 @@ function isElementVisible(el){
 function isCreditAvailable(){
   if (!rbCred) return false;
   if (rbCred.disabled) return false;
+
+  // If server truly hides it, either the input or its wrapper will be display:none.
+  try{
+    const csI = window.getComputedStyle(rbCred);
+    if (csI && (csI.display === 'none' || csI.visibility === 'hidden')) return false;
+  }catch{}
+
   const wrap = rbCred.closest('.radiobutton') || rbCred.parentElement;
-  // If server hid the option, the wrapper will be display:none. Otherwise it is available.
-  return isElementVisible(wrap);
+  try{
+    if (wrap){
+      const csW = window.getComputedStyle(wrap);
+      if (csW && (csW.display === 'none' || csW.visibility === 'hidden')) return false;
+    }
+  }catch{}
+
+  return true;
 }
 
 function reconcileNativeFromState(){
