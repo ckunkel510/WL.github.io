@@ -4057,7 +4057,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details</div>
+        <div class="w3-title">Payment Details.</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
@@ -4726,15 +4726,24 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
             window.WLPayPending.__cofPendingText = null;
           }catch(e){}
 
-          // Clear current COF dropdown value immediately (if present)
-          try{ clearSelectToPlaceholder(getCofSel(), false); }catch(e){}
+          // Clear current COF dropdown value immediately (if present) and trigger postback
+          try{
+            const sel = getCofSel();
+            if (sel){
+              // IMPORTANT: fire change so WebForms updates server state; otherwise it may keep using the prior saved selection
+              clearSelectToPlaceholder(sel, true);
+            }
+          }catch(e){}
 
           // Immediate visual update
           renderPayCards();
           try{ renderSummary(); }catch(e){}
 
           // Trigger the REAL WebForms radio for "Pay by Bank (new)"
-          try{ clickWebFormsRadio(rbCheck); }catch(e){}
+          try{
+            if (rbCof) rbCof.checked = false;
+            clickWebFormsRadio(rbCheck);
+          }catch(e){}
 
           // After postback, ensure COF selection is cleared and UI/summary match the true native state
           setTimeout(()=>{
