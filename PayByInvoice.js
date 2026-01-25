@@ -3493,7 +3493,7 @@ if (jobBtn){
   function injectCSS(){
     if ($('wl-ap-wiz3-css')) return;
     const css = `
-      #wlApWizard3{ border:1px solid #e5e7eb; border-radius:16px; background:#fff; margin-bottom:16px; }
+      #wlApWizard3{border:1px solid #e5e7eb; border-radius:16px; background:#fff; margin-bottom:16px; position:relative; z-index:5000; }
       #wlApWizard3 .w3-head{ display:flex; justify-content:space-between; gap:12px; align-items:center; padding:12px 14px; border-bottom:1px solid #e5e7eb; }
       #wlApWizard3 .w3-title{ font-weight:1000; font-size:16px; }
       #wlApWizard3 .w3-steps{ display:flex; gap:6px; flex-wrap:wrap; }
@@ -3502,7 +3502,7 @@ if (jobBtn){
       #wlApWizard3 .w3-body{ padding:14px; }
       #wlApWizard3 .w3-panel{ display:none; }
       #wlApWizard3 .w3-panel.on{ display:block; }
-      #wlApWizard3 .w3-nav{ display:flex; justify-content:space-between; gap:10px; margin-top:14px; }
+      #wlApWizard3 .w3-nav{ display:flex; justify-content:space-between; gap:10px; margin-top:14px; position:sticky; bottom:0; background:#fff; padding-top:12px; z-index:6000; }
       #wlApWizard3 .w3-btn{ border:1px solid #e5e7eb; background:#fff; border-radius:12px; padding:10px 12px; font-weight:1000; cursor:pointer; }
       #wlApWizard3 .w3-btn.primary{ background:#111827; color:#fff; border-color:#111827; }
       #wlApWizard3 .w3-btn[disabled]{ opacity:.5; cursor:not-allowed; }
