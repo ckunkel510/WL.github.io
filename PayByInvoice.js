@@ -1,4 +1,3 @@
-window.WL_AP_UI = window.WL_AP_UI || {};
 
 (function () {
   'use strict';
@@ -312,7 +311,7 @@ window.WL_AP_UI = window.WL_AP_UI || {};
       amt.defaultValue = amt.value;
     }
 
-    window.WL_AP_UI?.renderSummary?.();
+    renderSummary(pref);
   }
 
   // Ensure the values are present right before any partial postback
@@ -441,18 +440,18 @@ function startSelectionSync(){
         el.__wlBound = true;
       }
     });
-    window.WL_AP_UI?.renderSummary?.();
+    renderSummary(loadPref());
   }
 
   /* =============================
      Boot
      ============================= */
-  window.WL_AP_UI?.injectCSS?.();
+  injectCSS();
   wireAjax();
   startSelectionSync();
 wireFieldPersistence();
   applyPrefill();
-  window.WL_AP_UI?.triggerAmountChangeOnce?.();
+  triggerAmountChangeOnce();
 
   if (document.readyState === 'loading'){
     document.addEventListener('DOMContentLoaded', applyPrefill, { once:true });
@@ -583,7 +582,7 @@ wireFieldPersistence();
   };
 
   /* =============== CSS =============== */
-  function injectCSS(){
+  (function injectCSS(){
     if (document.getElementById('wl-ap-polish-css')) { log.debug('injectCSS: already present'); return; }
     const css = `
       :root{ --wl-bg:#f6f7fb; --wl-card:#fff; --wl-border:#e5e7eb;
@@ -719,13 +718,7 @@ wireFieldPersistence();
 `;
     const el = document.createElement('style'); el.id='wl-ap-polish-css'; el.textContent = css; document.head.appendChild(el);
     log.info('injectCSS: styles injected');
-  }
-
-  // Expose UI helpers used by other modules
-  window.WL_AP_UI = window.WL_AP_UI || {};
-  window.WL_AP_UI.injectCSS = injectCSS;
-  injectCSS();
-;
+  })();
 
   /* =============== helpers =============== */
   const $  = (sel, root=document)=> root.querySelector(sel);
@@ -1153,22 +1146,6 @@ return {
     }catch(e){}
     log.debug('renderSummary: data', d);
   }
-  window.WL_AP_UI = window.WL_AP_UI || {};
-  window.WL_AP_UI.renderSummary = renderSummary;
-  function triggerAmountChangeOnce(){
-    if (window.__WL_AP_amtTrig) return;
-    window.__WL_AP_amtTrig = true;
-    const el = document.getElementById('ctl00_PageBody_PaymentAmountTextBox');
-    if (!el) return;
-    try{
-      el.dispatchEvent(new Event('input', { bubbles:true }));
-      el.dispatchEvent(new Event('change', { bubbles:true }));
-      el.dispatchEvent(new Event('blur', { bubbles:true }));
-    }catch(e){}
-  }
-  window.WL_AP_UI.triggerAmountChangeOnce = triggerAmountChangeOnce;
-
-
 
   function wireSummaryBindings(){
     if (wireSummaryBindings.__bound) return;
@@ -4061,7 +4038,7 @@ function buildReviewHTML(){
 }
 
   function mount(){
-    window.WL_AP_UI?.injectCSS?.();
+    injectCSS();
 
     const shell = qs('.wl-shell');
     const left  = $('wlLeftCard');
@@ -4080,7 +4057,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details.</div>
+        <div class="w3-title">Payment Details</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
