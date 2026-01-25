@@ -4435,20 +4435,34 @@ function clickWebFormsRadio(rb){
 function clearSelectToPlaceholder(sel, fireChange){
   try{
     if (!sel) return;
+
+    // IMPORTANT (WebForms event validation):
+    // Do NOT inject new <option> values client-side. If we post back a value
+    // the server didn't render/whitelist, WebForms can ignore it and keep the prior
+    // saved selection. Instead, move to an existing placeholder option.
     const opts = Array.from(sel.options || []);
-    let minus1 = opts.find(o => String(o.value) === '-1');
-    if (!minus1){
-      minus1 = document.createElement('option');
-      minus1.value = '-1';
-      minus1.text = 'Select a saved account';
-      try{ sel.insertBefore(minus1, sel.firstChild); }catch(e){}
+    if (!opts.length) return;
+
+    // Prefer an existing "-1" placeholder if WebTrack rendered it; otherwise use the first option.
+    const placeholderOpt = opts.find(o => String(o.value) === '-1') || opts[0];
+
+    try{
+      sel.value = placeholderOpt.value;
+    }catch(e){
+      try{ sel.selectedIndex = Math.max(0, opts.indexOf(placeholderOpt)); }catch(e2){}
     }
-    sel.value = '-1';
+    // Ensure selectedIndex matches value
+    try{
+      const idx = opts.findIndex(o => o.value === sel.value);
+      if (idx >= 0) sel.selectedIndex = idx;
+    }catch(e){}
+
     if (fireChange){
       try{ sel.dispatchEvent(new Event('change', { bubbles:true })); }catch(e){}
     }
   }catch(e){}
 }
+
 
 function setSelectedCard(cardEl, isSelected){
       if (!cardEl) return;
@@ -4499,7 +4513,18 @@ function setSelectedCard(cardEl, isSelected){
       if (!methodMount || !bankMount || !cardMount) return;
 
       // Credit availability: only when WebTrack actually offers pay-by-card OR card-on-file on this account (e.g., CAB)
-      const cardAvail = isRadioAvailable(rbCardNew) || isRadioAvailable(rbCardSaved);
+      function isCardSupported(){
+  try{
+    // Card is supported when WebTrack exposes Cards-On-File UI OR when the credit radio label clearly indicates a card method.
+    const hasCardOnFileUI = !!(rbCardSaved || cardSel0 || card1 || card2);
+    const tCred = (__wlLabelText ? __wlLabelText(rbCred) : '');
+    const labelSaysCard = __wlLooksCard && __wlLooksCard(tCred) && !(__wlLooksBank && __wlLooksBank(tCred));
+    return hasCardOnFileUI || labelSaysCard;
+  }catch(e){ return false; }
+}
+
+const cardAvail = isCardSupported();
+
 
       // Top-level method row:
       // - Always show Bank
@@ -4688,7 +4713,7 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
           const kind = btn.getAttribute('data-card');
 
           if (kind === 'new'){
-            if (!isRadioAvailable(rbCardNew)) return;
+            if (!isCardSupported()) return;
             savePayState({ __userPicked:true, method:'card', card:{ mode:'new' } });
             try{ if (window.WLPayPending){ window.WLPayPending.__cardPendingVal = null; window.WLPayPending.__cardPendingText = null; } }catch(e){}
             try{ clickWebFormsRadio(rbCardNew); }catch(e){}
