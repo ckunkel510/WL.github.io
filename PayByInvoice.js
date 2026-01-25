@@ -2112,7 +2112,8 @@ const IDS = {
         opts = opts || {};
         const v = (proxyInput.value || '').trim();
         try { realInput.value = v; } catch {}
-        try { saveBillDraft(v); } catch {}
+        try { saveBillDraft(v);
+        try{ hardEnsureBillingUI(); }catch{} } catch {}
         try { if (v) lockBilling(v); } catch {}
 
         // If we have a value, show the read-only display immediately and hide the proxy input.
@@ -3661,7 +3662,71 @@ if (jobBtn){
       return !/AccountPayment_r\.aspx/i.test(ref);
     }catch{ return true; }
   }
-  function resetWizardState(){
+  function resetWizardState()
+  // --- Billing UI persistence helpers (prevents "it disappeared" confusion) ---
+  function renderBillingSticky(infoInner, value){
+    try{
+      if (!infoInner) return;
+      const v = String(value||'').trim();
+      if (!v) return;
+      let sticky = document.getElementById('wlBillingSticky');
+      if (!sticky){
+        sticky = document.createElement('div');
+        sticky.id = 'wlBillingSticky';
+        sticky.className = 'wl-item wl-span-2 wl-force-show';
+        sticky.innerHTML = `
+          <div class="wl-bill-display wl-force-show" style="margin-top:8px;">
+            <div class="wl-bill-head" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+              <div class="wl-bill-title" style="font-weight:600;">Billing Address</div>
+              <button type="button" class="w3-btn ghost sm" id="wlBillingStickyEditBtn">Edit</button>
+            </div>
+            <input type="text" id="wlBillingStickyVal" class="form-control" readonly value="">
+            <div class="wl-bill-note" style="font-size:12px;opacity:.85;margin-top:4px;">Saved.</div>
+          </div>
+        `;
+      }
+      const input = sticky.querySelector('#wlBillingStickyVal');
+      if (input) input.value = v;
+
+      // Insert near the top of Step 1 info area if possible
+      if (!sticky.parentElement){
+        infoInner.insertBefore(sticky, infoInner.firstChild);
+      }
+
+      const btn = sticky.querySelector('#wlBillingStickyEditBtn');
+      if (btn && !btn.__wlBound){
+        btn.__wlBound = true;
+        btn.addEventListener('click', ()=>{
+          try{ sticky.remove(); }catch{}
+          try{ sessionStorage.removeItem('wl_bill_lock'); }catch{}
+          // keep draft so it can be edited
+          const proxy = document.getElementById('wlProxyBillingInput');
+          if (proxy){ proxy.focus(); proxy.select?.(); }
+        });
+      }
+    }catch{}
+  }
+
+  function hardEnsureBillingUI(){
+    try{
+      // Only on AccountPayment page
+      if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+      const infoInner = document.querySelector('#w3InfoInner') || document.querySelector('.w3-step-info .w3-step-inner') || document.querySelector('[data-wl-step="info"] .w3-step-inner');
+      const draft = (sessionStorage.getItem('wl_bill_draft') || sessionStorage.getItem('wl_bill_lock') || '').trim();
+      if (infoInner && draft){
+        renderBillingSticky(infoInner, draft);
+      }
+      // If proxy input exists but got hidden, force it visible
+      const proxyWrap = document.getElementById('wlProxyBillingWrap');
+      if (proxyWrap){
+        proxyWrap.style.removeProperty('display');
+        proxyWrap.style.removeProperty('visibility');
+        proxyWrap.style.pointerEvents = 'auto';
+        proxyWrap.classList.add('wl-force-show');
+      }
+    }catch{}
+  }
+{
     try{ sessionStorage.removeItem(STEP_KEY); }catch{}
     try{ localStorage.removeItem(STEP_KEY); }catch{}
     try{ sessionStorage.removeItem("wl_bill_lock"); }catch{}
@@ -4016,6 +4081,7 @@ function setStep(n){
           const proxy = document.getElementById('wlProxyBillingInput');
           v = (proxy?.value || real?.value || '').trim();
           saveBillDraft(v);
+        try{ hardEnsureBillingUI(); }catch{}
           if (v) lockBilling(v);
         }catch{}
 
@@ -4024,7 +4090,7 @@ function setStep(n){
 
         // If they already typed billing, trigger the same postback path as "Make Payment" (throttled).
         if (v){
-          try{ forceWizardRoundTrip('step0-next'); }catch{}
+          try{ }catch{}
         }
 
         setStep(1);
