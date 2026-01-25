@@ -1,23 +1,5 @@
-// Global helper for legacy blocks (some functions run outside the main IIFE)
-window.byId = window.byId || function byId(sel){
-  // Back-compat helper: accepts either a DOM id ("foo") or a selector (".class", "#id", "div.foo", etc.)
-  try{
-    if (!sel) return null;
-    const s = String(sel);
-    // Heuristic: treat common selector starts / characters as selector
-    if (/^[.#\[]/.test(s) || /[ >:+~]/.test(s)) return document.querySelector(s);
-    return document.getElementById(s) || document.querySelector('#' + CSS.escape(s));
-  }catch{
-    try { return document.getElementById(String(sel)); } catch { return null; }
-  }
-};
-
 
 (function () {
-  // Ensure byId helper exists (used throughout patches)
-  const byId = window.byId;
-
-
   'use strict';
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
@@ -36,108 +18,7 @@ window.byId = window.byId || function byId(sel){
   function savePref(p){ try{ sessionStorage.setItem(KEY, JSON.stringify(p)); }catch{} }
   function loadPref(){ try{ return JSON.parse(sessionStorage.getItem(KEY) || '{}'); }catch{ return {}; } }
 
-  
-  const BILL_SEL_KEY   = 'wl_billSel_text_v1';
-
-  function getAddrDropdown(){
-    return document.getElementById('ctl00_PageBody_AddressDropdownList');
-  }
-  function parseStreet30(full){
-    // Input maxlen is 30; prefer the street line before first comma.
-    if (!full) return '';
-    const street = String(full).split(',')[0].trim();
-    return street.length > 30 ? street.slice(0,30) : street;
-  }
-  function saveBillSelectedText(t){ try{ sessionStorage.setItem(BILL_SEL_KEY, String(t||'')); }catch{} }
-  function loadBillSelectedText(){ try{ return sessionStorage.getItem(BILL_SEL_KEY) || ''; }catch{ return ''; } }
-  function clearBillSelectedText(){ try{ sessionStorage.removeItem(BILL_SEL_KEY); }catch{} }
-
-  function buildBillingSelectorUI(infoInner){
-    if (!infoInner) return false;
-    if (document.getElementById('wlBillSelectWrap')) return true;
-
-    const ddl = getAddrDropdown();
-    if (!ddl) return false;
-
-    const wrap = document.createElement('div');
-    wrap.id = 'wlBillSelectWrap';
-    wrap.className = 'wl-field';
-    wrap.innerHTML = `
-      <div class="wl-lab"><label for="wlBillSelect">Billing Address:</label></div>
-      <div class="wl-ctl" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-        <select id="wlBillSelect" class="form-control" style="min-width:320px;max-width:100%;"></select>
-        <button type="button" class="w3-btn" id="wlBillSelectApply">Use</button>
-      </div>
-      <p class="descriptionMessage wl-help">Choose an address, then click Use.</p>
-    `;
-
-    const sel = wrap.querySelector('#wlBillSelect');
-    // Copy options from the hidden Address dropdown
-    [...ddl.options].forEach(o=>{
-      if (!o || o.value === '-1') return;
-      const opt = document.createElement('option');
-      opt.value = o.value;
-      opt.textContent = o.textContent;
-      sel.appendChild(opt);
-    });
-
-    // Summary line + edit
-    const summary = document.createElement('div');
-    summary.id = 'wlBillSummary';
-    summary.className = 'wl-field';
-    summary.style.display = 'none';
-    summary.innerHTML = `
-      <div class="wl-lab"><label>Billing Address:</label></div>
-      <div class="wl-ctl" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-        <div id="wlBillSummaryText" style="font-weight:600;"></div>
-        <button type="button" class="w3-btn" id="wlBillEdit">Edit</button>
-      </div>
-    `;
-
-    // Insert near top of Step 1 info
-    infoInner.insertBefore(summary, infoInner.firstChild);
-    infoInner.insertBefore(wrap, summary);
-
-    function applySelected(){
-      const pickedText = sel.options[sel.selectedIndex]?.textContent || '';
-      if (!pickedText) return;
-
-      saveBillSelectedText(pickedText);
-
-      // Push a street-line into the real Billing textbox (best effort, <= 30 chars)
-      const real = document.getElementById('ctl00_PageBody_BillingAddressTextBox');
-      if (real){
-        real.value = parseStreet30(pickedText);
-        // DO NOT trigger onchange/postback (that's what causes the jump)
-      }
-
-      summary.querySelector('#wlBillSummaryText').textContent = pickedText;
-      wrap.style.display = 'none';
-      summary.style.display = '';
-    }
-
-    wrap.querySelector('#wlBillSelectApply').addEventListener('click', applySelected);
-
-    summary.querySelector('#wlBillEdit').addEventListener('click', ()=>{
-      summary.style.display = 'none';
-      wrap.style.display = '';
-    });
-
-    // Restore prior selection if present
-    const prev = loadBillSelectedText();
-    if (prev){
-      summary.querySelector('#wlBillSummaryText').textContent = prev;
-      wrap.style.display = 'none';
-      summary.style.display = '';
-      // also restore into real input if empty
-      const real = document.getElementById('ctl00_PageBody_BillingAddressTextBox');
-      if (real && !real.value) real.value = parseStreet30(prev);
-    }
-
-    return true;
-  }
-
-const BILL_DRAFT_KEY = 'wl_billDraft_v3';
+  const BILL_DRAFT_KEY = 'wl_billDraft_v3';
   const STEP_ADV_KEY  = 'wl_ap_forceStep_v3';
   function saveBillDraft(v){ try{ sessionStorage.setItem(BILL_DRAFT_KEY, String(v||'')); }catch{} }
   function loadBillDraft(){ try{ return sessionStorage.getItem(BILL_DRAFT_KEY) || ''; }catch{ return ''; } }
@@ -288,8 +169,8 @@ const BILL_DRAFT_KEY = 'wl_billDraft_v3';
   function applyPrefill(){
     const pref = loadPref(); if (!pref) return;
 
-    const rem = byId('ctl00_PageBody_RemittanceAdviceTextBox');
-    const amt = byId('ctl00_PageBody_PaymentAmountTextBox');
+    const rem = $('ctl00_PageBody_RemittanceAdviceTextBox');
+    const amt = $('ctl00_PageBody_PaymentAmountTextBox');
 
     if (rem){
       let finalText = String(rem.value||'').trim();
@@ -320,8 +201,8 @@ const BILL_DRAFT_KEY = 'wl_billDraft_v3';
   // Ensure the values are present right before any partial postback
   function stampValuesIntoForm(){
     const pref = loadPref(); if (!pref) return;
-    const rem = byId('ctl00_PageBody_RemittanceAdviceTextBox');
-    const amt = byId('ctl00_PageBody_PaymentAmountTextBox');
+    const rem = $('ctl00_PageBody_RemittanceAdviceTextBox');
+    const amt = $('ctl00_PageBody_PaymentAmountTextBox');
     if (rem){
       // rebuild expected text and ensure it's stamped
       let finalText = String(rem.value||'').trim();
@@ -417,8 +298,8 @@ function startSelectionSync(){
       const el = $(id);
       if (el && !el.__wlBound){
         const saveNow = ()=>{
-          const rem = byId('ctl00_PageBody_RemittanceAdviceTextBox');
-          const amt = byId('ctl00_PageBody_PaymentAmountTextBox');
+          const rem = $('ctl00_PageBody_RemittanceAdviceTextBox');
+          const amt = $('ctl00_PageBody_PaymentAmountTextBox');
           const pref = loadPref();
           // Re-extract docs only (first line with commas), leave jobs/notes/remit as-is
           let docsLine = '';
@@ -724,12 +605,12 @@ wireFieldPersistence();
   async function upgradeLayout(){
     log.info('upgradeLayout: start');
 
-    const page = byId('.bodyFlexContainer'); if (!page) { log.warn('upgradeLayout: page container missing'); return; }
+    const page = $('.bodyFlexContainer'); if (!page) { log.warn('upgradeLayout: page container missing'); return; }
 
     // Shell
-    let shell = byId('.wl-shell');
+    let shell = $('.wl-shell');
     if (!shell){
-      const firstLeft = byId('.bodyFlexItem > .float-left') || byId('.bodyFlexItem');
+      const firstLeft = $('.bodyFlexItem > .float-left') || $('.bodyFlexItem');
       shell = document.createElement('div'); shell.className='wl-shell';
       firstLeft?.parentNode?.insertBefore(shell, firstLeft);
       if (firstLeft) firstLeft.style.display='none';
@@ -896,11 +777,11 @@ wireFieldPersistence();
     // Move submit panel into right card (idempotent)
     const submitMount = byId('wlSubmitMount');
     if (submitMount && !submitMount.__wlMoved){
-      const realSubmitPanel = byId('#ctl00_PageBody_MakePaymentPanel .submit-button-panel');
+      const realSubmitPanel = $('#ctl00_PageBody_MakePaymentPanel .submit-button-panel');
       if (realSubmitPanel){ submitMount.appendChild(realSubmitPanel); submitMount.__wlMoved = true; log.debug('submit panel moved'); }
     }
     byId('wlProxySubmit')?.addEventListener('click', ()=>{
-      const real = byId('#wlSubmitMount .submit-button-panel button, #wlSubmitMount .submit-button-panel input[type="submit"], #wlSubmitMount .submit-button-panel input[type="button"]');
+      const real = $('#wlSubmitMount .submit-button-panel button, #wlSubmitMount .submit-button-panel input[type="submit"], #wlSubmitMount .submit-button-panel input[type="button"]');
       log.info('proxy submit click; found real?', !!real);
       if (real) real.click();
     });
@@ -3610,7 +3491,7 @@ if (jobBtn){
   const STEP_KEY = '__WL_AP_WIZ3_STEP';
 
   function injectCSS(){
-    if (byId('wl-ap-wiz3-css')) return;
+    if ($('wl-ap-wiz3-css')) return;
     const css = `
       #wlApWizard3{ border:1px solid #e5e7eb; border-radius:16px; background:#fff; margin-bottom:16px; }
       #wlApWizard3 .w3-head{ display:flex; justify-content:space-between; gap:12px; align-items:center; padding:12px 14px; border-bottom:1px solid #e5e7eb; }
@@ -3645,34 +3526,26 @@ if (jobBtn){
   }
 
   function getAmount(){
-    const el = byId('ctl00_PageBody_PaymentAmountTextBox');
+    const el = $('ctl00_PageBody_PaymentAmountTextBox');
     return moneyNum(el?.value || '');
   }
 
   function sanitizeEmailInPlace(){
-    // Avoid dependency on helper functions (this runs late and must never crash)
-    const el = document.getElementById('ctl00_PageBody_EmailAddressTextBox') ||
-               document.getElementById('ctl00_PageBody_EmailTextBox') ||
-               document.getElementById('wlProxyEmail');
-    if (!el) return false;
-
-    const raw = String(el.value || '').trim();
-    // If user has something like "(name) email@domain.com", keep the last token that looks like an email
-    const parts = raw.split(/\s+/).filter(Boolean);
-    let email = raw;
-    for (let i = parts.length - 1; i >= 0; i--){
-      if (/@/.test(parts[i])) { email = parts[i]; break; }
-    }
-    const cleaned = email.replace(/[<>()[\]{}'"]/g,'').trim();
-    if (cleaned && cleaned !== el.value) el.value = cleaned;
-    return true;
-  }
+  const el = $('ctl00_PageBody_EmailAddressTextBox');
+  if (!el) return;
+  const raw = String(el.value || '').trim();
+  if (!raw) return;
+  // If something like "(ckunkel) ckunkel@woodsonlumber.com", extract the first valid email token.
+  const tokens = raw.split(/[\s,;<>\(\)]+/).filter(Boolean);
+  const email = tokens.find(t => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(t)) || '';
+  if (email && email !== raw) el.value = email;
+}
 
 function buildReviewHTML(){
-    const amtEl = byId('ctl00_PageBody_PaymentAmountTextBox');
-    const remit = byId('ctl00_PageBody_RemittanceAdviceTextBox')?.value || '';
-    const notes = byId('ctl00_PageBody_NotesTextBox')?.value || '';
-    const email = byId('ctl00_PageBody_EmailAddressTextBox')?.value || '';
+    const amtEl = $('ctl00_PageBody_PaymentAmountTextBox');
+    const remit = $('ctl00_PageBody_RemittanceAdviceTextBox')?.value || '';
+    const notes = $('ctl00_PageBody_NotesTextBox')?.value || '';
+    const email = $('ctl00_PageBody_EmailAddressTextBox')?.value || '';
 
     // If your core script exposes a summary method, use it.
     let sel = '';
@@ -3706,11 +3579,11 @@ function buildReviewHTML(){
   // Only attempt to load COF accounts when COF is actually selected.
   window.WLPayMode?.ensureCheckOnFileUI?.();
 
-  const rb = byId('ctl00_PageBody_RadioButton_PayByCheckOnFile');
+  const rb = $('ctl00_PageBody_RadioButton_PayByCheckOnFile');
   if (!rb || !rb.checked) return;
 
-  const c1 = byId('ctl00_PageBody_ChecksOnFileContainer');
-  const c2 = byId('ctl00_PageBody_ChecksOnFileContainer1');
+  const c1 = $('ctl00_PageBody_ChecksOnFileContainer');
+  const c2 = $('ctl00_PageBody_ChecksOnFileContainer1');
   const sel = (c1?.querySelector('select') || c2?.querySelector('select'));
 
   // Throttle retries to avoid infinite postback loops
@@ -3743,16 +3616,16 @@ function buildReviewHTML(){
     injectCSS();
 
     const shell = qs('.wl-shell');
-    const left  = byId('wlLeftCard');
-    const right = byId('wlRightCard');
-    const tx    = byId('wlTxCard');
+    const left  = $('wlLeftCard');
+    const right = $('wlRightCard');
+    const tx    = $('wlTxCard');
 
     // Wait until the core layout module has created the cards.
     if (!shell || !left || !right){
       return false;
     }
 
-    if (byId('wlApWizard3')) return true;
+    if ($('wlApWizard3')) return true;
 
     // Build wizard wrapper above shell
     const wiz = document.createElement('div');
@@ -3783,18 +3656,17 @@ function buildReviewHTML(){
     // Move cards into steps (keeps all original logic intact)
     
 // Step 0 (Info): only show Email + Billing Address + ZIP
-const step0 = byId('w3Step0');
+const step0 = $('w3Step0');
 const infoCard = document.createElement('div');
 infoCard.className = 'wl-card';
 infoCard.innerHTML = `<div class="wl-card-head">Your information</div><div class="wl-card-body"><div id="w3InfoInner" style="display:grid;gap:12px;"></div></div>`;
 step0.appendChild(infoCard);
 
-const infoInner = byId('w3InfoInner');
-    try{ buildBillingSelectorUI(infoInner); }catch{}
+const infoInner = $('w3InfoInner');
 
 // Hide Address dropdown (not needed in Step 1)
 (function hideAddressDropdownOnStep1(){
-  const ddl = byId('ctl00_PageBody_AddressDropdownList');
+  const ddl = $('ctl00_PageBody_AddressDropdownList');
   const wrap = ddl ? (ddl.closest('.wl-field') || ddl.closest('.epi-form-group-acctPayment') || ddl.closest('tr') || ddl.parentElement) : null;
   if (wrap) wrap.style.display = 'none';
 })();
@@ -3808,8 +3680,8 @@ function moveFieldGroupById(id, to){
 
 // Prefer the BillingAddressContainer if present (may wrap multiple controls)
 const billWrap =
-  byId('ctl00_PageBody_BillingAddressContainer') ||
-  byId('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment');
+  $('ctl00_PageBody_BillingAddressContainer') ||
+  $('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment');
 
 sanitizeEmailInPlace();
 
@@ -3829,24 +3701,24 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
 
 // Keep the rest of the original UI (amount/quick-pay/remit/etc.) out of Step 0:
 // put the existing cards into Step 1 instead.
-    const step1 = byId('w3Step1');
+    const step1 = $('w3Step1');
     step1.appendChild(left);
     step1.appendChild(right);
     if (tx) step1.appendChild(tx);
 
     // Build pay step: move pay-by radios/containers + make payment button into a clean card
-    const payHost = byId('w3Step3');
+    const payHost = $('w3Step3');
     const payCard = document.createElement('div');
     payCard.className = 'wl-card';
     payCard.innerHTML = `<div class="wl-card-head">Payment method</div><div class="wl-card-body"><div id="w3PayInner" style="display:grid;gap:14px;"></div></div>`;
     payHost.appendChild(payCard);
 
-    const payInner = byId('w3PayInner');
+    const payInner = $('w3PayInner');
 
     // Move pay-by radio wrappers (real controls)
-    const rbCheck = byId('ctl00_PageBody_RadioButton_PayByCheck');
-    const rbCof   = byId('ctl00_PageBody_RadioButton_PayByCheckOnFile');
-    const rbCred  = byId('ctl00_PageBody_RadioButton_PayByCredit');
+    const rbCheck = $('ctl00_PageBody_RadioButton_PayByCheck');
+    const rbCof   = $('ctl00_PageBody_RadioButton_PayByCheckOnFile');
+    const rbCred  = $('ctl00_PageBody_RadioButton_PayByCredit');
 
     const wCheck = rbCheck?.closest('.radiobutton') || rbCheck?.parentElement;
     const wCof   = rbCof?.closest('.radiobutton')   || rbCof?.parentElement;
@@ -3856,8 +3728,8 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
     if (wCof)   payInner.appendChild(wCof);
     if (wCred)  payInner.appendChild(wCred);
 
-    const cof1 = byId('ctl00_PageBody_ChecksOnFileContainer');
-    const cof2 = byId('ctl00_PageBody_ChecksOnFileContainer1');
+    const cof1 = $('ctl00_PageBody_ChecksOnFileContainer');
+    const cof2 = $('ctl00_PageBody_ChecksOnFileContainer1');
     if (cof1) payInner.appendChild(cof1);
     if (cof2) payInner.appendChild(cof2);
 
@@ -3869,7 +3741,7 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
       submitCard.className = 'wl-card';
       submitCard.innerHTML = `<div class="wl-card-head">Submit</div><div class="wl-card-body" id="w3SubmitInner"></div>`;
       payHost.appendChild(submitCard);
-      const sub = byId('w3SubmitInner');
+      const sub = $('w3SubmitInner');
       if (wrap) sub.appendChild(wrap);
       else sub.appendChild(mp);
     }
@@ -3911,17 +3783,17 @@ function setStep(n){
         p.classList.toggle('on', Number(p.getAttribute('data-step')) === step);
       });
 
-      byId('w3Back').disabled = (step === 0);
-      byId('w3Next').textContent = (step === 3) ? 'Ready' : 'Next';
+      $('w3Back').disabled = (step === 0);
+      $('w3Next').textContent = (step === 3) ? 'Ready' : 'Next';
 
       if (step === 2){
-        byId('w3Review').innerHTML = buildReviewHTML();
+        $('w3Review').innerHTML = buildReviewHTML();
       }
       if (step === 3){
         // Make sure COF is actually usable
         window.WLPayMode?.ensureCheckOnFileUI?.();
-        const rb = byId('ctl00_PageBody_RadioButton_PayByCheckOnFile');
-        const ck = byId('ctl00_PageBody_RadioButton_PayByCheck');
+        const rb = $('ctl00_PageBody_RadioButton_PayByCheckOnFile');
+        const ck = $('ctl00_PageBody_RadioButton_PayByCheck');
         rb?.addEventListener('change', ensureCOFLoaded);
         ck?.addEventListener('change', ()=>window.WLPayMode?.ensureCheckOnFileUI?.());
         ensureCOFLoaded();
@@ -3938,14 +3810,14 @@ function setStep(n){
       return true;
     }
 
-    byId('w3Back').addEventListener('click', ()=>setStep(step-1));
-    byId('w3Next').addEventListener('click', ()=>{
+    $('w3Back').addEventListener('click', ()=>setStep(step-1));
+    $('w3Next').addEventListener('click', ()=>{
       if (!validateStep()) return;
 
       // Step 0 -> Step 1: persist Billing; advance immediately; then reload (optional) to stabilize WebForms rendering
       if (step === 0){
         try{
-          const real = byId('ctl00_PageBody_BillingAddressTextBox');
+          const real = $('ctl00_PageBody_BillingAddressTextBox');
           const proxy = document.getElementById('wlProxyBillingInput');
           const v = (proxy?.value || real?.value || '').trim();
           saveBillDraft(v);
@@ -3965,31 +3837,6 @@ function setStep(n){
     });
 
     setStep(step);
-
-    // Ensure Next is clickable even if other overlays/styles interfere
-    try{
-      const nbtn = byId('w3Next');
-      if (nbtn){
-        nbtn.style.pointerEvents = 'auto';
-        nbtn.style.position = 'relative';
-        nbtn.style.zIndex = '9999';
-      }
-    }catch{}
-
-    // Delegated capture as a backstop (some scripts may stopPropagation on buttons)
-    if (!window.__wl_next_capture){
-      window.__wl_next_capture = true;
-      document.addEventListener('click', (e)=>{
-        const t = e.target;
-        const btn = t && (t.id === 'w3Next' ? t : t.closest && t.closest('#w3Next'));
-        if (!btn) return;
-        // Let our existing handler run; if it doesn't, force step advance.
-        try{
-          // if step var exists in closure, no access here. So just trigger native click.
-          btn.__wlForced = true;
-        }catch{}
-      }, true);
-    }
 
     // If we reloaded from Step 0, jump straight to Step 1
     try{
