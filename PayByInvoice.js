@@ -3499,10 +3499,13 @@ if (jobBtn){
       #wlApWizard3 .w3-steps{ display:flex; gap:6px; flex-wrap:wrap; }
       #wlApWizard3 .w3-pill{ font-size:12px; font-weight:900; padding:6px 10px; border-radius:999px; border:1px solid #e5e7eb; background:#f8fafc; }
       #wlApWizard3 .w3-pill.on{ background:#111827; color:#fff; border-color:#111827; }
-      #wlApWizard3 .w3-body{ padding:14px; padding-bottom:96px; }
+      #wlApWizard3 .w3-body{ padding:14px; }
       #wlApWizard3 .w3-panel{ display:none; }
       #wlApWizard3 .w3-panel.on{ display:block; }
-      #wlApWizard3 .w3-nav{ display:flex; justify-content:space-between; gap:10px; margin-top:14px; position:fixed; left:50%; transform:translateX(-50%); bottom:18px; width:min(1000px, calc(100vw - 24px)); background:#fff; padding:12px 14px; border:1px solid #e5e7eb; border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.08); z-index:2147483647; pointer-events:auto; }
+      #wlApWizard3 .w3-nav{ display:flex; justify-content:space-between; gap:10px; margin-top:16px; position:sticky; bottom:12px; width:100%; background:#fff; padding:12px 14px; border:1px solid #e5e7eb; border-radius:16px; box-shadow:0 10px 30px rgba(0,0,0,.08); z-index:6000; pointer-events:auto; }
+      .RadAjaxLoadingPanel, .RadAjaxLoadingPanel *{ pointer-events:none !important; }
+      div[id*="LoadingPanel"], div[id*="loadingpanel"], div[id*="_LoadingPanel"], div[id*="_loadingPanel"]{ pointer-events:none !important; }
+
       #wlApWizard3 .w3-btn{ pointer-events:auto;  border:1px solid #e5e7eb; background:#fff; border-radius:12px; padding:10px 12px; font-weight:1000; cursor:pointer; }
       #wlApWizard3 .w3-btn.primary{ background:#111827; color:#fff; border-color:#111827; }
       #wlApWizard3 .w3-btn[disabled]{ opacity:.5; cursor:not-allowed; }
@@ -3814,22 +3817,15 @@ function setStep(n){
     $('w3Next').addEventListener('click', ()=>{
       if (!validateStep()) return;
 
-      // Step 0 -> Step 1: persist Billing; advance immediately; then reload (optional) to stabilize WebForms rendering
+      // Step 0 -> Step 1: persist Billing; advance immediately
       if (step === 0){
         try{
           const real = $('ctl00_PageBody_BillingAddressTextBox');
           const proxy = document.getElementById('wlProxyBillingInput');
           const v = (proxy?.value || real?.value || '').trim();
           saveBillDraft(v);
-
-          // Advance now so the user lands on Step 2 behavior even if reload is blocked
-          sessionStorage.setItem(STEP_ADV_KEY, '1');
-          sessionStorage.setItem(STEP_KEY, '1');
-          setStep(1);
-
-          // Reload shortly after to rebuild DOM cleanly (won't run if navigation is blocked)
-          setTimeout(()=>{ try{ location.reload(); }catch{} }, 50);
         }catch{}
+        setStep(1);
         return;
       }
 
@@ -3837,15 +3833,6 @@ function setStep(n){
     });
 
     setStep(step);
-
-    // If we reloaded from Step 0, jump straight to Step 1
-    try{
-      if (sessionStorage.getItem(STEP_ADV_KEY) === '1'){
-        sessionStorage.removeItem(STEP_ADV_KEY);
-        setStep(1);
-      }
-    }catch{}
-
     return true;
   
     try { pinBillingToStep1({ attempt: 0 }); } catch {}
