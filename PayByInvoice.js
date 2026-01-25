@@ -1,7 +1,7 @@
 
 (function () {
   'use strict';
-  console.log('[AP] PayByInvoice version v11 loaded');
+  console.log('[AP] PayByInvoice version v16 loaded');
 
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
@@ -668,6 +668,16 @@ wireFieldPersistence();
       }
       @media (max-width:720px){
         #w3PayInner .wl-pay-bank{ grid-template-columns: 1fr; }
+      }
+
+      #w3PayInner .wl-pay-cardlvl{
+        display:grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap:12px;
+        margin-top:12px;
+      }
+      @media (max-width:720px){
+        #w3PayInner .wl-pay-cardlvl{ grid-template-columns: 1fr; }
       }
       #w3PayInner .wl-pay-card{
         appearance:none;
@@ -3991,7 +4001,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details</div>
+        <div class="w3-title">Payment Details.</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
@@ -4124,7 +4134,8 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
       cardHost.id = 'wlPayCardsHost';
       cardHost.innerHTML = `
         <div class="wl-pay-methods" id="wlPayMethodCards"></div>
-        <div class="wl-pay-bank" id="wlPayBankCards" style="display:grid;"></div>
+        <div class="wl-pay-bank" id="wlPayBankCards"></div>
+    <div class="wl-pay-cardlvl" id="wlPayCardCards" style="display:none;"></div>
       `;
       payInner.appendChild(cardHost);
     }
@@ -4265,67 +4276,81 @@ function setSelectedCard(cardEl, isSelected){
       }catch(e){}
     }
 
+    
     function renderPayCards(){
       const methodMount = $('wlPayMethodCards');
       const bankMount   = $('wlPayBankCards');
-      if (!methodMount || !bankMount) return;
+      const cardMount   = $('wlPayCardCards');
+      if (!methodMount || !bankMount || !cardMount) return;
 
-      const mode = currentMode();
+      // Credit availability: only when WebTrack actually offers pay-by-card OR card-on-file on this account (e.g., CAB)
+      const cardAvail = isRadioAvailable(rbCred) || isRadioAvailable(rbCardOnFile);
 
-      // Met// 1) Method cards (Bank vs Credit)
-      const creditAvail = isCreditAvailable();
-
-      // Only show the ACH vs Card method toggle when Card is actually available.
-      if (creditAvail){
+      // We always show bank accounts UI; card UI is gated by cardAvail.
+      // Top-level method row only appears when Card is available; otherwise Bank is the only method.
+      if (cardAvail){
         methodMount.style.display = 'grid';
-        const parts = [];
-        parts.push(`
+        methodMount.style.gridTemplateColumns = 'repeat(auto-fit, minmax(0, 1fr))';
+        methodMount.innerHTML = `
           <button type="button" class="wl-pay-card" data-method="bank">
             <div class="wl-pay-title">Pay by Bank (ACH)</div>
             <div class="wl-pay-sub">Use a bank account (new or saved).</div>
           </button>
-        `);
-
-        if (isRadioAvailable(rbCred)){
-          parts.push(`
-            <button type="button" class="wl-pay-card" data-method="credit">
-              <div class="wl-pay-title">Pay by Card</div>
-              <div class="wl-pay-sub">Available for select accounts.</div>
-            </button>
-          `);
-        }
-        if (isRadioAvailable(rbCardOnFile)){
-          parts.push(`
-            <button type="button" class="wl-pay-card" data-method="card_on_file">
-              <div class="wl-pay-title">Card on File</div>
-              <div class="wl-pay-sub">Use a saved card.</div>
-            </button>
-          `);
-        }
-
-        methodMount.innerHTML = parts.join('');
+          <button type="button" class="wl-pay-card" data-method="card">
+            <div class="wl-pay-title">Pay by Card</div>
+            <div class="wl-pay-sub">Available for select accounts.</div>
+          </button>
+        `;
       } else {
         methodMount.style.display = 'none';
         methodMount.innerHTML = '';
       }
-// Match layout to availability
-      try{ methodMount.style.gridTemplateColumns = creditAvail ? 'repeat(auto-fit, minmax(0, 1fr))' : '1fr'; }catch(e){};
 
-      const bankMethodCard   = methodMount.querySelector('[data-method="bank"]');
-      const creditMethodCard = methodMount.querySelector('[data-method="credit"]');
-      const cofCardMethod    = methodMount.querySelector('[data-method="card_on_file"]');
+      // ----- Detect current mode (persisted intent wins) -----
+      function currentMode2(){
+        const st = loadPayState() || {};
 
-      const isCredit = (mode === 'credit');
-      const isCofCard = (mode === 'card_on_file');
+        // If card isn't available, force bank
+        if (st.method === 'card' && !cardAvail){
+          st.method = 'bank';
+          st.bank = st.bank || { mode:'new' };
+          delete st.card;
+          savePayState(st);
+        }
 
-      setSelectedCard(bankMethodCard, (!isCredit && !isCofCard));
-      setSelectedCard(creditMethodCard, isCredit);
-      setSelectedCard(cofCardMethod, isCofCard);
+        // Native radios may be set by server on CAB loads; honor ONLY if card is available and user intent is not bank.
+        if (cardAvail){
+          if (rbCred?.checked) return 'card_new';
+          if (rbCardOnFile?.checked) return 'card_saved';
+          if (st.method === 'card' && st.card?.mode === 'saved') return 'card_saved';
+          if (st.method === 'card' && st.card?.mode === 'new') return 'card_new';
+        }
 
-      bankMount.style.display = 'grid';
+        if (st.method === 'bank' && st.bank?.mode === 'saved') return 'bank_saved';
+        if (st.method === 'bank' && st.bank?.mode === 'new') return 'bank_new';
+
+        // Fallback inference (no saved state)
+        const hasCofSelection = !!(cofSel && cofSel.value && cofSel.value !== '-1');
+        if (rbCof?.checked || hasCofSelection) return 'bank_saved';
+        if (rbCheck?.checked) return 'bank_new';
+
+        return 'bank_new';
+      }
+
+      const mode = currentMode2();
+      const isCardMode = (mode === 'card_new' || mode === 'card_saved');
+
+      // ----- Top-level selection styles -----
+      const bankMethodCard = methodMount.querySelector?.('[data-method="bank"]');
+      const cardMethodCard = methodMount.querySelector?.('[data-method="card"]');
+      setSelectedCard(bankMethodCard, !isCardMode);
+      setSelectedCard(cardMethodCard, isCardMode);
+
+      // ----- BANK second level (always visible when bank selected; default shows it) -----
+      bankMount.style.display = (!isCardMode) ? 'grid' : 'none';
 
       // Bank account cards (Add new + saved)
-      const opts = [];
+      const bankOpts = [];
       try{
         if (cofSel && cofSel.options){
           for (const o of Array.from(cofSel.options)){
@@ -4333,18 +4358,19 @@ function setSelectedCard(cardEl, isSelected){
             const txt = String(o.text || '').trim();
             if (!val || val === '-1') continue;
             if (!txt || /select/i.test(txt)) continue;
-            opts.push({ value: val, text: txt });
+            bankOpts.push({ value: val, text: txt });
           }
         }
       }catch(e){}
 
-      const stSel = loadPayState();
+      const stBank = loadPayState() || {};
       const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
-      const desiredSavedVal = (stSel?.method === 'bank' && stSel?.bank?.mode === 'saved' && stSel?.bank?.value) ? String(stSel.bank.value) : '';
+      const desiredSavedVal = (stBank?.method === 'bank' && stBank?.bank?.mode === 'saved' && stBank?.bank?.value) ? String(stBank.bank.value) : '';
+      const bankMatchVal = desiredSavedVal || selectedCofVal;
 
-      const savedCards = opts.map(o=>{
-        const matchVal = desiredSavedVal || selectedCofVal;
-        const selected = (mode === 'bank_saved' && matchVal && matchVal === o.value);        return `
+      const bankSavedCards = bankOpts.map(o=>{
+        const selected = (mode === 'bank_saved' && bankMatchVal && bankMatchVal === o.value);
+        return `
           <button type="button" class="wl-pay-card wl-bank-card ${selected ? 'is-selected':''}"
                   data-bank="saved" data-value="${o.value}">
             <div class="wl-pay-title">${o.text}</div>
@@ -4353,45 +4379,145 @@ function setSelectedCard(cardEl, isSelected){
         `;
       }).join('');
 
-      const addNewSelected = (mode === 'bank_new' || (mode !== 'credit' && opts.length === 0));
+      const bankAddNewSelected = (mode === 'bank_new' || (!cardAvail && bankOpts.length === 0));
       bankMount.innerHTML = `
-        <button type="button" class="wl-pay-card wl-bank-card ${addNewSelected ? 'is-selected':''}"
+        <button type="button" class="wl-pay-card wl-bank-card ${bankAddNewSelected ? 'is-selected':''}"
                 data-bank="new">
           <div class="wl-pay-title">Add new bank account</div>
           <div class="wl-pay-sub">Enter bank details (ACH).</div>
         </button>
-        ${savedCards || ''}
+        ${bankSavedCards || ''}
       `;
 
+      // ----- CARD second level (only shown when card selected) -----
+      cardMount.style.display = (isCardMode && cardAvail) ? 'grid' : 'none';
+      if (cardAvail){
+        // Try to find a "cards on file" select control (WebTrack varies by account/config)
+        const cardSel =
+          $('ctl00_PageBody_CardOnFileList')
+          || document.querySelector('select[id*="CardOnFile"],select[name*="CardOnFile"],select[id*="CardsOnFile"],select[name*="CardsOnFile"],select[id*="PayByCardOnFile"],select[name*="PayByCardOnFile"]')
+          || (rbCardOnFile ? (rbCardOnFile.closest('tr,div,span')?.querySelector?.('select') || null) : null);
+
+        const cardOpts = [];
+        try{
+          if (cardSel && cardSel.options){
+            for (const o of Array.from(cardSel.options)){
+              const val = String(o.value || '').trim();
+              const txt = String(o.text || '').trim();
+              if (!val || val === '-1') continue;
+              if (!txt || /select/i.test(txt)) continue;
+              cardOpts.push({ value: val, text: txt });
+            }
+          }
+        }catch(e){}
+
+        const stCard = loadPayState() || {};
+        const desiredCardVal = (stCard?.method === 'card' && stCard?.card?.mode === 'saved' && stCard?.card?.value) ? String(stCard.card.value) : '';
+        const selectedCardVal = (cardSel && cardSel.value) ? String(cardSel.value) : '';
+        const cardMatchVal = desiredCardVal || selectedCardVal;
+
+        const showAddNewCard = isRadioAvailable(rbCred); // new card entry
+        const showSavedCards = isRadioAvailable(rbCardOnFile) && cardOpts.length > 0;
+
+        const addNewCardSelected = (mode === 'card_new' || (!showSavedCards && showAddNewCard));
+
+        const savedCardCards = cardOpts.map(o=>{
+          const selected = (mode === 'card_saved' && cardMatchVal && cardMatchVal === o.value);
+          return `
+            <button type="button" class="wl-pay-card wl-card-card ${selected ? 'is-selected':''}"
+                    data-card="saved" data-value="${o.value}">
+              <div class="wl-pay-title">${o.text}</div>
+              <div class="wl-pay-sub">Saved card</div>
+            </button>
+          `;
+        }).join('');
+
+        cardMount.innerHTML = `
+          ${showAddNewCard ? `
+            <button type="button" class="wl-pay-card wl-card-card ${addNewCardSelected ? 'is-selected':''}"
+                    data-card="new">
+              <div class="wl-pay-title">Add new card</div>
+              <div class="wl-pay-sub">Enter card details.</div>
+            </button>
+          ` : ''}
+          ${showSavedCards ? savedCardCards : ''}
+        `;
+
+        // Card level click handler (wire each render so it always works after MS AJAX updates)
+        cardMount.onclick = (e)=>{
+          const btn = e.target.closest('.wl-pay-card[data-card]');
+          if (!btn) return;
+          const kind = btn.getAttribute('data-card');
+
+          if (kind === 'new'){
+            if (!isRadioAvailable(rbCred)) return;
+            savePayState({ method:'card', card:{ mode:'new' } });
+            try{ clickWebFormsRadio(rbCred); }catch(e){}
+            setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 80);
+            return;
+          }
+
+          const val = btn.getAttribute('data-value') || '';
+          if (!val) return;
+          const text = (btn.querySelector('.wl-pay-title')?.textContent || '').trim();
+          savePayState({ method:'card', card:{ mode:'saved', value: val, text } });
+
+          try{
+            if (rbCardOnFile && !rbCardOnFile.checked) clickWebFormsRadio(rbCardOnFile);
+          }catch(e){}
+
+          setTimeout(()=>{
+            try{
+              if (cardSel){
+                cardSel.value = val;
+                cardSel.dispatchEvent(new Event('change', { bubbles:true }));
+              }
+            }catch(e){}
+            setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 120);
+          }, 80);
+        };
+      } else {
+        cardMount.innerHTML = '';
+        cardMount.onclick = null;
+      }
+
+      // ----- Top-level method click handler -----
       methodMount.onclick = (e)=>{
-  const btn = e.target.closest('.wl-pay-card[data-method]');
-  if (!btn) return;
-  const method = btn.getAttribute('data-method');
+        const btn = e.target.closest('.wl-pay-card[data-method]');
+        if (!btn) return;
+        const method = btn.getAttribute('data-method');
 
-  if (method === 'credit'){
-    if (!isRadioAvailable(rbCred)) return;
-    savePayState({ method:'credit' });
-    clickWebFormsRadio(rbCred);
-  } else if (method === 'card_on_file'){
-    if (!isRadioAvailable(rbCardOnFile)) return;
-    savePayState({ method:'card_on_file' });
-    clickWebFormsRadio(rbCardOnFile);
-  } else {
-    // Bank is the default
-    const st = loadPayState();
-    const preferSaved = !!(st?.bank?.mode === 'saved' && st?.bank?.value);
-    savePayState({ method:'bank', bank: preferSaved ? st.bank : { mode:'new' } });
+        if (method === 'card'){
+          if (!cardAvail) return;
+          const st = loadPayState() || {};
+          const preferSaved = !!(st?.card?.mode === 'saved' && st?.card?.value);
+          // If they have saved cards but no prior intent, default to "Add new card" (if available)
+          const newOk = isRadioAvailable(rbCred);
 
-    try{
-      if (preferSaved) clickWebFormsRadio(rbCof);
-      else clickWebFormsRadio(rbCheck);
-    }catch(e){}
-    ensureCofVisible();
-  }
+          savePayState({ method:'card', card: preferSaved ? st.card : { mode: newOk ? 'new' : 'saved' } });
 
-  setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ if (typeof renderSummary==='function') renderSummary(); }catch(e){} }, 50);
-};
+          try{
+            if (preferSaved && isRadioAvailable(rbCardOnFile)) clickWebFormsRadio(rbCardOnFile);
+            else if (newOk) clickWebFormsRadio(rbCred);
+            else if (isRadioAvailable(rbCardOnFile)) clickWebFormsRadio(rbCardOnFile);
+          }catch(e){}
+        } else {
+          // Bank is the default
+          const st = loadPayState() || {};
+          const preferSaved = !!(st?.bank?.mode === 'saved' && st?.bank?.value);
+          savePayState({ method:'bank', bank: preferSaved ? st.bank : { mode:'new' } });
 
+          try{
+            if (preferSaved) clickWebFormsRadio(rbCof);
+            else clickWebFormsRadio(rbCheck);
+          }catch(e){}
+          ensureCofVisible();
+        }
+
+        setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 80);
+      };
+
+      // ----- Bank level click handler (wire each render so it always works after MS AJAX updates) -----
       bankMount.onclick = (e)=>{
         const btn = e.target.closest('.wl-pay-card[data-bank]');
         if (!btn) return;
@@ -4399,10 +4525,9 @@ function setSelectedCard(cardEl, isSelected){
         const kind = btn.getAttribute('data-bank');
 
         if (kind === 'new'){
-          // Force "Add new bank account" -> PayByCheck radio
           savePayState({ method:'bank', bank:{ mode:'new' } });
 
-          // Clear any prior COF selection so the UI doesn't infer "saved" from the select value
+          // Clear any prior COF selection so UI and server agree that we're entering a new account
           try{
             if (cofSel){
               const hasMinus1 = Array.from(cofSel.options || []).some(o => String(o.value) === '-1');
@@ -4414,9 +4539,9 @@ function setSelectedCard(cardEl, isSelected){
           renderPayCards();
           try{ renderSummary(); }catch(e){}
 
-          // Trigger the real WebForms control behind the card
+          // Trigger real WebForms control
           try{ clickWebFormsRadio(rbCheck); }catch(e){}
-          setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 80);
+          setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 120);
           return;
         }
 
@@ -4440,13 +4565,12 @@ function setSelectedCard(cardEl, isSelected){
                 cofSel.dispatchEvent(new Event('change', { bubbles:true }));
               }
             }catch(e){}
-            setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 80);
+            setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 120);
           }, 80);
         }, 80);
       };
     }
-
-    // Initial render + rerender after MS AJAX updates
+// Initial render + rerender after MS AJAX updates
     if (!loadPayState()){
       savePayState({ method:'bank', bank:{ mode:'new' } });
     } else {
