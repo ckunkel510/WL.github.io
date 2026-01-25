@@ -4215,7 +4215,7 @@ function setSelectedCard(cardEl, isSelected){
       `;
 
       // Match layout to availability
-      try{ methodMount.style.gridTemplateColumns = creditAvail ? '1fr 1fr' : '1fr'; }catch{}`;
+      try{ methodMount.style.gridTemplateColumns = creditAvail ? '1fr 1fr' : '1fr'; }catch{};
 
       const bankMethodCard   = methodMount.querySelector('[data-method="bank"]');
       const creditMethodCard = methodMount.querySelector('[data-method="credit"]');
