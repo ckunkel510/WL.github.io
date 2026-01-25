@@ -3963,7 +3963,7 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details</div>
+        <div class="w3-title">Payment Details.</div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
@@ -4173,15 +4173,19 @@ function setSelectedCard(cardEl, isSelected){
         savePayState(st);
       }
 
+      // If native radios say Credit and it's allowed, honor that
       if (rbCred?.checked && isCreditAvailable()) return 'credit';
 
-      // Saved COF can lose the checked flag after partial postbacks; infer from select value/state
+      // Prefer persisted intent to avoid "snapping back" due to COF select retaining a value
+      if (st?.method === 'credit' && isCreditAvailable()) return 'credit';
+      if (st?.method === 'bank' && st?.bank?.mode === 'saved') return 'bank_saved';
+      if (st?.method === 'bank' && st?.bank?.mode === 'new') return 'bank_new';
+
+      // Fallback inference (no saved state)
       const hasCofSelection = !!(cofSel && cofSel.value && cofSel.value !== '-1');
       if (rbCof?.checked || hasCofSelection) return 'bank_saved';
       if (rbCheck?.checked) return 'bank_new';
 
-      if (st?.method === 'credit' && isCreditAvailable()) return 'credit';
-      if (st?.method === 'bank' && st?.bank?.mode === 'saved') return 'bank_saved';
       return 'bank_new';
     }
 
@@ -4202,15 +4206,21 @@ function setSelectedCard(cardEl, isSelected){
       // Met// 1) Method cards (Bank vs Credit)
       const creditAvail = isCreditAvailable();
 
-      // Always render both cards; disable Credit when server doesn't allow it (non-CAB loads).
-      methodMount.innerHTML = `
+      // Render only the methods that are actually allowed.
+// Credit Card should ONLY be offered when the server allows it (e.g., Cash Account Balance).
+      methodMount.innerHTML = creditAvail ? `
         <button type="button" class="wl-pay-card" data-method="bank">
           <div class="wl-pay-title">Pay by Bank (ACH)</div>
           <div class="wl-pay-sub">Use a bank account (new or saved).</div>
         </button>
-        <button type="button" class="wl-pay-card ${creditAvail ? '' : 'is-disabled'}" data-method="credit" ${creditAvail ? '' : 'aria-disabled="true" data-disabled="1"'}>
+        <button type="button" class="wl-pay-card" data-method="credit">
           <div class="wl-pay-title">Pay by Credit Card</div>
-          <div class="wl-pay-sub">${creditAvail ? 'Secure card payment.' : 'Credit card is available for Cash Account Balance only.'}</div>
+          <div class="wl-pay-sub">Secure card payment.</div>
+        </button>
+      ` : `
+        <button type="button" class="wl-pay-card" data-method="bank">
+          <div class="wl-pay-title">Pay by Bank (ACH)</div>
+          <div class="wl-pay-sub">Use a bank account (new or saved).</div>
         </button>
       `;
 
@@ -4240,11 +4250,13 @@ function setSelectedCard(cardEl, isSelected){
         }
       }catch{}
 
+      const stSel = loadPayState();
       const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
+      const desiredSavedVal = (stSel?.method === 'bank' && stSel?.bank?.mode === 'saved' && stSel?.bank?.value) ? String(stSel.bank.value) : '';
 
       const savedCards = opts.map(o=>{
-        const selected = (mode === 'bank_saved' && selectedCofVal && selectedCofVal === o.value);
-        return `
+        const matchVal = desiredSavedVal || selectedCofVal;
+        const selected = (mode === 'bank_saved' && matchVal && matchVal === o.value);        return `
           <button type="button" class="wl-pay-card wl-bank-card ${selected ? 'is-selected':''}"
                   data-bank="saved" data-value="${o.value}">
             <div class="wl-pay-title">${o.text}</div>
@@ -4298,6 +4310,20 @@ function setSelectedCard(cardEl, isSelected){
         if (kind === 'new'){
           // Force "Add new bank account" -> PayByCheck radio
           savePayState({ method:'bank', bank:{ mode:'new' } });
+
+          // Clear any prior COF selection so the UI doesn't infer "saved" from the select value
+          try{
+            if (cofSel){
+              const hasMinus1 = Array.from(cofSel.options || []).some(o => String(o.value) === '-1');
+              cofSel.value = hasMinus1 ? '-1' : (cofSel.options?.[0]?.value || '');
+            }
+          }catch{}
+
+          // Immediate visual update
+          renderPayCards();
+          try{ renderSummary(); }catch{}
+
+          // Trigger the real WebForms control behind the card
           try{ rbCheck?.click(); }catch{}
           setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch{} }, 80);
           return;
