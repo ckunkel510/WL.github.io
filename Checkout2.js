@@ -238,7 +238,70 @@
     function getPickupSelected() {
       const rbPick = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbCollectLater");
       return !!(rbPick && rbPick.checked);
+    
+    function getDeliveredSelected() {
+      const rbDel = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbDelivered");
+      return !!(rbDel && rbDel.checked);
     }
+
+    function getBranchField() {
+      const host = document.getElementById("ctl00_PageBody_BranchSelector");
+      if (!host) return null;
+      if (host.tagName === "SELECT" || host.tagName === "INPUT") return host;
+      return host.querySelector("select, input");
+    }
+
+    function isBranchChosen(field) {
+      if (!field) return false;
+      // Common placeholders are "", "0", or first option like "Select..."
+      const v = norm(field.value);
+      if (!v || v === "0") return false;
+      if (field.tagName === "SELECT" && field.selectedIndex <= 0) {
+        // allow if selectedIndex 0 is a real value
+        const opt0 = field.options && field.options[0] ? norm(field.options[0].value) : "";
+        if (!opt0 || opt0 === "0") return false;
+      }
+      return true;
+    }
+
+    function autoSelectDefaultBranch() {
+      const field = getBranchField();
+      if (!field) return false;
+      if (isBranchChosen(field)) return true;
+
+      // Try last used branch first
+      let last = "";
+      try { last = localStorage.getItem("wl_last_branch") || ""; } catch {}
+      if (last && field.tagName === "SELECT") {
+        const opts = Array.from(field.options || []);
+        const match = opts.find(o => norm(o.value) === norm(last));
+        if (match) { field.value = match.value; return isBranchChosen(field); }
+      }
+
+      // Otherwise pick first non-placeholder option
+      if (field.tagName === "SELECT") {
+        const opts = Array.from(field.options || []);
+        const candidate = opts.find(o => {
+          const val = norm(o.value);
+          const txt = norm(o.textContent || o.text || "");
+          return val && val !== "0" && !/^select/i.test(txt);
+        });
+        if (candidate) {
+          field.value = candidate.value;
+          return isBranchChosen(field);
+        }
+      }
+
+      return false;
+    }
+
+    function setStep4Visibility(isVisible) {
+      const li4 = nav.querySelector('li[data-step="4"]');
+      const pane4 = wizard.querySelector('.checkout-step[data-step="4"]');
+      if (li4) li4.style.display = isVisible ? "" : "none";
+      if (pane4) pane4.style.display = isVisible ? "" : "none";
+    }
+}
 
     function setStep5Visibility(isVisible) {
       const li5 = nav.querySelector('li[data-step="5"]');
@@ -393,11 +456,21 @@
 
     function updatePickupModeUI() {
       const pickup = getPickupSelected();
-      // If pickup: hide step 5 visuals and skip in navigation.
+      const delivered = getDeliveredSelected();
+
+      // Branch: show for Pickup (customer chooses), hide for Delivered/Shipping (route internally).
+      setStep4Visibility(!!pickup);
+
+      if (!pickup && delivered) {
+        // Ensure branch has a default value so WebTrack doesn't complain later.
+        autoSelectDefaultBranch();
+      }
+
+      // Delivery address UI: hide and skip in pickup mode, but still satisfy required fields.
       setStep5Visibility(!pickup);
       setDeliverySectionVisibility(!pickup);
 
-      // If pickup, we still keep Delivery inputs populated when possible.
+      // If pickup, keep Delivery inputs populated from Billing to satisfy required server fields.
       if (pickup) syncBillingToDelivery();
     }
 
@@ -493,6 +566,8 @@
     function showStep(n) {
       // If Pickup is selected, skip the Delivery Address step (Step 5)
       if (getPickupSelected() && n === 5) n = 6;
+      // If Delivered/Shipping is selected, Branch step is optional; skip Step 4.
+      if (getDeliveredSelected() && !getPickupSelected() && n === 4) n = 5;
       wizard
         .querySelectorAll(".checkout-step")
         .forEach((p) => p.classList.toggle("active", +p.dataset.step === n));
@@ -521,6 +596,8 @@
 
     function goNextFrom(stepNum) {
       let next = stepNum + 1;
+      // Skip branch step if delivered/shipping (we can route internally)
+      if (getDeliveredSelected() && !getPickupSelected() && next === 4) next = 5;
       // Skip delivery step if pickup
       if (getPickupSelected() && next === 5) next = 6;
       showStep(next);
@@ -543,13 +620,29 @@
       }
 
       if (stepNum === 4) {
-        // Branch required
-        const br = document.getElementById("ctl00_PageBody_BranchSelector");
-        if (br && !norm(br.value)) {
-          showInlineError(4, "<strong>Please select a store/branch</strong> so we can route your order.");
-          return false;
+        // Branch is REQUIRED for Pickup (customer chooses pickup store).
+        // For Delivered/Shipping, we can default a branch operationally (Amazon-style).
+        const field = getBranchField();
+
+        if (getPickupSelected()) {
+          if (field && !isBranchChosen(field)) {
+            showInlineError(4, "<strong>Please select a store/branch</strong> so we can route your pickup order.");
+            return false;
+          }
+          clearInlineError(4);
+          // Remember for next time
+          try { if (field && norm(field.value)) localStorage.setItem("wl_last_branch", norm(field.value)); } catch {}
+          return true;
+        }
+
+        // Delivered/Shipping: attempt to auto-select a default branch if none chosen.
+        // We still keep the server control satisfied, but we don't block the customer here.
+        if (field && !isBranchChosen(field)) {
+          autoSelectDefaultBranch();
         }
         clearInlineError(4);
+        // Remember for next time
+        try { if (field && norm(field.value)) localStorage.setItem("wl_last_branch", norm(field.value)); } catch {}
         return true;
       }
 
@@ -623,6 +716,9 @@
     bindReturnStepFor("#ctl00_PageBody_InvoiceAddress_CountrySelector1", 6, "change");
 
     bindReturnStepFor("#ctl00_PageBody_BranchSelector", 4, "change");
+    // If the branch control is a wrapper div, bind to its inner select/input as well.
+    bindReturnStepFor("#ctl00_PageBody_BranchSelector select", 4, "change");
+    bindReturnStepFor("#ctl00_PageBody_BranchSelector input", 4, "change");
 
     // -------------------------------------------------------------------------
     // G) Delivery summary/edit (Step 5)
