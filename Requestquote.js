@@ -84,7 +84,7 @@
       '    <a href="' +
       CONFIG.quoteUrl +
       '" target="_blank" rel="noopener" ' +
-      '       class="btn btn-outline-primary" ' +
+      '       class="btn btn-primary text-white" ' +
       '       style="white-space:nowrap;border-radius:8px;font-weight:700;">' +
       CONFIG.buttonText +
       "</a>" +
