@@ -668,6 +668,16 @@ try {
 } catch {}
 
           try { updatePickupModeUI(); } catch {}
+    // If a full postback happened (not UpdatePanel), consume pending step here as well.
+    try {
+      const ps = sessionStorage.getItem("wl_pendingStep");
+      if (ps) {
+        sessionStorage.removeItem("wl_pendingStep");
+        const n = parseInt(ps, 10);
+        if (Number.isFinite(n)) showStep(n);
+      }
+    } catch {}
+
           // If the active step became invalid for the selected mode, snap to the first required step.
           try {
             const a = getActiveStep ? getActiveStep() : 1;
@@ -1766,29 +1776,4 @@ const delRad = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
     }
   });
 })();
-      // Force everything to be an ORDER and hide Transaction Type UI (Order/Quote)
-      try {
-        const txDiv = document.getElementById("ctl00_PageBody_TransactionTypeDiv");
-        if (txDiv) {
-          // Try to find the "Order" radio by id/value/label text and click it (WebForms-safe)
-          const radios = Array.from(txDiv.querySelectorAll('input[type="radio"]'));
-          let orderRb =
-            radios.find(r => /order/i.test(r.id || "")) ||
-            radios.find(r => /order/i.test(r.value || ""));
-          if (!orderRb) {
-            // Match via label text
-            const labels = Array.from(txDiv.querySelectorAll("label"));
-            const lbl = labels.find(l => /\border\b/i.test((l.textContent || "").trim()));
-            if (lbl && lbl.htmlFor) {
-              const cand = document.getElementById(lbl.htmlFor);
-              if (cand && cand.type === "radio") orderRb = cand;
-            }
-          }
-          if (orderRb && !orderRb.checked) {
-            orderRb.click(); // ensures any WebForms handlers run
-          }
-          // Hide the whole transaction type block
-          const txWrap = txDiv.closest(".epi-form-col-single-checkout") || txDiv;
-          if (txWrap) txWrap.style.display = "none";
-        }
-      } catch {}
+
