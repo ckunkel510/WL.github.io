@@ -586,7 +586,8 @@
       if (num > 1) {
         const back = document.createElement("button");
         back.type = "button";
-        back.className = "btn btn-secondary";
+        back.className = "btn btn-secondary wl-back";
+        back.dataset.wlBack = String(num - 1);
         back.textContent = "Back";
         back.addEventListener("click", (e) => {
           e.preventDefault();
@@ -598,7 +599,8 @@
       if (num < steps.length) {
         const next = document.createElement("button");
         next.type = "button";
-        next.className = "btn btn-primary";
+        next.className = "btn btn-primary wl-next";
+        next.dataset.wlNext = String(num + 1);
         next.textContent = "Next";
         next.addEventListener("click", (e) => {
           e.preventDefault();
@@ -653,6 +655,16 @@
         prm.add_endRequest(function () {
           // Re-enable our injected buttons and re-apply mode visibility
           reEnableWizardNav();
+// If a ship/pickup selection triggered a postback, advance to the next logical step.
+try {
+  const ps = sessionStorage.getItem("wl_pendingStep");
+  if (ps) {
+    sessionStorage.removeItem("wl_pendingStep");
+    const n = parseInt(ps, 10);
+    if (Number.isFinite(n)) showStep(n);
+  }
+} catch {}
+
           try { updatePickupModeUI(); } catch {}
           // Date module visibility can get reset by partial updates
           try {
@@ -707,6 +719,28 @@
     }
 
     window.WLCheckout.showStep = showStep;
+
+// -------------------------------------------------------------------------
+// E.1) Delegated nav handlers (survive UpdatePanel partial refresh)
+// -------------------------------------------------------------------------
+document.addEventListener("click", function (ev) {
+  const btn = ev.target && ev.target.closest ? ev.target.closest("button") : null;
+  if (!btn) return;
+  if (btn.dataset && btn.dataset.wlNext) {
+    ev.preventDefault();
+    const to = parseInt(btn.dataset.wlNext, 10);
+    if (Number.isFinite(to)) showStep(to);
+    return;
+  }
+  if (btn.dataset && btn.dataset.wlBack) {
+    ev.preventDefault();
+    const to = parseInt(btn.dataset.wlBack, 10);
+    if (Number.isFinite(to)) showStep(to);
+    return;
+  }
+}, true);
+
+
 
     // -------------------------------------------------------------------------
     // E.5) Wizard navigation intercept: validate + skip Step 5 in Pickup mode
@@ -1219,8 +1253,8 @@
     // Fix: Same-day pickup times must be >= 2 hours out (rounded up to next hour)
     // -------------------------------------------------------------------------
     (function () {
-      const p7 = wizard.querySelector('.checkout-step[data-step="7"]');
-      if (!p7) return;
+      const p6 = wizard.querySelector('.checkout-step[data-step="6"]');
+      if (!p6) return;
 
       const parseLocalDate = (s) => {
         const [y, m, d] = s.split("-").map(Number);
@@ -1456,6 +1490,13 @@
 
       onShip();
 
+// Expose a refresh hook so UpdatePanel partial postbacks can restore visibility/state.
+window.WLCheckout = window.WLCheckout || {};
+window.WLCheckout.refreshDateUI = function () {
+  try { onShip(); } catch {}
+};
+
+
       // Client validation on Continue buttons
       if ($) {
         $("#ctl00_PageBody_ContinueButton1, #ctl00_PageBody_ContinueButton2").on("click", function (e) {
@@ -1507,7 +1548,7 @@
           if (!valid) {
             e.preventDefault();
             alert("Hold on – we need a bit more info:\n\n" + errors.join("\n"));
-            showStep(7);
+            showStep(6);
             setExpectedNav(false);
             return;
           }
@@ -1624,6 +1665,9 @@
           $("<style>.modern-shipping-selector .btn[disabled], .modern-shipping-selector .btn.disabled { pointer-events:auto; }</style>").appendTo(document.head);
 
           function updateShippingStyles(val) {
+// If selecting ship/pickup triggers an async postback, remember we want to land on Step 2 afterwards.
+try { sessionStorage.setItem("wl_pendingStep", "2"); } catch {}
+
             const delRad = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
             const pickRad = $("#ctl00_PageBody_SaleTypeSelector_rbCollectLater");
             const $btnDelivered = $("#btnDelivered");
