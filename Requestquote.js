@@ -3,7 +3,7 @@
    Handles:
    ✓ ShoppingCart* (ShoppingCart.aspx, ShoppingCart_r.aspx, etc.)
    ✓ ProductDetail.aspx
-   ✓ Products.aspx (before #productlistcards)
+   ✓ Products.aspx (before product list OR before group cards)
    Safe • standalone • no dependencies • retries for late DOM
    ========================================================= */
 
@@ -24,7 +24,6 @@
     else document.addEventListener("DOMContentLoaded", fn);
   }
 
-  // WebTrack pages can vary (ShoppingCart.aspx, ShoppingCart_r.aspx, etc.)
   function onCartPage() {
     const href = String(window.location.href || "");
     const path = String(window.location.pathname || "");
@@ -40,7 +39,6 @@
   function onProductsPage() {
     const href = String(window.location.href || "");
     const path = String(window.location.pathname || "");
-    // Keep it strict so we don't accidentally match ProductDetail.aspx
     return (/\/?Products\.aspx/i.test(path) || /\/?Products\.aspx/i.test(href)) && !/ProductDetail\.aspx/i.test(href);
   }
 
@@ -102,7 +100,7 @@
     }
 
     let attempts = 0;
-    const maxAttempts = 20; // ~10 seconds (20 * 500ms)
+    const maxAttempts = 20;
 
     const timer = setInterval(() => {
       attempts++;
@@ -160,8 +158,30 @@
   }
 
   /* =====================================================
-     PRODUCTS.ASPX PAGE (inject before #productlistcards)
+     PRODUCTS.ASPX PAGE
+     Insert once, before whichever layout is present:
+       A) Product list layout: #productlistcards
+       B) Group cards layout: first fieldset.Cards that contains #productGroupCard
   ===================================================== */
+  function findProductsInsertAnchor() {
+    // A) Your product list cards anchor
+    const listCards =
+      document.querySelector("#productlistcards") ||
+      document.querySelector('fieldset.Cards#productlistcards');
+
+    if (listCards) return listCards;
+
+    // B) Group cards: fieldset.Cards that wraps productGroupCard tiles
+    // (There are sometimes multiple fieldset.Cards on the page, so we pick the first
+    //  one that actually contains a productGroupCard.)
+    const cardsFieldsets = Array.from(document.querySelectorAll("fieldset.Cards"));
+    const groupCards = cardsFieldsets.find(fs => fs.querySelector('#productGroupCard'));
+
+    if (groupCards) return groupCards;
+
+    return null;
+  }
+
   function injectProductsCTA() {
     if (!onProductsPage()) return;
 
@@ -171,32 +191,29 @@
     }
 
     let attempts = 0;
-    const maxAttempts = 20; // ~10 seconds
+    const maxAttempts = 20;
 
     const timer = setInterval(() => {
       attempts++;
 
-      // Your requested anchor
-      const listCards =
-        document.querySelector("#productlistcards") ||
-        document.querySelector('fieldset.Cards#productlistcards');
+      const anchor = findProductsInsertAnchor();
 
-      if (listCards && !document.querySelector(".wl-quote-products")) {
+      if (anchor && !document.querySelector(".wl-quote-products")) {
         const cta = createCTA(
           "wl-quote-products",
           "Ordering for a project or need help pricing materials? Send a quote request and we’ll follow up quickly."
         );
 
-        // Insert right BEFORE the product cards fieldset
-        listCards.insertAdjacentElement("beforebegin", cta);
+        // Insert BEFORE the anchor element (either #productlistcards or the group Cards fieldset)
+        anchor.insertAdjacentElement("beforebegin", cta);
 
-        log("Products CTA injected");
+        log("Products CTA injected (before " + (anchor.id ? "#" + anchor.id : "fieldset.Cards") + ")");
         clearInterval(timer);
         return;
       }
 
       if (attempts >= maxAttempts) {
-        warn("Products CTA: #productlistcards not found after retries");
+        warn("Products CTA: no suitable anchor found after retries (#productlistcards or group Cards fieldset)");
         clearInterval(timer);
       }
     }, 500);
