@@ -3,6 +3,78 @@ window.addEventListener("load", function () {
   const cartPanel = document.querySelector("#ctl00_PageBody_ShoppingCartDetailPanel");
   if (!cartPanel) return;
 
+  /* =============================
+     Quote request CTA (under Shopping Cart header)
+     ============================= */
+  (function injectQuoteUnderHeader() {
+    try {
+      const QUOTE_URL = "https://woodsonwholesaleinc.formstack.com/forms/request_a_quote";
+
+      // Find the cart header (native markup on the page)
+      const header = cartPanel.querySelector(".cart-header");
+      if (!header) {
+        console.warn("[QuoteCTA] .cart-header not found inside cartPanel");
+        return;
+      }
+
+      // Avoid duplicates
+      if (cartPanel.querySelector(".wl-quote-cta")) return;
+
+      const wrap = document.createElement("div");
+      wrap.className = "wl-quote-cta card mb-3";
+      wrap.style.border = "1px solid rgba(0,0,0,.125)";
+
+      wrap.innerHTML = `
+        <div class="card-body p-3">
+          <div class="d-flex flex-wrap align-items-start justify-content-between gap-2">
+            <div style="min-width:240px; flex:1;">
+              <div class="fw-bold" style="font-size: 1.05rem;">Need a Quote?</div>
+              <div class="text-muted" style="line-height:1.35;">
+                Pricing a bigger order or not seeing exactly what you need? Submit a quick request and we’ll get back to you.
+              </div>
+            </div>
+
+            <a class="btn btn-outline-primary"
+               href="${QUOTE_URL}"
+               target="_blank"
+               rel="noopener">
+              Request a Quote
+            </a>
+          </div>
+        </div>
+      `;
+
+      // Insert right under the header
+      header.insertAdjacentElement("afterend", wrap);
+
+      console.log("[QuoteCTA] Injected under Shopping Cart header");
+    } catch (e) {
+      console.error("[QuoteCTA] Failed to inject:", e);
+    }
+  })();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+
   // Build a wrapper for the custom cart
   const customCartWrapper = document.createElement("div");
   customCartWrapper.style.padding = "2rem";
@@ -88,58 +160,7 @@ window.addEventListener("load", function () {
   customCartWrapper.appendChild(footerDiv);
 
 
-    /* =============================
-     Quote request CTA (below subtotal/proceed area)
-     ============================= */
-  (function injectQuoteCTA() {
-    const QUOTE_URL = "https://woodsonwholesaleinc.formstack.com/forms/request_a_quote";
-
-    // Build the section
-    const quoteWrap = document.createElement("div");
-    quoteWrap.className = "wl-quote-cta";
-    quoteWrap.style.marginTop = "14px";
-    quoteWrap.style.padding = "14px 16px";
-    quoteWrap.style.border = "1px solid #d9d9d9";
-    quoteWrap.style.borderRadius = "10px";
-    quoteWrap.style.background = "#ffffff";
-    quoteWrap.style.boxShadow = "0 1px 2px rgba(0,0,0,0.04)";
-
-    quoteWrap.innerHTML = `
-      <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-        <div style="min-width:220px; flex:1;">
-          <div style="font-weight:700; font-size:1.05rem; margin-bottom:4px;">
-            Need a Quote?
-          </div>
-          <div style="color:#555; line-height:1.35;">
-            Not seeing exactly what you need, or pricing a bigger order? Submit a quick quote request and we’ll get back to you.
-          </div>
-        </div>
-
-        <a href="${QUOTE_URL}" target="_blank" rel="noopener"
-           style="display:inline-flex; align-items:center; justify-content:center; padding:10px 14px;
-                  border-radius:8px; text-decoration:none; font-weight:700; white-space:nowrap;
-                  border:1px solid #004080; color:#004080; background:#f3f7ff;">
-          Request a Quote
-        </a>
-      </div>
-    `;
-
-    // Prefer inserting under the element you referenced if it exists
-    const customSubtotalWrapper = document.querySelector(".custom-subtotal-wrapper");
-
-    if (customSubtotalWrapper) {
-      // Avoid duplicates
-      if (!customSubtotalWrapper.querySelector(".wl-quote-cta")) {
-        customSubtotalWrapper.insertAdjacentElement("beforeend", quoteWrap);
-      }
-      return;
-    }
-
-    // Fallback: insert under our generated footer area
-    if (!customCartWrapper.querySelector(".wl-quote-cta")) {
-      customCartWrapper.appendChild(quoteWrap);
-    }
-  })();
+  
 
 
   // Insert after the real panel (still present for WebForms)
