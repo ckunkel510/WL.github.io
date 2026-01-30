@@ -201,7 +201,6 @@
           return ship ? [ship.closest(".epi-form-col-single-checkout")] : [];
         },
       },
-      },
       {
         title: "Branch",
         findEls: () => {
