@@ -6,7 +6,25 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 6
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
+  
   // ---------------------------------------------------------------------------
+  // HOTFIX: Some builds referenced getDeliveredSelected()/getPickupSelected()
+  // but didn't define them, which breaks the wizard and greys out steps.
+  // Keep these tiny and WebForms-safe.
+  // ---------------------------------------------------------------------------
+  function getDeliveredSelected() {
+    const el = document.getElementById('ctl00_PageBody_SaleTypeSelector_rbDelivered');
+    return !!(el && el.checked);
+  }
+  function getPickupSelected() {
+    const el = document.getElementById('ctl00_PageBody_SaleTypeSelector_rbCollectLater');
+    return !!(el && el.checked);
+  }
+  function getSaleType() {
+    return getPickupSelected() ? 'pickup' : (getDeliveredSelected() ? 'delivered' : '');
+  }
+
+// ---------------------------------------------------------------------------
   // 0) Storage helpers (TTL for step; sessionStorage for returnStep)
   // ---------------------------------------------------------------------------
   const STEP_KEY = "wl_currentStep";
