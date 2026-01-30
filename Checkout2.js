@@ -3,7 +3,7 @@
 // Fixes:
 //  1) Same-day pickup times must be >= 2 hours out
 //  2) Billing "same as delivery" persistence: if invoice fields blank after reload,
-//     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 6
+//     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
   
@@ -201,14 +201,6 @@
           return ship ? [ship.closest(".epi-form-col-single-checkout")] : [];
         },
       },
-      {
-        title: "Your reference",
-        findEls: () => {
-          const po = document.getElementById(
-            "ctl00_PageBody_PurchaseOrderNumberTextBox"
-          );
-          return po ? [po.closest(".epi-form-group-checkout")] : [];
-        },
       },
       {
         title: "Branch",
@@ -237,6 +229,17 @@
         title: "Date & Instructions",
         findEls: () => {
           const arr = [];
+
+          const po = document.getElementById(
+            "ctl00_PageBody_PurchaseOrderNumberTextBox"
+          );
+          if (po) {
+            const wrap =
+              po.closest(".epi-form-group-checkout") ||
+              po.closest(".epi-form-col-single-checkout") ||
+              po.parentElement;
+            if (wrap) arr.push(wrap);
+          }
           const tbl = document.querySelector(".cartTable");
           if (tbl) arr.push(tbl.closest("table"));
           const si = document.getElementById("ctl00_PageBody_SpecialInstructionsTextBox");
@@ -256,8 +259,8 @@
     // -------------------------------------------------------------------------
     // C.5) Pickup mode + address syncing helpers (WebForms-safe)
     // New step numbers after removing Order Details:
-    //  1 Ship/Pickup, 2 Your reference, 3 Branch, 4 Delivery Address,
-    //  5 Billing Address, 6 Date & Instructions
+    //  1 Ship/Pickup, 2 Branch (pickup only), 3 Delivery Address (delivered only),
+    //  4 Billing Address, 5 Date & Instructions (includes Your reference)
     // -------------------------------------------------------------------------
     function getBranchField() {
       const host = document.getElementById("ctl00_PageBody_BranchSelector");
@@ -369,16 +372,16 @@
       const pickup = getPickupSelected();
       const delivered = getDeliveredSelected();
 
-      // Step 3 Branch: show for Pickup, hide for Delivered.
-      setStepVisibility(3, !!pickup);
+      // Step 2 Branch: show for Pickup, hide for Delivered.
+      setStepVisibility(2, !!pickup);
 
       if (!pickup && delivered) {
         // Ensure branch has a default value so WebTrack doesn't complain later.
         autoSelectDefaultBranch();
       }
 
-      // Step 4 Delivery Address: hide + skip in pickup mode
-      setStepVisibility(4, !pickup);
+      // Step 3 Delivery Address: hide + skip in pickup mode
+      setStepVisibility(3, !pickup);
       setDeliverySectionVisibility(!pickup);
 
       // Phone requirement: surface delivery phone inside billing when pickup
@@ -698,10 +701,10 @@ try {
     // E) Step switching + persistence
     // -------------------------------------------------------------------------
     function showStep(n) {
-      // If Pickup is selected, skip the Delivery Address step (Step 5)
-      if (getPickupSelected() && n === 4) n = 5;
-      // If Delivered/Shipping is selected, Branch step is optional; skip Step 4.
-      if (getDeliveredSelected() && !getPickupSelected() && n === 3) n = 4;
+      // If Pickup is selected, skip Delivery Address (Step 3)
+      if (getPickupSelected() && n === 3) n = 4;
+      // If Delivered/Shipping is selected, hide Branch (Step 2)
+      if (getDeliveredSelected() && !getPickupSelected() && n === 2) n = 3;
       wizard
         .querySelectorAll(".checkout-step")
         .forEach((p) => p.classList.toggle("active", +p.dataset.step === n));
@@ -752,10 +755,10 @@ document.addEventListener("click", function (ev) {
 
     function goNextFrom(stepNum) {
       let next = stepNum + 1;
-      // Skip branch step if delivered/shipping (we can route internally)
-      if (getDeliveredSelected() && !getPickupSelected() && next === 3) next = 4;
-      // Skip delivery step if pickup
-      if (getPickupSelected() && next === 4) next = 5;
+      // Skip Branch step if delivered/shipping
+      if (getDeliveredSelected() && !getPickupSelected() && next === 2) next = 3;
+      // Skip Delivery Address step if pickup
+      if (getPickupSelected() && next === 3) next = 4;
       showStep(next);
     }
 
@@ -785,14 +788,14 @@ document.addEventListener("click", function (ev) {
         return true;
       }
 
-      if (stepNum === 3) {
+      if (stepNum === 2) {
         // Branch is REQUIRED for Pickup (customer chooses pickup store).
         // For Delivered/Shipping, we can default a branch operationally (Amazon-style).
         const field = getBranchField();
 
         if (getPickupSelected()) {
           if (field && !isBranchChosen(field)) {
-            showInlineError(3, "<strong>Please select a store/branch</strong> so we can route your pickup order.");
+            showInlineError(2, "<strong>Please select a store/branch</strong> so we can route your pickup order.");
             return false;
           }
           clearInlineError(3);
@@ -806,27 +809,27 @@ document.addEventListener("click", function (ev) {
         if (field && !isBranchChosen(field)) {
           autoSelectDefaultBranch();
         }
-        clearInlineError(4);
+        clearInlineError(2);
         // Remember for next time
         try { if (field && norm(field.value)) localStorage.setItem("wl_last_branch", norm(field.value)); } catch {}
         return true;
       }
 
-      if (stepNum === 4) {
+      if (stepNum === 3) {
         // Delivery step is hidden in pickup mode.
         if (getPickupSelected()) return true;
-        return validateAddressBlock("DeliveryAddress", 4, false);
+        return validateAddressBlock("DeliveryAddress", 3, false);
       }
 
-      if (stepNum === 5) {
+      if (stepNum === 4) {
         // Billing is always required (and is used to satisfy Delivery when pickup).
-        const ok = validateAddressBlock("InvoiceAddress", 5, true);
+        const ok = validateAddressBlock("InvoiceAddress", 4, true);
         if (!ok) return false;
 
         if (getPickupSelected()) {
           syncBillingToDelivery();
-          // Also, if Step 5 is hidden, make sure any Delivery postback fields are not blank.
-          clearInlineError(4);
+          // Also, if Delivery Address step is hidden (pickup), make sure required server fields are not blank.
+          clearInlineError(2);
         }
         return true;
       }
@@ -1093,7 +1096,7 @@ document.addEventListener("click", function (ev) {
       // trigger the server-side copy ONCE this session.
       if (sameStored && invoiceLooksBlank() && deliveryHasData() && !autoCopyAlreadyDone()) {
         markAutoCopyDone();
-        setReturnStep(6);
+        setReturnStep(5);
         try {
           __doPostBack("ctl00$PageBody$CopyDeliveryAddressLinkButton", "");
           return; // page will reload; stop further UI work this pass
@@ -1113,7 +1116,7 @@ document.addEventListener("click", function (ev) {
 
       sameCheck.addEventListener("change", function () {
         if (this.checked) {
-          setReturnStep(6);
+          setReturnStep(5);
           setSameAsDelivery(true);
           markAutoCopyDone(); // user-initiated copy: treat as done
 
