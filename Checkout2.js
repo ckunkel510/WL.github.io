@@ -361,8 +361,6 @@
         }
         row.style.display = "";
       } else {
-              // After async postback, land on Branch step for pickup (step 2)
-              try { sessionStorage.setItem("wl_pendingStep", "2"); } catch {}
         const origId = row.dataset.wlOrigParentId;
         const orig = origId ? document.getElementById(origId) : null;
         if (orig && !orig.contains(row)) orig.appendChild(row);
@@ -670,6 +668,13 @@ try {
 } catch {}
 
           try { updatePickupModeUI(); } catch {}
+          // If the active step became invalid for the selected mode, snap to the first required step.
+          try {
+            const a = getActiveStep ? getActiveStep() : 1;
+            if (getPickupSelected() && a === 3) showStep(2); // pickup must choose Branch before billing
+            if (getDeliveredSelected() && !getPickupSelected() && a === 2) showStep(3);
+          } catch {}
+
           // Date module visibility can get reset by partial updates
           try {
             if (window.WLCheckout && typeof window.WLCheckout.refreshDateUI === "function") {
@@ -1665,6 +1670,8 @@ const delRad = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
             $btnPickup.removeClass("disabled opacity-50").removeAttr("disabled").attr("aria-disabled", "false");
 
             if (val === "rbDelivered") {
+              // Reset wizard state before the UpdatePanel refresh so we don't resume on an invalid step.
+              try { setStep(1); } catch {}
               // After async postback, land on Delivery Address step (step 3; becomes step 2 visually when Branch is hidden)
               try { sessionStorage.setItem("wl_pendingStep", "3"); } catch {}
               // Use native click so any WebForms AutoPostBack handler fires immediately
@@ -1676,6 +1683,10 @@ const delRad = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
               document.cookie = "pickupSelected=false; path=/";
               document.cookie = "skipBack=false; path=/";
             } else {
+              // Reset wizard state before the UpdatePanel refresh so we don't resume on an invalid step.
+              try { setStep(1); } catch {}
+              // After async postback, land on Branch step (step 2) for pickup.
+              try { sessionStorage.setItem("wl_pendingStep", "2"); } catch {}
               if (!pickRad.is(":checked")) { try { pickRad.get(0).click(); } catch { pickRad.prop("checked", true).trigger("change"); } }
               else { pickRad.trigger("change"); }
 
@@ -1781,4 +1792,3 @@ const delRad = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
           if (txWrap) txWrap.style.display = "none";
         }
       } catch {}
-
