@@ -318,7 +318,7 @@
 
     function setDeliverySectionVisibility(isVisible) {
       // Keep underlying server controls in DOM, but hide the whole visual block.
-      const pane4 = wizard.querySelector('.checkout-step[data-step="4"]');
+      const pane4 = wizard.querySelector('.checkout-step[data-step="3"]');
       if (!pane4) return;
       const col = pane4.querySelector(".epi-form-col-single-checkout");
       if (col) col.style.display = isVisible ? "" : "none";
@@ -344,10 +344,10 @@
 
       const pane4 = wizard.querySelector('.checkout-step[data-step="4"]');
       if (!pane4) return;
-      const target = pane5.querySelector(".epi-form-col-single-checkout") || pane5;
+      const target = pane4.querySelector(\".epi-form-col-single-checkout\") || pane4;
 
       if (enable) {
-        if (!pane5.contains(row)) {
+        if (!pane4.contains(row)) {
           const holderId = "wlPickupPhoneHolder";
           let holder = document.getElementById(holderId);
           if (!holder) {
@@ -361,6 +361,8 @@
         }
         row.style.display = "";
       } else {
+              // After async postback, land on Branch step for pickup (step 2)
+              try { sessionStorage.setItem("wl_pendingStep", "2"); } catch {}
         const origId = row.dataset.wlOrigParentId;
         const orig = origId ? document.getElementById(origId) : null;
         if (orig && !orig.contains(row)) orig.appendChild(row);
@@ -683,19 +685,6 @@ try {
     // Also run once in case something disabled buttons during initial render
     reEnableWizardNav();
 
-// Optional "(optional)" on step 3 label
-    (function () {
-      const p3 = wizard.querySelector('.checkout-step[data-step="2"]');
-      if (!p3) return;
-      const lbl = p3.querySelector("label");
-      if (!lbl) return;
-      const opt = document.createElement("small");
-      opt.className = "text-muted";
-      opt.style.marginLeft = "8px";
-      opt.textContent = "(optional)";
-      lbl.appendChild(opt);
-    })();
-
     // -------------------------------------------------------------------------
     // E) Step switching + persistence
     // -------------------------------------------------------------------------
@@ -877,22 +866,22 @@ document.addEventListener("click", function (ev) {
       );
     }
 
-    bindReturnStepFor("#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList", 4, "change");
-    bindReturnStepFor("#ctl00_PageBody_DeliveryAddress_CountrySelector", 4, "change");
+    bindReturnStepFor("#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList", 3, "change");
+    bindReturnStepFor("#ctl00_PageBody_DeliveryAddress_CountrySelector", 3, "change");
 
-    bindReturnStepFor("#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList", 5, "change");
-    bindReturnStepFor("#ctl00_PageBody_InvoiceAddress_CountrySelector1", 5, "change");
+    bindReturnStepFor("#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList", 4, "change");
+    bindReturnStepFor("#ctl00_PageBody_InvoiceAddress_CountrySelector1", 4, "change");
 
-    bindReturnStepFor("#ctl00_PageBody_BranchSelector", 3, "change");
+    bindReturnStepFor("#ctl00_PageBody_BranchSelector", 2, "change");
     // If the branch control is a wrapper div, bind to its inner select/input as well.
-    bindReturnStepFor("#ctl00_PageBody_BranchSelector select", 3, "change");
-    bindReturnStepFor("#ctl00_PageBody_BranchSelector input", 3, "change");
+    bindReturnStepFor("#ctl00_PageBody_BranchSelector select", 2, "change");
+    bindReturnStepFor("#ctl00_PageBody_BranchSelector input", 2, "change");
 
     // -------------------------------------------------------------------------
     // G) Delivery summary/edit (Step 5)
     // -------------------------------------------------------------------------
     (function () {
-      const pane4 = wizard.querySelector('.checkout-step[data-step="5"]');
+      const pane4 = wizard.querySelector('.checkout-step[data-step="3"]');
       if (!pane4) return;
 
       const col = pane4.querySelector(".epi-form-col-single-checkout");
@@ -995,8 +984,8 @@ document.addEventListener("click", function (ev) {
     // auto-trigger CopyDeliveryAddress postback ONCE per session.
     // -------------------------------------------------------------------------
     (function () {
-      const pane5 = wizard.querySelector('.checkout-step[data-step="5"]');
-      if (!pane5) return;
+      const pane4 = wizard.querySelector('.checkout-step[data-step="4"]');
+      if (!pane4) return;
 
       const orig = document.getElementById("copyDeliveryAddressButton");
       if (orig) orig.style.display = "none";
@@ -1008,10 +997,10 @@ document.addEventListener("click", function (ev) {
         <label class="form-check-label" for="sameAsDeliveryCheck">
           Billing address is the same as delivery address
         </label>`;
-      pane5.insertBefore(chkDiv, pane5.firstChild);
+      pane4.insertBefore(chkDiv, pane4.firstChild);
 
       const sameCheck = chkDiv.querySelector("#sameAsDeliveryCheck");
-      const colInv = pane5.querySelector(".epi-form-col-single-checkout");
+      const colInv = pane4.querySelector(".epi-form-col-single-checkout");
       if (!colInv) return;
 
       const wrapInv = document.createElement("div");
@@ -1255,7 +1244,7 @@ document.addEventListener("click", function (ev) {
     // Fix: Same-day pickup times must be >= 2 hours out (rounded up to next hour)
     // -------------------------------------------------------------------------
     (function () {
-      const p6 = wizard.querySelector('.checkout-step[data-step="6"]');
+      const p6 = wizard.querySelector('.checkout-step[data-step="5"]');
       if (!p6) return;
 
       const parseLocalDate = (s) => {
@@ -1506,9 +1495,9 @@ window.WLCheckout.refreshDateUI = function () {
           try {
             if (getPickupSelected()) {
               // Validate billing now (so we can guide the user before server rejects)
-              if (!validateAddressBlock("InvoiceAddress", 5, true)) {
+              if (!validateAddressBlock("InvoiceAddress", 4, true)) {
                 e.preventDefault();
-                showStep(5);
+                showStep(4);
                 return;
               }
               syncBillingToDelivery();
@@ -1667,10 +1656,7 @@ window.WLCheckout.refreshDateUI = function () {
           $("<style>.modern-shipping-selector .btn[disabled], .modern-shipping-selector .btn.disabled { pointer-events:auto; }</style>").appendTo(document.head);
 
           function updateShippingStyles(val) {
-// If selecting ship/pickup triggers an async postback, remember we want to land on Step 2 afterwards.
-try { sessionStorage.setItem("wl_pendingStep", "2"); } catch {}
-
-            const delRad = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
+const delRad = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
             const pickRad = $("#ctl00_PageBody_SaleTypeSelector_rbCollectLater");
             const $btnDelivered = $("#btnDelivered");
             const $btnPickup = $("#btnPickup");
@@ -1679,6 +1665,8 @@ try { sessionStorage.setItem("wl_pendingStep", "2"); } catch {}
             $btnPickup.removeClass("disabled opacity-50").removeAttr("disabled").attr("aria-disabled", "false");
 
             if (val === "rbDelivered") {
+              // After async postback, land on Delivery Address step (step 3; becomes step 2 visually when Branch is hidden)
+              try { sessionStorage.setItem("wl_pendingStep", "3"); } catch {}
               // Use native click so any WebForms AutoPostBack handler fires immediately
               if (!delRad.is(":checked")) { try { delRad.get(0).click(); } catch { delRad.prop("checked", true).trigger("change"); } }
               else { delRad.trigger("change"); }
