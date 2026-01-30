@@ -624,7 +624,52 @@
       }
     });
 
-    // Optional "(optional)" on step 3 label
+    
+    // -------------------------------------------------------------------------
+    // E.2) ASP.NET UpdatePanel / async postback resilience
+    // - Selecting Delivered/Pickup can trigger an async postback that disables
+    //   arbitrary buttons on the page. Our injected "Next" buttons are not known
+    //   to WebForms, so they can remain disabled unless we re-enable them after
+    //   the request completes.
+    // -------------------------------------------------------------------------
+    function reEnableWizardNav() {
+      try {
+        wizard.querySelectorAll("button").forEach((b) => {
+          b.disabled = false;
+          b.removeAttribute("disabled");
+          b.classList.remove("aspNetDisabled");
+        });
+      } catch {}
+    }
+
+    function hookAspNetAjax() {
+      try {
+        const prm = window.Sys && window.Sys.WebForms && window.Sys.WebForms.PageRequestManager
+          ? window.Sys.WebForms.PageRequestManager.getInstance()
+          : null;
+        if (!prm || prm.__wlHooked) return;
+        prm.__wlHooked = true;
+
+        prm.add_endRequest(function () {
+          // Re-enable our injected buttons and re-apply mode visibility
+          reEnableWizardNav();
+          try { updatePickupModeUI(); } catch {}
+          // Date module visibility can get reset by partial updates
+          try {
+            if (window.WLCheckout && typeof window.WLCheckout.refreshDateUI === "function") {
+              window.WLCheckout.refreshDateUI();
+            }
+          } catch {}
+        });
+      } catch {}
+    }
+
+    // Hook immediately (safe even if Sys isn't present)
+    hookAspNetAjax();
+    // Also run once in case something disabled buttons during initial render
+    reEnableWizardNav();
+
+// Optional "(optional)" on step 3 label
     (function () {
       const p3 = wizard.querySelector('.checkout-step[data-step="2"]');
       if (!p3) return;
@@ -1407,6 +1452,8 @@
         .forEach((r) => r.addEventListener("change", updateSpecial));
       specialExtra.addEventListener("input", updateSpecial);
 
+      try { window.WLCheckout = window.WLCheckout || {}; window.WLCheckout.refreshDateUI = onShip; } catch {}
+
       onShip();
 
       // Client validation on Continue buttons
@@ -1425,7 +1472,7 @@
             }
           } catch {}
 
-          setReturnStep(7);
+          setReturnStep(steps.length);
           setExpectedNav(true);
 
           let valid = true;
