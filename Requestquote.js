@@ -1,9 +1,9 @@
 /* =========================================================
-   Woodson Quote CTA Injector
+   Woodson Quote CTA Injector (Combined)
    Handles:
-   ✓ ShoppingCart.aspx
+   ✓ ShoppingCart* (ShoppingCart.aspx, ShoppingCart_r.aspx, etc.)
    ✓ ProductDetail.aspx
-   Safe • standalone • no dependencies
+   Safe • standalone • no dependencies • retries for late DOM
    ========================================================= */
 
 (function WLQuoteCTA() {
@@ -16,18 +16,24 @@
   };
 
   const log = (...a) => CONFIG.debug && console.log("[QuoteCTA]", ...a);
+  const warn = (...a) => CONFIG.debug && console.warn("[QuoteCTA]", ...a);
 
   function ready(fn) {
     if (document.readyState !== "loading") fn();
     else document.addEventListener("DOMContentLoaded", fn);
   }
 
+  // WebTrack pages can vary (ShoppingCart.aspx, ShoppingCart_r.aspx, etc.)
   function onCartPage() {
-    return /ShoppingCart\.aspx/i.test(window.location.pathname);
+    const href = String(window.location.href || "");
+    const path = String(window.location.pathname || "");
+    return /ShoppingCart/i.test(href) || /ShoppingCart/i.test(path);
   }
 
   function onProductPage() {
-    return /ProductDetail\.aspx/i.test(window.location.pathname);
+    const href = String(window.location.href || "");
+    const path = String(window.location.pathname || "");
+    return /ProductDetail\.aspx/i.test(href) || /ProductDetail\.aspx/i.test(path);
   }
 
   /* =====================================================
@@ -36,6 +42,7 @@
   function createCTA(className, message) {
     const wrap = document.createElement("div");
     wrap.className = className;
+    wrap.setAttribute("data-wl", "quote-cta");
 
     wrap.style.margin = "12px 0";
     wrap.style.padding = "12px 14px";
@@ -51,7 +58,7 @@
     wrap.innerHTML = `
       <div>
         <div style="font-weight:700;">Need a Quote?</div>
-        <div style="font-size:14px;color:#6c757d;">
+        <div style="font-size:14px;color:#6c757d;line-height:1.35;">
           ${message}
         </div>
       </div>
@@ -76,42 +83,68 @@
   }
 
   /* =====================================================
-     CART PAGE
+     CART PAGE (inject under .cart-header)
+     Includes retries to survive late DOM or other scripts
   ===================================================== */
   function injectCartCTA() {
     if (!onCartPage()) return;
 
-    if (document.querySelector(".wl-quote-cart")) return;
+    // Avoid duplicates
+    if (document.querySelector(".wl-quote-cart")) {
+      log("Cart CTA already present");
+      return;
+    }
 
-    const header = document.querySelector(".cart-header");
-    if (!header) return;
+    let attempts = 0;
+    const maxAttempts = 20; // ~10 seconds (20 * 500ms)
 
-    const cta = createCTA(
-      "wl-quote-cart",
-      "Pricing a bigger order or special materials? Submit a quick request and we’ll get back to you fast."
-    );
+    const timer = setInterval(() => {
+      attempts++;
 
-    header.insertAdjacentElement("afterend", cta);
+      // Prefer the cart header you showed
+      const header = document.querySelector(".cart-header");
 
-    log("Cart CTA injected");
+      if (header && !document.querySelector(".wl-quote-cart")) {
+        const cta = createCTA(
+          "wl-quote-cart",
+          "Pricing a bigger order or special materials? Submit a quick request and we’ll get back to you fast."
+        );
+
+        header.insertAdjacentElement("afterend", cta);
+        log("Cart CTA injected");
+        clearInterval(timer);
+        return;
+      }
+
+      if (attempts >= maxAttempts) {
+        warn("Cart CTA: .cart-header not found after retries");
+        clearInterval(timer);
+      }
+    }, 500);
   }
 
   /* =====================================================
-     PRODUCT DETAIL PAGE
+     PRODUCT DETAIL PAGE (inject under Product Code header)
   ===================================================== */
   function injectProductCTA() {
     if (!onProductPage()) return;
 
-    if (document.querySelector(".wl-quote-product")) return;
+    if (document.querySelector(".wl-quote-product")) {
+      log("Product CTA already present");
+      return;
+    }
 
     const headers = document.querySelectorAll(".formPageHeader");
-
     let target = null;
-    headers.forEach(h => {
-      if (h.textContent.includes("Product Code")) target = h;
+
+    headers.forEach((h) => {
+      if (String(h.textContent || "").includes("Product Code")) target = h;
     });
 
-    if (!target) return;
+    if (!target) {
+      warn("Product CTA: Product Code header not found");
+      return;
+    }
 
     const cta = createCTA(
       "wl-quote-product",
@@ -119,7 +152,6 @@
     );
 
     target.insertAdjacentElement("afterend", cta);
-
     log("Product CTA injected");
   }
 
