@@ -700,6 +700,25 @@ try {
     // Also run once in case something disabled buttons during initial render
     reEnableWizardNav();
 
+    // Consume any pending step after a FULL postback (UpdatePanel hooks won't fire).
+    try {
+      const ps = sessionStorage.getItem("wl_pendingStep");
+      if (ps) {
+        sessionStorage.removeItem("wl_pendingStep");
+        const n = parseInt(ps, 10);
+        if (Number.isFinite(n)) showStep(n);
+      } else {
+        // If WebForms restored an unexpected step, clamp to the first required step
+        // so the user sees the right flow:
+        //  - Pickup: Step 2 (Branch) -> Step 4 (Billing) -> Step 5 (Date & Instructions)
+        //  - Delivery: Step 3 (Delivery Address) -> Step 4 -> Step 5
+        const a = (typeof getActiveStep === "function") ? getActiveStep() : 1;
+        if (getPickupSelected() && a >= 4) showStep(2);
+        if (getDeliveredSelected() && !getPickupSelected() && a === 2) showStep(3);
+      }
+    } catch {}
+
+
     // -------------------------------------------------------------------------
     // E) Step switching + persistence
     // -------------------------------------------------------------------------
@@ -732,19 +751,30 @@ try {
 document.addEventListener("click", function (ev) {
   const btn = ev.target && ev.target.closest ? ev.target.closest("button") : null;
   if (!btn) return;
+
+  // Delegated handlers must respect the wizard's smart-routing rules, especially
+  // after UpdatePanel refreshes (the direct listeners may be lost).
   if (btn.dataset && btn.dataset.wlNext) {
     ev.preventDefault();
+    const cur = (typeof getActiveStep === "function") ? getActiveStep() : 1;
+    if (typeof validateStep === "function" && !validateStep(cur)) return;
+    if (typeof goNextFrom === "function") { goNextFrom(cur); return; }
     const to = parseInt(btn.dataset.wlNext, 10);
     if (Number.isFinite(to)) showStep(to);
     return;
   }
+
   if (btn.dataset && btn.dataset.wlBack) {
     ev.preventDefault();
+    const cur = (typeof getActiveStep === "function") ? getActiveStep() : 1;
     const to = parseInt(btn.dataset.wlBack, 10);
-    if (Number.isFinite(to)) showStep(to);
+    // Prefer explicit back target if present, otherwise just go back one step.
+    if (Number.isFinite(to)) { showStep(to); return; }
+    showStep(Math.max(1, cur - 1));
     return;
   }
 }, true);
+
 
 
 
