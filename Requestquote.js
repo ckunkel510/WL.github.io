@@ -3,6 +3,7 @@
    Handles:
    ✓ ShoppingCart* (ShoppingCart.aspx, ShoppingCart_r.aspx, etc.)
    ✓ ProductDetail.aspx
+   ✓ Products.aspx (before .productGroupScrollingPanelFull)
    Safe • standalone • no dependencies • retries for late DOM
    ========================================================= */
 
@@ -34,6 +35,13 @@
     const href = String(window.location.href || "");
     const path = String(window.location.pathname || "");
     return /ProductDetail\.aspx/i.test(href) || /ProductDetail\.aspx/i.test(path);
+  }
+
+  function onProductsPage() {
+    const href = String(window.location.href || "");
+    const path = String(window.location.pathname || "");
+    // Keep it strict so we don't accidentally match ProductDetail.aspx
+    return (/\/?Products\.aspx/i.test(path) || /\/?Products\.aspx/i.test(href)) && !/ProductDetail\.aspx/i.test(href);
   }
 
   /* =====================================================
@@ -89,7 +97,6 @@
   function injectCartCTA() {
     if (!onCartPage()) return;
 
-    // Avoid duplicates
     if (document.querySelector(".wl-quote-cart")) {
       log("Cart CTA already present");
       return;
@@ -101,9 +108,7 @@
     const timer = setInterval(() => {
       attempts++;
 
-      // Prefer the cart header you showed
       const header = document.querySelector(".cart-header");
-
       if (header && !document.querySelector(".wl-quote-cart")) {
         const cta = createCTA(
           "wl-quote-cart",
@@ -156,11 +161,53 @@
   }
 
   /* =====================================================
+     PRODUCTS.ASPX PAGE (inject before .productGroupScrollingPanelFull)
+     Includes retries to survive late DOM or other scripts
+  ===================================================== */
+  function injectProductsCTA() {
+    if (!onProductsPage()) return;
+
+    if (document.querySelector(".wl-quote-products")) {
+      log("Products CTA already present");
+      return;
+    }
+
+    let attempts = 0;
+    const maxAttempts = 20; // ~10 seconds
+
+    const timer = setInterval(() => {
+      attempts++;
+
+      const panel = document.querySelector(".productGroupScrollingPanelFull");
+
+      if (panel && !document.querySelector(".wl-quote-products")) {
+        const cta = createCTA(
+          "wl-quote-products",
+          "Not sure what you need or ordering for a project? Submit a quote request and we’ll help you get it dialed in."
+        );
+
+        // Insert right BEFORE the panel (your request)
+        panel.insertAdjacentElement("beforebegin", cta);
+
+        log("Products CTA injected");
+        clearInterval(timer);
+        return;
+      }
+
+      if (attempts >= maxAttempts) {
+        warn("Products CTA: .productGroupScrollingPanelFull not found after retries");
+        clearInterval(timer);
+      }
+    }, 500);
+  }
+
+  /* =====================================================
      INIT
   ===================================================== */
   ready(() => {
     injectCartCTA();
     injectProductCTA();
+    injectProductsCTA();
   });
 
 })();
