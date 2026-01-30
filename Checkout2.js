@@ -344,7 +344,7 @@
 
       const pane4 = wizard.querySelector('.checkout-step[data-step="4"]');
       if (!pane4) return;
-      const target = pane4.querySelector(\".epi-form-col-single-checkout\") || pane4;
+      const target = pane4.querySelector(".epi-form-col-single-checkout\") || pane4;
 
       if (enable) {
         if (!pane4.contains(row)) {
