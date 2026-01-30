@@ -193,13 +193,6 @@
     // -------------------------------------------------------------------------
     const steps = [
       {
-        title: "Order Details",
-        findEls: () => {
-          const tx = document.getElementById("ctl00_PageBody_TransactionTypeDiv");
-          return tx ? [tx.closest(".epi-form-col-single-checkout")] : [];
-        },
-      },
-      {
         title: "Ship/Pickup",
         findEls: () => {
           const ship = document.getElementById(
@@ -262,18 +255,10 @@
     
     // -------------------------------------------------------------------------
     // C.5) Pickup mode + address syncing helpers (WebForms-safe)
-    // Goal: If Pickup is selected, hide Step 5 (Delivery UI) but still satisfy
-    // WebTrack's required delivery fields by mirroring Billing -> Delivery.
+    // New step numbers after removing Order Details:
+    //  1 Ship/Pickup, 2 Your reference, 3 Branch, 4 Delivery Address,
+    //  5 Billing Address, 6 Date & Instructions
     // -------------------------------------------------------------------------
-    function getPickupSelected() {
-      const rbPick = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbCollectLater");
-      return !!(rbPick && rbPick.checked);
-    
-    function getDeliveredSelected() {
-      const rbDel = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbDelivered");
-      return !!(rbDel && rbDel.checked);
-    }
-
     function getBranchField() {
       const host = document.getElementById("ctl00_PageBody_BranchSelector");
       if (!host) return null;
@@ -283,11 +268,9 @@
 
     function isBranchChosen(field) {
       if (!field) return false;
-      // Common placeholders are "", "0", or first option like "Select..."
       const v = norm(field.value);
       if (!v || v === "0") return false;
       if (field.tagName === "SELECT" && field.selectedIndex <= 0) {
-        // allow if selectedIndex 0 is a real value
         const opt0 = field.options && field.options[0] ? norm(field.options[0].value) : "";
         if (!opt0 || opt0 === "0") return false;
       }
@@ -321,62 +304,48 @@
           return isBranchChosen(field);
         }
       }
-
       return false;
     }
 
-    function setStep4Visibility(isVisible) {
-      const li4 = nav.querySelector('li[data-step="4"]');
-      const pane4 = wizard.querySelector('.checkout-step[data-step="4"]');
-      if (li4) li4.style.display = isVisible ? "" : "none";
-      if (pane4) pane4.style.display = isVisible ? "" : "none";
-    }
-}
-
-    function setStep5Visibility(isVisible) {
-      const li5 = nav.querySelector('li[data-step="5"]');
-      const pane5 = wizard.querySelector('.checkout-step[data-step="5"]');
-      if (li5) li5.style.display = isVisible ? "" : "none";
-      if (pane5) pane5.style.display = isVisible ? "" : "none";
+    function setStepVisibility(stepNum, isVisible) {
+      const li = nav.querySelector(`li[data-step="${stepNum}"]`);
+      const pane = wizard.querySelector(`.checkout-step[data-step="${stepNum}"]`);
+      if (li) li.style.display = isVisible ? "" : "none";
+      if (pane) pane.style.display = isVisible ? "" : "none";
     }
 
     function setDeliverySectionVisibility(isVisible) {
       // Keep underlying server controls in DOM, but hide the whole visual block.
-      const pane5 = wizard.querySelector('.checkout-step[data-step="5"]');
-      if (!pane5) return;
-      const col = pane5.querySelector(".epi-form-col-single-checkout");
+      const pane4 = wizard.querySelector('.checkout-step[data-step="4"]');
+      if (!pane4) return;
+      const col = pane4.querySelector(".epi-form-col-single-checkout");
       if (col) col.style.display = isVisible ? "" : "none";
     }
 
-
     // In Pickup mode we hide the Delivery step, but WebTrack still requires a phone.
-    // We surface the Delivery phone field inside Step 6 so customers can complete it.
+    // We surface the Delivery phone field inside Billing step so customers can complete it.
     function mountPickupPhoneInBilling(enable) {
       const phoneEl = document.getElementById("ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox");
       if (!phoneEl) return;
 
-      // Find a reasonable container row to move (label + input)
       let row = phoneEl.closest(".epi-form-group") || phoneEl.closest("div");
       if (!row) row = phoneEl.parentElement;
       if (!row) return;
 
-      // Store original location once
       if (!row.dataset.wlOrigParentId) {
         const p = row.parentElement;
         if (p) {
           if (!p.id) p.id = "wl_del_phone_parent_" + Math.random().toString(16).slice(2);
           row.dataset.wlOrigParentId = p.id;
-          row.dataset.wlOrigNext = row.nextSibling ? "1" : "0";
         }
       }
 
-      const pane6 = wizard.querySelector('.checkout-step[data-step="6"]');
-      if (!pane6) return;
-      const target = pane6.querySelector(".epi-form-col-single-checkout") || pane6;
+      const pane4 = wizard.querySelector('.checkout-step[data-step="4"]');
+      if (!pane4) return;
+      const target = pane5.querySelector(".epi-form-col-single-checkout") || pane5;
 
       if (enable) {
-        // Only move if not already inside step6
-        if (!pane6.contains(row)) {
+        if (!pane5.contains(row)) {
           const holderId = "wlPickupPhoneHolder";
           let holder = document.getElementById(holderId);
           if (!holder) {
@@ -384,22 +353,44 @@
             holder.id = holderId;
             holder.className = "wl-pickup-phone mb-3";
             holder.innerHTML = `<div class="font-weight-bold mb-1">Phone (for order updates)</div>`;
-            // Put near the top of step 6
             target.insertBefore(holder, target.firstChild);
           }
           holder.appendChild(row);
         }
         row.style.display = "";
       } else {
-        // Move back to original parent if we can
         const origId = row.dataset.wlOrigParentId;
         const orig = origId ? document.getElementById(origId) : null;
-        if (orig && !orig.contains(row)) {
-          orig.appendChild(row);
-        }
+        if (orig && !orig.contains(row)) orig.appendChild(row);
       }
     }
 
+    function updatePickupModeUI() {
+      const pickup = getPickupSelected();
+      const delivered = getDeliveredSelected();
+
+      // Step 3 Branch: show for Pickup, hide for Delivered.
+      setStepVisibility(3, !!pickup);
+
+      if (!pickup && delivered) {
+        // Ensure branch has a default value so WebTrack doesn't complain later.
+        autoSelectDefaultBranch();
+      }
+
+      // Step 4 Delivery Address: hide + skip in pickup mode
+      setStepVisibility(4, !pickup);
+      setDeliverySectionVisibility(!pickup);
+
+      // Phone requirement: surface delivery phone inside billing when pickup
+      mountPickupPhoneInBilling(!!pickup);
+
+      // If pickup, keep Delivery inputs populated from Billing to satisfy required server fields.
+      if (pickup) syncBillingToDelivery();
+    }
+
+    window.WLCheckout = window.WLCheckout || {};
+    window.WLCheckout.updatePickupModeUI = updatePickupModeUI;
+    window.WLCheckout.syncBillingToDelivery = syncBillingToDelivery;
     function norm(s) { return String(s || "").trim(); }
 
     function setIf(el, val) {
@@ -635,7 +626,7 @@
 
     // Optional "(optional)" on step 3 label
     (function () {
-      const p3 = wizard.querySelector('.checkout-step[data-step="3"]');
+      const p3 = wizard.querySelector('.checkout-step[data-step="2"]');
       if (!p3) return;
       const lbl = p3.querySelector("label");
       if (!lbl) return;
@@ -646,22 +637,14 @@
       lbl.appendChild(opt);
     })();
 
-    // Rename step 6 header
-    (function () {
-      const p6 = wizard.querySelector('.checkout-step[data-step="6"]');
-      if (!p6) return;
-      const hdr = p6.querySelector(".font-weight-bold.mb-3.mt-4");
-      if (hdr) hdr.textContent = "Billing Address";
-    })();
-
     // -------------------------------------------------------------------------
     // E) Step switching + persistence
     // -------------------------------------------------------------------------
     function showStep(n) {
       // If Pickup is selected, skip the Delivery Address step (Step 5)
-      if (getPickupSelected() && n === 5) n = 6;
+      if (getPickupSelected() && n === 4) n = 5;
       // If Delivered/Shipping is selected, Branch step is optional; skip Step 4.
-      if (getDeliveredSelected() && !getPickupSelected() && n === 4) n = 5;
+      if (getDeliveredSelected() && !getPickupSelected() && n === 3) n = 4;
       wizard
         .querySelectorAll(".checkout-step")
         .forEach((p) => p.classList.toggle("active", +p.dataset.step === n));
@@ -691,16 +674,16 @@
     function goNextFrom(stepNum) {
       let next = stepNum + 1;
       // Skip branch step if delivered/shipping (we can route internally)
-      if (getDeliveredSelected() && !getPickupSelected() && next === 4) next = 5;
+      if (getDeliveredSelected() && !getPickupSelected() && next === 3) next = 4;
       // Skip delivery step if pickup
-      if (getPickupSelected() && next === 5) next = 6;
+      if (getPickupSelected() && next === 4) next = 5;
       showStep(next);
     }
 
     function validateStep(stepNum) {
       // Lightweight, client-side validation to prevent "stuck" moments.
       // Server validation still runs on final Continue.
-      if (stepNum === 2) {
+      if (stepNum === 1) {
         // Ship/Pickup selected?
         const rbPick = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbCollectLater");
         const rbDel = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbDelivered");
@@ -714,26 +697,26 @@
           } catch {}
 
           if (!(rbPick && rbPick.checked) && !(rbDel && rbDel.checked)) {
-            showInlineError(2, "<strong>Please choose:</strong> Delivered or Pickup.");
+            showInlineError(1, "<strong>Please choose:</strong> Delivered or Pickup.");
             return false;
           }
         }
-        clearInlineError(2);
+        clearInlineError(1);
         updatePickupModeUI();
         return true;
       }
 
-      if (stepNum === 4) {
+      if (stepNum === 3) {
         // Branch is REQUIRED for Pickup (customer chooses pickup store).
         // For Delivered/Shipping, we can default a branch operationally (Amazon-style).
         const field = getBranchField();
 
         if (getPickupSelected()) {
           if (field && !isBranchChosen(field)) {
-            showInlineError(4, "<strong>Please select a store/branch</strong> so we can route your pickup order.");
+            showInlineError(3, "<strong>Please select a store/branch</strong> so we can route your pickup order.");
             return false;
           }
-          clearInlineError(4);
+          clearInlineError(3);
           // Remember for next time
           try { if (field && norm(field.value)) localStorage.setItem("wl_last_branch", norm(field.value)); } catch {}
           return true;
@@ -750,21 +733,21 @@
         return true;
       }
 
-      if (stepNum === 5) {
+      if (stepNum === 4) {
         // Delivery step is hidden in pickup mode.
         if (getPickupSelected()) return true;
-        return validateAddressBlock("DeliveryAddress", 5, false);
+        return validateAddressBlock("DeliveryAddress", 4, false);
       }
 
-      if (stepNum === 6) {
+      if (stepNum === 5) {
         // Billing is always required (and is used to satisfy Delivery when pickup).
-        const ok = validateAddressBlock("InvoiceAddress", 6, true);
+        const ok = validateAddressBlock("InvoiceAddress", 5, true);
         if (!ok) return false;
 
         if (getPickupSelected()) {
           syncBillingToDelivery();
           // Also, if Step 5 is hidden, make sure any Delivery postback fields are not blank.
-          clearInlineError(5);
+          clearInlineError(4);
         }
         return true;
       }
@@ -813,25 +796,25 @@
       );
     }
 
-    bindReturnStepFor("#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList", 5, "change");
-    bindReturnStepFor("#ctl00_PageBody_DeliveryAddress_CountrySelector", 5, "change");
+    bindReturnStepFor("#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList", 4, "change");
+    bindReturnStepFor("#ctl00_PageBody_DeliveryAddress_CountrySelector", 4, "change");
 
-    bindReturnStepFor("#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList", 6, "change");
-    bindReturnStepFor("#ctl00_PageBody_InvoiceAddress_CountrySelector1", 6, "change");
+    bindReturnStepFor("#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList", 5, "change");
+    bindReturnStepFor("#ctl00_PageBody_InvoiceAddress_CountrySelector1", 5, "change");
 
-    bindReturnStepFor("#ctl00_PageBody_BranchSelector", 4, "change");
+    bindReturnStepFor("#ctl00_PageBody_BranchSelector", 3, "change");
     // If the branch control is a wrapper div, bind to its inner select/input as well.
-    bindReturnStepFor("#ctl00_PageBody_BranchSelector select", 4, "change");
-    bindReturnStepFor("#ctl00_PageBody_BranchSelector input", 4, "change");
+    bindReturnStepFor("#ctl00_PageBody_BranchSelector select", 3, "change");
+    bindReturnStepFor("#ctl00_PageBody_BranchSelector input", 3, "change");
 
     // -------------------------------------------------------------------------
     // G) Delivery summary/edit (Step 5)
     // -------------------------------------------------------------------------
     (function () {
-      const pane5 = wizard.querySelector('.checkout-step[data-step="5"]');
-      if (!pane5) return;
+      const pane4 = wizard.querySelector('.checkout-step[data-step="5"]');
+      if (!pane4) return;
 
-      const col = pane5.querySelector(".epi-form-col-single-checkout");
+      const col = pane4.querySelector(".epi-form-col-single-checkout");
       if (!col) return;
 
       const wrap = document.createElement("div");
@@ -909,9 +892,15 @@
 
           btn.addEventListener("click", () => {
             upd();
+            try {
+              const same = document.getElementById('sameAsDeliveryCheck');
+              if (same && same.checked && window.WLCheckout && typeof window.WLCheckout.refreshInvoiceSummary === 'function') {
+                window.WLCheckout.refreshInvoiceSummary(true);
+              }
+            } catch {}
             wrap.style.display = "none";
             sum.style.display = "";
-            setStep(5);
+            setStep(4);
           });
         }
       });
@@ -925,8 +914,8 @@
     // auto-trigger CopyDeliveryAddress postback ONCE per session.
     // -------------------------------------------------------------------------
     (function () {
-      const pane6 = wizard.querySelector('.checkout-step[data-step="6"]');
-      if (!pane6) return;
+      const pane5 = wizard.querySelector('.checkout-step[data-step="5"]');
+      if (!pane5) return;
 
       const orig = document.getElementById("copyDeliveryAddressButton");
       if (orig) orig.style.display = "none";
@@ -938,10 +927,10 @@
         <label class="form-check-label" for="sameAsDeliveryCheck">
           Billing address is the same as delivery address
         </label>`;
-      pane6.insertBefore(chkDiv, pane6.firstChild);
+      pane5.insertBefore(chkDiv, pane5.firstChild);
 
       const sameCheck = chkDiv.querySelector("#sameAsDeliveryCheck");
-      const colInv = pane6.querySelector(".epi-form-col-single-checkout");
+      const colInv = pane5.querySelector(".epi-form-col-single-checkout");
       if (!colInv) return;
 
       const wrapInv = document.createElement("div");
@@ -953,6 +942,35 @@
       colInv.appendChild(wrapInv);
 
       const q = (sel) => wrapInv.querySelector(sel);
+
+      function copyDeliveryToInvoice(force) {
+        try {
+          const pairs = [
+            ["ctl00_PageBody_DeliveryAddress_AddressLine1","ctl00_PageBody_InvoiceAddress_AddressLine1"],
+            ["ctl00_PageBody_DeliveryAddress_AddressLine2","ctl00_PageBody_InvoiceAddress_AddressLine2"],
+            ["ctl00_PageBody_DeliveryAddress_AddressLine3","ctl00_PageBody_InvoiceAddress_AddressLine3"],
+            ["ctl00_PageBody_DeliveryAddress_City","ctl00_PageBody_InvoiceAddress_City"],
+            ["ctl00_PageBody_DeliveryAddress_Postcode","ctl00_PageBody_InvoiceAddress_Postcode"],
+          ];
+          pairs.forEach(([from,to])=>{
+            const f=document.getElementById(from);
+            const t=document.getElementById(to);
+            if (!f || !t) return;
+            if (force || !String(t.value||"").trim()) t.value = f.value;
+          });
+
+          const delState=document.getElementById("ctl00_PageBody_DeliveryAddress_CountySelector_CountyList");
+          const invState=document.getElementById("ctl00_PageBody_InvoiceAddress_CountySelector_CountyList");
+          if (delState && invState) {
+            const txt = delState.selectedOptions && delState.selectedOptions[0] ? delState.selectedOptions[0].text : "";
+            if (txt) selectByText(invState, txt);
+          }
+
+          const invCountry=document.getElementById("ctl00_PageBody_InvoiceAddress_CountrySelector1");
+          if (invCountry && !String(invCountry.value||"").trim()) invCountry.value = "USA";
+        } catch {}
+      }
+
 
       function refreshInv() {
         const a1 = (q("#ctl00_PageBody_InvoiceAddress_AddressLine1")?.value || "").trim();
@@ -1005,6 +1023,7 @@
 
       // Normal display
       if (sameStored) {
+        copyDeliveryToInvoice(true);
         refreshInv();
         wrapInv.style.display = "none";
         sumInv.style.display = "";
@@ -1020,28 +1039,7 @@
           markAutoCopyDone(); // user-initiated copy: treat as done
 
           // Client-side copy immediately so the customer sees it without needing to uncheck/recheck
-          try {
-            const map = [
-              ["ctl00_PageBody_DeliveryAddress_AddressLine1","ctl00_PageBody_InvoiceAddress_AddressLine1"],
-              ["ctl00_PageBody_DeliveryAddress_AddressLine2","ctl00_PageBody_InvoiceAddress_AddressLine2"],
-              ["ctl00_PageBody_DeliveryAddress_AddressLine3","ctl00_PageBody_InvoiceAddress_AddressLine3"],
-              ["ctl00_PageBody_DeliveryAddress_City","ctl00_PageBody_InvoiceAddress_City"],
-              ["ctl00_PageBody_DeliveryAddress_Postcode","ctl00_PageBody_InvoiceAddress_Postcode"]
-            ];
-            map.forEach(([from,to])=>{
-              const f=document.getElementById(from); const t=document.getElementById(to);
-              if (f && t && (!t.value || !t.value.trim())) t.value = f.value;
-            });
-            const delState=document.getElementById("ctl00_PageBody_DeliveryAddress_CountySelector_CountyList");
-            const invState=document.getElementById("ctl00_PageBody_InvoiceAddress_CountySelector_CountyList");
-            if (delState && invState) {
-              const t = delState.selectedOptions && delState.selectedOptions[0] ? delState.selectedOptions[0].text : "";
-              if (t) selectByText(invState, t);
-            }
-            const delCountry=document.getElementById("ctl00_PageBody_DeliveryAddress_CountrySelectorDeliveryAddress");
-            const invCountry=document.getElementById("ctl00_PageBody_InvoiceAddress_CountrySelector1");
-            if (delCountry && invCountry && (!invCountry.value || !invCountry.value.trim())) invCountry.value = delCountry.value || "USA";
-          } catch {}
+          copyDeliveryToInvoice(true);
 
           refreshInv();
           wrapInv.style.display = "none";
@@ -1063,6 +1061,14 @@
         wrapInv.style.display = "";
         try { wrapInv.scrollIntoView({ behavior: "smooth" }); } catch {}
       });
+
+      try {
+        window.WLCheckout = window.WLCheckout || {};
+        window.WLCheckout.refreshInvoiceSummary = function(forceCopy){
+          if (forceCopy) copyDeliveryToInvoice(true);
+          refreshInv();
+        };
+      } catch {}
 
       refreshInv();
     })();
@@ -1410,9 +1416,9 @@
           try {
             if (getPickupSelected()) {
               // Validate billing now (so we can guide the user before server rejects)
-              if (!validateAddressBlock("InvoiceAddress", 6, true)) {
+              if (!validateAddressBlock("InvoiceAddress", 5, true)) {
                 e.preventDefault();
-                showStep(6);
+                showStep(5);
                 return;
               }
               syncBillingToDelivery();
@@ -1525,7 +1531,7 @@
         const culprit = findFirstInvalidElement();
         if (!culprit) return false;
 
-        const stepNum = paneStepFor(culprit) || 2;
+        const stepNum = paneStepFor(culprit) || 1;
         showStep(stepNum);
 
         try {
@@ -1649,7 +1655,7 @@
     const expectedNav = consumeExpectedNav();
     const returnStep = consumeReturnStep();
     const saved = getStep();
-    const initial = returnStep || saved || 2;
+    const initial = returnStep || saved || 1;
 
     showStep(initial);
     // Apply pickup-mode visibility immediately on load
@@ -1668,3 +1674,30 @@
     }
   });
 })();
+      // Force everything to be an ORDER and hide Transaction Type UI (Order/Quote)
+      try {
+        const txDiv = document.getElementById("ctl00_PageBody_TransactionTypeDiv");
+        if (txDiv) {
+          // Try to find the "Order" radio by id/value/label text and click it (WebForms-safe)
+          const radios = Array.from(txDiv.querySelectorAll('input[type="radio"]'));
+          let orderRb =
+            radios.find(r => /order/i.test(r.id || "")) ||
+            radios.find(r => /order/i.test(r.value || ""));
+          if (!orderRb) {
+            // Match via label text
+            const labels = Array.from(txDiv.querySelectorAll("label"));
+            const lbl = labels.find(l => /\border\b/i.test((l.textContent || "").trim()));
+            if (lbl && lbl.htmlFor) {
+              const cand = document.getElementById(lbl.htmlFor);
+              if (cand && cand.type === "radio") orderRb = cand;
+            }
+          }
+          if (orderRb && !orderRb.checked) {
+            orderRb.click(); // ensures any WebForms handlers run
+          }
+          // Hide the whole transaction type block
+          const txWrap = txDiv.closest(".epi-form-col-single-checkout") || txDiv;
+          if (txWrap) txWrap.style.display = "none";
+        }
+      } catch {}
+
