@@ -17,7 +17,7 @@
     if (el && el.checked) return true;
     // Fallback: modern selector buttons (no radio checked yet)
     try {
-      const btn = document.querySelector(`.modern-shipping-selector button[data-value="rbDelivered"].is-selected, .modern-shipping-selector button[data-value="rbDelivered"].selected, .modern-shipping-selector button[data-value="rbDelivered"].active, .modern-shipping-selector button[data-value="rbDelivered"][aria-pressed="true"], #btnDelivered[aria-pressed="true"], .modern-shipping-selector button[data-value="rbDelivered"][aria-pressed="true"], #btnDelivered[aria-pressed="true"], #btnDelivered.is-selected, #btnDelivered.selected, #btnDelivered.active`);
+      const btn = document.querySelector(`.modern-shipping-selector button[data-value="rbDelivered"].is-selected, .modern-shipping-selector button[data-value="rbDelivered"].selected, .modern-shipping-selector button[data-value="rbDelivered"].active`);
       if (btn) return true;
     } catch {}
     return false;
@@ -27,7 +27,7 @@
     if (el && el.checked) return true;
     // Fallback: modern selector buttons (no radio checked yet)
     try {
-      const btn = document.querySelector(`.modern-shipping-selector button[data-value="rbCollectLater"].is-selected, .modern-shipping-selector button[data-value="rbCollectLater"].selected, .modern-shipping-selector button[data-value="rbCollectLater"].active, .modern-shipping-selector button[data-value="rbCollectLater"][aria-pressed="true"], #btnPickup[aria-pressed="true"], .modern-shipping-selector button[data-value="rbCollectLater"][aria-pressed="true"], #btnPickup[aria-pressed="true"], #btnPickup.is-selected, #btnPickup.selected, #btnPickup.active`);
+      const btn = document.querySelector(`.modern-shipping-selector button[data-value="rbCollectLater"].is-selected, .modern-shipping-selector button[data-value="rbCollectLater"].selected, .modern-shipping-selector button[data-value="rbCollectLater"].active`);
       if (btn) return true;
     } catch {}
     return false;
@@ -192,6 +192,12 @@
     // C) Steps definition
     // -------------------------------------------------------------------------
     const steps = [
+      {
+        title: "Order Details",
+        findEls: () => {
+          const tx = document.getElementById("ctl00_PageBody_TransactionTypeDiv");
+          return tx ? [tx.closest(".epi-form-col-single-checkout")] : [];
+        },
       },
       {
         title: "Ship/Pickup",
@@ -684,30 +690,26 @@
 
     function goNextFrom(stepNum) {
       let next = stepNum + 1;
-      // Numbering (Order Details removed):
-      // 1 Ship/Pickup, 2 Reference, 3 Branch, 4 Delivery, 5 Billing, 6 Date & Instructions
       // Skip branch step if delivered/shipping (we can route internally)
-      if (getDeliveredSelected() && !getPickupSelected() && next === 3) next = 4;
+      if (getDeliveredSelected() && !getPickupSelected() && next === 4) next = 5;
       // Skip delivery step if pickup
-      if (getPickupSelected() && next === 4) next = 5;
+      if (getPickupSelected() && next === 5) next = 6;
       showStep(next);
     }
 
     function validateStep(stepNum) {
       // Lightweight, client-side validation to prevent "stuck" moments.
       // Server validation still runs on final Continue.
-      if (stepNum === 1) {
+      if (stepNum === 2) {
         // Ship/Pickup selected?
         const rbPick = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbCollectLater");
         const rbDel = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbDelivered");
         if (!(rbPick && rbPick.checked) && !(rbDel && rbDel.checked)) {
           // If using the modern button selector, infer selection from the active button
           try {
-            const btnDel = document.querySelector('.modern-shipping-selector button[data-value="rbDelivered"].is-selected, .modern-shipping-selector button[data-value="rbDelivered"].selected, .modern-shipping-selector button[data-value="rbDelivered"].active, .modern-shipping-selector button[data-value="rbDelivered"][aria-pressed="true"], #btnDelivered[aria-pressed="true"]');
-            const btnPick = document.querySelector('.modern-shipping-selector button[data-value="rbCollectLater"].is-selected, .modern-shipping-selector button[data-value="rbCollectLater"].selected, .modern-shipping-selector button[data-value="rbCollectLater"].active, .modern-shipping-selector button[data-value="rbCollectLater"][aria-pressed="true"], #btnPickup[aria-pressed="true"]');
-                        if (btnDel && rbDel) rbDel.checked = true;
-            if (btnPick && rbPick) rbPick.checked = true;
-if (btnDel && rbDel) { rbDel.checked = true; }
+            const btnDel = document.querySelector('.modern-shipping-selector button[data-value="rbDelivered"].is-selected, .modern-shipping-selector button[data-value="rbDelivered"].selected, .modern-shipping-selector button[data-value="rbDelivered"].active');
+            const btnPick = document.querySelector('.modern-shipping-selector button[data-value="rbCollectLater"].is-selected, .modern-shipping-selector button[data-value="rbCollectLater"].selected, .modern-shipping-selector button[data-value="rbCollectLater"].active');
+            if (btnDel && rbDel) { rbDel.checked = true; }
             if (btnPick && rbPick) { rbPick.checked = true; }
           } catch {}
 
@@ -721,7 +723,7 @@ if (btnDel && rbDel) { rbDel.checked = true; }
         return true;
       }
 
-      if (stepNum === 2) {
+      if (stepNum === 4) {
         // Branch is REQUIRED for Pickup (customer chooses pickup store).
         // For Delivered/Shipping, we can default a branch operationally (Amazon-style).
         const field = getBranchField();
@@ -748,13 +750,13 @@ if (btnDel && rbDel) { rbDel.checked = true; }
         return true;
       }
 
-      if (stepNum === 3) {
+      if (stepNum === 5) {
         // Delivery step is hidden in pickup mode.
         if (getPickupSelected()) return true;
         return validateAddressBlock("DeliveryAddress", 5, false);
       }
 
-      if (stepNum === 4) {
+      if (stepNum === 6) {
         // Billing is always required (and is used to satisfy Delivery when pickup).
         const ok = validateAddressBlock("InvoiceAddress", 6, true);
         if (!ok) return false;
@@ -990,42 +992,11 @@ if (btnDel && rbDel) { rbDel.checked = true; }
       const sameStored = getSameAsDelivery();
       sameCheck.checked = sameStored;
 
-
-      function clientMirrorDeliveryToInvoice(force) {
-        try {
-          const map = [
-            ["ctl00_PageBody_DeliveryAddress_AddressLine1","ctl00_PageBody_InvoiceAddress_AddressLine1"],
-            ["ctl00_PageBody_DeliveryAddress_AddressLine2","ctl00_PageBody_InvoiceAddress_AddressLine2"],
-            ["ctl00_PageBody_DeliveryAddress_AddressLine3","ctl00_PageBody_InvoiceAddress_AddressLine3"],
-            ["ctl00_PageBody_DeliveryAddress_City","ctl00_PageBody_InvoiceAddress_City"],
-            ["ctl00_PageBody_DeliveryAddress_Postcode","ctl00_PageBody_InvoiceAddress_Postcode"]
-          ];
-          map.forEach(([from,to])=>{
-            const f=document.getElementById(from); const tt=document.getElementById(to);
-            if (f && tt && (force || !tt.value || !tt.value.trim())) tt.value = f.value;
-          });
-          const delState=document.getElementById("ctl00_PageBody_DeliveryAddress_CountySelector_CountyList");
-          const invState=document.getElementById("ctl00_PageBody_InvoiceAddress_CountySelector_CountyList");
-          if (delState && invState) {
-            const txt = delState.selectedOptions && delState.selectedOptions[0] ? delState.selectedOptions[0].text : "";
-            if (txt) selectByText(invState, txt);
-          }
-          const delCountry=document.getElementById("ctl00_PageBody_DeliveryAddress_CountrySelectorDeliveryAddress");
-          const invCountry=document.getElementById("ctl00_PageBody_InvoiceAddress_CountrySelector1");
-          if (delCountry && invCountry && (force || !invCountry.value || !invCountry.value.trim())) invCountry.value = delCountry.value || "USA";
-        } catch {}
-      }
-
-      // If same-as-delivery is already ON, mirror immediately so the UI shows values without a toggle.
-      if (sameStored && invoiceLooksBlank() && deliveryHasData()) {
-        clientMirrorDeliveryToInvoice(false);
-      }
-
       // If the user wants same-as-delivery AND invoice is blank after reload,
       // trigger the server-side copy ONCE this session.
       if (sameStored && invoiceLooksBlank() && deliveryHasData() && !autoCopyAlreadyDone()) {
         markAutoCopyDone();
-        setReturnStep(4);
+        setReturnStep(6);
         try {
           __doPostBack("ctl00$PageBody$CopyDeliveryAddressLinkButton", "");
           return; // page will reload; stop further UI work this pass
@@ -1044,7 +1015,7 @@ if (btnDel && rbDel) { rbDel.checked = true; }
 
       sameCheck.addEventListener("change", function () {
         if (this.checked) {
-          setReturnStep(4);
+          setReturnStep(6);
           setSameAsDelivery(true);
           markAutoCopyDone(); // user-initiated copy: treat as done
 
@@ -1441,14 +1412,14 @@ if (btnDel && rbDel) { rbDel.checked = true; }
               // Validate billing now (so we can guide the user before server rejects)
               if (!validateAddressBlock("InvoiceAddress", 6, true)) {
                 e.preventDefault();
-                showStep(4);
+                showStep(6);
                 return;
               }
               syncBillingToDelivery();
             }
           } catch {}
 
-          setReturnStep(5);
+          setReturnStep(7);
           setExpectedNav(true);
 
           let valid = true;
@@ -1483,7 +1454,7 @@ if (btnDel && rbDel) { rbDel.checked = true; }
           if (!valid) {
             e.preventDefault();
             alert("Hold on – we need a bit more info:\n\n" + errors.join("\n"));
-            showStep(5);
+            showStep(7);
             setExpectedNav(false);
             return;
           }
@@ -1569,15 +1540,18 @@ if (btnDel && rbDel) { rbDel.checked = true; }
     })();
 
     // -------------------------------------------------------------------------
-    // M) Modern Transaction & Shipping selectors (kept)
+    // M) Modern Shipping selector (Transaction is forced to ORDER)
     // -------------------------------------------------------------------------
     if ($) {
       $(function () {
+        // Force ORDER and hide transaction type UI
         if ($("#ctl00_PageBody_TransactionTypeDiv").length) {
-          // Default everything to an ORDER and hide transaction type UI.
-          try { $("#ctl00_PageBody_TransactionTypeSelector_rdbOrder").prop("checked", true); } catch {}
-          try { $(".TransactionTypeSelector").hide(); } catch {}
-          try { $("#ctl00_PageBody_TransactionTypeDiv").hide(); } catch {}
+          try {
+            $(".TransactionTypeSelector").hide();
+            $("#ctl00_PageBody_TransactionTypeDiv").hide();
+            $("#ctl00_PageBody_TransactionTypeSelector_rdbOrder").prop("checked", true);
+            $("#ctl00_PageBody_TransactionTypeSelector_rdbQuote").prop("checked", false);
+          } catch {}
         }
 
         if ($(".SaleTypeSelector").length) {
@@ -1606,20 +1580,25 @@ if (btnDel && rbDel) { rbDel.checked = true; }
             $btnPickup.removeClass("disabled opacity-50").removeAttr("disabled").attr("aria-disabled", "false");
 
             if (val === "rbDelivered") {
-              delRad.prop("checked", true).trigger("change");
+              // Use native click so any WebForms AutoPostBack handler fires immediately
+              if (!delRad.is(":checked")) { try { delRad.get(0).click(); } catch { delRad.prop("checked", true).trigger("change"); } }
+              else { delRad.trigger("change"); }
+
               $btnDelivered.addClass("btn-primary").removeClass("btn-secondary opacity-50").attr("aria-pressed", "true");
               $btnPickup.addClass("btn-secondary opacity-50").removeClass("btn-primary").attr("aria-pressed", "false");
               document.cookie = "pickupSelected=false; path=/";
               document.cookie = "skipBack=false; path=/";
             } else {
-              pickRad.prop("checked", true).trigger("change");
+              if (!pickRad.is(":checked")) { try { pickRad.get(0).click(); } catch { pickRad.prop("checked", true).trigger("change"); } }
+              else { pickRad.trigger("change"); }
+
               $btnPickup.addClass("btn-primary").removeClass("btn-secondary opacity-50").attr("aria-pressed", "true");
               $btnDelivered.addClass("btn-secondary opacity-50").removeClass("btn-primary").attr("aria-pressed", "false");
               document.cookie = "pickupSelected=true; path=/";
               document.cookie = "skipBack=true; path=/";
             }
 
-            setStep(2);
+            setStep(1);
             try { window.WLCheckout.updatePickupModeUI && window.WLCheckout.updatePickupModeUI(); } catch {}
           }
 
