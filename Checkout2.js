@@ -17,7 +17,7 @@
     if (el && el.checked) return true;
     // Fallback: modern selector buttons (no radio checked yet)
     try {
-      const btn = document.querySelector(`.modern-shipping-selector button[data-value="rbDelivered"].is-selected, .modern-shipping-selector button[data-value="rbDelivered"].selected, .modern-shipping-selector button[data-value="rbDelivered"].active`);
+      const btn = document.querySelector(`.modern-shipping-selector button[data-value="rbDelivered"].is-selected, .modern-shipping-selector button[data-value="rbDelivered"].selected, .modern-shipping-selector button[data-value="rbDelivered"].active, .modern-shipping-selector button[data-value="rbDelivered"][aria-pressed="true"], #btnDelivered[aria-pressed="true"], .modern-shipping-selector button[data-value="rbDelivered"][aria-pressed="true"], #btnDelivered[aria-pressed="true"], #btnDelivered.is-selected, #btnDelivered.selected, #btnDelivered.active`);
       if (btn) return true;
     } catch {}
     return false;
@@ -27,7 +27,7 @@
     if (el && el.checked) return true;
     // Fallback: modern selector buttons (no radio checked yet)
     try {
-      const btn = document.querySelector(`.modern-shipping-selector button[data-value="rbCollectLater"].is-selected, .modern-shipping-selector button[data-value="rbCollectLater"].selected, .modern-shipping-selector button[data-value="rbCollectLater"].active`);
+      const btn = document.querySelector(`.modern-shipping-selector button[data-value="rbCollectLater"].is-selected, .modern-shipping-selector button[data-value="rbCollectLater"].selected, .modern-shipping-selector button[data-value="rbCollectLater"].active, .modern-shipping-selector button[data-value="rbCollectLater"][aria-pressed="true"], #btnPickup[aria-pressed="true"], .modern-shipping-selector button[data-value="rbCollectLater"][aria-pressed="true"], #btnPickup[aria-pressed="true"], #btnPickup.is-selected, #btnPickup.selected, #btnPickup.active`);
       if (btn) return true;
     } catch {}
     return false;
@@ -192,6 +192,7 @@
     // C) Steps definition
     // -------------------------------------------------------------------------
     const steps = [
+      },
       {
         title: "Ship/Pickup",
         findEls: () => {
@@ -319,23 +320,23 @@
     }
 
     function setStep4Visibility(isVisible) {
-      const li4 = nav.querySelector('li[data-step="2"]');
-      const pane4 = wizard.querySelector('.checkout-step[data-step="2"]');
+      const li4 = nav.querySelector('li[data-step="4"]');
+      const pane4 = wizard.querySelector('.checkout-step[data-step="4"]');
       if (li4) li4.style.display = isVisible ? "" : "none";
       if (pane4) pane4.style.display = isVisible ? "" : "none";
     }
 }
 
     function setStep5Visibility(isVisible) {
-      const li5 = nav.querySelector('li[data-step="2"]');
-      const pane5 = wizard.querySelector('.checkout-step[data-step="2"]');
+      const li5 = nav.querySelector('li[data-step="5"]');
+      const pane5 = wizard.querySelector('.checkout-step[data-step="5"]');
       if (li5) li5.style.display = isVisible ? "" : "none";
       if (pane5) pane5.style.display = isVisible ? "" : "none";
     }
 
     function setDeliverySectionVisibility(isVisible) {
       // Keep underlying server controls in DOM, but hide the whole visual block.
-      const pane5 = wizard.querySelector('.checkout-step[data-step="2"]');
+      const pane5 = wizard.querySelector('.checkout-step[data-step="5"]');
       if (!pane5) return;
       const col = pane5.querySelector(".epi-form-col-single-checkout");
       if (col) col.style.display = isVisible ? "" : "none";
@@ -363,7 +364,7 @@
         }
       }
 
-      const pane6 = wizard.querySelector('.checkout-step[data-step="2"]');
+      const pane6 = wizard.querySelector('.checkout-step[data-step="6"]');
       if (!pane6) return;
       const target = pane6.querySelector(".epi-form-col-single-checkout") || pane6;
 
@@ -628,7 +629,7 @@
 
     // Optional "(optional)" on step 3 label
     (function () {
-      const p3 = wizard.querySelector('.checkout-step[data-step="2"]');
+      const p3 = wizard.querySelector('.checkout-step[data-step="3"]');
       if (!p3) return;
       const lbl = p3.querySelector("label");
       if (!lbl) return;
@@ -641,7 +642,7 @@
 
     // Rename step 6 header
     (function () {
-      const p6 = wizard.querySelector('.checkout-step[data-step="2"]');
+      const p6 = wizard.querySelector('.checkout-step[data-step="6"]');
       if (!p6) return;
       const hdr = p6.querySelector(".font-weight-bold.mb-3.mt-4");
       if (hdr) hdr.textContent = "Billing Address";
@@ -683,10 +684,12 @@
 
     function goNextFrom(stepNum) {
       let next = stepNum + 1;
+      // Numbering (Order Details removed):
+      // 1 Ship/Pickup, 2 Reference, 3 Branch, 4 Delivery, 5 Billing, 6 Date & Instructions
       // Skip branch step if delivered/shipping (we can route internally)
-      if (getDeliveredSelected() && !getPickupSelected() && next === 4) next = 5;
+      if (getDeliveredSelected() && !getPickupSelected() && next === 3) next = 4;
       // Skip delivery step if pickup
-      if (getPickupSelected() && next === 5) next = 6;
+      if (getPickupSelected() && next === 4) next = 5;
       showStep(next);
     }
 
@@ -700,44 +703,35 @@
         if (!(rbPick && rbPick.checked) && !(rbDel && rbDel.checked)) {
           // If using the modern button selector, infer selection from the active button
           try {
-            const btnDel = document.querySelector('.modern-shipping-selector button[data-value="rbDelivered"].is-selected, .modern-shipping-selector button[data-value="rbDelivered"].selected, .modern-shipping-selector button[data-value="rbDelivered"].active');
-            const btnPick = document.querySelector('.modern-shipping-selector button[data-value="rbCollectLater"].is-selected, .modern-shipping-selector button[data-value="rbCollectLater"].selected, .modern-shipping-selector button[data-value="rbCollectLater"].active');
-            if (btnDel && rbDel) { rbDel.checked = true; }
+            const btnDel = document.querySelector('.modern-shipping-selector button[data-value="rbDelivered"].is-selected, .modern-shipping-selector button[data-value="rbDelivered"].selected, .modern-shipping-selector button[data-value="rbDelivered"].active, .modern-shipping-selector button[data-value="rbDelivered"][aria-pressed="true"], #btnDelivered[aria-pressed="true"]');
+            const btnPick = document.querySelector('.modern-shipping-selector button[data-value="rbCollectLater"].is-selected, .modern-shipping-selector button[data-value="rbCollectLater"].selected, .modern-shipping-selector button[data-value="rbCollectLater"].active, .modern-shipping-selector button[data-value="rbCollectLater"][aria-pressed="true"], #btnPickup[aria-pressed="true"]');
+                        if (btnDel && rbDel) rbDel.checked = true;
+            if (btnPick && rbPick) rbPick.checked = true;
+if (btnDel && rbDel) { rbDel.checked = true; }
             if (btnPick && rbPick) { rbPick.checked = true; }
           } catch {}
 
-          // Also support native WebTrack label selector (lblDelivered / lblCollectLater)
-          try {
-            const lblDel = document.getElementById("ctl00_PageBody_SaleTypeSelector_lblDelivered");
-            const lblPick = document.getElementById("ctl00_PageBody_SaleTypeSelector_lblCollectLater");
-            const delActive = lblDel && (lblDel.classList.contains("active") || lblDel.classList.contains("selected") || lblDel.getAttribute("aria-pressed")==="true");
-            const pickActive = lblPick && (lblPick.classList.contains("active") || lblPick.classList.contains("selected") || lblPick.getAttribute("aria-pressed")==="true");
-            if (delActive && rbDel) rbDel.checked = true;
-            if (pickActive && rbPick) rbPick.checked = true;
-          } catch {}
-
-
           if (!(rbPick && rbPick.checked) && !(rbDel && rbDel.checked)) {
-            showInlineError(1, "<strong>Please choose:</strong> Delivered or Pickup.");
+            showInlineError(2, "<strong>Please choose:</strong> Delivered or Pickup.");
             return false;
           }
         }
-        clearInlineError(1);
+        clearInlineError(2);
         updatePickupModeUI();
         return true;
       }
 
-      if (stepNum === 3) {
+      if (stepNum === 2) {
         // Branch is REQUIRED for Pickup (customer chooses pickup store).
         // For Delivered/Shipping, we can default a branch operationally (Amazon-style).
         const field = getBranchField();
 
         if (getPickupSelected()) {
           if (field && !isBranchChosen(field)) {
-            showInlineError(3, "<strong>Please select a store/branch</strong> so we can route your pickup order.");
+            showInlineError(4, "<strong>Please select a store/branch</strong> so we can route your pickup order.");
             return false;
           }
-          clearInlineError(3);
+          clearInlineError(4);
           // Remember for next time
           try { if (field && norm(field.value)) localStorage.setItem("wl_last_branch", norm(field.value)); } catch {}
           return true;
@@ -748,19 +742,19 @@
         if (field && !isBranchChosen(field)) {
           autoSelectDefaultBranch();
         }
-        clearInlineError(3);
+        clearInlineError(4);
         // Remember for next time
         try { if (field && norm(field.value)) localStorage.setItem("wl_last_branch", norm(field.value)); } catch {}
         return true;
       }
 
-      if (stepNum === 4) {
+      if (stepNum === 3) {
         // Delivery step is hidden in pickup mode.
         if (getPickupSelected()) return true;
         return validateAddressBlock("DeliveryAddress", 5, false);
       }
 
-      if (stepNum === 5) {
+      if (stepNum === 4) {
         // Billing is always required (and is used to satisfy Delivery when pickup).
         const ok = validateAddressBlock("InvoiceAddress", 6, true);
         if (!ok) return false;
@@ -768,7 +762,7 @@
         if (getPickupSelected()) {
           syncBillingToDelivery();
           // Also, if Step 5 is hidden, make sure any Delivery postback fields are not blank.
-          clearInlineError(4);
+          clearInlineError(5);
         }
         return true;
       }
@@ -832,7 +826,7 @@
     // G) Delivery summary/edit (Step 5)
     // -------------------------------------------------------------------------
     (function () {
-      const pane5 = wizard.querySelector('.checkout-step[data-step="2"]');
+      const pane5 = wizard.querySelector('.checkout-step[data-step="5"]');
       if (!pane5) return;
 
       const col = pane5.querySelector(".epi-form-col-single-checkout");
@@ -929,7 +923,7 @@
     // auto-trigger CopyDeliveryAddress postback ONCE per session.
     // -------------------------------------------------------------------------
     (function () {
-      const pane6 = wizard.querySelector('.checkout-step[data-step="2"]');
+      const pane6 = wizard.querySelector('.checkout-step[data-step="6"]');
       if (!pane6) return;
 
       const orig = document.getElementById("copyDeliveryAddressButton");
@@ -996,16 +990,42 @@
       const sameStored = getSameAsDelivery();
       sameCheck.checked = sameStored;
 
-      // WL: if previously set to same-as-delivery, apply immediately so user doesn't need to uncheck/recheck
-      if (sameStored) {
-        setTimeout(() => { try { sameCheck.dispatchEvent(new Event('change')); } catch {} }, 0);
+
+      function clientMirrorDeliveryToInvoice(force) {
+        try {
+          const map = [
+            ["ctl00_PageBody_DeliveryAddress_AddressLine1","ctl00_PageBody_InvoiceAddress_AddressLine1"],
+            ["ctl00_PageBody_DeliveryAddress_AddressLine2","ctl00_PageBody_InvoiceAddress_AddressLine2"],
+            ["ctl00_PageBody_DeliveryAddress_AddressLine3","ctl00_PageBody_InvoiceAddress_AddressLine3"],
+            ["ctl00_PageBody_DeliveryAddress_City","ctl00_PageBody_InvoiceAddress_City"],
+            ["ctl00_PageBody_DeliveryAddress_Postcode","ctl00_PageBody_InvoiceAddress_Postcode"]
+          ];
+          map.forEach(([from,to])=>{
+            const f=document.getElementById(from); const tt=document.getElementById(to);
+            if (f && tt && (force || !tt.value || !tt.value.trim())) tt.value = f.value;
+          });
+          const delState=document.getElementById("ctl00_PageBody_DeliveryAddress_CountySelector_CountyList");
+          const invState=document.getElementById("ctl00_PageBody_InvoiceAddress_CountySelector_CountyList");
+          if (delState && invState) {
+            const txt = delState.selectedOptions && delState.selectedOptions[0] ? delState.selectedOptions[0].text : "";
+            if (txt) selectByText(invState, txt);
+          }
+          const delCountry=document.getElementById("ctl00_PageBody_DeliveryAddress_CountrySelectorDeliveryAddress");
+          const invCountry=document.getElementById("ctl00_PageBody_InvoiceAddress_CountrySelector1");
+          if (delCountry && invCountry && (force || !invCountry.value || !invCountry.value.trim())) invCountry.value = delCountry.value || "USA";
+        } catch {}
+      }
+
+      // If same-as-delivery is already ON, mirror immediately so the UI shows values without a toggle.
+      if (sameStored && invoiceLooksBlank() && deliveryHasData()) {
+        clientMirrorDeliveryToInvoice(false);
       }
 
       // If the user wants same-as-delivery AND invoice is blank after reload,
       // trigger the server-side copy ONCE this session.
       if (sameStored && invoiceLooksBlank() && deliveryHasData() && !autoCopyAlreadyDone()) {
         markAutoCopyDone();
-        setReturnStep(5);
+        setReturnStep(4);
         try {
           __doPostBack("ctl00$PageBody$CopyDeliveryAddressLinkButton", "");
           return; // page will reload; stop further UI work this pass
@@ -1024,7 +1044,7 @@
 
       sameCheck.addEventListener("change", function () {
         if (this.checked) {
-          setReturnStep(5);
+          setReturnStep(4);
           setSameAsDelivery(true);
           markAutoCopyDone(); // user-initiated copy: treat as done
 
@@ -1177,7 +1197,7 @@
     // Fix: Same-day pickup times must be >= 2 hours out (rounded up to next hour)
     // -------------------------------------------------------------------------
     (function () {
-      const p7 = wizard.querySelector('.checkout-step[data-step="2"]');
+      const p7 = wizard.querySelector('.checkout-step[data-step="7"]');
       if (!p7) return;
 
       const parseLocalDate = (s) => {
@@ -1421,14 +1441,14 @@
               // Validate billing now (so we can guide the user before server rejects)
               if (!validateAddressBlock("InvoiceAddress", 6, true)) {
                 e.preventDefault();
-                showStep(5);
+                showStep(4);
                 return;
               }
               syncBillingToDelivery();
             }
           } catch {}
 
-          setReturnStep(6);
+          setReturnStep(5);
           setExpectedNav(true);
 
           let valid = true;
@@ -1463,7 +1483,7 @@
           if (!valid) {
             e.preventDefault();
             alert("Hold on – we need a bit more info:\n\n" + errors.join("\n"));
-            showStep(6);
+            showStep(5);
             setExpectedNav(false);
             return;
           }
@@ -1554,48 +1574,10 @@
     if ($) {
       $(function () {
         if ($("#ctl00_PageBody_TransactionTypeDiv").length) {
-          $(".TransactionTypeSelector").hide();
-
-          const txnHTML = `
-            <div class="modern-transaction-selector d-flex justify-content-around">
-              <button type="button" id="btnOrder" class="btn btn-primary" data-value="rdbOrder">
-                <i class="fas fa-shopping-cart"></i> Order
-              </button>
-              <button type="button" id="btnQuote" class="btn btn-secondary" data-value="rdbQuote">
-                <i class="fas fa-file-alt"></i> Request Quote
-              </button>
-            </div>`;
-          $("#ctl00_PageBody_TransactionTypeDiv").append(txnHTML);
-
-          function updateTransactionStyles(val) {
-            const orderRad = $("#ctl00_PageBody_TransactionTypeSelector_rdbOrder");
-            const quoteRad = $("#ctl00_PageBody_TransactionTypeSelector_rdbQuote");
-
-            if (val === "rdbOrder") {
-              orderRad.prop("checked", true);
-              $("#btnOrder").addClass("btn-primary").removeClass("btn-secondary");
-              $("#btnQuote").addClass("btn-secondary").removeClass("btn-primary");
-            } else {
-              quoteRad.prop("checked", true);
-              $("#btnQuote").addClass("btn-primary").removeClass("btn-secondary");
-              $("#btnOrder").addClass("btn-secondary").removeClass("btn-primary");
-            }
-          }
-
-          updateTransactionStyles($("#ctl00_PageBody_TransactionTypeSelector_rdbOrder").is(":checked") ? "rdbOrder" : "rdbQuote");
-
-          // WL: Force all checkouts to be Orders (hide transaction type)
-          try {
-            updateTransactionStyles("rdbOrder");
-            const $txWrap = $("#ctl00_PageBody_TransactionTypeDiv").closest(".epi-form-col-single-checkout, .epi-form-group-checkout");
-            $txWrap.hide();
-          } catch {}
-
-
-          $(document).on("click", ".modern-transaction-selector button", function () {
-            updateTransactionStyles($(this).data("value"));
-            setStep(1);
-          });
+          // Default everything to an ORDER and hide transaction type UI.
+          try { $("#ctl00_PageBody_TransactionTypeSelector_rdbOrder").prop("checked", true); } catch {}
+          try { $(".TransactionTypeSelector").hide(); } catch {}
+          try { $("#ctl00_PageBody_TransactionTypeDiv").hide(); } catch {}
         }
 
         if ($(".SaleTypeSelector").length) {
@@ -1688,7 +1670,7 @@
     const expectedNav = consumeExpectedNav();
     const returnStep = consumeReturnStep();
     const saved = getStep();
-    const initial = returnStep || saved || 1;
+    const initial = returnStep || saved || 2;
 
     showStep(initial);
     // Apply pickup-mode visibility immediately on load
@@ -1701,7 +1683,7 @@
         setTimeout(tryJump, 300);
         setTimeout(tryJump, 1200);
         setTimeout(() => {
-          if (!tryJump()) showStep(returnStep || saved || 1);
+          if (!tryJump()) showStep(returnStep || saved || 2);
         }, 1600);
       }
     }
