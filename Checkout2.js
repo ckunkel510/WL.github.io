@@ -13,12 +13,24 @@
   // Keep these tiny and WebForms-safe.
   // ---------------------------------------------------------------------------
   function getDeliveredSelected() {
-    const el = document.getElementById('ctl00_PageBody_SaleTypeSelector_rbDelivered');
-    return !!(el && el.checked);
+    const el = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbDelivered");
+    if (el && el.checked) return true;
+    // Fallback: modern selector buttons (no radio checked yet)
+    try {
+      const btn = document.querySelector(`.modern-shipping-selector button[data-value="rbDelivered"].is-selected, .modern-shipping-selector button[data-value="rbDelivered"].selected, .modern-shipping-selector button[data-value="rbDelivered"].active`);
+      if (btn) return true;
+    } catch {}
+    return false;
   }
   function getPickupSelected() {
-    const el = document.getElementById('ctl00_PageBody_SaleTypeSelector_rbCollectLater');
-    return !!(el && el.checked);
+    const el = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbCollectLater");
+    if (el && el.checked) return true;
+    // Fallback: modern selector buttons (no radio checked yet)
+    try {
+      const btn = document.querySelector(`.modern-shipping-selector button[data-value="rbCollectLater"].is-selected, .modern-shipping-selector button[data-value="rbCollectLater"].selected, .modern-shipping-selector button[data-value="rbCollectLater"].active`);
+      if (btn) return true;
+    } catch {}
+    return false;
   }
   function getSaleType() {
     return getPickupSelected() ? 'pickup' : (getDeliveredSelected() ? 'delivered' : '');
@@ -336,6 +348,58 @@
       if (col) col.style.display = isVisible ? "" : "none";
     }
 
+
+    // In Pickup mode we hide the Delivery step, but WebTrack still requires a phone.
+    // We surface the Delivery phone field inside Step 6 so customers can complete it.
+    function mountPickupPhoneInBilling(enable) {
+      const phoneEl = document.getElementById("ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox");
+      if (!phoneEl) return;
+
+      // Find a reasonable container row to move (label + input)
+      let row = phoneEl.closest(".epi-form-group") || phoneEl.closest("div");
+      if (!row) row = phoneEl.parentElement;
+      if (!row) return;
+
+      // Store original location once
+      if (!row.dataset.wlOrigParentId) {
+        const p = row.parentElement;
+        if (p) {
+          if (!p.id) p.id = "wl_del_phone_parent_" + Math.random().toString(16).slice(2);
+          row.dataset.wlOrigParentId = p.id;
+          row.dataset.wlOrigNext = row.nextSibling ? "1" : "0";
+        }
+      }
+
+      const pane6 = wizard.querySelector('.checkout-step[data-step="6"]');
+      if (!pane6) return;
+      const target = pane6.querySelector(".epi-form-col-single-checkout") || pane6;
+
+      if (enable) {
+        // Only move if not already inside step6
+        if (!pane6.contains(row)) {
+          const holderId = "wlPickupPhoneHolder";
+          let holder = document.getElementById(holderId);
+          if (!holder) {
+            holder = document.createElement("div");
+            holder.id = holderId;
+            holder.className = "wl-pickup-phone mb-3";
+            holder.innerHTML = `<div class="font-weight-bold mb-1">Phone (for order updates)</div>`;
+            // Put near the top of step 6
+            target.insertBefore(holder, target.firstChild);
+          }
+          holder.appendChild(row);
+        }
+        row.style.display = "";
+      } else {
+        // Move back to original parent if we can
+        const origId = row.dataset.wlOrigParentId;
+        const orig = origId ? document.getElementById(origId) : null;
+        if (orig && !orig.contains(row)) {
+          orig.appendChild(row);
+        }
+      }
+    }
+
     function norm(s) { return String(s || "").trim(); }
 
     function setIf(el, val) {
@@ -412,12 +476,17 @@
       const phone = document.getElementById(`ctl00_PageBody_${prefix}_ContactTelephoneTextBox`);
       const email = prefix==="InvoiceAddress" ? document.getElementById("ctl00_PageBody_InvoiceAddress_EmailAddressTextBox") : null;
 
+      // Some WebTrack builds don’t have a Billing/Invoice phone field.
+      // In those cases, we validate (and later submit) the Delivery phone field instead.
+      const phoneFallback = (!phone && prefix==="InvoiceAddress") ? document.getElementById("ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox") : null;
+
       const missing = [];
       if (!norm(line1 && line1.value)) missing.push("Street address");
       if (!norm(city && city.value)) missing.push("City");
       if (!(state && norm(state.value))) missing.push("State");
       if (!validateZip(zip && zip.value)) missing.push("ZIP");
-      if (!validatePhone(phone && phone.value)) missing.push("Phone");
+      const phoneVal = (phone && phone.value) ? phone.value : (phoneFallback && phoneFallback.value) ? phoneFallback.value : "";
+      if (!validatePhone(phoneVal)) missing.push("Phone");
       if (requireEmail && !validateEmail(email && email.value)) missing.push("Email");
 
       if (country && !norm(country.value)) {
@@ -488,6 +557,9 @@
       setStep5Visibility(!pickup);
       setDeliverySectionVisibility(!pickup);
 
+      // Surface required phone field in billing step when pickup (delivery step hidden)
+      mountPickupPhoneInBilling(!!pickup);
+
       // If pickup, keep Delivery inputs populated from Billing to satisfy required server fields.
       if (pickup) syncBillingToDelivery();
     }
@@ -539,7 +611,11 @@
         next.textContent = "Next";
         next.addEventListener("click", (e) => {
           e.preventDefault();
-          showStep(num + 1);
+          const cur = getActiveStep ? getActiveStep() : num;
+          // Validate current step and use smart skipping rules
+          if (typeof validateStep === "function" && !validateStep(cur)) return;
+          if (typeof goNextFrom === "function") { goNextFrom(cur); return; }
+          showStep(cur + 1);
         });
         navDiv.appendChild(next);
       } else {
@@ -629,8 +705,18 @@
         const rbPick = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbCollectLater");
         const rbDel = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbDelivered");
         if (!(rbPick && rbPick.checked) && !(rbDel && rbDel.checked)) {
-          showInlineError(2, "<strong>Please choose:</strong> Delivered or Pickup.");
-          return false;
+          // If using the modern button selector, infer selection from the active button
+          try {
+            const btnDel = document.querySelector('.modern-shipping-selector button[data-value="rbDelivered"].is-selected, .modern-shipping-selector button[data-value="rbDelivered"].selected, .modern-shipping-selector button[data-value="rbDelivered"].active');
+            const btnPick = document.querySelector('.modern-shipping-selector button[data-value="rbCollectLater"].is-selected, .modern-shipping-selector button[data-value="rbCollectLater"].selected, .modern-shipping-selector button[data-value="rbCollectLater"].active');
+            if (btnDel && rbDel) { rbDel.checked = true; }
+            if (btnPick && rbPick) { rbPick.checked = true; }
+          } catch {}
+
+          if (!(rbPick && rbPick.checked) && !(rbDel && rbDel.checked)) {
+            showInlineError(2, "<strong>Please choose:</strong> Delivered or Pickup.");
+            return false;
+          }
         }
         clearInlineError(2);
         updatePickupModeUI();
@@ -779,8 +865,32 @@
           <button type="button" id="editDelivery" class="btn btn-link">Edit</button>`;
       }
 
-      wrap.style.display = "none";
       col.insertBefore(sum, wrap);
+
+      // Expose for other modules (prefill, pickup sync)
+      try { window.WLCheckout = window.WLCheckout || {}; window.WLCheckout.refreshDeliverySummary = upd;
+      try { window.WLCheckout.showDeliverySummaryIfFilled = function(){
+        try {
+          const hasAny = safeVal("#ctl00_PageBody_DeliveryAddress_AddressLine1").trim() ||
+                         safeVal("#ctl00_PageBody_DeliveryAddress_City").trim() ||
+                         safeVal("#ctl00_PageBody_DeliveryAddress_Postcode").trim();
+          if (hasAny) { upd(); wrap.style.display = "none"; sum.style.display = ""; }
+        } catch {}
+      }; } catch {}
+ } catch {}
+
+      // If delivery already has data, show summary; otherwise keep inputs visible
+      const hasAny = safeVal("#ctl00_PageBody_DeliveryAddress_AddressLine1").trim() ||
+                     safeVal("#ctl00_PageBody_DeliveryAddress_City").trim() ||
+                     safeVal("#ctl00_PageBody_DeliveryAddress_Postcode").trim();
+      if (hasAny) {
+        upd();
+        wrap.style.display = "none";
+        sum.style.display = "";
+      } else {
+        wrap.style.display = "";
+        sum.style.display = "none";
+      }
 
       sum.addEventListener("click", (e) => {
         if (e.target.id !== "editDelivery") return;
@@ -908,9 +1018,37 @@
           setReturnStep(6);
           setSameAsDelivery(true);
           markAutoCopyDone(); // user-initiated copy: treat as done
+
+          // Client-side copy immediately so the customer sees it without needing to uncheck/recheck
           try {
-            __doPostBack("ctl00$PageBody$CopyDeliveryAddressLinkButton", "");
+            const map = [
+              ["ctl00_PageBody_DeliveryAddress_AddressLine1","ctl00_PageBody_InvoiceAddress_AddressLine1"],
+              ["ctl00_PageBody_DeliveryAddress_AddressLine2","ctl00_PageBody_InvoiceAddress_AddressLine2"],
+              ["ctl00_PageBody_DeliveryAddress_AddressLine3","ctl00_PageBody_InvoiceAddress_AddressLine3"],
+              ["ctl00_PageBody_DeliveryAddress_City","ctl00_PageBody_InvoiceAddress_City"],
+              ["ctl00_PageBody_DeliveryAddress_Postcode","ctl00_PageBody_InvoiceAddress_Postcode"]
+            ];
+            map.forEach(([from,to])=>{
+              const f=document.getElementById(from); const t=document.getElementById(to);
+              if (f && t && (!t.value || !t.value.trim())) t.value = f.value;
+            });
+            const delState=document.getElementById("ctl00_PageBody_DeliveryAddress_CountySelector_CountyList");
+            const invState=document.getElementById("ctl00_PageBody_InvoiceAddress_CountySelector_CountyList");
+            if (delState && invState) {
+              const t = delState.selectedOptions && delState.selectedOptions[0] ? delState.selectedOptions[0].text : "";
+              if (t) selectByText(invState, t);
+            }
+            const delCountry=document.getElementById("ctl00_PageBody_DeliveryAddress_CountrySelectorDeliveryAddress");
+            const invCountry=document.getElementById("ctl00_PageBody_InvoiceAddress_CountrySelector1");
+            if (delCountry && invCountry && (!invCountry.value || !invCountry.value.trim())) invCountry.value = delCountry.value || "USA";
           } catch {}
+
+          refreshInv();
+          wrapInv.style.display = "none";
+          sumInv.style.display = "";
+
+          // If your WebTrack installation requires server-side copy logic, we can re-enable this postback.
+          // try { __doPostBack("ctl00$PageBody$CopyDeliveryAddressLinkButton", ""); } catch {}
         } else {
           setSameAsDelivery(false);
           sumInv.style.display = "none";
@@ -981,6 +1119,13 @@
               return false;
             }
           });
+
+          // Update the collapsed delivery summary immediately if present
+          try {
+            if (window.WLCheckout && typeof window.WLCheckout.refreshDeliverySummary === "function") window.WLCheckout.refreshDeliverySummary();
+            if (window.WLCheckout && typeof window.WLCheckout.showDeliverySummaryIfFilled === "function") window.WLCheckout.showDeliverySummaryIfFilled();
+          } catch {}
+
         }
       }
     } catch {}
