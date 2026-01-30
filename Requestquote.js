@@ -3,7 +3,7 @@
    Handles:
    ✓ ShoppingCart* (ShoppingCart.aspx, ShoppingCart_r.aspx, etc.)
    ✓ ProductDetail.aspx
-   ✓ Products.aspx (before .productGroupScrollingPanelFull)
+   ✓ Products.aspx (before #productlistcards)
    Safe • standalone • no dependencies • retries for late DOM
    ========================================================= */
 
@@ -92,7 +92,6 @@
 
   /* =====================================================
      CART PAGE (inject under .cart-header)
-     Includes retries to survive late DOM or other scripts
   ===================================================== */
   function injectCartCTA() {
     if (!onCartPage()) return;
@@ -161,8 +160,7 @@
   }
 
   /* =====================================================
-     PRODUCTS.ASPX PAGE (inject before .productGroupScrollingPanelFull)
-     Includes retries to survive late DOM or other scripts
+     PRODUCTS.ASPX PAGE (inject before #productlistcards)
   ===================================================== */
   function injectProductsCTA() {
     if (!onProductsPage()) return;
@@ -178,16 +176,19 @@
     const timer = setInterval(() => {
       attempts++;
 
-      const panel = document.querySelector(".productGroupScrollingPanelFull");
+      // Your requested anchor
+      const listCards =
+        document.querySelector("#productlistcards") ||
+        document.querySelector('fieldset.Cards#productlistcards');
 
-      if (panel && !document.querySelector(".wl-quote-products")) {
+      if (listCards && !document.querySelector(".wl-quote-products")) {
         const cta = createCTA(
           "wl-quote-products",
-          "Not sure what you need or ordering for a project? Submit a quote request and we’ll help you get it dialed in."
+          "Ordering for a project or need help pricing materials? Send a quote request and we’ll follow up quickly."
         );
 
-        // Insert right BEFORE the panel (your request)
-        panel.insertAdjacentElement("beforebegin", cta);
+        // Insert right BEFORE the product cards fieldset
+        listCards.insertAdjacentElement("beforebegin", cta);
 
         log("Products CTA injected");
         clearInterval(timer);
@@ -195,7 +196,7 @@
       }
 
       if (attempts >= maxAttempts) {
-        warn("Products CTA: .productGroupScrollingPanelFull not found after retries");
+        warn("Products CTA: #productlistcards not found after retries");
         clearInterval(timer);
       }
     }, 500);
