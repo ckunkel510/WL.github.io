@@ -1,0 +1,75 @@
+{
+  "pageTitle": "Woodson Lumber",
+  "pageSubtitle": "We deliver. We load. We help you finish the job.",
+  "hero": {
+    "type": "carousel",
+    "intervalMs": 6000,
+    "slides": [
+      {
+        "image": "https://images-woodsonlumber.sirv.com/Hero/winter-tools.jpg",
+        "heading": "Winter fixes made easy",
+        "text": "Faucet covers, insulation, fittings, and the advice to get it done right.",
+        "ctas": [
+          { "label": "Shop Plumbing", "href": "Products.aspx?pg=4677&pl1=4677&sort=StockClassSort&direction=asc", "variant": "primary" },
+          { "label": "Store Hours", "href": "Locations.aspx", "variant": "ghost" }
+        ]
+      },
+      {
+        "image": "https://images-woodsonlumber.sirv.com/Hero/delivery.jpg",
+        "heading": "Delivery that saves time",
+        "text": "Order online, pickup fast, or get it delivered where you need it.",
+        "ctas": [
+          { "label": "Shop Online", "href": "Products.aspx", "variant": "primary" },
+          { "label": "Contact Us", "href": "Contact.aspx", "variant": "ghost" }
+        ]
+      }
+    ]
+  },
+  "sections": [
+    {
+      "type": "categoryScroller",
+      "title": "Shop by category",
+      "note": "Swipe or click arrows",
+      "items": [
+        {
+          "title": "Fall Prep",
+          "sub": "Weatherproof, sealants, safety",
+          "image": "https://images-woodsonlumber.sirv.com/Cats/fall-prep.jpg",
+          "href": "Products.aspx?pl1=4677&pg=4677&sort=StockClassSort&direction=asc",
+          "chip": "Seasonal"
+        },
+        {
+          "title": "Plumbing Repair",
+          "sub": "Fittings, valves, pipe, glue",
+          "image": "https://images-woodsonlumber.sirv.com/Cats/plumbing.jpg",
+          "href": "Products.aspx?pg=1234&pl1=1234",
+          "chip": "Hot"
+        },
+        {
+          "title": "Paint",
+          "sub": "Interior & exterior",
+          "image": "https://images-woodsonlumber.sirv.com/Cats/paint.jpg",
+          "href": "Products.aspx?pg=2222&pl1=2222"
+        }
+      ]
+    },
+    {
+      "type": "banners",
+      "title": "Featured",
+      "items": [
+        {
+          "heading": "Weekly Ad",
+          "text": "See what’s on special this week.",
+          "image": "https://images-woodsonlumber.sirv.com/Banners/weekly-ad.jpg",
+          "href": "Resources.aspx"
+        },
+        {
+          "heading": "Contractor Signup",
+          "text": "Get listed and get leads.",
+          "image": "https://images-woodsonlumber.sirv.com/Banners/contractors.jpg",
+          "href": "Contractors.aspx"
+        }
+      ]
+    }
+  ]
+}
