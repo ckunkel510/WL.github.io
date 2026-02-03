@@ -1,11 +1,11 @@
-<script>
+
 /**
  * Woodson Shared Home Module
  * - Works in WebTrack Default.aspx and in Wix HTML embed
  * - Single JS file + JSON config (edit content without redesign)
  *
  * Usage:
- *   <script src="https://YOUR-CDN/woodson-home.js" data-config-url="https://YOUR-CDN/home-config.json"></script>
+ *   <script src="https://ckunkel510.github.io/WL.github.io/woodson-home.js" data-config-url="https://ckunkel510.github.io/WL.github.io/home-config.json"></script>
  *
  * Optional:
  *   <div id="wl-home-mount"></div>  // if not present, script will create one
@@ -745,4 +745,4 @@
     boot();
   }
 })();
-</script>
+
