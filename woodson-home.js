@@ -1,30 +1,27 @@
-
 /**
- * Woodson Shared Home Module
- * - Works in WebTrack Default.aspx and in Wix HTML embed
+ * Woodson Shared Home Module (Full-Width + Mobile Collapse)
+ * - Works in WebTrack Default.aspx and Wix HTML embed
  * - Single JS file + JSON config (edit content without redesign)
  *
- * Usage:
- *   <script src="https://ckunkel510.github.io/WL.github.io/woodson-home.js" data-config-url="https://ckunkel510.github.io/WL.github.io/home-config.json"></script>
+ * Usage (WebTrack / Wix):
+ *   <script defer src="https://YOUR-CDN/woodson-home.js"
+ *           data-config-url="https://YOUR-CDN/home-config.json"></script>
  *
- * Optional:
- *   <div id="wl-home-mount"></div>  // if not present, script will create one
+ * Optional mount:
+ *   <div id="wl-home-mount"></div>
  */
 (function () {
   "use strict";
 
-  // -------------------------
-  // Settings / hooks
-  // -------------------------
   var SCRIPT_EL = document.currentScript;
   var CONFIG_URL =
     (SCRIPT_EL && SCRIPT_EL.getAttribute("data-config-url")) ||
     window.WL_HOME_CONFIG_URL ||
     null;
 
-  // Where to mount:
-  // - If #wl-home-mount exists, use it.
-  // - Else try to prepend to a likely main container.
+  // -------------------------
+  // Mount
+  // -------------------------
   function resolveMount() {
     var existing = document.getElementById("wl-home-mount");
     if (existing) return existing;
@@ -32,16 +29,17 @@
     var mount = document.createElement("div");
     mount.id = "wl-home-mount";
 
-    // Try common containers (WebTrack-ish + general fallbacks)
+    // Try common containers first, but allow breakout CSS to handle width.
     var candidates = [
       document.querySelector("#MainLayoutRow"),
       document.querySelector("main"),
-      document.querySelector(".container"),
       document.querySelector("form"),
+      document.querySelector(".container"),
       document.body
     ].filter(Boolean);
 
-    (candidates[0] || document.body).insertBefore(mount, (candidates[0] || document.body).firstChild);
+    var host = candidates[0] || document.body;
+    host.insertBefore(mount, host.firstChild);
     return mount;
   }
 
@@ -58,23 +56,42 @@
         --wl-card2: #141419;
         --wl-text: #f3f3f3;
         --wl-muted: rgba(243,243,243,.72);
-        --wl-accent: #6b0016; /* Woodson deep red */
+        --wl-accent: #6b0016;
         --wl-accent2: #8d8d8d;
         --wl-radius: 18px;
         --wl-shadow: 0 10px 25px rgba(0,0,0,.25);
       }
 
-      #wl-home {
+      /* Full-width breakout even inside centered containers */
+      #wl-home{
+        width: 100vw;
+        max-width: 100vw;
+        margin-left: calc(50% - 50vw);
+        margin-right: calc(50% - 50vw);
         color: var(--wl-text);
         font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-        padding: 14px 14px 24px;
+        padding: 0;
       }
 
-      /* Make it play nice if the host page has a light background */
+      /* Inner "content width" shell */
       #wl-home .wl-shell{
         background: linear-gradient(180deg, rgba(0,0,0,.55), rgba(0,0,0,.15));
-        border-radius: var(--wl-radius);
         padding: 14px;
+      }
+
+      /* Optional: keep content readable on very large screens */
+      #wl-home .wl-shell-inner{
+        max-width: 1400px;
+        margin: 0 auto;
+      }
+
+      /* Desktop: rounded "card" feel */
+      @media (min-width: 900px){
+        #wl-home .wl-shell{
+          border-radius: var(--wl-radius);
+          margin: 14px;
+          padding: 18px;
+        }
       }
 
       #wl-home .wl-topbar{
@@ -86,8 +103,8 @@
       }
 
       #wl-home .wl-title{
-        font-size: clamp(18px, 2.2vw, 28px);
-        font-weight: 800;
+        font-size: clamp(18px, 2.2vw, 30px);
+        font-weight: 900;
         letter-spacing: .2px;
         margin: 0;
         line-height: 1.1;
@@ -98,7 +115,7 @@
         font-size: 13px;
       }
 
-      /* Hero */
+      /* HERO */
       #wl-home .wl-hero{
         position: relative;
         border-radius: var(--wl-radius);
@@ -110,31 +127,43 @@
         width: 100%;
         aspect-ratio: 16/7;
         min-height: 220px;
-        max-height: 520px;
+        max-height: 560px;
         display:block;
         object-fit: cover;
         background:#000;
       }
+      @media (max-width: 640px){
+        #wl-home .wl-hero-media{
+          aspect-ratio: 4/5;
+          min-height: 420px;
+          max-height: none;
+        }
+      }
+
       #wl-home .wl-hero-overlay{
         position:absolute;
         inset:0;
         display:flex;
         align-items:flex-end;
         padding: 18px;
-        background: linear-gradient(180deg, rgba(0,0,0,.15) 25%, rgba(0,0,0,.75) 100%);
+        background: linear-gradient(180deg, rgba(0,0,0,.10) 30%, rgba(0,0,0,.78) 100%);
       }
+      @media (max-width: 640px){
+        #wl-home .wl-hero-overlay{ padding: 14px; }
+      }
+
       #wl-home .wl-hero-copy{
-        max-width: 820px;
+        max-width: 860px;
       }
       #wl-home .wl-hero-h{
         margin:0;
-        font-size: clamp(18px, 2.4vw, 34px);
-        font-weight: 900;
+        font-size: clamp(18px, 2.6vw, 38px);
+        font-weight: 950;
         line-height: 1.05;
       }
       #wl-home .wl-hero-p{
         margin:8px 0 0;
-        color: rgba(255,255,255,.82);
+        color: rgba(255,255,255,.84);
         font-size: 14px;
         line-height: 1.35;
       }
@@ -149,7 +178,7 @@
         cursor:pointer;
         border-radius: 999px;
         padding: 10px 14px;
-        font-weight: 800;
+        font-weight: 900;
         font-size: 13px;
         text-decoration:none;
         display:inline-flex;
@@ -159,10 +188,7 @@
         user-select:none;
       }
       #wl-home .wl-btn:active{ transform: scale(.98); }
-      #wl-home .wl-btn-primary{
-        background: var(--wl-accent);
-        color: #fff;
-      }
+      #wl-home .wl-btn-primary{ background: var(--wl-accent); color: #fff; }
       #wl-home .wl-btn-ghost{
         background: rgba(255,255,255,.12);
         color:#fff;
@@ -186,14 +212,10 @@
         border: 1px solid rgba(255,255,255,.35);
         cursor:pointer;
       }
-      #wl-home .wl-dot.is-active{
-        background: #fff;
-      }
+      #wl-home .wl-dot.is-active{ background: #fff; }
 
-      /* Section */
-      #wl-home .wl-section{
-        margin-top: 16px;
-      }
+      /* Sections */
+      #wl-home .wl-section{ margin-top: 16px; }
       #wl-home .wl-section-h{
         display:flex;
         align-items:center;
@@ -204,7 +226,7 @@
       #wl-home .wl-section-title{
         margin:0;
         font-size: 16px;
-        font-weight: 900;
+        font-weight: 950;
       }
       #wl-home .wl-section-note{
         color: var(--wl-muted);
@@ -212,10 +234,8 @@
         margin:0;
       }
 
-      /* Horizontal scroller */
-      #wl-home .wl-scroller-wrap{
-        position:relative;
-      }
+      /* Horizontal scroller (desktop) */
+      #wl-home .wl-scroller-wrap{ position:relative; }
       #wl-home .wl-scroller{
         display:flex;
         gap: 12px;
@@ -227,8 +247,8 @@
       #wl-home .wl-scroller::-webkit-scrollbar{ display:none; }
 
       #wl-home .wl-card{
-        min-width: 230px;
-        max-width: 310px;
+        min-width: 240px;
+        max-width: 320px;
         flex: 0 0 auto;
         scroll-snap-align: start;
         border-radius: var(--wl-radius);
@@ -242,17 +262,15 @@
       }
       #wl-home .wl-card-img{
         width:100%;
-        height: 140px;
+        height: 150px;
         object-fit: cover;
         display:block;
         background:#000;
       }
-      #wl-home .wl-card-body{
-        padding: 12px 12px 14px;
-      }
+      #wl-home .wl-card-body{ padding: 12px 12px 14px; }
       #wl-home .wl-card-title{
         margin:0;
-        font-weight: 900;
+        font-weight: 950;
         font-size: 15px;
         line-height: 1.15;
       }
@@ -294,6 +312,23 @@
       #wl-home .wl-arrow-left{ left: 8px; }
       #wl-home .wl-arrow-right{ right: 8px; }
 
+      /* Mobile "collapse": stack cards vertically (no sideways scroll) */
+      @media (max-width: 640px){
+        #wl-home .wl-arrow{ display:none; }
+        #wl-home .wl-scroller{
+          display:grid;
+          grid-template-columns: 1fr;
+          overflow: visible;
+          scroll-snap-type: none;
+          padding-bottom: 0;
+        }
+        #wl-home .wl-card{
+          min-width: 100%;
+          max-width: 100%;
+        }
+        #wl-home .wl-card-img{ height: 170px; }
+      }
+
       /* Banners grid */
       #wl-home .wl-banners{
         display:grid;
@@ -314,7 +349,7 @@
       }
       #wl-home .wl-banner img{
         width:100%;
-        height: 180px;
+        height: 200px;
         object-fit: cover;
         display:block;
         opacity: .95;
@@ -325,23 +360,20 @@
         display:flex;
         align-items:flex-end;
         padding: 14px;
-        background: linear-gradient(180deg, rgba(0,0,0,.10) 35%, rgba(0,0,0,.70) 100%);
+        background: linear-gradient(180deg, rgba(0,0,0,.08) 35%, rgba(0,0,0,.72) 100%);
       }
       #wl-home .wl-banner .wl-banner-h{
         margin:0;
-        font-weight: 900;
+        font-weight: 950;
         font-size: 16px;
       }
       #wl-home .wl-banner .wl-banner-p{
         margin:6px 0 0;
-        color: rgba(255,255,255,.82);
+        color: rgba(255,255,255,.84);
         font-size: 12.5px;
         line-height: 1.25;
       }
-
       @media (min-width: 900px){
-        #wl-home{ padding: 18px 18px 26px; }
-        #wl-home .wl-shell{ padding: 18px; }
         #wl-home .wl-banner{ grid-column: span 6; }
       }
     `;
@@ -381,8 +413,6 @@
     return /youtube\.com|youtu\.be/.test(url || "");
   }
 
-  // For WebTrack product groups, you can build links like:
-  // Products.aspx?pg=4677&pl1=4677&sort=StockClassSort&direction=asc
   function buildHref(href) {
     return safeUrl(href || "#");
   }
@@ -394,9 +424,14 @@
   }
 
   function addDragScroll(scroller) {
+    // Only useful when scroller is horizontal (desktop). On mobile we stack.
     var isDown = false, startX = 0, scrollLeft = 0;
 
     scroller.addEventListener("pointerdown", function (e) {
+      // If the scroller is currently stacked, do nothing.
+      var isGrid = getComputedStyle(scroller).display === "grid";
+      if (isGrid) return;
+
       isDown = true;
       scroller.setPointerCapture(e.pointerId);
       startX = e.clientX;
@@ -409,42 +444,36 @@
       scroller.scrollLeft = scrollLeft - dx;
     });
 
-    function end(e){
+    function end(e) {
       isDown = false;
-      try { scroller.releasePointerCapture(e.pointerId); } catch(_){}
+      try { scroller.releasePointerCapture(e.pointerId); } catch (_) {}
     }
 
     scroller.addEventListener("pointerup", end);
     scroller.addEventListener("pointercancel", end);
-    scroller.addEventListener("pointerleave", function(){ isDown = false; });
+    scroller.addEventListener("pointerleave", function () { isDown = false; });
   }
 
   // -------------------------
   // Renderers
   // -------------------------
   function renderHero(hero) {
-    // hero = { type: "carousel"|"video", slides: [...], heading, text, ctas:[{label,href,variant}] }
     var wrap = el("div", { class: "wl-hero" });
-
-    var mediaHolder = null;
 
     if (hero && hero.type === "video" && hero.videoUrl) {
       var vUrl = safeUrl(hero.videoUrl);
 
       if (isYouTube(vUrl)) {
-        // YouTube embed
         var iframe = el("iframe", {
           class: "wl-hero-media",
           src: vUrl.replace("watch?v=", "embed/").replace("youtu.be/", "www.youtube.com/embed/"),
           title: "Promo video",
           frameborder: "0",
-          allow:
-            "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share",
+          allow: "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share",
           allowfullscreen: "true"
         });
-        mediaHolder = iframe;
+        wrap.appendChild(iframe);
       } else {
-        // MP4 (or similar)
         var video = el("video", {
           class: "wl-hero-media",
           playsinline: "true",
@@ -453,12 +482,10 @@
           loop: "true"
         });
         video.appendChild(el("source", { src: vUrl }));
-        mediaHolder = video;
+        wrap.appendChild(video);
       }
-
-      wrap.appendChild(mediaHolder);
     } else {
-      // Carousel (default)
+      // Carousel default
       var slides = (hero && hero.slides) || [];
       if (!slides.length) {
         slides = [{
@@ -483,8 +510,6 @@
         var s = slides[idx];
         img.src = safeUrl(s.image);
         img.alt = s.alt || "";
-
-        // Update overlay text (handled below by data binding)
         wrap.setAttribute("data-slide-idx", String(idx));
 
         Array.prototype.forEach.call(dots.children, function (d, di) {
@@ -498,7 +523,6 @@
         dots.appendChild(d);
       });
 
-      // autoplay
       setTimeout(function () {
         applySlide(0);
         if (slides.length > 1) {
@@ -508,11 +532,10 @@
         }
       }, 20);
 
-      // Store slides on element for overlay renderer
       wrap.__wlSlides = slides;
     }
 
-    // Overlay copy (supports either hero-level text OR per-slide)
+    // Overlay copy
     var overlay = el("div", { class: "wl-hero-overlay" });
     var copy = el("div", { class: "wl-hero-copy" });
 
@@ -532,20 +555,16 @@
       });
     }
 
-    // If carousel slides exist, bind overlay to current slide
     if (wrap.__wlSlides) {
       var slides = wrap.__wlSlides;
-
       function syncOverlayFromSlide() {
         var sidx = Number(wrap.getAttribute("data-slide-idx") || "0");
         var s = slides[sidx] || slides[0];
-
-        h.textContent = s.heading || hero.heading || "";
-        p.textContent = s.text || hero.text || "";
-        renderCtas(s.ctas || hero.ctas || []);
+        h.textContent = s.heading || (hero && hero.heading) || "";
+        p.textContent = s.text || (hero && hero.text) || "";
+        renderCtas(s.ctas || (hero && hero.ctas) || []);
       }
 
-      // Poll lightly; simple + robust across hosts
       var last = -1;
       setInterval(function () {
         var now = Number(wrap.getAttribute("data-slide-idx") || "0");
@@ -556,7 +575,6 @@
       }, 200);
       setTimeout(syncOverlayFromSlide, 30);
     } else {
-      // Video hero uses hero-level copy
       if (!h.textContent) h.textContent = "Weekly Deals, Local Help, Fast Pickup";
       if (!p.textContent) p.textContent = "Update this hero copy anytime via config JSON.";
       renderCtas((hero && hero.ctas) || [{ label: "Shop Now", href: "Products.aspx", variant: "primary" }]);
@@ -571,13 +589,12 @@
     return wrap;
   }
 
-  function renderCategoryScroller(section) {
-    // section = { title, note, items:[{title,sub,image,href,chip}] }
+  function renderCategorySection(section) {
     var root = el("div", { class: "wl-section" });
 
     var head = el("div", { class: "wl-section-h" });
     head.appendChild(el("h3", { class: "wl-section-title", text: section.title || "Shop Categories" }));
-    head.appendChild(el("p", { class: "wl-section-note", text: section.note || "Swipe or use arrows" }));
+    head.appendChild(el("p", { class: "wl-section-note", text: section.note || "Browse" }));
     root.appendChild(head);
 
     var wrap = el("div", { class: "wl-scroller-wrap" });
@@ -587,10 +604,7 @@
       var a = el("a", { class: "wl-card", href: buildHref(it.href), target: it.target || "_self" });
 
       if (it.chip) a.appendChild(el("div", { class: "wl-chip", text: it.chip }));
-
-      if (it.image) {
-        a.appendChild(el("img", { class: "wl-card-img", alt: it.title || "", src: safeUrl(it.image) }));
-      }
+      if (it.image) a.appendChild(el("img", { class: "wl-card-img", alt: it.title || "", src: safeUrl(it.image) }));
 
       var body = el("div", { class: "wl-card-body" });
       body.appendChild(el("div", { class: "wl-card-title", text: it.title || "Category" }));
@@ -617,7 +631,6 @@
   }
 
   function renderBanners(section) {
-    // section = { title, items:[{heading,text,image,href}] }
     var root = el("div", { class: "wl-section" });
 
     var head = el("div", { class: "wl-section-h" });
@@ -626,10 +639,10 @@
     root.appendChild(head);
 
     var grid = el("div", { class: "wl-banners" });
-
     (section.items || []).forEach(function (b) {
       var a = el("a", { class: "wl-banner", href: buildHref(b.href), target: b.target || "_self" });
       if (b.image) a.appendChild(el("img", { alt: b.heading || "", src: safeUrl(b.image) }));
+
       var copy = el("div", { class: "wl-banner-copy" });
       var inner = el("div", null, [
         el("div", { class: "wl-banner-h", text: b.heading || "" }),
@@ -637,6 +650,7 @@
       ]);
       copy.appendChild(inner);
       a.appendChild(copy);
+
       grid.appendChild(a);
     });
 
@@ -645,40 +659,41 @@
   }
 
   // -------------------------
-  // Main render
+  // Render main
   // -------------------------
   function render(config) {
     injectCSS();
 
     var mount = resolveMount();
-    var outer = el("section", { id: "wl-home" });
-    var shell = el("div", { class: "wl-shell" });
 
-    // Top title (optional)
-    var topbar = el("div", { class: "wl-topbar" });
-    var titleBlock = el("div", null, [
-      el("h1", { class: "wl-title", text: (config && config.pageTitle) || "Woodson Home" }),
-      el("p", { class: "wl-subtitle", text: (config && config.pageSubtitle) || "Updated from one shared config — WebTrack + Wix." })
-    ]);
-    topbar.appendChild(titleBlock);
-    shell.appendChild(topbar);
-
-    // Hero
-    shell.appendChild(renderHero(config && config.hero));
-
-    // Sections
-    (config.sections || []).forEach(function (s) {
-      if (!s || !s.type) return;
-      if (s.type === "categoryScroller") shell.appendChild(renderCategoryScroller(s));
-      else if (s.type === "banners") shell.appendChild(renderBanners(s));
-    });
-
-    outer.appendChild(shell);
-
-    // Replace existing module if rerender
+    // Clear previous render if present
     var existing = document.getElementById("wl-home");
     if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
 
+    var outer = el("section", { id: "wl-home" });
+    var shell = el("div", { class: "wl-shell" });
+    var inner = el("div", { class: "wl-shell-inner" });
+
+    var topbar = el("div", { class: "wl-topbar" });
+    topbar.appendChild(
+      el("div", null, [
+        el("h1", { class: "wl-title", text: (config && config.pageTitle) || "Woodson Lumber" }),
+        el("p", { class: "wl-subtitle", text: (config && config.pageSubtitle) || "Updated from one shared config — WebTrack + Wix." })
+      ])
+    );
+
+    inner.appendChild(topbar);
+
+    inner.appendChild(renderHero(config && config.hero));
+
+    (config && config.sections ? config.sections : []).forEach(function (s) {
+      if (!s || !s.type) return;
+      if (s.type === "categoryScroller") inner.appendChild(renderCategorySection(s));
+      if (s.type === "banners") inner.appendChild(renderBanners(s));
+    });
+
+    shell.appendChild(inner);
+    outer.appendChild(shell);
     mount.appendChild(outer);
   }
 
@@ -686,20 +701,26 @@
   // Config loader
   // -------------------------
   function boot() {
-    // Basic default config if none provided
+    // If you ever want to support inline config (CSP-friendly), you can set:
+    // window.WL_HOME_CONFIG = { ... };
+    if (window.WL_HOME_CONFIG && typeof window.WL_HOME_CONFIG === "object") {
+      render(window.WL_HOME_CONFIG);
+      return;
+    }
+
     var fallback = {
-      pageTitle: "Woodson Home",
-      pageSubtitle: "Edit the JSON config to change hero, categories, and banners.",
+      pageTitle: "Woodson Lumber",
+      pageSubtitle: "We deliver. We load. We help you finish the job.",
       hero: {
         type: "carousel",
         intervalMs: 6500,
         slides: [
           {
             image: "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/Statements.png",
-            heading: "Deals, delivery, and local help",
-            text: "Swap these slides by editing one JSON file.",
+            heading: "Welcome to Woodson",
+            text: "Edit one JSON file to update this homepage in WebTrack and Wix.",
             ctas: [
-              { label: "Shop All", href: "Products.aspx", variant: "primary" },
+              { label: "Shop Online", href: "Products.aspx", variant: "primary" },
               { label: "Weekly Ad", href: "Resources.aspx", variant: "ghost" }
             ]
           }
@@ -708,12 +729,12 @@
       sections: [
         {
           type: "categoryScroller",
-          title: "Shop by department",
-          note: "Tap a card to jump to a product group",
+          title: "Shop by category",
+          note: "On mobile, these stack for easy tapping",
           items: [
-            { title: "Plumbing", sub: "Pipes, fittings, repair", href: "Products.aspx", chip: "Popular" },
+            { title: "Plumbing", sub: "Fittings, repair, essentials", href: "Products.aspx", chip: "Popular" },
             { title: "Paint", sub: "Interior & exterior", href: "Products.aspx" },
-            { title: "Tools", sub: "Power tools & hand tools", href: "Products.aspx" }
+            { title: "Tools", sub: "Power + hand tools", href: "Products.aspx" }
           ]
         }
       ]
@@ -738,11 +759,9 @@
       });
   }
 
-  // Run
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", boot);
   } else {
     boot();
   }
 })();
-
