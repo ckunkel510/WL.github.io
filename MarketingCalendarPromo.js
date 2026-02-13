@@ -3,7 +3,7 @@ WL Promo Calendar (BisTrack Dashboard)
 - Renders a month grid calendar from PromotionHeader table (Table208993)
 - Creates promo badges with data-promotionid so tooltips/panel can bind
 - Uses PromotionLine table (Table208994) for hover/click details
-- Improved right-side panel layout (line cards + optional images)
+- Pulls Product images from a published Google Sheet (pubhtml) image_link column
 ============================================================================ */
 
 (function () {
@@ -11,7 +11,11 @@ WL Promo Calendar (BisTrack Dashboard)
 
   // ====== CONFIG ======
   const PROMO_HEADER_TABLE_SELECTOR = "table.Table208993";
-  const PROMO_LINE_TABLE_SELECTOR = "table.Table208994"; // you have this in the output
+  const PROMO_LINE_TABLE_SELECTOR = "table.Table208994";
+
+  // Published Google Sheet (pubhtml) that contains: ProductID + image_link
+  const GOOGLE_SHEET_PUBHTML_URL =
+    "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ5vq1Sr9diRHlwXDgYF5O9ERBlcR1iOt279hdi4xFJirj3YIPTQRAIF1vBGpGFSJj2KUNKg-3Oiaiq/pubhtml";
 
   // Your injected calendar container
   const CAL_ID = "wlPromoCal";
@@ -23,9 +27,8 @@ WL Promo Calendar (BisTrack Dashboard)
   const BADGE_CLASS = "wlPromoBadge";
   const TOOLTIP_PREVIEW_COUNT = 5;
 
-  // Optional: if you add ImageURL column into PromotionLine dataset,
-  // this script will automatically render it in the panel cards.
-  const IMAGE_FIELD_CANDIDATES = ["ImageURL", "ImageUrl", "Image", "ImageLink", "Image Link", "ImageURLFull"];
+  // If you ever add ImageURL into PromotionLine, we can use it as fallback.
+  const IMAGE_FIELD_CANDIDATES = ["ImageURL", "ImageUrl", "Image", "ImageLink", "image_link", "image link"];
 
   // ====== Helpers ======
   const qs = (sel, root = document) => root.querySelector(sel);
@@ -46,11 +49,9 @@ WL Promo Calendar (BisTrack Dashboard)
     const str = safeText(s).trim();
     if (!str) return null;
 
-    // Native parse first
     const d = new Date(str);
     if (!isNaN(d.getTime())) return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
-    // MM/DD/YYYY
     const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (m) {
       const mm = parseInt(m[1], 10) - 1;
@@ -91,9 +92,73 @@ WL Promo Calendar (BisTrack Dashboard)
     return "";
   }
 
+  function normalizeHeader(h) {
+    return safeText(h).trim().toLowerCase().replace(/\s+/g, "_");
+  }
+
+  // ====== Google Sheet image map ======
+  // productId -> imageUrl
+  let PRODUCT_IMAGE_MAP = {};
+  let PRODUCT_IMAGE_MAP_READY = false;
+
+  async function loadProductImageMapFromPubHtml() {
+    PRODUCT_IMAGE_MAP_READY = false;
+    PRODUCT_IMAGE_MAP = {};
+
+    try {
+      const res = await fetch(GOOGLE_SHEET_PUBHTML_URL, { credentials: "omit", cache: "no-store" });
+      if (!res.ok) throw new Error(`Sheet fetch failed: ${res.status}`);
+      const html = await res.text();
+
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      const table = doc.querySelector("table");
+      if (!table) throw new Error("No table found in pubhtml");
+
+      // Try to find the header row
+      const headerRow = table.querySelector("tr");
+      if (!headerRow) throw new Error("No header row found");
+
+      const headerCells = Array.from(headerRow.querySelectorAll("th, td")).map((c) => safeText(c.textContent).trim());
+      const headersNorm = headerCells.map(normalizeHeader);
+
+      const productIdIdx = headersNorm.findIndex((h) => h === "productid" || h === "product_id" || h === "product");
+      const imageIdx = headersNorm.findIndex((h) => h === "image_link" || h === "imagelink" || h === "imageurl" || h === "image_url");
+
+      if (productIdIdx === -1) throw new Error("Could not find ProductID column in sheet");
+      if (imageIdx === -1) throw new Error("Could not find image_link column in sheet");
+
+      // Read remaining rows
+      const rows = Array.from(table.querySelectorAll("tr")).slice(1);
+      rows.forEach((tr) => {
+        const tds = Array.from(tr.querySelectorAll("td"));
+        if (!tds.length) return;
+
+        const pid = safeText(tds[productIdIdx]?.textContent).trim();
+        const img = safeText(tds[imageIdx]?.textContent).trim();
+
+        if (pid && img) PRODUCT_IMAGE_MAP[pid] = img;
+      });
+
+      PRODUCT_IMAGE_MAP_READY = true;
+    } catch (err) {
+      // Not fatal: panel will still render, just without sheet images
+      PRODUCT_IMAGE_MAP_READY = false;
+      // eslint-disable-next-line no-console
+      console.warn("[WL PromoCal] Image map load failed:", err);
+    }
+  }
+
+  function getImageForProductId(productId, lineObj) {
+    const pid = safeText(productId).trim();
+    if (pid && PRODUCT_IMAGE_MAP[pid]) return PRODUCT_IMAGE_MAP[pid];
+
+    // fallback: if PromotionLine happens to include an image field
+    const fallback = pickFirstField(lineObj, IMAGE_FIELD_CANDIDATES);
+    return fallback || "";
+  }
+
   // ====== UI Ensure ======
   function ensureUIOnce() {
-    // tooltip
     if (!qs("#wlPromoTooltip")) {
       const tip = document.createElement("div");
       tip.id = "wlPromoTooltip";
@@ -103,7 +168,6 @@ WL Promo Calendar (BisTrack Dashboard)
       document.body.appendChild(tip);
     }
 
-    // panel
     if (!qs("#wlPromoDetailsPanel")) {
       const panel = document.createElement("div");
       panel.id = "wlPromoDetailsPanel";
@@ -155,7 +219,7 @@ WL Promo Calendar (BisTrack Dashboard)
     t.innerHTML = titleHtml;
     b.innerHTML = bodyHtml;
     panel.style.display = "block";
-    bindCloseButton(); // ensure always closable
+    bindCloseButton();
   }
 
   function closePanel() {
@@ -169,8 +233,6 @@ WL Promo Calendar (BisTrack Dashboard)
     if (!table) return [];
 
     const rows = qsa("tbody tr", table);
-
-    // locate columns by header name to be safer.
     const headers = qsa("thead th", table).map((th) => (th.innerText || "").trim());
     const idx = (name) => headers.findIndex((h) => h.toLowerCase() === name.toLowerCase());
 
@@ -245,11 +307,9 @@ WL Promo Calendar (BisTrack Dashboard)
 
     const start = startOfMonth(currentMonth);
 
-    // Calendar grid: start on Sunday
     const startDay = new Date(start);
     startDay.setDate(start.getDate() - start.getDay());
 
-    // 6 weeks grid (42 cells)
     for (let i = 0; i < 42; i++) {
       const day = new Date(startDay);
       day.setDate(startDay.getDate() + i);
@@ -265,7 +325,6 @@ WL Promo Calendar (BisTrack Dashboard)
       const stack = document.createElement("div");
       stack.className = "wl-promo-stack";
 
-      // promos active on this day
       const todays = promos.filter((p) => p.from && p.to && inRange(day, p.from, p.to));
 
       todays.forEach((p) => {
@@ -298,6 +357,7 @@ WL Promo Calendar (BisTrack Dashboard)
         `<span class="wl-chip">PromoID: ${escHtml(id || "?")}</span>`,
         promo.branchId ? `<span class="wl-chip">Branch: ${escHtml(promo.branchId)}</span>` : "",
         `<span class="wl-chip">Lines: ${count}</span>`,
+        PRODUCT_IMAGE_MAP_READY ? `<span class="wl-chip">Images: Sheet</span>` : `<span class="wl-chip">Images: n/a</span>`,
       ].join("");
 
       const dateLine = promo.from && promo.to ? `${formatDate(promo.from)} – ${formatDate(promo.to)}` : "";
@@ -305,10 +365,9 @@ WL Promo Calendar (BisTrack Dashboard)
       const preview = lines
         .slice(0, TOOLTIP_PREVIEW_COUNT)
         .map((l) => {
-          const prod = getFieldLoose(l, ["ProductID", "productid"]);
           const code = getFieldLoose(l, ["ProductCode", "productcode"]);
           const desc = getFieldLoose(l, ["Description", "description"]);
-          const label = prod ? `${escHtml(prod)}${code ? " • " + escHtml(code) : ""}` : "Line item";
+          const label = code ? escHtml(code) : "Line item";
           return `<div class="wl-panel-row"><strong>${label}</strong><div class="wl-muted">${escHtml(desc)}</div></div>`;
         })
         .join("");
@@ -340,16 +399,19 @@ WL Promo Calendar (BisTrack Dashboard)
       const lines = linesByPromoId[id] || [];
 
       const dateLine =
-        promo.from && promo.to ? `<span class="wl-muted">(${escHtml(formatDate(promo.from))} – ${escHtml(formatDate(promo.to))})</span>` : "";
+        promo.from && promo.to
+          ? `<span class="wl-muted">(${escHtml(formatDate(promo.from))} – ${escHtml(formatDate(promo.to))})</span>`
+          : "";
 
       const title = `${escHtml(promo.name || promo.code || "Promotion")} ${dateLine}`;
 
+      // Build pretty cards. ProductID is used ONLY to look up images; not displayed.
       const linesHtml =
         lines.length > 0
           ? `<div class="wl-lines">` +
             lines
               .map((l) => {
-                const prodId = getFieldLoose(l, ["ProductID", "productid"]);
+                const prodId = getFieldLoose(l, ["ProductID", "productid"]); // for image lookup only
                 const code = getFieldLoose(l, ["ProductCode", "productcode"]);
                 const desc = getFieldLoose(l, ["Description", "description"]);
 
@@ -358,9 +420,8 @@ WL Promo Calendar (BisTrack Dashboard)
                 const uom = getFieldLoose(l, ["UOM", "Uom", "uom"]);
                 const group = getFieldLoose(l, ["ProductGroupID", "GroupID", "groupid"]);
 
-                const imgUrl = pickFirstField(l, IMAGE_FIELD_CANDIDATES);
-
-                const titleText = code || (prodId ? `Product ${prodId}` : "Line Item");
+                const imgUrl = getImageForProductId(prodId, l);
+                const titleText = code || "Promotion Line Item";
 
                 return `
                   <div class="wl-line-card">
@@ -369,7 +430,6 @@ WL Promo Calendar (BisTrack Dashboard)
                       <div>
                         <div class="wl-line-title">${escHtml(titleText)}</div>
                         <div class="wl-line-meta">
-                          ${prodId ? `<span class="wl-kv">ProductID: ${escHtml(prodId)}</span>` : ""}
                           ${uom ? `<span class="wl-kv">UOM: ${escHtml(uom)}</span>` : ""}
                           ${qty ? `<span class="wl-kv">Qty: ${escHtml(qty)}</span>` : ""}
                           ${price ? `<span class="wl-kv">Price: ${escHtml(price)}</span>` : ""}
@@ -386,7 +446,6 @@ WL Promo Calendar (BisTrack Dashboard)
           : `<div class="wl-panel-row wl-muted">No line rows were found for this PromotionID.</div>`;
 
       const body = `
-        <div class="wl-panel-row"><strong>PromotionID:</strong> ${escHtml(id || "?")}</div>
         <div class="wl-panel-row"><strong>Branch:</strong> ${escHtml(promo.branchId || "All")}</div>
         <div class="wl-panel-row"><strong>Promo Code:</strong> ${escHtml(promo.code || "")}</div>
         <div class="wl-panel-row"><strong>Lines:</strong> ${lines.length}</div>
@@ -398,15 +457,15 @@ WL Promo Calendar (BisTrack Dashboard)
   }
 
   // ====== Init ======
-  function init() {
+  async function init() {
     ensureUIOnce();
     bindCloseButton();
 
+    // Load the image map early (non-fatal if it fails)
+    await loadProductImageMapFromPubHtml();
+
     const cal = qs("#" + CAL_ID);
-    if (!cal) {
-      // calendar container not present => nothing to do
-      return;
-    }
+    if (!cal) return;
 
     const promos = getPromosFromHeaderTable();
     const lines = buildLinesByPromoId();
@@ -414,7 +473,6 @@ WL Promo Calendar (BisTrack Dashboard)
     let current = new Date();
     current = new Date(current.getFullYear(), current.getMonth(), 1);
 
-    // Wire nav buttons
     const prev = qs("#" + PREV_ID);
     const next = qs("#" + NEXT_ID);
 
@@ -446,7 +504,7 @@ WL Promo Calendar (BisTrack Dashboard)
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
+    document.addEventListener("DOMContentLoaded", () => init());
   } else {
     init();
   }
