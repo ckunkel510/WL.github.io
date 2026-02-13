@@ -1,10 +1,9 @@
 /* ============================================================================
 WL Promo Calendar (BisTrack Dashboard)
 - Renders a month grid calendar from PromotionHeader table (Table208993)
-- Creates promo badges with data-promotionid so tooltips/panel can bind
 - Uses PromotionLine table (Table208994) for hover/click details
 - Loads Product images via JSONP from Apps Script (works from file://)
-- Optimized: calendar renders immediately; images load in background
+- IMPORTANT: Google Sheet uses "id" + "image_link"
 ============================================================================ */
 
 (function () {
@@ -28,10 +27,8 @@ WL Promo Calendar (BisTrack Dashboard)
   const BADGE_CLASS = "wlPromoBadge";
   const TOOLTIP_PREVIEW_COUNT = 5;
 
-  // Optional fallback if PromotionLine includes an image field later
   const IMAGE_FIELD_CANDIDATES = ["ImageURL", "ImageUrl", "Image", "ImageLink", "image_link", "image link"];
 
-  // Simple placeholder (no external request). You can swap this for a local icon if you want.
   const PLACEHOLDER_DATA_URI =
     "data:image/svg+xml;charset=utf-8," +
     encodeURIComponent(
@@ -57,20 +54,26 @@ WL Promo Calendar (BisTrack Dashboard)
       .replace(/'/g, "&#039;");
   }
 
-  // Normalize ProductID so "12345.0" / "12,345" / " 12345 " all become "12345"
-  function normalizeProductId(x) {
+  // Normalize IDs (works for ProductID from PromotionLine AND "id" from sheet)
+  function normalizeId(x) {
     let s = safeText(x).trim();
     if (!s) return "";
     s = s.replace(/,/g, "");
-    // If it looks numeric with .0 trailing, strip it
     s = s.replace(/\.0+$/, "");
-    // If it’s purely numeric after cleanup, keep digits only
+
+    // If numeric, collapse to integer string
     if (/^\d+(\.\d+)?$/.test(s)) {
       const n = parseInt(s, 10);
       return Number.isFinite(n) ? String(n) : s;
     }
-    // last resort: trim again
-    return s.trim();
+
+    // If it’s zero-padded numeric (like 00013), also collapse
+    if (/^0+\d+$/.test(s)) {
+      const n2 = parseInt(s, 10);
+      return Number.isFinite(n2) ? String(n2) : s;
+    }
+
+    return s;
   }
 
   function parseDateLoose(s) {
@@ -120,7 +123,7 @@ WL Promo Calendar (BisTrack Dashboard)
     return "";
   }
 
-  // ====== Image Map (ProductID -> ImageURL) via JSONP ======
+  // ====== Image Map (id -> image_link) via JSONP ======
   let PRODUCT_IMAGE_MAP = {};
   let PRODUCT_IMAGE_MAP_READY = false;
   let IMAGE_MAP_PROMISE = null;
@@ -164,10 +167,10 @@ WL Promo Calendar (BisTrack Dashboard)
             return;
           }
 
-          // Normalize keys so they match PromotionLine ProductID formatting
+          // Normalize keys from the sheet ("id" column)
           const normalized = {};
           for (const k in rawMap) {
-            const nk = normalizeProductId(k);
+            const nk = normalizeId(k);
             const v = rawMap[k];
             if (nk && v) normalized[nk] = String(v).trim();
           }
@@ -175,9 +178,7 @@ WL Promo Calendar (BisTrack Dashboard)
           PRODUCT_IMAGE_MAP = normalized;
           PRODUCT_IMAGE_MAP_READY = true;
 
-          // If panel is open, update images in place
           refreshPanelImages();
-
           resolve(true);
         } catch (e) {
           PRODUCT_IMAGE_MAP_READY = false;
@@ -204,10 +205,11 @@ WL Promo Calendar (BisTrack Dashboard)
   }
 
   function getImageForProductId(productId, lineObj) {
-    const pid = normalizeProductId(productId);
-    if (pid && PRODUCT_IMAGE_MAP && PRODUCT_IMAGE_MAP[pid]) return PRODUCT_IMAGE_MAP[pid];
+    // PromotionLine gives ProductID (ex: 84). Sheet map uses id (also 84).
+    const pid = normalizeId(productId);
+    if (pid && PRODUCT_IMAGE_MAP_READY && PRODUCT_IMAGE_MAP[pid]) return PRODUCT_IMAGE_MAP[pid];
 
-    // fallback: if PromotionLine happens to include an image field
+    // fallback: if PromotionLine includes an image field later
     const fallback = pickFirstField(lineObj, IMAGE_FIELD_CANDIDATES);
     return fallback || "";
   }
@@ -286,22 +288,19 @@ WL Promo Calendar (BisTrack Dashboard)
     const panel = qs("#wlPromoDetailsPanel");
     if (!panel || panel.style.display === "none") return;
 
-    // Find any images that were rendered without a src (or placeholder), and try to populate them now
     qsa("img.wl-line-img[data-productid]", panel).forEach((img) => {
-      const pid = normalizeProductId(img.getAttribute("data-productid") || "");
+      const pid = normalizeId(img.getAttribute("data-productid") || "");
       if (!pid) return;
 
       const url = PRODUCT_IMAGE_MAP_READY && PRODUCT_IMAGE_MAP[pid] ? PRODUCT_IMAGE_MAP[pid] : "";
       if (url) {
-        // Only replace if currently placeholder / empty
         const current = safeText(img.getAttribute("src")).trim();
         if (!current || current === PLACEHOLDER_DATA_URI) img.src = url;
       }
     });
 
-    // Update “Image ✓/—” indicators too
     qsa("[data-img-status][data-productid]", panel).forEach((el) => {
-      const pid = normalizeProductId(el.getAttribute("data-productid") || "");
+      const pid = normalizeId(el.getAttribute("data-productid") || "");
       const has = !!(pid && PRODUCT_IMAGE_MAP_READY && PRODUCT_IMAGE_MAP[pid]);
       el.textContent = has ? "Image: ✓" : "Image: —";
     });
@@ -405,7 +404,6 @@ WL Promo Calendar (BisTrack Dashboard)
       stack.className = "wl-promo-stack";
 
       const todays = promos.filter((p) => p.from && p.to && inRange(day, p.from, p.to));
-
       todays.forEach((p) => {
         const badge = document.createElement("div");
         badge.className = "wl-promo " + BADGE_CLASS;
@@ -457,11 +455,6 @@ WL Promo Calendar (BisTrack Dashboard)
         ${dateLine ? `<div class="wl-muted" style="margin-bottom:8px;">${escHtml(dateLine)}</div>` : ""}
         <div style="margin-bottom:8px;">${chips}</div>
         ${preview || `<div class="wl-muted">No line details found.</div>`}
-        ${
-          count > TOOLTIP_PREVIEW_COUNT
-            ? `<div class="wl-muted" style="margin-top:6px;">+${count - TOOLTIP_PREVIEW_COUNT} more… (click)</div>`
-            : ""
-        }
       `;
 
       showTooltip(html, ev.clientX, ev.clientY);
@@ -488,19 +481,13 @@ WL Promo Calendar (BisTrack Dashboard)
           ? `<div class="wl-lines">` +
             lines
               .map((l) => {
-                const prodIdRaw = getFieldLoose(l, ["ProductID", "productid"]); // internal only
-                const prodId = normalizeProductId(prodIdRaw);
+                const prodIdRaw = getFieldLoose(l, ["ProductID", "productid"]);
+                const prodId = normalizeId(prodIdRaw);
 
                 const code = getFieldLoose(l, ["ProductCode", "productcode"]);
                 const desc = getFieldLoose(l, ["Description", "description"]);
-                const qty = getFieldLoose(l, ["Quantity", "Qty", "qty"]);
-                const price = getFieldLoose(l, ["SalePrice", "Price", "price"]);
-                const uom = getFieldLoose(l, ["UOM", "Uom", "uom"]);
-                const group = getFieldLoose(l, ["ProductGroupID", "GroupID", "groupid"]);
 
                 const imgUrl = getImageForProductId(prodId, l);
-                const titleText = code || "Promotion Line Item";
-
                 const hasImg = !!(prodId && PRODUCT_IMAGE_MAP_READY && PRODUCT_IMAGE_MAP[prodId]);
 
                 return `
@@ -512,16 +499,10 @@ WL Promo Calendar (BisTrack Dashboard)
                            alt=""
                            onerror="this.src='${PLACEHOLDER_DATA_URI}'">
                       <div>
-                        <div class="wl-line-title">${escHtml(titleText)}</div>
-
+                        <div class="wl-line-title">${escHtml(code || "Item")}</div>
                         <div class="wl-line-meta">
-                          ${uom ? `<span class="wl-kv">UOM: ${escHtml(uom)}</span>` : ""}
-                          ${qty ? `<span class="wl-kv">Qty: ${escHtml(qty)}</span>` : ""}
-                          ${price ? `<span class="wl-kv">Price: ${escHtml(price)}</span>` : ""}
-                          ${group ? `<span class="wl-kv">Group: ${escHtml(group)}</span>` : ""}
                           <span class="wl-kv" data-img-status="1" data-productid="${escHtml(prodId)}">${hasImg ? "Image: ✓" : "Image: —"}</span>
                         </div>
-
                         ${desc ? `<div class="wl-line-desc">${escHtml(desc)}</div>` : `<div class="wl-line-desc wl-muted">No description.</div>`}
                       </div>
                     </div>
@@ -541,7 +522,6 @@ WL Promo Calendar (BisTrack Dashboard)
 
       openPanel(title, body);
 
-      // If images weren’t ready at click time, refresh once the map arrives.
       if (!PRODUCT_IMAGE_MAP_READY && IMAGE_MAP_PROMISE) {
         IMAGE_MAP_PROMISE.then(() => refreshPanelImages());
       } else {
@@ -584,10 +564,10 @@ WL Promo Calendar (BisTrack Dashboard)
       });
     }
 
-    // Render immediately (fast)
+    // Render immediately
     rerender();
 
-    // Kick off image map load in background (do NOT block dashboard)
+    // Load image map in background
     IMAGE_MAP_PROMISE = loadProductImageMapJSONP();
 
     document.addEventListener("keydown", (e) => {
