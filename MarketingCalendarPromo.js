@@ -3,7 +3,7 @@ WL Promo Calendar (BisTrack Dashboard)
 - Renders a month grid calendar from PromotionHeader table (Table208993)
 - Creates promo badges with data-promotionid so tooltips/panel can bind
 - Uses PromotionLine table (Table208994) for hover/click details
-- Pulls Product images via CORS-safe Apps Script Web App (ProductID -> image_link)
+- Loads Product images via JSONP from Apps Script (works from file://)
 ============================================================================ */
 
 (function () {
@@ -13,7 +13,7 @@ WL Promo Calendar (BisTrack Dashboard)
   const PROMO_HEADER_TABLE_SELECTOR = "table.Table208993";
   const PROMO_LINE_TABLE_SELECTOR = "table.Table208994";
 
-  // CORS-safe image map endpoint (Apps Script Web App)
+  // Apps Script Web App URL (must support ?callback= for JSONP)
   const IMAGE_MAP_URL =
     "https://script.google.com/macros/s/AKfycbxuC8mU6Bw9e_OX5akSfTKfNJtj3QHHUbAdYafnO8c2NryihJk-4pU2K77negMebo9p/exec";
 
@@ -27,7 +27,7 @@ WL Promo Calendar (BisTrack Dashboard)
   const BADGE_CLASS = "wlPromoBadge";
   const TOOLTIP_PREVIEW_COUNT = 5;
 
-  // If you ever add ImageURL into PromotionLine, we can use it as fallback.
+  // Optional fallback if PromotionLine includes an image field later
   const IMAGE_FIELD_CANDIDATES = ["ImageURL", "ImageUrl", "Image", "ImageLink", "image_link", "image link"];
 
   // ====== Helpers ======
@@ -49,11 +49,9 @@ WL Promo Calendar (BisTrack Dashboard)
     const str = safeText(s).trim();
     if (!str) return null;
 
-    // Native parse first
     const d = new Date(str);
     if (!isNaN(d.getTime())) return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
-    // MM/DD/YYYY
     const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
     if (m) {
       const mm = parseInt(m[1], 10) - 1;
@@ -94,27 +92,74 @@ WL Promo Calendar (BisTrack Dashboard)
     return "";
   }
 
-  // ====== Image Map (ProductID -> ImageURL) ======
+  // ====== Image Map (ProductID -> ImageURL) via JSONP ======
   let PRODUCT_IMAGE_MAP = {};
   let PRODUCT_IMAGE_MAP_READY = false;
 
-  async function loadProductImageMap() {
+  function loadProductImageMapJSONP(timeoutMs = 8000) {
     PRODUCT_IMAGE_MAP_READY = false;
     PRODUCT_IMAGE_MAP = {};
 
-    try {
-      const res = await fetch(IMAGE_MAP_URL, { cache: "no-store" });
-      if (!res.ok) throw new Error(`Image map fetch failed: ${res.status}`);
-      const data = await res.json();
+    return new Promise((resolve) => {
+      const cbName = "__wlImgMapCb_" + Math.random().toString(36).slice(2);
+      const url = IMAGE_MAP_URL + (IMAGE_MAP_URL.includes("?") ? "&" : "?") + "callback=" + cbName + "&_=" + Date.now();
 
-      if (!data || !data.ok || !data.map) throw new Error("Bad image map payload");
-      PRODUCT_IMAGE_MAP = data.map || {};
-      PRODUCT_IMAGE_MAP_READY = true;
-    } catch (err) {
-      PRODUCT_IMAGE_MAP_READY = false;
-      // eslint-disable-next-line no-console
-      console.warn("[WL PromoCal] Image map load failed:", err);
-    }
+      let done = false;
+
+      function cleanup() {
+        try { delete window[cbName]; } catch {}
+        const s = document.getElementById(cbName);
+        if (s && s.parentNode) s.parentNode.removeChild(s);
+      }
+
+      const timer = setTimeout(() => {
+        if (done) return;
+        done = true;
+        cleanup();
+        PRODUCT_IMAGE_MAP_READY = false;
+        // eslint-disable-next-line no-console
+        console.warn("[WL PromoCal] Image map JSONP timed out");
+        resolve(false);
+      }, timeoutMs);
+
+      window[cbName] = function (data) {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        cleanup();
+
+        try {
+          if (data && data.ok && data.map) {
+            PRODUCT_IMAGE_MAP = data.map || {};
+            PRODUCT_IMAGE_MAP_READY = true;
+            resolve(true);
+          } else {
+            PRODUCT_IMAGE_MAP_READY = false;
+            resolve(false);
+          }
+        } catch (e) {
+          PRODUCT_IMAGE_MAP_READY = false;
+          resolve(false);
+        }
+      };
+
+      const script = document.createElement("script");
+      script.id = cbName;
+      script.src = url;
+      script.async = true;
+      script.onerror = function () {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        cleanup();
+        PRODUCT_IMAGE_MAP_READY = false;
+        // eslint-disable-next-line no-console
+        console.warn("[WL PromoCal] Image map JSONP failed to load script");
+        resolve(false);
+      };
+
+      document.head.appendChild(script);
+    });
   }
 
   function getImageForProductId(productId, lineObj) {
@@ -128,7 +173,6 @@ WL Promo Calendar (BisTrack Dashboard)
 
   // ====== UI Ensure ======
   function ensureUIOnce() {
-    // tooltip
     if (!qs("#wlPromoTooltip")) {
       const tip = document.createElement("div");
       tip.id = "wlPromoTooltip";
@@ -138,7 +182,6 @@ WL Promo Calendar (BisTrack Dashboard)
       document.body.appendChild(tip);
     }
 
-    // panel
     if (!qs("#wlPromoDetailsPanel")) {
       const panel = document.createElement("div");
       panel.id = "wlPromoDetailsPanel";
@@ -190,7 +233,7 @@ WL Promo Calendar (BisTrack Dashboard)
     t.innerHTML = titleHtml;
     b.innerHTML = bodyHtml;
     panel.style.display = "block";
-    bindCloseButton(); // ensure always closable
+    bindCloseButton();
   }
 
   function closePanel() {
@@ -277,12 +320,9 @@ WL Promo Calendar (BisTrack Dashboard)
     label.textContent = monthLabel(currentMonth);
 
     const start = startOfMonth(currentMonth);
-
-    // Calendar grid: start on Sunday
     const startDay = new Date(start);
     startDay.setDate(start.getDate() - start.getDay());
 
-    // 6 weeks grid (42 cells)
     for (let i = 0; i < 42; i++) {
       const day = new Date(startDay);
       day.setDate(startDay.getDate() + i);
@@ -298,7 +338,6 @@ WL Promo Calendar (BisTrack Dashboard)
       const stack = document.createElement("div");
       stack.className = "wl-promo-stack";
 
-      // promos active on this day
       const todays = promos.filter((p) => p.from && p.to && inRange(day, p.from, p.to));
 
       todays.forEach((p) => {
@@ -328,10 +367,9 @@ WL Promo Calendar (BisTrack Dashboard)
       const count = lines.length;
 
       const chips = [
-        `<span class="wl-chip">PromoID: ${escHtml(id || "?")}</span>`,
         promo.branchId ? `<span class="wl-chip">Branch: ${escHtml(promo.branchId)}</span>` : "",
         `<span class="wl-chip">Lines: ${count}</span>`,
-        PRODUCT_IMAGE_MAP_READY ? `<span class="wl-chip">Images: Sheet</span>` : `<span class="wl-chip">Images: n/a</span>`,
+        PRODUCT_IMAGE_MAP_READY ? `<span class="wl-chip">Images: ✓</span>` : `<span class="wl-chip">Images: —</span>`,
       ].join("");
 
       const dateLine = promo.from && promo.to ? `${formatDate(promo.from)} – ${formatDate(promo.to)}` : "";
@@ -379,7 +417,6 @@ WL Promo Calendar (BisTrack Dashboard)
 
       const title = `${escHtml(promo.name || promo.code || "Promotion")} ${dateLine}`;
 
-      // Pretty cards. ProductID is used ONLY to look up images; not displayed.
       const linesHtml =
         lines.length > 0
           ? `<div class="wl-lines">` +
@@ -435,8 +472,8 @@ WL Promo Calendar (BisTrack Dashboard)
     ensureUIOnce();
     bindCloseButton();
 
-    // Load the image map early (non-fatal if it fails)
-    await loadProductImageMap();
+    // JSONP load (works from file://)
+    await loadProductImageMapJSONP();
 
     const cal = qs("#" + CAL_ID);
     if (!cal) return;
@@ -447,7 +484,6 @@ WL Promo Calendar (BisTrack Dashboard)
     let current = new Date();
     current = new Date(current.getFullYear(), current.getMonth(), 1);
 
-    // Wire nav buttons
     const prev = qs("#" + PREV_ID);
     const next = qs("#" + NEXT_ID);
 
