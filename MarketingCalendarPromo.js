@@ -369,6 +369,10 @@ WL Promo Calendar (BisTrack Dashboard)
   function init() {
     ensureUIOnce();
 
+    const closeBtn = document.querySelector("#wlPanelClose");
+if (closeBtn) closeBtn.addEventListener("click", closePanel);
+
+
     const cal = qs("#" + CAL_ID);
     if (!cal) {
       // calendar container not present => nothing to do
