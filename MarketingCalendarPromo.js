@@ -1,46 +1,28 @@
 /* ============================================================================
-WL Promotions: PromotionHeader + PromotionLine join
-- Adds hover tooltip + click details panel for each promo badge
-- Assumes you ALREADY render promo badges in the calendar (or you can map them)
-- Safe: only adds UI + listeners, does not remove native BisTrack elements
-
-HOW TO USE (minimal):
-1) Paste this JS into your existing script (or load externally)
-2) Set BADGE_SELECTOR to whatever your promo badge elements are
-3) Make sure each badge has data-promotionid (or adjust getBadgePromotionId)
-
+WL Promo Calendar (BisTrack Dashboard)
+- Renders a month grid calendar from PromotionHeader table (Table208993)
+- Creates promo badges with data-promotionid so tooltips/panel can bind
+- Uses PromotionLine table (Table208994) for hover/click details
 ============================================================================ */
 
 (function () {
   "use strict";
 
-  /* =========================
-     CONFIG (adjust these)
-     ========================= */
-
-  // Table containing PromotionHeader results (your working one)
+  // ====== CONFIG ======
   const PROMO_HEADER_TABLE_SELECTOR = "table.Table208993";
+  const PROMO_LINE_TABLE_SELECTOR = "table.Table208994"; // you have this in the output
 
-  // PromotionLine results table: set if you know it. Otherwise it will auto-detect by headers containing "PromotionID".
-  const PROMO_LINE_TABLE_SELECTOR = null; // e.g. "table.Table208994"
+  // Your injected calendar container
+  const CAL_ID = "wlPromoCal";
+  const GRID_ID = "wlPromoGrid";
+  const MONTH_LABEL_ID = "wlMonthLabel";
+  const PREV_ID = "wlPrevMonth";
+  const NEXT_ID = "wlNextMonth";
 
-  // Your existing promo badges in the calendar view:
-  // Set this to a selector that matches the badge elements you already inject.
-  // Example: ".wlPromoBadge" or ".calendar-promo" etc.
-  const BADGE_SELECTOR = ".wlPromoBadge";
-
-  // Where is the promotion id stored on the badge?
-  // Recommended: <div class="wlPromoBadge" data-promotionid="123">...</div>
-  function getBadgePromotionId(el) {
-    return (el.dataset && (el.dataset.promotionid || el.dataset.promoId || el.dataset.promotionId)) || "";
-  }
-
+  const BADGE_CLASS = "wlPromoBadge";
   const TOOLTIP_PREVIEW_COUNT = 5;
 
-  /* =========================
-     Helpers
-     ========================= */
-
+  // ====== Helpers ======
   const qs = (sel, root = document) => root.querySelector(sel);
   const qsa = (sel, root = document) => Array.from(root.querySelectorAll(sel));
   const safeText = (x) => (x == null ? "" : String(x));
@@ -52,7 +34,7 @@ HOW TO USE (minimal):
 
     // Native parse first
     const d = new Date(str);
-    if (!isNaN(d.getTime())) return d;
+    if (!isNaN(d.getTime())) return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
     // MM/DD/YYYY
     const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
@@ -75,55 +57,43 @@ HOW TO USE (minimal):
     }
   }
 
-  function ensureStyleOnce() {
-    if (qs("#wlPromoUIStyles")) return;
-    const style = document.createElement("style");
-    style.id = "wlPromoUIStyles";
-    style.textContent = `
-      #wlPromoTooltip{
-        display:none; position:fixed; z-index:99999; background:#fff;
-        border:1px solid #ccc; border-radius:10px; padding:10px;
-        box-shadow:0 10px 30px rgba(0,0,0,.15); max-width:360px;
-        font-size:12px; text-align:left;
-      }
-      #wlPromoDetailsPanel{
-        display:none; position:fixed; right:16px; top:16px; width:420px;
-        max-width: calc(100vw - 32px); max-height: calc(100vh - 32px);
-        overflow:auto; background:#fff; border:1px solid #ccc;
-        border-radius:14px; box-shadow:0 12px 40px rgba(0,0,0,.2);
-        z-index:99998;
-      }
-      #wlPromoDetailsPanel .wl-promo-panel__header{
-        display:flex; justify-content:space-between; align-items:center;
-        padding:12px 12px; border-bottom:1px solid #eee; font-weight:700;
-      }
-      #wlPromoDetailsPanel .wl-promo-panel__header button{
-        cursor:pointer; border:none; background:transparent; font-size:16px;
-      }
-      .wl-panel-row{ padding:10px 12px; border-bottom:1px solid #f1f1f1; }
-      .wl-muted{ color:#666; font-weight:400; }
-      .wl-chip{ display:inline-block; padding:2px 8px; border-radius:999px;
-        border:1px solid #ddd; background:#fafafa; margin-right:6px; margin-top:6px; }
-      .wlPromoBadge{ cursor:pointer; }
-    `;
-    document.head.appendChild(style);
+  function sameDay(a, b) {
+    return (
+      a && b &&
+      a.getFullYear() === b.getFullYear() &&
+      a.getMonth() === b.getMonth() &&
+      a.getDate() === b.getDate()
+    );
   }
 
-  function ensureUIOnce() {
-    ensureStyleOnce();
+  function inRange(day, from, to) {
+    if (!day || !from || !to) return false;
+    const t = day.getTime();
+    return t >= from.getTime() && t <= to.getTime();
+  }
 
+  // ====== UI Ensure ======
+  function ensureUIOnce() {
+    // tooltip
     if (!qs("#wlPromoTooltip")) {
       const tip = document.createElement("div");
       tip.id = "wlPromoTooltip";
+      tip.style.display = "none";
+      tip.style.position = "fixed";
+      tip.style.zIndex = "99999";
       document.body.appendChild(tip);
     }
+
+    // panel
     if (!qs("#wlPromoDetailsPanel")) {
       const panel = document.createElement("div");
       panel.id = "wlPromoDetailsPanel";
+      panel.style.display = "none";
+      panel.className = "wl-promo-panel";
       panel.innerHTML = `
         <div class="wl-promo-panel__header">
           <div id="wlPanelTitle"></div>
-          <button type="button" id="wlPanelClose" aria-label="Close promotion details">✕</button>
+          <button type="button" id="wlPanelClose" aria-label="Close">✕</button>
         </div>
         <div id="wlPanelBody"></div>
       `;
@@ -135,7 +105,6 @@ HOW TO USE (minimal):
   function showTooltip(html, x, y) {
     const tip = qs("#wlPromoTooltip");
     if (!tip) return;
-
     tip.innerHTML = html;
     tip.style.display = "block";
 
@@ -157,7 +126,6 @@ HOW TO USE (minimal):
     const t = qs("#wlPanelTitle");
     const b = qs("#wlPanelBody");
     if (!panel || !t || !b) return;
-
     t.innerHTML = titleHtml;
     b.innerHTML = bodyHtml;
     panel.style.display = "block";
@@ -166,6 +134,40 @@ HOW TO USE (minimal):
   function closePanel() {
     const panel = qs("#wlPromoDetailsPanel");
     if (panel) panel.style.display = "none";
+  }
+
+  // ====== Data Read ======
+  function getPromosFromHeaderTable() {
+    const table = qs(PROMO_HEADER_TABLE_SELECTOR);
+    if (!table) return [];
+
+    const rows = qsa("tbody tr", table);
+
+    // Based on your header output: PromotionID, BranchID, PromotionCode, PromotionName, ... ValidFrom, ValidTo ...
+    // In your HTML the date columns are labeled ValidFrom / ValidTo and appear mid-table. :contentReference[oaicite:5]{index=5}
+    // We'll locate columns by header name to be safer.
+    const headers = qsa("thead th", table).map(th => (th.innerText || "").trim());
+
+    const idx = (name) => headers.findIndex(h => h.toLowerCase() === name.toLowerCase());
+
+    const iPromoId = idx("PromotionID");
+    const iBranchId = idx("BranchID");
+    const iCode = idx("PromotionCode");
+    const iName = idx("PromotionName");
+    const iFrom = idx("ValidFrom");
+    const iTo = idx("ValidTo");
+
+    return rows.map(tr => {
+      const tds = qsa("td", tr);
+      const id = (tds[iPromoId]?.innerText || "").trim();
+      if (!id) return null;
+      const branchId = (tds[iBranchId]?.innerText || "").trim();
+      const code = (tds[iCode]?.innerText || "").trim();
+      const name = (tds[iName]?.innerText || "").trim();
+      const from = parseDateLoose((tds[iFrom]?.innerText || "").trim());
+      const to = parseDateLoose((tds[iTo]?.innerText || "").trim());
+      return { id, branchId, code, name, from, to };
+    }).filter(Boolean);
   }
 
   function tableToObjects(table) {
@@ -182,43 +184,8 @@ HOW TO USE (minimal):
     });
   }
 
-  function findPromotionLineTable() {
-    if (PROMO_LINE_TABLE_SELECTOR) {
-      const forced = qs(PROMO_LINE_TABLE_SELECTOR);
-      if (forced) return forced;
-    }
-
-    // Auto-detect: any table whose header includes PromotionID and looks "line-like"
-    const tables = qsa("table");
-    const getHeaders = (t) =>
-      qsa("thead th", t)
-        .map((x) => (x.innerText || "").trim().toLowerCase())
-        .filter(Boolean);
-
-    for (const t of tables) {
-      if (!qs("thead", t)) continue;
-      const hs = getHeaders(t);
-      const hasPromoId = hs.includes("promotionid");
-      const looksLine =
-        hs.some((h) => h.includes("product")) ||
-        hs.some((h) => h.includes("line")) ||
-        hs.some((h) => h.includes("discount")) ||
-        hs.some((h) => h.includes("group")) ||
-        hs.some((h) => h.includes("price"));
-      if (hasPromoId && looksLine) return t;
-    }
-
-    for (const t of tables) {
-      if (!qs("thead", t)) continue;
-      const hs = getHeaders(t);
-      if (hs.includes("promotionid")) return t;
-    }
-
-    return null;
-  }
-
   function buildLinesByPromoId() {
-    const t = findPromotionLineTable();
+    const t = qs(PROMO_LINE_TABLE_SELECTOR);
     if (!t) return {};
     const objs = tableToObjects(t);
 
@@ -232,61 +199,83 @@ HOW TO USE (minimal):
     return map;
   }
 
-  function getPromosFromHeaderTable() {
-    const table = qs(PROMO_HEADER_TABLE_SELECTOR);
-    if (!table) return [];
-
-    // If your column ordering differs, adjust these indexes:
-    // 0 PromotionID
-    // 1 Promo Code
-    // 2 Promo Name
-    // 3 Start Date
-    // 4 End Date
-    // 5 Branch (optional)
-    const rows = qsa("tbody tr", table);
-
-    return rows
-      .map((tr) => {
-        const tds = qsa("td", tr);
-        if (!tds.length) return null;
-
-        const id = (tds[0]?.innerText || "").trim();
-        const code = (tds[1]?.innerText || "").trim();
-        const name = (tds[2]?.innerText || "").trim();
-        const startRaw = (tds[3]?.innerText || "").trim();
-        const endRaw = (tds[4]?.innerText || "").trim();
-        const branchId = (tds[5]?.innerText || "").trim();
-
-        return {
-          id,
-          code,
-          name,
-          from: parseDateLoose(startRaw),
-          to: parseDateLoose(endRaw),
-          branchId,
-        };
-      })
-      .filter(Boolean);
+  function promosById(promos) {
+    const m = {};
+    promos.forEach(p => { m[String(p.id).trim()] = p; });
+    return m;
   }
 
-  function indexPromosById(promos) {
-    const map = {};
-    promos.forEach((p) => {
-      if (p && p.id) map[String(p.id).trim()] = p;
-    });
-    return map;
+  // ====== Calendar Render ======
+  function monthLabel(d) {
+    const m = d.toLocaleString(undefined, { month: "long" });
+    return `${m} ${d.getFullYear()}`;
   }
 
+  function startOfMonth(d) {
+    return new Date(d.getFullYear(), d.getMonth(), 1);
+  }
+
+  function endOfMonth(d) {
+    return new Date(d.getFullYear(), d.getMonth() + 1, 0);
+  }
+
+  function renderCalendar(currentMonth, promos, linesByPromoId) {
+    const grid = qs("#" + GRID_ID);
+    const label = qs("#" + MONTH_LABEL_ID);
+    if (!grid || !label) return;
+
+    grid.innerHTML = "";
+    label.textContent = monthLabel(currentMonth);
+
+    const start = startOfMonth(currentMonth);
+    const end = endOfMonth(currentMonth);
+
+    // Calendar grid: start on Sunday
+    const startDay = new Date(start);
+    startDay.setDate(start.getDate() - start.getDay());
+
+    // 6 weeks grid (42 cells)
+    for (let i = 0; i < 42; i++) {
+      const day = new Date(startDay);
+      day.setDate(startDay.getDate() + i);
+
+      const cell = document.createElement("div");
+      cell.className = "wl-day" + (day.getMonth() !== currentMonth.getMonth() ? " wl-day--muted" : "");
+
+      const num = document.createElement("div");
+      num.className = "wl-day__num";
+      num.textContent = day.getDate();
+      cell.appendChild(num);
+
+      const stack = document.createElement("div");
+      stack.className = "wl-promo-stack";
+
+      // promos active on this day
+      const todays = promos.filter(p => p.from && p.to && inRange(day, p.from, p.to));
+
+      todays.forEach(p => {
+        const badge = document.createElement("div");
+        badge.className = "wl-promo " + BADGE_CLASS;
+        badge.dataset.promotionid = String(p.id).trim();
+        badge.title = p.name || p.code || "Promotion";
+        badge.textContent = p.code || p.name || `Promo ${p.id}`;
+
+        attachBadgeEvents(badge, p, linesByPromoId);
+        stack.appendChild(badge);
+      });
+
+      cell.appendChild(stack);
+      grid.appendChild(cell);
+    }
+  }
+
+  // ====== Tooltip / Panel Binding ======
   function attachBadgeEvents(el, promo, linesByPromoId) {
     if (!el || el.__wlPromoBound) return;
     el.__wlPromoBound = true;
 
-    const promoId = String(promo.id || "").trim();
-    el.dataset.promotionid = promoId; // enforce
-    el.classList.add("wlPromoBadge");
-
     el.addEventListener("mousemove", (ev) => {
-      const id = el.dataset.promotionid;
+      const id = String(el.dataset.promotionid || "").trim();
       const lines = linesByPromoId[id] || [];
       const count = lines.length;
 
@@ -303,9 +292,10 @@ HOW TO USE (minimal):
         .slice(0, TOOLTIP_PREVIEW_COUNT)
         .map((l) => {
           const prod = l["ProductID"] || l["productid"] || "";
-          const grp = l["GroupID"] || l["groupid"] || "";
-          const desc = prod ? `Product ${prod}` : grp ? `Group ${grp}` : "Line item";
-          return `<div class="wl-panel-row">${desc}</div>`;
+          const code = l["ProductCode"] || l["productcode"] || "";
+          const desc = l["Description"] || l["description"] || "";
+          const label = prod ? `${prod}${code ? " • " + code : ""}` : "Line item";
+          return `<div class="wl-panel-row"><strong>${label}</strong><div class="wl-muted">${safeText(desc)}</div></div>`;
         })
         .join("");
 
@@ -332,7 +322,7 @@ HOW TO USE (minimal):
       ev.preventDefault();
       hideTooltip();
 
-      const id = el.dataset.promotionid;
+      const id = String(el.dataset.promotionid || "").trim();
       const lines = linesByPromoId[id] || [];
 
       const dateLine =
@@ -346,28 +336,18 @@ HOW TO USE (minimal):
         lines.length > 0
           ? lines
               .map((l) => {
-                const prod = l["ProductID"] || l["productid"] || "";
-                const grp = l["GroupID"] || l["groupid"] || "";
-                const amountOff =
-                  l["AmountOff"] || l["amountoff"] || l["DiscountAmount"] || l["discountamount"] || "";
-                const percentOff =
-                  l["PercentOff"] || l["percentoff"] || l["DiscountPercent"] || l["discountpercent"] || "";
-                const salePrice =
-                  l["SalePrice"] || l["saleprice"] || l["PromoPrice"] || l["promoprice"] || "";
-
-                let bits = "";
-                if (prod) bits += `<div><strong>ProductID:</strong> ${prod}</div>`;
-                if (grp) bits += `<div><strong>GroupID:</strong> ${grp}</div>`;
-                if (salePrice) bits += `<div><strong>Sale Price:</strong> ${salePrice}</div>`;
-                if (percentOff) bits += `<div><strong>% Off:</strong> ${percentOff}</div>`;
-                if (amountOff) bits += `<div><strong>$ Off:</strong> ${amountOff}</div>`;
-
-                if (!bits) {
-                  const keys = Object.keys(l).slice(0, 8);
-                  bits = `<div class="wl-muted">Line data present (columns: ${keys.join(", ")}...)</div>`;
-                }
-
-                return `<div class="wl-panel-row">${bits}</div>`;
+                const prod = l["ProductID"] || "";
+                const code = l["ProductCode"] || "";
+                const desc = l["Description"] || "";
+                const group = l["ProductGroupID"] || l["GroupID"] || "";
+                return `
+                  <div class="wl-panel-row">
+                    ${prod ? `<div><strong>ProductID:</strong> ${prod}</div>` : ""}
+                    ${code ? `<div><strong>ProductCode:</strong> ${code}</div>` : ""}
+                    ${group ? `<div><strong>Group:</strong> ${group}</div>` : ""}
+                    ${desc ? `<div class="wl-muted" style="margin-top:6px;">${safeText(desc)}</div>` : ""}
+                  </div>
+                `;
               })
               .join("")
           : `<div class="wl-panel-row wl-muted">No line rows were found for this PromotionID.</div>`;
@@ -385,31 +365,45 @@ HOW TO USE (minimal):
     });
   }
 
-  function bindBadges(promosById, linesByPromoId) {
-    const badges = qsa(BADGE_SELECTOR);
-    if (!badges.length) return;
-
-    badges.forEach((el) => {
-      const id = String(getBadgePromotionId(el)).trim();
-      if (!id) return;
-
-      const promo = promosById[id];
-      if (!promo) return;
-
-      attachBadgeEvents(el, promo, linesByPromoId);
-    });
-  }
-
+  // ====== Init ======
   function init() {
     ensureUIOnce();
 
+    const cal = qs("#" + CAL_ID);
+    if (!cal) {
+      // calendar container not present => nothing to do
+      return;
+    }
+
     const promos = getPromosFromHeaderTable();
-    const promosById = indexPromosById(promos);
-    const linesByPromoId = buildLinesByPromoId();
+    const lines = buildLinesByPromoId();
 
-    bindBadges(promosById, linesByPromoId);
+    let current = new Date();
+    current = new Date(current.getFullYear(), current.getMonth(), 1);
 
-    // Escape closes
+    // Wire nav buttons
+    const prev = qs("#" + PREV_ID);
+    const next = qs("#" + NEXT_ID);
+
+    function rerender() {
+      renderCalendar(current, promos, lines);
+    }
+
+    if (prev) {
+      prev.addEventListener("click", () => {
+        current = new Date(current.getFullYear(), current.getMonth() - 1, 1);
+        rerender();
+      });
+    }
+    if (next) {
+      next.addEventListener("click", () => {
+        current = new Date(current.getFullYear(), current.getMonth() + 1, 1);
+        rerender();
+      });
+    }
+
+    rerender();
+
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         hideTooltip();
@@ -418,7 +412,6 @@ HOW TO USE (minimal):
     });
   }
 
-  // Run once DOM is ready
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", init);
   } else {
