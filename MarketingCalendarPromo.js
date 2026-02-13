@@ -3,6 +3,7 @@ WL Promo Calendar (BisTrack Dashboard)
 - Renders a month grid calendar from PromotionHeader table (Table208993)
 - Creates promo badges with data-promotionid so tooltips/panel can bind
 - Uses PromotionLine table (Table208994) for hover/click details
+- Improved right-side panel layout (line cards + optional images)
 ============================================================================ */
 
 (function () {
@@ -22,11 +23,24 @@ WL Promo Calendar (BisTrack Dashboard)
   const BADGE_CLASS = "wlPromoBadge";
   const TOOLTIP_PREVIEW_COUNT = 5;
 
+  // Optional: if you add ImageURL column into PromotionLine dataset,
+  // this script will automatically render it in the panel cards.
+  const IMAGE_FIELD_CANDIDATES = ["ImageURL", "ImageUrl", "Image", "ImageLink", "Image Link", "ImageURLFull"];
+
   // ====== Helpers ======
   const qs = (sel, root = document) => root.querySelector(sel);
   const qsa = (sel, root = document) => Array.from(root.querySelectorAll(sel));
   const safeText = (x) => (x == null ? "" : String(x));
   const clamp = (n, min, max) => Math.max(min, Math.min(n, max));
+
+  function escHtml(str) {
+    return safeText(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
 
   function parseDateLoose(s) {
     const str = safeText(s).trim();
@@ -57,19 +71,24 @@ WL Promo Calendar (BisTrack Dashboard)
     }
   }
 
-  function sameDay(a, b) {
-    return (
-      a && b &&
-      a.getFullYear() === b.getFullYear() &&
-      a.getMonth() === b.getMonth() &&
-      a.getDate() === b.getDate()
-    );
-  }
-
   function inRange(day, from, to) {
     if (!day || !from || !to) return false;
     const t = day.getTime();
     return t >= from.getTime() && t <= to.getTime();
+  }
+
+  function pickFirstField(obj, candidates) {
+    for (const k of candidates) {
+      if (obj && obj[k] != null && String(obj[k]).trim() !== "") return String(obj[k]).trim();
+    }
+    return "";
+  }
+
+  function getFieldLoose(obj, names) {
+    for (const k of names) {
+      if (obj && obj[k] != null && String(obj[k]).trim() !== "") return String(obj[k]).trim();
+    }
+    return "";
   }
 
   // ====== UI Ensure ======
@@ -98,7 +117,14 @@ WL Promo Calendar (BisTrack Dashboard)
         <div id="wlPanelBody"></div>
       `;
       document.body.appendChild(panel);
-      qs("#wlPanelClose").addEventListener("click", closePanel);
+    }
+  }
+
+  function bindCloseButton() {
+    const closeBtn = qs("#wlPanelClose");
+    if (closeBtn && !closeBtn.__wlBound) {
+      closeBtn.__wlBound = true;
+      closeBtn.addEventListener("click", closePanel);
     }
   }
 
@@ -129,6 +155,7 @@ WL Promo Calendar (BisTrack Dashboard)
     t.innerHTML = titleHtml;
     b.innerHTML = bodyHtml;
     panel.style.display = "block";
+    bindCloseButton(); // ensure always closable
   }
 
   function closePanel() {
@@ -143,12 +170,9 @@ WL Promo Calendar (BisTrack Dashboard)
 
     const rows = qsa("tbody tr", table);
 
-    // Based on your header output: PromotionID, BranchID, PromotionCode, PromotionName, ... ValidFrom, ValidTo ...
-    // In your HTML the date columns are labeled ValidFrom / ValidTo and appear mid-table. :contentReference[oaicite:5]{index=5}
-    // We'll locate columns by header name to be safer.
-    const headers = qsa("thead th", table).map(th => (th.innerText || "").trim());
-
-    const idx = (name) => headers.findIndex(h => h.toLowerCase() === name.toLowerCase());
+    // locate columns by header name to be safer.
+    const headers = qsa("thead th", table).map((th) => (th.innerText || "").trim());
+    const idx = (name) => headers.findIndex((h) => h.toLowerCase() === name.toLowerCase());
 
     const iPromoId = idx("PromotionID");
     const iBranchId = idx("BranchID");
@@ -157,17 +181,19 @@ WL Promo Calendar (BisTrack Dashboard)
     const iFrom = idx("ValidFrom");
     const iTo = idx("ValidTo");
 
-    return rows.map(tr => {
-      const tds = qsa("td", tr);
-      const id = (tds[iPromoId]?.innerText || "").trim();
-      if (!id) return null;
-      const branchId = (tds[iBranchId]?.innerText || "").trim();
-      const code = (tds[iCode]?.innerText || "").trim();
-      const name = (tds[iName]?.innerText || "").trim();
-      const from = parseDateLoose((tds[iFrom]?.innerText || "").trim());
-      const to = parseDateLoose((tds[iTo]?.innerText || "").trim());
-      return { id, branchId, code, name, from, to };
-    }).filter(Boolean);
+    return rows
+      .map((tr) => {
+        const tds = qsa("td", tr);
+        const id = (tds[iPromoId]?.innerText || "").trim();
+        if (!id) return null;
+        const branchId = (tds[iBranchId]?.innerText || "").trim();
+        const code = (tds[iCode]?.innerText || "").trim();
+        const name = (tds[iName]?.innerText || "").trim();
+        const from = parseDateLoose((tds[iFrom]?.innerText || "").trim());
+        const to = parseDateLoose((tds[iTo]?.innerText || "").trim());
+        return { id, branchId, code, name, from, to };
+      })
+      .filter(Boolean);
   }
 
   function tableToObjects(table) {
@@ -199,12 +225,6 @@ WL Promo Calendar (BisTrack Dashboard)
     return map;
   }
 
-  function promosById(promos) {
-    const m = {};
-    promos.forEach(p => { m[String(p.id).trim()] = p; });
-    return m;
-  }
-
   // ====== Calendar Render ======
   function monthLabel(d) {
     const m = d.toLocaleString(undefined, { month: "long" });
@@ -213,10 +233,6 @@ WL Promo Calendar (BisTrack Dashboard)
 
   function startOfMonth(d) {
     return new Date(d.getFullYear(), d.getMonth(), 1);
-  }
-
-  function endOfMonth(d) {
-    return new Date(d.getFullYear(), d.getMonth() + 1, 0);
   }
 
   function renderCalendar(currentMonth, promos, linesByPromoId) {
@@ -228,7 +244,6 @@ WL Promo Calendar (BisTrack Dashboard)
     label.textContent = monthLabel(currentMonth);
 
     const start = startOfMonth(currentMonth);
-    const end = endOfMonth(currentMonth);
 
     // Calendar grid: start on Sunday
     const startDay = new Date(start);
@@ -251,9 +266,9 @@ WL Promo Calendar (BisTrack Dashboard)
       stack.className = "wl-promo-stack";
 
       // promos active on this day
-      const todays = promos.filter(p => p.from && p.to && inRange(day, p.from, p.to));
+      const todays = promos.filter((p) => p.from && p.to && inRange(day, p.from, p.to));
 
-      todays.forEach(p => {
+      todays.forEach((p) => {
         const badge = document.createElement("div");
         badge.className = "wl-promo " + BADGE_CLASS;
         badge.dataset.promotionid = String(p.id).trim();
@@ -280,30 +295,29 @@ WL Promo Calendar (BisTrack Dashboard)
       const count = lines.length;
 
       const chips = [
-        `<span class="wl-chip">PromoID: ${id || "?"}</span>`,
-        promo.branchId ? `<span class="wl-chip">Branch: ${promo.branchId}</span>` : "",
+        `<span class="wl-chip">PromoID: ${escHtml(id || "?")}</span>`,
+        promo.branchId ? `<span class="wl-chip">Branch: ${escHtml(promo.branchId)}</span>` : "",
         `<span class="wl-chip">Lines: ${count}</span>`,
       ].join("");
 
-      const dateLine =
-        promo.from && promo.to ? `${formatDate(promo.from)} – ${formatDate(promo.to)}` : "";
+      const dateLine = promo.from && promo.to ? `${formatDate(promo.from)} – ${formatDate(promo.to)}` : "";
 
       const preview = lines
         .slice(0, TOOLTIP_PREVIEW_COUNT)
         .map((l) => {
-          const prod = l["ProductID"] || l["productid"] || "";
-          const code = l["ProductCode"] || l["productcode"] || "";
-          const desc = l["Description"] || l["description"] || "";
-          const label = prod ? `${prod}${code ? " • " + code : ""}` : "Line item";
-          return `<div class="wl-panel-row"><strong>${label}</strong><div class="wl-muted">${safeText(desc)}</div></div>`;
+          const prod = getFieldLoose(l, ["ProductID", "productid"]);
+          const code = getFieldLoose(l, ["ProductCode", "productcode"]);
+          const desc = getFieldLoose(l, ["Description", "description"]);
+          const label = prod ? `${escHtml(prod)}${code ? " • " + escHtml(code) : ""}` : "Line item";
+          return `<div class="wl-panel-row"><strong>${label}</strong><div class="wl-muted">${escHtml(desc)}</div></div>`;
         })
         .join("");
 
       const html = `
         <div style="font-weight:700; margin-bottom:6px;">
-          ${promo.name || promo.code || "Promotion"}
+          ${escHtml(promo.name || promo.code || "Promotion")}
         </div>
-        ${dateLine ? `<div class="wl-muted" style="margin-bottom:8px;">${dateLine}</div>` : ""}
+        ${dateLine ? `<div class="wl-muted" style="margin-bottom:8px;">${escHtml(dateLine)}</div>` : ""}
         <div style="margin-bottom:8px;">${chips}</div>
         ${preview || `<div class="wl-muted">No line details found.</div>`}
         ${
@@ -326,38 +340,56 @@ WL Promo Calendar (BisTrack Dashboard)
       const lines = linesByPromoId[id] || [];
 
       const dateLine =
-        promo.from && promo.to
-          ? `<span class="wl-muted">(${formatDate(promo.from)} – ${formatDate(promo.to)})</span>`
-          : "";
+        promo.from && promo.to ? `<span class="wl-muted">(${escHtml(formatDate(promo.from))} – ${escHtml(formatDate(promo.to))})</span>` : "";
 
-      const title = `${promo.name || promo.code || "Promotion"} ${dateLine}`;
+      const title = `${escHtml(promo.name || promo.code || "Promotion")} ${dateLine}`;
 
       const linesHtml =
         lines.length > 0
-          ? lines
+          ? `<div class="wl-lines">` +
+            lines
               .map((l) => {
-                const prod = l["ProductID"] || "";
-                const code = l["ProductCode"] || "";
-                const desc = l["Description"] || "";
-                const group = l["ProductGroupID"] || l["GroupID"] || "";
+                const prodId = getFieldLoose(l, ["ProductID", "productid"]);
+                const code = getFieldLoose(l, ["ProductCode", "productcode"]);
+                const desc = getFieldLoose(l, ["Description", "description"]);
+
+                const qty = getFieldLoose(l, ["Quantity", "Qty", "qty"]);
+                const price = getFieldLoose(l, ["SalePrice", "Price", "price"]);
+                const uom = getFieldLoose(l, ["UOM", "Uom", "uom"]);
+                const group = getFieldLoose(l, ["ProductGroupID", "GroupID", "groupid"]);
+
+                const imgUrl = pickFirstField(l, IMAGE_FIELD_CANDIDATES);
+
+                const titleText = code || (prodId ? `Product ${prodId}` : "Line Item");
+
                 return `
-                  <div class="wl-panel-row">
-                    ${prod ? `<div><strong>ProductID:</strong> ${prod}</div>` : ""}
-                    ${code ? `<div><strong>ProductCode:</strong> ${code}</div>` : ""}
-                    ${group ? `<div><strong>Group:</strong> ${group}</div>` : ""}
-                    ${desc ? `<div class="wl-muted" style="margin-top:6px;">${safeText(desc)}</div>` : ""}
+                  <div class="wl-line-card">
+                    <div class="wl-line-grid">
+                      <img class="wl-line-img" src="${escHtml(imgUrl)}" alt="" onerror="this.style.display='none'">
+                      <div>
+                        <div class="wl-line-title">${escHtml(titleText)}</div>
+                        <div class="wl-line-meta">
+                          ${prodId ? `<span class="wl-kv">ProductID: ${escHtml(prodId)}</span>` : ""}
+                          ${uom ? `<span class="wl-kv">UOM: ${escHtml(uom)}</span>` : ""}
+                          ${qty ? `<span class="wl-kv">Qty: ${escHtml(qty)}</span>` : ""}
+                          ${price ? `<span class="wl-kv">Price: ${escHtml(price)}</span>` : ""}
+                          ${group ? `<span class="wl-kv">Group: ${escHtml(group)}</span>` : ""}
+                        </div>
+                        ${desc ? `<div class="wl-line-desc">${escHtml(desc)}</div>` : `<div class="wl-line-desc wl-muted">No description.</div>`}
+                      </div>
+                    </div>
                   </div>
                 `;
               })
-              .join("")
+              .join("") +
+            `</div>`
           : `<div class="wl-panel-row wl-muted">No line rows were found for this PromotionID.</div>`;
 
       const body = `
-        <div class="wl-panel-row"><strong>PromotionID:</strong> ${id || "?"}</div>
-        <div class="wl-panel-row"><strong>Branch:</strong> ${promo.branchId || "All"}</div>
-        <div class="wl-panel-row"><strong>Promo Code:</strong> ${promo.code || ""}</div>
+        <div class="wl-panel-row"><strong>PromotionID:</strong> ${escHtml(id || "?")}</div>
+        <div class="wl-panel-row"><strong>Branch:</strong> ${escHtml(promo.branchId || "All")}</div>
+        <div class="wl-panel-row"><strong>Promo Code:</strong> ${escHtml(promo.code || "")}</div>
         <div class="wl-panel-row"><strong>Lines:</strong> ${lines.length}</div>
-        <div class="wl-panel-row"><strong>Details</strong> <span class="wl-muted">(PromotionLine)</span></div>
         ${linesHtml}
       `;
 
@@ -368,10 +400,7 @@ WL Promo Calendar (BisTrack Dashboard)
   // ====== Init ======
   function init() {
     ensureUIOnce();
-
-    const closeBtn = document.querySelector("#wlPanelClose");
-if (closeBtn) closeBtn.addEventListener("click", closePanel);
-
+    bindCloseButton();
 
     const cal = qs("#" + CAL_ID);
     if (!cal) {
