@@ -586,14 +586,37 @@ function ensureViewPromoButton(panel, promo) {
       const dayAgg = salesIndex && salesIndex.byDay ? salesIndex.byDay[dk] : null;
       const daySales = dayAgg ? dayAgg.sales : 0;
 
-      const a01 = heatAlpha(daySales, maxVisible);
-      const bg = heatColor(a01);
-      if (bg) cell.style.background = bg;
+            const bg = heatBandColor(daySales, maxVisible);
+if (bg) cell.style.background = bg;
+
+      // Date + Sales label (white background for readability over heatmap)
+      const meta = document.createElement("div");
+      meta.className = "wl-day__meta";
+      meta.style.display = "inline-flex";
+      meta.style.alignItems = "baseline";
+      meta.style.gap = "8px";
+      meta.style.padding = "4px 8px";
+      meta.style.borderRadius = "10px";
+      meta.style.background = "rgba(255,255,255,0.92)";
+      meta.style.border = "1px solid rgba(0,0,0,0.10)";
+      meta.style.boxShadow = "0 1px 2px rgba(0,0,0,0.06)";
+      meta.style.maxWidth = "calc(100% - 28px)"; // leave room for +
+      meta.style.overflow = "hidden";
 
       const num = document.createElement("div");
       num.className = "wl-day__num";
       num.textContent = day.getDate();
-      cell.appendChild(num);
+      meta.appendChild(num);
+
+      if (daySales > 0) {
+        const daySalesEl = document.createElement("div");
+        daySalesEl.className = "wl-day__sales";
+        daySalesEl.textContent = compactCurrency(daySales);
+        meta.appendChild(daySalesEl);
+      }
+
+      cell.appendChild(meta);
+
       // + button (Create Promotion)
       const addBtn = document.createElement("button");
       addBtn.type = "button";
@@ -626,11 +649,6 @@ function ensureViewPromoButton(panel, promo) {
       cell.appendChild(addBtn);
 
 
-
-      const daySalesEl = document.createElement("div");
-      daySalesEl.className = "wl-day__sales";
-      daySalesEl.textContent = daySales > 0 ? compactCurrency(daySales) : "";
-      cell.appendChild(daySalesEl);
 
       const stack = document.createElement("div");
       stack.className = "wl-promo-stack";
