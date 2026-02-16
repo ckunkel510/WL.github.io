@@ -1,14 +1,14 @@
 /* ============================================================================
-WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
-- Renders a month grid calendar from PromotionHeader table (Table208993)
-- Uses PromotionLine table (Table208994) for hover/click details
-- Uses PromoSales daily table (Table208998) to build a heatmap + daily totals
+WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap + Product Line Sales
+Tables used:
+- PromoHeader:            table.Table208993
+- PromoLine:              table.Table208994
+- PromoSales Daily:       table.Table208998   (PromotionID, BranchID, SalesDate, Sales, Cost, Profit, Margin)
+- PromoSales By Product:  table.Table208999   (PromotionID, BranchID, SalesDate, ProductID, Sales, Cost, Profit, Margin)
 
 UPDATES IN THIS VERSION:
-- Heatmap contrast improved (scales to visible 42-day grid + gamma curve)
-- Badge tooltip shows promo sales for THAT day (if available)
-- Promo panel shows Day Sales (when clicked from a specific day cell) + Month summary
-- Supports optional "Promo Sales By Product" table auto-detection (doesn't require it)
+- Uses Table208999 to show per-line Day + Month sales in tooltip + panel
+- Heatmap remains high-contrast (visible 42-day max + gamma)
 ============================================================================ */
 
 (function () {
@@ -17,15 +17,9 @@ UPDATES IN THIS VERSION:
   // ====== CONFIG ======
   const PROMO_HEADER_TABLE_SELECTOR = "table.Table208993";
   const PROMO_LINE_TABLE_SELECTOR   = "table.Table208994";
-  const PROMO_SALES_TABLE_SELECTOR  = "table.Table208998"; // daily promo totals
+  const PROMO_SALES_TABLE_SELECTOR  = "table.Table208998";
+  const PROMO_SALES_BY_PRODUCT_TABLE_SELECTOR = "table.Table208999";
 
-  // Optional: if you later add a detailed table with ProductID/ProductCode per day,
-  // this script will attempt to auto-detect it. No selector required.
-  // If you DO want to force a selector later, set it here:
-  const PROMO_SALES_BY_PRODUCT_TABLE_SELECTOR = "table.Table208999"; // e.g. "table.Table209123" (optional)
-
-  // Your injected calendar container
-  const CAL_ID = "wlPromoCal";
   const GRID_ID = "wlPromoGrid";
   const MONTH_LABEL_ID = "wlMonthLabel";
   const PREV_ID = "wlPrevMonth";
@@ -35,19 +29,13 @@ UPDATES IN THIS VERSION:
   const TOOLTIP_PREVIEW_COUNT = 5;
 
   // Heatmap tuning (more contrast)
-  // - alpha range expanded
-  // - gamma curve applied
-  const HEAT_MIN_ALPHA = 0.10;
-  const HEAT_MAX_ALPHA = 0.88;
+  const HEAT_MIN_ALPHA = 0.12;
+  const HEAT_MAX_ALPHA = 0.92;
   const HEAT_GAMMA = 0.55; // <1 boosts low/mid values
-  const HEAT_COLOR_RGB = { r: 107, g: 0, b: 22 }; // WL maroon-ish (#6b0016)
+  const HEAT_COLOR_RGB = { r: 107, g: 0, b: 22 }; // #6b0016
 
-  // IMPORTANT: set to true only if your JSONP endpoint is stable
+  // Images (optional) - left disabled to avoid JSONP issues in dashboards
   const ENABLE_IMAGE_MAP_JSONP = false;
-
-  // Apps Script Web App URL (must support JSONP: callbackName({...});)
-  const IMAGE_MAP_URL =
-    "https://script.google.com/macros/s/AKfycbxuC8mU6Bw9e_OX5akSfTKfNJtj3QHHUbAdYafnO8c2NryihJk-4pU2K77negMebo9p/exec";
 
   const PLACEHOLDER_DATA_URI =
     "data:image/svg+xml;charset=utf-8," +
@@ -60,14 +48,10 @@ UPDATES IN THIS VERSION:
     );
 
   // ====== STATE ======
-  let PRODUCT_IMAGE_MAP_READY = false;
-  let PRODUCT_IMAGE_MAP = {};
   let CURRENT_MONTH = startOfMonth(new Date());
   let PROMOS = [];
   let LINES_BY_PROMO = {};
   let SALES_INDEX = null;
-
-  // Optional detailed index if a product-level table exists
   let SALES_BY_PRODUCT_INDEX = null;
 
   // ====== Helpers ======
@@ -112,11 +96,9 @@ UPDATES IN THIS VERSION:
     const s = safeText(str).trim();
     if (!s) return null;
 
-    // Try Date() parse first (often works with M/D/YYYY)
     const d1 = new Date(s);
     if (!isNaN(d1.getTime())) return new Date(d1.getFullYear(), d1.getMonth(), d1.getDate());
 
-    // Fallback: M/D/YYYY or MM/DD/YYYY
     const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
     if (m) {
       const mm = parseInt(m[1], 10) - 1;
@@ -131,10 +113,7 @@ UPDATES IN THIS VERSION:
 
   function formatDate(d) {
     if (!d) return "";
-    const mm = d.getMonth() + 1;
-    const dd = d.getDate();
-    const yy = d.getFullYear();
-    return `${mm}/${dd}/${yy}`;
+    return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
   }
 
   function dateKey(d) {
@@ -142,6 +121,10 @@ UPDATES IN THIS VERSION:
     const m = String(d.getMonth() + 1).padStart(2, "0");
     const day = String(d.getDate()).padStart(2, "0");
     return `${y}-${m}-${day}`;
+  }
+
+  function monthKeyFromDate(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   }
 
   function currency(n) {
@@ -269,10 +252,8 @@ UPDATES IN THIS VERSION:
     const table = qs(PROMO_HEADER_TABLE_SELECTOR);
     if (!table) return [];
 
-    const rows = qsa("tbody tr", table);
     const headers = qsa("thead th", table).map((th) => (th.innerText || "").trim());
     const idx = (name) => headers.findIndex((h) => h.toLowerCase() === name.toLowerCase());
-
     const iPromoId = idx("PromotionID");
     const iBranchId = idx("BranchID");
     const iCode = idx("PromotionCode");
@@ -280,7 +261,7 @@ UPDATES IN THIS VERSION:
     const iFrom = idx("ValidFrom");
     const iTo = idx("ValidTo");
 
-    return rows
+    return qsa("tbody tr", table)
       .map((tr) => {
         const tds = qsa("td", tr);
         const id = (tds[iPromoId]?.innerText || "").trim();
@@ -311,116 +292,85 @@ UPDATES IN THIS VERSION:
 
   function buildSalesIndexFromTable() {
     const t = qs(PROMO_SALES_TABLE_SELECTOR);
-    if (!t) {
-      return { byDay: {}, byDayPromo: {}, maxDaySalesGlobal: 0 };
-    }
+    if (!t) return { byDay: {}, byDayPromo: {} };
 
     const rows = tableToObjects(t);
     const byDay = {}; // dateKey -> {sales,cost,profit,rows:[]}
     const byDayPromo = {}; // dateKey -> promoId -> agg
 
-    let maxDaySalesGlobal = 0;
-
     rows.forEach((r) => {
-      const promoId = normalizeId(r["PromotionID"] || r["PromotionId"] || r["promotionid"]);
-      const branchId = normalizeId(r["BranchID"] || r["branchid"]);
-      const d = parseDateLoose(r["SalesDate"] || r["salesdate"] || r["Date"] || r["date"]);
+      const promoId = normalizeId(r["PromotionID"]);
+      const branchId = normalizeId(r["BranchID"]);
+      const d = parseDateLoose(r["SalesDate"]);
       if (!promoId || !d) return;
 
       const dk = dateKey(d);
+      const sales = parseNumberLoose(r["Sales"]);
+      const cost = parseNumberLoose(r["Cost"]);
+      const profit = parseNumberLoose(r["Profit"]);
+      const margin = parseNumberLoose(r["Margin"]);
 
-      const sales = parseNumberLoose(r["Sales"] || r["sales"]);
-      const cost = parseNumberLoose(r["Cost"] || r["cost"]);
-      const profit = parseNumberLoose(r["Profit"] || r["profit"]);
-      const margin = parseNumberLoose(r["Margin"] || r["margin"]);
-
-      if (!byDay[dk]) byDay[dk] = { sales: 0, cost: 0, profit: 0, rows: [] };
+      byDay[dk] ||= { sales: 0, cost: 0, profit: 0, rows: [] };
       byDay[dk].sales += sales;
       byDay[dk].cost += cost;
       byDay[dk].profit += profit;
       byDay[dk].rows.push({ promoId, branchId, sales, cost, profit, margin });
 
-      if (!byDayPromo[dk]) byDayPromo[dk] = {};
-      if (!byDayPromo[dk][promoId]) byDayPromo[dk][promoId] = { promoId, sales: 0, cost: 0, profit: 0, branchIds: {} };
+      byDayPromo[dk] ||= {};
+      byDayPromo[dk][promoId] ||= { promoId, sales: 0, cost: 0, profit: 0 };
       byDayPromo[dk][promoId].sales += sales;
       byDayPromo[dk][promoId].cost += cost;
       byDayPromo[dk][promoId].profit += profit;
-      if (branchId) byDayPromo[dk][promoId].branchIds[branchId] = true;
-
-      if (byDay[dk].sales > maxDaySalesGlobal) maxDaySalesGlobal = byDay[dk].sales;
     });
 
-    return { byDay, byDayPromo, maxDaySalesGlobal };
+    return { byDay, byDayPromo };
   }
 
-  // ====== Optional: detect a "Promo Sales By Product" table ======
-  function findSalesByProductTable() {
-    if (PROMO_SALES_BY_PRODUCT_TABLE_SELECTOR) {
-      const forced = qs(PROMO_SALES_BY_PRODUCT_TABLE_SELECTOR);
-      return forced || null;
-    }
-
-    // Heuristic: any table with headers that include PromotionID + SalesDate + (ProductID or ProductCode)
-    const tables = qsa("table");
-    for (const t of tables) {
-      const ths = qsa("thead th", t);
-      if (!ths.length) continue;
-      const headers = ths.map((x) => (x.innerText || "").trim().toLowerCase());
-      const hasPromo = headers.includes("promotionid");
-      const hasDate = headers.includes("salesdate") || headers.includes("date");
-      const hasProd = headers.includes("productid") || headers.includes("productcode") || headers.includes("product");
-      const hasSales = headers.includes("sales");
-      if (hasPromo && hasDate && hasProd && hasSales) return t;
-    }
-    return null;
-  }
-
-  function buildSalesByProductIndex() {
-    const t = findSalesByProductTable();
+  // Product-level index:
+  // byDayPromoProduct[dk][promoId][productId] = {sales,cost,profit}
+  // byMonthPromoProduct[ym][promoId][productId] = {sales,cost,profit}
+  function buildSalesByProductIndexFromTable() {
+    const t = qs(PROMO_SALES_BY_PRODUCT_TABLE_SELECTOR);
     if (!t) return null;
 
     const rows = tableToObjects(t);
-    // byDayPromoProd[dk][promoId][productKey] = agg
-    const byDayPromoProd = {};
+    const byDayPromoProduct = {};
+    const byMonthPromoProduct = {};
 
     rows.forEach((r) => {
-      const promoId = normalizeId(r["PromotionID"] || r["promotionid"]);
-      const d = parseDateLoose(r["SalesDate"] || r["salesdate"] || r["Date"] || r["date"]);
-      if (!promoId || !d) return;
+      const promoId = normalizeId(r["PromotionID"]);
+      const productId = normalizeId(r["ProductID"]);
+      const d = parseDateLoose(r["SalesDate"]);
+      if (!promoId || !productId || !d) return;
 
       const dk = dateKey(d);
-      const productId = normalizeId(r["ProductID"] || r["productid"] || "");
-      const productCode = safeText(r["ProductCode"] || r["productcode"] || r["Product"] || "").trim();
-      const description = safeText(r["Description"] || r["description"] || "").trim();
+      const ym = monthKeyFromDate(d);
 
-      const sales = parseNumberLoose(r["Sales"] || r["sales"]);
-      const cost = parseNumberLoose(r["Cost"] || r["cost"]);
-      const profit = parseNumberLoose(r["Profit"] || r["profit"]);
+      const sales = parseNumberLoose(r["Sales"]);
+      const cost = parseNumberLoose(r["Cost"]);
+      const profit = parseNumberLoose(r["Profit"]);
 
-      const pkey = productId || productCode || description || "line";
+      byDayPromoProduct[dk] ||= {};
+      byDayPromoProduct[dk][promoId] ||= {};
+      byDayPromoProduct[dk][promoId][productId] ||= { sales: 0, cost: 0, profit: 0 };
+      byDayPromoProduct[dk][promoId][productId].sales += sales;
+      byDayPromoProduct[dk][promoId][productId].cost += cost;
+      byDayPromoProduct[dk][promoId][productId].profit += profit;
 
-      if (!byDayPromoProd[dk]) byDayPromoProd[dk] = {};
-      if (!byDayPromoProd[dk][promoId]) byDayPromoProd[dk][promoId] = {};
-      if (!byDayPromoProd[dk][promoId][pkey]) {
-        byDayPromoProd[dk][promoId][pkey] = { productId, productCode, description, sales: 0, cost: 0, profit: 0 };
-      }
-      const agg = byDayPromoProd[dk][promoId][pkey];
-      agg.sales += sales;
-      agg.cost += cost;
-      agg.profit += profit;
-      if (!agg.productId && productId) agg.productId = productId;
-      if (!agg.productCode && productCode) agg.productCode = productCode;
-      if (!agg.description && description) agg.description = description;
+      byMonthPromoProduct[ym] ||= {};
+      byMonthPromoProduct[ym][promoId] ||= {};
+      byMonthPromoProduct[ym][promoId][productId] ||= { sales: 0, cost: 0, profit: 0 };
+      byMonthPromoProduct[ym][promoId][productId].sales += sales;
+      byMonthPromoProduct[ym][promoId][productId].cost += cost;
+      byMonthPromoProduct[ym][promoId][productId].profit += profit;
     });
 
-    return { byDayPromoProd };
+    return { byDayPromoProduct, byMonthPromoProduct };
   }
 
   // ====== Heatmap ======
   function heatAlpha(daySales, maxSalesVisible) {
     if (!maxSalesVisible || daySales <= 0) return 0;
-
-    // log scale -> normalize -> gamma
     const norm = Math.log10(daySales + 1) / Math.log10(maxSalesVisible + 1);
     const curved = Math.pow(clamp(norm, 0, 1), HEAT_GAMMA);
     return clamp(curved, 0, 1);
@@ -445,7 +395,7 @@ UPDATES IN THIS VERSION:
     const startDay = new Date(start);
     startDay.setDate(start.getDate() - start.getDay()); // Sunday-start grid
 
-    // Compute max sales only across the visible 42-day grid (boost contrast)
+    // Visible max for contrast
     let maxVisible = 0;
     if (salesIndex && salesIndex.byDay) {
       for (let i = 0; i < 42; i++) {
@@ -467,7 +417,6 @@ UPDATES IN THIS VERSION:
       cell.className = "wl-day" + (day.getMonth() !== currentMonth.getMonth() ? " wl-day--muted" : "");
       cell.dataset.date = dk;
 
-      // heat + sales label (day total across promos)
       const dayAgg = salesIndex && salesIndex.byDay ? salesIndex.byDay[dk] : null;
       const daySales = dayAgg ? dayAgg.sales : 0;
 
@@ -485,7 +434,6 @@ UPDATES IN THIS VERSION:
       daySalesEl.textContent = daySales > 0 ? compactCurrency(daySales) : "";
       cell.appendChild(daySalesEl);
 
-      // promos that are active on this day
       const stack = document.createElement("div");
       stack.className = "wl-promo-stack";
 
@@ -494,7 +442,7 @@ UPDATES IN THIS VERSION:
         const badge = document.createElement("div");
         badge.className = "wl-promo " + BADGE_CLASS;
         badge.dataset.promotionid = String(p.id).trim();
-        badge.dataset.day = dk; // IMPORTANT: gives tooltip/panel day context
+        badge.dataset.day = dk;
         badge.title = p.name || p.code || "Promotion";
         badge.textContent = p.code || p.name || `Promo ${p.id}`;
 
@@ -503,74 +451,8 @@ UPDATES IN THIS VERSION:
       });
 
       cell.appendChild(stack);
-
-      // click on day -> day sales breakdown panel
-      cell.addEventListener("click", (ev) => {
-        // don't steal clicks from promo badges
-        if (ev.target && ev.target.closest && ev.target.closest(".wl-promo")) return;
-        openDayPanel(day, salesIndex, promos);
-      });
-
       grid.appendChild(cell);
     }
-  }
-
-  function openDayPanel(day, salesIndex, promos) {
-    const dk = dateKey(day);
-    const dayAgg = salesIndex && salesIndex.byDay ? salesIndex.byDay[dk] : null;
-    const promoAgg = salesIndex && salesIndex.byDayPromo ? salesIndex.byDayPromo[dk] : null;
-
-    const title = `<strong>Promo Sales – ${escHtml(formatDate(day))}</strong>`;
-
-    if (!dayAgg || !dayAgg.sales) {
-      openPanel(title, `<div class="wl-muted">No promo sales found for this day.</div>`);
-      return;
-    }
-
-    const rows = promoAgg ? Object.values(promoAgg) : [];
-    rows.sort((a, b) => (b.sales || 0) - (a.sales || 0));
-
-    const promoName = (pid) => {
-      const p = promos.find((x) => String(x.id) === String(pid));
-      return p ? (p.name || p.code || `Promo ${pid}`) : `Promo ${pid}`;
-    };
-
-    const table = `
-      <div style="margin-bottom:10px;">
-        <span class="wl-chip">Sales: ${escHtml(currency(dayAgg.sales))}</span>
-        <span class="wl-chip">Cost: ${escHtml(currency(dayAgg.cost))}</span>
-        <span class="wl-chip">Profit: ${escHtml(currency(dayAgg.profit))}</span>
-      </div>
-      <table style="width:100%; border-collapse:collapse;">
-        <thead>
-          <tr>
-            <th style="text-align:left; padding:6px; border-bottom:1px solid #ddd;">Promotion</th>
-            <th style="text-align:right; padding:6px; border-bottom:1px solid #ddd;">Sales</th>
-            <th style="text-align:right; padding:6px; border-bottom:1px solid #ddd;">Profit</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows
-            .map((r) => {
-              const branches = r.branchIds ? Object.keys(r.branchIds).join(", ") : "";
-              return `
-                <tr>
-                  <td style="padding:6px; border-bottom:1px solid #f0f0f0;">
-                    <div style="font-weight:600;">${escHtml(promoName(r.promoId))}</div>
-                    ${branches ? `<div class="wl-muted">Branches: ${escHtml(branches)}</div>` : ""}
-                    <div class="wl-muted">PromoID: ${escHtml(r.promoId)}</div>
-                  </td>
-                  <td style="padding:6px; border-bottom:1px solid #f0f0f0; text-align:right;">${escHtml(currency(r.sales))}</td>
-                  <td style="padding:6px; border-bottom:1px solid #f0f0f0; text-align:right;">${escHtml(currency(r.profit))}</td>
-                </tr>
-              `;
-            })
-            .join("")}
-        </tbody>
-      </table>
-    `;
-
-    openPanel(title, table);
   }
 
   // ====== Promo Badge Events ======
@@ -588,7 +470,29 @@ UPDATES IN THIS VERSION:
     if (!salesIndex || !salesIndex.byDayPromo) return null;
     const perDay = salesIndex.byDayPromo[dk];
     if (!perDay || !perDay[promoId]) return null;
-    return perDay[promoId]; // {sales,cost,profit,...}
+    return perDay[promoId];
+  }
+
+  function getLineDayMonthSales(promoId, productId, dk, ym) {
+    if (!SALES_BY_PRODUCT_INDEX) return { day: null, month: null };
+
+    const dayRec =
+      SALES_BY_PRODUCT_INDEX.byDayPromoProduct &&
+      SALES_BY_PRODUCT_INDEX.byDayPromoProduct[dk] &&
+      SALES_BY_PRODUCT_INDEX.byDayPromoProduct[dk][promoId] &&
+      SALES_BY_PRODUCT_INDEX.byDayPromoProduct[dk][promoId][productId]
+        ? SALES_BY_PRODUCT_INDEX.byDayPromoProduct[dk][promoId][productId]
+        : null;
+
+    const monthRec =
+      SALES_BY_PRODUCT_INDEX.byMonthPromoProduct &&
+      SALES_BY_PRODUCT_INDEX.byMonthPromoProduct[ym] &&
+      SALES_BY_PRODUCT_INDEX.byMonthPromoProduct[ym][promoId] &&
+      SALES_BY_PRODUCT_INDEX.byMonthPromoProduct[ym][promoId][productId]
+        ? SALES_BY_PRODUCT_INDEX.byMonthPromoProduct[ym][promoId][productId]
+        : null;
+
+    return { day: dayRec, month: monthRec };
   }
 
   function attachBadgeEvents(el, promo, linesByPromoId, salesIndex) {
@@ -596,30 +500,50 @@ UPDATES IN THIS VERSION:
     el.__wlPromoBound = true;
 
     el.addEventListener("mousemove", (ev) => {
-      const id = String(el.dataset.promotionid || "").trim();
-      const dk = String(el.dataset.day || "").trim(); // day context
-      const lines = linesByPromoId[id] || [];
+      const promoId = String(el.dataset.promotionid || "").trim();
+      const dk = String(el.dataset.day || "").trim();
+      const ym = monthKeyFromDate(CURRENT_MONTH);
+
+      const lines = linesByPromoId[promoId] || [];
       const count = lines.length;
 
-      const dayAgg = dk ? getPromoDaySales(id, dk, salesIndex) : null;
+      const dayAgg = dk ? getPromoDaySales(promoId, dk, salesIndex) : null;
 
       const chips = [
         promo.branchId ? `<span class="wl-chip">Branch: ${escHtml(promo.branchId)}</span>` : "",
         `<span class="wl-chip">Lines: ${count}</span>`,
         dayAgg ? `<span class="wl-chip">Day Sales: ${escHtml(compactCurrency(dayAgg.sales || 0))}</span>` : "",
-      ].join("");
+      ].filter(Boolean).join("");
 
       const dateLine = promo.from && promo.to ? `${formatDate(promo.from)} – ${formatDate(promo.to)}` : "";
 
-      const preview = lines
-        .slice(0, TOOLTIP_PREVIEW_COUNT)
-        .map((l) => {
-          const code = getFieldLoose(l, ["ProductCode", "productcode"]);
-          const desc = getFieldLoose(l, ["Description", "description"]);
-          const label = code ? escHtml(code) : "Line item";
-          return `<div class="wl-panel-row"><strong>${label}</strong><div class="wl-muted">${escHtml(desc)}</div></div>`;
-        })
-        .join("");
+      // Preview lines with day+month sales if possible
+      const preview = lines.slice(0, TOOLTIP_PREVIEW_COUNT).map((l) => {
+        const productId = normalizeId(getFieldLoose(l, ["ProductID", "productid"]));
+        const code = getFieldLoose(l, ["ProductCode", "productcode"]);
+        const desc = getFieldLoose(l, ["Description", "description"]);
+
+        let salesBits = "";
+        if (productId && SALES_BY_PRODUCT_INDEX) {
+          const { day, month } = getLineDayMonthSales(promoId, productId, dk, ym);
+          const daySales = day ? day.sales : 0;
+          const monSales = month ? month.sales : 0;
+          salesBits = `
+            <div style="margin-top:4px;">
+              <span class="wl-chip">Day: ${escHtml(compactCurrency(daySales))}</span>
+              <span class="wl-chip">Month: ${escHtml(compactCurrency(monSales))}</span>
+            </div>
+          `;
+        }
+
+        return `
+          <div class="wl-panel-row">
+            <strong>${escHtml(code || ("Product " + productId) || "Line item")}</strong>
+            <div class="wl-muted">${escHtml(desc)}</div>
+            ${salesBits}
+          </div>
+        `;
+      }).join("");
 
       const html = `
         <div style="font-weight:700; margin-bottom:6px;">
@@ -640,22 +564,18 @@ UPDATES IN THIS VERSION:
       ev.stopPropagation();
       hideTooltip();
 
-      const id = String(el.dataset.promotionid || "").trim();
-      const dk = String(el.dataset.day || "").trim(); // the day you clicked it from
-      const lines = linesByPromoId[id] || [];
+      const promoId = String(el.dataset.promotionid || "").trim();
+      const dk = String(el.dataset.day || "").trim();
+      const ym = monthKeyFromDate(CURRENT_MONTH);
 
-      // Month summary for this promo (current month)
-      const promoSalesSummary = buildPromoSalesSummaryForCurrentMonth(id, salesIndex);
+      const lines = linesByPromoId[promoId] || [];
+      const dayAgg = dk ? getPromoDaySales(promoId, dk, salesIndex) : null;
 
-      // Day summary for this promo (if clicked from a day cell)
-      const dayAgg = dk ? getPromoDaySales(id, dk, salesIndex) : null;
+      const monthSummary = buildPromoSalesSummaryForCurrentMonth(promoId, salesIndex);
 
-      const dateLine =
-        promo.from && promo.to
-          ? `<span class="wl-muted">(${escHtml(formatDate(promo.from))} – ${escHtml(formatDate(promo.to))})</span>`
-          : "";
-
-      const title = `${escHtml(promo.name || promo.code || "Promotion")} ${dateLine}`;
+      const title = `${escHtml(promo.name || promo.code || "Promotion")} ${
+        promo.from && promo.to ? `<span class="wl-muted">(${escHtml(formatDate(promo.from))} – ${escHtml(formatDate(promo.to))})</span>` : ""
+      }`;
 
       const dayBlock = dayAgg
         ? `
@@ -666,50 +586,63 @@ UPDATES IN THIS VERSION:
         `
         : "";
 
-      const monthBlock = promoSalesSummary
+      const monthBlock = monthSummary
         ? `
           <div style="margin:10px 0;">
-            <span class="wl-chip">Month Sales: ${escHtml(currency(promoSalesSummary.sales))}</span>
-            <span class="wl-chip">Month Profit: ${escHtml(currency(promoSalesSummary.profit))}</span>
-            <span class="wl-chip">Days w/ Sales: ${escHtml(String(promoSalesSummary.days))}</span>
+            <span class="wl-chip">Month Sales: ${escHtml(currency(monthSummary.sales))}</span>
+            <span class="wl-chip">Month Profit: ${escHtml(currency(monthSummary.profit))}</span>
+            <span class="wl-chip">Days w/ Sales: ${escHtml(String(monthSummary.days))}</span>
           </div>
         `
         : `<div class="wl-muted" style="margin:10px 0;">No sales summary found for this promo in the visible month.</div>`;
 
-      // Optional product-level breakdown (only if a product sales table exists)
-      const productBreakdownHtml = buildOptionalProductBreakdownHtml(id, dk);
-
-      const body =
-        dayBlock +
-        monthBlock +
-        productBreakdownHtml +
-        (lines.length
-          ? `
-        <div style="max-height:340px; overflow:auto; border-top:1px solid #eee; padding-top:10px;">
-          ${lines
-            .map((l) => {
-              const pid = normalizeId(getFieldLoose(l, ["ProductID", "productid"]));
+      const lineHtml = lines.length
+        ? `
+          <div style="max-height:380px; overflow:auto; border-top:1px solid #eee; padding-top:10px;">
+            ${lines.map((l) => {
+              const productId = normalizeId(getFieldLoose(l, ["ProductID", "productid"]));
               const code = getFieldLoose(l, ["ProductCode", "productcode"]);
               const desc = getFieldLoose(l, ["Description", "description"]);
+
+              let chips = "";
+              if (productId && SALES_BY_PRODUCT_INDEX) {
+                const { day, month } = getLineDayMonthSales(promoId, productId, dk, ym);
+                const daySales = day ? day.sales : 0;
+                const dayProfit = day ? day.profit : 0;
+                const monSales = month ? month.sales : 0;
+                const monProfit = month ? month.profit : 0;
+
+                chips = `
+                  <div style="margin-top:6px;">
+                    <span class="wl-chip">Day: ${escHtml(compactCurrency(daySales))}</span>
+                    <span class="wl-chip">Day Profit: ${escHtml(compactCurrency(dayProfit))}</span>
+                    <span class="wl-chip">Month: ${escHtml(compactCurrency(monSales))}</span>
+                    <span class="wl-chip">Month Profit: ${escHtml(compactCurrency(monProfit))}</span>
+                  </div>
+                `;
+              }
+
               return `
-                <div class="wl-panel-row" style="display:flex; gap:10px; align-items:flex-start; margin-bottom:10px;">
-                  <img class="wl-line-img" data-productid="${escHtml(pid)}"
+                <div class="wl-panel-row" style="display:flex; gap:10px; align-items:flex-start; margin-bottom:12px;">
+                  <img class="wl-line-img" data-productid="${escHtml(productId)}"
                        src="${PLACEHOLDER_DATA_URI}"
                        style="width:42px; height:42px; object-fit:cover; border-radius:6px; border:1px solid #ddd;" />
                   <div style="flex:1;">
-                    <div style="font-weight:700;">${escHtml(code || "Line item")}</div>
+                    <div style="font-weight:700;">${escHtml(code || (productId ? ("Product " + productId) : "Line item"))}</div>
                     <div class="wl-muted">${escHtml(desc)}</div>
-                    ${pid ? `<div class="wl-muted">ProductID: ${escHtml(pid)}</div>` : ""}
+                    ${productId ? `<div class="wl-muted">ProductID: ${escHtml(productId)}</div>` : ""}
+                    ${chips}
                   </div>
                 </div>
               `;
-            })
-            .join("")}
-        </div>
-      `
-          : `<div class="wl-muted">No line details found.</div>`);
+            }).join("")}
+          </div>
+        `
+        : `<div class="wl-muted">No line details found.</div>`;
 
-      openPanel(title, body);
+      const topItems = buildTopItemsDaySummaryHtml(promoId, dk);
+
+      openPanel(title, dayBlock + monthBlock + topItems + lineHtml);
     });
   }
 
@@ -739,135 +672,45 @@ UPDATES IN THIS VERSION:
     return { sales, profit, days };
   }
 
-  function buildOptionalProductBreakdownHtml(promoId, dk) {
-    if (!SALES_BY_PRODUCT_INDEX || !SALES_BY_PRODUCT_INDEX.byDayPromoProd) return "";
+  function buildTopItemsDaySummaryHtml(promoId, dk) {
+    if (!SALES_BY_PRODUCT_INDEX || !dk) return "";
 
-    // If we have a day key, show day breakdown; otherwise show nothing.
-    if (!dk) return "";
+    const dayPromo = SALES_BY_PRODUCT_INDEX.byDayPromoProduct && SALES_BY_PRODUCT_INDEX.byDayPromoProduct[dk]
+      ? SALES_BY_PRODUCT_INDEX.byDayPromoProduct[dk][promoId]
+      : null;
 
-    const dayPromo = SALES_BY_PRODUCT_INDEX.byDayPromoProd[dk];
-    if (!dayPromo || !dayPromo[promoId]) return "";
+    if (!dayPromo) return "";
 
-    const items = Object.values(dayPromo[promoId]);
-    items.sort((a, b) => (b.sales || 0) - (a.sales || 0));
+    const items = Object.entries(dayPromo)
+      .map(([productId, agg]) => ({ productId, ...agg }))
+      .sort((a, b) => (b.sales || 0) - (a.sales || 0))
+      .slice(0, 10);
 
-    const top = items.slice(0, 12);
+    if (!items.length) return "";
 
     return `
       <div style="margin:10px 0; border-top:1px solid #eee; padding-top:10px;">
-        <div style="font-weight:700; margin-bottom:6px;">Day Breakdown (Top Items)</div>
+        <div style="font-weight:700; margin-bottom:6px;">Top Items (Day)</div>
         <table style="width:100%; border-collapse:collapse;">
           <thead>
             <tr>
-              <th style="text-align:left; padding:6px; border-bottom:1px solid #ddd;">Item</th>
+              <th style="text-align:left; padding:6px; border-bottom:1px solid #ddd;">ProductID</th>
               <th style="text-align:right; padding:6px; border-bottom:1px solid #ddd;">Sales</th>
               <th style="text-align:right; padding:6px; border-bottom:1px solid #ddd;">Profit</th>
             </tr>
           </thead>
           <tbody>
-            ${top
-              .map((x) => {
-                const label = (x.productCode || x.productId || "Item").trim();
-                const sub = (x.description || "").trim();
-                return `
-                  <tr>
-                    <td style="padding:6px; border-bottom:1px solid #f0f0f0;">
-                      <div style="font-weight:600;">${escHtml(label)}</div>
-                      ${sub ? `<div class="wl-muted">${escHtml(sub)}</div>` : ""}
-                    </td>
-                    <td style="padding:6px; border-bottom:1px solid #f0f0f0; text-align:right;">${escHtml(currency(x.sales || 0))}</td>
-                    <td style="padding:6px; border-bottom:1px solid #f0f0f0; text-align:right;">${escHtml(currency(x.profit || 0))}</td>
-                  </tr>
-                `;
-              })
-              .join("")}
+            ${items.map((x) => `
+              <tr>
+                <td style="padding:6px; border-bottom:1px solid #f0f0f0;">${escHtml(x.productId)}</td>
+                <td style="padding:6px; border-bottom:1px solid #f0f0f0; text-align:right;">${escHtml(currency(x.sales || 0))}</td>
+                <td style="padding:6px; border-bottom:1px solid #f0f0f0; text-align:right;">${escHtml(currency(x.profit || 0))}</td>
+              </tr>
+            `).join("")}
           </tbody>
         </table>
-        <div class="wl-muted" style="margin-top:6px;">(This section appears only if a product-level promo sales table is present.)</div>
       </div>
     `;
-  }
-
-  // ====== (Optional) Image JSONP - DISABLED by default ======
-  function loadProductImageMapJSONP(timeoutMs = 10000) {
-    PRODUCT_IMAGE_MAP_READY = false;
-    PRODUCT_IMAGE_MAP = {};
-
-    return new Promise((resolve) => {
-      const cbName = "__wlImgMapCb_" + Math.random().toString(36).slice(2);
-      const url =
-        IMAGE_MAP_URL +
-        (IMAGE_MAP_URL.includes("?") ? "&" : "?") +
-        "callback=" +
-        cbName +
-        "&_=" +
-        Date.now();
-
-      let done = false;
-
-      function cleanup() {
-        try {
-          delete window[cbName];
-        } catch {}
-        const s = document.getElementById(cbName);
-        if (s && s.parentNode) s.parentNode.removeChild(s);
-      }
-
-      const timer = setTimeout(() => {
-        if (done) return;
-        done = true;
-        cleanup();
-        PRODUCT_IMAGE_MAP_READY = false;
-        console.warn("[WL PromoCal] Image map JSONP timed out");
-        resolve(false);
-      }, timeoutMs);
-
-      window[cbName] = function (data) {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
-        cleanup();
-
-        try {
-          const rawMap = data && data.ok && data.map ? data.map : null;
-          if (!rawMap) {
-            PRODUCT_IMAGE_MAP_READY = false;
-            resolve(false);
-            return;
-          }
-
-          const normalized = {};
-          for (const k in rawMap) {
-            const nk = normalizeId(k);
-            const v = rawMap[k];
-            if (nk && v) normalized[nk] = String(v).trim();
-          }
-
-          PRODUCT_IMAGE_MAP = normalized;
-          PRODUCT_IMAGE_MAP_READY = true;
-          resolve(true);
-        } catch (e) {
-          PRODUCT_IMAGE_MAP_READY = false;
-          resolve(false);
-        }
-      };
-
-      const script = document.createElement("script");
-      script.id = cbName;
-      script.src = url;
-      script.async = true;
-      script.onerror = function () {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
-        cleanup();
-        PRODUCT_IMAGE_MAP_READY = false;
-        console.warn("[WL PromoCal] Image map JSONP failed to load script");
-        resolve(false);
-      };
-
-      document.head.appendChild(script);
-    });
   }
 
   // ====== Wiring / Init ======
@@ -879,7 +722,7 @@ UPDATES IN THIS VERSION:
       prev.__wlBound = true;
       prev.addEventListener("click", () => {
         CURRENT_MONTH = startOfMonth(new Date(CURRENT_MONTH.getFullYear(), CURRENT_MONTH.getMonth() - 1, 1));
-        renderCalendar(CURRENT_MONTH, PROMOS, LINES_BY_PROMO, SALES_INDEX);
+        refreshAllAndRender();
       });
     }
 
@@ -887,21 +730,17 @@ UPDATES IN THIS VERSION:
       next.__wlBound = true;
       next.addEventListener("click", () => {
         CURRENT_MONTH = startOfMonth(new Date(CURRENT_MONTH.getFullYear(), CURRENT_MONTH.getMonth() + 1, 1));
-        renderCalendar(CURRENT_MONTH, PROMOS, LINES_BY_PROMO, SALES_INDEX);
+        refreshAllAndRender();
       });
     }
   }
 
   function logStatus() {
-    const hasHeader = !!qs(PROMO_HEADER_TABLE_SELECTOR);
-    const hasLine = !!qs(PROMO_LINE_TABLE_SELECTOR);
-    const hasSales = !!qs(PROMO_SALES_TABLE_SELECTOR);
-    const hasSalesProd = !!findSalesByProductTable();
     console.log("[WL PromoCal] Tables found:", {
-      header: hasHeader,
-      line: hasLine,
-      salesDaily: hasSales,
-      salesByProduct: hasSalesProd,
+      header: !!qs(PROMO_HEADER_TABLE_SELECTOR),
+      line: !!qs(PROMO_LINE_TABLE_SELECTOR),
+      salesDaily: !!qs(PROMO_SALES_TABLE_SELECTOR),
+      salesByProduct: !!qs(PROMO_SALES_BY_PRODUCT_TABLE_SELECTOR),
     });
   }
 
@@ -913,31 +752,20 @@ UPDATES IN THIS VERSION:
     PROMOS = getPromosFromHeaderTable();
     LINES_BY_PROMO = buildLinesByPromoId();
     SALES_INDEX = buildSalesIndexFromTable();
-
-    // Optional: build if present
-    SALES_BY_PRODUCT_INDEX = buildSalesByProductIndex();
+    SALES_BY_PRODUCT_INDEX = buildSalesByProductIndexFromTable();
 
     renderCalendar(CURRENT_MONTH, PROMOS, LINES_BY_PROMO, SALES_INDEX);
   }
 
-  // Dashboard tables sometimes render after scripts run; wait + retry
   function initWithRetry(maxMs = 15000) {
     const start = Date.now();
-
     function tick() {
       const grid = qs("#" + GRID_ID);
       const hasHeader = !!qs(PROMO_HEADER_TABLE_SELECTOR);
 
-      // we can render without sales, but we at least need the calendar grid + header promos
       if (grid && hasHeader) {
         logStatus();
         refreshAllAndRender();
-
-        if (ENABLE_IMAGE_MAP_JSONP) {
-          loadProductImageMapJSONP(10000).then(() => {
-            // optional: refresh images later
-          });
-        }
         return;
       }
 
@@ -950,11 +778,9 @@ UPDATES IN THIS VERSION:
 
       setTimeout(tick, 250);
     }
-
     tick();
   }
 
-  // Start
   try {
     initWithRetry();
   } catch (e) {
