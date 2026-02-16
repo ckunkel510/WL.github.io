@@ -439,6 +439,45 @@ UPDATES IN THIS VERSION:
     // Trigger BisTrack drilldown
     link.click();
   }
+
+  // ====== Selling Price Rules Link ======
+  function getSellingPriceRulesLink() {
+    return (
+      document.querySelector(SELLING_PRICE_RULES_SELECTOR) ||
+      document.querySelector(`a.dashboard-link[href*="${SELLING_PRICE_RULES_HREF}"]`) ||
+      document.querySelector(`a[href*="${SELLING_PRICE_RULES_HREF}"]`)
+    );
+  }
+
+  function hideSellingPriceRulesLink() {
+    const link = getSellingPriceRulesLink();
+    if (!link) return;
+
+    // Hide visually but keep in DOM
+    link.style.display = "none";
+
+    const wrap = link.closest("td, div, span");
+    if (wrap && wrap !== document.body && wrap.children.length === 1) {
+      wrap.style.display = "none";
+    }
+  }
+
+  function openSellingPriceRulesFromPanel() {
+    // Provide context for the user (and for future automation)
+    try {
+      if (window.WL_PROMOCAL_OPEN_PROMO_ID) localStorage.setItem("WL_PROMOCAL_OPEN_PROMO_ID", String(window.WL_PROMOCAL_OPEN_PROMO_ID));
+      if (window.WL_PROMOCAL_OPEN_PROMO_CODE) localStorage.setItem("WL_PROMOCAL_OPEN_PROMO_CODE", String(window.WL_PROMOCAL_OPEN_PROMO_CODE));
+      if (window.WL_PROMOCAL_OPEN_PROMO_NAME) localStorage.setItem("WL_PROMOCAL_OPEN_PROMO_NAME", String(window.WL_PROMOCAL_OPEN_PROMO_NAME));
+    } catch (e) {}
+
+    const link = getSellingPriceRulesLink();
+    if (!link) {
+      console.warn("[WL PromoCal] Selling Price Rules link not found:", SELLING_PRICE_RULES_HREF);
+      return;
+    }
+    link.click();
+  }
+
 // ====== Heatmap ======
   function heatAlpha(daySales, maxSalesVisible) {
     if (!maxSalesVisible || daySales <= 0) return 0;
@@ -899,42 +938,3 @@ UPDATES IN THIS VERSION:
     console.error("[WL PromoCal] Fatal init error:", e);
   }
 })();
-// ====== Selling Price Rules Link ======
-function getSellingPriceRulesLink() {
-  return (
-    document.querySelector(SELLING_PRICE_RULES_SELECTOR) ||
-    document.querySelector(`a.dashboard-link[href*="${SELLING_PRICE_RULES_HREF}"]`) ||
-    document.querySelector(`a[href*="${SELLING_PRICE_RULES_HREF}"]`)
-  );
-}
-
-function hideSellingPriceRulesLink() {
-  const link = getSellingPriceRulesLink();
-  if (!link) return;
-
-  link.style.display = "none";
-
-  const wrap = link.closest("td, div, span");
-  if (wrap && wrap !== document.body && wrap.children.length === 1) {
-    wrap.style.display = "none";
-  }
-}
-
-function openSellingPriceRulesFromPanel() {
-  // Provide context for the user (and for future automation)
-  // They can filter/search once on the Selling Price Rules screen.
-  try {
-    if (window.WL_PROMOCAL_OPEN_PROMO_ID) localStorage.setItem("WL_PROMOCAL_OPEN_PROMO_ID", String(window.WL_PROMOCAL_OPEN_PROMO_ID));
-    if (window.WL_PROMOCAL_OPEN_PROMO_CODE) localStorage.setItem("WL_PROMOCAL_OPEN_PROMO_CODE", String(window.WL_PROMOCAL_OPEN_PROMO_CODE));
-    if (window.WL_PROMOCAL_OPEN_PROMO_NAME) localStorage.setItem("WL_PROMOCAL_OPEN_PROMO_NAME", String(window.WL_PROMOCAL_OPEN_PROMO_NAME));
-  } catch (e) {}
-
-  const link = getSellingPriceRulesLink();
-  if (!link) {
-    console.warn("[WL PromoCal] Selling Price Rules link not found:", SELLING_PRICE_RULES_HREF);
-    return;
-  }
-  link.click();
-}
-
-
