@@ -1,7 +1,8 @@
 /* ============================================================================
-WL Promo Calendar (BisTrack Dashboard)
+WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
 - Renders a month grid calendar from PromotionHeader table (Table208993)
 - Uses PromotionLine table (Table208994) for hover/click details
+- NEW: Uses Promo Sales By Day table (Table208998) to add a day heat map + totals
 - Loads Product images via JSONP from Apps Script (works from file://)
 - IMPORTANT: Google Sheet uses "id" + "image_link"
 ============================================================================ */
@@ -12,6 +13,9 @@ WL Promo Calendar (BisTrack Dashboard)
   // ====== CONFIG ======
   const PROMO_HEADER_TABLE_SELECTOR = "table.Table208993";
   const PROMO_LINE_TABLE_SELECTOR = "table.Table208994";
+
+  // NEW: Promo Sales table selector (your pasted component shows table.Table208998)
+  const PROMO_SALES_TABLE_SELECTOR = "table.Table208998";
 
   // Apps Script Web App URL (must support ?callback= for JSONP)
   const IMAGE_MAP_URL =
@@ -26,6 +30,11 @@ WL Promo Calendar (BisTrack Dashboard)
 
   const BADGE_CLASS = "wlPromoBadge";
   const TOOLTIP_PREVIEW_COUNT = 5;
+
+  // Heatmap tuning
+  const HEAT_ALPHA_MIN = 0.05;
+  const HEAT_ALPHA_MAX = 0.28;
+  const HEAT_BASE_RGB = { r: 107, g: 0, b: 22 }; // WL maroon-ish (matches your brand tone)
 
   const IMAGE_FIELD_CANDIDATES = ["ImageURL", "ImageUrl", "Image", "ImageLink", "image_link", "image link"];
 
@@ -54,6 +63,30 @@ WL Promo Calendar (BisTrack Dashboard)
       .replace(/'/g, "&#039;");
   }
 
+  function parseNumberLoose(x) {
+    const s = safeText(x).trim();
+    if (!s) return 0;
+    const cleaned = s.replace(/[$,]/g, "");
+    const n = parseFloat(cleaned);
+    return Number.isFinite(n) ? n : 0;
+  }
+
+  function fmtMoney(n) {
+    const v = Number.isFinite(n) ? n : 0;
+    try {
+      return v.toLocaleString(undefined, { style: "currency", currency: "USD" });
+    } catch {
+      // fallback
+      const sign = v < 0 ? "-" : "";
+      return sign + "$" + Math.abs(v).toFixed(2);
+    }
+  }
+
+  function fmtPct(n) {
+    const v = Number.isFinite(n) ? n : 0;
+    return (v * 100).toFixed(1) + "%";
+  }
+
   // Normalize IDs (works for ProductID from PromotionLine AND "id" from sheet)
   function normalizeId(x) {
     let s = safeText(x).trim();
@@ -61,18 +94,14 @@ WL Promo Calendar (BisTrack Dashboard)
     s = s.replace(/,/g, "");
     s = s.replace(/\.0+$/, "");
 
-    // If numeric, collapse to integer string
     if (/^\d+(\.\d+)?$/.test(s)) {
       const n = parseInt(s, 10);
       return Number.isFinite(n) ? String(n) : s;
     }
-
-    // If it’s zero-padded numeric (like 00013), also collapse
     if (/^0+\d+$/.test(s)) {
       const n2 = parseInt(s, 10);
       return Number.isFinite(n2) ? String(n2) : s;
     }
-
     return s;
   }
 
@@ -91,8 +120,15 @@ WL Promo Calendar (BisTrack Dashboard)
       const d2 = new Date(yy, mm, dd);
       if (!isNaN(d2.getTime())) return d2;
     }
-
     return null;
+  }
+
+  function dateKey(d) {
+    if (!d) return "";
+    const yy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    return `${yy}-${mm}-${dd}`;
   }
 
   function formatDate(d) {
@@ -139,7 +175,9 @@ WL Promo Calendar (BisTrack Dashboard)
       let done = false;
 
       function cleanup() {
-        try { delete window[cbName]; } catch {}
+        try {
+          delete window[cbName];
+        } catch {}
         const s = document.getElementById(cbName);
         if (s && s.parentNode) s.parentNode.removeChild(s);
       }
@@ -160,14 +198,13 @@ WL Promo Calendar (BisTrack Dashboard)
         cleanup();
 
         try {
-          const rawMap = (data && data.ok && data.map) ? data.map : null;
+          const rawMap = data && data.ok && data.map ? data.map : null;
           if (!rawMap) {
             PRODUCT_IMAGE_MAP_READY = false;
             resolve(false);
             return;
           }
 
-          // Normalize keys from the sheet ("id" column)
           const normalized = {};
           for (const k in rawMap) {
             const nk = normalizeId(k);
@@ -205,23 +242,24 @@ WL Promo Calendar (BisTrack Dashboard)
   }
 
   function getImageForProductId(productId, lineObj) {
-    // PromotionLine gives ProductID (ex: 84). Sheet map uses id (also 84).
     const pid = normalizeId(productId);
     if (pid && PRODUCT_IMAGE_MAP_READY && PRODUCT_IMAGE_MAP[pid]) return PRODUCT_IMAGE_MAP[pid];
 
-    // fallback: if PromotionLine includes an image field later
     const fallback = pickFirstField(lineObj, IMAGE_FIELD_CANDIDATES);
     return fallback || "";
   }
 
   // ====== UI Ensure ======
   function ensureUIOnce() {
+    injectStylesOnce();
+
     if (!qs("#wlPromoTooltip")) {
       const tip = document.createElement("div");
       tip.id = "wlPromoTooltip";
       tip.style.display = "none";
       tip.style.position = "fixed";
       tip.style.zIndex = "99999";
+      tip.className = "wl-tooltip";
       document.body.appendChild(tip);
     }
 
@@ -239,6 +277,38 @@ WL Promo Calendar (BisTrack Dashboard)
       `;
       document.body.appendChild(panel);
     }
+  }
+
+  function injectStylesOnce() {
+    if (qs("#wlPromoCalStyles")) return;
+    const s = document.createElement("style");
+    s.id = "wlPromoCalStyles";
+    s.type = "text/css";
+    s.textContent = `
+      .wl-tooltip{
+        background:#111; color:#fff; padding:10px 12px; border-radius:10px;
+        box-shadow:0 12px 30px rgba(0,0,0,.35);
+        font-family:Tahoma,Arial,sans-serif; font-size:12px; max-width:380px;
+      }
+      .wl-chip{ display:inline-block; padding:2px 8px; margin:0 6px 6px 0; border-radius:999px; background:rgba(255,255,255,.12); }
+      .wl-muted{ opacity:.75; }
+      .wl-day{ position:relative; border-radius:12px; overflow:hidden; }
+      .wl-day__sales{
+        position:absolute; right:8px; bottom:6px; font-size:11px;
+        background:rgba(0,0,0,.55); color:#fff; padding:2px 6px; border-radius:999px;
+        pointer-events:none;
+      }
+      .wl-heat-legend{
+        display:flex; gap:8px; align-items:center; font-family:Tahoma,Arial,sans-serif; font-size:12px; margin:6px 0 10px;
+      }
+      .wl-heat-swatch{ width:18px; height:10px; border-radius:3px; border:1px solid rgba(0,0,0,.15); }
+      .wl-panel-row{ margin:6px 0; }
+      .wl-kv{ display:inline-block; margin-right:10px; }
+      .wl-sales-table{ width:100%; border-collapse:collapse; margin-top:10px; }
+      .wl-sales-table th,.wl-sales-table td{ padding:6px 8px; border-bottom:1px solid rgba(0,0,0,.08); text-align:left; font-size:12px; }
+      .wl-sales-table th{ font-weight:700; }
+    `;
+    document.head.appendChild(s);
   }
 
   function bindCloseButton() {
@@ -366,6 +436,81 @@ WL Promo Calendar (BisTrack Dashboard)
     return map;
   }
 
+  // NEW: Sales indexing
+  function buildSalesIndex() {
+    const t = qs(PROMO_SALES_TABLE_SELECTOR);
+    if (!t) {
+      return {
+        byDay: {},          // dayKey -> {sales,cost,profit, promos:{promoId:{...}}}
+        byPromo: {},        // promoId -> {sales,cost,profit, days:[{dayKey,...}]}
+        maxDaySales: 0
+      };
+    }
+
+    const objs = tableToObjects(t);
+
+    const byDay = {};
+    const byPromo = {};
+    let maxDaySales = 0;
+
+    objs.forEach((o) => {
+      const promoId = String(o["PromotionID"] || o["PromotionId"] || o["promotionid"] || "").trim();
+      const d = parseDateLoose(o["SalesDate"] || o["salesdate"] || o["Date"] || o["date"]);
+      if (!promoId || !d) return;
+
+      const dk = dateKey(d);
+
+      const sales = parseNumberLoose(o["Sales"] || o["sales"]);
+      const cost = parseNumberLoose(o["Cost"] || o["cost"]);
+      const profit = parseNumberLoose(o["Profit"] || o["profit"]);
+      const margin = parseNumberLoose(o["Margin"] || o["margin"]);
+
+      if (!byDay[dk]) byDay[dk] = { sales: 0, cost: 0, profit: 0, promos: {} };
+      byDay[dk].sales += sales;
+      byDay[dk].cost += cost;
+      byDay[dk].profit += profit;
+
+      if (!byDay[dk].promos[promoId]) byDay[dk].promos[promoId] = { sales: 0, cost: 0, profit: 0, marginSum: 0, marginCount: 0 };
+      const dp = byDay[dk].promos[promoId];
+      dp.sales += sales;
+      dp.cost += cost;
+      dp.profit += profit;
+      if (Number.isFinite(margin) && margin !== 0) {
+        dp.marginSum += margin;
+        dp.marginCount += 1;
+      }
+
+      if (!byPromo[promoId]) byPromo[promoId] = { sales: 0, cost: 0, profit: 0, days: [] };
+      byPromo[promoId].sales += sales;
+      byPromo[promoId].cost += cost;
+      byPromo[promoId].profit += profit;
+      byPromo[promoId].days.push({ dayKey: dk, sales, cost, profit, margin });
+
+      if (byDay[dk].sales > maxDaySales) maxDaySales = byDay[dk].sales;
+    });
+
+    // Sort promo day lists descending by sales
+    Object.keys(byPromo).forEach((pid) => {
+      byPromo[pid].days.sort((a, b) => (b.sales || 0) - (a.sales || 0));
+    });
+
+    return { byDay, byPromo, maxDaySales };
+  }
+
+  function heatAlpha(daySales, maxDaySales) {
+    if (!maxDaySales || maxDaySales <= 0) return 0;
+    // log scaling so one huge day doesn’t flatten the rest
+    const a = Math.log10(1 + Math.max(0, daySales));
+    const b = Math.log10(1 + maxDaySales);
+    const t = b ? a / b : 0;
+    return HEAT_ALPHA_MIN + (HEAT_ALPHA_MAX - HEAT_ALPHA_MIN) * clamp(t, 0, 1);
+  }
+
+  function heatColor(alpha) {
+    const { r, g, b } = HEAT_BASE_RGB;
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
+
   // ====== Calendar Render ======
   function monthLabel(d) {
     const m = d.toLocaleString(undefined, { month: "long" });
@@ -376,7 +521,7 @@ WL Promo Calendar (BisTrack Dashboard)
     return new Date(d.getFullYear(), d.getMonth(), 1);
   }
 
-  function renderCalendar(currentMonth, promos, linesByPromoId) {
+  function renderCalendar(currentMonth, promos, linesByPromoId, salesIndex) {
     const grid = qs("#" + GRID_ID);
     const label = qs("#" + MONTH_LABEL_ID);
     if (!grid || !label) return;
@@ -395,10 +540,28 @@ WL Promo Calendar (BisTrack Dashboard)
       const cell = document.createElement("div");
       cell.className = "wl-day" + (day.getMonth() !== currentMonth.getMonth() ? " wl-day--muted" : "");
 
+      // Apply heat map background
+      const dk = dateKey(day);
+      const daySales = salesIndex && salesIndex.byDay && salesIndex.byDay[dk] ? salesIndex.byDay[dk].sales : 0;
+      const a = heatAlpha(daySales, salesIndex ? salesIndex.maxDaySales : 0);
+      if (daySales > 0 && a > 0) {
+        cell.style.background = heatColor(a);
+      }
+
       const num = document.createElement("div");
       num.className = "wl-day__num";
       num.textContent = day.getDate();
       cell.appendChild(num);
+
+      // Small $ label in the corner when there are sales
+      if (daySales > 0) {
+        const salesBadge = document.createElement("div");
+        salesBadge.className = "wl-day__sales";
+        // compact display
+        const compact = daySales >= 1000 ? (daySales / 1000).toFixed(1) + "k" : daySales.toFixed(0);
+        salesBadge.textContent = "$" + compact;
+        cell.appendChild(salesBadge);
+      }
 
       const stack = document.createElement("div");
       stack.className = "wl-promo-stack";
@@ -411,17 +574,92 @@ WL Promo Calendar (BisTrack Dashboard)
         badge.title = p.name || p.code || "Promotion";
         badge.textContent = p.code || p.name || `Promo ${p.id}`;
 
-        attachBadgeEvents(badge, p, linesByPromoId);
+        attachBadgeEvents(badge, p, linesByPromoId, salesIndex);
         stack.appendChild(badge);
       });
 
       cell.appendChild(stack);
+
+      // Day hover tooltip (totals + top promos that day)
+      attachDayEvents(cell, day, todays, salesIndex);
+
       grid.appendChild(cell);
     }
+
+    // Optional legend (only if sales table exists and has maxDaySales)
+    renderHeatLegendOnce(salesIndex);
+  }
+
+  function renderHeatLegendOnce(salesIndex) {
+    if (!salesIndex || !salesIndex.maxDaySales) return;
+    const cal = qs("#" + CAL_ID);
+    if (!cal) return;
+    if (qs("#wlHeatLegend", cal)) return;
+
+    const legend = document.createElement("div");
+    legend.id = "wlHeatLegend";
+    legend.className = "wl-heat-legend";
+
+    const a1 = heatAlpha(salesIndex.maxDaySales * 0.15, salesIndex.maxDaySales);
+    const a2 = heatAlpha(salesIndex.maxDaySales * 0.45, salesIndex.maxDaySales);
+    const a3 = heatAlpha(salesIndex.maxDaySales, salesIndex.maxDaySales);
+
+    legend.innerHTML = `
+      <span class="wl-muted">Promo sales heat:</span>
+      <span class="wl-heat-swatch" style="background:${heatColor(a1)}"></span>
+      <span class="wl-heat-swatch" style="background:${heatColor(a2)}"></span>
+      <span class="wl-heat-swatch" style="background:${heatColor(a3)}"></span>
+      <span class="wl-muted">higher = more sales</span>
+    `;
+    // Put legend just above grid
+    const grid = qs("#" + GRID_ID);
+    if (grid && grid.parentNode) grid.parentNode.insertBefore(legend, grid);
+  }
+
+  function attachDayEvents(cellEl, day, todaysPromos, salesIndex) {
+    if (!cellEl || cellEl.__wlDayBound) return;
+    cellEl.__wlDayBound = true;
+
+    cellEl.addEventListener("mousemove", (ev) => {
+      const dk = dateKey(day);
+      const dayRec = salesIndex && salesIndex.byDay ? salesIndex.byDay[dk] : null;
+      if (!dayRec || !dayRec.sales) {
+        // If no sales, don’t show a tooltip (keeps UI clean)
+        hideTooltip();
+        return;
+      }
+
+      // Top promos by sales for that day
+      const promoRows = Object.keys(dayRec.promos || {})
+        .map((pid) => ({ pid, sales: dayRec.promos[pid].sales }))
+        .sort((a, b) => (b.sales || 0) - (a.sales || 0))
+        .slice(0, 6);
+
+      const topHtml = promoRows
+        .map((r) => {
+          const promo = (todaysPromos || []).find((p) => String(p.id).trim() === String(r.pid).trim());
+          const label = promo ? (promo.code || promo.name || `Promo ${r.pid}`) : `Promo ${r.pid}`;
+          return `<div class="wl-panel-row"><strong>${escHtml(label)}</strong> <span class="wl-muted">${escHtml(fmtMoney(r.sales))}</span></div>`;
+        })
+        .join("");
+
+      const html = `
+        <div style="font-weight:700; margin-bottom:6px;">${escHtml(formatDate(day))}</div>
+        <div style="margin-bottom:8px;">
+          <span class="wl-chip">Sales: ${escHtml(fmtMoney(dayRec.sales))}</span>
+          <span class="wl-chip">Profit: ${escHtml(fmtMoney(dayRec.profit))}</span>
+          <span class="wl-chip">Margin: ${escHtml(dayRec.sales ? fmtPct(dayRec.profit / dayRec.sales) : "0.0%")}</span>
+        </div>
+        ${topHtml || `<div class="wl-muted">No promo breakdown found.</div>`}
+      `;
+      showTooltip(html, ev.clientX, ev.clientY);
+    });
+
+    cellEl.addEventListener("mouseleave", hideTooltip);
   }
 
   // ====== Tooltip / Panel Binding ======
-  function attachBadgeEvents(el, promo, linesByPromoId) {
+  function attachBadgeEvents(el, promo, linesByPromoId, salesIndex) {
     if (!el || el.__wlPromoBound) return;
     el.__wlPromoBound = true;
 
@@ -430,9 +668,13 @@ WL Promo Calendar (BisTrack Dashboard)
       const lines = linesByPromoId[id] || [];
       const count = lines.length;
 
+      const promoSales = salesIndex && salesIndex.byPromo ? salesIndex.byPromo[id] : null;
+
       const chips = [
         promo.branchId ? `<span class="wl-chip">Branch: ${escHtml(promo.branchId)}</span>` : "",
         `<span class="wl-chip">Lines: ${count}</span>`,
+        promoSales ? `<span class="wl-chip">Promo Sales: ${escHtml(fmtMoney(promoSales.sales))}</span>` : `<span class="wl-chip">Promo Sales: —</span>`,
+        promoSales ? `<span class="wl-chip">Profit: ${escHtml(fmtMoney(promoSales.profit))}</span>` : "",
         PRODUCT_IMAGE_MAP_READY ? `<span class="wl-chip">Images ready</span>` : `<span class="wl-chip">Images loading…</span>`,
       ].join("");
 
@@ -468,6 +710,7 @@ WL Promo Calendar (BisTrack Dashboard)
 
       const id = String(el.dataset.promotionid || "").trim();
       const lines = linesByPromoId[id] || [];
+      const promoSales = salesIndex && salesIndex.byPromo ? salesIndex.byPromo[id] : null;
 
       const dateLine =
         promo.from && promo.to
@@ -475,6 +718,37 @@ WL Promo Calendar (BisTrack Dashboard)
           : "";
 
       const title = `${escHtml(promo.name || promo.code || "Promotion")} ${dateLine}`;
+
+      // Sales section (top days)
+      let salesHtml = `<div class="wl-panel-row wl-muted">No sales rows found for this PromotionID.</div>`;
+      if (promoSales && promoSales.days && promoSales.days.length) {
+        const topDays = promoSales.days.slice(0, 12);
+        salesHtml = `
+          <div class="wl-panel-row">
+            <strong>Promo Sales:</strong> ${escHtml(fmtMoney(promoSales.sales))} &nbsp;
+            <span class="wl-muted">(Profit: ${escHtml(fmtMoney(promoSales.profit))}, Margin: ${escHtml(promoSales.sales ? fmtPct(promoSales.profit / promoSales.sales) : "0.0%")})</span>
+          </div>
+          <table class="wl-sales-table">
+            <thead>
+              <tr><th>Date</th><th>Sales</th><th>Profit</th><th>Margin</th></tr>
+            </thead>
+            <tbody>
+              ${topDays
+                .map((r) => {
+                  const d = parseDateLoose(r.dayKey) || new Date(r.dayKey);
+                  const margin = r.sales ? (r.profit / r.sales) : 0;
+                  return `<tr>
+                    <td>${escHtml(r.dayKey)}</td>
+                    <td>${escHtml(fmtMoney(r.sales))}</td>
+                    <td>${escHtml(fmtMoney(r.profit))}</td>
+                    <td>${escHtml(fmtPct(margin))}</td>
+                  </tr>`;
+                })
+                .join("")}
+            </tbody>
+          </table>
+        `;
+      }
 
       const linesHtml =
         lines.length > 0
@@ -517,6 +791,9 @@ WL Promo Calendar (BisTrack Dashboard)
         <div class="wl-panel-row"><strong>Branch:</strong> ${escHtml(promo.branchId || "All")}</div>
         <div class="wl-panel-row"><strong>Promo Code:</strong> ${escHtml(promo.code || "")}</div>
         <div class="wl-panel-row"><strong>Lines:</strong> ${lines.length}</div>
+        <hr style="border:none;border-top:1px solid rgba(0,0,0,.12); margin:10px 0;">
+        ${salesHtml}
+        <hr style="border:none;border-top:1px solid rgba(0,0,0,.12); margin:10px 0;">
         ${linesHtml}
       `;
 
@@ -541,6 +818,9 @@ WL Promo Calendar (BisTrack Dashboard)
     const promos = getPromosFromHeaderTable();
     const lines = buildLinesByPromoId();
 
+    // NEW: build sales index from the new table
+    const salesIndex = buildSalesIndex();
+
     let current = new Date();
     current = new Date(current.getFullYear(), current.getMonth(), 1);
 
@@ -548,7 +828,7 @@ WL Promo Calendar (BisTrack Dashboard)
     const next = qs("#" + NEXT_ID);
 
     function rerender() {
-      renderCalendar(current, promos, lines);
+      renderCalendar(current, promos, lines, salesIndex);
     }
 
     if (prev) {
