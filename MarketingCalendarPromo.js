@@ -440,7 +440,53 @@ UPDATES IN THIS VERSION:
     link.click();
   }
 
-  // ====== Selling Price Rules Link ======
+  
+function ensureViewPromoButton(panel, promo) {
+  try {
+    window.WL_PROMOCAL_OPEN_PROMO_ID = promo && promo.id ? promo.id : null;
+    window.WL_PROMOCAL_OPEN_PROMO_CODE = promo && promo.code ? promo.code : "";
+    window.WL_PROMOCAL_OPEN_PROMO_NAME = promo && promo.name ? promo.name : "";
+  } catch (e) {}
+
+  if (!panel) return;
+  const header = panel.querySelector(".wl-promo-panel__header");
+  if (!header) return;
+
+  const closeBtn = panel.querySelector("#wlPanelClose");
+  // Create or reuse button
+  let viewBtn = panel.querySelector("#wlPanelViewPromo");
+  if (!viewBtn) {
+    viewBtn = document.createElement("button");
+    viewBtn.type = "button";
+    viewBtn.id = "wlPanelViewPromo";
+    viewBtn.className = "wl-panel__view";
+    viewBtn.textContent = "View Promo";
+    viewBtn.title = "Open Selling Price Rules (filter to find this promotion)";
+    viewBtn.style.marginLeft = "8px";
+    viewBtn.style.padding = "6px 10px";
+    viewBtn.style.borderRadius = "10px";
+    viewBtn.style.border = "1px solid rgba(0,0,0,0.18)";
+    viewBtn.style.background = "rgba(255,255,255,0.95)";
+    viewBtn.style.cursor = "pointer";
+    viewBtn.style.fontWeight = "600";
+    viewBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openSellingPriceRulesFromPanel();
+    });
+    if (closeBtn) header.insertBefore(viewBtn, closeBtn);
+    else header.appendChild(viewBtn);
+  } else {
+    // Ensure it's placed in header
+    if (viewBtn.parentElement !== header) {
+      if (closeBtn) header.insertBefore(viewBtn, closeBtn);
+      else header.appendChild(viewBtn);
+    }
+    viewBtn.style.display = "";
+  }
+}
+
+// ====== Selling Price Rules Link ======
   function getSellingPriceRulesLink() {
     return (
       document.querySelector(SELLING_PRICE_RULES_SELECTOR) ||
