@@ -215,6 +215,42 @@ function heatBandColor(value, maxValue) {
       closeBtn.addEventListener("click", closePanel);
     }
   }
+function ensureHeaderViewPromosButton() {
+  const cal = qs("#wlPromoCal");
+  if (!cal) return;
+  const header = cal.querySelector(".wl-promo-cal__header");
+  if (!header) return;
+
+  // Avoid duplicates
+  let btn = header.querySelector("#wlViewPromosBtn");
+  if (!btn) {
+    btn = document.createElement("button");
+    btn.type = "button";
+    btn.id = "wlViewPromosBtn";
+    btn.className = "wl-header__action";
+    btn.textContent = "View Promotions";
+    btn.title = "Open Selling Price Rules (Promotions)";
+    btn.style.marginLeft = "8px";
+    btn.style.padding = "6px 10px";
+    btn.style.borderRadius = "10px";
+    btn.style.border = "1px solid rgba(0,0,0,0.18)";
+    btn.style.background = "rgba(255,255,255,0.95)";
+    btn.style.cursor = "pointer";
+    btn.style.fontWeight = "700";
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openSellingPriceRulesFromPanel();
+    });
+
+    // Put it on the right side of the header (after next button)
+    const nextBtn = header.querySelector("#wlNextMonth");
+    if (nextBtn) header.insertBefore(btn, nextBtn.nextSibling);
+    else header.appendChild(btn);
+  }
+}
+
+
 
   function showTooltip(html, x, y) {
     const tip = qs("#wlPromoTooltip");
@@ -976,6 +1012,7 @@ if (bg) cell.style.background = bg;
 
   function refreshAllAndRender() {
     ensureUIOnce();
+    ensureHeaderViewPromosButton();
     hideCreatePromoLink();
     hideSellingPriceRulesLink();
     bindCloseButton();
