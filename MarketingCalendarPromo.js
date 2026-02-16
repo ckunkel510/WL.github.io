@@ -156,6 +156,18 @@ UPDATES IN THIS VERSION:
     const c = new Date(to.getFullYear(), to.getMonth(), to.getDate()).getTime();
     return a >= b && a <= c;
   }
+// Discrete, log-scaled bands for better contrast across small & large days
+function heatBandColor(value, maxValue) {
+  if (!value || value <= 0 || !maxValue || maxValue <= 0) return "";
+  const n = Math.log1p(value) / Math.log1p(maxValue); // 0..1
+  const bands = [0.08, 0.14, 0.22, 0.32, 0.45, 0.60, 0.76, 0.90, 0.98]; // 9 bands
+  const idx = Math.min(bands.length - 1, Math.max(0, Math.floor(n * bands.length)));
+  const a = bands[idx];
+  const base = { r: 220, g: 20, b: 60 }; // crimson-like
+  return `rgba(${base.r}, ${base.g}, ${base.b}, ${a})`;
+}
+
+
 
   function monthLabel(d) {
     const m = d.toLocaleString(undefined, { month: "long" });
