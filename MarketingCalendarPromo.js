@@ -8,7 +8,8 @@ Tables used:
 
 UPDATES IN THIS VERSION:
 - Uses Table208999 to show per-line Day + Month sales in tooltip + panel
-- Heatmap remains high-contrast (visible 42-day max + gamma)
+- Heatmap is higher contrast (visible 42-day max + gamma)
+- "Top Items (Day)" shows ProductCode + Description (via PromoLine lookup) instead of ProductID
 ============================================================================ */
 
 (function () {
@@ -248,6 +249,16 @@ UPDATES IN THIS VERSION:
     });
   }
 
+  function getFieldLoose(obj, names) {
+    if (!obj) return "";
+    for (const n of names) {
+      if (obj[n] != null && String(obj[n]).trim() !== "") return String(obj[n]).trim();
+      const key = Object.keys(obj).find((k) => k.toLowerCase() === String(n).toLowerCase());
+      if (key && obj[key] != null && String(obj[key]).trim() !== "") return String(obj[key]).trim();
+    }
+    return "";
+  }
+
   function getPromosFromHeaderTable() {
     const table = qs(PROMO_HEADER_TABLE_SELECTOR);
     if (!table) return [];
@@ -295,12 +306,11 @@ UPDATES IN THIS VERSION:
     if (!t) return { byDay: {}, byDayPromo: {} };
 
     const rows = tableToObjects(t);
-    const byDay = {}; // dateKey -> {sales,cost,profit,rows:[]}
-    const byDayPromo = {}; // dateKey -> promoId -> agg
+    const byDay = {}; // dateKey -> {sales,cost,profit}
+    const byDayPromo = {}; // dateKey -> promoId -> {sales,cost,profit}
 
     rows.forEach((r) => {
       const promoId = normalizeId(r["PromotionID"]);
-      const branchId = normalizeId(r["BranchID"]);
       const d = parseDateLoose(r["SalesDate"]);
       if (!promoId || !d) return;
 
@@ -308,13 +318,11 @@ UPDATES IN THIS VERSION:
       const sales = parseNumberLoose(r["Sales"]);
       const cost = parseNumberLoose(r["Cost"]);
       const profit = parseNumberLoose(r["Profit"]);
-      const margin = parseNumberLoose(r["Margin"]);
 
-      byDay[dk] ||= { sales: 0, cost: 0, profit: 0, rows: [] };
+      byDay[dk] ||= { sales: 0, cost: 0, profit: 0 };
       byDay[dk].sales += sales;
       byDay[dk].cost += cost;
       byDay[dk].profit += profit;
-      byDay[dk].rows.push({ promoId, branchId, sales, cost, profit, margin });
 
       byDayPromo[dk] ||= {};
       byDayPromo[dk][promoId] ||= { promoId, sales: 0, cost: 0, profit: 0 };
@@ -366,6 +374,26 @@ UPDATES IN THIS VERSION:
     });
 
     return { byDayPromoProduct, byMonthPromoProduct };
+  }
+
+  // Build a lookup for ProductID -> { productCode, description } from PromoLine table (for a specific promo)
+  function buildPromoLineMetaLookup(promoId, linesByPromoId) {
+    const lines = (linesByPromoId && linesByPromoId[promoId]) ? linesByPromoId[promoId] : [];
+    const map = {};
+    lines.forEach((l) => {
+      const productId = normalizeId(getFieldLoose(l, ["ProductID", "productid"]));
+      if (!productId) return;
+
+      const productCode = (getFieldLoose(l, ["ProductCode", "productcode"]) || "").trim();
+      const description = (getFieldLoose(l, ["Description", "description"]) || "").trim();
+
+      if (!map[productId]) map[productId] = { productCode, description };
+      else {
+        if (!map[productId].productCode && productCode) map[productId].productCode = productCode;
+        if (!map[productId].description && description) map[productId].description = description;
+      }
+    });
+    return map;
   }
 
   // ====== Heatmap ======
@@ -456,16 +484,6 @@ UPDATES IN THIS VERSION:
   }
 
   // ====== Promo Badge Events ======
-  function getFieldLoose(obj, names) {
-    if (!obj) return "";
-    for (const n of names) {
-      if (obj[n] != null && String(obj[n]).trim() !== "") return String(obj[n]).trim();
-      const key = Object.keys(obj).find((k) => k.toLowerCase() === String(n).toLowerCase());
-      if (key && obj[key] != null && String(obj[key]).trim() !== "") return String(obj[key]).trim();
-    }
-    return "";
-  }
-
   function getPromoDaySales(promoId, dk, salesIndex) {
     if (!salesIndex || !salesIndex.byDayPromo) return null;
     const perDay = salesIndex.byDayPromo[dk];
@@ -538,7 +556,7 @@ UPDATES IN THIS VERSION:
 
         return `
           <div class="wl-panel-row">
-            <strong>${escHtml(code || ("Product " + productId) || "Line item")}</strong>
+            <strong>${escHtml(code || (productId ? ("Product " + productId) : "Line item"))}</strong>
             <div class="wl-muted">${escHtml(desc)}</div>
             ${salesBits}
           </div>
@@ -596,6 +614,9 @@ UPDATES IN THIS VERSION:
         `
         : `<div class="wl-muted" style="margin:10px 0;">No sales summary found for this promo in the visible month.</div>`;
 
+      // UPDATED: Top items now show ProductCode + Description using PromoLine lookup
+      const topItems = buildTopItemsDaySummaryHtml(promoId, dk, linesByPromoId);
+
       const lineHtml = lines.length
         ? `
           <div style="max-height:380px; overflow:auto; border-top:1px solid #eee; padding-top:10px;">
@@ -640,8 +661,6 @@ UPDATES IN THIS VERSION:
         `
         : `<div class="wl-muted">No line details found.</div>`;
 
-      const topItems = buildTopItemsDaySummaryHtml(promoId, dk);
-
       openPanel(title, dayBlock + monthBlock + topItems + lineHtml);
     });
   }
@@ -672,17 +691,29 @@ UPDATES IN THIS VERSION:
     return { sales, profit, days };
   }
 
-  function buildTopItemsDaySummaryHtml(promoId, dk) {
+  // UPDATED FUNCTION: Top Items uses ProductCode/Description from PromoLine table
+  function buildTopItemsDaySummaryHtml(promoId, dk, linesByPromoId) {
     if (!SALES_BY_PRODUCT_INDEX || !dk) return "";
 
-    const dayPromo = SALES_BY_PRODUCT_INDEX.byDayPromoProduct && SALES_BY_PRODUCT_INDEX.byDayPromoProduct[dk]
-      ? SALES_BY_PRODUCT_INDEX.byDayPromoProduct[dk][promoId]
-      : null;
+    const dayPromo =
+      SALES_BY_PRODUCT_INDEX.byDayPromoProduct &&
+      SALES_BY_PRODUCT_INDEX.byDayPromoProduct[dk] &&
+      SALES_BY_PRODUCT_INDEX.byDayPromoProduct[dk][promoId]
+        ? SALES_BY_PRODUCT_INDEX.byDayPromoProduct[dk][promoId]
+        : null;
 
     if (!dayPromo) return "";
 
+    const meta = buildPromoLineMetaLookup(promoId, linesByPromoId);
+
     const items = Object.entries(dayPromo)
-      .map(([productId, agg]) => ({ productId, ...agg }))
+      .map(([productId, agg]) => ({
+        productId,
+        productCode: (meta[productId] && meta[productId].productCode) ? meta[productId].productCode : "",
+        description: (meta[productId] && meta[productId].description) ? meta[productId].description : "",
+        sales: agg.sales || 0,
+        profit: agg.profit || 0,
+      }))
       .sort((a, b) => (b.sales || 0) - (a.sales || 0))
       .slice(0, 10);
 
@@ -694,19 +725,27 @@ UPDATES IN THIS VERSION:
         <table style="width:100%; border-collapse:collapse;">
           <thead>
             <tr>
-              <th style="text-align:left; padding:6px; border-bottom:1px solid #ddd;">ProductID</th>
+              <th style="text-align:left; padding:6px; border-bottom:1px solid #ddd;">Item</th>
               <th style="text-align:right; padding:6px; border-bottom:1px solid #ddd;">Sales</th>
               <th style="text-align:right; padding:6px; border-bottom:1px solid #ddd;">Profit</th>
             </tr>
           </thead>
           <tbody>
-            ${items.map((x) => `
-              <tr>
-                <td style="padding:6px; border-bottom:1px solid #f0f0f0;">${escHtml(x.productId)}</td>
-                <td style="padding:6px; border-bottom:1px solid #f0f0f0; text-align:right;">${escHtml(currency(x.sales || 0))}</td>
-                <td style="padding:6px; border-bottom:1px solid #f0f0f0; text-align:right;">${escHtml(currency(x.profit || 0))}</td>
-              </tr>
-            `).join("")}
+            ${items.map((x) => {
+              const title = x.productCode ? x.productCode : (x.productId ? ("Product " + x.productId) : "Item");
+              const desc = x.description || "";
+              return `
+                <tr>
+                  <td style="padding:6px; border-bottom:1px solid #f0f0f0;">
+                    <div style="font-weight:700;">${escHtml(title)}</div>
+                    ${desc ? `<div class="wl-muted">${escHtml(desc)}</div>` : ""}
+                    ${x.productId ? `<div class="wl-muted">ProductID: ${escHtml(x.productId)}</div>` : ""}
+                  </td>
+                  <td style="padding:6px; border-bottom:1px solid #f0f0f0; text-align:right;">${escHtml(currency(x.sales))}</td>
+                  <td style="padding:6px; border-bottom:1px solid #f0f0f0; text-align:right;">${escHtml(currency(x.profit))}</td>
+                </tr>
+              `;
+            }).join("")}
           </tbody>
         </table>
       </div>
@@ -735,15 +774,6 @@ UPDATES IN THIS VERSION:
     }
   }
 
-  function logStatus() {
-    console.log("[WL PromoCal] Tables found:", {
-      header: !!qs(PROMO_HEADER_TABLE_SELECTOR),
-      line: !!qs(PROMO_LINE_TABLE_SELECTOR),
-      salesDaily: !!qs(PROMO_SALES_TABLE_SELECTOR),
-      salesByProduct: !!qs(PROMO_SALES_BY_PRODUCT_TABLE_SELECTOR),
-    });
-  }
-
   function refreshAllAndRender() {
     ensureUIOnce();
     bindCloseButton();
@@ -762,20 +792,15 @@ UPDATES IN THIS VERSION:
     function tick() {
       const grid = qs("#" + GRID_ID);
       const hasHeader = !!qs(PROMO_HEADER_TABLE_SELECTOR);
-
       if (grid && hasHeader) {
-        logStatus();
         refreshAllAndRender();
         return;
       }
-
       if (Date.now() - start > maxMs) {
         console.warn("[WL PromoCal] Init timed out waiting for dashboard tables/grid.");
-        logStatus();
         if (grid) refreshAllAndRender();
         return;
       }
-
       setTimeout(tick, 250);
     }
     tick();
