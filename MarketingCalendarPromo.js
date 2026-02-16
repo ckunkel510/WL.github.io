@@ -6,21 +6,19 @@ Tables used:
 - PromoSales Daily:       table.Table208998   (PromotionID, BranchID, SalesDate, Sales, Cost, Profit, Margin)
 - PromoSales By Product:  table.Table208999   (PromotionID, BranchID, SalesDate, ProductID, Sales, Cost, Profit, Margin)
 
-UPDATES IN THIS VERSION:
-- Uses Table208999 to show per-line Day + Month sales in tooltip + panel
-- Heatmap is higher contrast (visible 42-day max + gamma)
-- "Top Items (Day)" shows ProductCode + Description (via PromoLine lookup) instead of ProductID
+UPDAT
 ============================================================================ */
-
 (function () {
   "use strict";
 
-  // ====== CONFIG ======
+  // ====== Config / Selectors ======
   const PROMO_HEADER_TABLE_SELECTOR = "table.Table208993";
   const PROMO_LINE_TABLE_SELECTOR   = "table.Table208994";
   const PROMO_SALES_TABLE_SELECTOR  = "table.Table208998";
   const PROMO_SALES_BY_PRODUCT_TABLE_SELECTOR = "table.Table208999";
 
+  const CREATE_PROMO_LINK_HREF = "dislinkDrillDown209001";
+  const CREATE_PROMO_LINK_SELECTOR = `a.dashboard-link[href="${CREATE_PROMO_LINK_HREF}"]`;
   const GRID_ID = "wlPromoGrid";
   const MONTH_LABEL_ID = "wlMonthLabel";
   const PREV_ID = "wlPrevMonth";
@@ -30,25 +28,11 @@ UPDATES IN THIS VERSION:
   const TOOLTIP_PREVIEW_COUNT = 5;
 
   // Heatmap tuning (more contrast)
-  const HEAT_MIN_ALPHA = 0.12;
-  const HEAT_MAX_ALPHA = 0.92;
-  const HEAT_GAMMA = 0.55; // <1 boosts low/mid values
-  const HEAT_COLOR_RGB = { r: 107, g: 0, b: 22 }; // #6b0016
+  const HEAT_MIN_ALPHA = 0.08; // base tint
+  const HEAT_MAX_ALPHA = 0.88; // max tint
+  const HEAT_POWER = 0.55;     // <1 = more contrast in low/mid values
 
-  // Images (optional) - left disabled to avoid JSONP issues in dashboards
-  const ENABLE_IMAGE_MAP_JSONP = false;
-
-  const PLACEHOLDER_DATA_URI =
-    "data:image/svg+xml;charset=utf-8," +
-    encodeURIComponent(
-      `<svg xmlns="http://www.w3.org/2000/svg" width="140" height="140">
-        <rect width="100%" height="100%" fill="#f4f4f4"/>
-        <text x="50%" y="50%" dominant-baseline="middle" text-anchor="middle"
-              font-family="Tahoma,Arial" font-size="12" fill="#777">No image</text>
-      </svg>`
-    );
-
-  // ====== STATE ======
+  // ====== State ======
   let CURRENT_MONTH = startOfMonth(new Date());
   let PROMOS = [];
   let LINES_BY_PROMO = {};
@@ -58,356 +42,391 @@ UPDATES IN THIS VERSION:
   // ====== Helpers ======
   const qs = (sel, root = document) => root.querySelector(sel);
   const qsa = (sel, root = document) => Array.from(root.querySelectorAll(sel));
-  const safeText = (x) => (x == null ? "" : String(x));
-  const clamp = (n, min, max) => Math.max(min, Math.min(n, max));
 
-  function escHtml(str) {
-    return safeText(str)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
+  function safeText(el) {
+    return (el && el.textContent ? el.textContent : "").trim();
   }
 
-  function normalizeId(x) {
-    let s = safeText(x).trim();
-    if (!s) return "";
-    s = s.replace(/,/g, "");
-    s = s.replace(/\.0+$/, "");
-    if (/^\d+(\.\d+)?$/.test(s)) {
-      const n = parseInt(s, 10);
-      return Number.isFinite(n) ? String(n) : s;
-    }
-    if (/^0+\d+$/.test(s)) {
-      const n2 = parseInt(s, 10);
-      return Number.isFinite(n2) ? String(n2) : s;
-    }
-    return s;
+  function parseFloatSafe(v) {
+    if (v == null) return 0;
+    const s = String(v).replace(/[^0-9.\-]/g, "");
+    const n = parseFloat(s);
+    return isNaN(n) ? 0 : n;
   }
 
-  function parseNumberLoose(x) {
-    const s = safeText(x).trim().replace(/[$,]/g, "");
-    if (!s) return 0;
-    const n = Number(s);
-    return Number.isFinite(n) ? n : 0;
-  }
-
-  function parseDateLoose(str) {
-    const s = safeText(str).trim();
-    if (!s) return null;
-
-    const d1 = new Date(s);
-    if (!isNaN(d1.getTime())) return new Date(d1.getFullYear(), d1.getMonth(), d1.getDate());
-
-    const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-    if (m) {
-      const mm = parseInt(m[1], 10) - 1;
-      const dd = parseInt(m[2], 10);
-      let yy = parseInt(m[3], 10);
-      if (yy < 100) yy += 2000;
-      const d = new Date(yy, mm, dd);
-      if (!isNaN(d.getTime())) return d;
-    }
-    return null;
-  }
-
-  function formatDate(d) {
-    if (!d) return "";
-    return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+  function parseIntSafe(v) {
+    if (v == null) return 0;
+    const s = String(v).replace(/[^0-9\-]/g, "");
+    const n = parseInt(s, 10);
+    return isNaN(n) ? 0 : n;
   }
 
   function dateKey(d) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
+    const dt = new Date(d);
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, "0");
+    const day = String(dt.getDate()).padStart(2, "0");
     return `${y}-${m}-${day}`;
   }
 
-  function monthKeyFromDate(d) {
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  function ymKey(d) {
+    const dt = new Date(d);
+    const y = dt.getFullYear();
+    const m = String(dt.getMonth() + 1).padStart(2, "0");
+    return `${y}-${m}`;
   }
 
-  function currency(n) {
-    const v = Number(n || 0);
-    try {
-      return v.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
-    } catch {
-      return "$" + Math.round(v).toString();
+  function parseAnyDate(v) {
+    // accepts: 2/5/2026, 02/05/2026, 2026-02-05, etc.
+    if (!v) return null;
+    const s = String(v).trim();
+    // ISO?
+    const iso = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+    if (iso) {
+      const y = parseInt(iso[1], 10);
+      const m = parseInt(iso[2], 10) - 1;
+      const d = parseInt(iso[3], 10);
+      const dt = new Date(y, m, d);
+      return isNaN(dt.getTime()) ? null : dt;
     }
-  }
-
-  function compactCurrency(n) {
-    const v = Number(n || 0);
-    const abs = Math.abs(v);
-    if (abs >= 1000000) return "$" + (v / 1000000).toFixed(1) + "M";
-    if (abs >= 1000) return "$" + (v / 1000).toFixed(1) + "k";
-    return "$" + Math.round(v).toString();
-  }
-
-  function inRange(day, from, to) {
-    if (!day || !from || !to) return false;
-    const a = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
-    const b = new Date(from.getFullYear(), from.getMonth(), from.getDate()).getTime();
-    const c = new Date(to.getFullYear(), to.getMonth(), to.getDate()).getTime();
-    return a >= b && a <= c;
-  }
-
-  function monthLabel(d) {
-    const m = d.toLocaleString(undefined, { month: "long" });
-    return `${m} ${d.getFullYear()}`;
+    // US slash?
+    const us = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/);
+    if (us) {
+      let y = parseInt(us[3], 10);
+      if (y < 100) y += 2000;
+      const m = parseInt(us[1], 10) - 1;
+      const d = parseInt(us[2], 10);
+      const dt = new Date(y, m, d);
+      return isNaN(dt.getTime()) ? null : dt;
+    }
+    const dt = new Date(s);
+    return isNaN(dt.getTime()) ? null : dt;
   }
 
   function startOfMonth(d) {
-    return new Date(d.getFullYear(), d.getMonth(), 1);
+    const dt = new Date(d);
+    return new Date(dt.getFullYear(), dt.getMonth(), 1);
   }
 
   function endOfMonth(d) {
-    return new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    const dt = new Date(d);
+    return new Date(dt.getFullYear(), dt.getMonth() + 1, 0);
   }
 
-  // ====== Tooltip / Panel ======
-  function ensureUIOnce() {
-    if (!qs("#wlPromoTooltip")) {
-      const tip = document.createElement("div");
-      tip.id = "wlPromoTooltip";
-      tip.style.display = "none";
-      tip.style.position = "fixed";
-      tip.style.zIndex = "99999";
-      document.body.appendChild(tip);
-    }
-    if (!qs("#wlPromoDetailsPanel")) {
-      const panel = document.createElement("div");
-      panel.id = "wlPromoDetailsPanel";
-      panel.style.display = "none";
-      panel.className = "wl-promo-panel";
-      panel.innerHTML = `
-        <div class="wl-promo-panel__header">
-          <div id="wlPanelTitle"></div>
-          <button type="button" id="wlPanelClose" aria-label="Close">✕</button>
-        </div>
-        <div id="wlPanelBody"></div>
-      `;
-      document.body.appendChild(panel);
-    }
+  function inRange(day, from, to) {
+    const t = new Date(day).setHours(0, 0, 0, 0);
+    const f = new Date(from).setHours(0, 0, 0, 0);
+    const tt = new Date(to).setHours(0, 0, 0, 0);
+    return t >= f && t <= tt;
   }
 
-  function bindCloseButton() {
-    const closeBtn = qs("#wlPanelClose");
-    if (closeBtn && !closeBtn.__wlBound) {
-      closeBtn.__wlBound = true;
-      closeBtn.addEventListener("click", closePanel);
+  function monthLabel(d) {
+    const dt = new Date(d);
+    return dt.toLocaleString(undefined, { month: "long", year: "numeric" });
+  }
+
+  function compactCurrency(v) {
+    // Use a simple formatter; BisTrack browser may not always support Intl well but usually does.
+    try {
+      return new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: 0,
+      }).format(v);
+    } catch (e) {
+      return "$" + Math.round(v).toLocaleString();
     }
   }
 
-  function showTooltip(html, x, y) {
-    const tip = qs("#wlPromoTooltip");
-    if (!tip) return;
-    tip.innerHTML = html;
-    tip.style.display = "block";
-
-    const pad = 12;
-    const maxX = window.innerWidth - tip.offsetWidth - pad;
-    const maxY = window.innerHeight - tip.offsetHeight - pad;
-
-    tip.style.left = clamp(x + 12, pad, maxX) + "px";
-    tip.style.top = clamp(y + 12, pad, maxY) + "px";
-  }
-
-  function hideTooltip() {
-    const tip = qs("#wlPromoTooltip");
-    if (tip) tip.style.display = "none";
-  }
-
-  function openPanel(titleHtml, bodyHtml) {
-    const panel = qs("#wlPromoDetailsPanel");
-    const t = qs("#wlPanelTitle");
-    const b = qs("#wlPanelBody");
-    if (!panel || !t || !b) return;
-    t.innerHTML = titleHtml;
-    b.innerHTML = bodyHtml;
-    panel.style.display = "block";
-    bindCloseButton();
-  }
-
-  function closePanel() {
-    const panel = qs("#wlPromoDetailsPanel");
-    if (panel) panel.style.display = "none";
-  }
-
-  // ====== Data Read ======
-  function tableToObjects(table) {
-    const headers = qsa("thead th", table).map((th) => (th.innerText || "").trim());
-    const rows = qsa("tbody tr", table);
-    return rows.map((tr) => {
-      const tds = qsa("td", tr);
-      const obj = {};
-      headers.forEach((h, idx) => {
-        obj[h] = tds[idx] ? (tds[idx].innerText || "").trim() : "";
-      });
-      return obj;
-    });
-  }
-
-  function getFieldLoose(obj, names) {
-    if (!obj) return "";
-    for (const n of names) {
-      if (obj[n] != null && String(obj[n]).trim() !== "") return String(obj[n]).trim();
-      const key = Object.keys(obj).find((k) => k.toLowerCase() === String(n).toLowerCase());
-      if (key && obj[key] != null && String(obj[key]).trim() !== "") return String(obj[key]).trim();
+  function compactCurrency2(v) {
+    try {
+      return new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency: "USD",
+        maximumFractionDigits: 2,
+      }).format(v);
+    } catch (e) {
+      return "$" + (Math.round(v * 100) / 100).toLocaleString();
     }
-    return "";
   }
 
+  // ====== Create Promotion Drilldown Link ======
+  function getCreatePromoLink() {
+    // prefer exact match, but fall back to contains in case dashboard rewrites
+    return (
+      document.querySelector(CREATE_PROMO_LINK_SELECTOR) ||
+      document.querySelector(`a.dashboard-link[href*="${CREATE_PROMO_LINK_HREF}"]`) ||
+      document.querySelector(`a[href*="${CREATE_PROMO_LINK_HREF}"]`)
+    );
+  }
+
+  function hideCreatePromoLink() {
+    const link = getCreatePromoLink();
+    if (!link) return;
+
+    // Hide visually but keep in DOM for programmatic click
+    link.style.display = "none";
+
+    // If there is surrounding text/spacing, hide the closest container too (safe)
+    const wrap = link.closest("td, div, span");
+    if (wrap && wrap !== document.body && wrap.children.length === 1) {
+      // only hide wrapper if it only contains this link
+      wrap.style.display = "none";
+    }
+  }
+
+  function openCreatePromotionForDate(dk) {
+    // Expose selected date for any drilldown params/logic you add later
+    window.WL_PROMOCAL_SELECTED_DATE = dk;
+    try { localStorage.setItem("WL_PROMOCAL_SELECTED_DATE", dk); } catch (e) {}
+
+    const link = getCreatePromoLink();
+    if (!link) {
+      console.warn("[WL PromoCal] Create Promotion link not found:", CREATE_PROMO_LINK_HREF);
+      return;
+    }
+    // Trigger BisTrack drilldown
+    link.click();
+  }
+
+  // ====== Heatmap ======
+  function clamp(v, a, b) {
+    return Math.max(a, Math.min(b, v));
+  }
+
+  function heatAlpha(value, maxValue) {
+    if (!value || value <= 0 || !maxValue || maxValue <= 0) return 0;
+    const n = clamp(value / maxValue, 0, 1);
+    // apply power curve for contrast
+    const curved = Math.pow(n, HEAT_POWER);
+    return HEAT_MIN_ALPHA + (HEAT_MAX_ALPHA - HEAT_MIN_ALPHA) * curved;
+  }
+
+  // warmer high end; keep readable
+  function heatColor(a) {
+    if (!a || a <= 0) return "";
+    // red-ish overlay
+    const base = { r: 220, g: 20, b: 60 }; // crimson-like
+    return `rgba(${base.r}, ${base.g}, ${base.b}, ${a})`;
+  }
+
+  // ====== Table Parsing ======
+  function tableRows(sel) {
+    const t = qs(sel);
+    if (!t) return [];
+    const body = qs("tbody", t);
+    if (!body) return [];
+    return qsa("tr", body);
+  }
+
+  // PromoHeader columns: PromotionID, BranchID, PromotionCode, PromotionName, ..., ValidFrom, ValidTo, ...
   function getPromosFromHeaderTable() {
-    const table = qs(PROMO_HEADER_TABLE_SELECTOR);
-    if (!table) return [];
+    const rows = tableRows(PROMO_HEADER_TABLE_SELECTOR);
+    const promos = [];
 
-    const headers = qsa("thead th", table).map((th) => (th.innerText || "").trim());
-    const idx = (name) => headers.findIndex((h) => h.toLowerCase() === name.toLowerCase());
-    const iPromoId = idx("PromotionID");
-    const iBranchId = idx("BranchID");
-    const iCode = idx("PromotionCode");
-    const iName = idx("PromotionName");
-    const iFrom = idx("ValidFrom");
-    const iTo = idx("ValidTo");
+    rows.forEach((tr) => {
+      const tds = qsa("td", tr);
+      if (tds.length < 9) return;
 
-    return qsa("tbody tr", table)
-      .map((tr) => {
-        const tds = qsa("td", tr);
-        const id = (tds[iPromoId]?.innerText || "").trim();
-        if (!id) return null;
-        const branchId = (tds[iBranchId]?.innerText || "").trim();
-        const code = (tds[iCode]?.innerText || "").trim();
-        const name = (tds[iName]?.innerText || "").trim();
-        const from = parseDateLoose((tds[iFrom]?.innerText || "").trim());
-        const to = parseDateLoose((tds[iTo]?.innerText || "").trim());
-        return { id: normalizeId(id), branchId: normalizeId(branchId), code, name, from, to };
-      })
-      .filter(Boolean);
-  }
+      const id = parseIntSafe(safeText(tds[0]));
+      if (!id) return;
 
-  function buildLinesByPromoId() {
-    const t = qs(PROMO_LINE_TABLE_SELECTOR);
-    if (!t) return {};
-    const objs = tableToObjects(t);
-    const map = {};
-    objs.forEach((o) => {
-      const pid = normalizeId(o["PromotionID"] || o["PromotionId"] || o["promotionid"] || "");
-      if (!pid) return;
-      if (!map[pid]) map[pid] = [];
-      map[pid].push(o);
+      const branchIdText = safeText(tds[1]);
+      const branchId = branchIdText ? parseIntSafe(branchIdText) : null;
+
+      const code = safeText(tds[2]);
+      const name = safeText(tds[3]);
+      const docText = safeText(tds[4]);
+      const promoType = parseIntSafe(safeText(tds[5]));
+
+      // ValidFrom / ValidTo appear later (per your header list)
+      // In your earlier SQL output you had them as CAST(date) and also had time-only columns present in some versions.
+      // We'll scan for the first two date-like cells after column 5.
+      let from = null;
+      let to = null;
+      for (let i = 6; i < tds.length; i++) {
+        const dt = parseAnyDate(safeText(tds[i]));
+        if (dt && !from) {
+          from = dt;
+          continue;
+        }
+        if (dt && from && !to) {
+          to = dt;
+          break;
+        }
+      }
+      if (!from || !to) {
+        // can't place on calendar without dates
+        return;
+      }
+
+      promos.push({
+        id,
+        branchId,
+        code,
+        name,
+        docText,
+        promoType,
+        from,
+        to,
+      });
     });
-    return map;
+
+    return promos;
   }
 
+  // PromoLine columns: PromotionLineID, PromotionID, LineType, ProductID, ProductGroupID, SellPriceGroupID, OfferType, OfferValue, ...
+  function buildLinesByPromoId() {
+    const rows = tableRows(PROMO_LINE_TABLE_SELECTOR);
+    const byPromo = {};
+
+    rows.forEach((tr) => {
+      const tds = qsa("td", tr);
+      if (tds.length < 8) return;
+
+      const promotionId = parseIntSafe(safeText(tds[1]));
+      if (!promotionId) return;
+
+      const line = {
+        promotionLineId: parseIntSafe(safeText(tds[0])),
+        promotionId,
+        lineType: parseIntSafe(safeText(tds[2])),
+        productId: parseIntSafe(safeText(tds[3])),
+        productGroupId: parseIntSafe(safeText(tds[4])),
+        sellPriceGroupId: parseIntSafe(safeText(tds[5])),
+        offerType: parseIntSafe(safeText(tds[6])),
+        offerValue: parseFloatSafe(safeText(tds[7])),
+      };
+
+      if (!byPromo[promotionId]) byPromo[promotionId] = [];
+      byPromo[promotionId].push(line);
+    });
+
+    return byPromo;
+  }
+
+  // PromoSales Daily: PromotionID, BranchID, SalesDate, Sales, Cost, Profit, Margin
   function buildSalesIndexFromTable() {
-    const t = qs(PROMO_SALES_TABLE_SELECTOR);
-    if (!t) return { byDay: {}, byDayPromo: {} };
+    const rows = tableRows(PROMO_SALES_TABLE_SELECTOR);
+    if (!rows.length) return { byDay: {}, byDayPromo: {}, byPromoMonth: {} };
 
-    const rows = tableToObjects(t);
-    const byDay = {}; // dateKey -> {sales,cost,profit}
-    const byDayPromo = {}; // dateKey -> promoId -> {sales,cost,profit}
+    const byDay = {};      // dk -> { sales, cost, profit }
+    const byDayPromo = {}; // dk -> { promoId: { sales, cost, profit, margin } }
+    const byPromoMonth = {}; // promoId -> ym -> { sales, cost, profit, margin }
 
-    rows.forEach((r) => {
-      const promoId = normalizeId(r["PromotionID"]);
-      const d = parseDateLoose(r["SalesDate"]);
-      if (!promoId || !d) return;
+    rows.forEach((tr) => {
+      const tds = qsa("td", tr);
+      if (tds.length < 7) return;
 
-      const dk = dateKey(d);
-      const sales = parseNumberLoose(r["Sales"]);
-      const cost = parseNumberLoose(r["Cost"]);
-      const profit = parseNumberLoose(r["Profit"]);
+      const promoId = String(safeText(tds[0])).trim();
+      const dk = dateKey(parseAnyDate(safeText(tds[2])));
 
-      byDay[dk] ||= { sales: 0, cost: 0, profit: 0 };
+      const sales = parseFloatSafe(safeText(tds[3]));
+      const cost = parseFloatSafe(safeText(tds[4]));
+      const profit = parseFloatSafe(safeText(tds[5]));
+      const margin = parseFloatSafe(safeText(tds[6]));
+
+      if (!byDay[dk]) byDay[dk] = { sales: 0, cost: 0, profit: 0 };
       byDay[dk].sales += sales;
       byDay[dk].cost += cost;
       byDay[dk].profit += profit;
 
-      byDayPromo[dk] ||= {};
-      byDayPromo[dk][promoId] ||= { promoId, sales: 0, cost: 0, profit: 0 };
+      if (!byDayPromo[dk]) byDayPromo[dk] = {};
+      if (!byDayPromo[dk][promoId]) byDayPromo[dk][promoId] = { sales: 0, cost: 0, profit: 0, margin: 0 };
       byDayPromo[dk][promoId].sales += sales;
       byDayPromo[dk][promoId].cost += cost;
       byDayPromo[dk][promoId].profit += profit;
+      // margin is recalculated later
+
+      const ym = dk.slice(0, 7);
+      if (!byPromoMonth[promoId]) byPromoMonth[promoId] = {};
+      if (!byPromoMonth[promoId][ym]) byPromoMonth[promoId][ym] = { sales: 0, cost: 0, profit: 0 };
+      byPromoMonth[promoId][ym].sales += sales;
+      byPromoMonth[promoId][ym].cost += cost;
+      byPromoMonth[promoId][ym].profit += profit;
     });
 
-    return { byDay, byDayPromo };
+    // calculate margins for promo+day and promo+month
+    Object.keys(byDayPromo).forEach((dk) => {
+      const perPromo = byDayPromo[dk];
+      Object.keys(perPromo).forEach((pid) => {
+        const x = perPromo[pid];
+        x.margin = x.sales > 0 ? x.profit / x.sales : 0;
+      });
+    });
+    Object.keys(byPromoMonth).forEach((pid) => {
+      const perMonth = byPromoMonth[pid];
+      Object.keys(perMonth).forEach((ym) => {
+        const x = perMonth[ym];
+        x.margin = x.sales > 0 ? x.profit / x.sales : 0;
+      });
+    });
+
+    return { byDay, byDayPromo, byPromoMonth };
   }
 
-  // Product-level index:
-  // byDayPromoProduct[dk][promoId][productId] = {sales,cost,profit}
-  // byMonthPromoProduct[ym][promoId][productId] = {sales,cost,profit}
+  // PromoSales By Product: PromotionID, BranchID, SalesDate, ProductID, Sales, Cost, Profit, Margin
   function buildSalesByProductIndexFromTable() {
-    const t = qs(PROMO_SALES_BY_PRODUCT_TABLE_SELECTOR);
-    if (!t) return null;
+    const rows = tableRows(PROMO_SALES_BY_PRODUCT_TABLE_SELECTOR);
+    if (!rows.length) return null;
 
-    const rows = tableToObjects(t);
-    const byDayPromoProduct = {};
-    const byMonthPromoProduct = {};
+    const byDayPromoProduct = {}; // dk -> promoId -> productId -> {sales,cost,profit,margin}
+    const byPromoProductMonth = {}; // promoId -> ym -> productId -> {sales,cost,profit,margin}
 
-    rows.forEach((r) => {
-      const promoId = normalizeId(r["PromotionID"]);
-      const productId = normalizeId(r["ProductID"]);
-      const d = parseDateLoose(r["SalesDate"]);
-      if (!promoId || !productId || !d) return;
+    rows.forEach((tr) => {
+      const tds = qsa("td", tr);
+      if (tds.length < 8) return;
 
-      const dk = dateKey(d);
-      const ym = monthKeyFromDate(d);
+      const promoId = String(safeText(tds[0])).trim();
+      const dk = dateKey(parseAnyDate(safeText(tds[2])));
+      const productId = String(parseIntSafe(safeText(tds[3])));
 
-      const sales = parseNumberLoose(r["Sales"]);
-      const cost = parseNumberLoose(r["Cost"]);
-      const profit = parseNumberLoose(r["Profit"]);
+      const sales = parseFloatSafe(safeText(tds[4]));
+      const cost = parseFloatSafe(safeText(tds[5]));
+      const profit = parseFloatSafe(safeText(tds[6]));
+      const margin = parseFloatSafe(safeText(tds[7]));
 
-      byDayPromoProduct[dk] ||= {};
-      byDayPromoProduct[dk][promoId] ||= {};
-      byDayPromoProduct[dk][promoId][productId] ||= { sales: 0, cost: 0, profit: 0 };
-      byDayPromoProduct[dk][promoId][productId].sales += sales;
-      byDayPromoProduct[dk][promoId][productId].cost += cost;
-      byDayPromoProduct[dk][promoId][productId].profit += profit;
-
-      byMonthPromoProduct[ym] ||= {};
-      byMonthPromoProduct[ym][promoId] ||= {};
-      byMonthPromoProduct[ym][promoId][productId] ||= { sales: 0, cost: 0, profit: 0 };
-      byMonthPromoProduct[ym][promoId][productId].sales += sales;
-      byMonthPromoProduct[ym][promoId][productId].cost += cost;
-      byMonthPromoProduct[ym][promoId][productId].profit += profit;
-    });
-
-    return { byDayPromoProduct, byMonthPromoProduct };
-  }
-
-  // Build a lookup for ProductID -> { productCode, description } from PromoLine table (for a specific promo)
-  function buildPromoLineMetaLookup(promoId, linesByPromoId) {
-    const lines = (linesByPromoId && linesByPromoId[promoId]) ? linesByPromoId[promoId] : [];
-    const map = {};
-    lines.forEach((l) => {
-      const productId = normalizeId(getFieldLoose(l, ["ProductID", "productid"]));
-      if (!productId) return;
-
-      const productCode = (getFieldLoose(l, ["ProductCode", "productcode"]) || "").trim();
-      const description = (getFieldLoose(l, ["Description", "description"]) || "").trim();
-
-      if (!map[productId]) map[productId] = { productCode, description };
-      else {
-        if (!map[productId].productCode && productCode) map[productId].productCode = productCode;
-        if (!map[productId].description && description) map[productId].description = description;
+      if (!byDayPromoProduct[dk]) byDayPromoProduct[dk] = {};
+      if (!byDayPromoProduct[dk][promoId]) byDayPromoProduct[dk][promoId] = {};
+      if (!byDayPromoProduct[dk][promoId][productId]) {
+        byDayPromoProduct[dk][promoId][productId] = { sales: 0, cost: 0, profit: 0, margin: 0 };
       }
+      const dayRec = byDayPromoProduct[dk][promoId][productId];
+      dayRec.sales += sales;
+      dayRec.cost += cost;
+      dayRec.profit += profit;
+
+      const ym = dk.slice(0, 7);
+      if (!byPromoProductMonth[promoId]) byPromoProductMonth[promoId] = {};
+      if (!byPromoProductMonth[promoId][ym]) byPromoProductMonth[promoId][ym] = {};
+      if (!byPromoProductMonth[promoId][ym][productId]) {
+        byPromoProductMonth[promoId][ym][productId] = { sales: 0, cost: 0, profit: 0, margin: 0 };
+      }
+      const monthRec = byPromoProductMonth[promoId][ym][productId];
+      monthRec.sales += sales;
+      monthRec.cost += cost;
+      monthRec.profit += profit;
     });
-    return map;
-  }
 
-  // ====== Heatmap ======
-  function heatAlpha(daySales, maxSalesVisible) {
-    if (!maxSalesVisible || daySales <= 0) return 0;
-    const norm = Math.log10(daySales + 1) / Math.log10(maxSalesVisible + 1);
-    const curved = Math.pow(clamp(norm, 0, 1), HEAT_GAMMA);
-    return clamp(curved, 0, 1);
-  }
+    // recompute margins
+    Object.keys(byDayPromoProduct).forEach((dk) => {
+      Object.keys(byDayPromoProduct[dk]).forEach((pid) => {
+        Object.keys(byDayPromoProduct[dk][pid]).forEach((prod) => {
+          const x = byDayPromoProduct[dk][pid][prod];
+          x.margin = x.sales > 0 ? x.profit / x.sales : 0;
+        });
+      });
+    });
+    Object.keys(byPromoProductMonth).forEach((pid) => {
+      Object.keys(byPromoProductMonth[pid]).forEach((ym) => {
+        Object.keys(byPromoProductMonth[pid][ym]).forEach((prod) => {
+          const x = byPromoProductMonth[pid][ym][prod];
+          x.margin = x.sales > 0 ? x.profit / x.sales : 0;
+        });
+      });
+    });
 
-  function heatColor(alpha01) {
-    if (alpha01 <= 0) return "";
-    const a = HEAT_MIN_ALPHA + (HEAT_MAX_ALPHA - HEAT_MIN_ALPHA) * alpha01;
-    return `rgba(${HEAT_COLOR_RGB.r}, ${HEAT_COLOR_RGB.g}, ${HEAT_COLOR_RGB.b}, ${a})`;
+    return { byDayPromoProduct, byPromoProductMonth };
   }
 
   // ====== Calendar Render ======
@@ -457,6 +476,37 @@ UPDATES IN THIS VERSION:
       num.textContent = day.getDate();
       cell.appendChild(num);
 
+      // + button (Create Promotion)
+      const addBtn = document.createElement("button");
+      addBtn.type = "button";
+      addBtn.className = "wl-day__add";
+      addBtn.textContent = "+";
+      addBtn.title = "Create a Promotion";
+      // Inline styles so it works even if dashboard CSS is missing
+      addBtn.style.position = "absolute";
+      addBtn.style.top = "4px";
+      addBtn.style.right = "4px";
+      addBtn.style.width = "20px";
+      addBtn.style.height = "20px";
+      addBtn.style.lineHeight = "18px";
+      addBtn.style.borderRadius = "999px";
+      addBtn.style.border = "1px solid rgba(0,0,0,0.25)";
+      addBtn.style.background = "rgba(255,255,255,0.85)";
+      addBtn.style.cursor = "pointer";
+      addBtn.style.fontWeight = "700";
+      addBtn.style.padding = "0";
+      addBtn.style.zIndex = "3";
+      // Ensure cell can position the button
+      if (!cell.style.position) cell.style.position = "relative";
+
+      addBtn.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        ev.stopPropagation();
+        openCreatePromotionForDate(dk);
+      });
+
+      cell.appendChild(addBtn);
+
       const daySalesEl = document.createElement("div");
       daySalesEl.className = "wl-day__sales";
       daySalesEl.textContent = daySales > 0 ? compactCurrency(daySales) : "";
@@ -498,265 +548,265 @@ UPDATES IN THIS VERSION:
       SALES_BY_PRODUCT_INDEX.byDayPromoProduct &&
       SALES_BY_PRODUCT_INDEX.byDayPromoProduct[dk] &&
       SALES_BY_PRODUCT_INDEX.byDayPromoProduct[dk][promoId] &&
-      SALES_BY_PRODUCT_INDEX.byDayPromoProduct[dk][promoId][productId]
-        ? SALES_BY_PRODUCT_INDEX.byDayPromoProduct[dk][promoId][productId]
+      SALES_BY_PRODUCT_INDEX.byDayPromoProduct[dk][promoId][String(productId)]
+        ? SALES_BY_PRODUCT_INDEX.byDayPromoProduct[dk][promoId][String(productId)]
         : null;
 
     const monthRec =
-      SALES_BY_PRODUCT_INDEX.byMonthPromoProduct &&
-      SALES_BY_PRODUCT_INDEX.byMonthPromoProduct[ym] &&
-      SALES_BY_PRODUCT_INDEX.byMonthPromoProduct[ym][promoId] &&
-      SALES_BY_PRODUCT_INDEX.byMonthPromoProduct[ym][promoId][productId]
-        ? SALES_BY_PRODUCT_INDEX.byMonthPromoProduct[ym][promoId][productId]
+      SALES_BY_PRODUCT_INDEX.byPromoProductMonth &&
+      SALES_BY_PRODUCT_INDEX.byPromoProductMonth[promoId] &&
+      SALES_BY_PRODUCT_INDEX.byPromoProductMonth[promoId][ym] &&
+      SALES_BY_PRODUCT_INDEX.byPromoProductMonth[promoId][ym][String(productId)]
+        ? SALES_BY_PRODUCT_INDEX.byPromoProductMonth[promoId][ym][String(productId)]
         : null;
 
     return { day: dayRec, month: monthRec };
   }
 
-  function attachBadgeEvents(el, promo, linesByPromoId, salesIndex) {
-    if (!el || el.__wlPromoBound) return;
-    el.__wlPromoBound = true;
-
-    el.addEventListener("mousemove", (ev) => {
-      const promoId = String(el.dataset.promotionid || "").trim();
-      const dk = String(el.dataset.day || "").trim();
-      const ym = monthKeyFromDate(CURRENT_MONTH);
-
-      const lines = linesByPromoId[promoId] || [];
-      const count = lines.length;
-
-      const dayAgg = dk ? getPromoDaySales(promoId, dk, salesIndex) : null;
-
-      const chips = [
-        promo.branchId ? `<span class="wl-chip">Branch: ${escHtml(promo.branchId)}</span>` : "",
-        `<span class="wl-chip">Lines: ${count}</span>`,
-        dayAgg ? `<span class="wl-chip">Day Sales: ${escHtml(compactCurrency(dayAgg.sales || 0))}</span>` : "",
-      ].filter(Boolean).join("");
-
-      const dateLine = promo.from && promo.to ? `${formatDate(promo.from)} – ${formatDate(promo.to)}` : "";
-
-      // Preview lines with day+month sales if possible
-      const preview = lines.slice(0, TOOLTIP_PREVIEW_COUNT).map((l) => {
-        const productId = normalizeId(getFieldLoose(l, ["ProductID", "productid"]));
-        const code = getFieldLoose(l, ["ProductCode", "productcode"]);
-        const desc = getFieldLoose(l, ["Description", "description"]);
-
-        let salesBits = "";
-        if (productId && SALES_BY_PRODUCT_INDEX) {
-          const { day, month } = getLineDayMonthSales(promoId, productId, dk, ym);
-          const daySales = day ? day.sales : 0;
-          const monSales = month ? month.sales : 0;
-          salesBits = `
-            <div style="margin-top:4px;">
-              <span class="wl-chip">Day: ${escHtml(compactCurrency(daySales))}</span>
-              <span class="wl-chip">Month: ${escHtml(compactCurrency(monSales))}</span>
-            </div>
-          `;
-        }
-
-        return `
-          <div class="wl-panel-row">
-            <strong>${escHtml(code || (productId ? ("Product " + productId) : "Line item"))}</strong>
-            <div class="wl-muted">${escHtml(desc)}</div>
-            ${salesBits}
-          </div>
-        `;
-      }).join("");
-
-      const html = `
-        <div style="font-weight:700; margin-bottom:6px;">
-          ${escHtml(promo.name || promo.code || "Promotion")}
-        </div>
-        ${dateLine ? `<div class="wl-muted" style="margin-bottom:8px;">${escHtml(dateLine)}</div>` : ""}
-        <div style="margin-bottom:8px;">${chips}</div>
-        ${preview || `<div class="wl-muted">No line details found.</div>`}
-      `;
-
-      showTooltip(html, ev.clientX, ev.clientY);
+  function attachBadgeEvents(badge, promo, linesByPromoId, salesIndex) {
+    badge.addEventListener("mouseenter", (ev) => {
+      showTooltip(ev, promo, linesByPromoId, salesIndex);
     });
-
-    el.addEventListener("mouseleave", hideTooltip);
-
-    el.addEventListener("click", (ev) => {
+    badge.addEventListener("mousemove", (ev) => {
+      positionTooltip(ev);
+    });
+    badge.addEventListener("mouseleave", () => {
+      hideTooltip();
+    });
+    badge.addEventListener("click", (ev) => {
       ev.preventDefault();
       ev.stopPropagation();
-      hideTooltip();
-
-      const promoId = String(el.dataset.promotionid || "").trim();
-      const dk = String(el.dataset.day || "").trim();
-      const ym = monthKeyFromDate(CURRENT_MONTH);
-
-      const lines = linesByPromoId[promoId] || [];
-      const dayAgg = dk ? getPromoDaySales(promoId, dk, salesIndex) : null;
-
-      const monthSummary = buildPromoSalesSummaryForCurrentMonth(promoId, salesIndex);
-
-      const title = `${escHtml(promo.name || promo.code || "Promotion")} ${
-        promo.from && promo.to ? `<span class="wl-muted">(${escHtml(formatDate(promo.from))} – ${escHtml(formatDate(promo.to))})</span>` : ""
-      }`;
-
-      const dayBlock = dayAgg
-        ? `
-          <div style="margin:10px 0;">
-            <span class="wl-chip">Day (${escHtml(dk)}): ${escHtml(currency(dayAgg.sales || 0))}</span>
-            <span class="wl-chip">Day Profit: ${escHtml(currency(dayAgg.profit || 0))}</span>
-          </div>
-        `
-        : "";
-
-      const monthBlock = monthSummary
-        ? `
-          <div style="margin:10px 0;">
-            <span class="wl-chip">Month Sales: ${escHtml(currency(monthSummary.sales))}</span>
-            <span class="wl-chip">Month Profit: ${escHtml(currency(monthSummary.profit))}</span>
-            <span class="wl-chip">Days w/ Sales: ${escHtml(String(monthSummary.days))}</span>
-          </div>
-        `
-        : `<div class="wl-muted" style="margin:10px 0;">No sales summary found for this promo in the visible month.</div>`;
-
-      // UPDATED: Top items now show ProductCode + Description using PromoLine lookup
-      const topItems = buildTopItemsDaySummaryHtml(promoId, dk, linesByPromoId);
-
-      const lineHtml = lines.length
-        ? `
-          <div style="max-height:380px; overflow:auto; border-top:1px solid #eee; padding-top:10px;">
-            ${lines.map((l) => {
-              const productId = normalizeId(getFieldLoose(l, ["ProductID", "productid"]));
-              const code = getFieldLoose(l, ["ProductCode", "productcode"]);
-              const desc = getFieldLoose(l, ["Description", "description"]);
-
-              let chips = "";
-              if (productId && SALES_BY_PRODUCT_INDEX) {
-                const { day, month } = getLineDayMonthSales(promoId, productId, dk, ym);
-                const daySales = day ? day.sales : 0;
-                const dayProfit = day ? day.profit : 0;
-                const monSales = month ? month.sales : 0;
-                const monProfit = month ? month.profit : 0;
-
-                chips = `
-                  <div style="margin-top:6px;">
-                    <span class="wl-chip">Day: ${escHtml(compactCurrency(daySales))}</span>
-                    <span class="wl-chip">Day Profit: ${escHtml(compactCurrency(dayProfit))}</span>
-                    <span class="wl-chip">Month: ${escHtml(compactCurrency(monSales))}</span>
-                    <span class="wl-chip">Month Profit: ${escHtml(compactCurrency(monProfit))}</span>
-                  </div>
-                `;
-              }
-
-              return `
-                <div class="wl-panel-row" style="display:flex; gap:10px; align-items:flex-start; margin-bottom:12px;">
-                  <img class="wl-line-img" data-productid="${escHtml(productId)}"
-                       src="${PLACEHOLDER_DATA_URI}"
-                       style="width:42px; height:42px; object-fit:cover; border-radius:6px; border:1px solid #ddd;" />
-                  <div style="flex:1;">
-                    <div style="font-weight:700;">${escHtml(code || (productId ? ("Product " + productId) : "Line item"))}</div>
-                    <div class="wl-muted">${escHtml(desc)}</div>
-                    ${productId ? `<div class="wl-muted">ProductID: ${escHtml(productId)}</div>` : ""}
-                    ${chips}
-                  </div>
-                </div>
-              `;
-            }).join("")}
-          </div>
-        `
-        : `<div class="wl-muted">No line details found.</div>`;
-
-      openPanel(title, dayBlock + monthBlock + topItems + lineHtml);
+      openDetailsPanel(promo, linesByPromoId, salesIndex);
     });
   }
 
-  function buildPromoSalesSummaryForCurrentMonth(promoId, salesIndex) {
-    if (!salesIndex || !salesIndex.byDayPromo) return null;
+  // ====== Tooltip ======
+  function tooltipEl() {
+    return qs("#wlPromoTooltip");
+  }
 
-    const start = startOfMonth(CURRENT_MONTH);
-    const end = endOfMonth(CURRENT_MONTH);
+  function showTooltip(ev, promo, linesByPromoId, salesIndex) {
+    const tip = tooltipEl();
+    if (!tip) return;
 
-    let sales = 0;
-    let profit = 0;
-    let days = 0;
+    const badge = ev.currentTarget;
+    const dk = badge && badge.dataset ? badge.dataset.day : null;
+    const promoId = String(promo.id).trim();
+    const ym = dk ? dk.slice(0, 7) : ymKey(CURRENT_MONTH);
 
-    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-      const dk = dateKey(d);
-      const perDay = salesIndex.byDayPromo[dk];
-      if (!perDay || !perDay[promoId]) continue;
-      const rec = perDay[promoId];
-      if (rec.sales) {
-        sales += rec.sales;
-        profit += rec.profit;
-        days += 1;
+    const dayAgg = dk ? getPromoDaySales(promoId, dk, salesIndex) : null;
+    const monthAgg =
+      salesIndex && salesIndex.byPromoMonth && salesIndex.byPromoMonth[promoId] && salesIndex.byPromoMonth[promoId][ym]
+        ? salesIndex.byPromoMonth[promoId][ym]
+        : null;
+
+    const lines = (linesByPromoId && linesByPromoId[promo.id]) ? linesByPromoId[promo.id] : [];
+
+    // Build top-selling by product for that day
+    let topByDay = [];
+    if (SALES_BY_PRODUCT_INDEX && dk) {
+      const perPromo =
+        SALES_BY_PRODUCT_INDEX.byDayPromoProduct &&
+        SALES_BY_PRODUCT_INDEX.byDayPromoProduct[dk] &&
+        SALES_BY_PRODUCT_INDEX.byDayPromoProduct[dk][promoId]
+          ? SALES_BY_PRODUCT_INDEX.byDayPromoProduct[dk][promoId]
+          : null;
+
+      if (perPromo) {
+        topByDay = Object.keys(perPromo)
+          .map((pid) => ({ productId: pid, sales: perPromo[pid].sales }))
+          .sort((a, b) => b.sales - a.sales)
+          .slice(0, TOOLTIP_PREVIEW_COUNT);
       }
     }
 
-    if (sales <= 0 && profit === 0 && days === 0) return null;
-    return { sales, profit, days };
+    const html = [];
+    html.push(`<div class="wl-tip">`);
+    html.push(`<div class="wl-tip__title"><strong>${escapeHtml(promo.code || promo.name || ("Promo " + promo.id))}</strong></div>`);
+    html.push(`<div class="wl-tip__sub">${escapeHtml(promo.name || "")}</div>`);
+
+    if (dk) {
+      html.push(`<div class="wl-tip__row"><span>Day:</span> <strong>${escapeHtml(dk)}</strong></div>`);
+    }
+
+    if (dayAgg) {
+      html.push(
+        `<div class="wl-tip__row"><span>Promo Sales (Day):</span> <strong>${compactCurrency2(dayAgg.sales)}</strong> ` +
+          `<span class="wl-tip__muted">Profit ${compactCurrency2(dayAgg.profit)} • Margin ${(dayAgg.margin * 100).toFixed(1)}%</span></div>`
+      );
+    } else if (dk) {
+      html.push(`<div class="wl-tip__row"><span>Promo Sales (Day):</span> <span class="wl-tip__muted">—</span></div>`);
+    }
+
+    if (monthAgg) {
+      html.push(
+        `<div class="wl-tip__row"><span>Promo Sales (Month):</span> <strong>${compactCurrency2(monthAgg.sales)}</strong> ` +
+          `<span class="wl-tip__muted">Profit ${compactCurrency2(monthAgg.profit)} • Margin ${(monthAgg.margin * 100).toFixed(1)}%</span></div>`
+      );
+    }
+
+    if (topByDay.length) {
+      html.push(`<div class="wl-tip__hr"></div>`);
+      html.push(`<div class="wl-tip__section"><strong>Top sellers (Day)</strong></div>`);
+      html.push(`<ol class="wl-tip__list">`);
+      topByDay.forEach((r) => {
+        html.push(`<li><span>${escapeHtml(r.productId)}</span> <strong>${compactCurrency2(r.sales)}</strong></li>`);
+      });
+      html.push(`</ol>`);
+    }
+
+    if (lines.length) {
+      html.push(`<div class="wl-tip__hr"></div>`);
+      html.push(`<div class="wl-tip__section"><strong>Promo Lines</strong></div>`);
+      html.push(`<ul class="wl-tip__lines">`);
+      lines.slice(0, 6).forEach((ln) => {
+        const prod = ln.productId ? `Product ${ln.productId}` : (ln.productGroupId ? `Group ${ln.productGroupId}` : "Line");
+        html.push(`<li>${escapeHtml(prod)} <span class="wl-tip__muted">Offer ${ln.offerValue}</span></li>`);
+      });
+      if (lines.length > 6) html.push(`<li class="wl-tip__muted">+ ${lines.length - 6} more…</li>`);
+      html.push(`</ul>`);
+    }
+
+    html.push(`</div>`);
+
+    tip.innerHTML = html.join("");
+    tip.style.display = "block";
+    positionTooltip(ev);
   }
 
-  // UPDATED FUNCTION: Top Items uses ProductCode/Description from PromoLine table
-  function buildTopItemsDaySummaryHtml(promoId, dk, linesByPromoId) {
-    if (!SALES_BY_PRODUCT_INDEX || !dk) return "";
+  function positionTooltip(ev) {
+    const tip = tooltipEl();
+    if (!tip || tip.style.display === "none") return;
 
-    const dayPromo =
-      SALES_BY_PRODUCT_INDEX.byDayPromoProduct &&
-      SALES_BY_PRODUCT_INDEX.byDayPromoProduct[dk] &&
-      SALES_BY_PRODUCT_INDEX.byDayPromoProduct[dk][promoId]
-        ? SALES_BY_PRODUCT_INDEX.byDayPromoProduct[dk][promoId]
+    const pad = 12;
+    const w = tip.offsetWidth || 260;
+    const h = tip.offsetHeight || 180;
+
+    let x = ev.clientX + pad;
+    let y = ev.clientY + pad;
+
+    if (x + w > window.innerWidth - 8) x = ev.clientX - w - pad;
+    if (y + h > window.innerHeight - 8) y = ev.clientY - h - pad;
+
+    tip.style.left = x + "px";
+    tip.style.top = y + "px";
+  }
+
+  function hideTooltip() {
+    const tip = tooltipEl();
+    if (!tip) return;
+    tip.style.display = "none";
+    tip.innerHTML = "";
+  }
+
+  function escapeHtml(s) {
+    return String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  // ====== Details Panel ======
+  function openDetailsPanel(promo, linesByPromoId, salesIndex) {
+    const panel = qs("#wlPromoDetailsPanel");
+    const title = qs("#wlPanelTitle");
+    const body = qs("#wlPanelBody");
+    if (!panel || !title || !body) return;
+
+    const promoId = String(promo.id).trim();
+    const ym = ymKey(CURRENT_MONTH);
+
+    const monthAgg =
+      salesIndex && salesIndex.byPromoMonth && salesIndex.byPromoMonth[promoId] && salesIndex.byPromoMonth[promoId][ym]
+        ? salesIndex.byPromoMonth[promoId][ym]
         : null;
 
-    if (!dayPromo) return "";
+    title.textContent = promo.code || promo.name || ("Promotion " + promo.id);
 
-    const meta = buildPromoLineMetaLookup(promoId, linesByPromoId);
+    const lines = (linesByPromoId && linesByPromoId[promo.id]) ? linesByPromoId[promo.id] : [];
 
-    const items = Object.entries(dayPromo)
-      .map(([productId, agg]) => ({
-        productId,
-        productCode: (meta[productId] && meta[productId].productCode) ? meta[productId].productCode : "",
-        description: (meta[productId] && meta[productId].description) ? meta[productId].description : "",
-        sales: agg.sales || 0,
-        profit: agg.profit || 0,
-      }))
-      .sort((a, b) => (b.sales || 0) - (a.sales || 0))
-      .slice(0, 10);
+    const parts = [];
+    parts.push(`<div class="wl-panel__meta">`);
+    parts.push(`<div><strong>${escapeHtml(promo.name || "")}</strong></div>`);
+    parts.push(`<div class="wl-panel__muted">${escapeHtml(promo.docText || "")}</div>`);
+    parts.push(`<div class="wl-panel__muted">Valid: ${escapeHtml(dateKey(promo.from))} → ${escapeHtml(dateKey(promo.to))}</div>`);
+    if (monthAgg) {
+      parts.push(
+        `<div class="wl-panel__kpi"><strong>${compactCurrency2(monthAgg.sales)}</strong> Sales • ` +
+          `${compactCurrency2(monthAgg.profit)} Profit • ${(monthAgg.margin * 100).toFixed(1)}% Margin</div>`
+      );
+    }
+    parts.push(`</div>`);
 
-    if (!items.length) return "";
+    if (lines.length) {
+      parts.push(`<div class="wl-panel__section"><strong>Lines</strong></div>`);
+      parts.push(`<table class="wl-panel__table"><thead><tr><th>Type</th><th>Target</th><th>Offer</th></tr></thead><tbody>`);
+      lines.forEach((ln) => {
+        const type = ln.lineType;
+        const target = ln.productId ? ("Product " + ln.productId) : (ln.productGroupId ? ("Group " + ln.productGroupId) : "—");
+        parts.push(`<tr><td>${escapeHtml(type)}</td><td>${escapeHtml(target)}</td><td>${escapeHtml(ln.offerValue)}</td></tr>`);
+      });
+      parts.push(`</tbody></table>`);
+    }
 
-    return `
-      <div style="margin:10px 0; border-top:1px solid #eee; padding-top:10px;">
-        <div style="font-weight:700; margin-bottom:6px;">Top Items (Day)</div>
-        <table style="width:100%; border-collapse:collapse;">
-          <thead>
-            <tr>
-              <th style="text-align:left; padding:6px; border-bottom:1px solid #ddd;">Item</th>
-              <th style="text-align:right; padding:6px; border-bottom:1px solid #ddd;">Sales</th>
-              <th style="text-align:right; padding:6px; border-bottom:1px solid #ddd;">Profit</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${items.map((x) => {
-              const title = x.productCode ? x.productCode : (x.productId ? ("Product " + x.productId) : "Item");
-              const desc = x.description || "";
-              return `
-                <tr>
-                  <td style="padding:6px; border-bottom:1px solid #f0f0f0;">
-                    <div style="font-weight:700;">${escHtml(title)}</div>
-                    ${desc ? `<div class="wl-muted">${escHtml(desc)}</div>` : ""}
-                    ${x.productId ? `<div class="wl-muted">ProductID: ${escHtml(x.productId)}</div>` : ""}
-                  </td>
-                  <td style="padding:6px; border-bottom:1px solid #f0f0f0; text-align:right;">${escHtml(currency(x.sales))}</td>
-                  <td style="padding:6px; border-bottom:1px solid #f0f0f0; text-align:right;">${escHtml(currency(x.profit))}</td>
-                </tr>
-              `;
-            }).join("")}
-          </tbody>
-        </table>
-      </div>
-    `;
+    body.innerHTML = parts.join("");
+    panel.style.display = "block";
   }
 
-  // ====== Wiring / Init ======
+  function bindCloseButton() {
+    const btn = qs("#wlPanelClose");
+    const panel = qs("#wlPromoDetailsPanel");
+    if (!btn || !panel) return;
+    if (btn.__wlBound) return;
+    btn.__wlBound = true;
+    btn.addEventListener("click", () => {
+      panel.style.display = "none";
+    });
+  }
+
+  // ====== UI Ensure ======
+  function ensureUIOnce() {
+    const grid = qs("#" + GRID_ID);
+    if (!grid) return;
+
+    // ensure a minimal layout if dashboard css doesn't include it
+    if (grid.__wlStyled) return;
+    grid.__wlStyled = true;
+
+    const style = document.createElement("style");
+    style.textContent = `
+      .wl-promo-cal__grid { display:grid; grid-template-columns: repeat(7, 1fr); gap:6px; }
+      .wl-day { position:relative; border:1px solid rgba(0,0,0,0.12); border-radius:10px; padding:8px; min-height:86px; overflow:hidden; }
+      .wl-day--muted { opacity:0.55; }
+      .wl-day__num { font-weight:700; font-size:12px; }
+      .wl-day__sales { font-size:12px; margin-top:2px; font-weight:600; }
+      .wl-promo-stack { margin-top:6px; display:flex; flex-direction:column; gap:4px; max-height:50px; overflow:auto; }
+      .wl-promo { font-size:11px; padding:3px 6px; border-radius:999px; background:rgba(255,255,255,0.7); border:1px solid rgba(0,0,0,0.10); cursor:pointer; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; }
+      #wlPromoTooltip { background:#fff; border:1px solid rgba(0,0,0,0.2); border-radius:10px; padding:10px; box-shadow:0 8px 22px rgba(0,0,0,0.18); max-width:340px; font-size:12px; }
+      .wl-tip__title { margin-bottom:4px; }
+      .wl-tip__sub { color:#555; margin-bottom:6px; }
+      .wl-tip__row { display:flex; gap:8px; margin:2px 0; }
+      .wl-tip__row span { color:#555; }
+      .wl-tip__muted { color:#666; margin-left:6px; }
+      .wl-tip__hr { height:1px; background:rgba(0,0,0,0.08); margin:8px 0; }
+      .wl-tip__list { margin:6px 0 0 18px; padding:0; }
+      .wl-tip__lines { margin:6px 0 0 18px; padding:0; }
+      .wl-promo-panel { position:fixed; right:20px; top:80px; width:420px; max-width:92vw; background:#fff; border:1px solid rgba(0,0,0,0.2); border-radius:14px; box-shadow:0 10px 30px rgba(0,0,0,0.2); z-index:99999; }
+      .wl-promo-panel__header { display:flex; align-items:center; justify-content:space-between; padding:10px 12px; border-bottom:1px solid rgba(0,0,0,0.1); }
+      .wl-panel__meta { padding:12px; }
+      .wl-panel__muted { color:#666; margin-top:4px; }
+      .wl-panel__kpi { margin-top:10px; }
+      .wl-panel__section { padding:0 12px 6px; }
+      .wl-panel__table { width:100%; border-collapse:collapse; margin:0 0 12px; }
+      .wl-panel__table th, .wl-panel__table td { border-top:1px solid rgba(0,0,0,0.08); padding:8px 12px; font-size:12px; text-align:left; }
+    `;
+    document.head.appendChild(style);
+  }
+
   function bindNavButtons() {
     const prev = qs("#" + PREV_ID);
     const next = qs("#" + NEXT_ID);
-
     if (prev && !prev.__wlBound) {
       prev.__wlBound = true;
       prev.addEventListener("click", () => {
@@ -776,6 +826,7 @@ UPDATES IN THIS VERSION:
 
   function refreshAllAndRender() {
     ensureUIOnce();
+    hideCreatePromoLink();
     bindCloseButton();
     bindNavButtons();
 
