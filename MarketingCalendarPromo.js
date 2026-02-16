@@ -3,8 +3,12 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
 - Renders a month grid calendar from PromotionHeader table (Table208993)
 - Uses PromotionLine table (Table208994) for hover/click details
 - Uses PromoSales daily table (Table208998) to build a heatmap + daily totals
-- Image JSONP is DISABLED by default because it is currently crashing execution
-  (Unexpected token '<', callback not defined, etc.)
+
+UPDATES IN THIS VERSION:
+- Heatmap contrast improved (scales to visible 42-day grid + gamma curve)
+- Badge tooltip shows promo sales for THAT day (if available)
+- Promo panel shows Day Sales (when clicked from a specific day cell) + Month summary
+- Supports optional "Promo Sales By Product" table auto-detection (doesn't require it)
 ============================================================================ */
 
 (function () {
@@ -12,8 +16,13 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
 
   // ====== CONFIG ======
   const PROMO_HEADER_TABLE_SELECTOR = "table.Table208993";
-  const PROMO_LINE_TABLE_SELECTOR = "table.Table208994";
-  const PROMO_SALES_TABLE_SELECTOR = "table.Table208998"; // <-- your new table
+  const PROMO_LINE_TABLE_SELECTOR   = "table.Table208994";
+  const PROMO_SALES_TABLE_SELECTOR  = "table.Table208998"; // daily promo totals
+
+  // Optional: if you later add a detailed table with ProductID/ProductCode per day,
+  // this script will attempt to auto-detect it. No selector required.
+  // If you DO want to force a selector later, set it here:
+  const PROMO_SALES_BY_PRODUCT_TABLE_SELECTOR = "table.Table208999"; // e.g. "table.Table209123" (optional)
 
   // Your injected calendar container
   const CAL_ID = "wlPromoCal";
@@ -25,15 +34,18 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
   const BADGE_CLASS = "wlPromoBadge";
   const TOOLTIP_PREVIEW_COUNT = 5;
 
-  // Heatmap tuning
-  const HEAT_MIN_ALPHA = 0.06; // faint tint
-  const HEAT_MAX_ALPHA = 0.55; // strongest tint
+  // Heatmap tuning (more contrast)
+  // - alpha range expanded
+  // - gamma curve applied
+  const HEAT_MIN_ALPHA = 0.10;
+  const HEAT_MAX_ALPHA = 0.88;
+  const HEAT_GAMMA = 0.55; // <1 boosts low/mid values
   const HEAT_COLOR_RGB = { r: 107, g: 0, b: 22 }; // WL maroon-ish (#6b0016)
 
-  // IMPORTANT: set to true only after your JSONP endpoint is fixed
+  // IMPORTANT: set to true only if your JSONP endpoint is stable
   const ENABLE_IMAGE_MAP_JSONP = false;
 
-  // Apps Script Web App URL (must support true JSONP: callbackName({...});)
+  // Apps Script Web App URL (must support JSONP: callbackName({...});)
   const IMAGE_MAP_URL =
     "https://script.google.com/macros/s/AKfycbxuC8mU6Bw9e_OX5akSfTKfNJtj3QHHUbAdYafnO8c2NryihJk-4pU2K77negMebo9p/exec";
 
@@ -54,6 +66,9 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
   let PROMOS = [];
   let LINES_BY_PROMO = {};
   let SALES_INDEX = null;
+
+  // Optional detailed index if a product-level table exists
+  let SALES_BY_PRODUCT_INDEX = null;
 
   // ====== Helpers ======
   const qs = (sel, root = document) => root.querySelector(sel);
@@ -161,6 +176,10 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
 
   function startOfMonth(d) {
     return new Date(d.getFullYear(), d.getMonth(), 1);
+  }
+
+  function endOfMonth(d) {
+    return new Date(d.getFullYear(), d.getMonth() + 1, 0);
   }
 
   // ====== Tooltip / Panel ======
@@ -293,18 +312,14 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
   function buildSalesIndexFromTable() {
     const t = qs(PROMO_SALES_TABLE_SELECTOR);
     if (!t) {
-      return {
-        byDay: {},
-        byDayPromo: {},
-        maxDaySales: 0,
-      };
+      return { byDay: {}, byDayPromo: {}, maxDaySalesGlobal: 0 };
     }
 
     const rows = tableToObjects(t);
     const byDay = {}; // dateKey -> {sales,cost,profit,rows:[]}
     const byDayPromo = {}; // dateKey -> promoId -> agg
 
-    let maxDaySales = 0;
+    let maxDaySalesGlobal = 0;
 
     rows.forEach((r) => {
       const promoId = normalizeId(r["PromotionID"] || r["PromotionId"] || r["promotionid"]);
@@ -332,18 +347,83 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
       byDayPromo[dk][promoId].profit += profit;
       if (branchId) byDayPromo[dk][promoId].branchIds[branchId] = true;
 
-      if (byDay[dk].sales > maxDaySales) maxDaySales = byDay[dk].sales;
+      if (byDay[dk].sales > maxDaySalesGlobal) maxDaySalesGlobal = byDay[dk].sales;
     });
 
-    return { byDay, byDayPromo, maxDaySales };
+    return { byDay, byDayPromo, maxDaySalesGlobal };
+  }
+
+  // ====== Optional: detect a "Promo Sales By Product" table ======
+  function findSalesByProductTable() {
+    if (PROMO_SALES_BY_PRODUCT_TABLE_SELECTOR) {
+      const forced = qs(PROMO_SALES_BY_PRODUCT_TABLE_SELECTOR);
+      return forced || null;
+    }
+
+    // Heuristic: any table with headers that include PromotionID + SalesDate + (ProductID or ProductCode)
+    const tables = qsa("table");
+    for (const t of tables) {
+      const ths = qsa("thead th", t);
+      if (!ths.length) continue;
+      const headers = ths.map((x) => (x.innerText || "").trim().toLowerCase());
+      const hasPromo = headers.includes("promotionid");
+      const hasDate = headers.includes("salesdate") || headers.includes("date");
+      const hasProd = headers.includes("productid") || headers.includes("productcode") || headers.includes("product");
+      const hasSales = headers.includes("sales");
+      if (hasPromo && hasDate && hasProd && hasSales) return t;
+    }
+    return null;
+  }
+
+  function buildSalesByProductIndex() {
+    const t = findSalesByProductTable();
+    if (!t) return null;
+
+    const rows = tableToObjects(t);
+    // byDayPromoProd[dk][promoId][productKey] = agg
+    const byDayPromoProd = {};
+
+    rows.forEach((r) => {
+      const promoId = normalizeId(r["PromotionID"] || r["promotionid"]);
+      const d = parseDateLoose(r["SalesDate"] || r["salesdate"] || r["Date"] || r["date"]);
+      if (!promoId || !d) return;
+
+      const dk = dateKey(d);
+      const productId = normalizeId(r["ProductID"] || r["productid"] || "");
+      const productCode = safeText(r["ProductCode"] || r["productcode"] || r["Product"] || "").trim();
+      const description = safeText(r["Description"] || r["description"] || "").trim();
+
+      const sales = parseNumberLoose(r["Sales"] || r["sales"]);
+      const cost = parseNumberLoose(r["Cost"] || r["cost"]);
+      const profit = parseNumberLoose(r["Profit"] || r["profit"]);
+
+      const pkey = productId || productCode || description || "line";
+
+      if (!byDayPromoProd[dk]) byDayPromoProd[dk] = {};
+      if (!byDayPromoProd[dk][promoId]) byDayPromoProd[dk][promoId] = {};
+      if (!byDayPromoProd[dk][promoId][pkey]) {
+        byDayPromoProd[dk][promoId][pkey] = { productId, productCode, description, sales: 0, cost: 0, profit: 0 };
+      }
+      const agg = byDayPromoProd[dk][promoId][pkey];
+      agg.sales += sales;
+      agg.cost += cost;
+      agg.profit += profit;
+      if (!agg.productId && productId) agg.productId = productId;
+      if (!agg.productCode && productCode) agg.productCode = productCode;
+      if (!agg.description && description) agg.description = description;
+    });
+
+    return { byDayPromoProd };
   }
 
   // ====== Heatmap ======
-  function heatAlpha(daySales, maxSales) {
-    if (!maxSales || daySales <= 0) return 0;
-    // log scale so 1 huge day doesn't make everything else invisible
-    const a = Math.log10(daySales + 1) / Math.log10(maxSales + 1);
-    return clamp(a, 0, 1);
+  function heatAlpha(daySales, maxSalesVisible) {
+    if (!maxSalesVisible || daySales <= 0) return 0;
+
+    // log scale -> normalize -> gamma
+    const norm = Math.log10(daySales + 1) / Math.log10(maxSalesVisible + 1);
+    const curved = Math.pow(clamp(norm, 0, 1), HEAT_GAMMA);
+    return clamp(curved, 0, 1);
   }
 
   function heatColor(alpha01) {
@@ -365,6 +445,18 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
     const startDay = new Date(start);
     startDay.setDate(start.getDate() - start.getDay()); // Sunday-start grid
 
+    // Compute max sales only across the visible 42-day grid (boost contrast)
+    let maxVisible = 0;
+    if (salesIndex && salesIndex.byDay) {
+      for (let i = 0; i < 42; i++) {
+        const day = new Date(startDay);
+        day.setDate(startDay.getDate() + i);
+        const dk = dateKey(day);
+        const agg = salesIndex.byDay[dk];
+        if (agg && agg.sales > maxVisible) maxVisible = agg.sales;
+      }
+    }
+
     for (let i = 0; i < 42; i++) {
       const day = new Date(startDay);
       day.setDate(startDay.getDate() + i);
@@ -378,8 +470,8 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
       // heat + sales label (day total across promos)
       const dayAgg = salesIndex && salesIndex.byDay ? salesIndex.byDay[dk] : null;
       const daySales = dayAgg ? dayAgg.sales : 0;
-      const max = salesIndex ? salesIndex.maxDaySales : 0;
-      const a01 = heatAlpha(daySales, max);
+
+      const a01 = heatAlpha(daySales, maxVisible);
       const bg = heatColor(a01);
       if (bg) cell.style.background = bg;
 
@@ -402,6 +494,7 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
         const badge = document.createElement("div");
         badge.className = "wl-promo " + BADGE_CLASS;
         badge.dataset.promotionid = String(p.id).trim();
+        badge.dataset.day = dk; // IMPORTANT: gives tooltip/panel day context
         badge.title = p.name || p.code || "Promotion";
         badge.textContent = p.code || p.name || `Promo ${p.id}`;
 
@@ -485,11 +578,17 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
     if (!obj) return "";
     for (const n of names) {
       if (obj[n] != null && String(obj[n]).trim() !== "") return String(obj[n]).trim();
-      // case-insensitive search
       const key = Object.keys(obj).find((k) => k.toLowerCase() === String(n).toLowerCase());
       if (key && obj[key] != null && String(obj[key]).trim() !== "") return String(obj[key]).trim();
     }
     return "";
+  }
+
+  function getPromoDaySales(promoId, dk, salesIndex) {
+    if (!salesIndex || !salesIndex.byDayPromo) return null;
+    const perDay = salesIndex.byDayPromo[dk];
+    if (!perDay || !perDay[promoId]) return null;
+    return perDay[promoId]; // {sales,cost,profit,...}
   }
 
   function attachBadgeEvents(el, promo, linesByPromoId, salesIndex) {
@@ -498,13 +597,16 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
 
     el.addEventListener("mousemove", (ev) => {
       const id = String(el.dataset.promotionid || "").trim();
+      const dk = String(el.dataset.day || "").trim(); // day context
       const lines = linesByPromoId[id] || [];
       const count = lines.length;
+
+      const dayAgg = dk ? getPromoDaySales(id, dk, salesIndex) : null;
 
       const chips = [
         promo.branchId ? `<span class="wl-chip">Branch: ${escHtml(promo.branchId)}</span>` : "",
         `<span class="wl-chip">Lines: ${count}</span>`,
-        salesIndex ? `<span class="wl-chip">Sales loaded</span>` : `<span class="wl-chip">Sales not loaded</span>`,
+        dayAgg ? `<span class="wl-chip">Day Sales: ${escHtml(compactCurrency(dayAgg.sales || 0))}</span>` : "",
       ].join("");
 
       const dateLine = promo.from && promo.to ? `${formatDate(promo.from)} – ${formatDate(promo.to)}` : "";
@@ -539,10 +641,14 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
       hideTooltip();
 
       const id = String(el.dataset.promotionid || "").trim();
+      const dk = String(el.dataset.day || "").trim(); // the day you clicked it from
       const lines = linesByPromoId[id] || [];
 
-      // Sales summary for this promo (within current visible month range)
+      // Month summary for this promo (current month)
       const promoSalesSummary = buildPromoSalesSummaryForCurrentMonth(id, salesIndex);
+
+      // Day summary for this promo (if clicked from a day cell)
+      const dayAgg = dk ? getPromoDaySales(id, dk, salesIndex) : null;
 
       const dateLine =
         promo.from && promo.to
@@ -551,7 +657,16 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
 
       const title = `${escHtml(promo.name || promo.code || "Promotion")} ${dateLine}`;
 
-      const salesBlock = promoSalesSummary
+      const dayBlock = dayAgg
+        ? `
+          <div style="margin:10px 0;">
+            <span class="wl-chip">Day (${escHtml(dk)}): ${escHtml(currency(dayAgg.sales || 0))}</span>
+            <span class="wl-chip">Day Profit: ${escHtml(currency(dayAgg.profit || 0))}</span>
+          </div>
+        `
+        : "";
+
+      const monthBlock = promoSalesSummary
         ? `
           <div style="margin:10px 0;">
             <span class="wl-chip">Month Sales: ${escHtml(currency(promoSalesSummary.sales))}</span>
@@ -561,8 +676,13 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
         `
         : `<div class="wl-muted" style="margin:10px 0;">No sales summary found for this promo in the visible month.</div>`;
 
+      // Optional product-level breakdown (only if a product sales table exists)
+      const productBreakdownHtml = buildOptionalProductBreakdownHtml(id, dk);
+
       const body =
-        salesBlock +
+        dayBlock +
+        monthBlock +
+        productBreakdownHtml +
         (lines.length
           ? `
         <div style="max-height:340px; overflow:auto; border-top:1px solid #eee; padding-top:10px;">
@@ -597,7 +717,7 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
     if (!salesIndex || !salesIndex.byDayPromo) return null;
 
     const start = startOfMonth(CURRENT_MONTH);
-    const end = new Date(start.getFullYear(), start.getMonth() + 1, 0); // last day of month
+    const end = endOfMonth(CURRENT_MONTH);
 
     let sales = 0;
     let profit = 0;
@@ -617,6 +737,55 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
 
     if (sales <= 0 && profit === 0 && days === 0) return null;
     return { sales, profit, days };
+  }
+
+  function buildOptionalProductBreakdownHtml(promoId, dk) {
+    if (!SALES_BY_PRODUCT_INDEX || !SALES_BY_PRODUCT_INDEX.byDayPromoProd) return "";
+
+    // If we have a day key, show day breakdown; otherwise show nothing.
+    if (!dk) return "";
+
+    const dayPromo = SALES_BY_PRODUCT_INDEX.byDayPromoProd[dk];
+    if (!dayPromo || !dayPromo[promoId]) return "";
+
+    const items = Object.values(dayPromo[promoId]);
+    items.sort((a, b) => (b.sales || 0) - (a.sales || 0));
+
+    const top = items.slice(0, 12);
+
+    return `
+      <div style="margin:10px 0; border-top:1px solid #eee; padding-top:10px;">
+        <div style="font-weight:700; margin-bottom:6px;">Day Breakdown (Top Items)</div>
+        <table style="width:100%; border-collapse:collapse;">
+          <thead>
+            <tr>
+              <th style="text-align:left; padding:6px; border-bottom:1px solid #ddd;">Item</th>
+              <th style="text-align:right; padding:6px; border-bottom:1px solid #ddd;">Sales</th>
+              <th style="text-align:right; padding:6px; border-bottom:1px solid #ddd;">Profit</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${top
+              .map((x) => {
+                const label = (x.productCode || x.productId || "Item").trim();
+                const sub = (x.description || "").trim();
+                return `
+                  <tr>
+                    <td style="padding:6px; border-bottom:1px solid #f0f0f0;">
+                      <div style="font-weight:600;">${escHtml(label)}</div>
+                      ${sub ? `<div class="wl-muted">${escHtml(sub)}</div>` : ""}
+                    </td>
+                    <td style="padding:6px; border-bottom:1px solid #f0f0f0; text-align:right;">${escHtml(currency(x.sales || 0))}</td>
+                    <td style="padding:6px; border-bottom:1px solid #f0f0f0; text-align:right;">${escHtml(currency(x.profit || 0))}</td>
+                  </tr>
+                `;
+              })
+              .join("")}
+          </tbody>
+        </table>
+        <div class="wl-muted" style="margin-top:6px;">(This section appears only if a product-level promo sales table is present.)</div>
+      </div>
+    `;
   }
 
   // ====== (Optional) Image JSONP - DISABLED by default ======
@@ -727,10 +896,12 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
     const hasHeader = !!qs(PROMO_HEADER_TABLE_SELECTOR);
     const hasLine = !!qs(PROMO_LINE_TABLE_SELECTOR);
     const hasSales = !!qs(PROMO_SALES_TABLE_SELECTOR);
+    const hasSalesProd = !!findSalesByProductTable();
     console.log("[WL PromoCal] Tables found:", {
       header: hasHeader,
       line: hasLine,
-      sales: hasSales,
+      salesDaily: hasSales,
+      salesByProduct: hasSalesProd,
     });
   }
 
@@ -743,6 +914,9 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
     LINES_BY_PROMO = buildLinesByPromoId();
     SALES_INDEX = buildSalesIndexFromTable();
 
+    // Optional: build if present
+    SALES_BY_PRODUCT_INDEX = buildSalesByProductIndex();
+
     renderCalendar(CURRENT_MONTH, PROMOS, LINES_BY_PROMO, SALES_INDEX);
   }
 
@@ -753,6 +927,7 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
     function tick() {
       const grid = qs("#" + GRID_ID);
       const hasHeader = !!qs(PROMO_HEADER_TABLE_SELECTOR);
+
       // we can render without sales, but we at least need the calendar grid + header promos
       if (grid && hasHeader) {
         logStatus();
@@ -760,7 +935,7 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
 
         if (ENABLE_IMAGE_MAP_JSONP) {
           loadProductImageMapJSONP(10000).then(() => {
-            // You can optionally refresh panel images here later if you want
+            // optional: refresh images later
           });
         }
         return;
@@ -769,7 +944,6 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
       if (Date.now() - start > maxMs) {
         console.warn("[WL PromoCal] Init timed out waiting for dashboard tables/grid.");
         logStatus();
-        // Try rendering anyway if grid exists
         if (grid) refreshAllAndRender();
         return;
       }
