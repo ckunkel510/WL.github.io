@@ -1010,6 +1010,163 @@ if (bg) cell.style.background = bg;
     }
   }
 
+
+  // ====== Month/Year Jump Picker ======
+  function ensureMonthYearPickerUIOnce() {
+    if (qs("#wlMonthYearModal")) return;
+
+    const modal = document.createElement("div");
+    modal.id = "wlMonthYearModal";
+    modal.style.display = "none";
+    modal.style.position = "fixed";
+    modal.style.inset = "0";
+    modal.style.zIndex = "100000";
+    modal.style.background = "rgba(0,0,0,0.35)";
+    modal.style.alignItems = "center";
+    modal.style.justifyContent = "center";
+    modal.style.padding = "16px";
+
+    modal.innerHTML = `
+      <div id="wlMonthYearDialog"
+           style="width:min(420px, 100%); background:#fff; border-radius:14px;
+                  box-shadow:0 14px 50px rgba(0,0,0,0.25); border:1px solid rgba(0,0,0,0.15);">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-bottom:1px solid #eee;">
+          <div style="font-weight:800;">Jump to month</div>
+          <button type="button" id="wlMonthYearClose"
+                  style="border:1px solid rgba(0,0,0,0.18); background:#fff; border-radius:10px; padding:6px 10px; cursor:pointer;">
+            ✕
+          </button>
+        </div>
+
+        <div style="padding:14px;">
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <div style="flex:1; min-width:160px;">
+              <div class="wl-muted" style="font-size:12px; margin-bottom:6px;">Month</div>
+              <select id="wlPickMonth" style="width:100%; padding:10px; border-radius:12px; border:1px solid rgba(0,0,0,0.18);"></select>
+            </div>
+            <div style="flex:1; min-width:140px;">
+              <div class="wl-muted" style="font-size:12px; margin-bottom:6px;">Year</div>
+              <select id="wlPickYear" style="width:100%; padding:10px; border-radius:12px; border:1px solid rgba(0,0,0,0.18);"></select>
+            </div>
+          </div>
+
+          <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:14px;">
+            <button type="button" id="wlMonthYearCancel"
+                    style="border:1px solid rgba(0,0,0,0.18); background:#fff; border-radius:12px; padding:10px 12px; cursor:pointer; font-weight:700;">
+              Cancel
+            </button>
+            <button type="button" id="wlMonthYearApply"
+                    style="border:1px solid rgba(0,0,0,0.18); background:rgba(107,0,22,0.08); border-radius:12px; padding:10px 12px; cursor:pointer; font-weight:800;">
+              Go
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const close = () => hideMonthYearPicker();
+    qs("#wlMonthYearClose").addEventListener("click", close);
+    qs("#wlMonthYearCancel").addEventListener("click", close);
+
+    // Click outside dialog closes
+    modal.addEventListener("click", (e) => {
+      const dialog = qs("#wlMonthYearDialog");
+      if (dialog && !dialog.contains(e.target)) close();
+    });
+
+    // ESC closes
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") hideMonthYearPicker();
+    });
+
+    // Apply
+    qs("#wlMonthYearApply").addEventListener("click", () => {
+      const m = parseInt(qs("#wlPickMonth").value, 10);
+      const y = parseInt(qs("#wlPickYear").value, 10);
+      if (!Number.isFinite(m) || !Number.isFinite(y)) return;
+
+      CURRENT_MONTH = startOfMonth(new Date(y, m, 1));
+      hideMonthYearPicker();
+      refreshAllAndRender();
+    });
+  }
+
+  function showMonthYearPicker() {
+    ensureMonthYearPickerUIOnce();
+
+    const modal = qs("#wlMonthYearModal");
+    const monthSel = qs("#wlPickMonth");
+    const yearSel = qs("#wlPickYear");
+    if (!modal || !monthSel || !yearSel) return;
+
+    // Populate months (once)
+    if (!monthSel.__wlFilled) {
+      monthSel.__wlFilled = true;
+      const monthNames = Array.from({ length: 12 }).map((_, i) =>
+        new Date(2000, i, 1).toLocaleString(undefined, { month: "long" })
+      );
+      monthNames.forEach((name, i) => {
+        const opt = document.createElement("option");
+        opt.value = String(i);
+        opt.textContent = name;
+        monthSel.appendChild(opt);
+      });
+    }
+
+    // Populate years (based on promo range if possible, else fallback)
+    const years = new Set();
+    if (Array.isArray(PROMOS) && PROMOS.length) {
+      PROMOS.forEach((p) => {
+        if (p && p.from) years.add(p.from.getFullYear());
+        if (p && p.to) years.add(p.to.getFullYear());
+      });
+    }
+    const nowY = new Date().getFullYear();
+    if (years.size === 0) {
+      for (let y = nowY - 5; y <= nowY + 5; y++) years.add(y);
+    } else {
+      const minY = Math.min(...Array.from(years));
+      const maxY = Math.max(...Array.from(years));
+      years.clear();
+      for (let y = minY - 1; y <= maxY + 1; y++) years.add(y);
+    }
+
+    yearSel.innerHTML = "";
+    Array.from(years).sort((a, b) => a - b).forEach((y) => {
+      const opt = document.createElement("option");
+      opt.value = String(y);
+      opt.textContent = String(y);
+      yearSel.appendChild(opt);
+    });
+
+    monthSel.value = String(CURRENT_MONTH.getMonth());
+    yearSel.value = String(CURRENT_MONTH.getFullYear());
+
+    modal.style.display = "flex";
+  }
+
+  function hideMonthYearPicker() {
+    const modal = qs("#wlMonthYearModal");
+    if (modal) modal.style.display = "none";
+  }
+
+  function bindMonthYearPickerTrigger() {
+    const label = qs("#" + MONTH_LABEL_ID);
+    if (!label || label.__wlBoundPicker) return;
+    label.__wlBoundPicker = true;
+
+    label.style.cursor = "pointer";
+    label.title = "Click to jump to a month/year";
+
+    label.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      showMonthYearPicker();
+    });
+  }
+
   function refreshAllAndRender() {
     ensureUIOnce();
     ensureHeaderViewPromosButton();
@@ -1017,6 +1174,7 @@ if (bg) cell.style.background = bg;
     hideSellingPriceRulesLink();
     bindCloseButton();
     bindNavButtons();
+    bindMonthYearPickerTrigger();
 
     PROMOS = getPromosFromHeaderTable();
     LINES_BY_PROMO = buildLinesByPromoId();
