@@ -2,9 +2,9 @@
 WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
 - Renders a month grid calendar from PromotionHeader table (Table208993)
 - Uses PromotionLine table (Table208994) for hover/click details
-- NEW: Uses Promo Sales By Day table (Table208998) to add a day heat map + totals
-- Loads Product images via JSONP from Apps Script (works from file://)
-- IMPORTANT: Google Sheet uses "id" + "image_link"
+- Uses PromoSales daily table (Table208998) to build a heatmap + daily totals
+- Image JSONP is DISABLED by default because it is currently crashing execution
+  (Unexpected token '<', callback not defined, etc.)
 ============================================================================ */
 
 (function () {
@@ -13,13 +13,7 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
   // ====== CONFIG ======
   const PROMO_HEADER_TABLE_SELECTOR = "table.Table208993";
   const PROMO_LINE_TABLE_SELECTOR = "table.Table208994";
-
-  // NEW: Promo Sales table selector (your pasted component shows table.Table208998)
-  const PROMO_SALES_TABLE_SELECTOR = "table.Table208998";
-
-  // Apps Script Web App URL (must support ?callback= for JSONP)
-  const IMAGE_MAP_URL =
-    "https://script.google.com/macros/s/AKfycbxuC8mU6Bw9e_OX5akSfTKfNJtj3QHHUbAdYafnO8c2NryihJk-4pU2K77negMebo9p/exec";
+  const PROMO_SALES_TABLE_SELECTOR = "table.Table208998"; // <-- your new table
 
   // Your injected calendar container
   const CAL_ID = "wlPromoCal";
@@ -32,11 +26,16 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
   const TOOLTIP_PREVIEW_COUNT = 5;
 
   // Heatmap tuning
-  const HEAT_ALPHA_MIN = 0.05;
-  const HEAT_ALPHA_MAX = 0.28;
-  const HEAT_BASE_RGB = { r: 107, g: 0, b: 22 }; // WL maroon-ish (matches your brand tone)
+  const HEAT_MIN_ALPHA = 0.06; // faint tint
+  const HEAT_MAX_ALPHA = 0.55; // strongest tint
+  const HEAT_COLOR_RGB = { r: 107, g: 0, b: 22 }; // WL maroon-ish (#6b0016)
 
-  const IMAGE_FIELD_CANDIDATES = ["ImageURL", "ImageUrl", "Image", "ImageLink", "image_link", "image link"];
+  // IMPORTANT: set to true only after your JSONP endpoint is fixed
+  const ENABLE_IMAGE_MAP_JSONP = false;
+
+  // Apps Script Web App URL (must support true JSONP: callbackName({...});)
+  const IMAGE_MAP_URL =
+    "https://script.google.com/macros/s/AKfycbxuC8mU6Bw9e_OX5akSfTKfNJtj3QHHUbAdYafnO8c2NryihJk-4pU2K77negMebo9p/exec";
 
   const PLACEHOLDER_DATA_URI =
     "data:image/svg+xml;charset=utf-8," +
@@ -47,6 +46,14 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
               font-family="Tahoma,Arial" font-size="12" fill="#777">No image</text>
       </svg>`
     );
+
+  // ====== STATE ======
+  let PRODUCT_IMAGE_MAP_READY = false;
+  let PRODUCT_IMAGE_MAP = {};
+  let CURRENT_MONTH = startOfMonth(new Date());
+  let PROMOS = [];
+  let LINES_BY_PROMO = {};
+  let SALES_INDEX = null;
 
   // ====== Helpers ======
   const qs = (sel, root = document) => root.querySelector(sel);
@@ -63,37 +70,11 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
       .replace(/'/g, "&#039;");
   }
 
-  function parseNumberLoose(x) {
-    const s = safeText(x).trim();
-    if (!s) return 0;
-    const cleaned = s.replace(/[$,]/g, "");
-    const n = parseFloat(cleaned);
-    return Number.isFinite(n) ? n : 0;
-  }
-
-  function fmtMoney(n) {
-    const v = Number.isFinite(n) ? n : 0;
-    try {
-      return v.toLocaleString(undefined, { style: "currency", currency: "USD" });
-    } catch {
-      // fallback
-      const sign = v < 0 ? "-" : "";
-      return sign + "$" + Math.abs(v).toFixed(2);
-    }
-  }
-
-  function fmtPct(n) {
-    const v = Number.isFinite(n) ? n : 0;
-    return (v * 100).toFixed(1) + "%";
-  }
-
-  // Normalize IDs (works for ProductID from PromotionLine AND "id" from sheet)
   function normalizeId(x) {
     let s = safeText(x).trim();
     if (!s) return "";
     s = s.replace(/,/g, "");
     s = s.replace(/\.0+$/, "");
-
     if (/^\d+(\.\d+)?$/.test(s)) {
       const n = parseInt(s, 10);
       return Number.isFinite(n) ? String(n) : s;
@@ -105,164 +86,93 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
     return s;
   }
 
-  function parseDateLoose(s) {
-    const str = safeText(s).trim();
-    if (!str) return null;
+  function parseNumberLoose(x) {
+    const s = safeText(x).trim().replace(/[$,]/g, "");
+    if (!s) return 0;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : 0;
+  }
 
-    const d = new Date(str);
-    if (!isNaN(d.getTime())) return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  function parseDateLoose(str) {
+    const s = safeText(str).trim();
+    if (!s) return null;
 
-    const m = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    // Try Date() parse first (often works with M/D/YYYY)
+    const d1 = new Date(s);
+    if (!isNaN(d1.getTime())) return new Date(d1.getFullYear(), d1.getMonth(), d1.getDate());
+
+    // Fallback: M/D/YYYY or MM/DD/YYYY
+    const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
     if (m) {
       const mm = parseInt(m[1], 10) - 1;
       const dd = parseInt(m[2], 10);
-      const yy = parseInt(m[3], 10);
-      const d2 = new Date(yy, mm, dd);
-      if (!isNaN(d2.getTime())) return d2;
+      let yy = parseInt(m[3], 10);
+      if (yy < 100) yy += 2000;
+      const d = new Date(yy, mm, dd);
+      if (!isNaN(d.getTime())) return d;
     }
     return null;
   }
 
-  function dateKey(d) {
+  function formatDate(d) {
     if (!d) return "";
+    const mm = d.getMonth() + 1;
+    const dd = d.getDate();
     const yy = d.getFullYear();
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    return `${yy}-${mm}-${dd}`;
+    return `${mm}/${dd}/${yy}`;
   }
 
-  function formatDate(d) {
+  function dateKey(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }
+
+  function currency(n) {
+    const v = Number(n || 0);
     try {
-      return d ? d.toLocaleDateString() : "";
+      return v.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
     } catch {
-      return "";
+      return "$" + Math.round(v).toString();
     }
+  }
+
+  function compactCurrency(n) {
+    const v = Number(n || 0);
+    const abs = Math.abs(v);
+    if (abs >= 1000000) return "$" + (v / 1000000).toFixed(1) + "M";
+    if (abs >= 1000) return "$" + (v / 1000).toFixed(1) + "k";
+    return "$" + Math.round(v).toString();
   }
 
   function inRange(day, from, to) {
     if (!day || !from || !to) return false;
-    const t = day.getTime();
-    return t >= from.getTime() && t <= to.getTime();
+    const a = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
+    const b = new Date(from.getFullYear(), from.getMonth(), from.getDate()).getTime();
+    const c = new Date(to.getFullYear(), to.getMonth(), to.getDate()).getTime();
+    return a >= b && a <= c;
   }
 
-  function pickFirstField(obj, candidates) {
-    for (const k of candidates) {
-      if (obj && obj[k] != null && String(obj[k]).trim() !== "") return String(obj[k]).trim();
-    }
-    return "";
+  function monthLabel(d) {
+    const m = d.toLocaleString(undefined, { month: "long" });
+    return `${m} ${d.getFullYear()}`;
   }
 
-  function getFieldLoose(obj, names) {
-    for (const k of names) {
-      if (obj && obj[k] != null && String(obj[k]).trim() !== "") return String(obj[k]).trim();
-    }
-    return "";
+  function startOfMonth(d) {
+    return new Date(d.getFullYear(), d.getMonth(), 1);
   }
 
-  // ====== Image Map (id -> image_link) via JSONP ======
-  let PRODUCT_IMAGE_MAP = {};
-  let PRODUCT_IMAGE_MAP_READY = false;
-  let IMAGE_MAP_PROMISE = null;
-
-  function loadProductImageMapJSONP(timeoutMs = 10000) {
-    PRODUCT_IMAGE_MAP_READY = false;
-    PRODUCT_IMAGE_MAP = {};
-
-    return new Promise((resolve) => {
-      const cbName = "__wlImgMapCb_" + Math.random().toString(36).slice(2);
-      const url = IMAGE_MAP_URL + (IMAGE_MAP_URL.includes("?") ? "&" : "?") + "callback=" + cbName + "&_=" + Date.now();
-
-      let done = false;
-
-      function cleanup() {
-        try {
-          delete window[cbName];
-        } catch {}
-        const s = document.getElementById(cbName);
-        if (s && s.parentNode) s.parentNode.removeChild(s);
-      }
-
-      const timer = setTimeout(() => {
-        if (done) return;
-        done = true;
-        cleanup();
-        PRODUCT_IMAGE_MAP_READY = false;
-        console.warn("[WL PromoCal] Image map JSONP timed out");
-        resolve(false);
-      }, timeoutMs);
-
-      window[cbName] = function (data) {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
-        cleanup();
-
-        try {
-          const rawMap = data && data.ok && data.map ? data.map : null;
-          if (!rawMap) {
-            PRODUCT_IMAGE_MAP_READY = false;
-            resolve(false);
-            return;
-          }
-
-          const normalized = {};
-          for (const k in rawMap) {
-            const nk = normalizeId(k);
-            const v = rawMap[k];
-            if (nk && v) normalized[nk] = String(v).trim();
-          }
-
-          PRODUCT_IMAGE_MAP = normalized;
-          PRODUCT_IMAGE_MAP_READY = true;
-
-          refreshPanelImages();
-          resolve(true);
-        } catch (e) {
-          PRODUCT_IMAGE_MAP_READY = false;
-          resolve(false);
-        }
-      };
-
-      const script = document.createElement("script");
-      script.id = cbName;
-      script.src = url;
-      script.async = true;
-      script.onerror = function () {
-        if (done) return;
-        done = true;
-        clearTimeout(timer);
-        cleanup();
-        PRODUCT_IMAGE_MAP_READY = false;
-        console.warn("[WL PromoCal] Image map JSONP failed to load script");
-        resolve(false);
-      };
-
-      document.head.appendChild(script);
-    });
-  }
-
-  function getImageForProductId(productId, lineObj) {
-    const pid = normalizeId(productId);
-    if (pid && PRODUCT_IMAGE_MAP_READY && PRODUCT_IMAGE_MAP[pid]) return PRODUCT_IMAGE_MAP[pid];
-
-    const fallback = pickFirstField(lineObj, IMAGE_FIELD_CANDIDATES);
-    return fallback || "";
-  }
-
-  // ====== UI Ensure ======
+  // ====== Tooltip / Panel ======
   function ensureUIOnce() {
-    injectStylesOnce();
-
     if (!qs("#wlPromoTooltip")) {
       const tip = document.createElement("div");
       tip.id = "wlPromoTooltip";
       tip.style.display = "none";
       tip.style.position = "fixed";
       tip.style.zIndex = "99999";
-      tip.className = "wl-tooltip";
       document.body.appendChild(tip);
     }
-
     if (!qs("#wlPromoDetailsPanel")) {
       const panel = document.createElement("div");
       panel.id = "wlPromoDetailsPanel";
@@ -277,38 +187,6 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
       `;
       document.body.appendChild(panel);
     }
-  }
-
-  function injectStylesOnce() {
-    if (qs("#wlPromoCalStyles")) return;
-    const s = document.createElement("style");
-    s.id = "wlPromoCalStyles";
-    s.type = "text/css";
-    s.textContent = `
-      .wl-tooltip{
-        background:#111; color:#fff; padding:10px 12px; border-radius:10px;
-        box-shadow:0 12px 30px rgba(0,0,0,.35);
-        font-family:Tahoma,Arial,sans-serif; font-size:12px; max-width:380px;
-      }
-      .wl-chip{ display:inline-block; padding:2px 8px; margin:0 6px 6px 0; border-radius:999px; background:rgba(255,255,255,.12); }
-      .wl-muted{ opacity:.75; }
-      .wl-day{ position:relative; border-radius:12px; overflow:hidden; }
-      .wl-day__sales{
-        position:absolute; right:8px; bottom:6px; font-size:11px;
-        background:rgba(0,0,0,.55); color:#fff; padding:2px 6px; border-radius:999px;
-        pointer-events:none;
-      }
-      .wl-heat-legend{
-        display:flex; gap:8px; align-items:center; font-family:Tahoma,Arial,sans-serif; font-size:12px; margin:6px 0 10px;
-      }
-      .wl-heat-swatch{ width:18px; height:10px; border-radius:3px; border:1px solid rgba(0,0,0,.15); }
-      .wl-panel-row{ margin:6px 0; }
-      .wl-kv{ display:inline-block; margin-right:10px; }
-      .wl-sales-table{ width:100%; border-collapse:collapse; margin-top:10px; }
-      .wl-sales-table th,.wl-sales-table td{ padding:6px 8px; border-bottom:1px solid rgba(0,0,0,.08); text-align:left; font-size:12px; }
-      .wl-sales-table th{ font-weight:700; }
-    `;
-    document.head.appendChild(s);
   }
 
   function bindCloseButton() {
@@ -354,29 +232,20 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
     if (panel) panel.style.display = "none";
   }
 
-  function refreshPanelImages() {
-    const panel = qs("#wlPromoDetailsPanel");
-    if (!panel || panel.style.display === "none") return;
-
-    qsa("img.wl-line-img[data-productid]", panel).forEach((img) => {
-      const pid = normalizeId(img.getAttribute("data-productid") || "");
-      if (!pid) return;
-
-      const url = PRODUCT_IMAGE_MAP_READY && PRODUCT_IMAGE_MAP[pid] ? PRODUCT_IMAGE_MAP[pid] : "";
-      if (url) {
-        const current = safeText(img.getAttribute("src")).trim();
-        if (!current || current === PLACEHOLDER_DATA_URI) img.src = url;
-      }
-    });
-
-    qsa("[data-img-status][data-productid]", panel).forEach((el) => {
-      const pid = normalizeId(el.getAttribute("data-productid") || "");
-      const has = !!(pid && PRODUCT_IMAGE_MAP_READY && PRODUCT_IMAGE_MAP[pid]);
-      el.textContent = has ? "Image: ✓" : "Image: —";
+  // ====== Data Read ======
+  function tableToObjects(table) {
+    const headers = qsa("thead th", table).map((th) => (th.innerText || "").trim());
+    const rows = qsa("tbody tr", table);
+    return rows.map((tr) => {
+      const tds = qsa("td", tr);
+      const obj = {};
+      headers.forEach((h, idx) => {
+        obj[h] = tds[idx] ? (tds[idx].innerText || "").trim() : "";
+      });
+      return obj;
     });
   }
 
-  // ====== Data Read ======
   function getPromosFromHeaderTable() {
     const table = qs(PROMO_HEADER_TABLE_SELECTOR);
     if (!table) return [];
@@ -402,33 +271,18 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
         const name = (tds[iName]?.innerText || "").trim();
         const from = parseDateLoose((tds[iFrom]?.innerText || "").trim());
         const to = parseDateLoose((tds[iTo]?.innerText || "").trim());
-        return { id, branchId, code, name, from, to };
+        return { id: normalizeId(id), branchId: normalizeId(branchId), code, name, from, to };
       })
       .filter(Boolean);
-  }
-
-  function tableToObjects(table) {
-    const headers = qsa("thead th", table).map((th) => (th.innerText || "").trim());
-    const rows = qsa("tbody tr", table);
-
-    return rows.map((tr) => {
-      const tds = qsa("td", tr);
-      const obj = {};
-      headers.forEach((h, idx) => {
-        obj[h] = tds[idx] ? (tds[idx].innerText || "").trim() : "";
-      });
-      return obj;
-    });
   }
 
   function buildLinesByPromoId() {
     const t = qs(PROMO_LINE_TABLE_SELECTOR);
     if (!t) return {};
     const objs = tableToObjects(t);
-
     const map = {};
     objs.forEach((o) => {
-      const pid = (o["PromotionID"] || o["PromotionId"] || o["promotionid"] || "").trim();
+      const pid = normalizeId(o["PromotionID"] || o["PromotionId"] || o["promotionid"] || "");
       if (!pid) return;
       if (!map[pid]) map[pid] = [];
       map[pid].push(o);
@@ -436,91 +290,69 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
     return map;
   }
 
-  // NEW: Sales indexing
-  function buildSalesIndex() {
+  function buildSalesIndexFromTable() {
     const t = qs(PROMO_SALES_TABLE_SELECTOR);
     if (!t) {
       return {
-        byDay: {},          // dayKey -> {sales,cost,profit, promos:{promoId:{...}}}
-        byPromo: {},        // promoId -> {sales,cost,profit, days:[{dayKey,...}]}
-        maxDaySales: 0
+        byDay: {},
+        byDayPromo: {},
+        maxDaySales: 0,
       };
     }
 
-    const objs = tableToObjects(t);
+    const rows = tableToObjects(t);
+    const byDay = {}; // dateKey -> {sales,cost,profit,rows:[]}
+    const byDayPromo = {}; // dateKey -> promoId -> agg
 
-    const byDay = {};
-    const byPromo = {};
     let maxDaySales = 0;
 
-    objs.forEach((o) => {
-      const promoId = String(o["PromotionID"] || o["PromotionId"] || o["promotionid"] || "").trim();
-      const d = parseDateLoose(o["SalesDate"] || o["salesdate"] || o["Date"] || o["date"]);
+    rows.forEach((r) => {
+      const promoId = normalizeId(r["PromotionID"] || r["PromotionId"] || r["promotionid"]);
+      const branchId = normalizeId(r["BranchID"] || r["branchid"]);
+      const d = parseDateLoose(r["SalesDate"] || r["salesdate"] || r["Date"] || r["date"]);
       if (!promoId || !d) return;
 
       const dk = dateKey(d);
 
-      const sales = parseNumberLoose(o["Sales"] || o["sales"]);
-      const cost = parseNumberLoose(o["Cost"] || o["cost"]);
-      const profit = parseNumberLoose(o["Profit"] || o["profit"]);
-      const margin = parseNumberLoose(o["Margin"] || o["margin"]);
+      const sales = parseNumberLoose(r["Sales"] || r["sales"]);
+      const cost = parseNumberLoose(r["Cost"] || r["cost"]);
+      const profit = parseNumberLoose(r["Profit"] || r["profit"]);
+      const margin = parseNumberLoose(r["Margin"] || r["margin"]);
 
-      if (!byDay[dk]) byDay[dk] = { sales: 0, cost: 0, profit: 0, promos: {} };
+      if (!byDay[dk]) byDay[dk] = { sales: 0, cost: 0, profit: 0, rows: [] };
       byDay[dk].sales += sales;
       byDay[dk].cost += cost;
       byDay[dk].profit += profit;
+      byDay[dk].rows.push({ promoId, branchId, sales, cost, profit, margin });
 
-      if (!byDay[dk].promos[promoId]) byDay[dk].promos[promoId] = { sales: 0, cost: 0, profit: 0, marginSum: 0, marginCount: 0 };
-      const dp = byDay[dk].promos[promoId];
-      dp.sales += sales;
-      dp.cost += cost;
-      dp.profit += profit;
-      if (Number.isFinite(margin) && margin !== 0) {
-        dp.marginSum += margin;
-        dp.marginCount += 1;
-      }
-
-      if (!byPromo[promoId]) byPromo[promoId] = { sales: 0, cost: 0, profit: 0, days: [] };
-      byPromo[promoId].sales += sales;
-      byPromo[promoId].cost += cost;
-      byPromo[promoId].profit += profit;
-      byPromo[promoId].days.push({ dayKey: dk, sales, cost, profit, margin });
+      if (!byDayPromo[dk]) byDayPromo[dk] = {};
+      if (!byDayPromo[dk][promoId]) byDayPromo[dk][promoId] = { promoId, sales: 0, cost: 0, profit: 0, branchIds: {} };
+      byDayPromo[dk][promoId].sales += sales;
+      byDayPromo[dk][promoId].cost += cost;
+      byDayPromo[dk][promoId].profit += profit;
+      if (branchId) byDayPromo[dk][promoId].branchIds[branchId] = true;
 
       if (byDay[dk].sales > maxDaySales) maxDaySales = byDay[dk].sales;
     });
 
-    // Sort promo day lists descending by sales
-    Object.keys(byPromo).forEach((pid) => {
-      byPromo[pid].days.sort((a, b) => (b.sales || 0) - (a.sales || 0));
-    });
-
-    return { byDay, byPromo, maxDaySales };
+    return { byDay, byDayPromo, maxDaySales };
   }
 
-  function heatAlpha(daySales, maxDaySales) {
-    if (!maxDaySales || maxDaySales <= 0) return 0;
-    // log scaling so one huge day doesn’t flatten the rest
-    const a = Math.log10(1 + Math.max(0, daySales));
-    const b = Math.log10(1 + maxDaySales);
-    const t = b ? a / b : 0;
-    return HEAT_ALPHA_MIN + (HEAT_ALPHA_MAX - HEAT_ALPHA_MIN) * clamp(t, 0, 1);
+  // ====== Heatmap ======
+  function heatAlpha(daySales, maxSales) {
+    if (!maxSales || daySales <= 0) return 0;
+    // log scale so 1 huge day doesn't make everything else invisible
+    const a = Math.log10(daySales + 1) / Math.log10(maxSales + 1);
+    return clamp(a, 0, 1);
   }
 
-  function heatColor(alpha) {
-    const { r, g, b } = HEAT_BASE_RGB;
-    return `rgba(${r},${g},${b},${alpha})`;
+  function heatColor(alpha01) {
+    if (alpha01 <= 0) return "";
+    const a = HEAT_MIN_ALPHA + (HEAT_MAX_ALPHA - HEAT_MIN_ALPHA) * alpha01;
+    return `rgba(${HEAT_COLOR_RGB.r}, ${HEAT_COLOR_RGB.g}, ${HEAT_COLOR_RGB.b}, ${a})`;
   }
 
   // ====== Calendar Render ======
-  function monthLabel(d) {
-    const m = d.toLocaleString(undefined, { month: "long" });
-    return `${m} ${d.getFullYear()}`;
-  }
-
-  function startOfMonth(d) {
-    return new Date(d.getFullYear(), d.getMonth(), 1);
-  }
-
   function renderCalendar(currentMonth, promos, linesByPromoId, salesIndex) {
     const grid = qs("#" + GRID_ID);
     const label = qs("#" + MONTH_LABEL_ID);
@@ -531,38 +363,37 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
 
     const start = startOfMonth(currentMonth);
     const startDay = new Date(start);
-    startDay.setDate(start.getDate() - start.getDay());
+    startDay.setDate(start.getDate() - start.getDay()); // Sunday-start grid
 
     for (let i = 0; i < 42; i++) {
       const day = new Date(startDay);
       day.setDate(startDay.getDate() + i);
 
+      const dk = dateKey(day);
+
       const cell = document.createElement("div");
       cell.className = "wl-day" + (day.getMonth() !== currentMonth.getMonth() ? " wl-day--muted" : "");
+      cell.dataset.date = dk;
 
-      // Apply heat map background
-      const dk = dateKey(day);
-      const daySales = salesIndex && salesIndex.byDay && salesIndex.byDay[dk] ? salesIndex.byDay[dk].sales : 0;
-      const a = heatAlpha(daySales, salesIndex ? salesIndex.maxDaySales : 0);
-      if (daySales > 0 && a > 0) {
-        cell.style.background = heatColor(a);
-      }
+      // heat + sales label (day total across promos)
+      const dayAgg = salesIndex && salesIndex.byDay ? salesIndex.byDay[dk] : null;
+      const daySales = dayAgg ? dayAgg.sales : 0;
+      const max = salesIndex ? salesIndex.maxDaySales : 0;
+      const a01 = heatAlpha(daySales, max);
+      const bg = heatColor(a01);
+      if (bg) cell.style.background = bg;
 
       const num = document.createElement("div");
       num.className = "wl-day__num";
       num.textContent = day.getDate();
       cell.appendChild(num);
 
-      // Small $ label in the corner when there are sales
-      if (daySales > 0) {
-        const salesBadge = document.createElement("div");
-        salesBadge.className = "wl-day__sales";
-        // compact display
-        const compact = daySales >= 1000 ? (daySales / 1000).toFixed(1) + "k" : daySales.toFixed(0);
-        salesBadge.textContent = "$" + compact;
-        cell.appendChild(salesBadge);
-      }
+      const daySalesEl = document.createElement("div");
+      daySalesEl.className = "wl-day__sales";
+      daySalesEl.textContent = daySales > 0 ? compactCurrency(daySales) : "";
+      cell.appendChild(daySalesEl);
 
+      // promos that are active on this day
       const stack = document.createElement("div");
       stack.className = "wl-promo-stack";
 
@@ -580,85 +411,87 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
 
       cell.appendChild(stack);
 
-      // Day hover tooltip (totals + top promos that day)
-      attachDayEvents(cell, day, todays, salesIndex);
+      // click on day -> day sales breakdown panel
+      cell.addEventListener("click", (ev) => {
+        // don't steal clicks from promo badges
+        if (ev.target && ev.target.closest && ev.target.closest(".wl-promo")) return;
+        openDayPanel(day, salesIndex, promos);
+      });
 
       grid.appendChild(cell);
     }
-
-    // Optional legend (only if sales table exists and has maxDaySales)
-    renderHeatLegendOnce(salesIndex);
   }
 
-  function renderHeatLegendOnce(salesIndex) {
-    if (!salesIndex || !salesIndex.maxDaySales) return;
-    const cal = qs("#" + CAL_ID);
-    if (!cal) return;
-    if (qs("#wlHeatLegend", cal)) return;
+  function openDayPanel(day, salesIndex, promos) {
+    const dk = dateKey(day);
+    const dayAgg = salesIndex && salesIndex.byDay ? salesIndex.byDay[dk] : null;
+    const promoAgg = salesIndex && salesIndex.byDayPromo ? salesIndex.byDayPromo[dk] : null;
 
-    const legend = document.createElement("div");
-    legend.id = "wlHeatLegend";
-    legend.className = "wl-heat-legend";
+    const title = `<strong>Promo Sales – ${escHtml(formatDate(day))}</strong>`;
 
-    const a1 = heatAlpha(salesIndex.maxDaySales * 0.15, salesIndex.maxDaySales);
-    const a2 = heatAlpha(salesIndex.maxDaySales * 0.45, salesIndex.maxDaySales);
-    const a3 = heatAlpha(salesIndex.maxDaySales, salesIndex.maxDaySales);
+    if (!dayAgg || !dayAgg.sales) {
+      openPanel(title, `<div class="wl-muted">No promo sales found for this day.</div>`);
+      return;
+    }
 
-    legend.innerHTML = `
-      <span class="wl-muted">Promo sales heat:</span>
-      <span class="wl-heat-swatch" style="background:${heatColor(a1)}"></span>
-      <span class="wl-heat-swatch" style="background:${heatColor(a2)}"></span>
-      <span class="wl-heat-swatch" style="background:${heatColor(a3)}"></span>
-      <span class="wl-muted">higher = more sales</span>
+    const rows = promoAgg ? Object.values(promoAgg) : [];
+    rows.sort((a, b) => (b.sales || 0) - (a.sales || 0));
+
+    const promoName = (pid) => {
+      const p = promos.find((x) => String(x.id) === String(pid));
+      return p ? (p.name || p.code || `Promo ${pid}`) : `Promo ${pid}`;
+    };
+
+    const table = `
+      <div style="margin-bottom:10px;">
+        <span class="wl-chip">Sales: ${escHtml(currency(dayAgg.sales))}</span>
+        <span class="wl-chip">Cost: ${escHtml(currency(dayAgg.cost))}</span>
+        <span class="wl-chip">Profit: ${escHtml(currency(dayAgg.profit))}</span>
+      </div>
+      <table style="width:100%; border-collapse:collapse;">
+        <thead>
+          <tr>
+            <th style="text-align:left; padding:6px; border-bottom:1px solid #ddd;">Promotion</th>
+            <th style="text-align:right; padding:6px; border-bottom:1px solid #ddd;">Sales</th>
+            <th style="text-align:right; padding:6px; border-bottom:1px solid #ddd;">Profit</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows
+            .map((r) => {
+              const branches = r.branchIds ? Object.keys(r.branchIds).join(", ") : "";
+              return `
+                <tr>
+                  <td style="padding:6px; border-bottom:1px solid #f0f0f0;">
+                    <div style="font-weight:600;">${escHtml(promoName(r.promoId))}</div>
+                    ${branches ? `<div class="wl-muted">Branches: ${escHtml(branches)}</div>` : ""}
+                    <div class="wl-muted">PromoID: ${escHtml(r.promoId)}</div>
+                  </td>
+                  <td style="padding:6px; border-bottom:1px solid #f0f0f0; text-align:right;">${escHtml(currency(r.sales))}</td>
+                  <td style="padding:6px; border-bottom:1px solid #f0f0f0; text-align:right;">${escHtml(currency(r.profit))}</td>
+                </tr>
+              `;
+            })
+            .join("")}
+        </tbody>
+      </table>
     `;
-    // Put legend just above grid
-    const grid = qs("#" + GRID_ID);
-    if (grid && grid.parentNode) grid.parentNode.insertBefore(legend, grid);
+
+    openPanel(title, table);
   }
 
-  function attachDayEvents(cellEl, day, todaysPromos, salesIndex) {
-    if (!cellEl || cellEl.__wlDayBound) return;
-    cellEl.__wlDayBound = true;
-
-    cellEl.addEventListener("mousemove", (ev) => {
-      const dk = dateKey(day);
-      const dayRec = salesIndex && salesIndex.byDay ? salesIndex.byDay[dk] : null;
-      if (!dayRec || !dayRec.sales) {
-        // If no sales, don’t show a tooltip (keeps UI clean)
-        hideTooltip();
-        return;
-      }
-
-      // Top promos by sales for that day
-      const promoRows = Object.keys(dayRec.promos || {})
-        .map((pid) => ({ pid, sales: dayRec.promos[pid].sales }))
-        .sort((a, b) => (b.sales || 0) - (a.sales || 0))
-        .slice(0, 6);
-
-      const topHtml = promoRows
-        .map((r) => {
-          const promo = (todaysPromos || []).find((p) => String(p.id).trim() === String(r.pid).trim());
-          const label = promo ? (promo.code || promo.name || `Promo ${r.pid}`) : `Promo ${r.pid}`;
-          return `<div class="wl-panel-row"><strong>${escHtml(label)}</strong> <span class="wl-muted">${escHtml(fmtMoney(r.sales))}</span></div>`;
-        })
-        .join("");
-
-      const html = `
-        <div style="font-weight:700; margin-bottom:6px;">${escHtml(formatDate(day))}</div>
-        <div style="margin-bottom:8px;">
-          <span class="wl-chip">Sales: ${escHtml(fmtMoney(dayRec.sales))}</span>
-          <span class="wl-chip">Profit: ${escHtml(fmtMoney(dayRec.profit))}</span>
-          <span class="wl-chip">Margin: ${escHtml(dayRec.sales ? fmtPct(dayRec.profit / dayRec.sales) : "0.0%")}</span>
-        </div>
-        ${topHtml || `<div class="wl-muted">No promo breakdown found.</div>`}
-      `;
-      showTooltip(html, ev.clientX, ev.clientY);
-    });
-
-    cellEl.addEventListener("mouseleave", hideTooltip);
+  // ====== Promo Badge Events ======
+  function getFieldLoose(obj, names) {
+    if (!obj) return "";
+    for (const n of names) {
+      if (obj[n] != null && String(obj[n]).trim() !== "") return String(obj[n]).trim();
+      // case-insensitive search
+      const key = Object.keys(obj).find((k) => k.toLowerCase() === String(n).toLowerCase());
+      if (key && obj[key] != null && String(obj[key]).trim() !== "") return String(obj[key]).trim();
+    }
+    return "";
   }
 
-  // ====== Tooltip / Panel Binding ======
   function attachBadgeEvents(el, promo, linesByPromoId, salesIndex) {
     if (!el || el.__wlPromoBound) return;
     el.__wlPromoBound = true;
@@ -668,14 +501,10 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
       const lines = linesByPromoId[id] || [];
       const count = lines.length;
 
-      const promoSales = salesIndex && salesIndex.byPromo ? salesIndex.byPromo[id] : null;
-
       const chips = [
         promo.branchId ? `<span class="wl-chip">Branch: ${escHtml(promo.branchId)}</span>` : "",
         `<span class="wl-chip">Lines: ${count}</span>`,
-        promoSales ? `<span class="wl-chip">Promo Sales: ${escHtml(fmtMoney(promoSales.sales))}</span>` : `<span class="wl-chip">Promo Sales: —</span>`,
-        promoSales ? `<span class="wl-chip">Profit: ${escHtml(fmtMoney(promoSales.profit))}</span>` : "",
-        PRODUCT_IMAGE_MAP_READY ? `<span class="wl-chip">Images ready</span>` : `<span class="wl-chip">Images loading…</span>`,
+        salesIndex ? `<span class="wl-chip">Sales loaded</span>` : `<span class="wl-chip">Sales not loaded</span>`,
       ].join("");
 
       const dateLine = promo.from && promo.to ? `${formatDate(promo.from)} – ${formatDate(promo.to)}` : "";
@@ -706,11 +535,14 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
 
     el.addEventListener("click", (ev) => {
       ev.preventDefault();
+      ev.stopPropagation();
       hideTooltip();
 
       const id = String(el.dataset.promotionid || "").trim();
       const lines = linesByPromoId[id] || [];
-      const promoSales = salesIndex && salesIndex.byPromo ? salesIndex.byPromo[id] : null;
+
+      // Sales summary for this promo (within current visible month range)
+      const promoSalesSummary = buildPromoSalesSummaryForCurrentMonth(id, salesIndex);
 
       const dateLine =
         promo.from && promo.to
@@ -719,148 +551,239 @@ WL Promo Calendar (BisTrack Dashboard) + Promo Sales Heatmap
 
       const title = `${escHtml(promo.name || promo.code || "Promotion")} ${dateLine}`;
 
-      // Sales section (top days)
-      let salesHtml = `<div class="wl-panel-row wl-muted">No sales rows found for this PromotionID.</div>`;
-      if (promoSales && promoSales.days && promoSales.days.length) {
-        const topDays = promoSales.days.slice(0, 12);
-        salesHtml = `
-          <div class="wl-panel-row">
-            <strong>Promo Sales:</strong> ${escHtml(fmtMoney(promoSales.sales))} &nbsp;
-            <span class="wl-muted">(Profit: ${escHtml(fmtMoney(promoSales.profit))}, Margin: ${escHtml(promoSales.sales ? fmtPct(promoSales.profit / promoSales.sales) : "0.0%")})</span>
+      const salesBlock = promoSalesSummary
+        ? `
+          <div style="margin:10px 0;">
+            <span class="wl-chip">Month Sales: ${escHtml(currency(promoSalesSummary.sales))}</span>
+            <span class="wl-chip">Month Profit: ${escHtml(currency(promoSalesSummary.profit))}</span>
+            <span class="wl-chip">Days w/ Sales: ${escHtml(String(promoSalesSummary.days))}</span>
           </div>
-          <table class="wl-sales-table">
-            <thead>
-              <tr><th>Date</th><th>Sales</th><th>Profit</th><th>Margin</th></tr>
-            </thead>
-            <tbody>
-              ${topDays
-                .map((r) => {
-                  const d = parseDateLoose(r.dayKey) || new Date(r.dayKey);
-                  const margin = r.sales ? (r.profit / r.sales) : 0;
-                  return `<tr>
-                    <td>${escHtml(r.dayKey)}</td>
-                    <td>${escHtml(fmtMoney(r.sales))}</td>
-                    <td>${escHtml(fmtMoney(r.profit))}</td>
-                    <td>${escHtml(fmtPct(margin))}</td>
-                  </tr>`;
-                })
-                .join("")}
-            </tbody>
-          </table>
-        `;
-      }
+        `
+        : `<div class="wl-muted" style="margin:10px 0;">No sales summary found for this promo in the visible month.</div>`;
 
-      const linesHtml =
-        lines.length > 0
-          ? `<div class="wl-lines">` +
-            lines
-              .map((l) => {
-                const prodIdRaw = getFieldLoose(l, ["ProductID", "productid"]);
-                const prodId = normalizeId(prodIdRaw);
-
-                const code = getFieldLoose(l, ["ProductCode", "productcode"]);
-                const desc = getFieldLoose(l, ["Description", "description"]);
-
-                const imgUrl = getImageForProductId(prodId, l);
-                const hasImg = !!(prodId && PRODUCT_IMAGE_MAP_READY && PRODUCT_IMAGE_MAP[prodId]);
-
-                return `
-                  <div class="wl-line-card">
-                    <div class="wl-line-grid">
-                      <img class="wl-line-img"
-                           data-productid="${escHtml(prodId)}"
-                           src="${escHtml(imgUrl || PLACEHOLDER_DATA_URI)}"
-                           alt=""
-                           onerror="this.src='${PLACEHOLDER_DATA_URI}'">
-                      <div>
-                        <div class="wl-line-title">${escHtml(code || "Item")}</div>
-                        <div class="wl-line-meta">
-                          <span class="wl-kv" data-img-status="1" data-productid="${escHtml(prodId)}">${hasImg ? "Image: ✓" : "Image: —"}</span>
-                        </div>
-                        ${desc ? `<div class="wl-line-desc">${escHtml(desc)}</div>` : `<div class="wl-line-desc wl-muted">No description.</div>`}
-                      </div>
-                    </div>
+      const body =
+        salesBlock +
+        (lines.length
+          ? `
+        <div style="max-height:340px; overflow:auto; border-top:1px solid #eee; padding-top:10px;">
+          ${lines
+            .map((l) => {
+              const pid = normalizeId(getFieldLoose(l, ["ProductID", "productid"]));
+              const code = getFieldLoose(l, ["ProductCode", "productcode"]);
+              const desc = getFieldLoose(l, ["Description", "description"]);
+              return `
+                <div class="wl-panel-row" style="display:flex; gap:10px; align-items:flex-start; margin-bottom:10px;">
+                  <img class="wl-line-img" data-productid="${escHtml(pid)}"
+                       src="${PLACEHOLDER_DATA_URI}"
+                       style="width:42px; height:42px; object-fit:cover; border-radius:6px; border:1px solid #ddd;" />
+                  <div style="flex:1;">
+                    <div style="font-weight:700;">${escHtml(code || "Line item")}</div>
+                    <div class="wl-muted">${escHtml(desc)}</div>
+                    ${pid ? `<div class="wl-muted">ProductID: ${escHtml(pid)}</div>` : ""}
                   </div>
-                `;
-              })
-              .join("") +
-            `</div>`
-          : `<div class="wl-panel-row wl-muted">No line rows were found for this PromotionID.</div>`;
-
-      const body = `
-        <div class="wl-panel-row"><strong>Branch:</strong> ${escHtml(promo.branchId || "All")}</div>
-        <div class="wl-panel-row"><strong>Promo Code:</strong> ${escHtml(promo.code || "")}</div>
-        <div class="wl-panel-row"><strong>Lines:</strong> ${lines.length}</div>
-        <hr style="border:none;border-top:1px solid rgba(0,0,0,.12); margin:10px 0;">
-        ${salesHtml}
-        <hr style="border:none;border-top:1px solid rgba(0,0,0,.12); margin:10px 0;">
-        ${linesHtml}
-      `;
+                </div>
+              `;
+            })
+            .join("")}
+        </div>
+      `
+          : `<div class="wl-muted">No line details found.</div>`);
 
       openPanel(title, body);
-
-      if (!PRODUCT_IMAGE_MAP_READY && IMAGE_MAP_PROMISE) {
-        IMAGE_MAP_PROMISE.then(() => refreshPanelImages());
-      } else {
-        refreshPanelImages();
-      }
     });
   }
 
-  // ====== Init ======
-  function init() {
-    ensureUIOnce();
-    bindCloseButton();
+  function buildPromoSalesSummaryForCurrentMonth(promoId, salesIndex) {
+    if (!salesIndex || !salesIndex.byDayPromo) return null;
 
-    const cal = qs("#" + CAL_ID);
-    if (!cal) return;
+    const start = startOfMonth(CURRENT_MONTH);
+    const end = new Date(start.getFullYear(), start.getMonth() + 1, 0); // last day of month
 
-    const promos = getPromosFromHeaderTable();
-    const lines = buildLinesByPromoId();
+    let sales = 0;
+    let profit = 0;
+    let days = 0;
 
-    // NEW: build sales index from the new table
-    const salesIndex = buildSalesIndex();
+    for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+      const dk = dateKey(d);
+      const perDay = salesIndex.byDayPromo[dk];
+      if (!perDay || !perDay[promoId]) continue;
+      const rec = perDay[promoId];
+      if (rec.sales) {
+        sales += rec.sales;
+        profit += rec.profit;
+        days += 1;
+      }
+    }
 
-    let current = new Date();
-    current = new Date(current.getFullYear(), current.getMonth(), 1);
+    if (sales <= 0 && profit === 0 && days === 0) return null;
+    return { sales, profit, days };
+  }
 
+  // ====== (Optional) Image JSONP - DISABLED by default ======
+  function loadProductImageMapJSONP(timeoutMs = 10000) {
+    PRODUCT_IMAGE_MAP_READY = false;
+    PRODUCT_IMAGE_MAP = {};
+
+    return new Promise((resolve) => {
+      const cbName = "__wlImgMapCb_" + Math.random().toString(36).slice(2);
+      const url =
+        IMAGE_MAP_URL +
+        (IMAGE_MAP_URL.includes("?") ? "&" : "?") +
+        "callback=" +
+        cbName +
+        "&_=" +
+        Date.now();
+
+      let done = false;
+
+      function cleanup() {
+        try {
+          delete window[cbName];
+        } catch {}
+        const s = document.getElementById(cbName);
+        if (s && s.parentNode) s.parentNode.removeChild(s);
+      }
+
+      const timer = setTimeout(() => {
+        if (done) return;
+        done = true;
+        cleanup();
+        PRODUCT_IMAGE_MAP_READY = false;
+        console.warn("[WL PromoCal] Image map JSONP timed out");
+        resolve(false);
+      }, timeoutMs);
+
+      window[cbName] = function (data) {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        cleanup();
+
+        try {
+          const rawMap = data && data.ok && data.map ? data.map : null;
+          if (!rawMap) {
+            PRODUCT_IMAGE_MAP_READY = false;
+            resolve(false);
+            return;
+          }
+
+          const normalized = {};
+          for (const k in rawMap) {
+            const nk = normalizeId(k);
+            const v = rawMap[k];
+            if (nk && v) normalized[nk] = String(v).trim();
+          }
+
+          PRODUCT_IMAGE_MAP = normalized;
+          PRODUCT_IMAGE_MAP_READY = true;
+          resolve(true);
+        } catch (e) {
+          PRODUCT_IMAGE_MAP_READY = false;
+          resolve(false);
+        }
+      };
+
+      const script = document.createElement("script");
+      script.id = cbName;
+      script.src = url;
+      script.async = true;
+      script.onerror = function () {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        cleanup();
+        PRODUCT_IMAGE_MAP_READY = false;
+        console.warn("[WL PromoCal] Image map JSONP failed to load script");
+        resolve(false);
+      };
+
+      document.head.appendChild(script);
+    });
+  }
+
+  // ====== Wiring / Init ======
+  function bindNavButtons() {
     const prev = qs("#" + PREV_ID);
     const next = qs("#" + NEXT_ID);
 
-    function rerender() {
-      renderCalendar(current, promos, lines, salesIndex);
-    }
-
-    if (prev) {
+    if (prev && !prev.__wlBound) {
+      prev.__wlBound = true;
       prev.addEventListener("click", () => {
-        current = new Date(current.getFullYear(), current.getMonth() - 1, 1);
-        rerender();
+        CURRENT_MONTH = startOfMonth(new Date(CURRENT_MONTH.getFullYear(), CURRENT_MONTH.getMonth() - 1, 1));
+        renderCalendar(CURRENT_MONTH, PROMOS, LINES_BY_PROMO, SALES_INDEX);
       });
     }
-    if (next) {
+
+    if (next && !next.__wlBound) {
+      next.__wlBound = true;
       next.addEventListener("click", () => {
-        current = new Date(current.getFullYear(), current.getMonth() + 1, 1);
-        rerender();
+        CURRENT_MONTH = startOfMonth(new Date(CURRENT_MONTH.getFullYear(), CURRENT_MONTH.getMonth() + 1, 1));
+        renderCalendar(CURRENT_MONTH, PROMOS, LINES_BY_PROMO, SALES_INDEX);
       });
     }
+  }
 
-    // Render immediately
-    rerender();
-
-    // Load image map in background
-    IMAGE_MAP_PROMISE = loadProductImageMapJSONP();
-
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
-        hideTooltip();
-        closePanel();
-      }
+  function logStatus() {
+    const hasHeader = !!qs(PROMO_HEADER_TABLE_SELECTOR);
+    const hasLine = !!qs(PROMO_LINE_TABLE_SELECTOR);
+    const hasSales = !!qs(PROMO_SALES_TABLE_SELECTOR);
+    console.log("[WL PromoCal] Tables found:", {
+      header: hasHeader,
+      line: hasLine,
+      sales: hasSales,
     });
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
-  } else {
-    init();
+  function refreshAllAndRender() {
+    ensureUIOnce();
+    bindCloseButton();
+    bindNavButtons();
+
+    PROMOS = getPromosFromHeaderTable();
+    LINES_BY_PROMO = buildLinesByPromoId();
+    SALES_INDEX = buildSalesIndexFromTable();
+
+    renderCalendar(CURRENT_MONTH, PROMOS, LINES_BY_PROMO, SALES_INDEX);
+  }
+
+  // Dashboard tables sometimes render after scripts run; wait + retry
+  function initWithRetry(maxMs = 15000) {
+    const start = Date.now();
+
+    function tick() {
+      const grid = qs("#" + GRID_ID);
+      const hasHeader = !!qs(PROMO_HEADER_TABLE_SELECTOR);
+      // we can render without sales, but we at least need the calendar grid + header promos
+      if (grid && hasHeader) {
+        logStatus();
+        refreshAllAndRender();
+
+        if (ENABLE_IMAGE_MAP_JSONP) {
+          loadProductImageMapJSONP(10000).then(() => {
+            // You can optionally refresh panel images here later if you want
+          });
+        }
+        return;
+      }
+
+      if (Date.now() - start > maxMs) {
+        console.warn("[WL PromoCal] Init timed out waiting for dashboard tables/grid.");
+        logStatus();
+        // Try rendering anyway if grid exists
+        if (grid) refreshAllAndRender();
+        return;
+      }
+
+      setTimeout(tick, 250);
+    }
+
+    tick();
+  }
+
+  // Start
+  try {
+    initWithRetry();
+  } catch (e) {
+    console.error("[WL PromoCal] Fatal init error:", e);
   }
 })();
