@@ -22,6 +22,9 @@ UPDATES IN THIS VERSION:
   const PROMO_SALES_BY_PRODUCT_TABLE_SELECTOR = "table.Table208999";
   const CREATE_PROMO_LINK_HREF = "dislinkDrillDown209001";
   const CREATE_PROMO_LINK_SELECTOR = `a.dashboard-link[href="${CREATE_PROMO_LINK_HREF}"]`;
+
+  const SELLING_PRICE_RULES_HREF = "dislinkSellingPriceRules";
+  const SELLING_PRICE_RULES_SELECTOR = `a.dashboard-link[href="${SELLING_PRICE_RULES_HREF}"]`;
   const GRID_ID = "wlPromoGrid";
   const MONTH_LABEL_ID = "wlMonthLabel";
   const PREV_ID = "wlPrevMonth";
@@ -859,6 +862,7 @@ UPDATES IN THIS VERSION:
   function refreshAllAndRender() {
     ensureUIOnce();
     hideCreatePromoLink();
+    hideSellingPriceRulesLink();
     bindCloseButton();
     bindNavButtons();
 
@@ -895,3 +899,42 @@ UPDATES IN THIS VERSION:
     console.error("[WL PromoCal] Fatal init error:", e);
   }
 })();
+// ====== Selling Price Rules Link ======
+function getSellingPriceRulesLink() {
+  return (
+    document.querySelector(SELLING_PRICE_RULES_SELECTOR) ||
+    document.querySelector(`a.dashboard-link[href*="${SELLING_PRICE_RULES_HREF}"]`) ||
+    document.querySelector(`a[href*="${SELLING_PRICE_RULES_HREF}"]`)
+  );
+}
+
+function hideSellingPriceRulesLink() {
+  const link = getSellingPriceRulesLink();
+  if (!link) return;
+
+  link.style.display = "none";
+
+  const wrap = link.closest("td, div, span");
+  if (wrap && wrap !== document.body && wrap.children.length === 1) {
+    wrap.style.display = "none";
+  }
+}
+
+function openSellingPriceRulesFromPanel() {
+  // Provide context for the user (and for future automation)
+  // They can filter/search once on the Selling Price Rules screen.
+  try {
+    if (window.WL_PROMOCAL_OPEN_PROMO_ID) localStorage.setItem("WL_PROMOCAL_OPEN_PROMO_ID", String(window.WL_PROMOCAL_OPEN_PROMO_ID));
+    if (window.WL_PROMOCAL_OPEN_PROMO_CODE) localStorage.setItem("WL_PROMOCAL_OPEN_PROMO_CODE", String(window.WL_PROMOCAL_OPEN_PROMO_CODE));
+    if (window.WL_PROMOCAL_OPEN_PROMO_NAME) localStorage.setItem("WL_PROMOCAL_OPEN_PROMO_NAME", String(window.WL_PROMOCAL_OPEN_PROMO_NAME));
+  } catch (e) {}
+
+  const link = getSellingPriceRulesLink();
+  if (!link) {
+    console.warn("[WL PromoCal] Selling Price Rules link not found:", SELLING_PRICE_RULES_HREF);
+    return;
+  }
+  link.click();
+}
+
+
