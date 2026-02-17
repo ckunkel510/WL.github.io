@@ -652,7 +652,7 @@ float: left;
 }
 
 .pagination.pagination-sm.m-0{
-width: 50%
+width: 50%;
 margin-left: 25% !important;
 margin-right: 25% !important;
 text-align: center;
@@ -854,4 +854,110 @@ width: 25% !important;
 #ctl00_PageBody_productDetail_entryInputDiv > div > div > div > table > tbody {
   display: flex;
   flex-direction: column-reverse;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ===== GLOBAL (all pages) ===== */
+
+.disabled {
+  background-color: grey;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.rmpView.attachmentContainer img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* If you use jQuery UI dialogs anywhere */
+.ui-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 90%;
+  width: auto !important;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ===== RADGRID (wherever .rgRow/.rgAltRow exist) ===== */
+
+.rgRow,
+.rgAltRow {
+  font-size: 12px;
+}
+
+.rgRow td a,
+.rgAltRow td a {
+  width: 100%;
+  padding-left: 20px;
+  padding-right: 20px;
+  height: 100%;
+  padding-top: 5px;
+  padding-bottom: 5px;
+  border-style: solid;
+  border-width: 1px;
+  border-color: #6b0005;
+}
+
+.rgRow td a:hover,
+.rgAltRow td a:hover {
+  background-color: #6b0005;
+  color: white;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ===== UNKNOWN / SINGLE-USE ===== */
+#editAddressButton {
+  margin-left: 5px;
 }

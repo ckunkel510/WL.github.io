@@ -25,3 +25,26 @@ display: none !important;
   #stock-widget{
     width: 100%;
   }
+
+
+
+
+
+
+
+  /* ===== PRODUCT DETAIL (likely ProductDetail.aspx) ===== */
+
+#ctl00_PageBody_productDetail_ctl03,
+#ctl00_PageBody_productDetail_ctl04,
+#ctl00_PageBody_productDetail_ctl05 {
+  display: inline !important;
+}
+
+/* If you're hiding the iframe and replacing it with injected HTML */
+#DescriptionIframe {
+  display: none !important;
+}
+
+.productDescriptionOnThisPageFull {
+  display: none;
+}

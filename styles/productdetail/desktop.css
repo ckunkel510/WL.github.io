@@ -80,3 +80,24 @@ width: 100% !important;
     flex: 1 1 auto;
     margin-top: -10px; /* pulls description up closer to image */
   }
+
+
+
+
+
+  /* ===== PRODUCT DETAIL (likely ProductDetail.aspx) ===== */
+
+#ctl00_PageBody_productDetail_ctl03,
+#ctl00_PageBody_productDetail_ctl04,
+#ctl00_PageBody_productDetail_ctl05 {
+  display: inline !important;
+}
+
+/* If you're hiding the iframe and replacing it with injected HTML */
+#DescriptionIframe {
+  display: none !important;
+}
+
+.productDescriptionOnThisPageFull {
+  display: none;
+}

@@ -15,3 +15,43 @@ padding: 10px !important;
 #ctl00_PageBody_accountsTransactionsPanel{
 float: left !important;
 }
+
+
+
+
+
+
+
+
+
+
+/* ===== ACCOUNT INFO (likely AccountInfo_R.aspx) ===== */
+
+.Accountinfolink {
+  min-width: 30%;
+  max-width: 40%;
+  text-align: center;
+  margin: 10px;
+  height: 150px;
+  font-size: 1.75em;
+  font-weight: bold !important;
+  padding: 25px;
+  float: left;
+  border: 1px solid lightgray;
+  border-radius: 5px;
+  align-content: space-evenly;
+  word-break: keep-all;
+  text-wrap: balance;
+}
+
+#accountlinkdiv {
+  display: flex;
+  flex-wrap: wrap;
+  text-wrap: nowrap;
+  text-align: center;
+}
+
+/* Likely Account page links/buttons */
+a#ctl00_PageBody_ManageStoredCardsForCashCustomers {
+  margin-top: 25px;
+}

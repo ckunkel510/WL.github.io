@@ -751,3 +751,43 @@ a#gc_guest_gtn{
   margin: auto;
   width: 70%;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* ===== SHOPPING CART / CHECKOUT (likely ShoppingCart.aspx) ===== */
+
+#ctl00_PageBody_PromoCodeEntryInputTH,
+#ctl00_PageBody_PromoCodeEntryInputTD,
+#ctl00_PageBody_PromotionCodesAndDeliveryHeader_HeaderText {
+  display: none !important;
+}
+
+#ctl00_PageBody_AgreeToTermsAndConditionsCheckBox {
+  height: 20px;
+  width: 20px;
+}
+
+label[for="ctl00_PageBody_AgreeToTermsAndConditionsCheckBox"] {
+  font-size: large;
+  font-weight: bold;
+}
+
+#summary {
+  display: grid;
+}
+
+#summary table {
+  display: inline-table;
+  border: 2px solid;
+  border-color: #6b0005;
+}
