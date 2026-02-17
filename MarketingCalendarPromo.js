@@ -20,6 +20,7 @@ UPDATES IN THIS VERSION:
   const PROMO_LINE_TABLE_SELECTOR   = "table.Table208994";
   const PROMO_SALES_TABLE_SELECTOR  = "table.Table208998";
   const PROMO_SALES_BY_PRODUCT_TABLE_SELECTOR = "table.Table208999";
+  const PRODUCT_GROUP_TABLE_SELECTOR = "table.Table209003"; // ProductID -> Level1 (JRHProductGroup)
   const CREATE_PROMO_LINK_HREF = "dislinkDrillDown209001";
   const CREATE_PROMO_LINK_SELECTOR = `a.dashboard-link[href="${CREATE_PROMO_LINK_HREF}"]`;
 
@@ -54,7 +55,8 @@ UPDATES IN THIS VERSION:
 
   // ====== STATE ======
   let CURRENT_MONTH = startOfMonth(new Date());
-  let PROMOS = [];
+    let GROUP_BY_PRODUCT = {}; // productId -> Level1
+let PROMOS = [];
   let LINES_BY_PROMO = {};
   let SALES_INDEX = null;
   let SALES_BY_PRODUCT_INDEX = null;
@@ -428,6 +430,26 @@ function ensureHeaderViewPromosButton() {
     return { byDayPromoProduct, byMonthPromoProduct };
   }
 
+
+  // Build lookup: ProductID -> Level1 (from PRODUCT_GROUP_TABLE_SELECTOR)
+  function buildProductGroupLookupFromTable() {
+    const t = qs(PRODUCT_GROUP_TABLE_SELECTOR);
+    if (!t) return {};
+
+    const rows = tableToObjects(t);
+    const map = {};
+    rows.forEach((r) => {
+      const productId = normalizeId(getFieldLoose(r, ["ProductID", "productid"]));
+      if (!productId) return;
+
+      const level1 = (getFieldLoose(r, ["Level1", "level1", "Group", "group"]) || "").trim();
+      if (!level1) return;
+
+      map[productId] = level1;
+    });
+    return map;
+  }
+
   // Build a lookup for ProductID -> { productCode, description } from PromoLine table (for a specific promo)
   function buildPromoLineMetaLookup(promoId, linesByPromoId) {
     const lines = (linesByPromoId && linesByPromoId[promoId]) ? linesByPromoId[promoId] : [];
@@ -584,6 +606,268 @@ function ensureViewPromoButton(panel, promo) {
     if (alpha01 <= 0) return "";
     const a = HEAT_MIN_ALPHA + (HEAT_MAX_ALPHA - HEAT_MIN_ALPHA) * alpha01;
     return `rgba(${HEAT_COLOR_RGB.r}, ${HEAT_COLOR_RGB.g}, ${HEAT_COLOR_RGB.b}, ${a})`;
+  }
+
+
+  // ====== Insights (YoY Monthly + Group Rollups) ======
+  function ensureInsightsUIOnce() {
+    const cal = qs("#wlPromoCal");
+    const grid = qs("#" + GRID_ID);
+    if (!cal || !grid) return;
+
+    if (qs("#wlPromoInsights")) return;
+
+    const box = document.createElement("div");
+    box.id = "wlPromoInsights";
+    box.style.marginTop = "12px";
+    box.style.padding = "12px";
+    box.style.borderRadius = "14px";
+    box.style.border = "1px solid rgba(0,0,0,0.12)";
+    box.style.background = "rgba(255,255,255,0.92)";
+
+    box.innerHTML = `
+      <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+        <div style="font-weight:900;">Promo Insights</div>
+        <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+          <div style="font-size:12px; opacity:0.75;">Year</div>
+          <select id="wlInsightYear" style="padding:8px 10px; border-radius:12px; border:1px solid rgba(0,0,0,0.18);"></select>
+        </div>
+      </div>
+
+      <div style="margin-top:10px;">
+        <div style="font-weight:800; margin-bottom:6px;">Year-over-Year Monthly Promo Sales</div>
+        <div id="wlYoYChart"></div>
+        <div id="wlYoYSummary" style="margin-top:6px; font-size:12px; opacity:0.8;"></div>
+      </div>
+
+      <div style="display:grid; grid-template-columns: 1fr; gap:12px; margin-top:12px;">
+        <div>
+          <div style="font-weight:800; margin-bottom:6px;">Top Product Groups (Selected Month)</div>
+          <div id="wlTopGroups"></div>
+        </div>
+      </div>
+    `;
+
+    // Insert right after the calendar grid
+    grid.parentElement.insertBefore(box, grid.nextSibling);
+
+    const yearSel = qs("#wlInsightYear");
+    if (yearSel && !yearSel.__wlBound) {
+      yearSel.__wlBound = true;
+      yearSel.addEventListener("change", () => renderInsights(CURRENT_MONTH));
+    }
+  }
+
+  function computeMonthlyTotalsForYear(byDay, year) {
+    const arr = new Array(12).fill(0);
+    if (!byDay) return arr;
+
+    Object.keys(byDay).forEach((dk) => {
+      // dk is YYYY-MM-DD
+      const y = parseInt(dk.slice(0, 4), 10);
+      if (y !== year) return;
+      const m = parseInt(dk.slice(5, 7), 10) - 1;
+      if (m < 0 || m > 11) return;
+      arr[m] += (byDay[dk]?.sales || 0);
+    });
+    return arr;
+  }
+
+  function fmtMoney(n) {
+    const v = Number(n || 0);
+    return v.toLocaleString(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+  }
+
+  function renderYoYSvgChart(curYear, curArr, prevYear, prevArr) {
+    const mount = qs("#wlYoYChart");
+    if (!mount) return;
+
+    const w = 860;
+    const h = 240;
+    const padL = 44;
+    const padR = 16;
+    const padT = 18;
+    const padB = 34;
+
+    const maxV = Math.max(1, ...curArr, ...prevArr);
+    const xStep = (w - padL - padR) / 11;
+
+    const x = (i) => padL + i * xStep;
+    const y = (v) => padT + (h - padT - padB) * (1 - (v / maxV));
+
+    const points = (arr) => arr.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+
+    const monthLabels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+    // Use two clear strokes; rely on default theme + light alpha
+    mount.innerHTML = `
+      <svg viewBox="0 0 ${w} ${h}" width="100%" height="240" role="img" aria-label="YoY Monthly Promo Sales">
+        <rect x="0" y="0" width="${w}" height="${h}" fill="transparent"></rect>
+
+        <!-- gridlines -->
+        ${[0.25,0.5,0.75,1].map((p)=> {
+          const yy = padT + (h - padT - padB) * (1 - p);
+          const label = fmtMoney(maxV * p);
+          return `
+            <line x1="${padL}" y1="${yy}" x2="${w-padR}" y2="${yy}" stroke="rgba(0,0,0,0.08)" />
+            <text x="${padL-8}" y="${yy+4}" text-anchor="end" font-size="11" fill="rgba(0,0,0,0.55)">${label}</text>
+          `;
+        }).join("")}
+
+        <!-- axes -->
+        <line x1="${padL}" y1="${h-padB}" x2="${w-padR}" y2="${h-padB}" stroke="rgba(0,0,0,0.18)" />
+        <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${h-padB}" stroke="rgba(0,0,0,0.18)" />
+
+        <!-- previous year -->
+        <polyline points="${points(prevArr)}" fill="none" stroke="rgba(0,0,0,0.35)" stroke-width="3" />
+        ${prevArr.map((v,i)=>`<circle cx="${x(i)}" cy="${y(v)}" r="3.5" fill="rgba(0,0,0,0.35)"></circle>`).join("")}
+
+        <!-- current year -->
+        <polyline points="${points(curArr)}" fill="none" stroke="rgba(${HEAT_COLOR_RGB.r},${HEAT_COLOR_RGB.g},${HEAT_COLOR_RGB.b},0.85)" stroke-width="3.5" />
+        ${curArr.map((v,i)=>`<circle cx="${x(i)}" cy="${y(v)}" r="4" fill="rgba(${HEAT_COLOR_RGB.r},${HEAT_COLOR_RGB.g},${HEAT_COLOR_RGB.b},0.85)"></circle>`).join("")}
+
+        <!-- x labels -->
+        ${monthLabels.map((m,i)=>`<text x="${x(i)}" y="${h-12}" text-anchor="middle" font-size="11" fill="rgba(0,0,0,0.65)">${m}</text>`).join("")}
+
+        <!-- legend -->
+        <g transform="translate(${padL}, ${padT-4})">
+          <rect x="0" y="0" width="12" height="4" fill="rgba(${HEAT_COLOR_RGB.r},${HEAT_COLOR_RGB.g},${HEAT_COLOR_RGB.b},0.85)"></rect>
+          <text x="18" y="5" font-size="11" fill="rgba(0,0,0,0.75)">${curYear}</text>
+
+          <rect x="64" y="0" width="12" height="4" fill="rgba(0,0,0,0.35)"></rect>
+          <text x="82" y="5" font-size="11" fill="rgba(0,0,0,0.75)">${prevYear}</text>
+        </g>
+      </svg>
+    `;
+  }
+
+  function renderTopGroupsForMonth(monthDate) {
+    const mount = qs("#wlTopGroups");
+    if (!mount) return;
+
+    const ym = monthKeyFromDate(monthDate);
+    const prevYm = `${monthDate.getFullYear() - 1}-${String(monthDate.getMonth() + 1).padStart(2, "0")}`;
+
+    const cur = aggregateGroupSalesForYm(ym);
+    const prev = aggregateGroupSalesForYm(prevYm);
+
+    const rows = Object.keys(cur).map((g) => {
+      const a = cur[g] || 0;
+      const b = prev[g] || 0;
+      const pct = (b > 0) ? ((a - b) / b) : null;
+      return { g, a, b, pct };
+    }).sort((x,y)=> (y.a - x.a)).slice(0, 12);
+
+    if (!rows.length) {
+      mount.innerHTML = `<div style="opacity:0.7; font-size:12px;">No group sales found for ${ym}. (Make sure Table209003 is on the dashboard.)</div>`;
+      return;
+    }
+
+    mount.innerHTML = `
+      <div style="overflow:auto;">
+        <table style="width:100%; border-collapse:collapse;">
+          <thead>
+            <tr style="text-align:left; font-size:12px; opacity:0.75;">
+              <th style="padding:6px 6px; border-bottom:1px solid rgba(0,0,0,0.10);">Group</th>
+              <th style="padding:6px 6px; border-bottom:1px solid rgba(0,0,0,0.10); text-align:right;">This Month</th>
+              <th style="padding:6px 6px; border-bottom:1px solid rgba(0,0,0,0.10); text-align:right;">Last Year</th>
+              <th style="padding:6px 6px; border-bottom:1px solid rgba(0,0,0,0.10); text-align:right;">YoY</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((r)=> {
+              const yoy = (r.pct===null) ? "—" : `${(r.pct*100).toFixed(0)}%`;
+              return `
+                <tr>
+                  <td style="padding:6px 6px; border-bottom:1px solid rgba(0,0,0,0.06); font-weight:700;">${escapeHtml(r.g)}</td>
+                  <td style="padding:6px 6px; border-bottom:1px solid rgba(0,0,0,0.06); text-align:right;">${fmtMoney(r.a)}</td>
+                  <td style="padding:6px 6px; border-bottom:1px solid rgba(0,0,0,0.06); text-align:right;">${fmtMoney(r.b)}</td>
+                  <td style="padding:6px 6px; border-bottom:1px solid rgba(0,0,0,0.06); text-align:right;">${yoy}</td>
+                </tr>
+              `;
+            }).join("")}
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
+
+  function aggregateGroupSalesForYm(ym) {
+    const out = {};
+    const idx = SALES_BY_PRODUCT_INDEX && SALES_BY_PRODUCT_INDEX.byMonthPromoProduct;
+    const monthNode = idx ? idx[ym] : null;
+    if (!monthNode) return out;
+
+    Object.keys(monthNode).forEach((promoId) => {
+      const prodNode = monthNode[promoId] || {};
+      Object.keys(prodNode).forEach((productId) => {
+        const v = prodNode[productId]?.sales || 0;
+        const g = GROUP_BY_PRODUCT[productId] || "Unassigned";
+        out[g] = (out[g] || 0) + v;
+      });
+    });
+
+    return out;
+  }
+
+  function renderInsights(monthDate) {
+    ensureInsightsUIOnce();
+
+    const yearSel = qs("#wlInsightYear");
+    const summary = qs("#wlYoYSummary");
+
+    // fill year selector based on available byDay dates
+    const years = new Set();
+    if (SALES_INDEX && SALES_INDEX.byDay) {
+      Object.keys(SALES_INDEX.byDay).forEach((dk) => {
+        const y = parseInt(dk.slice(0, 4), 10);
+        if (Number.isFinite(y)) years.add(y);
+      });
+    }
+    const fallbackY = monthDate.getFullYear();
+    if (years.size === 0) years.add(fallbackY), years.add(fallbackY - 1);
+
+    if (yearSel && !yearSel.__wlFilled) {
+      yearSel.__wlFilled = true;
+      Array.from(years).sort((a,b)=>b-a).forEach((y) => {
+        const opt = document.createElement("option");
+        opt.value = String(y);
+        opt.textContent = String(y);
+        yearSel.appendChild(opt);
+      });
+    }
+
+    const selectedYear = yearSel ? parseInt(yearSel.value || String(monthDate.getFullYear()), 10) : monthDate.getFullYear();
+    const curYear = Number.isFinite(selectedYear) ? selectedYear : monthDate.getFullYear();
+    const prevYear = curYear - 1;
+
+    if (yearSel) {
+      // keep options fresh if new years appear
+      const existing = new Set(Array.from(yearSel.options).map(o=>parseInt(o.value,10)));
+      Array.from(years).forEach((y)=>{
+        if (!existing.has(y)) {
+          const opt=document.createElement("option");
+          opt.value=String(y);
+          opt.textContent=String(y);
+          yearSel.appendChild(opt);
+        }
+      });
+      yearSel.value = String(curYear);
+    }
+
+    const curArr = computeMonthlyTotalsForYear(SALES_INDEX?.byDay, curYear);
+    const prevArr = computeMonthlyTotalsForYear(SALES_INDEX?.byDay, prevYear);
+
+    renderYoYSvgChart(curYear, curArr, prevYear, prevArr);
+
+    if (summary) {
+      const curTotal = curArr.reduce((a,b)=>a+b,0);
+      const prevTotal = prevArr.reduce((a,b)=>a+b,0);
+      const pct = (prevTotal>0) ? ((curTotal - prevTotal)/prevTotal)*100 : null;
+      summary.textContent = `Total ${curYear}: ${fmtMoney(curTotal)}  •  Total ${prevYear}: ${fmtMoney(prevTotal)}${pct===null ? "" : `  •  YoY: ${pct.toFixed(1)}%`}`;
+    }
+
+    renderTopGroupsForMonth(monthDate);
   }
 
   // ====== Calendar Render ======
@@ -1010,7 +1294,6 @@ if (bg) cell.style.background = bg;
     }
   }
 
-
   // ====== Month/Year Jump Picker ======
   function ensureMonthYearPickerUIOnce() {
     if (qs("#wlMonthYearModal")) return;
@@ -1167,6 +1450,7 @@ if (bg) cell.style.background = bg;
     });
   }
 
+
   function refreshAllAndRender() {
     ensureUIOnce();
     ensureHeaderViewPromosButton();
@@ -1180,8 +1464,10 @@ if (bg) cell.style.background = bg;
     LINES_BY_PROMO = buildLinesByPromoId();
     SALES_INDEX = buildSalesIndexFromTable();
     SALES_BY_PRODUCT_INDEX = buildSalesByProductIndexFromTable();
+    GROUP_BY_PRODUCT = buildProductGroupLookupFromTable();
 
     renderCalendar(CURRENT_MONTH, PROMOS, LINES_BY_PROMO, SALES_INDEX);
+    renderInsights(CURRENT_MONTH);
   }
 
   function initWithRetry(maxMs = 15000) {
