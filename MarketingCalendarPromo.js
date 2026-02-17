@@ -321,7 +321,10 @@ function ensureHeaderViewPromosButton() {
     const url = `${IMAGE_PROXY_BASE}${sep}productid=${encodeURIComponent(pid)}`;
 
     try {
-      const resp = await fetch(url, { credentials: "include" });
+      const resp = await fetch(url, { method: "GET",
+  mode: "cors",
+  credentials: "omit",   // <-- important
+  cache: "no-store", });
       const ct = (resp.headers.get("content-type") || "").toLowerCase();
 
       // Direct image bytes
