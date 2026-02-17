@@ -63,7 +63,9 @@ UPDATES IN THIS VERSION:
   //   1) image/* bytes (jpeg/png)
   //   2) JSON { "url": "https://..." }
   //   3) JSON { "dataUri": "data:image/jpeg;base64,..." }
-  const IMAGE_PROXY_BASE = (window.WL_PROMOCAL_IMAGE_PROXY_BASE || "").trim();
+  const IMAGE_PROXY_BASE =
+  "https://script.google.com/macros/s/AKfycbxuC8mU6Bw9e_OX5akSfTKfNJtj3QHHUbAdYafnO8c2NryihJk-4pU2K77negMebo9p/exec";
+
   const IMAGE_SRC_CACHE = {}; // ProductID -> resolved src (objectURL or url/dataUri)
 
 // ====== STATE ======
