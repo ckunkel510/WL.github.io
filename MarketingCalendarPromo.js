@@ -53,7 +53,20 @@ UPDATES IN THIS VERSION:
       </svg>`
     );
 
-  // ====== STATE ======
+  
+  // ====== Product Image Proxy (optional) ======
+  // Set this BEFORE the script runs (in the dashboard HTML or a preceding script tag):
+  //   window.WL_PROMOCAL_IMAGE_PROXY_BASE = "https://script.google.com/macros/s/XXXX/exec";
+  //
+  // Proxy should accept: ?productid=123
+  // It may return:
+  //   1) image/* bytes (jpeg/png)
+  //   2) JSON { "url": "https://..." }
+  //   3) JSON { "dataUri": "data:image/jpeg;base64,..." }
+  const IMAGE_PROXY_BASE = (window.WL_PROMOCAL_IMAGE_PROXY_BASE || "").trim();
+  const IMAGE_SRC_CACHE = {}; // ProductID -> resolved src (objectURL or url/dataUri)
+
+// ====== STATE ======
   let CURRENT_MONTH = startOfMonth(new Date());
     let GROUP_BY_PRODUCT = {}; // productId -> Level1
 let PROMOS = [];
@@ -75,6 +88,10 @@ let PROMOS = [];
       .replace(/"/g, "&quot;")
       .replace(/'/g, "&#039;");
   }
+
+  // Back-compat alias (some sections call escapeHtml)
+  function escapeHtml(str) { return escHtml(str); }
+
 
   function normalizeId(x) {
     let s = safeText(x).trim();
@@ -282,6 +299,7 @@ function ensureHeaderViewPromosButton() {
     b.innerHTML = bodyHtml;
     panel.style.display = "block";
     bindCloseButton();
+    hydratePanelImages();
   }
 
   function closePanel() {
@@ -289,7 +307,68 @@ function ensureHeaderViewPromosButton() {
     if (panel) panel.style.display = "none";
   }
 
-  // ====== Data Read ======
+  
+  async function resolveImageSrcForProduct(productId) {
+    const pid = String(productId || "").trim();
+    if (!pid) return null;
+
+    if (IMAGE_SRC_CACHE[pid]) return IMAGE_SRC_CACHE[pid];
+    if (!IMAGE_PROXY_BASE) return null;
+
+    const sep = IMAGE_PROXY_BASE.includes("?") ? "&" : "?";
+    const url = `${IMAGE_PROXY_BASE}${sep}productid=${encodeURIComponent(pid)}`;
+
+    try {
+      const resp = await fetch(url, { credentials: "include" });
+      const ct = (resp.headers.get("content-type") || "").toLowerCase();
+
+      // Direct image bytes
+      if (ct.startsWith("image/")) {
+        const blob = await resp.blob();
+        const objUrl = URL.createObjectURL(blob);
+        IMAGE_SRC_CACHE[pid] = objUrl;
+        return objUrl;
+      }
+
+      // Try JSON
+      const text = await resp.text();
+      const json = JSON.parse(text);
+      const candidate = json && (json.dataUri || json.dataURI || json.url || json.src);
+      if (candidate) {
+        IMAGE_SRC_CACHE[pid] = String(candidate);
+        return IMAGE_SRC_CACHE[pid];
+      }
+
+      return null;
+    } catch (err) {
+      // If the proxy returned HTML (login page / error), JSON.parse will throw; that's OK.
+      console.warn("[WL PromoCal] Image proxy failed for ProductID", pid, err);
+      return null;
+    }
+  }
+
+  function hydratePanelImages() {
+    if (!IMAGE_PROXY_BASE) return;
+    const panel = qs("#wlPromoDetailsPanel");
+    if (!panel || panel.style.display === "none") return;
+
+    const imgs = qsa("img.wl-line-img[data-productid]", panel);
+    imgs.forEach(async (img) => {
+      const pid = img.getAttribute("data-productid");
+      if (!pid) return;
+
+      const current = img.getAttribute("src") || "";
+      // Only replace placeholders / svg no-image
+      const isPlaceholder = !current || current === PLACEHOLDER_DATA_URI || current.startsWith("data:image/svg+xml");
+      if (!isPlaceholder) return;
+
+      const resolved = await resolveImageSrcForProduct(pid);
+      if (resolved) img.src = resolved;
+    });
+  }
+
+
+// ====== Data Read ======
   function tableToObjects(table) {
     const headers = qsa("thead th", table).map((th) => (th.innerText || "").trim());
     const rows = qsa("tbody tr", table);
