@@ -665,14 +665,19 @@ function ensureViewPromoButton(panel, promo) {
     }
   }
 
-  function computeMonthlyTotalsForYear(byDay, year) {
+  function computeMonthlyTotalsForYear(byDay, year, cutoffDate /* optional Date */) {
     const arr = new Array(12).fill(0);
     if (!byDay) return arr;
+
+    const cutoffKey = cutoffDate ? dateKey(cutoffDate) : null;
 
     Object.keys(byDay).forEach((dk) => {
       // dk is YYYY-MM-DD
       const y = parseInt(dk.slice(0, 4), 10);
       if (y !== year) return;
+
+      if (cutoffKey && dk > cutoffKey) return;
+
       const m = parseInt(dk.slice(5, 7), 10) - 1;
       if (m < 0 || m > 11) return;
       arr[m] += (byDay[dk]?.sales || 0);
@@ -875,21 +880,36 @@ function ensureViewPromoButton(panel, promo) {
       yearSel.value = String(curYear);
     }
 
-    const curArr = computeMonthlyTotalsForYear(SALES_INDEX?.byDay, curYear);
-    const prevArr = computeMonthlyTotalsForYear(SALES_INDEX?.byDay, prevYear);
-
     const now = new Date();
     const isCurrentYear = (curYear === now.getFullYear());
+
+    // If we're comparing the *current* year, only compare through today's date,
+    // and compare the prior year through the same month/day cutoff (same time period).
+    let cutoffCur = null;
+    let cutoffPrev = null;
+    if (isCurrentYear) {
+      cutoffCur = now;
+
+      // Build a safe "same day" cutoff for prev year (handles Feb 29 etc.)
+      const m = now.getMonth();
+      const d = now.getDate();
+      const lastDayPrev = new Date(prevYear, m + 1, 0).getDate();
+      cutoffPrev = new Date(prevYear, m, Math.min(d, lastDayPrev));
+    }
+
+    const curArr = computeMonthlyTotalsForYear(SALES_INDEX?.byDay, curYear, cutoffCur);
+    const prevArr = computeMonthlyTotalsForYear(SALES_INDEX?.byDay, prevYear, cutoffPrev);
+
     const cutoffMonthIdx = isCurrentYear ? now.getMonth() : 11;
 
     const curArrMasked = curArr.map((v, i) => (i <= cutoffMonthIdx ? v : null));
-    // previous year stays full (all 12 months)
+    const prevArrMasked = isCurrentYear ? prevArr.map((v, i) => (i <= cutoffMonthIdx ? v : null)) : prevArr;
 
-    renderYoYSvgChart(curYear, curArrMasked, prevYear, prevArr);
+    renderYoYSvgChart(curYear, curArrMasked, prevYear, prevArrMasked);
 
     if (summary) {
-      const curTotal = curArr.reduce((a,b)=>a+b,0);
-      const prevTotal = prevArr.reduce((a,b)=>a+b,0);
+      const curTotal = curArrMasked.filter(v=>v!=null).reduce((a,b)=>a+b,0);
+      const prevTotal = prevArrMasked.filter(v=>v!=null).reduce((a,b)=>a+b,0);
       const pct = (prevTotal>0) ? ((curTotal - prevTotal)/prevTotal)*100 : null;
       summary.textContent = `Total ${curYear}: ${fmtMoney(curTotal)}  •  Total ${prevYear}: ${fmtMoney(prevTotal)}${pct===null ? "" : `  •  YoY: ${pct.toFixed(1)}%`}`;
     }
