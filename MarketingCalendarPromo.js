@@ -303,7 +303,14 @@ function ensureHeaderViewPromosButton() {
     });
   }
 
-  function getFieldLoose(obj, names) {
+  
+  function normalizeKey(k) {
+    return String(k || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, ""); // remove spaces, underscores, punctuation
+  }
+
+function getFieldLoose(obj, names) {
     if (!obj) return "";
     for (const n of names) {
       if (obj[n] != null && String(obj[n]).trim() !== "") return String(obj[n]).trim();
@@ -694,8 +701,21 @@ function ensureViewPromoButton(panel, promo) {
 
     const x = (i) => padL + i * xStep;
     const y = (v) => padT + (h - padT - padB) * (1 - (v / maxV));
+    const segments = (arr) => {
+      const segs = [];
+      let cur = [];
+      arr.forEach((v, i) => {
+        if (v == null || !Number.isFinite(v)) {
+          if (cur.length) { segs.push(cur); cur = []; }
+          return;
+        }
+        cur.push({ i, v });
+      });
+      if (cur.length) segs.push(cur);
+      return segs;
+    };
 
-    const points = (arr) => arr.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
+    const polyPoints = (seg) => seg.map((p) => `${x(p.i).toFixed(1)},${y(p.v).toFixed(1)}`).join(" ");
 
     const monthLabels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -719,12 +739,12 @@ function ensureViewPromoButton(panel, promo) {
         <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${h-padB}" stroke="rgba(0,0,0,0.18)" />
 
         <!-- previous year -->
-        <polyline points="${points(prevArr)}" fill="none" stroke="rgba(0,0,0,0.35)" stroke-width="3" />
-        ${prevArr.map((v,i)=>`<circle cx="${x(i)}" cy="${y(v)}" r="3.5" fill="rgba(0,0,0,0.35)"></circle>`).join("")}
+        ${segments(prevArr).map((seg)=>`<polyline points="${polyPoints(seg)}" fill="none" stroke="rgba(0,0,0,0.35)" stroke-width="3" />`).join("")}
+        ${prevArr.map((v,i)=> (v==null || !Number.isFinite(v)) ? "" : `<circle cx="${x(i)}" cy="${y(v)}" r="3.5" fill="rgba(0,0,0,0.35)"></circle>`).join("")}
 
         <!-- current year -->
-        <polyline points="${points(curArr)}" fill="none" stroke="rgba(${HEAT_COLOR_RGB.r},${HEAT_COLOR_RGB.g},${HEAT_COLOR_RGB.b},0.85)" stroke-width="3.5" />
-        ${curArr.map((v,i)=>`<circle cx="${x(i)}" cy="${y(v)}" r="4" fill="rgba(${HEAT_COLOR_RGB.r},${HEAT_COLOR_RGB.g},${HEAT_COLOR_RGB.b},0.85)"></circle>`).join("")}
+        ${segments(curArr).map((seg)=>`<polyline points="${polyPoints(seg)}" fill="none" stroke="rgba(${HEAT_COLOR_RGB.r},${HEAT_COLOR_RGB.g},${HEAT_COLOR_RGB.b},0.85)" stroke-width="3.5" />`).join("")}
+        ${curArr.map((v,i)=> (v==null || !Number.isFinite(v)) ? "" : `<circle cx="${x(i)}" cy="${y(v)}" r="4" fill="rgba(${HEAT_COLOR_RGB.r},${HEAT_COLOR_RGB.g},${HEAT_COLOR_RGB.b},0.85)"></circle>`).join("")}
 
         <!-- x labels -->
         ${monthLabels.map((m,i)=>`<text x="${x(i)}" y="${h-12}" text-anchor="middle" font-size="11" fill="rgba(0,0,0,0.65)">${m}</text>`).join("")}
@@ -858,7 +878,14 @@ function ensureViewPromoButton(panel, promo) {
     const curArr = computeMonthlyTotalsForYear(SALES_INDEX?.byDay, curYear);
     const prevArr = computeMonthlyTotalsForYear(SALES_INDEX?.byDay, prevYear);
 
-    renderYoYSvgChart(curYear, curArr, prevYear, prevArr);
+    const now = new Date();
+    const isCurrentYear = (curYear === now.getFullYear());
+    const cutoffMonthIdx = isCurrentYear ? now.getMonth() : 11;
+
+    const curArrMasked = curArr.map((v, i) => (i <= cutoffMonthIdx ? v : null));
+    // previous year stays full (all 12 months)
+
+    renderYoYSvgChart(curYear, curArrMasked, prevYear, prevArr);
 
     if (summary) {
       const curTotal = curArr.reduce((a,b)=>a+b,0);
