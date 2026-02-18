@@ -5122,7 +5122,146 @@ function setStep(n){
         }catch(e){}
 
         // Keep them on Step 1 after any round-trip.
-        try{ sessionStorage.setItem(STEP_KEY, '1'); }catch(e){}
+/* =============================
+   One-page guided flow mode
+   (keeps WebForms state stable)
+   ============================= */
+function activateOnePageMode(){
+  const wiz = document.getElementById('wlApWizard3');
+  if (!wiz || wiz.classList.contains('wl-onepage')) return;
+  wiz.classList.add('wl-onepage');
+
+  // Style + layout tweaks
+  if (!document.getElementById('wl-ap-onepage-css')){
+    const st = document.createElement('style');
+    st.id = 'wl-ap-onepage-css';
+    st.textContent = `
+      /* One-page: show everything, hide step pills + sticky nav */
+      #wlApWizard3.wl-onepage .w3-steps{ display:none !important; }
+      #wlApWizard3.wl-onepage .w3-nav{ display:none !important; }
+      #wlApWizard3.wl-onepage .w3-panel{ display:block !important; }
+      #wlApWizard3.wl-onepage .w3-panel.on{ display:block !important; }
+      #wlApWizard3.wl-onepage .w3-body{ display:flex; flex-direction:column; gap:14px; }
+
+      /* Section “card within card” feel */
+      #wlApWizard3.wl-onepage .w3-panel{
+        background: #f8fafc;
+        border: 1px solid rgba(148,163,184,.55);
+        border-radius: 14px;
+        padding: 14px;
+      }
+      #wlApWizard3.wl-onepage .w3-help{ margin-top:8px; color: var(--wl-sub, #334155); }
+
+      /* Step 1 (Info) — modern form layout */
+      #w3InfoInner{ gap:14px !important; }
+      #w3InfoInner .wl-field{ display:grid !important; grid-template-columns: 1fr !important; gap:6px !important; }
+      #w3InfoInner .wl-lab{ text-align:left !important; }
+      #w3InfoInner label{ font-weight:900 !important; color:#0f172a !important; }
+      #w3InfoInner .wl-ctl{ width:100% !important; }
+      #w3InfoInner input.form-control,
+      #w3InfoInner select.form-control,
+      #w3InfoInner textarea.form-control{
+        width:100% !important;
+        max-width: 720px !important;
+        min-height: 46px !important;
+        padding: 10px 12px !important;
+        border-radius: 12px !important;
+        border: 1px solid rgba(148,163,184,.7) !important;
+        background:#fff !important;
+        box-sizing:border-box !important;
+      }
+      #w3InfoInner .wl-help{ color:#64748b !important; margin:4px 0 0 !important; }
+      #ctl00_PageBody_BillingAddressValidatorMessage{ margin-top:6px !important; font-weight:700; }
+
+      /* Continue buttons between sections */
+      .wl-flow-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:10px; }
+      .wl-flow-btn{
+        appearance:none; border:1px solid rgba(148,163,184,.8); border-radius:12px;
+        padding:10px 14px; background:#fff; font-weight:900; cursor:pointer;
+      }
+      .wl-flow-btn.primary{
+        background:#0f172a; color:#fff; border-color:#0f172a;
+      }
+      .wl-flow-btn:focus-visible{ outline:0; box-shadow:0 0 0 3px rgba(15,23,42,.18); }
+      .wl-flow-hint{
+        margin-top:10px; padding:10px 12px; border-radius:12px;
+        background:#ecfeff; border:1px solid #a5f3fc; color:#155e75; font-weight:800;
+        display:none;
+      }
+      .wl-flow-hint.on{ display:block; }
+    `;
+    document.head.appendChild(st);
+  }
+
+  // Force all panels visible
+  wiz.querySelectorAll('.w3-panel').forEach(p=>p.classList.add('on'));
+
+  // Remove any existing per-step footer actions then add “Continue” buttons
+  wiz.querySelectorAll('.wl-flow-actions').forEach(el=>el.remove());
+
+  const panels = Array.from(wiz.querySelectorAll('.w3-panel')).sort((a,b)=>(
+    Number(a.getAttribute('data-step')) - Number(b.getAttribute('data-step'))
+  ));
+
+  function scrollToPanel(i){
+    const p = panels[i];
+    if (!p) return;
+    p.scrollIntoView({behavior:'smooth', block:'start'});
+    p.animate?.([{boxShadow:'0 0 0 0 rgba(107,0,22,0)'},{boxShadow:'0 0 0 4px rgba(107,0,22,.12)'},{boxShadow:'0 0 0 0 rgba(107,0,22,0)'}], {duration:900});
+  }
+
+  panels.forEach((panel, idx)=>{
+    const isLast = idx === panels.length - 1;
+
+    // Optional helper message area (used later for payment method “click Next” hint)
+    if (!panel.querySelector('.wl-flow-hint')){
+      const hint = document.createElement('div');
+      hint.className = 'wl-flow-hint';
+      hint.textContent = '✅ Selection saved. Click Continue to move to the next section.';
+      panel.appendChild(hint);
+    }
+
+    const actions = document.createElement('div');
+    actions.className = 'wl-flow-actions';
+
+    if (idx > 0){
+      const back = document.createElement('button');
+      back.type = 'button';
+      back.className = 'wl-flow-btn';
+      back.textContent = 'Back';
+      back.addEventListener('click', ()=> scrollToPanel(idx-1));
+      actions.appendChild(back);
+    }
+
+    if (!isLast){
+      const cont = document.createElement('button');
+      cont.type = 'button';
+      cont.className = 'wl-flow-btn primary';
+      cont.textContent = 'Continue';
+      cont.addEventListener('click', ()=>{
+        // Best-effort: run existing validateStep (for Info/Select/Review) if present.
+        try{ if (typeof validateStep === 'function' && !validateStep()) return; }catch(e){}
+        scrollToPanel(idx+1);
+      });
+      actions.appendChild(cont);
+    } else {
+      const cont = document.createElement('button');
+      cont.type = 'button';
+      cont.className = 'wl-flow-btn primary';
+      cont.textContent = 'Scroll to Submit';
+      cont.addEventListener('click', ()=> {
+        // If we later add a dedicated Submit block, this can be upgraded.
+        scrollToPanel(idx);
+      });
+      actions.appendChild(cont);
+    }
+
+    panel.appendChild(actions);
+  });
+
+  // Start at top
+  scrollToPanel(0);
+}
 
         // If they already typed billing, trigger the same postback path as "Make Payment" (throttled).
         if (v){
@@ -5137,6 +5276,8 @@ function setStep(n){
     });
 
     setStep(step);
+    // Switch to one-page guided layout (draft)
+    try{ activateOnePageMode(); }catch(e){}
     return true;
   
     try { pinBillingToStep1({ attempt: 0 }); } catch {}
