@@ -1,7 +1,7 @@
 
 (function () {
   'use strict';
-  console.log('[AP] PayByInvoice version v30 loaded');
+  console.log('[AP] PayByInvoice version v31 loaded');
 
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
@@ -2237,6 +2237,7 @@ const IDS = {
 
   // Defer remittance write until after amount postback finishes
   try { window.WL_AP?.remit?.defer(remitVal); } catch {}
+  try { window.WL_AP?.remit?._setNow?.(remitVal, /*fireInputOnly*/true); } catch {}
 
   // Amount = sum of selected jobs (and make it stick server-side)
   const a = amtEl();
@@ -3260,6 +3261,7 @@ if (jobBtn){
 
     if (changed) {
       try{ window.WL_AP?.remit?.defer(remString); }catch(e){}
+      try{ window.WL_AP?.remit?._setNow?.(remString, /*fireInputOnly*/true); }catch(e){}
       try{
         if (typeof window.__doPostBack === 'function'){
           const uniqueId = aEl.id.replace(/_/g,'$');
@@ -4831,7 +4833,7 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
       const bankMatchVal = desiredSavedVal || selectedCofVal;
 
       const bankSavedCards = bankOpts.map(o=>{
-        const selected = (userPicked && mode === 'bank_saved' && bankMatchVal && bankMatchVal === o.value);
+        const selected = (userPicked && stBank && stBank.__pickedAccount && mode === 'bank_saved' && bankMatchVal && bankMatchVal === o.value);
         return `
           <button type="button" class="wl-pay-card wl-bank-card ${selected ? 'is-selected':''}"
                   data-bank="saved" data-value="${o.value}">
@@ -4841,7 +4843,7 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
         `;
       }).join('');
 
-      const bankAddNewSelected = (userPicked && mode === 'bank_new');
+      const bankAddNewSelected = (userPicked && stBank && stBank.__pickedAccount && mode === 'bank_new');
       bankMount.innerHTML = `
         <button type="button" class="wl-pay-card wl-bank-card ${bankAddNewSelected ? 'is-selected':''}"
                 data-bank="new">
@@ -4878,10 +4880,10 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
         const showAddNewCard = isRadioAvailable(rbCred); // new card entry
         const showSavedCards = isRadioAvailable(rbCardOnFile) && cardOpts.length > 0;
 
-        const addNewCardSelected = (mode === 'card_new' || (!showSavedCards && showAddNewCard));
+        const addNewCardSelected = (userPicked && stCard && stCard.__pickedAccount && (mode === 'card_new')) || (!showSavedCards && showAddNewCard);
 
         const savedCardCards = cardOpts.map(o=>{
-          const selected = (mode === 'card_saved' && cardMatchVal && cardMatchVal === o.value);
+          const selected = (userPicked && stCard && stCard.__pickedAccount && mode === 'card_saved' && cardMatchVal && cardMatchVal === o.value);
           return `
             <button type="button" class="wl-pay-card wl-card-card ${selected ? 'is-selected':''}"
                     data-card="saved" data-value="${o.value}">
@@ -4910,7 +4912,7 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
 
           if (kind === 'new'){
             if (!isRadioAvailable(rbCred)) return;
-            savePayState({ __userPicked:true, method:'card', card:{ mode:'new' } });
+            savePayState({ __userPicked:true, __pickedAccount:true, method:'card', card:{ mode:'new', __pickedAccount:true } });
             try{ if (window.WLPayPending){ window.WLPayPending.__cardPendingVal = null; window.WLPayPending.__cardPendingText = null; } }catch(e){}
             try{ clickWebFormsRadio(rbCred); }catch(e){}
             setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 80);
@@ -4923,7 +4925,7 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
           const val = btn.getAttribute('data-value') || '';
           if (!val) return;
           const text = (btn.querySelector('.wl-pay-title')?.textContent || '').trim();
-          savePayState({ __userPicked:true, method:'card', card:{ mode:'saved', value: val, text } });
+          savePayState({ __userPicked:true, __pickedAccount:true, method:'card', card:{ mode:'saved', value: val, text, __pickedAccount:true } });
 
           // Store intended selection and let MS AJAX endRequest apply it after the postback replaces the select.
           try{
@@ -4983,89 +4985,63 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
         setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 80);
       };
 
-      // ----- Bank level click handler (wire each render so it always works after MS AJAX updates) -----
-      bankMount.onclick = (e)=>{
-        const btn = e.target.closest('.wl-pay-card[data-bank]');
-        if (!btn) return;
+      
+// ----- Bank level click handler (no postback; selection happens at final submit) -----
+bankMount.onclick = (e)=>{
+  const btn = e.target.closest('.wl-pay-card[data-bank]');
+  if (!btn) return;
+  e.preventDefault();
 
-        const kind = btn.getAttribute('data-bank');
+  const kind = btn.getAttribute('data-bank');
 
-        if (kind === 'new'){
-          // User intends to enter a NEW bank account
-          savePayState({ __userPicked:true, method:'bank', bank:{ mode:'new' } });
-          // (No auto-submit; user confirms on final step)
+  // Helper: set native controls WITHOUT triggering WebForms postbacks
+  const setRadioSilent = (rb)=>{
+    try{ if (rb) rb.checked = true; }catch(e){}
+  };
+  const setSelectSilent = (sel, v)=>{
+    try{
+      if (!sel) return;
+      sel.value = v;
+      try{ sel.dispatchEvent(new Event('input',{bubbles:true})); }catch(e){}
+      try{ sel.dispatchEvent(new Event('change',{bubbles:true})); }catch(e){}
+    }catch(e){}
+  };
 
-          // Clear any pending selections so we don't "snap back" to a saved method after postback
-          try{
-            window.WLPayPending = window.WLPayPending || {};
-            window.WLPayPending.__cofPendingVal = '__CLEAR__';
-            window.WLPayPending.__cofPendingText = null;
-          }catch(e){}
+  if (kind === 'new'){
+    const st = loadPayState() || {};
+    st.__userPicked = true;
+    st.method = 'bank';
+    st.bank = { mode:'new', __pickedAccount:true };
+    st.__pickedAccount = true;
+    savePayState(st);
 
-          // Clear current COF dropdown value immediately (if present) and trigger postback
-          try{
-            const sel = getCofSel();
-            if (sel){
-              // IMPORTANT: fire change so WebForms updates server state; otherwise it may keep using the prior saved selection
-              clearSelectToPlaceholder(sel, true);
-            }
-          }catch(e){}
+    setRadioSilent(rbCheck);
+    try{ setSelectSilent(getCofSel(), '-1'); }catch(e){}
 
-          // Immediate visual update
-          renderPayCards();
-          try{ renderSummary(); }catch(e){}
+    setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 0);
+    setTimeout(()=>{ try{ jumpToWizardStep(3); }catch(e){} }, 80);
+    return;
+  }
 
-          // Trigger the REAL WebForms radio for "Pay by Bank (new)"
-          try{
-            if (rbCof) rbCof.checked = false;
-            clickWebFormsRadio(rbCheck);
-          }catch(e){}
+  const val = btn.getAttribute('data-value') || '';
+  if (!val) return;
 
-          // After postback, ensure COF selection is cleared and UI/summary match the true native state
-          setTimeout(()=>{
-            try{ if (window.WLPayPending && typeof window.WLPayPending.apply === 'function') window.WLPayPending.apply(); }catch(e){}
-            reconcileNativeFromState();
-            renderPayCards();
-            try{ renderSummary(); }catch(e){}
-          }, 180);
+  const text = (btn.querySelector('.wl-pay-title')?.textContent || '').trim();
+  const st = loadPayState() || {};
+  st.__userPicked = true;
+  st.method = 'bank';
+  st.bank = { mode:'saved', value: val, text, __pickedAccount:true };
+  st.__pickedAccount = true;
+  savePayState(st);
 
-          // Fallback: if MS AJAX isn't available, still try to submit after a short delay
-          setTimeout(()=>{ try{ triggerMakePayment('bank_new_fallback'); }catch(e){} }, 650);
+  ensureCofVisible();
 
-          return;
-        }
+  setRadioSilent(rbCof);
+  try{ setSelectSilent(getCofSel(), val); }catch(e){}
 
-        const val = btn.getAttribute('data-value') || '';
-        if (!val) return;
-
-        const text = (btn.querySelector('.wl-pay-title')?.textContent || '').trim();
-        savePayState({ __userPicked:true, method:'bank', bank:{ mode:'saved', value: val, text } });
-
-        ensureCofVisible();
-
-        // Store intended COF selection; applying after MS AJAX endRequest is more reliable
-        try{
-          window.WLPayPending = window.WLPayPending || {};
-          window.WLPayPending.__cofPendingVal = val;
-          window.WLPayPending.__cofPendingText = text;
-        }catch(e){}
-
-        setTimeout(()=>{
-          try{
-            if (rbCof && !rbCof.checked) clickWebFormsRadio(rbCof);
-            else if (rbCof && rbCof.checked){
-              // even if already checked, a change in dropdown may still require a postback
-              // apply will dispatch change on the select
-            }
-          }catch(e){}
-
-          // Try applying immediately, and endRequest will re-apply if the select gets replaced
-          setTimeout(()=>{
-            try{ if (window.WLPayPending && typeof window.WLPayPending.apply === 'function') window.WLPayPending.apply(); }catch(e){}
-            setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 160);
-          }, 120);
-        }, 80);
-      };
+  setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 0);
+  setTimeout(()=>{ try{ jumpToWizardStep(3); }catch(e){} }, 80);
+};
     }
 // Initial render + rerender after MS AJAX updates
     if (!loadPayState()){
