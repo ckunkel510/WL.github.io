@@ -4129,6 +4129,10 @@ if (jobBtn){
     const css = `
       #wlApWizard3{border:1px solid #e5e7eb; border-radius:16px; background:#fff; margin-bottom:16px; position:relative; z-index:5000; }
       #wlApWizard3 .w3-head{ display:flex; justify-content:space-between; gap:12px; align-items:center; padding:12px 14px; border-bottom:1px solid #e5e7eb; }
+      #wlApWizard3 .w3-head-left{ display:flex; align-items:center; gap:10px; }
+      #wlApWizard3 .w3-head-left .w3-btn{ padding:8px 10px; border-radius:12px; }
+      #wlApWizard3 .w3-nav.w3-nav-next-only{ justify-content:flex-end; }
+
       #wlApWizard3 .w3-title{ font-weight:1000; font-size:16px; }
       #wlApWizard3 .w3-steps{ display:flex; gap:6px; flex-wrap:wrap; }
       #wlApWizard3 .w3-pill{ font-size:12px; font-weight:900; padding:6px 10px; border-radius:999px; border:1px solid #e5e7eb; background:#f8fafc; }
@@ -4278,7 +4282,10 @@ function buildReviewHTML(){
     wiz.id = 'wlApWizard3';
     wiz.innerHTML = `
       <div class="w3-head">
-        <div class="w3-title">Payment Details.</div>
+        <div class="w3-head-left">
+          <button type="button" class="w3-btn" id="w3Back">Back</button>
+          <div class="w3-title">Payment Details</div>
+        </div>
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
@@ -4291,8 +4298,7 @@ function buildReviewHTML(){
         <div class="w3-panel" data-step="1"><div id="w3Step1"></div><div class="w3-help">Pick statement / jobs / invoices or set a manual amount.</div></div>
         <div class="w3-panel" data-step="2"><div id="w3Review"></div></div>
         <div class="w3-panel" data-step="3"><div id="w3Step3"></div><div class="w3-help">Choose payment method and submit.</div></div>
-        <div class="w3-nav">
-          <button type="button" class="w3-btn" id="w3Back">Back</button>
+        <div class="w3-nav w3-nav-next-only">
           <button type="button" class="w3-btn primary" id="w3Next">Next</button>
         </div>
       </div>
