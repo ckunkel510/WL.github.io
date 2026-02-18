@@ -708,6 +708,43 @@ wireFieldPersistence();
       }
 
     
+
+      /* ===========================
+         Wizard Step 1 (Info) — modern, larger fields
+         =========================== */
+      #w3InfoInner .epi-form-group-acctPayment,
+      #w3InfoInner tr{
+        width:100%;
+        max-width:100%;
+      }
+      #w3InfoInner .epi-form-group-acctPayment{
+        display:grid;
+        grid-template-columns: 1fr;
+        gap:6px;
+        padding:6px 0;
+      }
+      #w3InfoInner label,
+      #w3InfoInner .control-label,
+      #w3InfoInner .epi-form-group-acctPayment label{
+        font-weight:900;
+        color:var(--wl-sub);
+        text-align:left !important;
+        margin:0 !important;
+        padding:0 !important;
+      }
+      #w3InfoInner input.form-control,
+      #w3InfoInner select.form-control,
+      #w3InfoInner textarea.form-control{
+        width:100% !important;
+        max-width:100% !important;
+        box-sizing:border-box;
+        font-size:16px;
+        min-height:52px;
+        padding:14px 16px;
+        border-radius:14px;
+      }
+      #w3InfoInner textarea.form-control{ min-height:84px; resize:vertical; }
+
       /* Billing saved inline confirm */
       .wl-inline-confirm{margin-top:8px;font-size:12px;padding:8px 10px;border-radius:10px;border:1px solid rgba(107,0,21,.35);background:rgba(107,0,21,.06);color:#111;display:none}
       .wl-inline-confirm.on{display:block}
@@ -4291,7 +4328,7 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
     const payHost = $('w3Step3');
     const payCard = document.createElement('div');
     payCard.className = 'wl-card';
-    payCard.innerHTML = `<div class="wl-card-head">Payment method</div><div class="wl-card-body"><div id="w3PayInner" style="display:grid;gap:14px;"></div></div>`;
+    payCard.innerHTML = `<div class="wl-card-head">Payment</div><div class="wl-card-body"><div id="w3PaySummary" style="display:grid;gap:12px;"></div><div id="w3PayInner" style="display:grid;gap:14px;"></div></div>`;
     payHost.appendChild(payCard);
 
     const payInner = $('w3PayInner');
@@ -4790,14 +4827,47 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
           if (!btn) return;
           const kind = btn.getAttribute('data-card');
 
-          if (kind === 'new'){
-            if (!isRadioAvailable(rbCred)) return;
-            savePayState({ __userPicked:true, method:'card', card:{ mode:'new' } });
-            try{ if (window.WLPayPending){ window.WLPayPending.__cardPendingVal = null; window.WLPayPending.__cardPendingText = null; } }catch(e){}
-            try{ clickWebFormsRadio(rbCred); }catch(e){}
-            setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 80);
-            return;
-          }
+          
+        if (kind === 'new'){
+          // User intends to enter a NEW bank account (ACH)
+          savePayState({ __userPicked:true, method:'bank', bank:{ mode:'new' } });
+
+          // Clear any pending selections so we don't "snap back" to a saved method after postback
+          try{
+            window.WLPayPending = window.WLPayPending || {};
+            window.WLPayPending.__cofPendingVal = '__CLEAR__';
+            window.WLPayPending.__cofPendingText = null;
+          }catch(e){}
+
+          // Clear current COF dropdown value immediately (if present) without triggering a change postback.
+          try{
+            const sel = getCofSel();
+            if (sel){
+              clearSelectToPlaceholder(sel, false);
+            }
+          }catch(e){}
+
+          // Set native radios (no extra postback) so the submit reflects "new bank"
+          try{
+            if (rbCof) rbCof.checked = false;
+            if (rbCheck) rbCheck.checked = true;
+          }catch(e){}
+
+          // Immediate visual update
+          renderPayCards();
+          try{ renderSummary(); }catch(e){}
+
+          // When they choose "Add new bank account", treat it as intent to pay now:
+          // trigger the Make Payment button right away.
+          try{
+            const mp = findMakePaymentButton();
+            if (mp){
+              setTimeout(()=>{ try{ mp.click(); }catch(e){} }, 0);
+            }
+          }catch(e){}
+
+          return;
+        }
 
           const val = btn.getAttribute('data-value') || '';
           if (!val) return;
@@ -5022,7 +5092,26 @@ function setStep(n){
       $('w3Back').disabled = (step === 0);
       $('w3Next').textContent = (step === 3) ? 'Ready' : 'Next';
 
-      if (step === 2){
+      
+      // On final step, the bottom "Ready" nav is redundant — hide Next and show a compact summary above payment choices.
+      try{
+        const nextBtn = $('w3Next');
+        if (nextBtn) nextBtn.style.display = (step === 3) ? 'none' : '';
+        const nav = wiz.querySelector('.w3-nav');
+        if (nav && step === 3){
+          // keep Back available, but visually tighten the bar
+          nav.style.justifyContent = 'flex-start';
+        } else if (nav){
+          nav.style.justifyContent = '';
+        }
+      }catch(e){}
+      try{
+        if (step === 3){
+          const s = $('w3PaySummary');
+          if (s) s.innerHTML = buildReviewHTML();
+        }
+      }catch(e){}
+if (step === 2){
         $('w3Review').innerHTML = buildReviewHTML();
       }
       if (step === 3){
