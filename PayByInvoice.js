@@ -4570,6 +4570,15 @@ function buildReviewHTML(){
     `;
     shell.parentNode.insertBefore(wiz, shell);
 
+    // New wizard run: start pay selection unpicked/unhighlighted
+    try{ clearPickedThisRun(); }catch(e){}
+    try{
+      const st0 = loadPayState() || {};
+      st0.__pickedAccount = false;
+      st0.__userPicked = false;
+      savePayState(st0);
+    }catch(e){}
+
     // Move cards into steps (keeps all original logic intact)
     
 // Step 0 (Info): only show Email + Billing Address + ZIP
@@ -4605,10 +4614,12 @@ sanitizeEmailInPlace();
 // Address / billing / zip / email (only) on Step 0
 // Put Billing BEFORE Email so users can complete address details first.
 moveFieldGroupById('ctl00_PageBody_AddressDropdownList', infoInner);
-moveFieldGroupById('ctl00_PageBody_PostalCodeTextBox', infoInner);
 
-// Billing address block (may include textarea + helper controls)
+// Billing address FIRST (so ZIP tab-trigger postback doesn't hide it before entry)
 if (billWrap) infoInner.appendChild(billWrap);
+
+// ZIP code AFTER billing address
+moveFieldGroupById('ctl00_PageBody_PostalCodeTextBox', infoInner);
 
 // Billing zip (if separate)
 moveFieldGroupById('ctl00_PageBody_BillingPostalCodeTextBox', infoInner);
