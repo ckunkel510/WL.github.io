@@ -908,6 +908,12 @@ width: 25% !important;
 
 
 
+div#MainLayoutRow{
+  display: inline !important;
+}
+
+
+
 
 
 

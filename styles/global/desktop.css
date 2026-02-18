@@ -1019,3 +1019,8 @@ width: 25% !important;
 .epi-form-group-acctPayment > div:nth-child(1){
   width: 100% !important;
 }
+
+
+div#MainLayoutRow{
+  display: inline !important;
+}
