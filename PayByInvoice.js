@@ -4289,15 +4289,15 @@ function buildReviewHTML(){
         <div class="w3-steps">
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
-          <span class="w3-pill" data-pill="2">3) Review</span>
-          <span class="w3-pill" data-pill="3">4) Pay</span>
+          <span class="w3-pill" data-pill="2">3) Pay Method</span>
+          <span class="w3-pill" data-pill="3">4) Review</span>
         </div>
       </div>
       <div class="w3-body">
         <div class="w3-panel" data-step="0"><div id="w3Step0"></div><div class="w3-help">Confirm contact + billing details, then continue.</div></div>
         <div class="w3-panel" data-step="1"><div id="w3Step1"></div><div class="w3-help">Pick statement / jobs / invoices or set a manual amount.</div></div>
-        <div class="w3-panel" data-step="2"><div id="w3Review"></div></div>
-        <div class="w3-panel" data-step="3"><div id="w3Step3"></div><div class="w3-help">Choose payment method and submit.</div></div>
+        <div class="w3-panel" data-step="2"><div id="w3Step2"></div><div class="w3-help">Choose payment method.</div></div>
+        <div class="w3-panel" data-step="3"><div id="w3Review"></div><div id="w3Step3"></div><div class="w3-help">Review everything, then make your payment.</div></div>
         <div class="w3-nav w3-nav-next-only">
           <button type="button" class="w3-btn primary" id="w3Next">Next</button>
         </div>
@@ -4359,7 +4359,7 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
     if (tx) step1.appendChild(tx);
 
     // Build pay step: move pay-by radios/containers + make payment button into a clean card
-    const payHost = $('w3Step3');
+    const payHost = $('w3Step2');
     const payCard = document.createElement('div');
     payCard.className = 'wl-card';
     payCard.innerHTML = `<div class="wl-card-head">Payment method</div><div class="wl-card-body"><div id="w3PayInner" style="display:grid;gap:14px;"></div></div>`;
@@ -5062,7 +5062,8 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
       const submitCard = document.createElement('div');
       submitCard.className = 'wl-card';
       submitCard.innerHTML = `<div class="wl-card-head">Submit</div><div class="wl-card-body" id="w3SubmitInner"></div>`;
-      payHost.insertBefore(submitCard, payCard);
+      const reviewHost = $('w3Step3') || $('w3Review')?.parentElement || payHost;
+      (reviewHost || payHost).appendChild(submitCard);
       const sub = $('w3SubmitInner');
       if (wrap) sub.appendChild(wrap);
       else sub.appendChild(mp);
@@ -5113,10 +5114,10 @@ function setStep(n){
       $('w3Back').disabled = (step === 0);
       $('w3Next').textContent = (step === 3) ? 'Ready' : 'Next';
 
-      if (step === 2){
+      if (step === 3){
         $('w3Review').innerHTML = buildReviewHTML();
       }
-      if (step === 3){
+      if (step === 2){
         // Make sure COF is actually usable
         window.WLPayMode?.ensureCheckOnFileUI?.();
         const rb = $('ctl00_PageBody_RadioButton_PayByCheckOnFile');
