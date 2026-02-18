@@ -599,6 +599,9 @@ wireFieldPersistence();
 
       #wlLeftCard{ grid-area:left; }  #wlRightCard{ grid-area:right; }  #wlTxCard{ grid-area:tx; }
       /* Keep recent transactions in DOM for selection logic, but hide from users */
+      /* Step 3 – hide the sticky Back/Ready bar (redundant once Submit card is visible) */
+      #wlApWizard3[data-step="3"] .w3-nav{ display:none !important; }
+
       #wlTxCard{ position:absolute !important; left:-99999px !important; top:auto !important; width:1px !important; height:1px !important; overflow:hidden !important; }
 
 
@@ -619,6 +622,34 @@ wireFieldPersistence();
       .wl-ctl input.form-control, .wl-ctl select.form-control, .wl-ctl textarea.form-control{
         border:1px solid var(--wl-border); border-radius:12px; padding:12px 14px; min-height:42px;
       }
+
+      /* Step 0 (Info) – make native WebTrack inputs full-width + readable */
+      #wlApWizard3 #w3InfoInner .epi-form-group-acctPayment{
+        width:100% !important;
+        max-width:720px;
+        margin:0 auto;
+      }
+      #wlApWizard3 #w3InfoInner .epi-form-group-acctPayment label,
+      #wlApWizard3 #w3InfoInner .epi-form-group-acctPayment .label,
+      #wlApWizard3 #w3InfoInner .epi-form-group-acctPayment .control-label{
+        display:block !important;
+        text-align:left !important;
+        font-weight:900;
+        color:var(--wl-sub);
+        margin:0 0 6px 0;
+      }
+      #wlApWizard3 #w3InfoInner input.form-control,
+      #wlApWizard3 #w3InfoInner select.form-control,
+      #wlApWizard3 #w3InfoInner textarea.form-control{
+        width:100% !important;
+        max-width:none !important;
+        min-height:48px;
+        font-size:16px;
+        padding:12px 14px;
+        box-sizing:border-box;
+      }
+      #wlApWizard3 #w3InfoInner textarea.form-control{ min-height:90px; }
+
       .wl-help{ color:var(--wl-sub); font-size:12px; margin-top:4px; }
 
       .wl-chips{ display:flex; gap:10px; flex-wrap:wrap; margin-top:8px; }
@@ -708,43 +739,6 @@ wireFieldPersistence();
       }
 
     
-
-      /* ===========================
-         Wizard Step 1 (Info) — modern, larger fields
-         =========================== */
-      #w3InfoInner .epi-form-group-acctPayment,
-      #w3InfoInner tr{
-        width:100%;
-        max-width:100%;
-      }
-      #w3InfoInner .epi-form-group-acctPayment{
-        display:grid;
-        grid-template-columns: 1fr;
-        gap:6px;
-        padding:6px 0;
-      }
-      #w3InfoInner label,
-      #w3InfoInner .control-label,
-      #w3InfoInner .epi-form-group-acctPayment label{
-        font-weight:900;
-        color:var(--wl-sub);
-        text-align:left !important;
-        margin:0 !important;
-        padding:0 !important;
-      }
-      #w3InfoInner input.form-control,
-      #w3InfoInner select.form-control,
-      #w3InfoInner textarea.form-control{
-        width:100% !important;
-        max-width:100% !important;
-        box-sizing:border-box;
-        font-size:16px;
-        min-height:52px;
-        padding:14px 16px;
-        border-radius:14px;
-      }
-      #w3InfoInner textarea.form-control{ min-height:84px; resize:vertical; }
-
       /* Billing saved inline confirm */
       .wl-inline-confirm{margin-top:8px;font-size:12px;padding:8px 10px;border-radius:10px;border:1px solid rgba(107,0,21,.35);background:rgba(107,0,21,.06);color:#111;display:none}
       .wl-inline-confirm.on{display:block}
@@ -1966,7 +1960,7 @@ const IDS = {
       .wl-modern-grid td { border-bottom:1px solid #eef2f7; padding:10px 12px; }
       .wl-modern-grid .rgPager, .wl-modern-grid .paging-control { border-top:1px solid #e5e7eb; padding-top:8px; margin-top:8px; }
       .wl-modern-grid .rgHeader, .wl-modern-grid .panelHeaderMidProductInfo1, .wl-modern-grid .ViewHeader { display:none !important; }
-      @media (min-width:768px){ .wl-form-grid{ gap:14px 16px; } .wl-field{ gap:6px; width:80%; } }
+      @media (min-width:768px){ .wl-form-grid{ gap:14px 16px; } .wl-field{ gap:6px; width:100%; } }
     `;
     const s = document.createElement('style'); s.id='wl-quick-widget-css'; s.textContent = css;
     document.head.appendChild(s);
@@ -4193,6 +4187,15 @@ function buildReviewHTML(){
     return inputs.find(x => /make\s+payment|process\s+payment|submit\s+payment/i.test((x.value||x.textContent||'').trim())) || null;
   }
 
+  function triggerMakePayment(reason){
+    const btn = findMakePaymentButton();
+    if (!btn) return false;
+    if (btn.__wlAutoClicked) return true;
+    btn.__wlAutoClicked = true;
+    try{ console.log('[AP] Auto-trigger Make Payment:', reason||''); }catch(e){}
+    try{ btn.click(); return true; }catch(e){ return false; }
+  }
+
   function ensureCOFLoaded(){
   // Only attempt to load COF accounts when COF is actually selected.
   window.WLPayMode?.ensureCheckOnFileUI?.();
@@ -4328,7 +4331,7 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
     const payHost = $('w3Step3');
     const payCard = document.createElement('div');
     payCard.className = 'wl-card';
-    payCard.innerHTML = `<div class="wl-card-head">Payment</div><div class="wl-card-body"><div id="w3PaySummary" style="display:grid;gap:12px;"></div><div id="w3PayInner" style="display:grid;gap:14px;"></div></div>`;
+    payCard.innerHTML = `<div class="wl-card-head">Payment method</div><div class="wl-card-body"><div id="w3PayInner" style="display:grid;gap:14px;"></div></div>`;
     payHost.appendChild(payCard);
 
     const payInner = $('w3PayInner');
@@ -4827,47 +4830,14 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
           if (!btn) return;
           const kind = btn.getAttribute('data-card');
 
-          
-        if (kind === 'new'){
-          // User intends to enter a NEW bank account (ACH)
-          savePayState({ __userPicked:true, method:'bank', bank:{ mode:'new' } });
-
-          // Clear any pending selections so we don't "snap back" to a saved method after postback
-          try{
-            window.WLPayPending = window.WLPayPending || {};
-            window.WLPayPending.__cofPendingVal = '__CLEAR__';
-            window.WLPayPending.__cofPendingText = null;
-          }catch(e){}
-
-          // Clear current COF dropdown value immediately (if present) without triggering a change postback.
-          try{
-            const sel = getCofSel();
-            if (sel){
-              clearSelectToPlaceholder(sel, false);
-            }
-          }catch(e){}
-
-          // Set native radios (no extra postback) so the submit reflects "new bank"
-          try{
-            if (rbCof) rbCof.checked = false;
-            if (rbCheck) rbCheck.checked = true;
-          }catch(e){}
-
-          // Immediate visual update
-          renderPayCards();
-          try{ renderSummary(); }catch(e){}
-
-          // When they choose "Add new bank account", treat it as intent to pay now:
-          // trigger the Make Payment button right away.
-          try{
-            const mp = findMakePaymentButton();
-            if (mp){
-              setTimeout(()=>{ try{ mp.click(); }catch(e){} }, 0);
-            }
-          }catch(e){}
-
-          return;
-        }
+          if (kind === 'new'){
+            if (!isRadioAvailable(rbCred)) return;
+            savePayState({ __userPicked:true, method:'card', card:{ mode:'new' } });
+            try{ if (window.WLPayPending){ window.WLPayPending.__cardPendingVal = null; window.WLPayPending.__cardPendingText = null; } }catch(e){}
+            try{ clickWebFormsRadio(rbCred); }catch(e){}
+            setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 80);
+            return;
+          }
 
           const val = btn.getAttribute('data-value') || '';
           if (!val) return;
@@ -4943,6 +4913,13 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
           // User intends to enter a NEW bank account
           savePayState({ __userPicked:true, method:'bank', bank:{ mode:'new' } });
 
+          // Auto-submit after the WebForms async update completes
+          try{
+            window.WLPayPending = window.WLPayPending || {};
+            window.WLPayPending.__autoSubmit = true;
+            window.WLPayPending.__autoSubmitWhy = 'bank_new';
+          }catch(e){}
+
           // Clear any pending selections so we don't "snap back" to a saved method after postback
           try{
             window.WLPayPending = window.WLPayPending || {};
@@ -4976,6 +4953,9 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
             renderPayCards();
             try{ renderSummary(); }catch(e){}
           }, 180);
+
+          // Fallback: if MS AJAX isn't available, still try to submit after a short delay
+          setTimeout(()=>{ try{ triggerMakePayment('bank_new_fallback'); }catch(e){} }, 650);
 
           return;
         }
@@ -5028,7 +5008,16 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
       if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
         const prm = Sys.WebForms.PageRequestManager.getInstance();
         if (!prm.__wlPayCardsBound){
-          prm.add_endRequest(()=>{ setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 0); });
+          prm.add_endRequest(()=>{ setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){};
+            try{
+              const pend = window.WLPayPending || {};
+              if (pend.__autoSubmit){
+                pend.__autoSubmit = false;
+                // Give the DOM a moment to settle after the async update
+                setTimeout(()=>{ triggerMakePayment(pend.__autoSubmitWhy || 'bank_new'); }, 120);
+              }
+            }catch(e){}
+          }, 0); });
           prm.__wlPayCardsBound = true;
         }
       }
@@ -5042,7 +5031,7 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
       const submitCard = document.createElement('div');
       submitCard.className = 'wl-card';
       submitCard.innerHTML = `<div class="wl-card-head">Submit</div><div class="wl-card-body" id="w3SubmitInner"></div>`;
-      payHost.appendChild(submitCard);
+      payHost.insertBefore(submitCard, payCard);
       const sub = $('w3SubmitInner');
       if (wrap) sub.appendChild(wrap);
       else sub.appendChild(mp);
@@ -5081,6 +5070,7 @@ document.addEventListener('click', function (ev) {
 function setStep(n){
       step = Math.max(0, Math.min(3, Number(n||0)));
       sessionStorage.setItem(STEP_KEY, String(step));
+      try{ wiz.setAttribute('data-step', String(step)); }catch(e){}
 
       wiz.querySelectorAll('[data-pill]').forEach(p=>{
         p.classList.toggle('on', Number(p.getAttribute('data-pill')) === step);
@@ -5092,26 +5082,7 @@ function setStep(n){
       $('w3Back').disabled = (step === 0);
       $('w3Next').textContent = (step === 3) ? 'Ready' : 'Next';
 
-      
-      // On final step, the bottom "Ready" nav is redundant — hide Next and show a compact summary above payment choices.
-      try{
-        const nextBtn = $('w3Next');
-        if (nextBtn) nextBtn.style.display = (step === 3) ? 'none' : '';
-        const nav = wiz.querySelector('.w3-nav');
-        if (nav && step === 3){
-          // keep Back available, but visually tighten the bar
-          nav.style.justifyContent = 'flex-start';
-        } else if (nav){
-          nav.style.justifyContent = '';
-        }
-      }catch(e){}
-      try{
-        if (step === 3){
-          const s = $('w3PaySummary');
-          if (s) s.innerHTML = buildReviewHTML();
-        }
-      }catch(e){}
-if (step === 2){
+      if (step === 2){
         $('w3Review').innerHTML = buildReviewHTML();
       }
       if (step === 3){
