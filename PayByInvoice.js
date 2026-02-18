@@ -344,17 +344,16 @@ function startSelectionSync(){
 
   function extractDocsString(){
     try{
+      // Stored by TX picker with TTL wrapper {v,exp} OR legacy direct array
       const raw = localStorage.getItem('WL_AP_SelectedDocs');
       if (!raw) return '';
-      const obj = JSON.parse(raw);
-      const docs = obj?.value?.docs || obj?.docs || obj?.value || obj;
-      if (!Array.isArray(docs)) return '';
-      // Build a concise "INV 123, CR 456" style list
-      return docs.map(d=>{
-        const t = (d.type||d.DocType||'').toString().toUpperCase().startsWith('C') ? 'CN' : 'INV';
-        const n = (d.doc || d.Doc || d.docNumber || d.DocumentNumber || '').toString().trim();
-        return n ? `${t}${n}` : '';
-      }).filter(Boolean).join(',');
+      let v = null;
+      try{ v = JSON.parse(raw); }catch{ return ''; }
+      // New format: { v: [...] , exp: <ms> }
+      if (v && typeof v === 'object' && 'v' in v) v = v.v;
+      if (!Array.isArray(v)) return '';
+      // v is an array of selected keys (doc numbers / CN tokens)
+      return v.map(x => String(x||'').trim()).filter(Boolean).join(',');
     }catch{ return ''; }
   }
 
@@ -1081,7 +1080,10 @@ wireFieldPersistence();
   const addrSelText = (addrDDL && addrDDL.value !== '-1')
     ? (addrDDL.options[addrDDL.selectedIndex]?.text || '')
     : '';
-  const billing = (billEl?.value || '').trim();
+  // WebTrack sometimes hides Billing after entry; keep a shadow copy in sessionStorage
+  const billing = (billEl?.value || '').trim()
+    || (function(){ try{ return (sessionStorage.getItem('wl_billLocked_v1')||'').trim(); }catch{ return ''; } })()
+    || (function(){ try{ return (sessionStorage.getItem('wl_billDraft_v3')||'').trim(); }catch{ return ''; } })();
   const zip     = (zipEl?.value || '').trim();
   const email   = (emailEl?.value || '').trim();
 
@@ -4183,17 +4185,62 @@ if (jobBtn){
 }
 
 function buildReviewHTML(){
-    const amtEl = $('ctl00_PageBody_PaymentAmountTextBox');
-    const remit = $('ctl00_PageBody_RemittanceAdviceTextBox')?.value || '';
-    const notes = $('ctl00_PageBody_NotesTextBox')?.value || '';
-    const email = $('ctl00_PageBody_EmailAddressTextBox')?.value || '';
+    const amtEl  = $('ctl00_PageBody_PaymentAmountTextBox');
+    const remEl  = $('ctl00_PageBody_RemittanceAdviceTextBox');
+    const noteEl = $('ctl00_PageBody_NotesTextBox');
+    const emailEl= $('ctl00_PageBody_EmailAddressTextBox');
 
-    // If your core script exposes a summary method, use it.
+    const remit = remEl?.value || '';
+    const notes = noteEl?.value || '';
+    const email = emailEl?.value || '';
+
+    // Read the same prefill state used everywhere else
+    const PREF_KEY = 'wl_ap_prefill_v3';
+    const pref = (()=>{ try{ return JSON.parse(sessionStorage.getItem(PREF_KEY) || '{}'); }catch{ return {}; } })();
+
+    function parseList(str){
+      return String(str||'').split(',').map(s=>s.trim()).filter(Boolean);
+    }
+
+    // Build a selection string that matches what we put in Remittance Advice
+    function buildSelectionText(){
+      // If remittance already has content, use it (most accurate)
+      const v = String(remit||'').trim();
+      if (v) return v;
+
+      const docs = String(pref.docs||'').trim();
+      const jobs = parseList(pref.jobs);
+      const extra = [String(pref.remit||'').trim(), String(pref.notes||'').trim()].filter(Boolean);
+
+      const lines = [];
+      if (docs) lines.push(docs);
+
+      // Jobs → keep it simple in review; the server-side note format can be verbose
+      if (jobs.length) lines.push(`Jobs: ${jobs.join(', ')}`);
+
+      // Keep any extra user-entered remit/notes content so Review matches Submit
+      extra.forEach(x=> lines.push(x));
+
+      return lines.join('\n');
+    }
+
     let sel = '';
     try{
       if (typeof window.getSelectionSummaryText === 'function') sel = window.getSelectionSummaryText();
     } catch {}
-    if (!sel) sel = (remit || notes) ? [remit, notes].filter(Boolean).join(' • ') : '(none)';
+    if (!sel) sel = buildSelectionText();
+    if (!sel) sel = '(none)';
+
+    // Ensure Remittance Advice equals what we show in Selection so customers aren't confused
+    try{
+      if (remEl && String(remEl.value||'').trim() !== String(sel||'').trim()){
+        if (window.WL_AP?.remit?._setNow) window.WL_AP.remit._setNow(String(sel||''), /*fireInputOnly*/true);
+        else {
+          remEl.value = String(sel||'');
+          remEl.dispatchEvent(new Event('input',{bubbles:true}));
+        }
+      }
+    }catch(e){}
 
     const amtDisp = amtEl?.value ? ('$' + String(amtEl.value).trim()) : '(none)';
     return `
@@ -4204,7 +4251,7 @@ function buildReviewHTML(){
             <div><b>Amount:</b> <span style="font-weight:1000;">${amtDisp}</span></div>
             <div><b>Selection:</b> ${sel || '(none)'}</div>
             <div><b>Email:</b> ${email || '(not provided)'}</div>
-            ${(remit||notes) ? `<div><b>Remit/Notes:</b><div style="white-space:pre-wrap;margin-top:4px;">${[remit,notes].filter(Boolean).join('\n\n')}</div></div>` : ``}
+            ${(sel||notes) ? `<div><b>Remit/Notes:</b><div style="white-space:pre-wrap;margin-top:4px;">${[sel,notes].filter(Boolean).join('\n\n')}</div></div>` : ``}
           </div>
         </div>
       </div>
