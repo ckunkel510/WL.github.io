@@ -4376,21 +4376,43 @@ function buildReviewHTML(){
 
     // Build a selection string that matches what we put in Remittance Advice
     function buildSelectionText(){
-      // If remittance already has content, use it (most accurate)
+      // Prefer explicit storage-driven selection so Review stays accurate
+      // even if WebForms clears/removes inputs during postbacks.
       const v = String(remit||'').trim();
       if (v) return v;
 
-      const docs = String(pref.docs||'').trim();
-      const jobs = parseList(pref.jobs);
+      function extractDocsString(){
+        try{
+          const raw = localStorage.getItem('WL_AP_SelectedDocs');
+          if (!raw) return '';
+          let val = null;
+          try{ val = JSON.parse(raw); }catch{ return ''; }
+          if (val && typeof val === 'object' && 'v' in val) val = val.v;
+          if (!Array.isArray(val)) return '';
+          return val.map(x=>String(x||'').trim()).filter(Boolean).join(',');
+        }catch{ return ''; }
+      }
+      function extractJobsString(){
+        try{
+          const raw = sessionStorage.getItem('__WL_JobsSelection');
+          if (!raw) return '';
+          const obj = JSON.parse(raw);
+          if (Array.isArray(obj)) return obj.map(x=>String(x||'').trim()).filter(Boolean).join(',');
+          if (obj && typeof obj === 'object') return Object.keys(obj).map(x=>String(x||'').trim()).filter(Boolean).join(',');
+          return '';
+        }catch{ return ''; }
+      }
+
+      const docs = extractDocsString() || String(pref.docs||'').trim();
+      const jobsStr = extractJobsString() || String(pref.jobs||'').trim();
+      const jobs = parseList(jobsStr);
+
+      // Keep any extra user-entered remit/notes content so Review matches Submit
       const extra = [String(pref.remit||'').trim(), String(pref.notes||'').trim()].filter(Boolean);
 
       const lines = [];
       if (docs) lines.push(docs);
-
-      // Jobs → keep it simple in review; the server-side note format can be verbose
       if (jobs.length) lines.push(`Jobs: ${jobs.join(', ')}`);
-
-      // Keep any extra user-entered remit/notes content so Review matches Submit
       extra.forEach(x=> lines.push(x));
 
       return lines.join('\n');
