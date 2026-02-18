@@ -1,7 +1,7 @@
 
 (function () {
   'use strict';
-  console.log('[AP] PayByInvoice version v25 loaded');
+  console.log('[AP] PayByInvoice version v30 loaded');
 
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
@@ -4831,7 +4831,7 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
       const bankMatchVal = desiredSavedVal || selectedCofVal;
 
       const bankSavedCards = bankOpts.map(o=>{
-        const selected = (mode === 'bank_saved' && bankMatchVal && bankMatchVal === o.value);
+        const selected = (userPicked && mode === 'bank_saved' && bankMatchVal && bankMatchVal === o.value);
         return `
           <button type="button" class="wl-pay-card wl-bank-card ${selected ? 'is-selected':''}"
                   data-bank="saved" data-value="${o.value}">
@@ -4841,7 +4841,7 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
         `;
       }).join('');
 
-      const bankAddNewSelected = (mode === 'bank_new' || (!cardAvail && bankOpts.length === 0));
+      const bankAddNewSelected = (userPicked && mode === 'bank_new');
       bankMount.innerHTML = `
         <button type="button" class="wl-pay-card wl-bank-card ${bankAddNewSelected ? 'is-selected':''}"
                 data-bank="new">
@@ -4914,6 +4914,9 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
             try{ if (window.WLPayPending){ window.WLPayPending.__cardPendingVal = null; window.WLPayPending.__cardPendingText = null; } }catch(e){}
             try{ clickWebFormsRadio(rbCred); }catch(e){}
             setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 80);
+
+        // Auto-advance wizard after choosing a bank option
+        setTimeout(()=>{ try{ sessionStorage.setItem('__WL_AP_WIZ3_STEP','3'); }catch(e){} try{ if (typeof jumpToWizardStep === 'function') jumpToWizardStep(3); }catch(e){} }, 140);
             return;
           }
 
@@ -4990,13 +4993,7 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
         if (kind === 'new'){
           // User intends to enter a NEW bank account
           savePayState({ __userPicked:true, method:'bank', bank:{ mode:'new' } });
-
-          // Auto-submit after the WebForms async update completes
-          try{
-            window.WLPayPending = window.WLPayPending || {};
-            window.WLPayPending.__autoSubmit = true;
-            window.WLPayPending.__autoSubmitWhy = 'bank_new';
-          }catch(e){}
+          // (No auto-submit; user confirms on final step)
 
           // Clear any pending selections so we don't "snap back" to a saved method after postback
           try{
@@ -5087,15 +5084,7 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
         const prm = Sys.WebForms.PageRequestManager.getInstance();
         if (!prm.__wlPayCardsBound){
           prm.add_endRequest(()=>{ setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){};
-            try{
-              const pend = window.WLPayPending || {};
-              if (pend.__autoSubmit){
-                pend.__autoSubmit = false;
-                // Give the DOM a moment to settle after the async update
-                setTimeout(()=>{ triggerMakePayment(pend.__autoSubmitWhy || 'bank_new'); }, 120);
-              }
-            }catch(e){}
-          }, 0); });
+            try{ /* no auto-submit on selection */ }catch(e){} }, 0); });
           prm.__wlPayCardsBound = true;
         }
       }
