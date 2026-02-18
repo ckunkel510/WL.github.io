@@ -1,7 +1,7 @@
 
 (function () {
   'use strict';
-  console.log('[AP] PayByInvoice version v31 loaded');
+  console.log('[AP] PayByInvoice version v35 loaded');
 
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
@@ -980,7 +980,28 @@ wireFieldPersistence();
       if (!grid.contains(el)) { grid.appendChild(el); log.debug('moved to grid', el.id||'(no-id)'); }
     });
 
-    // Billing must appear before Email in Step 1 (users fill billing first)
+    
+    // Billing must appear before ZIP in Step 1 (prevents ZIP postback from hiding Billing before it's entered)
+    (function enforceBillingBeforeZip(){
+      if (WIZ_V3_ACTIVE) return;
+      const bill = grp.billAddr
+        || byId('ctl00_PageBody_BillingAddressContainer')
+        || byId('ctl00_PageBody_BillingAddressTextBox')?.closest('.epi-form-group-acctPayment');
+      const zip = grp.zip
+        || byId('ctl00_PageBody_PostalCodeTextBox')?.closest('.epi-form-group-acctPayment');
+
+      if (!grid || !bill || !zip) return;
+      if (!grid.contains(bill) || !grid.contains(zip)) return;
+
+      // If Billing is after ZIP, move it just before ZIP
+      const pos = bill.compareDocumentPosition(zip);
+      if (pos & Node.DOCUMENT_POSITION_PRECEDING){
+        grid.insertBefore(bill, zip);
+        log.info('enforceBillingBeforeZip: moved Billing before ZIP');
+      }
+    })();
+
+// Billing must appear before Email in Step 1 (users fill billing first)
     (function enforceBillingBeforeEmail(){
       if (WIZ_V3_ACTIVE) return;
       const bill = grp.billAddr
@@ -2508,8 +2529,11 @@ const IDS = {
         <input id="wlProxyBillingInput" type="text" maxlength="${realInput.getAttribute('maxlength')||'30'}"
                class="${realInput.className || 'form-control'}" autocomplete="billing address-line1">`;
 
-      // Insert proxy before Email when possible
-      if (emailWrap && emailWrap.parentElement === infoInner){
+      // Insert proxy before ZIP when possible (Billing first), else before Email
+      const zipWrap = document.getElementById('ctl00_PageBody_PostalCodeTextBox')?.closest('.epi-form-group-acctPayment') || null;
+      if (zipWrap && zipWrap.parentElement === infoInner){
+        infoInner.insertBefore(proxyWrap, zipWrap);
+      } else if (emailWrap && emailWrap.parentElement === infoInner){
         infoInner.insertBefore(proxyWrap, emailWrap);
       } else {
         infoInner.appendChild(proxyWrap);
@@ -5371,6 +5395,24 @@ function setStep(n){
         $('w3Review').innerHTML = buildReviewHTML();
       }
       if (step === 2){
+        // Step 3 (Payment method) should start visually unselected (even if WebTrack defaults to Pay by Bank).
+        // Only keep a highlight if the user has already clicked a payment option during this wizard run.
+        try{
+          const k = 'wl_pay_step3_initialized_v1';
+          if (sessionStorage.getItem(k) !== '1'){
+            sessionStorage.setItem(k, '1');
+            // Clear any stale "picked" flags from prior attempts so Add New isn't pre-selected.
+            clearPickedThisRun();
+            const st = loadPayState() || {};
+            st.__userPicked = false;
+            delete st.__pickedAccount;
+            if (st.bank){ delete st.bank.__pickedAccount; delete st.bank.mode; delete st.bank.value; delete st.bank.text; }
+            if (st.card){ delete st.card.__pickedAccount; delete st.card.mode; delete st.card.value; delete st.card.text; }
+            savePayState(st);
+            // Re-render cards immediately to remove any lingering selected styles.
+            try{ renderPayCards(); }catch(e){}
+          }
+        }catch(e){}
         // Make sure COF is actually usable
         window.WLPayMode?.ensureCheckOnFileUI?.();
         const rb = $('ctl00_PageBody_RadioButton_PayByCheckOnFile');
