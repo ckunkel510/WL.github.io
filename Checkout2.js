@@ -534,33 +534,41 @@
       }
     }
 
-    function updatePickupModeUI() {
-      const pickup = getPickupSelected();
-      const delivered = getDeliveredSelected();
+    // In Pickup mode WebTrack still requires Delivery fields, so we keep them synced.
+    // This hooks Billing field edits and continuously copies Billing -> Delivery (no postbacks).
+    function hookPickupBillingSync() {
+      const billingIds = [
+        "ctl00_PageBody_InvoiceAddress_ContactFirstNameTextBox",
+        "ctl00_PageBody_InvoiceAddress_ContactLastNameTextBox",
+        "ctl00_PageBody_InvoiceAddress_ContactTelephoneTextBox",
+        "ctl00_PageBody_InvoiceAddress_AddressLine1",
+        "ctl00_PageBody_InvoiceAddress_AddressLine2",
+        "ctl00_PageBody_InvoiceAddress_AddressLine3",
+        "ctl00_PageBody_InvoiceAddress_City",
+        "ctl00_PageBody_InvoiceAddress_Postcode",
+        "ctl00_PageBody_InvoiceAddress_CountySelector_CountyList",
+        "ctl00_PageBody_InvoiceAddress_CountrySelector1"
+      ];
 
-      // Branch: show for Pickup (customer chooses), hide for Delivered/Shipping (route internally).
-      setStep4Visibility(!!pickup);
-
-      if (!pickup && delivered) {
-        // Ensure branch has a default value so WebTrack doesn't complain later.
-        autoSelectDefaultBranch();
+      function onEdit() {
+        if (getPickupSelected()) {
+          try { syncBillingToDelivery(); } catch {}
+        }
       }
 
-      // Delivery address UI: hide and skip in pickup mode, but still satisfy required fields.
-      setStep5Visibility(!pickup);
-      setDeliverySectionVisibility(!pickup);
-
-      // Surface required phone field in billing step when pickup (delivery step hidden)
-      mountPickupPhoneInBilling(!!pickup);
-
-      // If pickup, keep Delivery inputs populated from Billing to satisfy required server fields.
-      if (pickup) syncBillingToDelivery();
+      billingIds.forEach((id) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener("input", onEdit, true);
+        el.addEventListener("change", onEdit, true);
+      });
     }
 
-    window.WLCheckout = window.WLCheckout || {};
-    window.WLCheckout.updatePickupModeUI = updatePickupModeUI;
-    window.WLCheckout.syncBillingToDelivery = syncBillingToDelivery;
-// -------------------------------------------------------------------------
+    try { hookPickupBillingSync(); } catch {}
+
+
+
+    // -------------------------------------------------------------------------
     // D) Create step panes + nav buttons
     // -------------------------------------------------------------------------
     steps.forEach(function (step, i) {
