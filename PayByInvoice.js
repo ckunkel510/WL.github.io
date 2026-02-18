@@ -1,7 +1,7 @@
 
 (function () {
   'use strict';
-  console.log('[AP] PayByInvoice version v24 loaded');
+  console.log('[AP] PayByInvoice version v25 loaded');
 
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
@@ -616,7 +616,7 @@ wireFieldPersistence();
       .wl-span-2{ grid-column: 1 / -1; }
 
       .wl-field{ display:grid; gap:8px; }
-      @media(min-width:640px){ .wl-field{ grid-template-columns: 200px 1fr; align-items:center; }
+      @media(min-width:640px){ .wl-field{ grid-template-columns: 240px 1fr; align-items:center; }
                                 .wl-lab{ text-align:right; padding-right:14px; } }
       .wl-lab{ color:var(--wl-sub); font-weight:800; }
       .wl-ctl input.form-control, .wl-ctl select.form-control, .wl-ctl textarea.form-control{
@@ -909,6 +909,31 @@ wireFieldPersistence();
       remit: byId('ctl00_PageBody_RemittanceAdviceTextBox')?.closest('.epi-form-group-acctPayment') || null,
       payWrap: byId('ctl00_PageBody_MakePaymentPanel')?.previousElementSibling || null
     };
+
+    // Step 1: remove Address dropdown (not used; confuses users)
+    function removeAddressDropdown(){
+      try{
+        const ddl = document.getElementById('ctl00_PageBody_AddressDropdownList');
+        if (!ddl) return false;
+
+        // Remove the entire field group wrapper when possible
+        const wrap =
+          ddl.closest('.epi-form-group-acctPayment') ||
+          ddl.closest('.epi-form-group') ||
+          ddl.closest('.wl-field') ||
+          ddl.closest('tr') ||
+          ddl.parentElement;
+
+        if (wrap) { wrap.remove(); return true; }
+        ddl.remove();
+        return true;
+      }catch(e){ return false; }
+    }
+
+    // If the Address dropdown exists, remove it now and keep grp.addrDDL null
+    const __wlAddrRemoved = removeAddressDropdown();
+    if (__wlAddrRemoved) grp.addrDDL = null;
+
     log.debug('groups found', Object.fromEntries(Object.entries(grp).map(([k,v])=>[k, !!v])));
 
     // Tidy groups (label+control), keep native radios intact
