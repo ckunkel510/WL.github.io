@@ -1115,7 +1115,7 @@ return {
   function jumpToWizardStep(n){
     const wiz = document.getElementById('wlApWizard3');
     if (!wiz) return false;
-    const step = Math.max(0, Math.min(4, Number(n||0)));
+    const step = Math.max(0, Math.min(3, Number(n||0)));
     try{ sessionStorage.setItem('__WL_AP_WIZ3_STEP', String(step)); }catch(e){}
     try{
       wiz.querySelectorAll('[data-pill]').forEach(p=>{
@@ -4258,16 +4258,14 @@ function buildReviewHTML(){
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
           <span class="w3-pill" data-pill="2">3) Review</span>
-          <span class="w3-pill" data-pill="3">4) Method</span>
-          <span class="w3-pill" data-pill="4">5) Submit</span>
+          <span class="w3-pill" data-pill="3">4) Pay</span>
         </div>
       </div>
       <div class="w3-body">
         <div class="w3-panel" data-step="0"><div id="w3Step0"></div><div class="w3-help">Confirm contact + billing details, then continue.</div></div>
         <div class="w3-panel" data-step="1"><div id="w3Step1"></div><div class="w3-help">Pick statement / jobs / invoices or set a manual amount.</div></div>
         <div class="w3-panel" data-step="2"><div id="w3Review"></div></div>
-        <div class="w3-panel" data-step="3"><div id="w3Step3"></div><div class="w3-help" id="w3MethodHelp">Choose a payment method, then click <b>Next</b>.</div></div>
-        <div class="w3-panel" data-step="4"><div id="w3Step4"></div><div class="w3-help">Review and submit your payment.</div></div>
+        <div class="w3-panel" data-step="3"><div id="w3Step3"></div><div class="w3-help">Choose payment method and submit.</div></div>
         <div class="w3-nav">
           <button type="button" class="w3-btn" id="w3Back">Back</button>
           <button type="button" class="w3-btn primary" id="w3Next">Next</button>
@@ -4915,7 +4913,12 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
           // User intends to enter a NEW bank account
           savePayState({ __userPicked:true, method:'bank', bank:{ mode:'new' } });
 
-          // No auto-submit here (method is now its own step); we just prep the native UI.
+          // Auto-submit after the WebForms async update completes
+          try{
+            window.WLPayPending = window.WLPayPending || {};
+            window.WLPayPending.__autoSubmit = true;
+            window.WLPayPending.__autoSubmitWhy = 'bank_new';
+          }catch(e){}
 
           // Clear any pending selections so we don't "snap back" to a saved method after postback
           try{
@@ -4935,7 +4938,6 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
 
           // Immediate visual update
           renderPayCards();
-          try{ const h=document.getElementById('w3MethodHelp'); if(h) h.innerHTML='✅ Bank method selected — click <b>Next</b>.'; }catch(e){}
           try{ renderSummary(); }catch(e){}
 
           // Trigger the REAL WebForms radio for "Pay by Bank (new)"
@@ -4952,7 +4954,8 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
             try{ renderSummary(); }catch(e){}
           }, 180);
 
-          // (No auto-submit)
+          // Fallback: if MS AJAX isn't available, still try to submit after a short delay
+          setTimeout(()=>{ try{ triggerMakePayment('bank_new_fallback'); }catch(e){} }, 650);
 
           return;
         }
@@ -5039,7 +5042,7 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
     // (like Billing onchange) doesn't yank the user back to Step 1 later.
     let step = Number(sessionStorage.getItem(STEP_KEY) || '0');
     if (!Number.isFinite(step)) step = 0;
-    step = Math.max(0, Math.min(4, step));
+    step = Math.max(0, Math.min(3, step));
     sessionStorage.setItem(STEP_KEY, String(step));
 
 let __wlSubmitted = false;
@@ -5065,7 +5068,7 @@ document.addEventListener('click', function (ev) {
   } catch {}
 }, true);
 function setStep(n){
-      step = Math.max(0, Math.min(4, Number(n||0)));
+      step = Math.max(0, Math.min(3, Number(n||0)));
       sessionStorage.setItem(STEP_KEY, String(step));
       try{ wiz.setAttribute('data-step', String(step)); }catch(e){}
 
@@ -5077,7 +5080,7 @@ function setStep(n){
       });
 
       $('w3Back').disabled = (step === 0);
-      $('w3Next').textContent = (step === 4) ? 'Make Payment' : 'Next';
+      $('w3Next').textContent = (step === 3) ? 'Ready' : 'Next';
 
       if (step === 2){
         $('w3Review').innerHTML = buildReviewHTML();
@@ -5091,27 +5094,6 @@ function setStep(n){
         ck?.addEventListener('change', ()=>window.WLPayMode?.ensureCheckOnFileUI?.());
         ensureCOFLoaded();
       }
-      if (step === 4){
-        // Build submit view each time (amount/selection can change)
-        const host = $('w3Step4');
-        if (host){
-          host.innerHTML = `
-            ${buildReviewHTML()}
-            <div class="wl-card">
-              <div class="wl-card-head">Submit</div>
-              <div class="wl-card-body">
-                <div class="w3-submit-note">When you're ready, click <b>Make Payment</b>.</div>
-                <button type="button" class="w3-btn primary" id="w3SubmitBtn" style="width:100%; margin-top:10px;">Make Payment</button>
-              </div>
-            </div>
-          `;
-          const btn = document.getElementById('w3SubmitBtn');
-          if (btn && !btn.__wlBound){
-            btn.__wlBound = true;
-            btn.addEventListener('click', ()=>{ try{ triggerMakePayment('wizard-submit-btn'); }catch(e){} });
-          }
-        }
-      }
     }
 
     function validateStep(){
@@ -5121,41 +5103,6 @@ function setStep(n){
           return false;
         }
       }
-
-      if (step === 3){
-        // Require a payment method selection before proceeding
-        const rbCheck = $('ctl00_PageBody_RadioButton_PayByCheck')
-          || document.querySelector('input[type="radio"][id*="PayByCheck"], input[type="radio"][name*="PayByCheck"]');
-        const rbCof = $('ctl00_PageBody_RadioButton_PayByCheckOnFile')
-          || document.querySelector('input[type="radio"][id*="CheckOnFile"], input[type="radio"][name*="CheckOnFile"], input[type="radio"][id*="PayByCheckOnFile"], input[type="radio"][name*="PayByCheckOnFile"]');
-        const rbCred = $('ctl00_PageBody_RadioButton_PayByCredit')
-          || document.querySelector('input[type="radio"][id*="PayByCredit"], input[type="radio"][name*="PayByCredit"], input[type="radio"][id*="PayByCard"], input[type="radio"][name*="PayByCard"]');
-        const rbCardOnFile = $('ctl00_PageBody_RadioButton_PayByCardOnFile')
-          || document.querySelector('input[type="radio"][id*="CardOnFile"], input[type="radio"][name*="CardOnFile"], input[type="radio"][id*="PayByCardOnFile"], input[type="radio"][name*="PayByCardOnFile"]');
-
-        const cofSel = document.querySelector('select[id*="ChecksOnFile"], select[id*="CheckOnFile"], select[name*="ChecksOnFile"], select[name*="CheckOnFile"]');
-        const cardSel = document.querySelector('select[id*="CardOnFile"],select[name*="CardOnFile"],select[id*="CardsOnFile"],select[name*="CardsOnFile"],select[id*="PayByCardOnFile"],select[name*="PayByCardOnFile"]');
-
-        const anyChecked = !!(rbCheck?.checked || rbCof?.checked || rbCred?.checked || rbCardOnFile?.checked);
-        if (!anyChecked){
-          alert('Please choose a payment method.');
-          return false;
-        }
-        if (rbCof?.checked && cofSel && (!cofSel.value || cofSel.value === '-1')){
-          alert('Please choose a saved bank account, or select Add new bank account.');
-          return false;
-        }
-        if (rbCardOnFile?.checked && cardSel && (!cardSel.value || cardSel.value === '-1')){
-          alert('Please choose a saved card, or select Add new card.');
-          return false;
-        }
-        // Nudge: show helper text
-        try{
-          const h = document.getElementById('w3MethodHelp');
-          if (h) h.innerHTML = '✅ Payment method selected — click <b>Next</b> to submit.';
-        }catch(e){}
-      }
-
       return true;
     }
 
@@ -5183,12 +5130,6 @@ function setStep(n){
         }
 
         setStep(1);
-        return;
-      }
-
-      // Final step: submit
-      if (step === 4){
-        try{ triggerMakePayment('wizard-step4-next'); }catch(e){}
         return;
       }
 
