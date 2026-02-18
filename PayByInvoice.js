@@ -1586,6 +1586,110 @@ const IDS = {
     return (cr && cr.checked) ? 'credit' : 'check';
   }
 
+  /* =============================
+     Payment loading UX + 1-click submit
+     - Some gateways require a postback first, then a second click to open modal.
+     - We auto-retry once after the postback settles if the payment UI isn't visible yet.
+     ============================= */
+  function ensurePayOverlayCss(){
+    if (document.getElementById('wl-pay-overlay-css')) return;
+    const s = document.createElement('style');
+    s.id = 'wl-pay-overlay-css';
+    s.textContent = `
+      #wlPayOverlay{position:fixed;inset:0;z-index:2147483000;display:none;}
+      #wlPayOverlay .bg{position:absolute;inset:0;background:rgba(15,23,42,.45);}
+      #wlPayOverlay .card{position:absolute;left:50%;top:20%;transform:translateX(-50%);
+        background:#fff;border-radius:14px;box-shadow:0 18px 60px rgba(0,0,0,.28);
+        width:min(520px,92vw);padding:14px 16px;font-family:inherit;}
+      #wlPayOverlay .title{font-weight:900;font-size:16px;margin-bottom:6px;color:#0f172a;}
+      #wlPayOverlay .sub{font-size:13px;opacity:.85;color:#0f172a;}
+      #wlPayOverlay .bar{height:6px;border-radius:999px;background:rgba(107,0,22,.15);overflow:hidden;margin-top:10px;}
+      #wlPayOverlay .bar > i{display:block;height:100%;width:35%;background:#6b0016;border-radius:999px;animation:wlPaySlide 1.1s infinite ease-in-out;}
+      @keyframes wlPaySlide{0%{transform:translateX(-60%)}50%{transform:translateX(220%)}100%{transform:translateX(520%)}}
+    `;
+    document.head.appendChild(s);
+  }
+
+  function showPayOverlay(msg){
+    try{
+      ensurePayOverlayCss();
+      let el = document.getElementById('wlPayOverlay');
+      if (!el){
+        el = document.createElement('div');
+        el.id = 'wlPayOverlay';
+        el.innerHTML = `<div class="bg"></div><div class="card" role="status" aria-live="polite">
+          <div class="title">Opening secure payment…</div>
+          <div class="sub" id="wlPayOverlayMsg">Please wait a moment.</div>
+          <div class="bar"><i></i></div>
+        </div>`;
+        document.body.appendChild(el);
+      }
+      const m = document.getElementById('wlPayOverlayMsg');
+      if (m) m.textContent = msg || 'Please wait a moment.';
+      el.style.display = 'block';
+    }catch(e){}
+  }
+
+  function hidePayOverlay(){
+    try{ const el = document.getElementById('wlPayOverlay'); if (el) el.style.display = 'none'; }catch(e){}
+  }
+
+  function paymentUiIsOpen(){
+    try{
+      // Forte / gateway patterns (best-effort, non-breaking)
+      if (document.querySelector('iframe[src*="forte" i], iframe[id*="forte" i], [id*="Forte" i], [class*="forte" i]')) return true;
+      if (document.querySelector('iframe[src*="shift4" i], [id*="Shift4" i], [class*="shift4" i]')) return true;
+      if (document.querySelector('[role="dialog"] iframe, [role="dialog"][style*="display"], .modal iframe')) return true;
+      if (document.querySelector('[id*="payment" i][style*="display"], [class*="payment" i][style*="display"], [id*="overlay" i][style*="display"], [class*="overlay" i][style*="display"]')) return true;
+    }catch(e){}
+    return false;
+  }
+
+  function makePaymentOneClick(){
+    // Prevent double-binding
+    const btn = document.getElementById('wlProxySubmit');
+    if (!btn || btn.__wlOneClickBound) return;
+    btn.__wlOneClickBound = true;
+
+    btn.addEventListener('click', ()=>{
+      // Let bridge handler run; we only add retry + overlay.
+      try{ showPayOverlay('Connecting to the payment screen…'); }catch(e){}
+
+      // Track "pending" so endRequest can help if needed.
+      window.__wlPaySubmitPending = { t: Date.now(), retried:false };
+
+      // Poll for UI open; if not, retry once after ~1.2s
+      const start = Date.now();
+      const maxMs = 9000;
+      const retryAfter = 1200;
+      const tick = ()=>{
+        const st = window.__wlPaySubmitPending;
+        if (!st) return;
+        if (paymentUiIsOpen()){
+          hidePayOverlay();
+          window.__wlPaySubmitPending = null;
+          return;
+        }
+        const age = Date.now() - start;
+        if (age > retryAfter && !st.retried){
+          st.retried = true;
+          // Retry the *native* trigger in case first click only prepared server state.
+          try{
+            log.info('one-click: retrying native trigger (payment UI not open yet)');
+            proxyFire();
+          }catch(err){ log.warn('one-click retry failed', err); }
+        }
+        if (age > maxMs){
+          hidePayOverlay();
+          window.__wlPaySubmitPending = null;
+          return;
+        }
+        setTimeout(tick, 160);
+      };
+      setTimeout(tick, 180);
+    }, true);
+  }
+
   function proxyFire(){
     const mode = currentPayMode();
     try{ window.ensureShadowPayBy?.(); }catch(e){}
@@ -1624,6 +1728,8 @@ const IDS = {
     btn.addEventListener('click', proxyFire);
     btn.__wlBridgeBound = true;
     log.info('proxy wired to native submit');
+    // Add 1-click + loading UX behavior
+    makePaymentOneClick();
   }
 
   function afterAjax(){
@@ -1638,6 +1744,21 @@ const IDS = {
         const prm = Sys.WebForms.PageRequestManager.getInstance();
         if (!prm.__wlBridgeBound){
           prm.add_endRequest(()=>{ log.info('bridge endRequest rewire'); afterAjax(); });
+          // If payment submit is pending and gateway UI hasn't opened yet, retry once right after postback.
+          prm.add_endRequest(()=>{
+            try{
+              const st = window.__wlPaySubmitPending;
+              if (!st) return;
+              if (paymentUiIsOpen()) { hidePayOverlay(); window.__wlPaySubmitPending = null; return; }
+              if (!st.retried){
+                st.retried = true;
+                log.info('one-click: endRequest retry');
+                proxyFire();
+              }
+              // keep overlay up briefly while gateway initializes
+              setTimeout(()=>{ if (window.__wlPaySubmitPending && paymentUiIsOpen()){ hidePayOverlay(); window.__wlPaySubmitPending = null; } }, 1200);
+            }catch(e){}
+          });
           prm.__wlBridgeBound = true;
         }
       }
