@@ -1014,3 +1014,8 @@ width: 25% !important;
 #editAddressButton {
   margin-left: 5px;
 }
+
+
+.epi-form-group-acctPayment > div:nth-child(1){
+  width: 100% !important;
+}
