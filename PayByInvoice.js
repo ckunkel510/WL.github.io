@@ -1258,6 +1258,12 @@ return {
 
   /* =============== Boot =============== */
   (function boot(){
+    // Fresh run: ensure payment choice starts unselected on Step 3.
+    try{
+      const s = sessionStorage.getItem(STEP_KEY) || '0';
+      if (String(s) === '0') clearPickedThisRun();
+    }catch(e){}
+
     if (document.readyState === 'loading'){
       document.addEventListener('DOMContentLoaded', ()=>{
         log.info('BOOT (DOMContentLoaded)');
@@ -1645,6 +1651,47 @@ const IDS = {
     return false;
   }
 
+  function resumePendingSubmitIfAny(){
+    try{
+      const pending = loadPendingSubmit();
+      if (!pending) return;
+      // Re-show overlay after a full postback / reload
+      if (!paymentUiIsOpen()){
+        showPayOverlay('Connecting to the payment screen…');
+      }
+      // If we already retried, just keep polling until UI opens or timeout.
+      // If not retried yet, fire one more time after a short delay (the "second click").
+      const age = Date.now() - pending.t;
+      const maxMs = 9000;
+      const start = Date.now();
+      const doRetry = ()=>{
+        const p = loadPendingSubmit();
+        if (!p) return;
+        if (paymentUiIsOpen()){
+          hidePayOverlay();
+          clearPendingSubmit();
+          return;
+        }
+        const elapsed = Date.now() - start;
+        if (elapsed > maxMs){
+          hidePayOverlay();
+          clearPendingSubmit();
+          return;
+        }
+        // Fire retry once
+        if (!p.retried){
+          p.retried = true;
+          savePendingSubmit(p);
+          try{ proxyFire(); }catch(e){}
+        }
+        setTimeout(doRetry, 220);
+      };
+      // wait a beat for WebForms to finish rendering after reload / endRequest
+      setTimeout(doRetry, 420);
+    }catch(e){}
+  }
+
+
   function makePaymentOneClick(){
     // Prevent double-binding
     const btn = document.getElementById('wlProxySubmit');
@@ -1657,6 +1704,7 @@ const IDS = {
 
       // Track "pending" so endRequest can help if needed.
       window.__wlPaySubmitPending = { t: Date.now(), retried:false };
+      try{ savePendingSubmit(window.__wlPaySubmitPending); }catch(e){}
 
       // Poll for UI open; if not, retry once after ~1.2s
       const start = Date.now();
@@ -1667,12 +1715,12 @@ const IDS = {
         if (!st) return;
         if (paymentUiIsOpen()){
           hidePayOverlay();
-          window.__wlPaySubmitPending = null;
+          window.__wlPaySubmitPending = null; try{ clearPendingSubmit(); }catch(e){}
           return;
         }
         const age = Date.now() - start;
         if (age > retryAfter && !st.retried){
-          st.retried = true;
+          st.retried = true; try{ savePendingSubmit(st); }catch(e){}
           // Retry the *native* trigger in case first click only prepared server state.
           try{
             log.info('one-click: retrying native trigger (payment UI not open yet)');
@@ -1681,7 +1729,7 @@ const IDS = {
         }
         if (age > maxMs){
           hidePayOverlay();
-          window.__wlPaySubmitPending = null;
+          window.__wlPaySubmitPending = null; try{ clearPendingSubmit(); }catch(e){}
           return;
         }
         setTimeout(tick, 160);
@@ -1735,6 +1783,7 @@ const IDS = {
   function afterAjax(){
     restoreSubmitPanel();
     wireProxy();
+    try{ resumePendingSubmitIfAny(); }catch(e){}
   }
 
   function boot(){
@@ -1749,14 +1798,14 @@ const IDS = {
             try{
               const st = window.__wlPaySubmitPending;
               if (!st) return;
-              if (paymentUiIsOpen()) { hidePayOverlay(); window.__wlPaySubmitPending = null; return; }
+              if (paymentUiIsOpen()) { hidePayOverlay(); window.__wlPaySubmitPending = null; try{ clearPendingSubmit(); }catch(e){} return; }
               if (!st.retried){
-                st.retried = true;
+                st.retried = true; try{ savePendingSubmit(st); }catch(e){}
                 log.info('one-click: endRequest retry');
                 proxyFire();
               }
               // keep overlay up briefly while gateway initializes
-              setTimeout(()=>{ if (window.__wlPaySubmitPending && paymentUiIsOpen()){ hidePayOverlay(); window.__wlPaySubmitPending = null; } }, 1200);
+              setTimeout(()=>{ if (window.__wlPaySubmitPending && paymentUiIsOpen()){ hidePayOverlay(); window.__wlPaySubmitPending = null; try{ clearPendingSubmit(); }catch(e){} } }, 1200);
             }catch(e){}
           });
           prm.__wlBridgeBound = true;
@@ -4667,6 +4716,9 @@ function getCofSel(){
     
 // Persist selection so cards stay highlighted even after WebForms partial postbacks
 const PAY_STATE_KEY = 'wlPayState';
+const PAY_PICKED_KEY = 'wlPayPickedThisRun';
+const PAY_PENDING_KEY = 'wlPayPendingSubmit';
+
 function loadPayState(){
   try{
     const raw = sessionStorage.getItem(PAY_STATE_KEY);
@@ -4675,6 +4727,33 @@ function loadPayState(){
 }
 function savePayState(st){
   try{ sessionStorage.setItem(PAY_STATE_KEY, JSON.stringify(st||{})); }catch(e){}
+}
+
+function getPickedThisRun(){
+  try{ return sessionStorage.getItem(PAY_PICKED_KEY) === '1'; }catch(e){ return false; }
+}
+function markPickedThisRun(){
+  try{ sessionStorage.setItem(PAY_PICKED_KEY, '1'); }catch(e){}
+}
+function clearPickedThisRun(){
+  try{ sessionStorage.removeItem(PAY_PICKED_KEY); }catch(e){}
+}
+function loadPendingSubmit(){
+  try{
+    const raw = sessionStorage.getItem(PAY_PENDING_KEY);
+    if (!raw) return null;
+    const st = JSON.parse(raw);
+    if (!st?.t) return null;
+    // expire after 40s
+    if (Date.now() - st.t > 40000){ sessionStorage.removeItem(PAY_PENDING_KEY); return null; }
+    return st;
+  }catch(e){ return null; }
+}
+function savePendingSubmit(st){
+  try{ sessionStorage.setItem(PAY_PENDING_KEY, JSON.stringify(st||{})); }catch(e){}
+}
+function clearPendingSubmit(){
+  try{ sessionStorage.removeItem(PAY_PENDING_KEY); }catch(e){}
 }
 
 function isElementVisible(el){
@@ -4837,6 +4916,17 @@ function setSelectedCard(cardEl, isSelected){
     try{ window.WLPayMode?.ensureCheckOnFileUI?.(); }catch(e){}
   }
 function renderPayCards(){
+    // If user hasn't chosen a payment option in *this run*, force the cards to start unselected.
+    try{
+      if (!getPickedThisRun()){
+        const st = loadPayState() || {};
+        st.__userPicked = false;
+        if (st.bank) { delete st.bank.mode; delete st.bank.__pickedAccount; }
+        delete st.__pickedAccount;
+        savePayState(st);
+      }
+    }catch(e){}
+
       const methodMount = $('wlPayMethodCards');
       const bankMount   = $('wlPayBankCards');
       const cardMount   = $('wlPayCardCards');
@@ -5034,7 +5124,9 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
           if (kind === 'new'){
             if (!isRadioAvailable(rbCred)) return;
             savePayState({ __userPicked:true, __pickedAccount:true, method:'card', card:{ mode:'new', __pickedAccount:true } });
-            try{ if (window.WLPayPending){ window.WLPayPending.__cardPendingVal = null; window.WLPayPending.__cardPendingText = null; } }catch(e){}
+            
+    try{ markPickedThisRun(); }catch(e){}
+try{ if (window.WLPayPending){ window.WLPayPending.__cardPendingVal = null; window.WLPayPending.__cardPendingText = null; } }catch(e){}
             try{ clickWebFormsRadio(rbCred); }catch(e){}
             setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 80);
 
@@ -5048,7 +5140,9 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
           const text = (btn.querySelector('.wl-pay-title')?.textContent || '').trim();
           savePayState({ __userPicked:true, __pickedAccount:true, method:'card', card:{ mode:'saved', value: val, text, __pickedAccount:true } });
 
-          // Store intended selection and let MS AJAX endRequest apply it after the postback replaces the select.
+          
+    try{ markPickedThisRun(); }catch(e){}
+// Store intended selection and let MS AJAX endRequest apply it after the postback replaces the select.
           try{
             window.WLPayPending = window.WLPayPending || {};
             window.WLPayPending.__cardPendingVal = val;
@@ -5085,7 +5179,9 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
 
           savePayState({ __userPicked:true, method:'card', card: preferSaved ? st.card : { mode: newOk ? 'new' : 'saved' } });
 
-          try{
+          
+    try{ markPickedThisRun(); }catch(e){}
+try{
             if (preferSaved && isRadioAvailable(rbCardOnFile)) clickWebFormsRadio(rbCardOnFile);
             else if (newOk) clickWebFormsRadio(rbCred);
             else if (isRadioAvailable(rbCardOnFile)) clickWebFormsRadio(rbCardOnFile);
@@ -5096,7 +5192,9 @@ const selectedCofVal = (cofSel && cofSel.value) ? String(cofSel.value) : '';
           const preferSaved = !!(st?.bank?.mode === 'saved' && st?.bank?.value);
           savePayState({ __userPicked:true, method:'bank', bank: preferSaved ? st.bank : { mode:'new' } });
 
-          try{
+          
+    try{ markPickedThisRun(); }catch(e){}
+try{
             if (preferSaved) clickWebFormsRadio(rbCof);
             else clickWebFormsRadio(rbCheck);
           }catch(e){}
