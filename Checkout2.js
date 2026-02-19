@@ -1315,3 +1315,111 @@
   ready(init);
 
 })();
+
+
+
+(function () {
+  const LOG_PREFIX = "[WL CheckoutWizard]";
+
+  function log(...args) {
+    console.log(LOG_PREFIX, ...args);
+  }
+
+  function findInvoiceColumn() {
+    // Most reliable anchor: any InvoiceAddress field that should exist
+    const invoiceField =
+      document.getElementById("ctl00_PageBody_InvoiceAddress_AddressLine1") ||
+      document.querySelector('[id*="InvoiceAddress_AddressLine1"]') ||
+      document.querySelector('[id*="InvoiceAddress_"]');
+
+    if (!invoiceField) return null;
+
+    // In your HTML, the whole invoice UI is inside a .epi-form-col-single-checkout
+    const col = invoiceField.closest(".epi-form-col-single-checkout");
+    return col || null;
+  }
+
+  function widenToFullWidth(el) {
+    if (!el) return;
+    el.style.flex = "0 0 100%";
+    el.style.maxWidth = "100%";
+    el.style.width = "100%";
+  }
+
+  function ensureStep4HasInvoice() {
+    const wizard = document.getElementById("wlCheckoutWizard");
+    if (!wizard) return false;
+
+    const step4 = wizard.querySelector('.checkout-step[data-step="4"]');
+    if (!step4) return false;
+
+    const invoiceBlock = document.getElementById("wlInvoiceFormBlock") || step4.querySelector("#wlInvoiceFormBlock");
+    if (!invoiceBlock) return false;
+
+    // If invoice inputs already exist in step 4, we’re done
+    if (invoiceBlock.querySelector('[id*="InvoiceAddress_"]')) return true;
+
+    const invoiceCol = findInvoiceColumn();
+    if (!invoiceCol) return false;
+
+    // If we already moved it once, don’t keep doing it
+    if (invoiceCol.dataset.wlInvoiceMoved === "1") {
+      // But if step 4 got rebuilt, re-append it
+      invoiceBlock.appendChild(invoiceCol);
+      return true;
+    }
+
+    invoiceCol.dataset.wlInvoiceMoved = "1";
+
+    // Ensure a row wrapper in step 4 (keeps your layout consistent)
+    let row = invoiceBlock.querySelector(".row");
+    if (!row) {
+      row = document.createElement("div");
+      row.className = "row";
+      row.setAttribute("data-wl-moved", "1");
+      invoiceBlock.appendChild(row);
+    }
+
+    // MOVE (not clone) the invoice column from step 3 into step 4
+    row.appendChild(invoiceCol);
+
+    // Make invoice col full width
+    widenToFullWidth(invoiceCol);
+
+    // After moving invoice out of step 3, widen the delivery column too
+    const step3 = wizard.querySelector('.checkout-step[data-step="3"]');
+    if (step3) {
+      const deliveryCol = step3.querySelector(".epi-form-col-single-checkout");
+      widenToFullWidth(deliveryCol);
+    }
+
+    log("Moved Invoice/Billing column into Step 4 (#wlInvoiceFormBlock).");
+    return true;
+  }
+
+  function initMoveWithRetry() {
+    let tries = 0;
+    const maxTries = 60; // 60 * 250ms = 15s
+
+    const t = setInterval(() => {
+      tries++;
+
+      const ok = ensureStep4HasInvoice();
+      if (ok) {
+        clearInterval(t);
+        return;
+      }
+
+      if (tries >= maxTries) {
+        clearInterval(t);
+        log("Could not find Invoice column to move. (Invoice fields not detected)");
+      }
+    }, 250);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initMoveWithRetry);
+  } else {
+    initMoveWithRetry();
+  }
+})();
