@@ -2103,6 +2103,21 @@ window.WLCheckout.refreshDateUI = function () {
 /* When active/completed, keep icon color in sync with text */
 .checkout-wizard ul li.active .wl-step-icon,
 .checkout-wizard ul li.completed .wl-step-icon{color:inherit;}
+
+/* Hide any native step numbers (WebTrack often uses ::before or a number span) */
+.checkout-wizard ul li::before{content:none !important;display:none !important;}
+.checkout-wizard ul li .step-number,
+.checkout-wizard ul li .wizard-step-number,
+.checkout-wizard ul li .stepNum,
+.checkout-wizard ul li .number,
+.checkout-wizard ul li .step{display:none !important;}
+
+/* Woodson brand: active step pill */
+.checkout-wizard ul li{padding:10px 12px;border-radius:10px;gap:10px;}
+.checkout-wizard ul li.active{background:#6b0016 !important;color:#fff !important;}
+.checkout-wizard ul li.active .wl-step-icon{color:#fff !important;}
+.checkout-wizard ul li.completed{opacity:.75;}
+.checkout-wizard ul li.completed:hover{opacity:1;}
 `;
             try {
               if (!document.getElementById("wlCheckoutCss")) {
