@@ -1255,6 +1255,13 @@ document.addEventListener("click", function (ev) {
     }
 
     function goNextFrom(stepNum) {
+      // Step 1 is special: decide the correct next step directly from Ship/Pickup selection.
+      if (stepNum === 1) {
+        const next = getPickupSelected() ? 2 : 3; // Pickup -> Branch, Delivered -> Delivery Address
+        showStep(next);
+        return;
+      }
+
       let next = stepNum + 1;
       // Skip Branch step if delivered/shipping
       if (getDeliveredSelected() && !getPickupSelected() && next === 2) next = 3;
