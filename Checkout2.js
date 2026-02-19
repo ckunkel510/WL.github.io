@@ -2420,8 +2420,7 @@ window.WLCheckout.refreshDateUI = function () {
 
               // Let the postback-return logic know where to land if the page refreshes.
               try {
-                sessionStorage.setItem("wl_pendingStep", String(nextStep));
-              try { sessionStorage.setItem(SHIP_PB_KEY, String(nextStep)); sessionStorage.setItem("wl_shipPostback_ts", String(Date.now())); } catch {}
+                try { sessionStorage.removeItem("wl_pendingStep"); sessionStorage.removeItem(SHIP_PB_KEY); } catch {}
                 setExpectedNav();
               } catch (e) {}
 
@@ -2434,11 +2433,11 @@ window.WLCheckout.refreshDateUI = function () {
                 }
               } catch (e) {}
 
-              // Advance immediately so the user lands on the right step right away.
+              // Do NOT auto-advance on ship/pickup change.
+              // WebForms postbacks can bounce back to Step 1; letting the user click Next avoids confusion.
               try {
-                showStep(nextStep);
-                setStep(nextStep);
-      clearBillingConfirmed();
+                setStep(1);
+                clearBillingConfirmed();
               } catch (e) {}
             }
 
