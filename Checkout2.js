@@ -1,3 +1,75 @@
+
+
+  // ---------------------------------------------------------------------------
+  // Helper: hide legacy native checkout fields we no longer use
+  // ---------------------------------------------------------------------------
+  function hideLegacyCheckoutFields() {
+    try {
+      // Transaction type (Order / Quote) - always hide
+      const txDiv = document.getElementById("ctl00_PageBody_TransactionTypeDiv");
+      const txHeader = document.getElementById("ctl00_PageBody_TransactionTypeHeader");
+      const txInput = document.getElementById("ctl00_PageBody_TransactionTypeInput");
+
+      [txDiv, txHeader, txInput].forEach((el) => {
+        if (el) el.style.setProperty("display", "none", "important");
+      });
+
+      document.querySelectorAll(".TransactionTypeSelector").forEach((el) => {
+        el.style.setProperty("display", "none", "important");
+      });
+
+      if (txDiv) {
+        const col = txDiv.closest(".epi-form-col-single-checkout.epi-form-group-checkout");
+        if (col) col.style.setProperty("display", "none", "important");
+        const row = txDiv.closest(".row");
+        // If this row only exists for transaction type, hide the whole row to remove spacing.
+        if (row && row.querySelectorAll("#ctl00_PageBody_TransactionTypeDiv").length === 1) {
+          row.style.setProperty("display", "none", "important");
+        }
+      }
+
+      // Date required - always hide (we handle timing elsewhere)
+      const dtWrap = document.getElementById("ctl00_PageBody_dtRequired_DatePicker_wrapper");
+      const dtInput = document.getElementById("ctl00_PageBody_dtRequired_DatePicker_dateInput");
+      const dtValidator = document.getElementById("ctl00_PageBody_dtRequired_DateRequiredValidator");
+
+      [dtWrap, dtInput, dtValidator].forEach((el) => {
+        if (el) el.style.setProperty("display", "none", "important");
+      });
+
+      // Hide only the Date Required column/row that contains the picker
+      const dtCol =
+        (dtWrap && dtWrap.closest(".epi-form-col-single-checkout.epi-form-group-checkout")) ||
+        (dtInput && dtInput.closest(".epi-form-col-single-checkout.epi-form-group-checkout"));
+      if (dtCol) dtCol.style.setProperty("display", "none", "important");
+
+      const dtRow = (dtCol && dtCol.closest(".row")) || (dtWrap && dtWrap.closest(".row"));
+      if (dtRow && dtRow.querySelectorAll("#ctl00_PageBody_dtRequired_DatePicker_wrapper, #ctl00_PageBody_dtRequired_DatePicker_dateInput").length) {
+        dtRow.style.setProperty("display", "none", "important");
+      }
+
+      // If the page ever renders a label, hide it only within the Date Required row
+      document.querySelectorAll("label").forEach((lab) => {
+        const t = (lab.textContent || "").trim();
+        if (t === "Date required:" || t === "Transaction type:") {
+          const row = lab.closest(".row");
+          const hasDatePicker = row && row.querySelector("#ctl00_PageBody_dtRequired_DatePicker_wrapper, #ctl00_PageBody_dtRequired_DatePicker_dateInput");
+          const hasTx = row && row.querySelector("#ctl00_PageBody_TransactionTypeDiv");
+          if (hasDatePicker || hasTx) lab.style.setProperty("display", "none", "important");
+        }
+      });
+
+      // Native submit button panel (we use our own buttons)
+      document.querySelectorAll(".submit-button-panel").forEach((el) => {
+        el.style.setProperty("display", "none", "important");
+      });
+
+      // Small UX tweak
+      if (window.jQuery) window.jQuery("#ctl00_PageBody_BackToCartButton2").val("Back to Cart");
+    } catch (e) {
+      // no-op
+    }
+  }
 // ─────────────────────────────────────────────────────────────────────────────
 // Woodson WebTrack Checkout Wizard (Modern Flow Rebuild + Fixes)
 // Fixes:
@@ -144,29 +216,7 @@
     // -------------------------------------------------------------------------
     // A) Hide legacy UI bits
     // -------------------------------------------------------------------------
-    try {
-      const dateColDefault = document.getElementById(
-        "ctl00_PageBody_dtRequired_DatePicker_wrapper"
-      );
-      if (dateColDefault) dateColDefault.style.display = "none";
-
-      if ($) {
-        $("label")
-          .filter(function () {
-            return $(this).text().trim() === "Date required:";
-          })
-          .hide();
-        $("div.form-control").hide();
-        $("#ctl00_PageBody_dtRequired_DatePicker_wrapper").hide();
-        $("#ctl00_PageBody_dtRequired_DatePicker_wrapper")
-          .closest(".epi-form-col-single-checkout.epi-form-group-checkout")
-          .hide();
-
-        $(".submit-button-panel").hide();
-      }
-
-      if ($) $("#ctl00_PageBody_BackToCartButton2").val("Back to Cart");
-    } catch {}
+    hideLegacyCheckoutFields();
 
     // -------------------------------------------------------------------------
     // B) Build wizard container only once
@@ -636,6 +686,7 @@
         prm.__wlHooked = true;
 
         prm.add_endRequest(function () {
+      hideLegacyCheckoutFields();
           // Re-enable our injected buttons and re-apply mode visibility
           reEnableWizardNav();
 // If a ship/pickup selection triggered a postback, advance to the next logical step.
