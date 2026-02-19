@@ -878,6 +878,14 @@ try {
       if (getPickupSelected() && n === 3) n = 4;
       // If Delivered/Shipping is selected, hide Branch (Step 2)
       if (getDeliveredSelected() && !getPickupSelected() && n === 2) n = 3;
+      // Delivered flow: require the user to confirm Billing (Step 4) before showing Step 5
+      try {
+        if (n === 5 && getDeliveredSelected() && !getPickupSelected()) {
+          const confirmed = sessionStorage.getItem("wl_billing_confirmed_delivered") === "1";
+          if (!confirmed) n = 4;
+        }
+      } catch {}
+
 
       // Pickup flow: require Billing confirmation before allowing Step 5 (Date & Instructions).
       // (Billing is prefilled in pickup mode, but we still want the user to confirm it.)
@@ -1050,6 +1058,13 @@ document.addEventListener("click", function (ev) {
         // Billing is always required (and is used to satisfy Delivery when pickup).
         const ok = validateAddressBlock("InvoiceAddress", 4, true);
         if (!ok) return false;
+
+        // Delivered flow: user is clicking Next on Billing, treat this as confirmation.
+        try {
+          if (getDeliveredSelected() && !getPickupSelected()) {
+            sessionStorage.setItem("wl_billing_confirmed_delivered", "1");
+          }
+        } catch {}
 
         if (getPickupSelected()) {
           try { ensureDeliveryRequiredForPickup(); } catch { try { syncBillingToDelivery({force:false}); } catch {} }
@@ -2066,6 +2081,8 @@ window.WLCheckout.refreshDateUI = function () {
             // IMPORTANT: on initial load we only want Step 1 (selection) visible.
             // Only on user interaction do we select the WebTrack radio + advance.
             if (!silent) {
+              // Changing ship/pickup selection resets Billing confirmation gates
+              try { sessionStorage.removeItem("wl_billing_confirmed_delivered"); } catch {}
               const nextStep = isDelivered ? 3 : 2;
 
               // Let the postback-return logic know where to land if the page refreshes.
