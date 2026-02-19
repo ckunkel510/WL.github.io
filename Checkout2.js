@@ -470,20 +470,57 @@
       const email = prefix==="InvoiceAddress" ? document.getElementById("ctl00_PageBody_InvoiceAddress_EmailAddressTextBox") : null;
 
       // Some WebTrack builds don’t have a Billing/Invoice phone field.
-      // In those cases, we validate (and later submit) the Delivery phone field instead.
-      const phoneFallback = (!phone && prefix==="InvoiceAddress") ? document.getElementById("ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox") : null;
+      // In those cases, validate (and later submit) the Delivery phone field instead.
+      const phoneFallback = (!phone && prefix==="InvoiceAddress")
+        ? document.getElementById("ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox")
+        : null;
+
+      const isVisible = (el) => {
+        if (!el) return false;
+        const cs = window.getComputedStyle(el);
+        if (cs.display === "none" || cs.visibility === "hidden") return false;
+        // offsetParent is null for display:none; keep fallback for fixed/absolute
+        return el.offsetParent !== null || cs.position === "fixed";
+      };
+
+      const val = (el) => (el && typeof el.value !== "undefined" ? String(el.value).trim() : "");
 
       const missing = [];
-      if (!norm(line1 && line1.value)) missing.push("Street address");
-      if (!norm(city && city.value)) missing.push("City");
-      if (!(state && norm(state.value))) missing.push("State");
-      if (!validateZip(zip && zip.value)) missing.push("ZIP");
-      const phoneVal = (phone && phone.value) ? phone.value : (phoneFallback && phoneFallback.value) ? phoneFallback.value : "";
-      if (!validatePhone(phoneVal)) missing.push("Phone");
-      if (requireEmail && !validateEmail(email && email.value)) missing.push("Email");
 
-      if (country && !norm(country.value)) {
-        // default to USA without triggering postbacks
+      if (!val(line1)) missing.push("Street address");
+      if (!val(city)) missing.push("City");
+
+      // State can be "selected" even if the underlying value is blank in some themed dropdowns.
+      let stateOk = false;
+      if (state) {
+        const v = val(state);
+        if (v && v !== "0") stateOk = true;
+        else if (state.selectedIndex != null && state.selectedIndex > 0) {
+          const t = state.selectedOptions && state.selectedOptions[0] ? String(state.selectedOptions[0].text || "").trim() : "";
+          if (t && !/^select/i.test(t)) stateOk = true;
+        }
+      }
+      if (!stateOk) missing.push("State");
+
+      if (!validateZip(val(zip))) missing.push("ZIP");
+
+      // Phone: prefer a visible phone input; otherwise accept fallback if it has digits
+      let phoneVal = "";
+      if (phone && (isVisible(phone) || val(phone))) phoneVal = val(phone);
+      else if (phoneFallback) phoneVal = val(phoneFallback);
+
+      if (!validatePhone(phoneVal)) missing.push("Phone");
+
+      // Email: only enforce if the field exists and is visible OR has a value.
+      if (requireEmail && email) {
+        const emailVal = val(email);
+        if ((isVisible(email) || emailVal) && !validateEmail(emailVal)) {
+          missing.push("Email");
+        }
+      }
+
+      // Default country quietly
+      if (country && !val(country)) {
         try { country.value = "USA"; } catch {}
       }
 
@@ -1732,13 +1769,11 @@ window.WLCheckout.refreshDateUI = function () {
             </div>`;
           $(".epi-form-col-single-checkout:has(.SaleTypeSelector)").append(shipHTML);
 
-          $("<style>.modern-shipping-selector .btn[disabled], .modern-shipping-selector .btn.disabled { pointer-events:auto; }</style>").appendTo(document.head);
+          $("<style>.modern-shipping-selector .btn[disabled], .modern-shipping-selector .btn.disabled { pointer-events:auto; }.modern-shipping-selector button.wl-selected{background-color:#6b0016 !important;color:#fff !important;border:none !important;}.modern-shipping-selector button.wl-selected i{color:#fff !important;}.modern-shipping-selector button.wl-unselected{background-color:#f5f5f5 !important;color:#000 !important;border:1px solid #ccc !important;}.modern-shipping-selector button.wl-unselected i{color:#000 !important;}</style>").appendTo(document.head);
 
-                    function updateShippingStyles(val, opts) {
+          function updateShippingStyles(val, opts) {
             opts = opts || {};
             const silent = !!opts.silent;
-            const visualOnly = !!opts.visualOnly; // style buttons but do not change radios / advance
-            const allowNeutral = !!opts.allowNeutral;
 
             const delRad = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
             const pickRad = $("#ctl00_PageBody_SaleTypeSelector_rbCollectLater");
@@ -1749,46 +1784,37 @@ window.WLCheckout.refreshDateUI = function () {
             $btnDelivered.css({ opacity: 1, pointerEvents: "auto" });
             $btnPickup.css({ opacity: 1, pointerEvents: "auto" });
 
-            // Neutral state (no selection highlighted)
-            if (allowNeutral && (!val || val === "none")) {
-              $btnDelivered.css({ background: "#f5f5f5", color: "#000", border: "1px solid #ccc" });
-              $btnPickup.css({ background: "#f5f5f5", color: "#000", border: "1px solid #ccc" });
-              try { document.cookie = "pickupSelected=;expires=Thu, 01 Jan 1970 00:00:00 GMT;path=/"; } catch (e) {}
-
-              // Keep underlying panels sane but do not force either panel
-              try { ensureShippingPanelVisibility(true); } catch (e) {}
-
-              if (window.WLCheckout && typeof window.WLCheckout.updatePickupModeUI === "function") {
-                try { window.WLCheckout.updatePickupModeUI(); } catch (e) {}
-              }
-              return;
-            }
-
             const isDelivered = val === "rbDelivered";
 
-            // Visual styling
-            if (isDelivered) {
-              $btnDelivered.css({ background: "#6b0016", color: "#fff", border: "none" });
-              $btnPickup.css({ background: "#f5f5f5", color: "#000", border: "1px solid #ccc" });
-              document.cookie = "pickupSelected=false;path=/";
-            } else {
-              $btnPickup.css({ background: "#6b0016", color: "#fff", border: "none" });
-              $btnDelivered.css({ background: "#f5f5f5", color: "#000", border: "1px solid #ccc" });
-              document.cookie = "pickupSelected=true;path=/";
-            }
+            // Visual styling (use classes + !important CSS to defeat theme overrides)
+            try {
+              const setSelected = (btn, selected) => {
+                if (!btn || !btn.length) return;
+                btn.toggleClass("wl-selected", !!selected);
+                btn.toggleClass("wl-unselected", !selected);
+                btn.attr("aria-pressed", selected ? "true" : "false");
+                // extra safety: force icon/text colors
+                try {
+                  const el = btn.get(0);
+                  if (el && el.style) {
+                    el.style.setProperty("background-color", selected ? "#6b0016" : "#f5f5f5", "important");
+                    el.style.setProperty("color", selected ? "#fff" : "#000", "important");
+                    el.style.setProperty("border", selected ? "none" : "1px solid #ccc", "important");
+                  }
+                  btn.find("i").each(function(){
+                    try { this.style.setProperty("color", selected ? "#fff" : "#000", "important"); } catch(e){}
+                  });
+                } catch (e) {}
+              };
 
-            // Keep underlying panels sane (does not trigger postback)
+              setSelected($btnDelivered, isDelivered);
+              setSelected($btnPickup, !isDelivered);
+            } catch (e) {}
+
+            // Persist selection for other modules
+            document.cookie = "pickupSelected=" + (isDelivered ? "false" : "true") + ";path=/";
+// Keep underlying panels sane (does not trigger postback)
             try { ensureShippingPanelVisibility(isDelivered); } catch (e) {}
-
-            // If we only want to update visuals (e.g., restore after a postback), stop here.
-            if (visualOnly) {
-              try {
-                if (window.WLCheckout && typeof window.WLCheckout.updatePickupModeUI === "function") {
-                  window.WLCheckout.updatePickupModeUI();
-                }
-              } catch (e) {}
-              return;
-            }
 
             // IMPORTANT: on initial load we only want Step 1 (selection) visible.
             // Only on user interaction do we select the WebTrack radio + advance.
@@ -1798,18 +1824,15 @@ window.WLCheckout.refreshDateUI = function () {
               // Let the postback-return logic know where to land if the page refreshes.
               try {
                 sessionStorage.setItem("wl_pendingStep", String(nextStep));
-                setExpectedNav(true);
+                setExpectedNav();
               } catch (e) {}
 
               // Select the underlying WebTrack radio (may cause an UpdatePanel postback)
               try {
-                if (isDelivered && delRad.length) {
-                  delRad.prop("checked", true);
-                  // Even if it was already checked, trigger click/change so WebForms runs its logic.
-                  delRad.trigger("click").trigger("change");
-                } else if (!isDelivered && pickRad.length) {
-                  pickRad.prop("checked", true);
-                  pickRad.trigger("click").trigger("change");
+                if (isDelivered && delRad.length && !delRad.is(":checked")) {
+                  delRad.prop("checked", true).trigger("click").trigger("change");
+                } else if (!isDelivered && pickRad.length && !pickRad.is(":checked")) {
+                  pickRad.prop("checked", true).trigger("click").trigger("change");
                 }
               } catch (e) {}
 
@@ -1828,35 +1851,14 @@ window.WLCheckout.refreshDateUI = function () {
             } catch (e) {}
           }
 
-          // INITIAL LOAD BEHAVIOR:
-          // - If the user has already progressed (step saved > 1) or we have a pending step,
-          //   restore the visual selection from the underlying radios.
-          // - Otherwise, do NOT default to Delivered; show both options neutral and require a click.
-          (function initShippingSelector() {
-            let hasProgress = false;
-            try {
-              const savedStep = (typeof getStep === "function") ? getStep() : null;
-              const pending = sessionStorage.getItem("wl_pendingStep");
-              hasProgress = (savedStep && savedStep > 1) || !!pending;
-            } catch (e) {}
 
-            const isDelChecked = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered").is(":checked");
-            const isPickChecked = $("#ctl00_PageBody_SaleTypeSelector_rbCollectLater").is(":checked");
-
-            if (hasProgress && (isDelChecked || isPickChecked)) {
-              updateShippingStyles(isDelChecked ? "rbDelivered" : "rbCollectLater", { silent: true, visualOnly: true });
-            } else {
-              // Neutral UI + clear radios so Step 1 is truly "choose one"
-              updateShippingStyles("none", { silent: true, visualOnly: true, allowNeutral: true });
-              try {
-                $("#ctl00_PageBody_SaleTypeSelector_rbDelivered").prop("checked", false);
-                $("#ctl00_PageBody_SaleTypeSelector_rbCollectLater").prop("checked", false);
-              } catch (e) {}
-            }
-          })();
+          updateShippingStyles(
+            $("#ctl00_PageBody_SaleTypeSelector_rbDelivered").is(":checked") ? "rbDelivered" : "rbCollectLater",
+            { silent: true }
+          );
 
           $(document).on("click", ".modern-shipping-selector button", function () {
-            updateShippingStyles($(this).data("value"), { silent: false });
+            updateShippingStyles($(this).data("value"));
           });
         }
       });
@@ -1910,15 +1912,14 @@ window.WLCheckout.refreshDateUI = function () {
     if (expectedNav) {
       const tryJump = () => window.WLCheckout?.detectAndJumpToValidation?.() === true;
       if (!tryJump()) {
-        setTimeout(tryJump, 350);
+        setTimeout(tryJump, 0);
+        setTimeout(tryJump, 300);
+        setTimeout(tryJump, 1200);
+        setTimeout(() => {
+          if (!tryJump()) showStep(returnStep || saved || 2);
+        }, 1600);
       }
-    } else if (returnStep && Number.isFinite(returnStep)) {
-      // If we are returning from a forced postback and asked to go back to a specific step.
-      try { showStep(returnStep); } catch {}
-    } else if (saved && Number.isFinite(saved)) {
-      // Keep user on last known step if still valid for mode.
-      try { showStep(saved); } catch {}
     }
+  });
+})();
 
-  }); // DOMContentLoaded
-})(); // IIFE
