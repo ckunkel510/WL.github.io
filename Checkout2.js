@@ -837,6 +837,55 @@ document.addEventListener("click", function (ev) {
 
       if (stepNum === 4) {
         // Billing is always required (and is used to satisfy Delivery when pickup).
+
+        // Fail-safe: if "Billing same as delivery" is checked but Invoice inputs are blank,
+        // copy Delivery -> Invoice before validating. If we still don't have core fields,
+        // uncheck and reveal the invoice form so the customer can proceed.
+        const same = document.getElementById("sameAsDeliveryCheck");
+        if (same && same.checked) {
+          const pairs = [
+            ["ctl00_PageBody_DeliveryAddress_AddressLine1", "ctl00_PageBody_InvoiceAddress_AddressLine1"],
+            ["ctl00_PageBody_DeliveryAddress_AddressLine2", "ctl00_PageBody_InvoiceAddress_AddressLine2"],
+            ["ctl00_PageBody_DeliveryAddress_AddressLine3", "ctl00_PageBody_InvoiceAddress_AddressLine3"],
+            ["ctl00_PageBody_DeliveryAddress_City",        "ctl00_PageBody_InvoiceAddress_City"],
+            ["ctl00_PageBody_DeliveryAddress_County",      "ctl00_PageBody_InvoiceAddress_County"],
+            ["ctl00_PageBody_DeliveryAddress_Postcode",    "ctl00_PageBody_InvoiceAddress_Postcode"],
+            ["ctl00_PageBody_DeliveryAddress_CountrySelector1", "ctl00_PageBody_InvoiceAddress_CountrySelector1"],
+          ];
+          pairs.forEach(([dId, iId]) => {
+            const d = document.getElementById(dId);
+            const i = document.getElementById(iId);
+            if (!d || !i) return;
+            const dv = norm(d.value);
+            if (!dv) return;
+            if (!norm(i.value)) i.value = dv;
+          });
+
+          const i1 = document.getElementById("ctl00_PageBody_InvoiceAddress_AddressLine1");
+          const ic = document.getElementById("ctl00_PageBody_InvoiceAddress_City");
+          const is = document.getElementById("ctl00_PageBody_InvoiceAddress_County");
+          const iz = document.getElementById("ctl00_PageBody_InvoiceAddress_Postcode");
+
+          const stillMissing =
+            !i1 || !norm(i1.value) ||
+            !ic || !norm(ic.value) ||
+            !is || !norm(is.value) ||
+            !iz || !validateZip(norm(iz.value));
+
+          if (stillMissing) {
+            try { setSameAsDelivery(false); } catch {}
+            same.checked = false;
+
+            const wrapInv = document.getElementById("wl_invoiceWrap");
+            const sumInv  = document.getElementById("wl_invoiceSummary");
+            if (sumInv)  sumInv.style.display = "none";
+            if (wrapInv) wrapInv.style.display = "";
+
+            showInlineError(4, "Billing address didn’t load. Please enter your billing address to continue.");
+            return false;
+          }
+        }
+
         const ok = validateAddressBlock("InvoiceAddress", 4, true);
         if (!ok) return false;
 
@@ -1106,23 +1155,51 @@ document.addEventListener("click", function (ev) {
       const sameStored = getSameAsDelivery();
       sameCheck.checked = sameStored;
 
-      // If the user wants same-as-delivery AND invoice is blank after reload,
-      // trigger the server-side copy ONCE this session.
+      // If "same as delivery" is checked, try to populate invoice fields.
+      // If we still look blank, attempt a one-time server-side copy; if that fails,
+      // fall back to manual billing entry (uncheck + show the form).
+      if (sameStored && invoiceLooksBlank() && deliveryHasData()) {
+        copyDeliveryToInvoice(true);
+        refreshInv();
+      }
+
       if (sameStored && invoiceLooksBlank() && deliveryHasData() && !autoCopyAlreadyDone()) {
         markAutoCopyDone();
-        setReturnStep(5);
-        try {
-          __doPostBack("ctl00$PageBody$CopyDeliveryAddressLinkButton", "");
-          return; // page will reload; stop further UI work this pass
-        } catch {}
+        setReturnStep(4); // after reload, stay on billing so the user can verify
+
+        if (typeof __doPostBack === "function") {
+          try {
+            __doPostBack("ctl00$PageBody$CopyDeliveryAddressLinkButton", "");
+            return; // page will reload; stop further UI work this pass
+          } catch (err) {
+            // fall through
+          }
+        }
+
+        // Fallback: manual billing entry
+        setSameAsDelivery(false);
+        sameCheck.checked = false;
+        sumInv.style.display = "none";
+        wrapInv.style.display = "";
+        showInlineError(4, "We couldn’t auto-copy your billing address. Please enter it below.");
       }
 
       // Normal display
       if (sameStored) {
         copyDeliveryToInvoice(true);
         refreshInv();
-        wrapInv.style.display = "none";
-        sumInv.style.display = "";
+
+        // Don’t trap the user: if invoice didn’t populate, force manual entry.
+        if (invoiceLooksBlank()) {
+          setSameAsDelivery(false);
+          sameCheck.checked = false;
+          sumInv.style.display = "none";
+          wrapInv.style.display = "";
+          showInlineError(4, "We couldn’t auto-copy your billing address. Please enter it below.");
+        } else {
+          wrapInv.style.display = "none";
+          sumInv.style.display = "";
+        }
       } else {
         wrapInv.style.display = "";
         sumInv.style.display = "none";
@@ -1138,8 +1215,19 @@ document.addEventListener("click", function (ev) {
           copyDeliveryToInvoice(true);
 
           refreshInv();
-          wrapInv.style.display = "none";
-          sumInv.style.display = "";
+
+          // If invoice didn’t populate, revert so the customer can type it.
+          if (invoiceLooksBlank()) {
+            setSameAsDelivery(false);
+            this.checked = false;
+            sumInv.style.display = "none";
+            wrapInv.style.display = "";
+            showInlineError(4, "We couldn’t auto-copy your billing address. Please enter it below.");
+          } else {
+            wrapInv.style.display = "none";
+            sumInv.style.display = "";
+            clearInlineError(4);
+          }
 
           // If your WebTrack installation requires server-side copy logic, we can re-enable this postback.
           // try { __doPostBack("ctl00$PageBody$CopyDeliveryAddressLinkButton", ""); } catch {}
