@@ -1290,10 +1290,19 @@ document.addEventListener("click", function (ev) {
           wrapInv.style.display = "none";
           sumInv.style.display = "";
 
+          // After copying, re-validate Step 4 and clear any stale inline warning.
+          try {
+            clearInlineError(4);
+            setTimeout(function(){
+              try { validateAddressBlock("InvoiceAddress", 4, true); } catch {}
+            }, 60);
+          } catch {}
+
           // If your WebTrack installation requires server-side copy logic, we can re-enable this postback.
           // try { __doPostBack("ctl00$PageBody$CopyDeliveryAddressLinkButton", ""); } catch {}
         } else {
           setSameAsDelivery(false);
+          try { clearInlineError(4); } catch {}
           sumInv.style.display = "none";
           wrapInv.style.display = "";
         }
