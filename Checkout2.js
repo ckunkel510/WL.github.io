@@ -1,75 +1,3 @@
-
-
-  // ---------------------------------------------------------------------------
-  // Helper: hide legacy native checkout fields we no longer use
-  // ---------------------------------------------------------------------------
-  function hideLegacyCheckoutFields() {
-    try {
-      // Transaction type (Order / Quote) - always hide
-      const txDiv = document.getElementById("ctl00_PageBody_TransactionTypeDiv");
-      const txHeader = document.getElementById("ctl00_PageBody_TransactionTypeHeader");
-      const txInput = document.getElementById("ctl00_PageBody_TransactionTypeInput");
-
-      [txDiv, txHeader, txInput].forEach((el) => {
-        if (el) el.style.setProperty("display", "none", "important");
-      });
-
-      document.querySelectorAll(".TransactionTypeSelector").forEach((el) => {
-        el.style.setProperty("display", "none", "important");
-      });
-
-      if (txDiv) {
-        const col = txDiv.closest(".epi-form-col-single-checkout.epi-form-group-checkout");
-        if (col) col.style.setProperty("display", "none", "important");
-        const row = txDiv.closest(".row");
-        // If this row only exists for transaction type, hide the whole row to remove spacing.
-        if (row && row.querySelectorAll("#ctl00_PageBody_TransactionTypeDiv").length === 1) {
-          row.style.setProperty("display", "none", "important");
-        }
-      }
-
-      // Date required - always hide (we handle timing elsewhere)
-      const dtWrap = document.getElementById("ctl00_PageBody_dtRequired_DatePicker_wrapper");
-      const dtInput = document.getElementById("ctl00_PageBody_dtRequired_DatePicker_dateInput");
-      const dtValidator = document.getElementById("ctl00_PageBody_dtRequired_DateRequiredValidator");
-
-      [dtWrap, dtInput, dtValidator].forEach((el) => {
-        if (el) el.style.setProperty("display", "none", "important");
-      });
-
-      // Hide only the Date Required column/row that contains the picker
-      const dtCol =
-        (dtWrap && dtWrap.closest(".epi-form-col-single-checkout.epi-form-group-checkout")) ||
-        (dtInput && dtInput.closest(".epi-form-col-single-checkout.epi-form-group-checkout"));
-      if (dtCol) dtCol.style.setProperty("display", "none", "important");
-
-      const dtRow = (dtCol && dtCol.closest(".row")) || (dtWrap && dtWrap.closest(".row"));
-      if (dtRow && dtRow.querySelectorAll("#ctl00_PageBody_dtRequired_DatePicker_wrapper, #ctl00_PageBody_dtRequired_DatePicker_dateInput").length) {
-        dtRow.style.setProperty("display", "none", "important");
-      }
-
-      // If the page ever renders a label, hide it only within the Date Required row
-      document.querySelectorAll("label").forEach((lab) => {
-        const t = (lab.textContent || "").trim();
-        if (t === "Date required:" || t === "Transaction type:") {
-          const row = lab.closest(".row");
-          const hasDatePicker = row && row.querySelector("#ctl00_PageBody_dtRequired_DatePicker_wrapper, #ctl00_PageBody_dtRequired_DatePicker_dateInput");
-          const hasTx = row && row.querySelector("#ctl00_PageBody_TransactionTypeDiv");
-          if (hasDatePicker || hasTx) lab.style.setProperty("display", "none", "important");
-        }
-      });
-
-      // Native submit button panel (we use our own buttons)
-      document.querySelectorAll(".submit-button-panel").forEach((el) => {
-        el.style.setProperty("display", "none", "important");
-      });
-
-      // Small UX tweak
-      if (window.jQuery) window.jQuery("#ctl00_PageBody_BackToCartButton2").val("Back to Cart");
-    } catch (e) {
-      // no-op
-    }
-  }
 // ─────────────────────────────────────────────────────────────────────────────
 // Woodson WebTrack Checkout Wizard (Modern Flow Rebuild + Fixes)
 // Fixes:
@@ -193,6 +121,14 @@
     }
   }
 
+  function peekExpectedNav() {
+    try {
+      return sessionStorage.getItem("wl_expect_nav") === "1";
+    } catch {
+      return false;
+    }
+  }
+
   // One-time per-session guard for auto-copy
   function markAutoCopyDone() {
     try { sessionStorage.setItem("wl_autocopy_done", "1"); } catch {}
@@ -210,13 +146,40 @@
   // ---------------------------------------------------------------------------
   // 1) DOM Ready
   // ---------------------------------------------------------------------------
-  document.addEventListener("DOMContentLoaded", function () {
+  function wlReady(fn) {
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", fn);
+    else fn();
+  }
+
+  wlReady(function () {
     const $ = window.jQuery;
 
     // -------------------------------------------------------------------------
     // A) Hide legacy UI bits
     // -------------------------------------------------------------------------
-    hideLegacyCheckoutFields();
+    try {
+      const dateColDefault = document.getElementById(
+        "ctl00_PageBody_dtRequired_DatePicker_wrapper"
+      );
+      if (dateColDefault) dateColDefault.style.display = "none";
+
+      if ($) {
+        $("label")
+          .filter(function () {
+            return $(this).text().trim() === "Date required:";
+          })
+          .hide();
+        $("div.form-control").hide();
+        $("#ctl00_PageBody_dtRequired_DatePicker_wrapper").hide();
+        $("#ctl00_PageBody_dtRequired_DatePicker_wrapper")
+          .closest(".epi-form-col-single-checkout.epi-form-group-checkout")
+          .hide();
+
+        $(".submit-button-panel").hide();
+      }
+
+      if ($) $("#ctl00_PageBody_BackToCartButton2").val("Back to Cart");
+    } catch {}
 
     // -------------------------------------------------------------------------
     // B) Build wizard container only once
@@ -686,7 +649,6 @@
         prm.__wlHooked = true;
 
         prm.add_endRequest(function () {
-      hideLegacyCheckoutFields();
           // Re-enable our injected buttons and re-apply mode visibility
           reEnableWizardNav();
 // If a ship/pickup selection triggered a postback, advance to the next logical step.
@@ -695,7 +657,7 @@ try {
   if (ps) {
     sessionStorage.removeItem("wl_pendingStep");
     const n = parseInt(ps, 10);
-    if (Number.isFinite(n)) showStep(n);
+    if (Number.isFinite(n)) { showStep(n); setStep(n); }
   }
 } catch {}
 
@@ -706,7 +668,7 @@ try {
       if (ps) {
         sessionStorage.removeItem("wl_pendingStep");
         const n = parseInt(ps, 10);
-        if (Number.isFinite(n)) showStep(n);
+        if (Number.isFinite(n)) { showStep(n); setStep(n); }
       }
     } catch {}
 
@@ -738,15 +700,23 @@ try {
       if (ps) {
         sessionStorage.removeItem("wl_pendingStep");
         const n = parseInt(ps, 10);
-        if (Number.isFinite(n)) showStep(n);
+        if (Number.isFinite(n)) { showStep(n); setStep(n); }
       } else {
-        // If WebForms restored an unexpected step, clamp to the first required step
-        // so the user sees the right flow:
-        //  - Pickup: Step 2 (Branch) -> Step 4 (Billing) -> Step 5 (Date & Instructions)
-        //  - Delivery: Step 3 (Delivery Address) -> Step 4 -> Step 5
-        const a = (typeof getActiveStep === "function") ? getActiveStep() : 1;
-        if (getPickupSelected() && a >= 4) showStep(2);
-        if (getDeliveredSelected() && !getPickupSelected() && a === 2) showStep(3);
+        // If we intentionally triggered a postback, keep the last stored step.
+        const expected = (typeof peekExpectedNav === "function") ? peekExpectedNav() : false;
+        const saved = (typeof getStep === "function") ? getStep() : null;
+        if (expected && saved && saved > 1) {
+          showStep(saved);
+          setStep(saved);
+        } else {
+          // If WebForms restored an unexpected step, clamp to the first required step
+          // so the user sees the right flow:
+          //  - Pickup: Step 2 (Branch) -> Step 4 (Billing) -> Step 5 (Date & Instructions)
+          //  - Delivery: Step 3 (Delivery Address) -> Step 4 -> Step 5
+          const a = (typeof getActiveStep === "function") ? getActiveStep() : 1;
+          if (getPickupSelected() && a >= 4) showStep(2);
+          if (getDeliveredSelected() && !getPickupSelected() && a === 2) showStep(3);
+        }
       }
     } catch {}
 
@@ -888,55 +858,6 @@ document.addEventListener("click", function (ev) {
 
       if (stepNum === 4) {
         // Billing is always required (and is used to satisfy Delivery when pickup).
-
-        // Fail-safe: if "Billing same as delivery" is checked but Invoice inputs are blank,
-        // copy Delivery -> Invoice before validating. If we still don't have core fields,
-        // uncheck and reveal the invoice form so the customer can proceed.
-        const same = document.getElementById("sameAsDeliveryCheck");
-        if (same && same.checked) {
-          const pairs = [
-            ["ctl00_PageBody_DeliveryAddress_AddressLine1", "ctl00_PageBody_InvoiceAddress_AddressLine1"],
-            ["ctl00_PageBody_DeliveryAddress_AddressLine2", "ctl00_PageBody_InvoiceAddress_AddressLine2"],
-            ["ctl00_PageBody_DeliveryAddress_AddressLine3", "ctl00_PageBody_InvoiceAddress_AddressLine3"],
-            ["ctl00_PageBody_DeliveryAddress_City",        "ctl00_PageBody_InvoiceAddress_City"],
-            ["ctl00_PageBody_DeliveryAddress_County",      "ctl00_PageBody_InvoiceAddress_County"],
-            ["ctl00_PageBody_DeliveryAddress_Postcode",    "ctl00_PageBody_InvoiceAddress_Postcode"],
-            ["ctl00_PageBody_DeliveryAddress_CountrySelector1", "ctl00_PageBody_InvoiceAddress_CountrySelector1"],
-          ];
-          pairs.forEach(([dId, iId]) => {
-            const d = document.getElementById(dId);
-            const i = document.getElementById(iId);
-            if (!d || !i) return;
-            const dv = norm(d.value);
-            if (!dv) return;
-            if (!norm(i.value)) i.value = dv;
-          });
-
-          const i1 = document.getElementById("ctl00_PageBody_InvoiceAddress_AddressLine1");
-          const ic = document.getElementById("ctl00_PageBody_InvoiceAddress_City");
-          const is = document.getElementById("ctl00_PageBody_InvoiceAddress_County");
-          const iz = document.getElementById("ctl00_PageBody_InvoiceAddress_Postcode");
-
-          const stillMissing =
-            !i1 || !norm(i1.value) ||
-            !ic || !norm(ic.value) ||
-            !is || !norm(is.value) ||
-            !iz || !validateZip(norm(iz.value));
-
-          if (stillMissing) {
-            try { setSameAsDelivery(false); } catch {}
-            same.checked = false;
-
-            const wrapInv = document.getElementById("wl_invoiceWrap");
-            const sumInv  = document.getElementById("wl_invoiceSummary");
-            if (sumInv)  sumInv.style.display = "none";
-            if (wrapInv) wrapInv.style.display = "";
-
-            showInlineError(4, "Billing address didn’t load. Please enter your billing address to continue.");
-            return false;
-          }
-        }
-
         const ok = validateAddressBlock("InvoiceAddress", 4, true);
         if (!ok) return false;
 
@@ -1206,51 +1127,23 @@ document.addEventListener("click", function (ev) {
       const sameStored = getSameAsDelivery();
       sameCheck.checked = sameStored;
 
-      // If "same as delivery" is checked, try to populate invoice fields.
-      // If we still look blank, attempt a one-time server-side copy; if that fails,
-      // fall back to manual billing entry (uncheck + show the form).
-      if (sameStored && invoiceLooksBlank() && deliveryHasData()) {
-        copyDeliveryToInvoice(true);
-        refreshInv();
-      }
-
+      // If the user wants same-as-delivery AND invoice is blank after reload,
+      // trigger the server-side copy ONCE this session.
       if (sameStored && invoiceLooksBlank() && deliveryHasData() && !autoCopyAlreadyDone()) {
         markAutoCopyDone();
-        setReturnStep(4); // after reload, stay on billing so the user can verify
-
-        if (typeof __doPostBack === "function") {
-          try {
-            __doPostBack("ctl00$PageBody$CopyDeliveryAddressLinkButton", "");
-            return; // page will reload; stop further UI work this pass
-          } catch (err) {
-            // fall through
-          }
-        }
-
-        // Fallback: manual billing entry
-        setSameAsDelivery(false);
-        sameCheck.checked = false;
-        sumInv.style.display = "none";
-        wrapInv.style.display = "";
-        showInlineError(4, "We couldn’t auto-copy your billing address. Please enter it below.");
+        setReturnStep(5);
+        try {
+          __doPostBack("ctl00$PageBody$CopyDeliveryAddressLinkButton", "");
+          return; // page will reload; stop further UI work this pass
+        } catch {}
       }
 
       // Normal display
       if (sameStored) {
         copyDeliveryToInvoice(true);
         refreshInv();
-
-        // Don’t trap the user: if invoice didn’t populate, force manual entry.
-        if (invoiceLooksBlank()) {
-          setSameAsDelivery(false);
-          sameCheck.checked = false;
-          sumInv.style.display = "none";
-          wrapInv.style.display = "";
-          showInlineError(4, "We couldn’t auto-copy your billing address. Please enter it below.");
-        } else {
-          wrapInv.style.display = "none";
-          sumInv.style.display = "";
-        }
+        wrapInv.style.display = "none";
+        sumInv.style.display = "";
       } else {
         wrapInv.style.display = "";
         sumInv.style.display = "none";
@@ -1266,19 +1159,8 @@ document.addEventListener("click", function (ev) {
           copyDeliveryToInvoice(true);
 
           refreshInv();
-
-          // If invoice didn’t populate, revert so the customer can type it.
-          if (invoiceLooksBlank()) {
-            setSameAsDelivery(false);
-            this.checked = false;
-            sumInv.style.display = "none";
-            wrapInv.style.display = "";
-            showInlineError(4, "We couldn’t auto-copy your billing address. Please enter it below.");
-          } else {
-            wrapInv.style.display = "none";
-            sumInv.style.display = "";
-            clearInlineError(4);
-          }
+          wrapInv.style.display = "none";
+          sumInv.style.display = "";
 
           // If your WebTrack installation requires server-side copy logic, we can re-enable this postback.
           // try { __doPostBack("ctl00$PageBody$CopyDeliveryAddressLinkButton", ""); } catch {}
@@ -1820,74 +1702,48 @@ window.WLCheckout.refreshDateUI = function () {
 
           $("<style>.modern-shipping-selector .btn[disabled], .modern-shipping-selector .btn.disabled { pointer-events:auto; }</style>").appendTo(document.head);
 
-                    function updateShippingStyles(val, opts) {
-            opts = opts || {};
-            const silent = !!opts.silent;
-
-            const delRad = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
+          function updateShippingStyles(val) {
+const delRad = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
             const pickRad = $("#ctl00_PageBody_SaleTypeSelector_rbCollectLater");
             const $btnDelivered = $("#btnDelivered");
             const $btnPickup = $("#btnPickup");
 
-            // Ensure buttons are clickable
-            $btnDelivered.css({ opacity: 1, pointerEvents: "auto" });
-            $btnPickup.css({ opacity: 1, pointerEvents: "auto" });
+            $btnDelivered.removeClass("disabled opacity-50").removeAttr("disabled").attr("aria-disabled", "false");
+            $btnPickup.removeClass("disabled opacity-50").removeAttr("disabled").attr("aria-disabled", "false");
 
-            const isDelivered = val === "rbDelivered";
+            if (val === "rbDelivered") {
+              // Reset wizard state before the UpdatePanel refresh so we don't resume on an invalid step.
+              try { setStep(nextStep); } catch {}
+              // After async postback, land on Delivery Address step (step 3; becomes step 2 visually when Branch is hidden)
+              try { sessionStorage.setItem("wl_pendingStep", "3"); } catch {}
+              // Use native click so any WebForms AutoPostBack handler fires immediately
+              if (!delRad.is(":checked")) { try { delRad.get(0).click(); } catch { delRad.prop("checked", true).trigger("change"); } }
+              else { delRad.trigger("change"); }
 
-            // Visual styling
-            if (isDelivered) {
-              $btnDelivered.css({ background: "#6b0016", color: "#fff", border: "none" });
-              $btnPickup.css({ background: "#f5f5f5", color: "#000", border: "1px solid #ccc" });
-              document.cookie = "pickupSelected=false;path=/";
+              $btnDelivered.addClass("btn-primary").removeClass("btn-secondary opacity-50").attr("aria-pressed", "true");
+              $btnPickup.addClass("btn-secondary opacity-50").removeClass("btn-primary").attr("aria-pressed", "false");
+              document.cookie = "pickupSelected=false; path=/";
+              document.cookie = "skipBack=false; path=/";
             } else {
-              $btnPickup.css({ background: "#6b0016", color: "#fff", border: "none" });
-              $btnDelivered.css({ background: "#f5f5f5", color: "#000", border: "1px solid #ccc" });
-              document.cookie = "pickupSelected=true;path=/";
+              // Reset wizard state before the UpdatePanel refresh so we don't resume on an invalid step.
+              try { setStep(nextStep); } catch {}
+              // After async postback, land on Branch step (step 2) for pickup.
+              try { sessionStorage.setItem("wl_pendingStep", "2"); } catch {}
+              if (!pickRad.is(":checked")) { try { pickRad.get(0).click(); } catch { pickRad.prop("checked", true).trigger("change"); } }
+              else { pickRad.trigger("change"); }
+
+              $btnPickup.addClass("btn-primary").removeClass("btn-secondary opacity-50").attr("aria-pressed", "true");
+              $btnDelivered.addClass("btn-secondary opacity-50").removeClass("btn-primary").attr("aria-pressed", "false");
+              document.cookie = "pickupSelected=true; path=/";
+              document.cookie = "skipBack=true; path=/";
             }
 
-            // Keep underlying panels sane (does not trigger postback)
-            try { ensureShippingPanelVisibility(isDelivered); } catch (e) {}
-
-            // IMPORTANT: on initial load we only want Step 1 (selection) visible.
-            // Only on user interaction do we select the WebTrack radio + advance.
-            if (!silent) {
-              const nextStep = isDelivered ? 3 : 2;
-
-              // Let the postback-return logic know where to land if the page refreshes.
-              try {
-                sessionStorage.setItem("wl_pendingStep", String(nextStep));
-                setExpectedNav();
-              } catch (e) {}
-
-              // Select the underlying WebTrack radio (may cause an UpdatePanel postback)
-              try {
-                if (isDelivered && delRad.length && !delRad.is(":checked")) {
-                  delRad.prop("checked", true).trigger("click").trigger("change");
-                } else if (!isDelivered && pickRad.length && !pickRad.is(":checked")) {
-                  pickRad.prop("checked", true).trigger("click").trigger("change");
-                }
-              } catch (e) {}
-
-              // Advance immediately so the user lands on the right step right away.
-              try {
-                showStep(nextStep);
-                setStep(nextStep);
-              } catch (e) {}
-            }
-
-            // Refresh pickup-mode UI (uses pickupSelected cookie)
-            try {
-              if (window.WLCheckout && typeof window.WLCheckout.updatePickupModeUI === "function") {
-                window.WLCheckout.updatePickupModeUI();
-              }
-            } catch (e) {}
+            setStep(nextStep);
+            try { window.WLCheckout.updatePickupModeUI && window.WLCheckout.updatePickupModeUI(); } catch {}
           }
 
-
           updateShippingStyles(
-            $("#ctl00_PageBody_SaleTypeSelector_rbDelivered").is(":checked") ? "rbDelivered" : "rbCollectLater",
-            { silent: true }
+            $("#ctl00_PageBody_SaleTypeSelector_rbDelivered").is(":checked") ? "rbDelivered" : "rbCollectLater"
           );
 
           $(document).on("click", ".modern-shipping-selector button", function () {
@@ -1920,15 +1776,13 @@ window.WLCheckout.refreshDateUI = function () {
           sessionStorage.removeItem("wl_returnStep");
           sessionStorage.removeItem("wl_expect_nav");
           sessionStorage.removeItem("wl_autocopy_done");
-          sessionStorage.removeItem("wl_pendingStep");
-          sessionStorage.removeItem("wl_lastMode");
-          sessionStorage.removeItem("wl_lastStep");
         } catch {}
       }
 
       if (placeOrderBtn) placeOrderBtn.addEventListener("click", resetWizardState);
       if (backToCartBtn) backToCartBtn.addEventListener("click", resetWizardState);
     })();
+
     // -------------------------------------------------------------------------
     // P) Restore step on load
     // -------------------------------------------------------------------------
@@ -1936,40 +1790,39 @@ window.WLCheckout.refreshDateUI = function () {
     const returnStep = consumeReturnStep();
     const saved = getStep();
 
-    // Default: always start on Step 1 (Delivery / Pickup selection) for a fresh checkout load.
-    // Exception: if a full postback happens mid-flow (ex: clicking Pickup triggers a postback),
-    // resume to the pending step so users don’t see a “bounce” back to Step 1.
-    let initial = 1;
+    // If we intentionally triggered a postback (delivery/pickup selection, same-as-delivery, etc),
+    // keep the user on the intended step after the round-trip.
+    let pendingStep = null;
     try {
-      const pending = sessionStorage.getItem("wl_pendingStep");
-      if (pending && /^\d+$/.test(pending)) {
-        const n = parseInt(pending, 10);
-        if (n >= 1 && n <= STEPS.length) initial = n;
+      const raw = sessionStorage.getItem("wl_pendingStep");
+      if (raw && /^\d+$/.test(raw)) {
+        const n = parseInt(raw, 10);
+        if (Number.isFinite(n) && n >= 1 && n <= 5) pendingStep = n;
       }
     } catch {}
 
-    // Consume pending step on full loads once applied.
-    if (initial !== 1) {
+    if (pendingStep != null) {
       try { sessionStorage.removeItem("wl_pendingStep"); } catch {}
     }
 
+    const initial =
+      pendingStep != null
+        ? pendingStep
+        : (expectedNav ? (returnStep || saved || 1) : 1);
+
     setStep(initial);
     showStep(initial);
-
-    // Apply pickup-mode visibility immediately on load (reads pickupSelected cookie)
+    // Apply pickup-mode visibility immediately on load
     try { updatePickupModeUI(); } catch {}
 
-    // If this load was triggered by a Next/Continue postback, try to jump to the step
-    // that WebTrack validation is reporting (or fall back to the intended step).
     if (expectedNav) {
-      const fallback = returnStep || saved || initial || 2;
       const tryJump = () => window.WLCheckout?.detectAndJumpToValidation?.() === true;
       if (!tryJump()) {
         setTimeout(tryJump, 0);
         setTimeout(tryJump, 300);
         setTimeout(tryJump, 1200);
         setTimeout(() => {
-          if (!tryJump()) showStep(fallback);
+          if (!tryJump()) showStep(returnStep || saved || 2);
         }, 1600);
       }
     }
