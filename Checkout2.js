@@ -156,7 +156,13 @@
             return $(this).text().trim() === "Date required:";
           })
           .hide();
-        $("div.form-control").hide();
+        // Only hide the legacy "Date required" row/controls (do NOT hide all .form-control elements)
+      $("label").filter(function(){
+        return (this.textContent || "").trim().toLowerCase() === "date required:";
+      }).closest(".epi-form-col-single-checkout, .epi-form-group-checkout, .row").hide();
+      $("#ctl00_PageBody_dtRequired_DatePicker_wrapper")
+        .closest(".epi-form-col-single-checkout, .epi-form-group-checkout, .row, .form-control")
+        .hide();
         $("#ctl00_PageBody_dtRequired_DatePicker_wrapper").hide();
         $("#ctl00_PageBody_dtRequired_DatePicker_wrapper")
           .closest(".epi-form-col-single-checkout.epi-form-group-checkout")
@@ -703,7 +709,72 @@ try {
     // -------------------------------------------------------------------------
     // E) Step switching + persistence
     // -------------------------------------------------------------------------
-    function showStep(n) {
+    
+    // Late-mount Step 5 content that can appear only after a postback / late render
+    // (e.g., PO number + Special Instructions + Instructions table). Without this, users can land
+    // on Step 5 and see an empty pane until they click the native tab again.
+    var _wl_step5AttachTimer = null;
+    var _wl_step5AttachTries = 0;
+
+    function ensureStep5OrderDetailsMounted() {
+      try {
+        if (!wizard || !wizard.isConnected) return;
+
+        var pane = wizard.querySelector('.checkout-step[data-step="5"]');
+        if (!pane) return;
+
+        var ids = [
+          "ctl00_PageBody_PurchaseOrderNumberTextBox",
+          "ctl00_PageBody_SpecialInstructionsTextBox",
+          "ctl00_PageBody_ShoppingCartInstructionTable"
+        ];
+
+        var movedAny = false;
+
+        ids.forEach(function (id) {
+          var el = document.getElementById(id);
+          if (!el) return;
+
+          // Prefer moving the entire epi-form-group wrapper (keeps label + spacing consistent)
+          var wrap = el.closest(".epi-form-group-checkout") || el.closest(".row") || el.parentElement;
+          if (!wrap) wrap = el;
+
+          // If something upstream set display:none, clear it for this control
+          if (wrap && wrap.style) {
+            if (wrap.style.display === "none") wrap.style.display = "";
+          }
+
+          if (!pane.contains(wrap)) {
+            pane.appendChild(wrap);
+            movedAny = true;
+          }
+        });
+
+        // Retry a few times because UpdatePanel / client scripts can render these controls late
+        var paneHasPO = !!pane.querySelector("#ctl00_PageBody_PurchaseOrderNumberTextBox");
+        var paneHasSI = !!pane.querySelector("#ctl00_PageBody_SpecialInstructionsTextBox");
+
+        if ((!paneHasPO || !paneHasSI) && _wl_step5AttachTries < 10) {
+          _wl_step5AttachTries += 1;
+          clearTimeout(_wl_step5AttachTimer);
+          _wl_step5AttachTimer = setTimeout(ensureStep5OrderDetailsMounted, 200);
+        } else if (paneHasPO && paneHasSI) {
+          _wl_step5AttachTries = 0;
+          clearTimeout(_wl_step5AttachTimer);
+          _wl_step5AttachTimer = null;
+        }
+
+        if (movedAny) {
+          try {
+            if (window.WLCheckout && typeof window.WLCheckout.refreshDateUI === "function") {
+              window.WLCheckout.refreshDateUI();
+            }
+          } catch {}
+        }
+      } catch {}
+    }
+
+function showStep(n) {
       // If Pickup is selected, skip Delivery Address (Step 3)
       if (getPickupSelected() && n === 3) n = 4;
       // If Delivered/Shipping is selected, hide Branch (Step 2)
@@ -719,6 +790,9 @@ try {
       });
 
       setStep(n);
+
+      if (n === 5) { ensureStep5OrderDetailsMounted(); }
+
       try {
         window.scrollTo({ top: wizard.offsetTop, behavior: "smooth" });
       } catch {}
@@ -1681,74 +1755,48 @@ window.WLCheckout.refreshDateUI = function () {
 
           $("<style>.modern-shipping-selector .btn[disabled], .modern-shipping-selector .btn.disabled { pointer-events:auto; }</style>").appendTo(document.head);
 
-                    function updateShippingStyles(val, opts) {
-            opts = opts || {};
-            const silent = !!opts.silent;
-
-            const delRad = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
+          function updateShippingStyles(val) {
+const delRad = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
             const pickRad = $("#ctl00_PageBody_SaleTypeSelector_rbCollectLater");
             const $btnDelivered = $("#btnDelivered");
             const $btnPickup = $("#btnPickup");
 
-            // Ensure buttons are clickable
-            $btnDelivered.css({ opacity: 1, pointerEvents: "auto" });
-            $btnPickup.css({ opacity: 1, pointerEvents: "auto" });
+            $btnDelivered.removeClass("disabled opacity-50").removeAttr("disabled").attr("aria-disabled", "false");
+            $btnPickup.removeClass("disabled opacity-50").removeAttr("disabled").attr("aria-disabled", "false");
 
-            const isDelivered = val === "rbDelivered";
+            if (val === "rbDelivered") {
+              // Reset wizard state before the UpdatePanel refresh so we don't resume on an invalid step.
+              try { setStep(1); } catch {}
+              // After async postback, land on Delivery Address step (step 3; becomes step 2 visually when Branch is hidden)
+              try { sessionStorage.setItem("wl_pendingStep", "3"); } catch {}
+              // Use native click so any WebForms AutoPostBack handler fires immediately
+              if (!delRad.is(":checked")) { try { delRad.get(0).click(); } catch { delRad.prop("checked", true).trigger("change"); } }
+              else { delRad.trigger("change"); }
 
-            // Visual styling
-            if (isDelivered) {
-              $btnDelivered.css({ background: "#6b0016", color: "#fff", border: "none" });
-              $btnPickup.css({ background: "#f5f5f5", color: "#000", border: "1px solid #ccc" });
-              document.cookie = "pickupSelected=false;path=/";
+              $btnDelivered.addClass("btn-primary").removeClass("btn-secondary opacity-50").attr("aria-pressed", "true");
+              $btnPickup.addClass("btn-secondary opacity-50").removeClass("btn-primary").attr("aria-pressed", "false");
+              document.cookie = "pickupSelected=false; path=/";
+              document.cookie = "skipBack=false; path=/";
             } else {
-              $btnPickup.css({ background: "#6b0016", color: "#fff", border: "none" });
-              $btnDelivered.css({ background: "#f5f5f5", color: "#000", border: "1px solid #ccc" });
-              document.cookie = "pickupSelected=true;path=/";
+              // Reset wizard state before the UpdatePanel refresh so we don't resume on an invalid step.
+              try { setStep(1); } catch {}
+              // After async postback, land on Branch step (step 2) for pickup.
+              try { sessionStorage.setItem("wl_pendingStep", "2"); } catch {}
+              if (!pickRad.is(":checked")) { try { pickRad.get(0).click(); } catch { pickRad.prop("checked", true).trigger("change"); } }
+              else { pickRad.trigger("change"); }
+
+              $btnPickup.addClass("btn-primary").removeClass("btn-secondary opacity-50").attr("aria-pressed", "true");
+              $btnDelivered.addClass("btn-secondary opacity-50").removeClass("btn-primary").attr("aria-pressed", "false");
+              document.cookie = "pickupSelected=true; path=/";
+              document.cookie = "skipBack=true; path=/";
             }
 
-            // Keep underlying panels sane (does not trigger postback)
-            try { ensureShippingPanelVisibility(isDelivered); } catch (e) {}
-
-            // IMPORTANT: on initial load we only want Step 1 (selection) visible.
-            // Only on user interaction do we select the WebTrack radio + advance.
-            if (!silent) {
-              const nextStep = isDelivered ? 3 : 2;
-
-              // Let the postback-return logic know where to land if the page refreshes.
-              try {
-                sessionStorage.setItem("wl_pendingStep", String(nextStep));
-                setExpectedNav();
-              } catch (e) {}
-
-              // Select the underlying WebTrack radio (may cause an UpdatePanel postback)
-              try {
-                if (isDelivered && delRad.length && !delRad.is(":checked")) {
-                  delRad.prop("checked", true).trigger("click").trigger("change");
-                } else if (!isDelivered && pickRad.length && !pickRad.is(":checked")) {
-                  pickRad.prop("checked", true).trigger("click").trigger("change");
-                }
-              } catch (e) {}
-
-              // Advance immediately so the user lands on the right step right away.
-              try {
-                showStep(nextStep);
-                setStep(nextStep);
-              } catch (e) {}
-            }
-
-            // Refresh pickup-mode UI (uses pickupSelected cookie)
-            try {
-              if (window.WLCheckout && typeof window.WLCheckout.updatePickupModeUI === "function") {
-                window.WLCheckout.updatePickupModeUI();
-              }
-            } catch (e) {}
+            setStep(1);
+            try { window.WLCheckout.updatePickupModeUI && window.WLCheckout.updatePickupModeUI(); } catch {}
           }
 
-
           updateShippingStyles(
-            $("#ctl00_PageBody_SaleTypeSelector_rbDelivered").is(":checked") ? "rbDelivered" : "rbCollectLater",
-            { silent: true }
+            $("#ctl00_PageBody_SaleTypeSelector_rbDelivered").is(":checked") ? "rbDelivered" : "rbCollectLater"
           );
 
           $(document).on("click", ".modern-shipping-selector button", function () {
@@ -1794,11 +1842,8 @@ window.WLCheckout.refreshDateUI = function () {
     const expectedNav = consumeExpectedNav();
     const returnStep = consumeReturnStep();
     const saved = getStep();
+    const initial = returnStep || saved || 1;
 
-    // Always start on Step 1 (Delivery / Pickup selection) when Checkout loads.
-    // If this load is a postback return, the pending-step / validation logic below will jump as needed.
-    const initial = 1;
-    setStep(initial);
     showStep(initial);
     // Apply pickup-mode visibility immediately on load
     try { updatePickupModeUI(); } catch {}
