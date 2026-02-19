@@ -969,15 +969,6 @@ steps.forEach(function (step, i) {
           // Re-enable our injected buttons and re-apply mode visibility
           reEnableWizardNav();
           hideLegacyCheckoutFields();
-// If a ship/pickup selection triggered a postback, advance to the next logical step.
-try {
-  const ps = sessionStorage.getItem("wl_pendingStep");
-  if (ps) {
-    sessionStorage.removeItem("wl_pendingStep");
-    const n = parseInt(ps, 10);
-    if (Number.isFinite(n)) showStep(n);
-  }
-} catch {}
 
           try { enhanceBranchPicker(); } catch {}
 
@@ -988,7 +979,10 @@ try {
       if (ps) {
         sessionStorage.removeItem("wl_pendingStep");
         const n = parseInt(ps, 10);
-        if (Number.isFinite(n)) showStep(n);
+        if (Number.isFinite(n)) {
+          showStep(n);
+          try { setStep(n); } catch {}
+        }
       }
     } catch {}
 
@@ -1029,7 +1023,10 @@ try {
       if (ps) {
         sessionStorage.removeItem("wl_pendingStep");
         const n = parseInt(ps, 10);
-        if (Number.isFinite(n)) showStep(n);
+        if (Number.isFinite(n)) {
+          showStep(n);
+          try { setStep(n); } catch {}
+        }
       } else {
         // After a full postback, WebForms can lose which step was active.
         // Always restore from our stored step first; if missing, fall back to the first
@@ -1137,7 +1134,10 @@ wizard
           }, 30);
         }
       } catch {}
-    }
+    
+      // Pickup: render Branch cards whenever Branch step is shown
+      try { if (n === 2 && getPickupSelected()) enhanceBranchPicker(); } catch {}
+}
 
     window.WLCheckout.showStep = showStep;
 
