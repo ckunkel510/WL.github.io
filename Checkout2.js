@@ -869,6 +869,16 @@ try {
           }, 0);
         }
       } catch {}
+
+      // Always present Billing as a confirm-first summary when values exist.
+      // (Delivery + Pickup both.) User can click Edit to expand.
+      try {
+        if (n === 4 && window.WLCheckout && typeof window.WLCheckout.applyInvoiceDefaultView === "function") {
+          setTimeout(function () {
+            try { window.WLCheckout.applyInvoiceDefaultView(); } catch {}
+          }, 30);
+        }
+      } catch {}
     }
 
     window.WLCheckout.showStep = showStep;
@@ -1259,7 +1269,10 @@ document.addEventListener("click", function (ev) {
       // trigger the server-side copy ONCE this session.
       if (sameStored && invoiceLooksBlank() && deliveryHasData() && !autoCopyAlreadyDone()) {
         markAutoCopyDone();
-        setReturnStep(5);
+        // IMPORTANT: Do not bounce the user past Billing.
+        // After any server-side copy / refresh, always return to Billing (Step 4)
+        // so the user can confirm the billing summary.
+        setReturnStep(4);
         try {
           __doPostBack("ctl00$PageBody$CopyDeliveryAddressLinkButton", "");
           return; // page will reload; stop further UI work this pass
@@ -1279,7 +1292,8 @@ document.addEventListener("click", function (ev) {
 
       sameCheck.addEventListener("change", function () {
         if (this.checked) {
-          setReturnStep(5);
+          // Always keep the user on Billing after copying so they can confirm.
+          setReturnStep(4);
           setSameAsDelivery(true);
           markAutoCopyDone(); // user-initiated copy: treat as done
 
@@ -1287,6 +1301,7 @@ document.addEventListener("click", function (ev) {
           copyDeliveryToInvoice(true);
 
           refreshInv();
+          // Show summary mode (collapsed) after copying.
           wrapInv.style.display = "none";
           sumInv.style.display = "";
 
@@ -1393,13 +1408,32 @@ document.addEventListener("click", function (ev) {
           }
         } catch {}
       }
+      // Enter edit mode
       sumInv.addEventListener("click", (e) => {
         if (e.target.id !== "editInvoice") return;
         e.preventDefault();
         sumInv.style.display = "none";
         wrapInv.style.display = "";
+        // If the user edits billing, consider it unconfirmed until they hit Next.
+        try { clearBillingConfirmed(); } catch {}
         try { wrapInv.scrollIntoView({ behavior: "smooth" }); } catch {}
       });
+
+      // When arriving at Billing, default to a collapsed summary if we already have values.
+      // This mirrors the Pickup confirmation UX, but does NOT auto-advance.
+      function applyInvoiceDefaultView() {
+        try {
+          const hasAny = !invoiceLooksBlank();
+          if (hasAny) {
+            refreshInv();
+            wrapInv.style.display = "none";
+            sumInv.style.display = "";
+          } else {
+            sumInv.style.display = "none";
+            wrapInv.style.display = "";
+          }
+        } catch {}
+      }
 
       try {
         window.WLCheckout = window.WLCheckout || {};
@@ -1408,12 +1442,15 @@ document.addEventListener("click", function (ev) {
           refreshInv();
         };
 
+        window.WLCheckout.applyInvoiceDefaultView = applyInvoiceDefaultView;
+
         // Expose the step-entry refresh hook.
         window.WLCheckout.forceInvoiceSameAsDeliveryRefresh = forceInvoiceSameAsDeliveryRefresh;
         window.WLCheckout.setSameAsDeliveryVisible = setSameAsDeliveryVisible;
       } catch {}
 
       refreshInv();
+      applyInvoiceDefaultView();
     })();
 
     // -------------------------------------------------------------------------
@@ -1812,7 +1849,8 @@ window.WLCheckout.refreshDateUI = function () {
           if (!valid) {
             e.preventDefault();
             alert("Hold on – we need a bit more info:\n\n" + errors.join("\n"));
-            showStep(6);
+            // Final step in this wizard is Step 5 (Date & Instructions)
+            showStep(5);
             setExpectedNav(false);
             return;
           }
