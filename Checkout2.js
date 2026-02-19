@@ -868,6 +868,12 @@ try {
     // E) Step switching + persistence
     // -------------------------------------------------------------------------
     function showStep(n) {
+      // Clamp step number (old sessions sometimes stored 6+ which breaks Step 5 rendering)
+      n = parseInt(n, 10);
+      if (!Number.isFinite(n)) n = 1;
+      const _maxStep = steps.length;
+      if (n < 1) n = 1;
+      if (n > _maxStep) n = _maxStep;
       // If Pickup is selected, skip Delivery Address (Step 3)
       if (getPickupSelected() && n === 3) n = 4;
       // If Delivered/Shipping is selected, hide Branch (Step 2)
@@ -880,6 +886,10 @@ try {
       if (n === 4) { try { setBillingSeen(true); } catch {} }
       // When showing Step 5, re-run Date/Instructions UI init in case an UpdatePanel refreshed it.
       if (n === 5) { try { window.WLCheckout?.refreshDateUI?.(); } catch {} }
+
+      // Re-clamp after mode-based skipping
+      if (n < 1) n = 1;
+      if (n > steps.length) n = steps.length;
 
 wizard
         .querySelectorAll(".checkout-step")
