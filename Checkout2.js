@@ -386,8 +386,17 @@
       // Phone requirement: surface delivery phone inside billing when pickup
       mountPickupPhoneInBilling(!!pickup);
 
-      // If pickup, keep Delivery inputs populated from Billing to satisfy required server fields.
-      if (pickup) syncBillingToDelivery();
+      // Billing same-as-delivery checkbox: hide in pickup mode
+      try {
+        if (window.WLCheckout && typeof window.WLCheckout.setSameAsDeliveryVisible === 'function') {
+          window.WLCheckout.setSameAsDeliveryVisible(!pickup);
+        }
+      } catch {}
+
+      // If pickup, keep Delivery inputs populated (or at least valid) to satisfy server-side required fields.
+      if (pickup) {
+        try { ensureDeliveryRequiredForPickup(); } catch { try { syncBillingToDelivery({force:false}); } catch {} }
+      }
     }
 
     window.WLCheckout = window.WLCheckout || {};
@@ -536,9 +545,16 @@
       return true;
     }
 
-    function syncBillingToDelivery() {
+    function syncBillingToDelivery(opts) {
       // Copy invoice/billing fields into delivery fields (no postback).
-      // This keeps pickup checkout "shoppable" by only asking for billing.
+      // Used primarily for PICKUP mode where we hide the Delivery step, but WebTrack
+      // still validates Delivery fields on submit.
+      //
+      // opts.force: overwrite delivery fields even if they already have values.
+      // Default: only fill missing delivery fields.
+      opts = opts || {};
+      const force = !!opts.force;
+
       const map = [
         ["ctl00_PageBody_InvoiceAddress_ContactFirstNameTextBox","ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox"],
         ["ctl00_PageBody_InvoiceAddress_ContactLastNameTextBox","ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox"],
@@ -553,31 +569,95 @@
       map.forEach(([fromId,toId]) => {
         const from = document.getElementById(fromId);
         const to = document.getElementById(toId);
-        if (from && to) setIf(to, from.value);
+        if (!from || !to) return;
+        if (force || !norm(to.value)) setIf(to, from.value);
       });
 
       // Country selectors differ between delivery/invoice
       const invCountry = document.getElementById("ctl00_PageBody_InvoiceAddress_CountrySelector1");
       const delCountry = document.getElementById("ctl00_PageBody_DeliveryAddress_CountrySelector");
-      if (invCountry && delCountry) setIf(delCountry, invCountry.value || "USA");
-      if (delCountry && !norm(delCountry.value)) delCountry.value = "USA";
+      if (delCountry) {
+        if (force || !norm(delCountry.value)) {
+          if (invCountry && norm(invCountry.value)) setIf(delCountry, invCountry.value);
+          if (!norm(delCountry.value)) delCountry.value = "USA";
+        }
+      }
 
-      // State dropdown by visible text
+      // State dropdown by visible text (more reliable than value in some themes)
       const invState = document.getElementById("ctl00_PageBody_InvoiceAddress_CountySelector_CountyList");
       const delState = document.getElementById("ctl00_PageBody_DeliveryAddress_CountySelector_CountyList");
       if (invState && delState) {
         const invText = invState.selectedOptions && invState.selectedOptions[0] ? invState.selectedOptions[0].text : "";
-        if (invText) selectByText(delState, invText);
+        const delHas = delState.selectedIndex != null && delState.selectedIndex > 0;
+        if (invText && (force || !delHas)) selectByText(delState, invText);
       }
     }
 
-    
+    function syncDeliveryToInvoiceIfInvoiceBlank() {
+      // For Pickup, if Delivery already has data (customer saved address, or system prefill)
+      // and Invoice is still blank, we can *prefill* Invoice for convenience — WITHOUT
+      // checking "same as delivery".
+      const invLine1 = document.getElementById("ctl00_PageBody_InvoiceAddress_AddressLine1");
+      const invCity  = document.getElementById("ctl00_PageBody_InvoiceAddress_City");
+      const invZip   = document.getElementById("ctl00_PageBody_InvoiceAddress_Postcode");
+      const invState = document.getElementById("ctl00_PageBody_InvoiceAddress_CountySelector_CountyList");
+      if (!invLine1 || !invCity || !invZip || !invState) return;
 
+      const invBlank = !norm(invLine1.value) && !norm(invCity.value) && !norm(invZip.value) && (invState.selectedIndex == null || invState.selectedIndex <= 0);
 
+      if (!invBlank) return;
+
+      const delLine1 = document.getElementById("ctl00_PageBody_DeliveryAddress_AddressLine1");
+      const delCity  = document.getElementById("ctl00_PageBody_DeliveryAddress_City");
+      const delZip   = document.getElementById("ctl00_PageBody_DeliveryAddress_Postcode");
+      const delState = document.getElementById("ctl00_PageBody_DeliveryAddress_CountySelector_CountyList");
+
+      const delHas = (delLine1 && norm(delLine1.value)) || (delCity && norm(delCity.value)) || (delZip && norm(delZip.value)) || (delState && delState.selectedIndex != null && delState.selectedIndex > 0);
+      if (!delHas) return;
+
+      try {
+        if (delLine1 && invLine1) invLine1.value = delLine1.value;
+        if (delCity && invCity) invCity.value = delCity.value;
+        if (delZip && invZip) invZip.value = delZip.value;
+
+        if (delState && invState) {
+          const txt = delState.selectedOptions && delState.selectedOptions[0] ? delState.selectedOptions[0].text : "";
+          if (txt) selectByText(invState, txt);
+        }
+
+        const delCountry = document.getElementById("ctl00_PageBody_DeliveryAddress_CountrySelector");
+        const invCountry = document.getElementById("ctl00_PageBody_InvoiceAddress_CountrySelector1");
+        if (invCountry && (!norm(invCountry.value))) {
+          invCountry.value = (delCountry && norm(delCountry.value)) ? delCountry.value : "USA";
+        }
+      } catch {}
+    }
+
+    function ensureDeliveryRequiredForPickup() {
+      // In PICKUP mode we hide the Delivery step, but WebTrack still validates delivery fields.
+      // Requirement: all delivery fields must be filled EXCEPT the Google address search box.
+      // Strategy:
+      //   - If delivery already has info, keep it.
+      //   - Otherwise, fill any missing delivery required fields from Invoice.
+      //   - If Invoice is blank but Delivery has info, optionally prefill Invoice (convenience).
+      if (!getPickupSelected()) return;
+
+      // If delivery has substantial data, we still want to ensure required fields are present.
+      // We'll fill *missing* fields from invoice without overwriting existing delivery values.
+      syncBillingToDelivery({ force: false });
+
+      // If invoice is blank but delivery exists, prefill invoice (no checkbox).
+      syncDeliveryToInvoiceIfInvoiceBlank();
+
+      // Ensure delivery country defaults
+      const delCountry = document.getElementById("ctl00_PageBody_DeliveryAddress_CountrySelector");
+      if (delCountry && !norm(delCountry.value)) delCountry.value = "USA";
+    }
 
     window.WLCheckout = window.WLCheckout || {};
     window.WLCheckout.updatePickupModeUI = updatePickupModeUI;
     window.WLCheckout.syncBillingToDelivery = syncBillingToDelivery;
+    window.WLCheckout.ensureDeliveryRequiredForPickup = ensureDeliveryRequiredForPickup;
 // -------------------------------------------------------------------------
     // D) Create step panes + nav buttons
     // -------------------------------------------------------------------------
@@ -889,7 +969,7 @@ document.addEventListener("click", function (ev) {
         if (!ok) return false;
 
         if (getPickupSelected()) {
-          syncBillingToDelivery();
+          try { ensureDeliveryRequiredForPickup(); } catch { try { syncBillingToDelivery({force:false}); } catch {} }
           // Also, if Delivery Address step is hidden (pickup), make sure required server fields are not blank.
           clearInlineError(2);
         }
@@ -1237,6 +1317,34 @@ document.addEventListener("click", function (ev) {
         } catch {}
       }
 
+      // Pickup mode: we do NOT want "same as delivery" to ever be checked,
+      // because we hide the delivery step and instead keep Delivery valid behind the scenes.
+      function setSameAsDeliveryVisible(visible) {
+        try {
+          chkDiv.style.display = visible ? "" : "none";
+
+          if (!visible) {
+            // Force off and show invoice inputs so the customer can enter billing.
+            if (sameCheck) sameCheck.checked = false;
+            setSameAsDelivery(false);
+            sumInv.style.display = "none";
+            wrapInv.style.display = "";
+          } else {
+            // Restore from storage when returning to Delivered flow
+            const stored = getSameAsDelivery();
+            if (sameCheck) sameCheck.checked = stored;
+            if (stored) {
+              copyDeliveryToInvoice(true);
+              refreshInv();
+              wrapInv.style.display = "none";
+              sumInv.style.display = "";
+            } else {
+              sumInv.style.display = "none";
+              wrapInv.style.display = "";
+            }
+          }
+        } catch {}
+      }
       sumInv.addEventListener("click", (e) => {
         if (e.target.id !== "editInvoice") return;
         e.preventDefault();
@@ -1254,6 +1362,7 @@ document.addEventListener("click", function (ev) {
 
         // Expose the step-entry refresh hook.
         window.WLCheckout.forceInvoiceSameAsDeliveryRefresh = forceInvoiceSameAsDeliveryRefresh;
+        window.WLCheckout.setSameAsDeliveryVisible = setSameAsDeliveryVisible;
       } catch {}
 
       refreshInv();
@@ -1616,7 +1725,7 @@ window.WLCheckout.refreshDateUI = function () {
                 showStep(4);
                 return;
               }
-              syncBillingToDelivery();
+              try { ensureDeliveryRequiredForPickup(); } catch { try { syncBillingToDelivery({force:false}); } catch {} }
             }
           } catch {}
 
