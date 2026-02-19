@@ -892,7 +892,34 @@ steps.forEach(function (step, i) {
         .filter(isEl)
         .forEach((el) => pane.appendChild(el));
 
-      const navDiv = document.createElement("div");
+      
+      function clickNativeContinue() {
+        const btn =
+          document.querySelector("#ctl00_PageBody_ContinueButton2") ||
+          document.querySelector("#ctl00_PageBody_ContinueButton1");
+        if (!btn) return false;
+
+        try {
+          // Prefer a real click on the actual server control
+          btn.disabled = false;
+          btn.style.display = ""; // keep it actionable even if hidden elsewhere
+          btn.click();
+          return true;
+        } catch {}
+
+        // Fallback: explicit WebForms postback
+        try {
+          const uniqueName = btn.getAttribute("name");
+          if (uniqueName && typeof __doPostBack === "function") {
+            __doPostBack(uniqueName, "");
+            return true;
+          }
+        } catch {}
+
+        return false;
+      }
+
+const navDiv = document.createElement("div");
       navDiv.className = "checkout-nav";
       pane.appendChild(navDiv);
 
@@ -925,19 +952,41 @@ steps.forEach(function (step, i) {
         });
         navDiv.appendChild(next);
       } else {
-        const conts = Array.from(
-          document.querySelectorAll(
-            "#ctl00_PageBody_ContinueButton1,#ctl00_PageBody_ContinueButton2"
-          )
-        );
-        if (conts.length) {
-          const cont = conts.pop();
-          cont.style.display = "";
-          cont.type = "submit";
-          navDiv.appendChild(cont);
+        // Final step: keep the native Continue button in-place (don’t move it),
+        // and use a proxy button that triggers the native postback reliably.
+        const native =
+          document.querySelector("#ctl00_PageBody_ContinueButton2") ||
+          document.querySelector("#ctl00_PageBody_ContinueButton1");
+
+        if (native) {
+          // Hide native button (but keep it in DOM so WebForms/Telerik wiring stays intact)
+          try { native.style.display = "none"; } catch {}
+
+          const proxy = document.createElement("button");
+          proxy.type = "button";
+          proxy.className = (native.className || "btn btn-primary") + " wl-proxy-continue";
+          proxy.textContent = (native.value || native.innerText || "Continue").trim() || "Continue";
+
+          proxy.addEventListener("click", function () {
+            // Clear any sticky inline errors on Step 5 before submitting
+            try { clearInlineError(5); } catch {}
+            const ok = (typeof validateStep === "function") ? validateStep(5) : true;
+            if (!ok) return;
+
+            // Trigger native submit/postback
+            const worked = clickNativeContinue();
+            if (!worked) {
+              // As a last resort, try submitting the form
+              try {
+                const form = native.closest("form") || document.querySelector("form");
+                if (form) form.submit();
+              } catch {}
+            }
+          });
+
+          navDiv.appendChild(proxy);
         }
-      }
-    });
+      }});
 
     
     // -------------------------------------------------------------------------
