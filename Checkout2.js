@@ -722,6 +722,17 @@ try {
       try {
         window.scrollTo({ top: wizard.offsetTop, behavior: "smooth" });
       } catch {}
+
+      // Billing step (Step 4): if "same as delivery" is checked but invoice fields are blank
+      // because the checkbox persisted from a prior session, force a quick uncheck/recheck
+      // AFTER the user has entered delivery address so the copy runs with real values.
+      try {
+        if (n === 4 && window.WLCheckout && typeof window.WLCheckout.forceInvoiceSameAsDeliveryRefresh === "function") {
+          setTimeout(function () {
+            try { window.WLCheckout.forceInvoiceSameAsDeliveryRefresh(); } catch {}
+          }, 0);
+        }
+      } catch {}
     }
 
     window.WLCheckout.showStep = showStep;
@@ -1150,6 +1161,45 @@ document.addEventListener("click", function (ev) {
         }
       });
 
+      // When the "same as delivery" checkbox state is persisted (localStorage), it can be
+      // checked on page load BEFORE the customer enters a delivery address. In that case,
+      // we copy blanks into invoice fields and then hide the inputs (summary view), which
+      // looks like the billing section is broken.
+      //
+      // This helper is called when Step 4 is shown. If delivery now has data but invoice is
+      // still blank while the checkbox is checked, we toggle (uncheck→check) and re-run the
+      // copy logic so the invoice fields populate.
+      function forceInvoiceSameAsDeliveryRefresh() {
+        try {
+          if (!sameCheck || !sameCheck.checked) return;
+          if (!invoiceLooksBlank()) return;
+          if (!deliveryHasData()) return;
+
+          // Avoid thrashing if Step 4 is re-rendered multiple times in quick succession.
+          const guardKey = "wl_same_recheck_step4";
+          try {
+            if (sessionStorage.getItem(guardKey) === "1") return;
+            sessionStorage.setItem(guardKey, "1");
+            setTimeout(function(){
+              try { sessionStorage.removeItem(guardKey); } catch {}
+            }, 1500);
+          } catch {}
+
+          // Uncheck then recheck (without relying on browser firing change automatically)
+          sameCheck.checked = false;
+          setSameAsDelivery(false);
+
+          sameCheck.checked = true;
+          setSameAsDelivery(true);
+          markAutoCopyDone();
+
+          copyDeliveryToInvoice(true);
+          refreshInv();
+          wrapInv.style.display = "none";
+          sumInv.style.display = "";
+        } catch {}
+      }
+
       sumInv.addEventListener("click", (e) => {
         if (e.target.id !== "editInvoice") return;
         e.preventDefault();
@@ -1164,6 +1214,9 @@ document.addEventListener("click", function (ev) {
           if (forceCopy) copyDeliveryToInvoice(true);
           refreshInv();
         };
+
+        // Expose the step-entry refresh hook.
+        window.WLCheckout.forceInvoiceSameAsDeliveryRefresh = forceInvoiceSameAsDeliveryRefresh;
       } catch {}
 
       refreshInv();
