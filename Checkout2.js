@@ -712,8 +712,12 @@ function validateZip(zip) {
       }
 
       // Default country quietly
-      if (country && !val(country)) {
-        try { country.value = "USA"; } catch {}
+      if (country) {
+        const cv = val(country);
+        if (!cv || cv === "00") {
+          try { country.value = "USA"; } catch {}
+          try { country.dispatchEvent(new Event("change", { bubbles: true })); } catch {}
+        }
       }
 
       if (missing.length) {
@@ -1305,6 +1309,15 @@ document.addEventListener("click", function (ev) {
         // Billing is always required (and is used to satisfy Delivery when pickup).
         const ok = validateAddressBlock("InvoiceAddress", 4, true);
         if (!ok) return false;
+
+        // Ensure Billing country is set (default USA if blank/[Select Country])
+        try {
+          const c = document.getElementById("ctl00_PageBody_InvoiceAddress_CountrySelector1");
+          if (c && (String(c.value||"").trim()==="" || String(c.value||"").trim()==="00")) {
+            c.value = "USA";
+            try { c.dispatchEvent(new Event("change",{bubbles:true})); } catch {}
+          }
+        } catch {}
 
         // Delivered flow: user is clicking Next on Billing, treat this as confirmation.
         try {
