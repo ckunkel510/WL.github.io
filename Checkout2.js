@@ -799,6 +799,14 @@ try {
               window.WLCheckout.refreshDateUI();
             }
           } catch {}
+
+          // Restore the active step after UpdatePanel refreshes.
+          // Some partial updates can drop the `.active` class even though our stored step is correct,
+          // which makes Step 5 look "completed" until the user clicks the tab.
+          try {
+            const desired = getStep();
+            if (desired && Number.isFinite(desired)) showStep(desired);
+          } catch {}
         });
       } catch {}
     }
@@ -816,13 +824,27 @@ try {
         const n = parseInt(ps, 10);
         if (Number.isFinite(n)) showStep(n);
       } else {
-        // If WebForms restored an unexpected step, clamp to the first required step
-        // so the user sees the right flow:
-        //  - Pickup: Step 2 (Branch) -> Step 4 (Billing) -> Step 5 (Date & Instructions)
-        //  - Delivery: Step 3 (Delivery Address) -> Step 4 -> Step 5
-        const a = (typeof getActiveStep === "function") ? getActiveStep() : 1;
-        if (getPickupSelected() && a >= 4) showStep(2);
-        if (getDeliveredSelected() && !getPickupSelected() && a === 2) showStep(3);
+        // After a full postback, WebForms can lose which step was active.
+        // Always restore from our stored step first; if missing, fall back to the first
+        // required step for the selected mode.
+        try {
+          const desired = getStep();
+          if (desired && Number.isFinite(desired)) {
+            showStep(desired);
+          } else if (getPickupSelected()) {
+            showStep(2);
+          } else if (getDeliveredSelected() && !getPickupSelected()) {
+            showStep(3);
+          } else {
+            showStep(1);
+          }
+        } catch {
+          try {
+            if (getPickupSelected()) showStep(2);
+            else if (getDeliveredSelected() && !getPickupSelected()) showStep(3);
+            else showStep(1);
+          } catch {}
+        }
       }
     } catch {}
 
