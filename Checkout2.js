@@ -12,28 +12,24 @@
   // but didn't define them, which breaks the wizard and greys out steps.
   // Keep these tiny and WebForms-safe.
   // ---------------------------------------------------------------------------
+  function getSavedShipChoice() {
+    try { return sessionStorage.getItem("wl_shipChosen") || ""; } catch (e) { return ""; }
+  }
+
   function getDeliveredSelected() {
     const el = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbDelivered");
     if (el && el.checked) return true;
-    // Fallback: modern selector buttons (no radio checked yet)
-    try {
-      const btn = document.querySelector(`.modern-shipping-selector button[data-value="rbDelivered"].is-selected, .modern-shipping-selector button[data-value="rbDelivered"].selected, .modern-shipping-selector button[data-value="rbDelivered"].active`);
-      if (btn) return true;
-    } catch {}
-    return false;
+    return getSavedShipChoice() === "rbDelivered";
   }
+
   function getPickupSelected() {
     const el = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbCollectLater");
     if (el && el.checked) return true;
-    // Fallback: modern selector buttons (no radio checked yet)
-    try {
-      const btn = document.querySelector(`.modern-shipping-selector button[data-value="rbCollectLater"].is-selected, .modern-shipping-selector button[data-value="rbCollectLater"].selected, .modern-shipping-selector button[data-value="rbCollectLater"].active`);
-      if (btn) return true;
-    } catch {}
-    return false;
+    return getSavedShipChoice() === "rbCollectLater";
   }
+
   function getSaleType() {
-    return getPickupSelected() ? 'pickup' : (getDeliveredSelected() ? 'delivered' : '');
+    return getPickupSelected() ? "pickup" : (getDeliveredSelected() ? "delivered" : "");
   }
 
 // ---------------------------------------------------------------------------
@@ -373,7 +369,18 @@
 
     function updatePickupModeUI() {
       const pickup = getPickupSelected();
-      const delivered = getDeliveredSelected() && !pickup;
+      const deliveredSelected = getDeliveredSelected();
+      const delivered = deliveredSelected && !pickup;
+
+      // If the customer hasn't explicitly chosen yet, keep both paths visible
+      // (we still force them to pick before leaving Step 1).
+      if (!pickup && !deliveredSelected) {
+        setStepVisibility(2, true);   // Branch
+        setStepVisibility(3, true);   // Delivery Address
+        setDeliverySectionVisibility(true);
+        try { mountPickupPhoneInBilling(false); } catch (e) {}
+        return;
+      }
 
       // Toggle which steps are relevant for the selected fulfillment method
       setStepVisibility(2, pickup);      // Branch step
@@ -385,6 +392,9 @@
       if (pickup) {
         try { syncBillingToDelivery(); } catch (e) {}
       }
+
+      // Ensure required phone + contact fields are visible/usable in the correct place
+      try { mountPickupPhoneInBilling(pickup); } catch (e) {}
     }
 
 window.WLCheckout.updatePickupModeUI = updatePickupModeUI;
@@ -782,6 +792,10 @@ try {
     // E) Step switching + persistence
     // -------------------------------------------------------------------------
     function showStep(n) {
+      // Enforce explicit Delivered/Pickup choice before leaving Step 1
+      const hasChoice = getPickupSelected() || getDeliveredSelected();
+      if (!hasChoice && n !== 1) n = 1;
+
       // If Pickup is selected, skip Delivery Address (Step 3)
       if (getPickupSelected() && n === 3) n = 4;
       // If Delivered/Shipping is selected, hide Branch (Step 2)
@@ -797,6 +811,17 @@ try {
       });
 
       setStep(n);
+
+      // Step 1: disable Next until choice is made
+      try {
+        const step1Next = wizard && wizard.querySelector('.checkout-step[data-step="1"] .wl-next');
+        if (step1Next) {
+          const chosenNow = getPickupSelected() || getDeliveredSelected();
+          step1Next.disabled = !chosenNow;
+          step1Next.classList.toggle('wl-disabled', !chosenNow);
+        }
+      } catch (e) {}
+
       try {
         window.scrollTo({ top: wizard.offsetTop, behavior: "smooth" });
       } catch {}
@@ -1732,88 +1757,143 @@ window.WLCheckout.refreshDateUI = function () {
     })();
 
     // -------------------------------------------------------------------------
-    // M) Modern Shipping selector (Transaction is forced to ORDER)
     // -------------------------------------------------------------------------
-    if ($) {
+    // M) Modern Shipping selector (explicit choice required)
+    // -------------------------------------------------------------------------
+    if (window.jQuery) {
       $(function () {
-        // Force ORDER and hide transaction type UI
-        if ($("#ctl00_PageBody_TransactionTypeDiv").length) {
-          try {
-            $(".TransactionTypeSelector").hide();
-            $("#ctl00_PageBody_TransactionTypeDiv").hide();
-            $("#ctl00_PageBody_TransactionTypeSelector_rdbOrder").prop("checked", true);
-            $("#ctl00_PageBody_TransactionTypeSelector_rdbQuote").prop("checked", false);
-          } catch {}
+        const $saleType = $(".SaleTypeSelector");
+        if (!$saleType.length) return;
+
+        // Hide native radios UI but keep inputs in DOM for WebForms posting.
+        $saleType.addClass("d-none").attr("aria-hidden", "true");
+
+        // Hide transaction type row (Order/Quote) if present to simplify the UX.
+        try { $("#ctl00_PageBody_TransactionTypeDiv").addClass("d-none").attr("aria-hidden", "true"); } catch {}
+
+        const deliveredId = "ctl00_PageBody_SaleTypeSelector_rbDelivered";
+        const pickupId    = "ctl00_PageBody_SaleTypeSelector_rbCollectLater";
+
+        // Insert our selector right after the native selector (which is now hidden)
+        const $ui = $(`
+          <div class="modern-shipping-selector mt-2" id="wlModernShip">
+            <div class="wl-ship-title" style="font-weight:700;margin-bottom:6px;">Shipping method</div>
+            <div class="wl-ship-buttons" style="display:flex;gap:10px;">
+              <button type="button" class="epi-button wl-ship-btn" data-value="rbDelivered" aria-pressed="false" style="flex:1;">Delivered</button>
+              <button type="button" class="epi-button wl-ship-btn" data-value="rbCollectLater" aria-pressed="false" style="flex:1;">Pickup (Free)</button>
+            </div>
+            <div class="wl-ship-help" style="font-size:12px;opacity:.8;margin-top:6px;">Choose one to continue.</div>
+          </div>
+        `);
+
+        $saleType.after($ui);
+
+        function setShipChosen(val) {
+          try { sessionStorage.setItem("wl_shipChosen", val); } catch {}
+        }
+        function getShipChosen() {
+          try { return sessionStorage.getItem("wl_shipChosen") || ""; } catch { return ""; }
+        }
+        function clearShipChosen() {
+          try { sessionStorage.removeItem("wl_shipChosen"); } catch {}
         }
 
-        if ($(".SaleTypeSelector").length) {
-          $(".SaleTypeSelector").hide();
+        function hardClearRadios() {
+          const del = document.getElementById(deliveredId);
+          const pick = document.getElementById(pickupId);
+          if (del) { del.checked = false; del.removeAttribute("checked"); }
+          if (pick) { pick.checked = false; pick.removeAttribute("checked"); }
+        }
 
-          const shipHTML = `
-            <div class="modern-shipping-selector d-flex justify-content-around">
-              <button type="button" id="btnDelivered" class="btn btn-primary" data-value="rbDelivered">
-                <i class="fas fa-truck"></i> Delivered
-              </button>
-              <button type="button" id="btnPickup" class="btn btn-secondary" data-value="rbCollectLater">
-                <i class="fas fa-store"></i> Pickup (Free)
-              </button>
-            </div>`;
-          $(".epi-form-col-single-checkout:has(.SaleTypeSelector)").append(shipHTML);
+        function setButtons(val) {
+          const $btnD = $ui.find('button[data-value="rbDelivered"]');
+          const $btnP = $ui.find('button[data-value="rbCollectLater"]');
 
-          $("<style>.modern-shipping-selector .btn[disabled], .modern-shipping-selector .btn.disabled { pointer-events:auto; }</style>").appendTo(document.head);
+          $btnD.removeClass("wl-selected").attr("aria-pressed", "false").css("opacity", "1");
+          $btnP.removeClass("wl-selected").attr("aria-pressed", "false").css("opacity", "1");
 
-          function updateShippingStyles(val) {
-const delRad = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
-            const pickRad = $("#ctl00_PageBody_SaleTypeSelector_rbCollectLater");
-            const $btnDelivered = $("#btnDelivered");
-            const $btnPickup = $("#btnPickup");
+          if (val === "rbDelivered") {
+            $btnD.addClass("wl-selected").attr("aria-pressed", "true");
+            $btnP.css("opacity", "0.55");
+          } else if (val === "rbCollectLater") {
+            $btnP.addClass("wl-selected").attr("aria-pressed", "true");
+            $btnD.css("opacity", "0.55");
+          }
+        }
 
-            $btnDelivered.removeClass("disabled opacity-50").removeAttr("disabled").attr("aria-disabled", "false");
-            $btnPickup.removeClass("disabled opacity-50").removeAttr("disabled").attr("aria-disabled", "false");
+        function applyChoice(val, opts) {
+          opts = opts || {};
+          const delEl  = document.getElementById(deliveredId);
+          const pickEl = document.getElementById(pickupId);
 
-            if (val === "rbDelivered") {
-              // Reset wizard state before the UpdatePanel refresh so we don't resume on an invalid step.
-              try { setStep(1); } catch {}
-              // After async postback, land on Delivery Address step (step 3; becomes step 2 visually when Branch is hidden)
-              try { sessionStorage.setItem("wl_pendingStep", "3"); } catch {}
-              // Use native click so any WebForms AutoPostBack handler fires immediately
-              if (!delRad.is(":checked")) { try { delRad.get(0).click(); } catch { delRad.prop("checked", true).trigger("change"); } }
-              else { delRad.trigger("change"); }
-
-              $btnDelivered.addClass("btn-primary").removeClass("btn-secondary opacity-50").attr("aria-pressed", "true");
-              $btnPickup.addClass("btn-secondary opacity-50").removeClass("btn-primary").attr("aria-pressed", "false");
-              document.cookie = "pickupSelected=false; path=/";
-              document.cookie = "skipBack=false; path=/";
-            } else {
-              // Reset wizard state before the UpdatePanel refresh so we don't resume on an invalid step.
-              try { setStep(1); } catch {}
-              // After async postback, land on Branch step (step 2) for pickup.
-              try { sessionStorage.setItem("wl_pendingStep", "2"); } catch {}
-              if (!pickRad.is(":checked")) { try { pickRad.get(0).click(); } catch { pickRad.prop("checked", true).trigger("change"); } }
-              else { pickRad.trigger("change"); }
-
-              $btnPickup.addClass("btn-primary").removeClass("btn-secondary opacity-50").attr("aria-pressed", "true");
-              $btnDelivered.addClass("btn-secondary opacity-50").removeClass("btn-primary").attr("aria-pressed", "false");
-              document.cookie = "pickupSelected=true; path=/";
-              document.cookie = "skipBack=true; path=/";
-            }
-
-            setStep(1);
-            try { window.WLCheckout.updatePickupModeUI && window.WLCheckout.updatePickupModeUI(); } catch {}
+          if (val !== "rbDelivered" && val !== "rbCollectLater") {
+            clearShipChosen();
+            hardClearRadios();
+            setButtons("");
+            try { window.WLCheckout?.updatePickupModeUI?.(); } catch {}
+            try { window.WLCheckout?.showStep?.(1); } catch {}
+            return;
           }
 
-          updateShippingStyles(
-            $("#ctl00_PageBody_SaleTypeSelector_rbDelivered").is(":checked") ? "rbDelivered" : "rbCollectLater"
-          );
+          setShipChosen(val);
+          setButtons(val);
 
-          $(document).on("click", ".modern-shipping-selector button", function () {
-            updateShippingStyles($(this).data("value"));
-          });
+          if (val === "rbDelivered") {
+            if (delEl) delEl.checked = true;
+            if (pickEl) pickEl.checked = false;
+
+            document.cookie = "pickupSelected=false; path=/";
+            document.cookie = "skipBack=false; path=/";
+
+            try { window.WLCheckout?.updatePickupModeUI?.(); } catch {}
+
+            if (!opts.silent) {
+              // Go straight to Delivery Address (step 3). Branch step is hidden in Delivered mode.
+              try { window.WLCheckout?.showStep?.(3); } catch {}
+            }
+          } else {
+            // Pickup
+            if (pickEl) pickEl.checked = true;
+            if (delEl) delEl.checked = false;
+
+            document.cookie = "pickupSelected=true; path=/";
+            document.cookie = "skipBack=true; path=/";
+
+            // Ensure we restart on step 1 and then land on Branch after WebTrack refreshes.
+            try { setStep(1); } catch {}
+            try { sessionStorage.setItem("wl_pendingStep", "2"); } catch {}
+
+            if (!opts.silent && pickEl && typeof pickEl.click === "function") {
+              // Trigger native onclick (__doPostBack) so WebTrack updates its pickup-only bits.
+              try { pickEl.click(); } catch {}
+            } else {
+              try { window.WLCheckout?.updatePickupModeUI?.(); } catch {}
+              if (!opts.silent) {
+                try { window.WLCheckout?.showStep?.(2); } catch {}
+              }
+            }
+          }
+
+          try { setStep(1); } catch {}
         }
+
+        // Initial state:
+        // - If user already chose (postback), respect it.
+        // - Otherwise, force NO default selection even if WebTrack checks Delivered by default.
+        const saved = getShipChosen();
+        if (saved === "rbDelivered" || saved === "rbCollectLater") {
+          applyChoice(saved, { silent: true });
+        } else {
+          applyChoice("", { silent: true });
+        }
+
+        $(document).on("click", "#wlModernShip button", function () {
+          applyChoice($(this).data("value"));
+        });
       });
     }
 
-    // -------------------------------------------------------------------------
+// -------------------------------------------------------------------------
     // N) Hide "Special Instructions" column header if present
     // -------------------------------------------------------------------------
     try {
@@ -1849,7 +1929,19 @@ const delRad = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
     const expectedNav = consumeExpectedNav();
     const returnStep = consumeReturnStep();
     const saved = getStep();
-    const initial = returnStep || saved || 1;
+
+    let initial = 1;
+    const shipChosen = (function () { try { return sessionStorage.getItem("wl_shipChosen") || ""; } catch { return ""; } })();
+    const hasChoice = shipChosen === "rbDelivered" || shipChosen === "rbCollectLater";
+
+    // If the user hasn't explicitly chosen Delivered vs Pickup, force Step 1
+    // and do NOT restore an old step (prevents jumping straight into Billing, etc).
+    if (hasChoice) {
+      initial = returnStep || saved || 1;
+    } else {
+      try { localStorage.removeItem(STEP_KEY); } catch {}
+      initial = 1;
+    }
 
     showStep(initial);
     // Apply pickup-mode visibility immediately on load
