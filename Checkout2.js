@@ -121,6 +121,16 @@
     }
   }
 
+
+  // Pickup flow confirmation: ensure the user sees Billing summary before Date/Instructions.
+  function setBillingConfirmed(flag) {
+    try { sessionStorage.setItem("wl_billing_confirmed", flag ? "1" : "0"); } catch {}
+  }
+  function isBillingConfirmed() {
+    try { return sessionStorage.getItem("wl_billing_confirmed") === "1"; } catch { return false; }
+  }
+  function clearBillingConfirmed() { setBillingConfirmed(false); }
+
   // One-time per-session guard for auto-copy
   function markAutoCopyDone() {
     try { sessionStorage.setItem("wl_autocopy_done", "1"); } catch {}
@@ -825,6 +835,10 @@ try {
       if (getPickupSelected() && n === 3) n = 4;
       // If Delivered/Shipping is selected, hide Branch (Step 2)
       if (getDeliveredSelected() && !getPickupSelected() && n === 2) n = 3;
+
+      // Pickup flow: require Billing confirmation before allowing Step 5 (Date & Instructions).
+      // (Billing is prefilled in pickup mode, but we still want the user to confirm it.)
+      if (getPickupSelected() && n === 5 && !isBillingConfirmed()) n = 4;
       wizard
         .querySelectorAll(".checkout-step")
         .forEach((p) => p.classList.toggle("active", +p.dataset.step === n));
@@ -836,6 +850,11 @@ try {
       });
 
       setStep(n);
+      try {
+        if (window.WLCheckout && typeof window.WLCheckout.setSameAsDeliveryVisible === "function") {
+          window.WLCheckout.setSameAsDeliveryVisible(!getPickupSelected());
+        }
+      } catch {}
       try {
         window.scrollTo({ top: wizard.offsetTop, behavior: "smooth" });
       } catch {}
@@ -866,6 +885,8 @@ document.addEventListener("click", function (ev) {
   if (btn.dataset && btn.dataset.wlNext) {
     ev.preventDefault();
     const cur = (typeof getActiveStep === "function") ? getActiveStep() : 1;
+    // Mark Billing as confirmed when leaving Step 4 in pickup flow
+    if (cur === 4 && getPickupSelected()) setBillingConfirmed(true);
     if (typeof validateStep === "function" && !validateStep(cur)) return;
     if (typeof goNextFrom === "function") { goNextFrom(cur); return; }
     const to = parseInt(btn.dataset.wlNext, 10);
@@ -1209,7 +1230,7 @@ document.addEventListener("click", function (ev) {
           ${a1}${a2 ? "<br>" + a2 : ""}<br>
           ${c}${c && (st || z) ? ", " : ""}${st} ${z}<br>
           Email: ${e}<br>
-          <button type="button" id="editInvoice" class="btn btn-link">Enter new billing address</button>`;
+          <button type="button" id="editInvoice" class="btn btn-link">Edit billing address</button>`;
       }
 
       function invoiceLooksBlank() {
@@ -1324,11 +1345,29 @@ document.addEventListener("click", function (ev) {
           chkDiv.style.display = visible ? "" : "none";
 
           if (!visible) {
-            // Force off and show invoice inputs so the customer can enter billing.
+            // Pickup flow:
+            // - Never allow same-as-delivery to be checked (we maintain Delivery validity behind the scenes)
+            // - Default to a collapsed Billing summary so the customer can confirm, with an Edit option.
             if (sameCheck) sameCheck.checked = false;
             setSameAsDelivery(false);
-            sumInv.style.display = "none";
-            wrapInv.style.display = "";
+
+            // Ensure invoice has something to summarize (prefill happens elsewhere; this is just defensive)
+            try { refreshInv(); } catch {}
+
+            // Show summary if we have any billing data; otherwise show inputs.
+            const invHasAny =
+              (q("#ctl00_PageBody_InvoiceAddress_AddressLine1")?.value || "").trim() ||
+              (q("#ctl00_PageBody_InvoiceAddress_City")?.value || "").trim() ||
+              (q("#ctl00_PageBody_InvoiceAddress_Postcode")?.value || "").trim() ||
+              (q("#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox")?.value || "").trim();
+
+            if (invHasAny) {
+              wrapInv.style.display = "none";
+              sumInv.style.display = "";
+            } else {
+              sumInv.style.display = "none";
+              wrapInv.style.display = "";
+            }
           } else {
             // Restore from storage when returning to Delivered flow
             const stored = getSameAsDelivery();
@@ -1949,6 +1988,7 @@ window.WLCheckout.refreshDateUI = function () {
               try {
                 showStep(nextStep);
                 setStep(nextStep);
+      clearBillingConfirmed();
               } catch (e) {}
             }
 
