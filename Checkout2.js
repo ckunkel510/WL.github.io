@@ -131,7 +131,16 @@
   }
   function clearBillingConfirmed() { setBillingConfirmed(false); }
 
-  // One-time per-session guard for auto-copy
+  
+  // Track whether Billing step has been shown this session.
+  // Prevents WebForms/postback restores from jumping past Billing straight to Step 5.
+  function setBillingSeen(flag) {
+    try { sessionStorage.setItem("wl_billing_seen", flag ? "1" : "0"); } catch {}
+  }
+  function isBillingSeen() {
+    try { return sessionStorage.getItem("wl_billing_seen") === "1"; } catch { return false; }
+  }
+// One-time per-session guard for auto-copy
   function markAutoCopyDone() {
     try { sessionStorage.setItem("wl_autocopy_done", "1"); } catch {}
   }
@@ -829,8 +838,14 @@ try {
         // required step for the selected mode.
         try {
           const desired = getStep();
+          // If the stored step is 5 (or beyond) but Billing hasn't been shown yet in this session,
+          // force the user to see Billing confirmation instead of silently skipping it.
           if (desired && Number.isFinite(desired)) {
-            showStep(desired);
+            if (desired >= 5 && !isBillingSeen()) {
+              showStep(4);
+            } else {
+              showStep(desired);
+            }
           } else if (getPickupSelected()) {
             showStep(2);
           } else if (getDeliveredSelected() && !getPickupSelected()) {
@@ -861,7 +876,12 @@ try {
       // Pickup flow: require Billing confirmation before allowing Step 5 (Date & Instructions).
       // (Billing is prefilled in pickup mode, but we still want the user to confirm it.)
       if (getPickupSelected() && n === 5 && !isBillingConfirmed()) n = 4;
-      wizard
+            // Mark Billing as seen whenever we land on Step 4.
+      if (n === 4) { try { setBillingSeen(true); } catch {} }
+      // When showing Step 5, re-run Date/Instructions UI init in case an UpdatePanel refreshed it.
+      if (n === 5) { try { window.WLCheckout?.refreshDateUI?.(); } catch {} }
+
+wizard
         .querySelectorAll(".checkout-step")
         .forEach((p) => p.classList.toggle("active", +p.dataset.step === n));
 
