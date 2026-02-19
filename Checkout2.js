@@ -704,12 +704,42 @@ function validateZip(zip) {
 // -------------------------------------------------------------------------
     // D) Create step panes + nav buttons
     // -------------------------------------------------------------------------
-    steps.forEach(function (step, i) {
+    
+    // --------------------------------------------------
+    // Woodson-style step icons (avoids confusion when steps are conditionally hidden)
+    // --------------------------------------------------
+    function wlStepIconSvg(stepNum) {
+      // Inline SVGs use currentColor so they automatically match active/inactive styles.
+      switch (stepNum) {
+        case 1: // Truck (Ship/Pickup)
+          return '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M3 6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2h2.7a2 2 0 0 1 1.6.8l1.7 2.2a2 2 0 0 1 .4 1.2V18a2 2 0 0 1-2 2h-1.1a2.5 2.5 0 0 1-4.8 0H10.9a2.5 2.5 0 0 1-4.8 0H5a2 2 0 0 1-2-2V6Zm2 0v12h1.1a2.5 2.5 0 0 1 4.8 0H15V6H5Zm12 6v6h.4a2.5 2.5 0 0 1 4.8 0H22v-2.4L20.5 12H17Zm-8 7.5a1 1 0 1 0 0 .01V19.5Zm11 0a1 1 0 1 0 0 .01V19.5Z"/></svg>';
+        case 2: // Wrench (Branch)
+          return '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M22 6.6a6.5 6.5 0 0 1-7.9 6.3l-5.8 5.8a2 2 0 0 1-2.8 0l-.7-.7a2 2 0 0 1 0-2.8l5.8-5.8A6.5 6.5 0 0 1 17.4 2l-2.7 2.7 1.9 1.9L19.4 4A6.5 6.5 0 0 1 22 6.6ZM6.1 16.3l.7.7 5.3-5.3-.7-.7-5.3 5.3Z"/></svg>';
+        case 3: // Map pin (Delivery address)
+          return '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a7 7 0 0 1 7 7c0 5.2-7 13-7 13S5 14.2 5 9a7 7 0 0 1 7-7Zm0 9.5A2.5 2.5 0 1 0 12 6.5a2.5 2.5 0 0 0 0 5Z"/></svg>';
+        case 4: // Document (Billing)
+          return '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 2h7l5 5v15a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm7 1.5V8h4.5L14 3.5ZM8 11h8v2H8v-2Zm0 4h8v2H8v-2Zm0-8h5v2H8V7Z"/></svg>';
+        case 5: // Calendar / checklist (Date & instructions)
+        default:
+          return '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M7 2h2v2h6V2h2v2h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2V2Zm14 8H3v10h18V10ZM5 6v2h14V6H5Zm2 7h2v2H7v-2Zm4 0h2v2h-2v-2Zm4 0h2v2h-2v-2Z"/></svg>';
+      }
+    }
+
+    function decorateStepLi(li, stepNum, title) {
+      if (!li) return;
+      li.classList.add("wl-step-li");
+      li.setAttribute("title", title || "");
+      li.setAttribute("aria-label", title || "");
+      li.innerHTML = '<span class="wl-step-icon" aria-hidden="true">' + wlStepIconSvg(stepNum) + '</span>' +
+                     '<span class="wl-step-label">' + (title || ("Step " + stepNum)) + '</span>';
+    }
+
+steps.forEach(function (step, i) {
       const num = i + 1;
 
       const li = document.createElement("li");
       li.dataset.step = String(num);
-      li.textContent = step.title;
+      decorateStepLi(li, num, step.title);
       li.addEventListener("click", () => showStep(num));
       nav.appendChild(li);
 
@@ -2057,7 +2087,32 @@ window.WLCheckout.refreshDateUI = function () {
             </div>`;
           $(".epi-form-col-single-checkout:has(.SaleTypeSelector)").append(shipHTML);
 
-          $("<style>.modern-shipping-selector .btn[disabled], .modern-shipping-selector .btn.disabled { pointer-events:auto; }.modern-shipping-selector button.wl-selected{background-color:#6b0016 !important;color:#fff !important;border:none !important;}.modern-shipping-selector button.wl-selected i{color:#fff !important;}.modern-shipping-selector button.wl-unselected{background-color:#f5f5f5 !important;color:#000 !important;border:1px solid #ccc !important;}.modern-shipping-selector button.wl-unselected i{color:#000 !important;}</style>").appendTo(document.head);
+          (function(){
+            const wlCss = `
+.modern-shipping-selector .btn[disabled], .modern-shipping-selector .btn.disabled { pointer-events:auto; }
+.modern-shipping-selector button.wl-selected{background-color:#6b0016 !important;color:#fff !important;border:none !important;}
+.modern-shipping-selector button.wl-selected i{color:#fff !important;}
+.modern-shipping-selector button.wl-unselected{background-color:#f5f5f5 !important;color:#000 !important;border:1px solid #ccc !important;}
+.modern-shipping-selector button.wl-unselected i{color:#000 !important;}
+.wl-step-li{display:flex;align-items:center;gap:10px;}
+.wl-step-icon{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;}
+.wl-step-icon svg{width:20px;height:20px;display:block;}
+/* keep labels readable; numbers are replaced by icons */
+.checkout-wizard ul li{display:flex;align-items:center;}
+.checkout-wizard ul li .wl-step-label{line-height:1.1;}
+/* When active/completed, keep icon color in sync with text */
+.checkout-wizard ul li.active .wl-step-icon,
+.checkout-wizard ul li.completed .wl-step-icon{color:inherit;}
+`;
+            try {
+              if (!document.getElementById("wlCheckoutCss")) {
+                const st = document.createElement("style");
+                st.id = "wlCheckoutCss";
+                st.textContent = wlCss;
+                document.head.appendChild(st);
+              }
+            } catch {}
+          })();
 
           function updateShippingStyles(val, opts) {
             opts = opts || {};
