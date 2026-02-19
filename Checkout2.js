@@ -40,7 +40,6 @@
   // 0) Storage helpers (TTL for step; sessionStorage for returnStep)
   // ---------------------------------------------------------------------------
   const STEP_KEY = "wl_currentStep";
-  const SHIP_PB_KEY = "wl_shipPostbackDesiredStep";
   const SAME_KEY = "wl_sameAsDelivery";
   const TTL_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -78,20 +77,6 @@
     const v = getWithExpiry(STEP_KEY);
     return v != null ? parseInt(v, 10) : null;
   }
-
-  // If the ship/pickup toggle triggered a WebForms postback, restore the desired step on reload.
-  // This prevents the common "postback sends you back to Step 1" behavior.
-  (function recoverShipStepEarly(){
-    try {
-      const desiredRaw = sessionStorage.getItem(SHIP_PB_KEY);
-      if (!desiredRaw) return;
-      const desired = parseInt(desiredRaw, 10);
-      if (!Number.isFinite(desired)) return;
-      // Persist as the current step so the wizard initializes on the right step.
-      setStep(desired);
-    } catch {}
-  })();
-
 
   function setSameAsDelivery(val) {
     try {
@@ -1073,7 +1058,7 @@ const navDiv = document.createElement("div");
           // which makes Step 5 look "completed" until the user clicks the tab.
           try {
             const desired = getStep();
-            if (desired && Number.isFinite(desired)) { showStep(desired); try { sessionStorage.removeItem(SHIP_PB_KEY); } catch {} }
+            if (desired && Number.isFinite(desired)) showStep(desired);
           } catch {}
         });
       } catch {}
@@ -1125,8 +1110,6 @@ const navDiv = document.createElement("div");
         }
       }
     } catch {}
-    // Clear ship/pickup postback desired step once we have initialized the wizard
-    try { sessionStorage.removeItem(SHIP_PB_KEY); } catch {}
 
 
     // -------------------------------------------------------------------------
@@ -1255,13 +1238,6 @@ document.addEventListener("click", function (ev) {
     }
 
     function goNextFrom(stepNum) {
-      // Step 1 is special: decide the correct next step directly from Ship/Pickup selection.
-      if (stepNum === 1) {
-        const next = getPickupSelected() ? 2 : 3; // Pickup -> Branch, Delivered -> Delivery Address
-        showStep(next);
-        return;
-      }
-
       let next = stepNum + 1;
       // Skip Branch step if delivered/shipping
       if (getDeliveredSelected() && !getPickupSelected() && next === 2) next = 3;
@@ -2427,7 +2403,7 @@ window.WLCheckout.refreshDateUI = function () {
 
               // Let the postback-return logic know where to land if the page refreshes.
               try {
-                try { sessionStorage.removeItem("wl_pendingStep"); sessionStorage.removeItem(SHIP_PB_KEY); } catch {}
+                sessionStorage.setItem("wl_pendingStep", String(nextStep));
                 setExpectedNav();
               } catch (e) {}
 
@@ -2440,11 +2416,11 @@ window.WLCheckout.refreshDateUI = function () {
                 }
               } catch (e) {}
 
-              // Do NOT auto-advance on ship/pickup change.
-              // WebForms postbacks can bounce back to Step 1; letting the user click Next avoids confusion.
+              // Advance immediately so the user lands on the right step right away.
               try {
-                setStep(1);
-                clearBillingConfirmed();
+                showStep(nextStep);
+                setStep(nextStep);
+      clearBillingConfirmed();
               } catch (e) {}
             }
 
