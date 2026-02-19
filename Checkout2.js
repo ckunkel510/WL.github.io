@@ -295,6 +295,143 @@
         const opt0 = field.options && field.options[0] ? norm(field.options[0].value) : "";
         if (!opt0 || opt0 === "0") return false;
       }
+
+    // --------------------------------------------------
+    // Branch picker UI (Pickup only): cards + "selected" summary
+    // --------------------------------------------------
+    function wlCleanBranchText(txt) {
+      const t = norm(txt);
+      if (!t) return "";
+      // Remove "PO BOX ..." chunks (common in WebTrack address strings)
+      return t
+        .replace(/,\s*PO BOX[^,]*,/gi, ",")
+        .replace(/,\s*PO BOX[^,]*$/gi, "")
+        .replace(/\s{2,}/g, " ")
+        .replace(/\s+,/g, ",")
+        .trim();
+    }
+
+    function wlParseBranchOption(label) {
+      const raw = wlCleanBranchText(label);
+      // Expected format: "Caldwell - 702 W Buck St, Caldwell, Texas, 77836, United States"
+      const parts = raw.split(" - ");
+      if (parts.length >= 2) {
+        return { name: parts[0].trim(), address: parts.slice(1).join(" - ").trim() };
+      }
+      return { name: raw, address: "" };
+    }
+
+    function wlTriggerBranchPostback(selectEl) {
+      if (!selectEl) return;
+      try {
+        // fire native onchange (inline attribute should be invoked on real change event)
+        const ev = new Event("change", { bubbles: true });
+        selectEl.dispatchEvent(ev);
+      } catch {}
+      // Fallback: if WebForms postback isn't wired via event listeners, call __doPostBack directly.
+      try {
+        if (typeof __doPostBack === "function") {
+          setTimeout(function () {
+            __doPostBack("ctl00$PageBody$BranchDropDownList", "");
+          }, 0);
+        }
+      } catch {}
+    }
+
+    function enhanceBranchPicker() {
+      // Only enhance for Pickup (Branch step is pickup-only, but be explicit)
+      if (!getPickupSelected()) return;
+
+      const sel = document.getElementById("ctl00_PageBody_BranchDropDownList") || getBranchField();
+      if (!sel || sel.tagName !== "SELECT") return;
+
+      // Ensure label copy is pickup-specific
+      try {
+        const label = sel.closest(".epi-form-group-checkout")?.querySelector("label");
+        if (label) label.textContent = "Select pickup branch:";
+      } catch {}
+
+      // Create container once
+      const host = sel.closest(".epi-form-group-checkout") || sel.parentElement;
+      if (!host) return;
+
+      let wrap = host.querySelector("#wlBranchCardsWrap");
+      if (!wrap) {
+        wrap = document.createElement("div");
+        wrap.id = "wlBranchCardsWrap";
+        wrap.className = "wl-branch-wrap";
+        // Insert after the select (keep select in DOM for server validation/postback)
+        const overflowWrap = sel.closest(".overflow-hidden") || sel.parentElement;
+        (overflowWrap || host).appendChild(wrap);
+      }
+
+      // Hide the dropdown but keep it functional for server controls
+      try { sel.classList.add("wl-hidden-select"); } catch {}
+      try { sel.style.position = "absolute"; sel.style.left = "-9999px"; sel.style.width = "1px"; sel.style.height = "1px"; sel.style.opacity = "0"; } catch {}
+
+      // Build data
+      const opts = Array.from(sel.options || []).map(function (o) {
+        const parsed = wlParseBranchOption(o.textContent || o.label || "");
+        return {
+          value: norm(o.value),
+          selected: !!o.selected,
+          name: parsed.name,
+          address: parsed.address,
+          raw: wlCleanBranchText(o.textContent || o.label || "")
+        };
+      });
+
+      if (!opts.length) return;
+
+      const current = opts.find(o => o.selected) || opts[0];
+
+      // Render cards
+      wrap.innerHTML = `
+        <div class="wl-branch-selected">
+          <div class="wl-branch-selected-title">Pickup branch</div>
+          <div class="wl-branch-card wl-branch-card-selected" data-value="${current.value}">
+            <div class="wl-branch-name">${current.name}</div>
+            <div class="wl-branch-addr">${current.address}</div>
+            <div class="wl-branch-cta">Selected</div>
+          </div>
+        </div>
+        <div class="wl-branch-list-title">Other stores</div>
+        <div class="wl-branch-grid">
+          ${opts.filter(o => o.value !== current.value).map(o => `
+            <button type="button" class="wl-branch-card wl-branch-card-option" data-value="${o.value}">
+              <div class="wl-branch-name">${o.name}</div>
+              <div class="wl-branch-addr">${o.address}</div>
+              <div class="wl-branch-cta">Choose this store</div>
+            </button>
+          `).join("")}
+        </div>
+      `;
+
+      // Click binding
+      wrap.querySelectorAll("[data-value]").forEach(function (el) {
+        el.addEventListener("click", function () {
+          const v = (this.getAttribute("data-value") || "").trim();
+          if (!v) return;
+
+          // update select
+          try { sel.value = v; } catch {}
+          // mark selected option
+          try {
+            Array.from(sel.options).forEach(o => { o.selected = (norm(o.value) === v); });
+          } catch {}
+
+          // Persist
+          try { localStorage.setItem("wl_last_branch", v); } catch {}
+
+          // Rerender UI immediately
+          try { enhanceBranchPicker(); } catch {}
+
+          // Trigger server postback
+          wlTriggerBranchPostback(sel);
+        }, { passive: true });
+      });
+    }
+
       return true;
     }
 
@@ -416,7 +553,10 @@
       if (pickup) {
         try { ensureDeliveryRequiredForPickup(); } catch { try { syncBillingToDelivery({force:false}); } catch {} }
       }
-    }
+    
+      // Enhance Branch selector UI when Pickup is selected
+      try { enhanceBranchPicker(); } catch {}
+}
 
     window.WLCheckout = window.WLCheckout || {};
     window.WLCheckout.updatePickupModeUI = updatePickupModeUI;
@@ -838,6 +978,8 @@ try {
     if (Number.isFinite(n)) showStep(n);
   }
 } catch {}
+
+          try { enhanceBranchPicker(); } catch {}
 
           try { updatePickupModeUI(); } catch {}
     // If a full postback happened (not UpdatePanel), consume pending step here as well.
@@ -2118,6 +2260,22 @@ window.WLCheckout.refreshDateUI = function () {
 .checkout-wizard ul li.active .wl-step-icon{color:#fff !important;}
 .checkout-wizard ul li.completed{opacity:.75;}
 .checkout-wizard ul li.completed:hover{opacity:1;}
+
+
+/* Branch cards (Pickup) */
+.wl-hidden-select{position:absolute !important;left:-9999px !important;width:1px !important;height:1px !important;opacity:0 !important;}
+.wl-branch-wrap{margin-top:12px;}
+.wl-branch-selected-title,.wl-branch-list-title{font-weight:700;margin:10px 0 8px 0;}
+.wl-branch-card{width:100%;text-align:left;border-radius:14px;padding:14px 14px;border:1px solid #ddd;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+.wl-branch-card + .wl-branch-card{margin-top:10px;}
+.wl-branch-name{font-weight:800;font-size:16px;margin-bottom:4px;}
+.wl-branch-addr{font-size:13px;opacity:.85;line-height:1.25;}
+.wl-branch-cta{margin-top:10px;font-weight:700;font-size:12px;opacity:.9;}
+.wl-branch-card-option{cursor:pointer;}
+.wl-branch-card-option:hover{border-color:#6b0016;box-shadow:0 2px 8px rgba(107,0,22,.18);}
+.wl-branch-card-selected{border-color:#6b0016;}
+.wl-branch-grid{display:grid;grid-template-columns:1fr;gap:10px;}
+@media (min-width: 900px){.wl-branch-grid{grid-template-columns:1fr 1fr;}}
 `;
             try {
               if (!document.getElementById("wlCheckoutCss")) {
