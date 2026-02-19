@@ -1920,13 +1920,15 @@ window.WLCheckout.refreshDateUI = function () {
           sessionStorage.removeItem("wl_returnStep");
           sessionStorage.removeItem("wl_expect_nav");
           sessionStorage.removeItem("wl_autocopy_done");
+          sessionStorage.removeItem("wl_pendingStep");
+          sessionStorage.removeItem("wl_lastMode");
+          sessionStorage.removeItem("wl_lastStep");
         } catch {}
       }
 
       if (placeOrderBtn) placeOrderBtn.addEventListener("click", resetWizardState);
       if (backToCartBtn) backToCartBtn.addEventListener("click", resetWizardState);
     })();
-
     // -------------------------------------------------------------------------
     // P) Restore step on load
     // -------------------------------------------------------------------------
@@ -1934,22 +1936,40 @@ window.WLCheckout.refreshDateUI = function () {
     const returnStep = consumeReturnStep();
     const saved = getStep();
 
-    // Always start on Step 1 (Delivery / Pickup selection) when Checkout loads.
-    // If this load is a postback return, the pending-step / validation logic below will jump as needed.
-    const initial = 1;
+    // Default: always start on Step 1 (Delivery / Pickup selection) for a fresh checkout load.
+    // Exception: if a full postback happens mid-flow (ex: clicking Pickup triggers a postback),
+    // resume to the pending step so users don’t see a “bounce” back to Step 1.
+    let initial = 1;
+    try {
+      const pending = sessionStorage.getItem("wl_pendingStep");
+      if (pending && /^\d+$/.test(pending)) {
+        const n = parseInt(pending, 10);
+        if (n >= 1 && n <= STEPS.length) initial = n;
+      }
+    } catch {}
+
+    // Consume pending step on full loads once applied.
+    if (initial !== 1) {
+      try { sessionStorage.removeItem("wl_pendingStep"); } catch {}
+    }
+
     setStep(initial);
     showStep(initial);
-    // Apply pickup-mode visibility immediately on load
+
+    // Apply pickup-mode visibility immediately on load (reads pickupSelected cookie)
     try { updatePickupModeUI(); } catch {}
 
+    // If this load was triggered by a Next/Continue postback, try to jump to the step
+    // that WebTrack validation is reporting (or fall back to the intended step).
     if (expectedNav) {
+      const fallback = returnStep || saved || initial || 2;
       const tryJump = () => window.WLCheckout?.detectAndJumpToValidation?.() === true;
       if (!tryJump()) {
         setTimeout(tryJump, 0);
         setTimeout(tryJump, 300);
         setTimeout(tryJump, 1200);
         setTimeout(() => {
-          if (!tryJump()) showStep(returnStep || saved || 2);
+          if (!tryJump()) showStep(fallback);
         }, 1600);
       }
     }
