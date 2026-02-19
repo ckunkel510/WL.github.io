@@ -474,7 +474,31 @@
       if (box) box.remove();
     }
 
-    function validateZip(zip) {
+    
+    // Hide legacy/native checkout fields we do not want customers to see (they can re-appear after UpdatePanel postbacks)
+    function hideLegacyCheckoutFields() {
+      try {
+        const txnDiv = document.getElementById("ctl00_PageBody_TransactionTypeDiv");
+        if (txnDiv) {
+          const row = txnDiv.closest(".row") || txnDiv.parentElement;
+          if (row) row.style.display = "none";
+          txnDiv.style.display = "none";
+        }
+
+        // "Date required" native RadDatePicker block (often hidden by WebTrack but can still take space/flash)
+        const dtWrap = document.getElementById("ctl00_PageBody_dtRequired_DatePicker_wrapper");
+        if (dtWrap) {
+          const row = dtWrap.closest(".row") || dtWrap.parentElement;
+          if (row) row.style.display = "none";
+          dtWrap.style.display = "none";
+        }
+
+        const dtVal = document.getElementById("ctl00_PageBody_dtRequired_DateRequiredValidator");
+        if (dtVal) dtVal.style.display = "none";
+      } catch {}
+    }
+
+function validateZip(zip) {
       const z = norm(zip).replace(/\s/g, "");
       return /^\d{5}(-\d{4})?$/.test(z);
     }
@@ -774,6 +798,7 @@
         prm.add_endRequest(function () {
           // Re-enable our injected buttons and re-apply mode visibility
           reEnableWizardNav();
+          hideLegacyCheckoutFields();
 // If a ship/pickup selection triggered a postback, advance to the next logical step.
 try {
   const ps = sessionStorage.getItem("wl_pendingStep");
@@ -825,6 +850,7 @@ try {
     // Also run once in case something disabled buttons during initial render
     reEnableWizardNav();
 
+    hideLegacyCheckoutFields();
     // Consume any pending step after a FULL postback (UpdatePanel hooks won't fire).
     try {
       const ps = sessionStorage.getItem("wl_pendingStep");
