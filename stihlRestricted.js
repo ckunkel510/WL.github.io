@@ -1,16 +1,12 @@
 
 /**
- * WL — Disable online purchase for specific ProductIDs
- * Works on:
- *  - Products.aspx (card sets)
- *  - ProductDetail.aspx (detail page)
+ * WL — Block online purchase UI for specific ProductIDs
+ * Updates from previous version:
+ *  - Hides qty inputs entirely (Products.aspx + ProductDetail.aspx)
+ *  - Replaces Add button area with a notice
+ *  - On ProductDetail.aspx: hides the *Delivery* method box (leaves Pickup visible)
  *
- * What it does:
- *  - Disables qty inputs and Add-to-Cart buttons
- *  - Prevents postbacks/clicks
- *  - Shows “This item is not eligible for online purchase.”
- *
- * Add/Remove ProductIDs below.
+ * ✅ EDIT BLOCKED_PIDS
  */
 (function () {
   "use strict";
@@ -23,12 +19,16 @@
 
   var MSG = "This item is not eligible for online purchase.";
 
-  // ---------- helpers ----------
+  // ---------------- helpers ----------------
   function getFirstPidFromUrl(url) {
     if (!url) return null;
-    // specifically the FIRST pid= in the string (in case returnUrl includes pid= later)
-    var m = String(url).match(/[?&]pid=(\d+)/i);
+    var m = String(url).match(/[?&]pid=(\d+)/i); // first pid=
     return m ? m[1] : null;
+  }
+
+  function hideEl(el) {
+    if (!el) return;
+    el.style.display = "none";
   }
 
   function preventLink(el) {
@@ -40,62 +40,43 @@
     el.style.cursor = "not-allowed";
   }
 
-  function disableInput(el) {
+  function insertNoticeNear(el, mode) {
     if (!el) return;
-    el.disabled = true;
-    el.readOnly = true;
-    el.setAttribute("aria-disabled", "true");
-    el.style.pointerEvents = "none";
-    el.style.opacity = "0.6";
-    el.style.cursor = "not-allowed";
-  }
-
-  function disableButtonsInContainer(container) {
-    if (!container) return;
-    var btns = container.querySelectorAll("button, input[type='button'], input[type='submit']");
-    btns.forEach(function (b) {
-      b.disabled = true;
-      b.setAttribute("aria-disabled", "true");
-      b.style.pointerEvents = "none";
-      b.style.opacity = "0.6";
-      b.style.cursor = "not-allowed";
-    });
-  }
-
-  function insertNotice(targetEl, where) {
-    if (!targetEl) return;
-    // avoid duplicate notices
-    var existing = targetEl.parentElement && targetEl.parentElement.querySelector(".wl-not-eligible");
-    if (existing) return;
+    var parent = el.parentElement || document.body;
+    if (parent.querySelector(".wl-not-eligible")) return;
 
     var note = document.createElement("div");
     note.className = "wl-not-eligible";
     note.textContent = MSG;
     note.style.cssText = [
       "margin-top:8px",
-      "padding:8px 10px",
+      "padding:10px 12px",
       "border:1px solid #e1e1e1",
       "border-left:4px solid #6b0016",
-      "border-radius:6px",
+      "border-radius:8px",
       "background:#fff7f8",
       "color:#6b0016",
-      "font-weight:700",
+      "font-weight:800",
       "text-align:center",
       "font-size:0.95em",
       "line-height:1.2"
     ].join(";");
 
-    if (where === "replace") {
-      targetEl.replaceWith(note);
-    } else if (where === "after") {
-      targetEl.insertAdjacentElement("afterend", note);
-    } else {
-      // default: before
-      targetEl.insertAdjacentElement("beforebegin", note);
-    }
+    if (mode === "replace") el.replaceWith(note);
+    else if (mode === "after") el.insertAdjacentElement("afterend", note);
+    else el.insertAdjacentElement("beforebegin", note);
   }
 
-  // ---------- ProductDetail.aspx ----------
+  function closestQtyGroupFromInput(input) {
+    // On ProductDetail you have +/- buttons wrapped with the input in a small inline-flex div.
+    // We'll hide the tightest wrapper that looks like the control group.
+    if (!input) return null;
+    // Prefer the inline-flex wrapper that contains both buttons + input
+    var inline = input.closest("div");
+    return inline || input.parentElement;
+  }
+
+  // ---------------- ProductDetail.aspx ----------------
   function handleProductDetail() {
     var path = (location.pathname || "").toLowerCase();
     if (path.indexOf("productdetail.aspx") === -1) return;
@@ -103,81 +84,81 @@
     var pid = getFirstPidFromUrl(location.href);
     if (!pid || BLOCKED_PIDS.indexOf(String(pid)) === -1) return;
 
-    // Add button (your example ID)
-    var addBtn = document.getElementById("ctl00_PageBody_productDetail_ctl00_AddProductButton");
-    if (addBtn) {
-      preventLink(addBtn);
-      // Replace the add button with a notice (cleanest)
-      insertNotice(addBtn, "replace");
-    }
-
-    // Qty input (try exact id pattern first, then fallback)
+    // 1) Hide qty group entirely (input + +/-)
     var qtyInput =
       document.getElementById("ctl00_PageBody_productDetail_ctl00_qty_" + pid) ||
-      document.querySelector("input.productQtyInput") ||
-      null;
+      document.querySelector("input.productQtyInput");
 
     if (qtyInput) {
-      disableInput(qtyInput);
-      // disable +/- buttons near the qty input
-      var wrap = qtyInput.closest("div");
-      if (wrap) disableButtonsInContainer(wrap);
-      // if add button wasn’t found, show message near qty
-      if (!document.querySelector(".wl-not-eligible")) insertNotice(qtyInput, "after");
+      var qtyGroup = closestQtyGroupFromInput(qtyInput);
+      hideEl(qtyGroup);
     }
 
-    // If there are any other “Add” links on the detail page (safety net)
-    document.querySelectorAll("a[id*='AddProductButton'], a[title*='Add to cart']").forEach(function (a) {
-      preventLink(a);
+    // 2) Replace Add-to-Cart button with notice
+    var addBtn = document.getElementById("ctl00_PageBody_productDetail_ctl00_AddProductButton")
+      || document.querySelector("a[id*='AddProductButton'][href*='WebForm_DoPostBackWithOptions']");
+    if (addBtn) {
+      preventLink(addBtn);
+      insertNoticeNear(addBtn, "replace");
+    } else if (qtyInput && !document.querySelector(".wl-not-eligible")) {
+      insertNoticeNear(qtyInput, "after");
+    }
+
+    // 3) Hide the Delivery method box, keep Pickup
+    // Target: the method-box with <strong>Delivery</strong>
+    document.querySelectorAll(".method-box").forEach(function (box) {
+      var strong = box.querySelector("strong");
+      var label = strong ? strong.textContent.trim().toLowerCase() : "";
+      if (label === "delivery") hideEl(box);
     });
+
+    // Also, if the container ends up with only Pickup, we can tighten spacing a bit (optional)
+    var methodRow = document.querySelector("div[style*='margin-bottom: 10px'][style*='gap: 10px']");
+    if (methodRow) methodRow.style.justifyContent = "flex-start";
   }
 
-  // ---------- Products.aspx (search cards) ----------
+  // ---------------- Products.aspx ----------------
   function handleProductsList() {
     var path = (location.pathname || "").toLowerCase();
     if (path.indexOf("products.aspx") === -1) return;
 
-    // Each card is a fieldset.CardSet
     var cards = document.querySelectorAll("fieldset.CardSet");
     if (!cards.length) return;
 
     cards.forEach(function (card) {
-      // First ProductDetail link in the card is the one we trust
+      // trust the first ProductDetail link in the card
       var link = card.querySelector("a[href*='ProductDetail.aspx?pid='], a[href*='ProductDetail.aspx%3Fpid%3D']");
       if (!link) return;
 
       var pid = getFirstPidFromUrl(link.getAttribute("href"));
       if (!pid || BLOCKED_PIDS.indexOf(String(pid)) === -1) return;
 
-      // Qty input inside card
-      var qty = card.querySelector("input[id*='ProductQuantity'], input[name*='ProductQuantity']");
-      if (qty) disableInput(qty);
+      // 1) Hide qty row (more reliable than just the input)
+      var qtyRow = card.querySelector("#QuantityRow") || card.querySelector("tr[id*='QuantityRow']");
+      if (qtyRow) hideEl(qtyRow);
+      else {
+        // fallback: hide the input wrapper if row not found
+        var qtyInput = card.querySelector("input[id*='ProductQuantity'], input[name*='ProductQuantity']");
+        if (qtyInput) hideEl(qtyInput.closest("td") || qtyInput);
+      }
 
-      // Add button inside card (anchor that triggers postback)
+      // 2) Replace Add button with notice
       var add = card.querySelector("a[id*='AddProductButton']");
       if (add) {
         preventLink(add);
-        // Replace with notice
-        insertNotice(add, "replace");
+        insertNoticeNear(add, "replace");
       } else {
-        // fallback: put notice near bottom of card
+        // fallback: put notice at bottom of card controls
         var bottom = card.querySelector(".mx-2") || card;
         if (bottom && !bottom.querySelector(".wl-not-eligible")) {
           var dummy = document.createElement("div");
           bottom.appendChild(dummy);
-          insertNotice(dummy, "replace");
+          insertNoticeNear(dummy, "replace");
         }
       }
-
-      // Also disable Quicklist / Stock buttons if you want (optional)
-      // var quick = card.querySelector("a[id*='QuickListLink']");
-      // if (quick) preventLink(quick);
-      // var stock = card.querySelector("a[id*='btnShowStock']");
-      // if (stock) preventLink(stock);
     });
   }
 
-  // Run after DOM is ready (no jQuery required)
   function boot() {
     try { handleProductDetail(); } catch (e) {}
     try { handleProductsList(); } catch (e) {}
@@ -189,4 +170,3 @@
     boot();
   }
 })();
-
