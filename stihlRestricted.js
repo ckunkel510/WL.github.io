@@ -11,11 +11,39 @@
 (function () {
   "use strict";
 
-  // ✅ EDIT THIS LIST
-  var BLOCKED_PIDS = [
-    3158
-    // 1234, 5678, ...
-  ].map(String);
+  // ===== Shared blocklist (GitHub JSON) =====
+  // TODO: Set this to your GitHub RAW URL for blocked-products.json
+  // Example:
+  // https://raw.githubusercontent.com/<USER>/<REPO>/<BRANCH>/path/blocked-products.json
+  var WL_BLOCKLIST_URL = "https://ckunkel510.github.io/WL.github.io/blocked-products.json";
+
+  async function wlLoadBlocklist() {
+    var fallback = {
+      blockedProductIds: [3158], // fallback so behavior stays active if JSON can't load
+      message: "This item is not eligible for online purchase."
+    };
+
+    try {
+      if (!WL_BLOCKLIST_URL || WL_BLOCKLIST_URL.indexOf("REPLACE_WITH_") === 0) return fallback;
+
+      var url = WL_BLOCKLIST_URL + (WL_BLOCKLIST_URL.indexOf("?") >= 0 ? "&" : "?") + "v=" + Date.now();
+      var res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) return fallback;
+
+      var json = await res.json();
+      var ids = (json.blockedProductIds || json.blockedProductIDs || json.blockedProductIdList || []).map(String);
+      return {
+        blockedProductIds: ids,
+        message: (json.message || fallback.message)
+      };
+    } catch (e) {
+      return fallback;
+    }
+  }
+
+
+  // Blocklist is loaded from GitHub JSON (see WL_BLOCKLIST_URL above)
+  var BLOCKED_PIDS = [];
 
   var MSG = "This item is not eligible for online purchase.";
 
@@ -159,8 +187,16 @@
     });
   }
 
-  function boot() {
+  async function boot() {
+    try {
+      var cfg = await wlLoadBlocklist();
+      BLOCKED_PIDS = (cfg.blockedProductIds || []).map(String);
+      MSG = cfg.message || MSG;
+    } catch (e) {}
+
     try { handleProductDetail(); } catch (e) {}
+    try { handleProductsList(); } catch (e) {}
+  } catch (e) {}
     try { handleProductsList(); } catch (e) {}
   }
 
