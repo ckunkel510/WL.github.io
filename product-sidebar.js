@@ -1,22 +1,46 @@
-$(document).ready(function () {
+$(document).ready(async function () {
   if ($("#product-page").length) return;
 
   const $insertionPoint = $(".bodyFlexItem.d-flex").first();
   if (!$insertionPoint.length) return;
 
+  
   // =========================
-  // Online-purchase blocking
+  // Online-purchase blocking (GitHub JSON)
   // =========================
-  // ✅ Add ProductIDs that are NOT eligible for online purchase
-  const BLOCKED_PIDS = [3158
-    // 3158,
-  ].map(String);
+  // TODO: Set this to your GitHub RAW URL for blocked-products.json
+  // Example:
+  // https://raw.githubusercontent.com/<USER>/<REPO>/<BRANCH>/path/blocked-products.json
+  const WL_BLOCKLIST_URL = "https://ckunkel510.github.io/WL.github.io/blocked-products.json";
+
+  async function wlLoadBlocklist() {
+    const fallback = {
+      blockedProductIds: [3158], // fallback so behavior stays active if JSON can't load
+      message: "This item is not eligible for online purchase."
+    };
+
+    try {
+      if (!WL_BLOCKLIST_URL || WL_BLOCKLIST_URL.startsWith("REPLACE_WITH_")) return fallback;
+
+      const url = WL_BLOCKLIST_URL + (WL_BLOCKLIST_URL.includes("?") ? "&" : "?") + "v=" + Date.now();
+      const res = await fetch(url, { cache: "no-store" });
+      if (!res.ok) return fallback;
+
+      const json = await res.json();
+      const ids = (json.blockedProductIds || json.blockedProductIDs || json.blockedProductIdList || []).map(String);
+      return { blockedProductIds: ids, message: (json.message || fallback.message) };
+    } catch (e) {
+      return fallback;
+    }
+  }
+
+  const cfg = await wlLoadBlocklist();
+  const BLOCKED_PIDS = (cfg.blockedProductIds || []).map(String);
+  const NOT_ELIGIBLE_MSG = cfg.message || "This item is not eligible for online purchase.";
 
   // Current product id (first pid= in the URL)
   const currentPID = new URLSearchParams(window.location.search).get("pid");
   const isBlockedProduct = currentPID && BLOCKED_PIDS.includes(String(currentPID));
-
-  const NOT_ELIGIBLE_MSG = "This item is not eligible for online purchase.";
 
   // Layout wrappers
   const $pageWrapper = $("<div>", { id: "product-page" }).css({
