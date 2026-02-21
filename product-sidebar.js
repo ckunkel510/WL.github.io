@@ -8,7 +8,7 @@ $(document).ready(function () {
   // Online-purchase blocking
   // =========================
   // ✅ Add ProductIDs that are NOT eligible for online purchase
-  const BLOCKED_PIDS = [
+  const BLOCKED_PIDS = [3158
     // 3158,
   ].map(String);
 
