@@ -1,4 +1,4 @@
-<script>
+
 /**
  * WL — Disable online purchase for specific ProductIDs
  * Works on:
@@ -189,4 +189,4 @@
     boot();
   }
 })();
-</script>
+
