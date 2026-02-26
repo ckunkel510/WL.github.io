@@ -1,14 +1,14 @@
 /* wl-home-merch.js
    Homepage merchandising + personalization for Products.aspx
    - Tracks visited Product Groups (pg) across pagination and direct landings
-   - Pulls affinity mapping from a published Google Sheet CSV
+   - Pulls affinity mapping from a published Google Sheet CSV (Option A or B)
+   - Reuses your ProductGroup image override sheet (Sheet1) for shelf card images
    - Injects a hero + shelves on Products.aspx homepage only (no pl1/pg)
 
    Affinity Sheet format (CSV headers):
    Option A (recommended):
      ProductGroupID, RelatedGroupIDs
        - RelatedGroupIDs is a comma-separated list (e.g., "2353,2371,2354")
-
    Option B:
      ProductGroupID, Related1, Related2, Related3 ... (any number of columns)
 */
@@ -18,7 +18,7 @@
   const CFG = {
     // HERO (temporary)
     HERO_IMAGE: "https://images-woodsonlumber.sirv.com/Emailimages/Dark-Walnut.jpg",
-    HERO_LINK: "/Products.aspx?pl1=4546&pg=4546&sort=StockClassSort&direction=asc", // example: Deals (adjust anytime)
+    HERO_LINK: "/Products.aspx?pl1=4546&pg=4546&sort=StockClassSort&direction=asc", // <-- change anytime
     HERO_TITLE: "Featured",
     HERO_SUBTITLE: "Shop current specials",
 
@@ -26,6 +26,12 @@
     // Example:
     // https://docs.google.com/spreadsheets/d/e/XXXX/pub?output=csv&gid=0
     AFFINITY_CSV_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRQWZZ6H1UvsAhO8o29StEflcyS_ssW0lQxRg0LA9NucM9oyAl6gG8jZJfVaIG6nYiZ80Fw2NXldNWD/pub?output=csv",
+
+    // GROUP IMAGE SHEET (published CSV URL) - reuse same sheet you use for wl-productgroup-images.js (Sheet1)
+    // Columns must include: ProductGroupID, ImageURL (adjust names below if different)
+    GROUP_IMAGE_CSV_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vS-3Rdml5LGrt8dn1yzvZJYqHQDn0BIXrUjycLG_Q0xtu7c-OcVTnO5BvhjXFb2o0H4zlC2lThUUx0V/pub?output=csv",
+    GROUP_IMAGE_COL_ID: "ProductGroupID",
+    GROUP_IMAGE_COL_URL: "ImageURL",
 
     // LocalStorage keys
     LS_RECENT: "__WL_RECENT_GROUPS_V1__",
@@ -61,11 +67,20 @@
   const trim = (s) => (s == null ? "" : String(s).trim());
 
   function safeJsonParse(raw, fallback) {
-    try { return JSON.parse(raw); } catch { return fallback; }
+    try {
+      const parsed = JSON.parse(raw);
+      return (parsed === null || parsed === undefined) ? fallback : parsed;
+    } catch {
+      return fallback;
+    }
   }
 
   function getAbsUrl(href) {
-    try { return new URL(href, location.origin).toString(); } catch { return null; }
+    try {
+      return new URL(href, location.origin).toString();
+    } catch {
+      return null;
+    }
   }
 
   function getGroupIdFromHref(href) {
@@ -84,7 +99,6 @@
   }
 
   function getCardMetaFromAnchor(a) {
-    // Try to locate the surrounding card and pull title/image
     const href = a.getAttribute("href") || "";
     const abs = getAbsUrl(href);
     const pg = getGroupIdFromHref(href);
@@ -94,12 +108,12 @@
     let title = trim(a.textContent);
     const card = a.closest('fieldset[id="productGroupCard"]') || a.closest("fieldset") || null;
     if (card && !title) {
-      const headerA = card.querySelector('#ProductGroupCardHeader a');
+      const headerA = card.querySelector("#ProductGroupCardHeader a");
       if (headerA) title = trim(headerA.textContent);
     }
 
-    // Image: whatever is currently on the DOM (may already be replaced by your image override script)
-    let img = null;
+    // Image: whatever is currently on the DOM (may be replaced by your image override script)
+    let img = "";
     if (card) {
       const imgEl = card.querySelector("img.productGroupImage");
       if (imgEl) img = trim(imgEl.getAttribute("src") || "");
@@ -114,7 +128,7 @@
     };
   }
 
-  // ---------------- TRACKING ENGINE ----------------
+  // ---------------- RECENT + INTENT STORAGE ----------------
   function loadRecent() {
     const arr = safeJsonParse(localStorage.getItem(CFG.LS_RECENT), []);
     return Array.isArray(arr) ? arr : [];
@@ -125,13 +139,15 @@
   }
 
   function bumpIntent(pg) {
-    const key = CFG.LS_INTENT;
-    const obj = safeJsonParse(localStorage.getItem(key), {});
     const gid = normalizeGroupId(pg);
     if (!gid) return;
 
+    const raw = localStorage.getItem(CFG.LS_INTENT);
+    const parsed = safeJsonParse(raw, {});
+    const obj = (parsed && typeof parsed === "object" && !Array.isArray(parsed)) ? parsed : {};
+
     obj[gid] = (obj[gid] || 0) + 1;
-    localStorage.setItem(key, JSON.stringify(obj));
+    localStorage.setItem(CFG.LS_INTENT, JSON.stringify(obj));
   }
 
   function recordGroupVisit(meta) {
@@ -140,10 +156,8 @@
     const gid = normalizeGroupId(meta.pg);
     if (!gid) return;
 
-    // Intent score
     bumpIntent(gid);
 
-    // Recent list (dedupe by pg)
     let recent = loadRecent();
     recent = recent.filter(x => x && String(x.pg) !== String(gid));
     recent.unshift({ ...meta, pg: gid, ts: now() });
@@ -163,7 +177,6 @@
       const pg = getGroupIdFromHref(a.getAttribute("href") || "");
       if (!pg) return;
 
-      // Only track group navigation clicks (links that include pg=)
       const meta = getCardMetaFromAnchor(a);
       if (meta) recordGroupVisit(meta);
     }, true);
@@ -174,7 +187,6 @@
     const pg = qs.get("pg");
     if (!pg) return;
 
-    // Build meta from the page itself (title fallback)
     const titleGuess =
       trim(document.querySelector("h1, .PageTitle, .page-title, #PageTitle")?.textContent) ||
       trim(document.querySelector('span[id*="ProductGroup"]')?.textContent) ||
@@ -182,7 +194,7 @@
 
     const link = location.pathname + location.search;
 
-    // Try to find a hero-ish image on page; otherwise leave blank
+    // Grab an image if we can
     let img = "";
     const firstCardImg = document.querySelector('fieldset[id="productGroupCard"] img.productGroupImage');
     if (firstCardImg) img = trim(firstCardImg.getAttribute("src") || "");
@@ -196,23 +208,7 @@
     });
   }
 
-  // ---------------- AFFINITY SHEET FETCH ----------------
-  function loadAffinityCache() {
-    const raw = localStorage.getItem(CFG.LS_AFF_CACHE);
-    const parsed = safeJsonParse(raw, null);
-    if (!parsed || !parsed.expiresAt || !parsed.map) return null;
-    if (now() > parsed.expiresAt) return null;
-    return parsed.map; // plain object: { "18": ["2353","2371"] }
-  }
-
-  function saveAffinityCache(mapObj) {
-    const payload = {
-      expiresAt: now() + CFG.AFFINITY_CACHE_TTL_MS,
-      map: mapObj
-    };
-    localStorage.setItem(CFG.LS_AFF_CACHE, JSON.stringify(payload));
-  }
-
+  // ---------------- CSV PARSER ----------------
   // Lightweight CSV parse (quoted fields supported)
   function parseCsv(text) {
     const rows = [];
@@ -244,13 +240,30 @@
     return rows;
   }
 
+  // ---------------- AFFINITY CACHE ----------------
+  function loadAffinityCache() {
+    const raw = localStorage.getItem(CFG.LS_AFF_CACHE);
+    const parsed = safeJsonParse(raw, null);
+    if (!parsed || !parsed.expiresAt || !parsed.map) return null;
+    if (now() > parsed.expiresAt) return null;
+    return parsed.map; // plain object: { "18": ["2353","2371"] }
+  }
+
+  function saveAffinityCache(mapObj) {
+    const payload = {
+      expiresAt: now() + CFG.AFFINITY_CACHE_TTL_MS,
+      map: mapObj
+    };
+    localStorage.setItem(CFG.LS_AFF_CACHE, JSON.stringify(payload));
+  }
+
   async function fetchAffinityMap() {
     const cached = loadAffinityCache();
     if (cached) return cached;
 
     const url = CFG.AFFINITY_CSV_URL;
-    if (!url || url.includes("PASTE_YOUR_AFFINITY")) {
-      return {}; // no affinity configured yet
+    if (!url || url.includes("PASTE_AFFINITY")) {
+      return {}; // affinity not configured yet
     }
 
     const res = await fetch(url, { cache: "no-store" });
@@ -294,6 +307,47 @@
 
     saveAffinityCache(mapObj);
     return mapObj;
+  }
+
+  // ---------------- GROUP IMAGE MAP (reuse your image override sheet) ----------------
+  async function fetchGroupImageMap() {
+    // cache in-memory per page load
+    if (window.__WL_GROUP_IMG_MAP__) return window.__WL_GROUP_IMG_MAP__;
+
+    const url = CFG.GROUP_IMAGE_CSV_URL;
+    if (!url || url.includes("PASTE_GROUP_IMAGE")) {
+      window.__WL_GROUP_IMG_MAP__ = new Map();
+      return window.__WL_GROUP_IMG_MAP__;
+    }
+
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) {
+      window.__WL_GROUP_IMG_MAP__ = new Map();
+      return window.__WL_GROUP_IMG_MAP__;
+    }
+
+    const csv = await res.text();
+    const rows = parseCsv(csv);
+    if (!rows.length) {
+      window.__WL_GROUP_IMG_MAP__ = new Map();
+      return window.__WL_GROUP_IMG_MAP__;
+    }
+
+    const header = rows[0].map(h => trim(h));
+    const idxId = header.findIndex(h => h.toLowerCase() === CFG.GROUP_IMAGE_COL_ID.toLowerCase());
+    const idxUrl = header.findIndex(h => h.toLowerCase() === CFG.GROUP_IMAGE_COL_URL.toLowerCase());
+
+    const map = new Map();
+    if (idxId >= 0 && idxUrl >= 0) {
+      for (let r = 1; r < rows.length; r++) {
+        const id = normalizeGroupId(rows[r][idxId]);
+        const img = trim(rows[r][idxUrl] || "");
+        if (id && img) map.set(String(id), img);
+      }
+    }
+
+    window.__WL_GROUP_IMG_MAP__ = map;
+    return map;
   }
 
   // ---------------- HOMEPAGE RENDER ----------------
@@ -364,22 +418,26 @@ body.wlhm-hide-default fieldset.Cards { display:none !important; }
   }
 
   function pickTopIntentGroups() {
-    const obj = safeJsonParse(localStorage.getItem(CFG.LS_INTENT), {});
-    const entries = Object.entries(obj)
+    const raw = localStorage.getItem(CFG.LS_INTENT);
+    const parsed = safeJsonParse(raw, {});
+    const obj = (parsed && typeof parsed === "object" && !Array.isArray(parsed)) ? parsed : {};
+
+    return Object.entries(obj)
       .map(([k, v]) => ({ k, v: Number(v) || 0 }))
       .filter(x => x.k && x.v > 0)
-      .sort((a, b) => b.v - a.v);
-    return entries.map(x => x.k);
+      .sort((a, b) => b.v - a.v)
+      .map(x => x.k);
   }
 
   function renderShelfCards(cards) {
     return cards.map(c => {
-      const img = c.img || ""; // may be empty
+      const img = c.img || "";
       const safeImg = img ? img : "data:image/gif;base64,R0lGODlhAQABAAAAACw=";
+      const safeTitle = (c.title || "Shop").replace(/"/g, "&quot;");
       return `
         <div class="wlhm-card">
           <a href="${c.link}">
-            <img class="wlhm-cardImg" src="${safeImg}" alt="${(c.title || "").replace(/"/g, "&quot;")}">
+            <img class="wlhm-cardImg" src="${safeImg}" alt="${safeTitle}">
             <div class="wlhm-cardBody">
               <div class="wlhm-cardTitle">${c.title || "Shop"}</div>
               ${c.badge ? `<div class="wlhm-badge">${c.badge}</div>` : ``}
@@ -396,7 +454,6 @@ body.wlhm-hide-default fieldset.Cards { display:none !important; }
       document.body.classList.add("wlhm-hide-default");
     }
 
-    // Insert above the default card grid
     const anchor =
       document.querySelector("fieldset.Cards") ||
       document.querySelector("#MainLayoutRow") ||
@@ -404,7 +461,6 @@ body.wlhm-hide-default fieldset.Cards { display:none !important; }
 
     if (!anchor) return;
 
-    // Avoid double
     if (document.getElementById("wlhmRoot")) return;
 
     const root = document.createElement("div");
@@ -444,29 +500,29 @@ body.wlhm-hide-default fieldset.Cards { display:none !important; }
     anchor.parentNode.insertBefore(root, anchor);
   }
 
-  function buildRecentCards() {
+  function buildRecentCards(groupImgMap) {
     const recent = loadRecent().slice(0, CFG.SHELF_RECENT_COUNT);
     return recent.map(r => ({
       title: r.title || "Shop",
       link: r.link || "/Products.aspx",
-      img: r.img || "",
+      img: r.img || groupImgMap.get(String(r.pg)) || "",
       badge: "Continue"
     }));
   }
 
-  function buildRecoCards(affMap) {
-    const top = pickTopIntentGroups().slice(0, 5); // take top few visited groups
+  function buildRecoCards(affMap, groupImgMap) {
+    const top = pickTopIntentGroups().slice(0, 5);
+    if (!top.length) return [];
+
     const recent = loadRecent().map(x => String(x.pg));
     const seen = new Set(recent);
 
-    // Score related groups by affinity occurrences
     const score = {};
     top.forEach(src => {
-      const rel = affMap[String(src)] || [];
+      const rel = (affMap && affMap[String(src)]) ? affMap[String(src)] : [];
       rel.forEach(pg => {
         const gid = String(pg);
         if (!gid) return;
-        // don’t recommend the exact same group they just viewed repeatedly
         if (seen.has(gid)) return;
         score[gid] = (score[gid] || 0) + 1;
       });
@@ -478,12 +534,10 @@ body.wlhm-hide-default fieldset.Cards { display:none !important; }
       .slice(0, CFG.SHELF_RECO_COUNT)
       .map(x => x.pg);
 
-    // We need titles/images. For v1: try to find from recents (if ever clicked), else generic label.
-    // Later we can pull a “Group Catalog sheet” with Title + Sirv image.
     return ranked.map(pg => ({
       title: "Recommended",
       link: `/Products.aspx?pg=${pg}&sort=StockClassSort&direction=asc`,
-      img: "", // optional: can be filled once we add catalog sheet
+      img: groupImgMap.get(String(pg)) || "",
       badge: "Suggested"
     }));
   }
@@ -496,15 +550,20 @@ body.wlhm-hide-default fieldset.Cards { display:none !important; }
   if (isHomepage) {
     (async function () {
       try {
-        const aff = await fetchAffinityMap();
-        const recentCards = buildRecentCards();
-        const recoCards = buildRecoCards(aff);
+        const [aff, groupImgMap] = await Promise.all([
+          fetchAffinityMap(),
+          fetchGroupImageMap()
+        ]);
+
+        const recentCards = buildRecentCards(groupImgMap);
+        const recoCards = buildRecoCards(aff, groupImgMap);
+
         injectHomepageUI({ recentCards, recoCards });
       } catch (e) {
-        // Still show hero + recent even if affinity fails
-        const recentCards = buildRecentCards();
+        const groupImgMap = await fetchGroupImageMap().catch(() => new Map());
+        const recentCards = buildRecentCards(groupImgMap);
         injectHomepageUI({ recentCards, recoCards: [] });
-        console.warn("[WLHM] affinity load failed:", e);
+        console.warn("[WLHM] init failed:", e);
       }
     })();
   }
