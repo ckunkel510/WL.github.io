@@ -1,8 +1,9 @@
 /* wl-home-merch.js
-   Adds:
+   Updates:
+   - Uses Sheet1 as Group Catalog: ProductGroupID + ImageURL + Title
+   - All shelves/cards use real titles when available
    - Up to 4 affinity shelves based on recently viewed groups
-   - Mix of scrolling rows + static grid shelves
-   - Square card images (aspect-ratio: 1 / 1)
+   - Square image ratio everywhere (aspect-ratio 1/1)
 
    Injection rules:
    - Inject if querystring starts with "?pg=0" OR homepage-like (no pl1, no pid, and pg missing or pg=0)
@@ -15,11 +16,14 @@
     HERO_TITLE: "Featured",
     HERO_SUBTITLE: "Shop current specials",
 
+    // Affinity CSV (Option A: ProductGroupID, RelatedGroupIDs)
     AFFINITY_CSV_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRQWZZ6H1UvsAhO8o29StEflcyS_ssW0lQxRg0LA9NucM9oyAl6gG8jZJfVaIG6nYiZ80Fw2NXldNWD/pub?output=csv",
 
-    GROUP_IMAGE_CSV_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vS-3Rdml5LGrt8dn1yzvZJYqHQDn0BIXrUjycLG_Q0xtu7c-OcVTnO5BvhjXFb2o0H4zlC2lThUUx0V/pub?output=csv",
-    GROUP_IMAGE_COL_ID: "ProductGroupID",
-    GROUP_IMAGE_COL_URL: "ImageURL",
+    // Group Catalog CSV (your image override sheet, now with Title too)
+    GROUP_CATALOG_CSV_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vS-3Rdml5LGrt8dn1yzvZJYqHQDn0BIXrUjycLG_Q0xtu7c-OcVTnO5BvhjXFb2o0H4zlC2lThUUx0V/pub?output=csv",
+    COL_GROUP_ID: "ProductGroupID",
+    COL_IMAGE_URL: "ImageURL",
+    COL_TITLE: "Title", // <-- set this to your header name if different
 
     COLD_START_SEEDS: ["18"],
 
@@ -30,14 +34,12 @@
     RECENT_LIMIT: 16,
     AFFINITY_CACHE_TTL_MS: 12 * 60 * 60 * 1000,
 
-    // Shelves
     SHELF_RECENT_COUNT: 10,
     SHELF_RECO_COUNT: 12,
 
-    // NEW: Affinity shelves
-    MAX_AFFINITY_SHELVES: 4,       // up to 4 shelves total
-    AFFINITY_ITEMS_PER_SHELF: 10,  // show up to N related groups per shelf
-    STATIC_GRID_TILE_COUNT: 4,     // for grid shelves show 4 tiles (2x2)
+    MAX_AFFINITY_SHELVES: 4,
+    AFFINITY_ITEMS_PER_SHELF: 10,
+    STATIC_GRID_TILE_COUNT: 4,
 
     DEBUG: true
   };
@@ -183,13 +185,11 @@
   }
 
   function trackLandingContext() {
-    // If pl1 present, record pl1 as intent (even if pg=0 paging)
     if (pl1) {
       const gid = normalizeGroupId(pl1);
       if (gid) recordGroupVisit({ pg: gid, title: `Group ${gid}`, link: location.pathname + location.search, img: "", ts: now() });
       return;
     }
-    // Else if pg present and pg != 0, record pg as intent
     if (pgParam && String(pgParam) !== "0") {
       const gid = normalizeGroupId(pgParam);
       if (gid) recordGroupVisit({ pg: gid, title: `Group ${gid}`, link: location.pathname + location.search, img: "", ts: now() });
@@ -273,49 +273,60 @@
       }
       if (related.length) mapObj[id] = related;
     }
-
     saveAffinityCache(mapObj);
     return mapObj;
   }
 
-  // ---------- Group image map ----------
-  async function fetchGroupImageMap() {
-    if (window.__WL_GROUP_IMG_MAP__) return window.__WL_GROUP_IMG_MAP__;
+  // ---------- Group Catalog (Image + Title) ----------
+  async function fetchGroupCatalog() {
+    if (window.__WL_GROUP_CATALOG__) return window.__WL_GROUP_CATALOG__;
 
-    const url = CFG.GROUP_IMAGE_CSV_URL;
+    const url = CFG.GROUP_CATALOG_CSV_URL;
     if (!url || url.includes("PASTE_")) {
-      window.__WL_GROUP_IMG_MAP__ = new Map();
-      return window.__WL_GROUP_IMG_MAP__;
+      window.__WL_GROUP_CATALOG__ = { img: new Map(), title: new Map() };
+      return window.__WL_GROUP_CATALOG__;
     }
 
     const res = await fetch(url, { cache: "no-store" });
     if (!res.ok) {
-      window.__WL_GROUP_IMG_MAP__ = new Map();
-      return window.__WL_GROUP_IMG_MAP__;
+      window.__WL_GROUP_CATALOG__ = { img: new Map(), title: new Map() };
+      return window.__WL_GROUP_CATALOG__;
     }
 
     const csv = await res.text();
     const rows = parseCsv(csv);
     if (!rows.length) {
-      window.__WL_GROUP_IMG_MAP__ = new Map();
-      return window.__WL_GROUP_IMG_MAP__;
+      window.__WL_GROUP_CATALOG__ = { img: new Map(), title: new Map() };
+      return window.__WL_GROUP_CATALOG__;
     }
 
     const header = rows[0].map(h => trim(h));
-    const idxId = header.findIndex(h => h.toLowerCase() === CFG.GROUP_IMAGE_COL_ID.toLowerCase());
-    const idxUrl = header.findIndex(h => h.toLowerCase() === CFG.GROUP_IMAGE_COL_URL.toLowerCase());
+    const idxId = header.findIndex(h => h.toLowerCase() === CFG.COL_GROUP_ID.toLowerCase());
+    const idxUrl = header.findIndex(h => h.toLowerCase() === CFG.COL_IMAGE_URL.toLowerCase());
+    const idxTitle = header.findIndex(h => h.toLowerCase() === CFG.COL_TITLE.toLowerCase());
 
-    const map = new Map();
-    if (idxId >= 0 && idxUrl >= 0) {
-      for (let r = 1; r < rows.length; r++) {
-        const id = normalizeGroupId(rows[r][idxId]);
-        const img = trim(rows[r][idxUrl] || "");
-        if (id && img) map.set(String(id), img);
-      }
+    const imgMap = new Map();
+    const titleMap = new Map();
+
+    for (let r = 1; r < rows.length; r++) {
+      const id = normalizeGroupId(idxId >= 0 ? rows[r][idxId] : "");
+      if (!id) continue;
+
+      const img = idxUrl >= 0 ? trim(rows[r][idxUrl] || "") : "";
+      const title = idxTitle >= 0 ? trim(rows[r][idxTitle] || "") : "";
+
+      if (img) imgMap.set(String(id), img);
+      if (title) titleMap.set(String(id), title);
     }
 
-    window.__WL_GROUP_IMG_MAP__ = map;
-    return map;
+    window.__WL_GROUP_CATALOG__ = { img: imgMap, title: titleMap };
+    log("Catalog loaded:", imgMap.size, "images,", titleMap.size, "titles");
+    return window.__WL_GROUP_CATALOG__;
+  }
+
+  function titleFor(groupId, titleMap) {
+    const gid = String(groupId);
+    return titleMap.get(gid) || `Group ${gid}`;
   }
 
   // ---------- UI / styles ----------
@@ -342,28 +353,13 @@
 .wlhm-card { flex:0 0 170px; scroll-snap-align:start; border-radius:14px; overflow:hidden; border:1px solid rgba(0,0,0,.08); background:#fff; box-shadow:0 6px 18px rgba(0,0,0,.08); transition:transform .12s ease, box-shadow .12s ease; }
 .wlhm-card:hover { transform:translateY(-2px); box-shadow:0 10px 28px rgba(0,0,0,.12); }
 .wlhm-card a { display:block; text-decoration:none; color:inherit; }
-
-.wlhm-cardImg {
-  width:100%;
-  aspect-ratio: 1 / 1;      /* ✅ square images */
-  object-fit:cover;
-  background:#f2f2f2;
-  display:block;
-}
+.wlhm-cardImg { width:100%; aspect-ratio:1/1; object-fit:cover; background:#f2f2f2; display:block; }
 .wlhm-cardBody { padding:10px 10px 12px 10px; }
 .wlhm-cardTitle { font-weight:800; font-size:13px; line-height:1.2; }
 .wlhm-badge { margin-top:6px; font-size:11px; opacity:.75; }
 
-/* Static grid shelf (2x2) */
-.wlhm-grid {
-  display:grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap:10px;
-  padding:6px 2px 10px 2px;
-}
-@media (min-width: 900px){
-  .wlhm-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } /* becomes 4-up on desktop */
-}
+.wlhm-grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:10px; padding:6px 2px 10px 2px; }
+@media (min-width:900px){ .wlhm-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .wlhm-grid .wlhm-card { flex: initial; }
 `;
     const style = document.createElement("style");
@@ -425,17 +421,20 @@
     return ranked.length ? ranked : (CFG.COLD_START_SEEDS || []).map(normalizeGroupId).filter(Boolean);
   }
 
-  function buildRecentCards(groupImgMap) {
+  function buildRecentCards(catalog) {
     const recent = loadRecent().slice(0, CFG.SHELF_RECENT_COUNT);
-    return recent.map(r => ({
-      title: r.title || `Group ${r.pg}`,
-      link: r.link || "/Products.aspx",
-      img: r.img || groupImgMap.get(String(r.pg)) || "",
-      badge: "Continue"
-    }));
+    return recent.map(r => {
+      const gid = String(r.pg);
+      return {
+        title: r.title && !/^Group\s+\d+$/.test(r.title) ? r.title : titleFor(gid, catalog.title),
+        link: r.link || "/Products.aspx",
+        img: r.img || catalog.img.get(gid) || "",
+        badge: "Continue"
+      };
+    });
   }
 
-  function buildRecoCards(affMap, groupImgMap) {
+  function buildRecoCards(affMap, catalog) {
     const top = pickTopIntentGroups().slice(0, 5);
     if (!top.length) return [];
 
@@ -456,16 +455,15 @@
       .slice(0, CFG.SHELF_RECO_COUNT)
       .map(x => x[0]);
 
-    return ranked.map(pg => ({
-      title: `Shop ${pg}`, // upgrade later if you add a Title column
-      link: `/Products.aspx?pl1=${pg}&pg=${pg}&sort=StockClassSort&direction=asc`,
-      img: groupImgMap.get(String(pg)) || "",
+    return ranked.map(gid => ({
+      title: titleFor(gid, catalog.title),
+      link: `/Products.aspx?pl1=${gid}&pg=${gid}&sort=StockClassSort&direction=asc`,
+      img: catalog.img.get(gid) || "",
       badge: "Suggested"
     }));
   }
 
-  // NEW: build up to 4 affinity shelves from recently viewed groups
-  function buildAffinityShelves(affMap, groupImgMap) {
+  function buildAffinityShelves(affMap, catalog) {
     const recent = loadRecent();
     if (!recent.length) return [];
 
@@ -480,7 +478,6 @@
       const rel = (affMap && affMap[src]) ? affMap[src] : [];
       if (!rel.length) continue;
 
-      // Filter: unique targets and skip recommending the same source group
       const targets = rel
         .map(String)
         .filter(gid => gid && gid !== src && !usedTarget.has(gid));
@@ -489,7 +486,6 @@
 
       usedSource.add(src);
 
-      // Decide shelf type: first 2 scrolling, next 2 grid
       const shelfIndex = shelves.length;
       const mode = shelfIndex < 2 ? "scroll" : "grid";
 
@@ -499,14 +495,15 @@
       chosen.forEach(gid => usedTarget.add(gid));
 
       const cards = chosen.map(gid => ({
-        title: `Shop ${gid}`, // upgrade later using Title column
+        title: titleFor(gid, catalog.title),
         link: `/Products.aspx?pl1=${gid}&pg=${gid}&sort=StockClassSort&direction=asc`,
-        img: groupImgMap.get(String(gid)) || "",
+        img: catalog.img.get(gid) || "",
         badge: ""
       }));
 
+      const srcTitle = (r.title && !/^Group\s+\d+$/.test(r.title)) ? r.title : titleFor(src, catalog.title);
       shelves.push({
-        title: `More like ${r.title || ("Group " + src)}`,
+        title: `More like ${srcTitle}`,
         mode,
         cards
       });
@@ -527,7 +524,6 @@
     const root = document.createElement("div");
     root.id = "wlhmRoot";
 
-    // Build HTML in order: hero -> recent -> recommended -> affinity shelves
     let html = `
       <div class="wlhm-hero">
         <a href="${CFG.HERO_LINK}">
@@ -540,13 +536,8 @@
       </div>
     `;
 
-    if (recentCards.length) {
-      html += renderShelf("Recently Viewed", "scroll", renderCards(recentCards));
-    }
-
-    if (recoCards.length) {
-      html += renderShelf("Recommended for You", "scroll", renderCards(recoCards));
-    }
+    if (recentCards.length) html += renderShelf("Recently Viewed", "scroll", renderCards(recentCards));
+    if (recoCards.length) html += renderShelf("Recommended for You", "scroll", renderCards(recoCards));
 
     if (affinityShelves && affinityShelves.length) {
       for (const s of affinityShelves) {
@@ -556,14 +547,13 @@
 
     root.innerHTML = html;
 
-    // Insert at top if we found the scrolling panel
     if (anchor.classList && anchor.classList.contains("productGroupScrollingPanelFull")) {
       anchor.insertBefore(root, anchor.firstChild);
     } else {
       anchor.parentNode.insertBefore(root, anchor);
     }
 
-    log("Injected UI with affinity shelves:", affinityShelves?.length || 0);
+    log("Injected UI. affinity shelves:", affinityShelves?.length || 0);
   }
 
   // ---------- Init ----------
@@ -577,11 +567,10 @@
 
   (async function init() {
     try {
-      const [affMap, imgMap] = await Promise.all([fetchAffinityMap(), fetchGroupImageMap()]);
-      const recentCards = buildRecentCards(imgMap);
-      const recoCards = buildRecoCards(affMap, imgMap);
-      const affinityShelves = buildAffinityShelves(affMap, imgMap);
-
+      const [affMap, catalog] = await Promise.all([fetchAffinityMap(), fetchGroupCatalog()]);
+      const recentCards = buildRecentCards(catalog);
+      const recoCards = buildRecoCards(affMap, catalog);
+      const affinityShelves = buildAffinityShelves(affMap, catalog);
       injectUI({ recentCards, recoCards, affinityShelves });
     } catch (e) {
       warn("init failed:", e);
