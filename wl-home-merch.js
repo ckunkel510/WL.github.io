@@ -65,6 +65,31 @@
   // ---------- Utils ----------
   const now = () => Date.now();
   const trim = (s) => (s == null ? "" : String(s).trim());
+
+  function cleanTitle(raw) {
+    const t = trim(raw)
+      .replace(/\s+/g, " ")
+      .replace(/\bContinue\b/gi, "")
+      .replace(/\s{2,}/g, " ")
+      .trim();
+    return t;
+  }
+
+  function isBadTitle(t) {
+    const s = cleanTitle(t).toLowerCase();
+    if (!s) return true;
+    // common failure cases when grabbing whole card textContent
+    if (s.includes("continue")) return true;
+    if (/\b\d+\s+products\b/.test(s)) return true;
+    if (s.length > 80) return true;
+    return false;
+  }
+
+  function getPreferredGroupIdFromHref(href) {
+    // Prefer pl1 when present (that is the ProductLevel1 / "current group"),
+    // and fall back to pg.
+    return normalizeGroupId(getParamFromHref(href, "pl1") || getParamFromHref(href, "pg"));
+  }
   function log(...args) { if (CFG.DEBUG) console.log("[WLHM]", ...args); }
   function warn(...args) { console.warn("[WLHM]", ...args); }
 
@@ -97,7 +122,12 @@
   }
 
   function isGroupDrilldownHref(href) {
+    // Group drilldowns can be either:
+    //  - pl1=<ProductLevel1GroupId>&pg=<ProductGroupPageId>
+    //  - pg=<ProductGroupId>
+    const pl1 = getParamFromHref(href, "pl1");
     const pg = getParamFromHref(href, "pg");
+    if (pl1) return true;
     if (!pg) return false;
     return String(pg) !== "0";
   }
@@ -425,8 +455,13 @@
     const recent = loadRecent().slice(0, CFG.SHELF_RECENT_COUNT);
     return recent.map(r => {
       const gid = String(r.pg);
+
+      const fallbackTitle = titleFor(gid, catalog.title);
+      const useStoredTitle = r.title && !/^Group\s+\d+$/.test(r.title) && !isBadTitle(r.title);
+      const title = useStoredTitle ? cleanTitle(r.title) : fallbackTitle;
+
       return {
-        title: r.title && !/^Group\s+\d+$/.test(r.title) ? r.title : titleFor(gid, catalog.title),
+        title,
         link: r.link || "/Products.aspx",
         img: r.img || catalog.img.get(gid) || "",
         badge: "Continue"
