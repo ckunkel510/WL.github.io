@@ -1,141 +1,185 @@
-/* wl-refine-panel.js
-   - Collapses "REFINE BY" refinements into click-to-open sections
-   - Hides "Keywords" refinement group entirely
-   - De-dupes obvious duplicate option values inside each refinement (ex: 10', 10 feet, 10 foot)
-     NOTE: This is UI de-dup only (keeps the first option, hides the rest) to avoid changing filter logic.
+/* wl-refine-flyout.js
+   - Accordion behavior: only one section "active" at a time
+   - Flyout panel opens to the RIGHT of the refine panel (keeps left panel compact)
+   - Fixes Telerik "open then close" by using stopImmediatePropagation + capture handlers
+   - Optional: hide Keywords group
+   - Optional: de-dupe option labels (10', 10 feet, 10 foot -> 10 ft) UI-only
 */
 
 (function () {
   "use strict";
 
-  // -----------------------------
-  // Config
-  // -----------------------------
   const CFG = {
-    // Pages where this should run
     allowPages: new Set(["products.aspx"]),
-
-    // Which refinement sections should start open (case-insensitive match on header text)
-    defaultOpen: ["brand"],
-
-    // Hide these refinement section headers entirely (case-insensitive)
-    hideSections: ["keywords"],
-
-    // Insert "Expand all / Collapse all" controls at top of REFINE BY
-    addControls: true,
-
-    // De-dupe option rows within each section
+    hideSections: ["keywords"], // hide whole section(s)
+    defaultOpen: ["brand"],     // open first time if flyout enabled
     dedupeOptions: true,
+    flyout: {
+      enabled: true,
+      width: 420,
+      maxHeightVh: 72,     // flyout scroll height (vh)
+      offsetPx: 12,        // gap from left panel
+      closeOnOutsideClick: true,
+      closeOnEsc: true,
+    },
   };
 
   // -----------------------------
-  // Helpers
+  // Utils
   // -----------------------------
-  const log = (...args) => console.log("[WL RefinePanel]", ...args);
-
-  function getPageFile() {
-    return (location.pathname.split("/").pop() || "").toLowerCase();
-  }
-
-  function textEq(a, b) {
-    return String(a || "").trim().toLowerCase() === String(b || "").trim().toLowerCase();
-  }
-
-  function normSpace(s) {
-    return String(s || "")
+  const normSpace = (s) =>
+    String(s || "")
       .replace(/\u00A0/g, " ")
       .replace(/\s+/g, " ")
       .trim();
-  }
 
-  // Canonicalize “same meaning” strings so we can dedupe:
-  // 10' / 10 feet / 10 foot -> "10 ft"
-  // 12 inches / 12 inch -> "12 in"
-  // also normalizes weird quotes/primes.
-  function canonicalizeValue(labelText) {
+  const pageFile = () => (location.pathname.split("/").pop() || "").toLowerCase();
+
+  const canonicalizeValue = (labelText) => {
     let s = normSpace(labelText)
       .toLowerCase()
-      // normalize primes/quotes people paste in from different sources
       .replace(/[′’‛`]/g, "'")
-      .replace(/[″“”]/g, '"');
-
-    // common unit words -> abbreviations
-    s = s
+      .replace(/[″“”]/g, '"')
       .replace(/\b(feet|foot)\b/g, "ft")
       .replace(/\b(inches|inch)\b/g, "in");
 
-    // numeric foot patterns:
-    // "10 '"  or "10'"  -> "10 ft"
     s = s.replace(/\b(\d+(?:\.\d+)?)\s*'\b/g, "$1 ft");
-    // "10 ft." -> "10 ft"
-    s = s.replace(/\bft\.\b/g, "ft");
-    // "10 in." -> "10 in"
-    s = s.replace(/\bin\.\b/g, "in");
+    s = s.replace(/\bft\.\b/g, "ft").replace(/\bin\.\b/g, "in");
+    return normSpace(s);
+  };
 
-    // collapse spaces again
-    s = normSpace(s);
+  function injectStylesOnce() {
+    if (document.getElementById("wl-refine-flyout-css")) return;
 
-    return s;
+    const css = `
+/* --- Modernize the refine panel --- */
+.RadPanelBar[id*="RefineSearchRadPanelBar"] {
+  font-family: inherit;
+}
+
+.RadPanelBar[id*="RefineSearchRadPanelBar"] .rpRootGroup,
+.RadPanelBar[id*="RefineSearchRadPanelBar"] .rpGroup {
+  padding: 0 !important;
+}
+
+.RadPanelBar[id*="RefineSearchRadPanelBar"] a.rpLink {
+  border-radius: 10px;
+  margin: 6px 8px;
+  padding: 10px 12px !important;
+  background: #fff;
+  border: 1px solid rgba(0,0,0,.10);
+  box-shadow: 0 1px 2px rgba(0,0,0,.05);
+  transition: transform .08s ease, box-shadow .08s ease, border-color .08s ease;
+}
+
+.RadPanelBar[id*="RefineSearchRadPanelBar"] a.rpLink:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 10px rgba(0,0,0,.08);
+  border-color: rgba(0,0,0,.18);
+}
+
+.RadPanelBar[id*="RefineSearchRadPanelBar"] a.rpLink .rpText {
+  font-weight: 600;
+}
+
+/* Visually indicate active section */
+.wl-refine-active > a.rpLink {
+  border-color: rgba(0,0,0,.25) !important;
+  box-shadow: 0 2px 12px rgba(0,0,0,.10) !important;
+}
+
+/* Hide Telerik slide area since we’ll use flyout for options */
+.wl-refine-hide-slide > .rpSlide {
+  display: none !important;
+}
+
+/* Flyout shell */
+.wl-refine-flyout {
+  position: absolute;
+  z-index: 99999;
+  background: #fff;
+  border: 1px solid rgba(0,0,0,.12);
+  box-shadow: 0 14px 50px rgba(0,0,0,.18);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.wl-refine-flyout-header {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(0,0,0,.08);
+  background: linear-gradient(to bottom, #fff, rgba(0,0,0,.02));
+}
+
+.wl-refine-flyout-title {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.wl-refine-flyout-close {
+  border: 1px solid rgba(0,0,0,.18);
+  background: #fff;
+  border-radius: 10px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+.wl-refine-flyout-body {
+  padding: 10px 14px;
+  overflow: auto;
+}
+
+.wl-refine-flyout-body table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.wl-refine-flyout-body td {
+  padding: 6px 0;
+}
+
+.wl-refine-flyout-body label {
+  cursor: pointer;
+}
+
+/* Slightly bigger checkbox click targets */
+.wl-refine-flyout-body input[type="checkbox"] {
+  transform: scale(1.05);
+  margin-right: 10px;
+}
+    `.trim();
+
+    const style = document.createElement("style");
+    style.id = "wl-refine-flyout-css";
+    style.textContent = css;
+    document.head.appendChild(style);
   }
 
-  // Try to find the REFINE BY root <li> inside the RadPanelBar
-  function findRefineByRoot(panelBarEl) {
+  function findPanelBar() {
+    return document.querySelector('[id*="RefineSearchRadPanelBar"].RadPanelBar');
+  }
+
+  function findRefineRoot(panelBarEl) {
     const links = panelBarEl.querySelectorAll("a.rpLink");
     for (const a of links) {
-      const t = normSpace(a.textContent);
-      if (t && t.toLowerCase() === "refine by") {
-        return a.closest("li.rpItem");
-      }
+      const t = normSpace(a.textContent).toLowerCase();
+      if (t === "refine by") return a.closest("li.rpItem");
     }
     return null;
   }
 
-  function setExpanded(li, expanded) {
-    const link = li.querySelector(":scope > a.rpLink");
-    const slide = li.querySelector(":scope > .rpSlide");
-    if (!link || !slide) return;
-
-    li.classList.toggle("rpExpanded", !!expanded);
-
-    // Telerik uses inline display styles; we override consistently.
-    slide.style.display = expanded ? "block" : "none";
-
-    // Keep "expandable" behavior visually consistent
-    link.classList.toggle("rpExpanded", !!expanded);
-    link.classList.toggle("rpCollapsed", !expanded);
-  }
-
-  function attachToggle(li) {
-    const link = li.querySelector(":scope > a.rpLink");
-    const slide = li.querySelector(":scope > .rpSlide");
-    if (!link || !slide) return;
-
-    // Make the header behave like an accordion toggle
-    link.addEventListener(
-      "click",
-      (e) => {
-        // Prevent # navigation
-        e.preventDefault();
-        e.stopPropagation();
-
-        const isOpen = slide.style.display !== "none";
-        setExpanded(li, !isOpen);
-      },
-      true
-    );
-  }
-
   function getSectionHeaderText(sectionLi) {
-    const headerA = sectionLi.querySelector(":scope > a.rpLink .rpText");
-    return normSpace(headerA ? headerA.textContent : "");
+    const t = sectionLi.querySelector(":scope > a.rpLink .rpText");
+    return normSpace(t ? t.textContent : "");
   }
 
-  function hideSection(sectionLi) {
-    sectionLi.style.display = "none";
+  function hideSection(li) {
+    li.style.display = "none";
   }
 
-  // De-dupe options inside a section:
-  // The options are typically spans with refinequery + input + label.
+  // UI-only dedupe (hide duplicates, optionally rewrite kept label to canonical)
   function dedupeSectionOptions(sectionLi) {
     const table = sectionLi.querySelector(".rpTemplate table");
     if (!table) return;
@@ -143,178 +187,303 @@
     const spans = table.querySelectorAll("span[refinequery]");
     if (!spans || spans.length < 2) return;
 
-    const seen = new Map(); // canonical -> { span, labelEl }
-    let hiddenCount = 0;
-
+    const seen = new Map();
     spans.forEach((sp) => {
       const labelEl = sp.querySelector("label");
       if (!labelEl) return;
-
       const original = normSpace(labelEl.textContent);
       const canon = canonicalizeValue(original);
-
       if (!canon) return;
 
       if (!seen.has(canon)) {
-        // Keep first occurrence. Optionally rewrite label to canonical if it changes.
-        seen.set(canon, { span: sp, labelEl });
-
-        // If canonical differs (ex: "10 feet" -> "10 ft"), update the label text for cleanliness.
-        if (canon !== original.toLowerCase()) {
-          // Preserve leading space that Telerik labels often have
-          labelEl.textContent = " " + canon;
-        }
+        seen.set(canon, sp);
+        // rewrite label to more consistent display (optional)
+        if (canon !== original.toLowerCase()) labelEl.textContent = " " + canon;
       } else {
-        // Hide duplicates (UI-only). Do NOT auto-check multiple, because that would AND filters.
-        const { span: keepSpan } = seen.get(canon);
-
-        // If the kept one is currently hidden for some reason, swap (rare)
-        if (keepSpan.style.display === "none") {
-          seen.set(canon, { span: sp, labelEl });
-          sp.style.display = "";
-          keepSpan.style.display = "none";
-          hiddenCount++;
-          return;
-        }
-
         sp.style.display = "none";
-        hiddenCount++;
       }
     });
+  }
 
-    if (hiddenCount) {
-      sectionLi.setAttribute("data-wl-deduped", String(hiddenCount));
+  // -----------------------------
+  // Flyout
+  // -----------------------------
+  let flyoutEl = null;
+  let activeSectionLi = null;
+
+  function ensureFlyout() {
+    if (flyoutEl) return flyoutEl;
+
+    flyoutEl = document.createElement("div");
+    flyoutEl.className = "wl-refine-flyout";
+    flyoutEl.style.width = CFG.flyout.width + "px";
+
+    const header = document.createElement("div");
+    header.className = "wl-refine-flyout-header";
+
+    const title = document.createElement("div");
+    title.className = "wl-refine-flyout-title";
+    title.textContent = "Filter";
+
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "wl-refine-flyout-close";
+    close.textContent = "Close";
+    close.addEventListener("click", () => closeFlyout());
+
+    header.appendChild(title);
+    header.appendChild(close);
+
+    const body = document.createElement("div");
+    body.className = "wl-refine-flyout-body";
+    body.style.maxHeight = CFG.flyout.maxHeightVh + "vh";
+
+    flyoutEl.appendChild(header);
+    flyoutEl.appendChild(body);
+
+    document.body.appendChild(flyoutEl);
+    return flyoutEl;
+  }
+
+  function positionFlyoutNear(sectionLi) {
+    const panelBar = findPanelBar();
+    if (!panelBar) return;
+
+    const rect = panelBar.getBoundingClientRect();
+
+    const left = Math.round(rect.right + CFG.flyout.offsetPx + window.scrollX);
+    // top aligned roughly with the clicked section header
+    const headerRect = sectionLi.querySelector(":scope > a.rpLink").getBoundingClientRect();
+    let top = Math.round(headerRect.top + window.scrollY);
+
+    // keep flyout within viewport vertically
+    const fly = ensureFlyout();
+    const flyRect = fly.getBoundingClientRect();
+    const maxTop = window.scrollY + window.innerHeight - flyRect.height - 12;
+    if (top > maxTop) top = Math.max(window.scrollY + 12, maxTop);
+
+    fly.style.left = left + "px";
+    fly.style.top = top + "px";
+  }
+
+  function closeFlyout() {
+    if (!flyoutEl) return;
+    flyoutEl.style.display = "none";
+    if (activeSectionLi) {
+      activeSectionLi.classList.remove("wl-refine-active");
+      activeSectionLi = null;
     }
   }
 
-  function addExpandCollapseControls(refineRootLi) {
-    const slide = refineRootLi.querySelector(":scope > .rpSlide");
-    if (!slide) return;
+  function openFlyoutForSection(sectionLi) {
+    const headerText = getSectionHeaderText(sectionLi) || "Filter";
+    const fly = ensureFlyout();
 
-    const container = slide.querySelector(":scope > ul.rpGroup") || slide;
+    // Mark active
+    if (activeSectionLi && activeSectionLi !== sectionLi) {
+      activeSectionLi.classList.remove("wl-refine-active");
+    }
+    activeSectionLi = sectionLi;
+    sectionLi.classList.add("wl-refine-active");
 
-    // Avoid double-injection
-    if (container.querySelector(".wl-refine-controls")) return;
+    // Fill content: clone ONLY the template table and wire inputs back to originals
+    const body = fly.querySelector(".wl-refine-flyout-body");
+    body.innerHTML = "";
 
-    const controls = document.createElement("div");
-    controls.className = "wl-refine-controls";
-    controls.style.cssText =
-      "display:flex; gap:8px; align-items:center; padding:6px 6px 8px; border-bottom:1px solid rgba(0,0,0,.08);";
+    const origTable = sectionLi.querySelector(".rpTemplate table");
+    if (!origTable) {
+      body.textContent = "No options found.";
+    } else {
+      const cloned = origTable.cloneNode(true);
 
-    const mkBtn = (txt) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.textContent = txt;
-      b.style.cssText =
-        "font:inherit; font-size:12px; padding:4px 8px; border:1px solid rgba(0,0,0,.25); background:#fff; cursor:pointer; border-radius:6px;";
-      return b;
-    };
+      // Wire checkbox changes back to original inputs (by id)
+      const clonedInputs = cloned.querySelectorAll('input[type="checkbox"]');
+      clonedInputs.forEach((ci) => {
+        const origId = ci.getAttribute("id");
+        if (!origId) return;
 
-    const btnExpand = mkBtn("Expand all");
-    const btnCollapse = mkBtn("Collapse all");
+        const origInput = document.getElementById(origId);
+        if (!origInput) return;
 
-    btnExpand.addEventListener("click", () => {
-      const sections = container.querySelectorAll(":scope > li.rpItem");
-      sections.forEach((li) => {
-        const header = getSectionHeaderText(li).toLowerCase();
-        if (CFG.hideSections.includes(header)) return;
-        setExpanded(li, true);
+        // sync initial state
+        ci.checked = origInput.checked;
+
+        // when user changes clone, change the original + trigger click so the site applies filter
+        ci.addEventListener("change", () => {
+          if (origInput.checked !== ci.checked) {
+            // clicking original is safest for Telerik / postback logic
+            origInput.click();
+          }
+        });
+
+        // also if original changes (AJAX rerender), try to keep clone synced
+        // (best-effort; rerenders will also be handled by our MutationObserver re-init)
       });
-    });
 
-    btnCollapse.addEventListener("click", () => {
-      const sections = container.querySelectorAll(":scope > li.rpItem");
-      sections.forEach((li) => {
-        const header = getSectionHeaderText(li).toLowerCase();
-        if (CFG.hideSections.includes(header)) return;
-        setExpanded(li, false);
-      });
-    });
+      body.appendChild(cloned);
+    }
 
-    controls.appendChild(btnExpand);
-    controls.appendChild(btnCollapse);
-
-    // Insert at top of the refine list
-    container.insertBefore(controls, container.firstChild);
+    // Set title + show
+    fly.querySelector(".wl-refine-flyout-title").textContent = headerText;
+    fly.style.display = "block";
+    positionFlyoutNear(sectionLi);
   }
 
   // -----------------------------
-  // Main
+  // Accordion / event handling
+  // -----------------------------
+  function makeHeaderOpenFlyout(li) {
+    const link = li.querySelector(":scope > a.rpLink");
+    if (!link) return;
+
+    // prevent double binding
+    if (link.__WL_BOUND__) return;
+    link.__WL_BOUND__ = true;
+
+    // IMPORTANT: Telerik will also bind click. We must beat it:
+    // - use CAPTURE phase
+    // - stopImmediatePropagation
+    // - preventDefault
+    const handler = (e) => {
+      // Only handle real user clicks
+      e.preventDefault();
+      e.stopPropagation();
+      if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+
+      // Toggle logic: clicking the active section closes the flyout
+      if (activeSectionLi === li && flyoutEl && flyoutEl.style.display !== "none") {
+        closeFlyout();
+        return;
+      }
+
+      // Open new section in flyout
+      openFlyoutForSection(li);
+    };
+
+    // capture-phase click
+    link.addEventListener("click", handler, true);
+    // Some builds fire mousedown/pointerdown handlers; intercept those too
+    link.addEventListener("pointerdown", handler, true);
+  }
+
+  function setOnlyOneActive(rootGroup, activeLi) {
+    const items = rootGroup.querySelectorAll(":scope > li.rpItem");
+    items.forEach((li) => {
+      if (li === activeLi) li.classList.add("wl-refine-active");
+      else li.classList.remove("wl-refine-active");
+    });
+  }
+
+  // -----------------------------
+  // Init / Re-init (AJAX safe)
   // -----------------------------
   function init() {
-    const page = getPageFile();
-    if (!CFG.allowPages.has(page)) return;
+    if (!CFG.allowPages.has(pageFile())) return;
 
-    // Find the RadPanelBar used for refine nav
-    const panelBar = document.querySelector('[id*="RefineSearchRadPanelBar"].RadPanelBar');
+    injectStylesOnce();
+
+    const panelBar = findPanelBar();
     if (!panelBar) return;
 
-    const refineRoot = findRefineByRoot(panelBar);
+    const refineRoot = findRefineRoot(panelBar);
     if (!refineRoot) return;
 
-    // REFINE BY sections live under this root's slide/group
     const rootGroup =
       refineRoot.querySelector(":scope > .rpSlide > ul.rpGroup") ||
       refineRoot.querySelector(":scope > .rpSlide");
 
     if (!rootGroup) return;
 
-    if (CFG.addControls) addExpandCollapseControls(refineRoot);
+    // Hide the built-in slide growth (we are using flyout)
+    if (CFG.flyout.enabled) {
+      // Hide only child slides (sections). Keep root slide visible.
+      const sectionLis = rootGroup.querySelectorAll(":scope > li.rpItem");
+      sectionLis.forEach((li) => li.classList.add("wl-refine-hide-slide"));
+    }
 
     const sectionLis = rootGroup.querySelectorAll(":scope > li.rpItem");
     sectionLis.forEach((li) => {
-      const header = getSectionHeaderText(li);
-      const headerLower = header.toLowerCase();
+      const header = getSectionHeaderText(li).toLowerCase();
 
-      // Hide whole section(s), especially Keywords (this is the huge one in your panel)
-      // Your markup shows it as a section named "Keywords". :contentReference[oaicite:1]{index=1}
-      if (CFG.hideSections.includes(headerLower)) {
+      // Hide certain sections entirely
+      if (CFG.hideSections.includes(header)) {
         hideSection(li);
         return;
       }
 
-      // Always make sections collapsible
-      attachToggle(li);
-
-      // Default open/closed behavior
-      const shouldOpen = CFG.defaultOpen.some((x) => headerLower.includes(String(x).toLowerCase()));
-      setExpanded(li, shouldOpen);
-
-      // De-dupe internal checkbox rows by canonical label text
+      // Dedupe inside the ORIGINAL table so clones inherit it
       if (CFG.dedupeOptions) {
-        try {
-          dedupeSectionOptions(li);
-        } catch (e) {
-          // Don't break the panel if one section is weird
-          console.warn("[WL RefinePanel] dedupe failed for", header, e);
-        }
+        try { dedupeSectionOptions(li); } catch (_) {}
+      }
+
+      // Make header open flyout (and prevent Telerik toggling)
+      if (CFG.flyout.enabled) {
+        makeHeaderOpenFlyout(li);
       }
     });
 
-    log("initialized");
-  }
+    // Default open (optional)
+    if (CFG.flyout.enabled && !activeSectionLi) {
+      const first = Array.from(sectionLis).find((li) => {
+        const t = getSectionHeaderText(li).toLowerCase();
+        return CFG.defaultOpen.some((x) => t.includes(String(x).toLowerCase()));
+      }) || Array.from(sectionLis).find((li) => li.style.display !== "none");
 
-  // Run after load, and also after partial updates (RadControls sometimes re-render)
-  function safeInit() {
-    try {
-      init();
-    } catch (e) {
-      console.warn("[WL RefinePanel] init error", e);
+      if (first) openFlyoutForSection(first);
+    }
+
+    // Close controls
+    if (CFG.flyout.closeOnEsc && !window.__WL_REFINE_ESC__) {
+      window.__WL_REFINE_ESC__ = true;
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") closeFlyout();
+      });
+    }
+
+    if (CFG.flyout.closeOnOutsideClick && !window.__WL_REFINE_OUTSIDE__) {
+      window.__WL_REFINE_OUTSIDE__ = true;
+      document.addEventListener("mousedown", (e) => {
+        if (!flyoutEl || flyoutEl.style.display === "none") return;
+        const link = activeSectionLi?.querySelector(":scope > a.rpLink");
+        if (flyoutEl.contains(e.target)) return;
+        if (link && link.contains(e.target)) return;
+        closeFlyout();
+      });
     }
   }
 
-  // 1) normal load
+  function safeInit() {
+    try { init(); } catch (e) { console.warn("[WL RefineFlyout] init error", e); }
+  }
+
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", safeInit);
   } else {
     safeInit();
   }
 
-  // 2) watch for re-renders
+  // Re-render watcher (Telerik often rebuilds HTML after you click filters)
   const mo = new MutationObserver(() => {
-    // debounce-ish: if the panel gets rebuilt, rerun
-    window.clearTimeout(window.__WL_REFINE_REINIT__);
-    window.__WL_REFINE_REINIT__ = window.setTimeout(safeInit, 150);
+    clearTimeout(window.__WL_REFINE_REINIT__);
+    window.__WL_REFINE_REINIT__ = setTimeout(() => {
+      // If the active section got re-rendered, keep flyout open by trying to re-open by header text
+      const activeTitle = activeSectionLi ? getSectionHeaderText(activeSectionLi) : null;
+      safeInit();
+      if (activeTitle) {
+        const panelBar = findPanelBar();
+        const refineRoot = panelBar ? findRefineRoot(panelBar) : null;
+        const rootGroup =
+          refineRoot?.querySelector(":scope > .rpSlide > ul.rpGroup") ||
+          refineRoot?.querySelector(":scope > .rpSlide");
+        if (rootGroup) {
+          const match = Array.from(rootGroup.querySelectorAll(":scope > li.rpItem")).find(
+            (li) => normSpace(getSectionHeaderText(li)).toLowerCase() === normSpace(activeTitle).toLowerCase()
+          );
+          if (match && match.style.display !== "none") openFlyoutForSection(match);
+        }
+      }
+    }, 180);
   });
+
   mo.observe(document.documentElement, { childList: true, subtree: true });
 })();
