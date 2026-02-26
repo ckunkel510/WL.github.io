@@ -1,59 +1,43 @@
 /* wl-home-merch.js
    Homepage merchandising + personalization for Products.aspx
 
-   Fixes applied:
-   - Treats pg=0 (with no pl1) as "homepage-like" so hero/shelves still inject
-   - Uses pl1 as the "current group context" on internal pages (because pg is also used for paging)
-   - Inserts hero at the TOP of .productGroupScrollingPanelFull (above paging controls / styles / other injections)
-   - Ignores paging links where pg=0 when tracking clicks
-   - Cold-start seeds so Recommended can show even before intent is collected
+   Injection rules:
+   - Inject hero/shelves if querystring starts with "?pg=0" (first param)
+     OR if "homepage-like" (no pl1, no pid, and pg missing or pg=0)
+   - Otherwise do not inject.
 
-   Affinity Sheet format (CSV headers):
-   Option A:
-     ProductGroupID, RelatedGroupIDs
-       - RelatedGroupIDs is a comma-separated list (e.g., "2353,2371,2354")
-   Option B:
-     ProductGroupID, Related1, Related2, Related3 ... (any number of columns)
+   Tracking rules:
+   - Track landing context via pl1 when present (pl1=####)
+   - Ignore pager links where pg=0 when tracking clicks
 */
 
 (function WL_HomeMerch() {
   // ---------------- CONFIG ----------------
   const CFG = {
-    // HERO (temporary)
     HERO_IMAGE: "https://images-woodsonlumber.sirv.com/Emailimages/Dark-Walnut.jpg",
-    HERO_LINK: "/Products.aspx?pl1=4546&pg=4546&sort=StockClassSort&direction=asc", // change anytime
+    HERO_LINK: "/Products.aspx?pl1=4546&pg=4546&sort=StockClassSort&direction=asc",
     HERO_TITLE: "Featured",
     HERO_SUBTITLE: "Shop current specials",
 
-    // AFFINITY SHEET (published CSV URL)
     AFFINITY_CSV_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vRQWZZ6H1UvsAhO8o29StEflcyS_ssW0lQxRg0LA9NucM9oyAl6gG8jZJfVaIG6nYiZ80Fw2NXldNWD/pub?output=csv",
 
-    // GROUP IMAGE SHEET (published CSV URL) - reuse same sheet you use for wl-productgroup-images.js (Sheet1)
     GROUP_IMAGE_CSV_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vS-3Rdml5LGrt8dn1yzvZJYqHQDn0BIXrUjycLG_Q0xtu7c-OcVTnO5BvhjXFb2o0H4zlC2lThUUx0V/pub?output=csv",
     GROUP_IMAGE_COL_ID: "ProductGroupID",
     GROUP_IMAGE_COL_URL: "ImageURL",
 
-    // Cold-start seeds (used when user has no intent yet)
-    // For testing: set this to the ProductGroupID you have in your affinity sheet
     COLD_START_SEEDS: ["18"],
 
-    // LocalStorage keys
     LS_RECENT: "__WL_RECENT_GROUPS_V1__",
     LS_INTENT: "__WL_INTENT_GROUPS_V1__",
     LS_AFF_CACHE: "__WL_AFFINITY_CACHE_V1__",
 
-    // Limits / TTL
     RECENT_LIMIT: 16,
-    AFFINITY_CACHE_TTL_MS: 12 * 60 * 60 * 1000, // 12 hours
+    AFFINITY_CACHE_TTL_MS: 12 * 60 * 60 * 1000,
 
-    // Home shelves
     SHELF_RECENT_COUNT: 10,
     SHELF_RECO_COUNT: 12,
 
-    // If true, hides the default WebTrack cards on homepage (keeps everything on lower pages unchanged)
     HIDE_DEFAULT_CARDS_ON_HOMEPAGE: false,
-
-    // Debug logging
     DEBUG: true
   };
 
@@ -63,16 +47,16 @@
 
   const qs = new URLSearchParams(location.search);
   const pl1 = qs.get("pl1");
-  const pgParam = qs.get("pg"); // can be paging (0) or group id (e.g. 4677)
-  const pid = qs.get("pid");    // product context (search-ish flows)
+  const pgParam = qs.get("pg");
+  const pid = qs.get("pid");
+
+  const queryStartsWithPg0 = (location.search || "").toLowerCase().startsWith("?pg=0");
 
   const pgIsPagingZero = (pgParam !== null && String(pgParam) === "0");
+  const homepageLike = !pl1 && !pid && (!pgParam || pgIsPagingZero);
 
-  // "Homepage-like" view:
-  // - not inside a department (no pl1)
-  // - not in a product-specific flow (no pid)
-  // - and either no pg at all OR pg=0
-  const isHomepage = !pl1 && !pid && (!pgParam || pgIsPagingZero);
+  // ✅ Your requested rule:
+  const shouldInjectHero = queryStartsWithPg0 || homepageLike;
 
   if (window.__WL_HOME_MERCH_LOADED__) return;
   window.__WL_HOME_MERCH_LOADED__ = true;
@@ -112,7 +96,6 @@
     }
   }
 
-  // Treat as a “group drilldown link” only if pg exists AND pg != 0
   function isGroupDrilldownHref(href) {
     const pg = getParamFromHref(href, "pg");
     if (!pg) return false;
@@ -124,7 +107,7 @@
     const abs = getAbsUrl(href);
     if (!abs) return null;
 
-    const pg = getParamFromHref(href, "pg"); // on card links this is the ProductGroupID
+    const pg = getParamFromHref(href, "pg");
     if (!pg || String(pg) === "0") return null;
 
     let title = trim(a.textContent);
@@ -149,12 +132,11 @@
     };
   }
 
-  // ---------------- RECENT + INTENT STORAGE ----------------
+  // ---------------- STORAGE ----------------
   function loadRecent() {
     const arr = safeJsonParse(localStorage.getItem(CFG.LS_RECENT), []);
     return Array.isArray(arr) ? arr : [];
   }
-
   function saveRecent(arr) {
     localStorage.setItem(CFG.LS_RECENT, JSON.stringify(arr));
   }
@@ -188,23 +170,20 @@
     log("Recorded group visit:", gid, meta.title);
   }
 
-  // Track clicks on group cards (works across pagination)
+  // ---------------- TRACKING ----------------
   function wireClickTracking() {
     document.addEventListener("click", function (e) {
       const a = e.target && e.target.closest ? e.target.closest('a[href*="Products.aspx"]') : null;
       if (!a) return;
 
       const href = a.getAttribute("href") || "";
-      if (!isGroupDrilldownHref(href)) return; // ignore paging links like pg=0
+      if (!isGroupDrilldownHref(href)) return;
 
       const meta = getCardMetaFromAnchor(a);
       if (meta) recordGroupVisit(meta);
     }, true);
   }
 
-  // Track landing context:
-  // - If pl1 present, record pl1 as intent (even if pg=0 paging)
-  // - Else if pg present and pg != 0, record pg as intent
   function trackLandingContext() {
     if (pl1) {
       const gid = normalizeGroupId(pl1);
@@ -263,7 +242,7 @@
     return rows;
   }
 
-  // ---------------- AFFINITY MAP ----------------
+  // ---------------- AFFINITY ----------------
   function loadAffinityCache() {
     const raw = localStorage.getItem(CFG.LS_AFF_CACHE);
     const parsed = safeJsonParse(raw, null);
@@ -298,7 +277,6 @@
     const idxRelatedList = header.findIndex(h => h.toLowerCase() === "relatedgroupids");
 
     const mapObj = {};
-
     for (let r = 1; r < rows.length; r++) {
       const id = normalizeGroupId(idxId >= 0 ? rows[r][idxId] : "");
       if (!id) continue;
@@ -364,7 +342,7 @@
     return map;
   }
 
-  // ---------------- HOMEPAGE INSERTION ----------------
+  // ---------------- UI ----------------
   function ensureStyles() {
     if (document.getElementById("wl-home-merch-css")) return;
 
@@ -372,45 +350,25 @@
 #wlhmRoot { margin: 12px 0 18px 0; }
 #wlhmRoot * { box-sizing: border-box; }
 
-.wlhm-hero {
-  border-radius: 16px; overflow: hidden;
-  border: 1px solid rgba(0,0,0,.08);
-  box-shadow: 0 10px 26px rgba(0,0,0,.10);
-  position: relative;
-}
+.wlhm-hero { border-radius:16px; overflow:hidden; border:1px solid rgba(0,0,0,.08); box-shadow:0 10px 26px rgba(0,0,0,.10); position:relative; }
 .wlhm-hero a { display:block; text-decoration:none; color:inherit; }
 .wlhm-hero img { width:100%; height:240px; object-fit:cover; display:block; }
-@media (max-width: 768px){ .wlhm-hero img { height: 170px; } }
-.wlhm-heroOverlay{
-  position:absolute; inset:auto 0 0 0;
-  padding: 14px 16px;
-  background: linear-gradient(to top, rgba(0,0,0,.62), rgba(0,0,0,0));
-  color:#fff;
-}
-.wlhm-heroTitle{ font-weight:800; font-size:18px; line-height:1.15; }
-.wlhm-heroSub{ opacity:.92; font-size:13px; margin-top:2px; }
+@media (max-width:768px){ .wlhm-hero img { height:170px; } }
+.wlhm-heroOverlay { position:absolute; inset:auto 0 0 0; padding:14px 16px; background:linear-gradient(to top, rgba(0,0,0,.62), rgba(0,0,0,0)); color:#fff; }
+.wlhm-heroTitle { font-weight:800; font-size:18px; line-height:1.15; }
+.wlhm-heroSub { opacity:.92; font-size:13px; margin-top:2px; }
 
-.wlhm-shelf { margin-top: 14px; }
-.wlhm-shelfHead { display:flex; align-items:baseline; justify-content:space-between; padding: 6px 2px; }
+.wlhm-shelf { margin-top:14px; }
+.wlhm-shelfHead { display:flex; align-items:baseline; justify-content:space-between; padding:6px 2px; }
 .wlhm-shelfTitle { font-weight:800; font-size:16px; }
-.wlhm-row { display:flex; gap: 10px; overflow:auto; padding: 6px 2px 10px 2px; scroll-snap-type: x mandatory; }
-.wlhm-card {
-  flex: 0 0 180px;
-  scroll-snap-align: start;
-  border-radius: 14px; overflow:hidden;
-  border: 1px solid rgba(0,0,0,.08);
-  background:#fff;
-  box-shadow: 0 6px 18px rgba(0,0,0,.08);
-  transition: transform .12s ease, box-shadow .12s ease;
-}
-.wlhm-card:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(0,0,0,.12); }
+.wlhm-row { display:flex; gap:10px; overflow:auto; padding:6px 2px 10px 2px; scroll-snap-type:x mandatory; }
+.wlhm-card { flex:0 0 180px; scroll-snap-align:start; border-radius:14px; overflow:hidden; border:1px solid rgba(0,0,0,.08); background:#fff; box-shadow:0 6px 18px rgba(0,0,0,.08); transition:transform .12s ease, box-shadow .12s ease; }
+.wlhm-card:hover { transform:translateY(-2px); box-shadow:0 10px 28px rgba(0,0,0,.12); }
 .wlhm-card a { display:block; text-decoration:none; color:inherit; }
 .wlhm-cardImg { width:100%; height:120px; object-fit:cover; background:#f2f2f2; display:block; }
-.wlhm-cardBody { padding: 10px 10px 12px 10px; }
+.wlhm-cardBody { padding:10px 10px 12px 10px; }
 .wlhm-cardTitle { font-weight:800; font-size:13px; line-height:1.2; }
-.wlhm-badge { margin-top: 6px; font-size:11px; opacity:.75; }
-
-body.wlhm-hide-default fieldset.Cards { display:none !important; }
+.wlhm-badge { margin-top:6px; font-size:11px; opacity:.75; }
 `;
     const style = document.createElement("style");
     style.id = "wl-home-merch-css";
@@ -418,7 +376,7 @@ body.wlhm-hide-default fieldset.Cards { display:none !important; }
     document.head.appendChild(style);
   }
 
-  function getHomepageInsertAnchor() {
+  function getInsertAnchor() {
     return (
       document.querySelector("#ctl00_PageBody_ProductGroupDrillDownPanel .productGroupScrollingPanelFull") ||
       document.querySelector(".productGroupScrollingPanelFull") ||
@@ -439,9 +397,7 @@ body.wlhm-hide-default fieldset.Cards { display:none !important; }
       .sort((a, b) => b.v - a.v)
       .map(x => x.k);
 
-    if (ranked.length) return ranked;
-
-    return (CFG.COLD_START_SEEDS || []).map(normalizeGroupId).filter(Boolean);
+    return ranked.length ? ranked : (CFG.COLD_START_SEEDS || []).map(normalizeGroupId).filter(Boolean);
   }
 
   function renderShelfCards(cards) {
@@ -461,13 +417,11 @@ body.wlhm-hide-default fieldset.Cards { display:none !important; }
     }).join("");
   }
 
-  function injectHomepageUI({ recentCards, recoCards }) {
+  function injectUI({ recentCards, recoCards }) {
     ensureStyles();
-
-    if (CFG.HIDE_DEFAULT_CARDS_ON_HOMEPAGE) document.body.classList.add("wlhm-hide-default");
     if (document.getElementById("wlhmRoot")) return;
 
-    const anchor = getHomepageInsertAnchor();
+    const anchor = getInsertAnchor();
     if (!anchor) return;
 
     const root = document.createElement("div");
@@ -496,14 +450,14 @@ body.wlhm-hide-default fieldset.Cards { display:none !important; }
       </div>` : ``}
     `;
 
-    // If we anchored to the scroll panel, insert hero at the TOP (above paging controls)
+    // If anchored to scrolling panel, insert at top
     if (anchor.classList && anchor.classList.contains("productGroupScrollingPanelFull")) {
       anchor.insertBefore(root, anchor.firstChild);
     } else {
       anchor.parentNode.insertBefore(root, anchor);
     }
 
-    log("Injected homepage hero/shelves. Anchor:", anchor.className || anchor.id || anchor.tagName);
+    log("Injected UI. shouldInjectHero =", shouldInjectHero, "search =", location.search);
   }
 
   function buildRecentCards(groupImgMap) {
@@ -521,8 +475,8 @@ body.wlhm-hide-default fieldset.Cards { display:none !important; }
     if (!top.length) return [];
 
     const seen = new Set(loadRecent().map(x => String(x.pg)));
-
     const score = {};
+
     top.forEach(src => {
       const rel = (affMap && affMap[String(src)]) ? affMap[String(src)] : [];
       rel.forEach(pg => {
@@ -538,11 +492,8 @@ body.wlhm-hide-default fieldset.Cards { display:none !important; }
       .slice(0, CFG.SHELF_RECO_COUNT)
       .map(x => x[0]);
 
-    log("Top intent:", top, "Reco:", ranked);
-
     return ranked.map(pg => ({
-      title: `Shop ${pg}`, // upgrade later using a Title column
-      // Use pl1+pg when linking to a group page (works well with your existing patterns)
+      title: `Shop ${pg}`,
       link: `/Products.aspx?pl1=${pg}&pg=${pg}&sort=StockClassSort&direction=asc`,
       img: groupImgMap.get(String(pg)) || "",
       badge: "Suggested"
@@ -553,18 +504,18 @@ body.wlhm-hide-default fieldset.Cards { display:none !important; }
   wireClickTracking();
   trackLandingContext();
 
-  if (isHomepage) {
+  if (shouldInjectHero) {
     (async function () {
       try {
         const [aff, groupImgMap] = await Promise.all([fetchAffinityMap(), fetchGroupImageMap()]);
         const recentCards = buildRecentCards(groupImgMap);
         const recoCards = buildRecoCards(aff, groupImgMap);
-        injectHomepageUI({ recentCards, recoCards });
+        injectUI({ recentCards, recoCards });
       } catch (e) {
-        warn("homepage init failed:", e);
+        warn("inject init failed:", e);
       }
     })();
   } else {
-    log("Not homepage-like; hero not injected. search =", location.search);
+    log("Not injecting (rule). search =", location.search);
   }
 })();
