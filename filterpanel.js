@@ -1,6 +1,6 @@
-/* wl-refine-flyout.js (responsive)
-   Desktop: right-side flyout
-   Mobile: inline accordion with scrollable option area
+/* wl-refine-flyout.js (responsive, FIXED)
+   Desktop: right-side flyout (clone is OK because we wire changes back to originals)
+   Mobile: inline accordion with scrollable option area (MUST NOT CLONE; keep original inputs)
 */
 
 (function () {
@@ -12,10 +12,8 @@
     dedupeOptions: true,
 
     responsive: {
-      // below this width, use INLINE mode (no flyout)
-      inlineMaxWidth: 860,
-      // max height of the inline options area (px) before it scrolls
-      inlineOptionsMaxHeight: 320,
+      inlineMaxWidth: 860,          // <= uses inline mode
+      inlineOptionsMaxHeight: 320,  // inline options scroll box height
     },
 
     flyout: {
@@ -26,13 +24,9 @@
       closeOnEsc: true,
     },
 
-    // inline default open section(s) (case-insensitive includes)
     defaultOpenInline: ["brand"],
   };
 
-  // -----------------------------
-  // Utils
-  // -----------------------------
   const normSpace = (s) =>
     String(s || "")
       .replace(/\u00A0/g, " ")
@@ -42,7 +36,6 @@
   const pageFile = () => (location.pathname.split("/").pop() || "").toLowerCase();
 
   function isInlineMode() {
-    // prefer viewport width because it matches the actual rendering constraints
     return window.innerWidth <= CFG.responsive.inlineMaxWidth;
   }
 
@@ -63,7 +56,6 @@
     if (document.getElementById("wl-refine-responsive-css")) return;
 
     const css = `
-/* Modernize base headers */
 .RadPanelBar[id*="RefineSearchRadPanelBar"] a.rpLink{
   border-radius: 10px;
   margin: 6px 8px;
@@ -80,13 +72,12 @@
 }
 .RadPanelBar[id*="RefineSearchRadPanelBar"] a.rpLink .rpText{ font-weight:600; }
 
-/* Active section */
 .wl-refine-active > a.rpLink{
   border-color:rgba(0,0,0,.25) !important;
   box-shadow:0 2px 12px rgba(0,0,0,.10) !important;
 }
 
-/* Inline mode: make section slide look like a card */
+/* Inline mode section content */
 .wl-inline .rpSlide{
   margin: 0 8px 10px;
   padding: 10px 12px;
@@ -96,7 +87,7 @@
   box-shadow: 0 8px 22px rgba(0,0,0,.06);
 }
 
-/* Inline mode: options area scrolls instead of page growing forever */
+/* Inline mode options scroll box */
 .wl-inline .wl-inline-options-scroll{
   overflow:auto;
   -webkit-overflow-scrolling: touch;
@@ -132,7 +123,7 @@
 .wl-refine-flyout-body{ padding:10px 14px; overflow:auto; }
 .wl-refine-flyout-body input[type="checkbox"]{ transform:scale(1.05); margin-right:10px; }
 
-/* Safety: on small screens, force flyout hidden (prevents left-peek/offscreen issues) */
+/* Safety: force flyout hidden on small screens */
 @media (max-width: 860px){
   .wl-refine-flyout{ display:none !important; }
 }
@@ -169,6 +160,7 @@
   function dedupeSectionOptions(sectionLi) {
     const table = sectionLi.querySelector(".rpTemplate table");
     if (!table) return;
+
     const spans = table.querySelectorAll("span[refinequery]");
     if (!spans || spans.length < 2) return;
 
@@ -176,6 +168,7 @@
     spans.forEach((sp) => {
       const labelEl = sp.querySelector("label");
       if (!labelEl) return;
+
       const original = normSpace(labelEl.textContent);
       const canon = canonicalizeValue(original);
       if (!canon) return;
@@ -190,7 +183,7 @@
   }
 
   // -----------------------------
-  // Inline accordion mode (mobile)
+  // Inline (mobile) accordion
   // -----------------------------
   function setSlideOpen(li, open) {
     const slide = li.querySelector(":scope > .rpSlide");
@@ -199,22 +192,25 @@
     li.classList.toggle("wl-refine-active", !!open);
   }
 
+  // FIXED: wrap the ORIGINAL rpTemplate (do NOT clone) so checkboxes still work
   function makeInlineScrollable(li) {
     const slide = li.querySelector(":scope > .rpSlide");
     if (!slide) return;
 
-    // wrap the template content in a scroll container once
     const templ = slide.querySelector(".rpTemplate");
-    if (!templ || templ.__WL_WRAPPED__) return;
-    templ.__WL_WRAPPED__ = true;
+    if (!templ) return;
+
+    // already wrapped?
+    if (templ.closest(".wl-inline-options-scroll")) return;
 
     const wrap = document.createElement("div");
     wrap.className = "wl-inline-options-scroll";
     wrap.style.maxHeight = CFG.responsive.inlineOptionsMaxHeight + "px";
 
-    // move template content into wrapper
-    wrap.appendChild(templ.cloneNode(true));
-    templ.parentNode.replaceChild(wrap, templ);
+    // Replace template with wrapper, then move template inside wrapper
+    const parent = templ.parentNode;
+    parent.replaceChild(wrap, templ);
+    wrap.appendChild(templ);
   }
 
   function bindInlineAccordion(sectionLis) {
@@ -223,11 +219,9 @@
       const slide = li.querySelector(":scope > .rpSlide");
       if (!link || !slide) return;
 
-      // avoid double binding
       if (link.__WL_INLINE_BOUND__) return;
       link.__WL_INLINE_BOUND__ = true;
 
-      // prevent Telerik from fighting us
       const handler = (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -235,13 +229,12 @@
 
         const isOpen = slide.style.display !== "none";
 
-        // close all others (accordion)
+        // close others
         sectionLis.forEach((other) => setSlideOpen(other, false));
 
-        // toggle this one
+        // toggle this
         setSlideOpen(li, !isOpen);
 
-        // keep it usable: make options area scroll
         if (!isOpen) makeInlineScrollable(li);
       };
 
@@ -251,7 +244,7 @@
   }
 
   // -----------------------------
-  // Flyout mode (desktop)
+  // Flyout (desktop)
   // -----------------------------
   let flyoutEl = null;
   let activeSectionLi = null;
@@ -295,7 +288,7 @@
     const left = Math.round(rect.right + CFG.flyout.offsetPx + window.scrollX);
 
     const headerRect = sectionLi.querySelector(":scope > a.rpLink").getBoundingClientRect();
-    let top = Math.round(headerRect.top + window.scrollY);
+    const top = Math.round(headerRect.top + window.scrollY);
 
     const fly = ensureFlyout();
     fly.style.left = left + "px";
@@ -312,14 +305,14 @@
   }
 
   function openFlyoutForSection(panelBar, sectionLi) {
-    if (isInlineMode()) return; // safety
+    if (isInlineMode()) return;
 
     const fly = ensureFlyout();
     const body = fly.querySelector(".wl-refine-flyout-body");
     const title = fly.querySelector(".wl-refine-flyout-title");
+
     const headerText = getSectionHeaderText(sectionLi) || "Filter";
 
-    // active styling
     if (activeSectionLi && activeSectionLi !== sectionLi) {
       activeSectionLi.classList.remove("wl-refine-active");
     }
@@ -335,10 +328,10 @@
     } else {
       const cloned = origTable.cloneNode(true);
 
-      // wire cloned checkbox -> original checkbox click
       cloned.querySelectorAll('input[type="checkbox"]').forEach((ci) => {
         const origId = ci.getAttribute("id");
         if (!origId) return;
+
         const origInput = document.getElementById(origId);
         if (!origInput) return;
 
@@ -382,7 +375,7 @@
   }
 
   // -----------------------------
-  // Init / Reinit
+  // Init / re-init
   // -----------------------------
   function init() {
     if (!CFG.allowPages.has(pageFile())) return;
@@ -401,15 +394,14 @@
 
     if (!rootGroup) return;
 
-    // mark panelBar for responsive CSS hooks
     panelBar.classList.toggle("wl-inline", isInlineMode());
 
     const sectionLis = Array.from(rootGroup.querySelectorAll(":scope > li.rpItem"));
 
     sectionLis.forEach((li) => {
-      const header = getSectionHeaderText(li).toLowerCase();
+      const headerLower = getSectionHeaderText(li).toLowerCase();
 
-      if (CFG.hideSections.includes(header)) {
+      if (CFG.hideSections.includes(headerLower)) {
         hideSection(li);
         return;
       }
@@ -419,12 +411,10 @@
       }
     });
 
-    // MODE SWITCH
     if (isInlineMode()) {
-      // Ensure flyout is hidden (prevents “something on the left”)
       closeFlyout();
 
-      // Show slides (inline) and start collapsed
+      // Start all collapsed
       sectionLis.forEach((li) => {
         const slide = li.querySelector(":scope > .rpSlide");
         if (slide) slide.style.display = "none";
@@ -433,19 +423,20 @@
 
       bindInlineAccordion(sectionLis);
 
-      // default open one (optional)
-      const first = sectionLis.find((li) => {
-        const t = getSectionHeaderText(li).toLowerCase();
-        return CFG.defaultOpenInline.some((x) => t.includes(String(x).toLowerCase()));
-      }) || sectionLis.find((li) => li.style.display !== "none");
+      // Default open one section
+      const first =
+        sectionLis.find((li) => {
+          const t = getSectionHeaderText(li).toLowerCase();
+          return CFG.defaultOpenInline.some((x) => t.includes(String(x).toLowerCase()));
+        }) ||
+        sectionLis.find((li) => li.style.display !== "none");
 
       if (first) {
         setSlideOpen(first, true);
         makeInlineScrollable(first);
       }
     } else {
-      // Desktop: hide slide growth by keeping slides hidden;
-      // we still rely on the original DOM for checkbox IDs.
+      // Desktop: hide slides so left panel stays compact
       sectionLis.forEach((li) => {
         const slide = li.querySelector(":scope > .rpSlide");
         if (slide) slide.style.display = "none";
@@ -453,13 +444,7 @@
 
       bindFlyoutHeaders(panelBar, sectionLis);
 
-      // close flyout if it would be offscreen
-      if (flyoutEl && flyoutEl.style.display !== "none") {
-        // reposition to current active if any
-        if (activeSectionLi) positionFlyout(panelBar, activeSectionLi);
-      }
-
-      // esc / outside close once
+      // One-time close handlers
       if (!window.__WL_REFINE_CLOSE_BOUND__) {
         window.__WL_REFINE_CLOSE_BOUND__ = true;
 
@@ -470,9 +455,11 @@
         document.addEventListener("mousedown", (e) => {
           if (!CFG.flyout.closeOnOutsideClick) return;
           if (!flyoutEl || flyoutEl.style.display === "none") return;
+
           const link = activeSectionLi?.querySelector(":scope > a.rpLink");
           if (flyoutEl.contains(e.target)) return;
           if (link && link.contains(e.target)) return;
+
           closeFlyout();
         });
       }
@@ -483,26 +470,24 @@
     try { init(); } catch (e) { console.warn("[WL RefineResponsive] init error", e); }
   }
 
-  // load
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", safeInit);
   } else {
     safeInit();
   }
 
-  // re-render watcher (telerik ajax rebuilds)
   const mo = new MutationObserver(() => {
     clearTimeout(window.__WL_REFINE_REINIT__);
     window.__WL_REFINE_REINIT__ = setTimeout(safeInit, 180);
   });
   mo.observe(document.documentElement, { childList: true, subtree: true });
 
-  // responsive re-init on resize/orientation
-  let lastModeInline = isInlineMode();
+  // Switch modes on resize/orientation change
+  let lastInline = isInlineMode();
   window.addEventListener("resize", () => {
     const nowInline = isInlineMode();
-    if (nowInline !== lastModeInline) {
-      lastModeInline = nowInline;
+    if (nowInline !== lastInline) {
+      lastInline = nowInline;
       safeInit();
     }
   });
