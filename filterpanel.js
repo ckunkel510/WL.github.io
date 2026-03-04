@@ -27,6 +27,10 @@
     defaultOpenInline: ["brand"],
   };
 
+  // Used to prevent touch pointerdown + click double-toggle
+  let lastTouchPointerDownAt = 0;
+
+
   const normSpace = (s) =>
     String(s || "")
       .replace(/\u00A0/g, " ")
@@ -127,7 +131,42 @@
 @media (max-width: 860px){
   .wl-refine-flyout{ display:none !important; }
 }
-    `.trim();
+    
+
+/* Mobile full-screen drawer (inline mode) */
+.wl-refine-drawer{
+  position:fixed;
+  inset:0;
+  z-index:100000;
+  background:#fff;
+  display:none;
+  flex-direction:column;
+}
+.wl-refine-drawer.is-open{ display:flex; }
+.wl-refine-drawer-header{
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 14px;
+  border-bottom:1px solid rgba(0,0,0,.10);
+  position:sticky; top:0; background:#fff;
+}
+.wl-refine-drawer-title{ font-weight:800; font-size:16px; }
+.wl-refine-drawer-close{
+  border:1px solid rgba(0,0,0,.16);
+  background:#fff;
+  border-radius:12px;
+  padding:8px 10px;
+  font-weight:700;
+}
+.wl-refine-drawer-body{
+  padding:12px 12px 18px;
+  overflow:auto;
+  -webkit-overflow-scrolling:touch;
+}
+@media (max-width: 860px){
+  /* when drawer is open, prevent background scroll via body class */
+  body.wl-refine-lock{ overflow:hidden !important; }
+}
+`.trim();
 
     const style = document.createElement("style");
     style.id = "wl-refine-responsive-css";
@@ -223,6 +262,8 @@
       link.__WL_INLINE_BOUND__ = true;
 
       const handler = (e) => {
+        // On touch, pointerdown is used; ignore the synthetic click that follows.
+        if (e && e.type === "click" && Date.now() - lastTouchPointerDownAt < 700) return;
         e.preventDefault();
         e.stopPropagation();
         if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
@@ -235,7 +276,19 @@
         // toggle this
         setSlideOpen(li, !isOpen);
 
-        if (!isOpen) makeInlineScrollable(li);
+        if (isOpen) {
+          // We just closed the active section; also close the mobile drawer if it's open.
+          closeDrawer(true);
+        }
+
+        if (!isOpen) {
+          makeInlineScrollable(li);
+
+          // Mobile: open options in a full-screen drawer for easier selection
+          if (isInlineMode()) {
+            openDrawerForSection(li);
+          }
+        }
       };
 
       // IMPORTANT: avoid double-fire on mouse (pointerdown + click)
@@ -244,12 +297,135 @@
         "pointerdown",
         (e) => {
           // Touch/pen can feel laggy on click; use pointerdown for those only.
-          if (e && e.pointerType && e.pointerType !== "mouse") handler(e);
+          if (e && e.pointerType && e.pointerType !== "mouse") {
+            lastTouchPointerDownAt = Date.now();
+            handler(e);
+          }
         },
         true
       );
     });
   }
+
+  
+  // -----------------------------
+  // Mobile full-screen drawer (inline mode)
+  // -----------------------------
+  let drawerEl = null;
+  let drawerBodyEl = null;
+  let drawerTitleEl = null;
+  let drawerCloseBtn = null;
+
+  // Track where to restore the slide content after moving into the drawer
+  let drawerRestore = null;
+
+  function ensureDrawer() {
+    if (drawerEl) return;
+    drawerEl = document.createElement("div");
+    drawerEl.className = "wl-refine-drawer";
+    drawerEl.setAttribute("role", "dialog");
+    drawerEl.setAttribute("aria-modal", "true");
+
+    const header = document.createElement("div");
+    header.className = "wl-refine-drawer-header";
+
+    drawerTitleEl = document.createElement("div");
+    drawerTitleEl.className = "wl-refine-drawer-title";
+    drawerTitleEl.textContent = "Refine";
+
+    drawerCloseBtn = document.createElement("button");
+    drawerCloseBtn.type = "button";
+    drawerCloseBtn.className = "wl-refine-drawer-close";
+    drawerCloseBtn.textContent = "Close";
+
+    header.appendChild(drawerTitleEl);
+    header.appendChild(drawerCloseBtn);
+
+    drawerBodyEl = document.createElement("div");
+    drawerBodyEl.className = "wl-refine-drawer-body";
+
+    drawerEl.appendChild(header);
+    drawerEl.appendChild(drawerBodyEl);
+    document.body.appendChild(drawerEl);
+
+    drawerCloseBtn.addEventListener("click", closeDrawer, true);
+    drawerEl.addEventListener(
+      "click",
+      (e) => {
+        // Clicking the backdrop (outside body) closes
+        if (e.target === drawerEl) closeDrawer();
+      },
+      true
+    );
+
+    document.addEventListener(
+      "keydown",
+      (e) => {
+        if (!drawerEl.classList.contains("is-open")) return;
+        if (e.key === "Escape") closeDrawer();
+      },
+      true
+    );
+  }
+
+  function openDrawerForSection(sectionLi) {
+    ensureDrawer();
+
+    const title = getSectionHeaderText(sectionLi) || "Refine";
+    drawerTitleEl.textContent = title;
+
+    const slide = sectionLi.querySelector(":scope > .rpSlide");
+    if (!slide) return;
+
+    // If already open for something else, restore first
+    if (drawerRestore) closeDrawer(true);
+
+    // Make sure the slide is visible for measurement / content
+    slide.style.display = "block";
+
+    // Prepare restore info
+    const placeholder = document.createComment("wl-refine-drawer-placeholder");
+    slide.parentNode.insertBefore(placeholder, slide);
+    drawerRestore = { slide, placeholder, originalDisplay: slide.style.display };
+
+    // Move the ORIGINAL slide (no cloning) into the drawer body
+    drawerBodyEl.innerHTML = "";
+    drawerBodyEl.appendChild(slide);
+
+    drawerEl.classList.add("is-open");
+    document.body.classList.add("wl-refine-lock");
+  }
+
+  function closeDrawer(silent) {
+    if (!drawerEl || !drawerEl.classList.contains("is-open")) {
+      // Still restore if needed
+      if (drawerRestore) {
+        const { slide, placeholder, originalDisplay } = drawerRestore;
+        placeholder.parentNode.insertBefore(slide, placeholder);
+        placeholder.remove();
+        slide.style.display = originalDisplay || "";
+        drawerRestore = null;
+      }
+      return;
+    }
+
+    // Restore content
+    if (drawerRestore) {
+      const { slide, placeholder, originalDisplay } = drawerRestore;
+      placeholder.parentNode.insertBefore(slide, placeholder);
+      placeholder.remove();
+      slide.style.display = originalDisplay || "";
+      drawerRestore = null;
+    }
+
+    drawerEl.classList.remove("is-open");
+    document.body.classList.remove("wl-refine-lock");
+
+    if (!silent) {
+      // noop: reserved for future focus restore
+    }
+  }
+
 
   // -----------------------------
   // Flyout (desktop)
@@ -366,6 +542,8 @@
       link.__WL_FLYOUT_BOUND__ = true;
 
       const handler = (e) => {
+        // On touch, pointerdown is used; ignore the synthetic click that follows.
+        if (e && e.type === "click" && Date.now() - lastTouchPointerDownAt < 700) return;
         e.preventDefault();
         e.stopPropagation();
         if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
@@ -383,7 +561,10 @@
         "pointerdown",
         (e) => {
           // Touch/pen can feel laggy on click; use pointerdown for those only.
-          if (e && e.pointerType && e.pointerType !== "mouse") handler(e);
+          if (e && e.pointerType && e.pointerType !== "mouse") {
+            lastTouchPointerDownAt = Date.now();
+            handler(e);
+          }
         },
         true
       );
