@@ -55,7 +55,17 @@
 
   const queryStartsWithPg0 = (location.search || "").toLowerCase().startsWith("?pg=0");
   const pgIsPagingZero = (pgParam !== null && String(pgParam) === "0");
-  const homepageLike = !pl1 && !pid && (!pgParam || pgIsPagingZero);
+
+  // Exclude plain search-result URLs like:
+  //   Products.aspx?direction=desc&searchText=2x4x8&pg=0&sort=Relevance
+  // so we don't inject the homepage merchandising UI on search pages.
+  const hasSearchText = ["searchText", "search", "q", "keyword", "keywords"]
+    .some(k => {
+      const v = qs.get(k);
+      return v !== null && String(v).trim() !== "";
+    });
+
+  const homepageLike = !pl1 && !pid && (!pgParam || pgIsPagingZero) && !hasSearchText;
 
   const shouldInject = queryStartsWithPg0 || homepageLike;
 
