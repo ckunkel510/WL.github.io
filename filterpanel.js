@@ -238,8 +238,16 @@
         if (!isOpen) makeInlineScrollable(li);
       };
 
+      // IMPORTANT: avoid double-fire on mouse (pointerdown + click)
       link.addEventListener("click", handler, true);
-      link.addEventListener("pointerdown", handler, true);
+      link.addEventListener(
+        "pointerdown",
+        (e) => {
+          // Touch/pen can feel laggy on click; use pointerdown for those only.
+          if (e && e.pointerType && e.pointerType !== "mouse") handler(e);
+        },
+        true
+      );
     });
   }
 
@@ -369,8 +377,16 @@
         openFlyoutForSection(panelBar, li);
       };
 
+      // IMPORTANT: avoid double-fire on mouse (pointerdown + click)
       link.addEventListener("click", handler, true);
-      link.addEventListener("pointerdown", handler, true);
+      link.addEventListener(
+        "pointerdown",
+        (e) => {
+          // Touch/pen can feel laggy on click; use pointerdown for those only.
+          if (e && e.pointerType && e.pointerType !== "mouse") handler(e);
+        },
+        true
+      );
     });
   }
 
