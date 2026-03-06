@@ -1,3 +1,7 @@
+#MainLayoutRow{
+display: inline !important;
+}
+
 #ctl00_PageHeader_searchBarTableRow{
 background-color: white;
 margin-top:0px !important;
