@@ -102,10 +102,14 @@
     if (document.getElementById("wl-storelocations-styles")) return;
 
     var css = `
+      #MainLayoutRow {
+        display: block !important;
+      }
+
       #wl-storelocations-root {
         width: 100%;
         max-width: 1400px;
-        margin: 0 auto 30px auto;
+        margin: 20px auto 30px auto;
         padding: 20px;
         box-sizing: border-box;
         font-family: Arial, sans-serif;
@@ -286,43 +290,15 @@
   }
 
   function findContentContainer() {
-    var selectors = [
-      ".page-content .d-flex",
-      ".content-wrapper .d-flex",
-      ".container .d-flex",
-      ".d-flex"
-    ];
+    var el = document.getElementById("MainLayoutRow");
 
-    for (var i = 0; i < selectors.length; i++) {
-      var el = document.querySelector(selectors[i]);
-      if (el) {
-        console.log(LOG, "Using content container:", selectors[i], el);
-        return el;
-      }
+    if (el) {
+      console.log(LOG, "Using #MainLayoutRow as content container:", el);
+      return el;
     }
 
-    console.warn(LOG, "Could not find target .d-flex container.");
+    console.warn(LOG, "Could not find #MainLayoutRow.");
     return null;
-  }
-
-  function hideNearbyNoise() {
-    var selectors = [
-      ".groupHeader",
-      ".groupPager",
-      ".productFilterPanel",
-      ".refinementPanel",
-      ".sortByPanel",
-      ".productsHeader",
-      ".pagingWrapper",
-      ".facetContainer",
-      ".breadcrumbContainer"
-    ];
-
-    selectors.forEach(function (selector) {
-      document.querySelectorAll(selector).forEach(function (el) {
-        el.style.setProperty("display", "none", "important");
-      });
-    });
   }
 
   function setPrettyUrl(page) {
@@ -429,22 +405,19 @@
 
   function render() {
     injectStyles();
-    hideNearbyNoise();
 
     var container = findContentContainer();
     if (!container) return;
 
-    container.innerHTML = "";
+    console.log(LOG, "Rendering into #MainLayoutRow");
 
-    if (currentPage.type === "hub") {
-      container.innerHTML = createHubMarkup();
-    } else {
-      container.innerHTML = createStoreMarkup(currentPage);
-    }
+    container.innerHTML = currentPage.type === "hub"
+      ? createHubMarkup()
+      : createStoreMarkup(currentPage);
 
     setPrettyUrl(currentPage);
 
-    console.log(LOG, "Custom store page rendered.");
+    console.log(LOG, "Custom store page rendered into #MainLayoutRow.");
   }
 
   function waitForContainerThenRender() {
@@ -463,7 +436,7 @@
 
       if (tries >= maxTries) {
         clearInterval(iv);
-        console.warn(LOG, "Timed out waiting for content container.");
+        console.warn(LOG, "Timed out waiting for #MainLayoutRow.");
       }
     }, 200);
   }
