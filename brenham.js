@@ -32,7 +32,7 @@
       shopUrl: "/Products.aspx",
       makeMyStoreUrl: "/AccountSettings.aspx?cms=1",
       reviewUrl: "#",
-      heroImage: "",
+      heroImage: "https://static.wixstatic.com/media/aba64d_e4bef13eccc0407385a7152fcff2f035~mv2.png/v1/crop/x_128%2Cy_20%2Cw_1126%2Ch_516/fill/w_980%2Ch_456%2Cal_c%2Cq_95%2Cusm_0.66_1.00_0.01%2Cenc_avif%2Cquality_auto/aba64d_e4bef13eccc0407385a7152fcff2f035~mv2.png",
       intro:
         "Brenham is built to serve homeowners, DIY customers, and pros with the lumber, hardware, and project support they need from a local team they know.",
       hours: [
@@ -47,7 +47,7 @@
       view: "store-bryan",
       slug: "bryan",
       name: "Bryan",
-      company: "Woodson Lumber & Hardware Bryan",
+      company: "Woodson Lumber &Hardware Bryan",
       phoneLabel: "Phone / Call & Text",
       phoneDisplay: "(979) 822-3765",
       phoneHref: "tel:+19798223765",
@@ -57,7 +57,7 @@
       shopUrl: "/Products.aspx",
       makeMyStoreUrl: "/AccountSettings.aspx?cms=1",
       reviewUrl: "#",
-      heroImage: "",
+      heroImage: "https://static.wixstatic.com/media/aba64d_bac1afac1160451b8a1872fbdbde7363~mv2.png/v1/crop/x_144%2Cy_0%2Cw_1191%2Ch_554/fill/w_980%2Ch_456%2Cal_c%2Cq_95%2Cusm_0.66_1.00_0.01%2Cenc_avif%2Cquality_auto/store-bryan.png",
       intro:
         "Bryan is positioned as a contractor-friendly lumber yard and hardware location with convenient pickup, delivery support, and strong day-to-day project coverage.",
       hours: [
@@ -82,7 +82,7 @@
       shopUrl: "/Products.aspx",
       makeMyStoreUrl: "/AccountSettings.aspx?cms=1",
       reviewUrl: "#",
-      heroImage: "",
+      heroImage: "https://static.wixstatic.com/media/aba64d_10d6752e582f4cf5b147bef46f4ee4a2~mv2.png/v1/crop/x_144%2Cy_0%2Cw_1191%2Ch_554/fill/w_980%2Ch_456%2Cal_c%2Cq_95%2Cusm_0.66_1.00_0.01%2Cenc_avif%2Cquality_auto/store-caldwell.png",
       intro:
         "Caldwell serves as a full local hardware and lumber store with paint, garden, pickup, and delivery support for both quick needs and larger projects.",
       hours: [
@@ -107,7 +107,7 @@
       shopUrl: "/Products.aspx",
       makeMyStoreUrl: "/AccountSettings.aspx?cms=1",
       reviewUrl: "#",
-      heroImage: "",
+      heroImage: "https://static.wixstatic.com/media/aba64d_5d638a9ba44446ab879100b3e51c3d19~mv2.png/v1/crop/x_144%2Cy_0%2Cw_1191%2Ch_554/fill/w_980%2Ch_456%2Cal_c%2Cq_95%2Cusm_0.66_1.00_0.01%2Cenc_avif%2Cquality_auto/store-lexington.png",
       intro:
         "Lexington combines local hardware and lumber access with delivery support and a straightforward pickup experience for customers across the surrounding area.",
       hours: [
@@ -132,7 +132,7 @@
       shopUrl: "/Products.aspx",
       makeMyStoreUrl: "/AccountSettings.aspx?cms=1",
       reviewUrl: "#",
-      heroImage: "",
+      heroImage: "https://static.wixstatic.com/media/aba64d_9c60a78b90c1467d9a82f162181f0f3e~mv2.png/v1/crop/x_144%2Cy_0%2Cw_1191%2Ch_554/fill/w_980%2Ch_456%2Cal_c%2Cq_95%2Cusm_0.66_1.00_0.01%2Cenc_avif%2Cquality_auto/store-groesbeck.png",
       intro:
         "Groesbeck is set up as a local source for lumber, hardware, paint, and building materials with pickup and delivery options built into the store experience.",
       hours: [
@@ -157,7 +157,7 @@
       shopUrl: "/Products.aspx",
       makeMyStoreUrl: "/AccountSettings.aspx?cms=1",
       reviewUrl: "#",
-      heroImage: "",
+      heroImage: "https://static.wixstatic.com/media/aba64d_a640e6f19e2a49ea849b31d2dd5007fd~mv2.png/v1/crop/x_144%2Cy_0%2Cw_1191%2Ch_554/fill/w_980%2Ch_456%2Cal_c%2Cq_95%2Cusm_0.66_1.00_0.01%2Cenc_avif%2Cquality_auto/store-mexia.png",
       intro:
         "Mexia is positioned as a local hardware and lumber store with a practical mix of building materials, pickup convenience, and delivery support.",
       hours: [
@@ -182,7 +182,7 @@
       shopUrl: "/Products.aspx",
       makeMyStoreUrl: "/AccountSettings.aspx?cms=1",
       reviewUrl: "#",
-      heroImage: "",
+      heroImage: "https://static.wixstatic.com/media/aba64d_f374f2a488944e169c04fe0ecfd41300~mv2.png/v1/crop/x_144%2Cy_0%2Cw_1191%2Ch_554/fill/w_980%2Ch_456%2Cal_c%2Cq_95%2Cusm_0.66_1.00_0.01%2Cenc_avif%2Cquality_auto/store-buffalo.png",
       intro:
         "Buffalo offers local access to lumber, hardware, paint, and building materials with in-store pickup, curbside pickup, and delivery options.",
       hours: [
@@ -370,44 +370,6 @@
         object-fit: cover;
       }
 
-      .wlsp-hero-fallback {
-        min-height: 420px;
-        height: 100%;
-        display: flex;
-        flex-direction: column;
-        justify-content: flex-end;
-        background: linear-gradient(135deg, #efe3e6 0%, #ffffff 60%);
-        padding: 28px;
-        box-sizing: border-box;
-      }
-
-      .wlsp-hero-fallback-badge {
-        width: 72px;
-        height: 72px;
-        border-radius: 18px;
-        background: #6b0014;
-        color: #fff;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 28px;
-        font-weight: 800;
-        margin-bottom: 18px;
-      }
-
-      .wlsp-hero-fallback h2 {
-        margin: 0 0 8px;
-        font-size: 30px;
-        color: #6b0014;
-      }
-
-      .wlsp-hero-fallback p {
-        margin: 0;
-        color: #444;
-        font-size: 15px;
-        line-height: 1.65;
-      }
-
       .wlsp-main-grid {
         display: grid;
         grid-template-columns: 1.15fr 0.85fr;
@@ -593,8 +555,7 @@
           grid-template-columns: 1fr;
         }
 
-        .wlsp-hero-media img,
-        .wlsp-hero-fallback {
+        .wlsp-hero-media img {
           min-height: 300px;
         }
 
@@ -696,21 +657,9 @@
   }
 
   function buildHeroMedia(store) {
-    if (store.heroImage) {
-      return [
-        '<div class="wlsp-hero-media">',
-        '  <img src="' + store.heroImage + '" alt="Woodson Lumber ' + store.name + ' store image">',
-        '</div>'
-      ].join("");
-    }
-
     return [
       '<div class="wlsp-hero-media">',
-      '  <div class="wlsp-hero-fallback">',
-      '    <div class="wlsp-hero-fallback-badge">' + store.name.charAt(0) + '</div>',
-      '    <h2>' + store.name + '</h2>',
-      '    <p>Custom hero image can be added here later with a Sirv or other hosted image URL, while the page remains fully usable today.</p>',
-      '  </div>',
+      '  <img src="' + store.heroImage + '" alt="Woodson Lumber ' + store.name + ' store image" loading="eager">',
       '</div>'
     ].join("");
   }
