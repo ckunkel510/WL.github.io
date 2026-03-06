@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var LOG = "[WL Brenham]";
+  var LOG = "[WL StorePage]";
   var loc = window.location;
   var path = (loc.pathname || "").toLowerCase();
   var params = new URLSearchParams(loc.search || "");
@@ -16,58 +16,209 @@
     return;
   }
 
-  // Brenham store product group only
-  if (!(pg === "4733" || pl1 === "4733")) {
-    console.log(LOG, "Not Brenham product group. Exiting.");
+  var stores = {
+    "4733": {
+      pg: "4733",
+      view: "store-brenham",
+      slug: "brenham",
+      name: "Brenham",
+      company: "Woodson Lumber Co. of Brenham",
+      phoneLabel: "Phone",
+      phoneDisplay: "(979) 836-7933",
+      phoneHref: "tel:+19798367933",
+      address1: "301 E. Clinton St.",
+      cityStateZip: "Brenham, TX 77833",
+      directionsUrl: "https://www.google.com/maps/search/?api=1&query=301+E.+Clinton+St.+Brenham+TX+77833",
+      shopUrl: "/Products.aspx",
+      makeMyStoreUrl: "/AccountSettings.aspx?cms=1",
+      reviewUrl: "#",
+      heroImage: "",
+      intro:
+        "Brenham is built to serve homeowners, DIY customers, and pros with the lumber, hardware, and project support they need from a local team they know.",
+      hours: [
+        { label: "Monday - Friday", value: "7:30am - 5:30pm" },
+        { label: "Saturday", value: "7:30am - 12:00pm" },
+        { label: "Sunday", value: "Closed" }
+      ]
+    },
+
+    "4734": {
+      pg: "4734",
+      view: "store-bryan",
+      slug: "bryan",
+      name: "Bryan",
+      company: "Woodson Lumber & Hardware Bryan",
+      phoneLabel: "Phone / Call & Text",
+      phoneDisplay: "(979) 822-3765",
+      phoneHref: "tel:+19798223765",
+      address1: "105 Pease St.",
+      cityStateZip: "Bryan, TX 77803",
+      directionsUrl: "https://www.google.com/maps/search/?api=1&query=105+Pease+St.+Bryan+TX+77803",
+      shopUrl: "/Products.aspx",
+      makeMyStoreUrl: "/AccountSettings.aspx?cms=1",
+      reviewUrl: "#",
+      heroImage: "",
+      intro:
+        "Bryan is positioned as a contractor-friendly lumber yard and hardware location with convenient pickup, delivery support, and strong day-to-day project coverage.",
+      hours: [
+        { label: "Monday - Friday", value: "7:30am - 5:30pm" },
+        { label: "Saturday", value: "7:30am - 12:00pm" },
+        { label: "Sunday", value: "Closed" }
+      ]
+    },
+
+    "4735": {
+      pg: "4735",
+      view: "store-caldwell",
+      slug: "caldwell",
+      name: "Caldwell",
+      company: "Woodson Lumber Co. of Caldwell",
+      phoneLabel: "Phone",
+      phoneDisplay: "(979) 567-9805",
+      phoneHref: "tel:+19795679805",
+      address1: "702 W. Buck St.",
+      cityStateZip: "Caldwell, TX 77836",
+      directionsUrl: "https://www.google.com/maps/search/?api=1&query=702+W.+Buck+St.+Caldwell+TX+77836",
+      shopUrl: "/Products.aspx",
+      makeMyStoreUrl: "/AccountSettings.aspx?cms=1",
+      reviewUrl: "#",
+      heroImage: "",
+      intro:
+        "Caldwell serves as a full local hardware and lumber store with paint, garden, pickup, and delivery support for both quick needs and larger projects.",
+      hours: [
+        { label: "Monday - Friday", value: "7:30am - 5:30pm" },
+        { label: "Saturday", value: "7:30am - 4:00pm" },
+        { label: "Sunday", value: "Closed" }
+      ]
+    },
+
+    "4736": {
+      pg: "4736",
+      view: "store-lexington",
+      slug: "lexington",
+      name: "Lexington",
+      company: "Woodson Lumber Co. of Lexington",
+      phoneLabel: "Phone",
+      phoneDisplay: "(979) 773-2238",
+      phoneHref: "tel:+19797732238",
+      address1: "8714 N. Hwy. 77",
+      cityStateZip: "Lexington, TX 78947",
+      directionsUrl: "https://www.google.com/maps/search/?api=1&query=8714+N.+Hwy.+77+Lexington+TX+78947",
+      shopUrl: "/Products.aspx",
+      makeMyStoreUrl: "/AccountSettings.aspx?cms=1",
+      reviewUrl: "#",
+      heroImage: "",
+      intro:
+        "Lexington combines local hardware and lumber access with delivery support and a straightforward pickup experience for customers across the surrounding area.",
+      hours: [
+        { label: "Monday - Friday", value: "7:30am - 5:30pm" },
+        { label: "Saturday", value: "7:30am - 4:00pm" },
+        { label: "Sunday", value: "Closed" }
+      ]
+    },
+
+    "4737": {
+      pg: "4737",
+      view: "store-groesbeck",
+      slug: "groesbeck",
+      name: "Groesbeck",
+      company: "Woodson Lumber & Hardware Groesbeck",
+      phoneLabel: "Phone",
+      phoneDisplay: "(254) 729-2865",
+      phoneHref: "tel:+12547292865",
+      address1: "1219 E. Yeagua St.",
+      cityStateZip: "Groesbeck, TX 76642",
+      directionsUrl: "https://www.google.com/maps/search/?api=1&query=1219+E.+Yeagua+St.+Groesbeck+TX+76642",
+      shopUrl: "/Products.aspx",
+      makeMyStoreUrl: "/AccountSettings.aspx?cms=1",
+      reviewUrl: "#",
+      heroImage: "",
+      intro:
+        "Groesbeck is set up as a local source for lumber, hardware, paint, and building materials with pickup and delivery options built into the store experience.",
+      hours: [
+        { label: "Monday - Friday", value: "7:30am - 5:30pm" },
+        { label: "Saturday", value: "7:30am - 4:00pm" },
+        { label: "Sunday", value: "Closed" }
+      ]
+    },
+
+    "4738": {
+      pg: "4738",
+      view: "store-mexia",
+      slug: "mexia",
+      name: "Mexia",
+      company: "Woodson Lumber & Hardware Mexia",
+      phoneLabel: "Phone",
+      phoneDisplay: "(254) 562-9351",
+      phoneHref: "tel:+12545629351",
+      address1: "1127 Hwy. 84",
+      cityStateZip: "Mexia, TX 76667",
+      directionsUrl: "https://www.google.com/maps/search/?api=1&query=1127+Hwy.+84+Mexia+TX+76667",
+      shopUrl: "/Products.aspx",
+      makeMyStoreUrl: "/AccountSettings.aspx?cms=1",
+      reviewUrl: "#",
+      heroImage: "",
+      intro:
+        "Mexia is positioned as a local hardware and lumber store with a practical mix of building materials, pickup convenience, and delivery support.",
+      hours: [
+        { label: "Monday - Friday", value: "7:30am - 5:30pm" },
+        { label: "Saturday", value: "7:30am - 4:00pm" },
+        { label: "Sunday", value: "Closed" }
+      ]
+    },
+
+    "4739": {
+      pg: "4739",
+      view: "store-buffalo",
+      slug: "buffalo",
+      name: "Buffalo",
+      company: "Woodson Lumber & Hardware Buffalo",
+      phoneLabel: "Phone",
+      phoneDisplay: "(903) 322-4638",
+      phoneHref: "tel:+19033224638",
+      address1: "2871 W. Commerce St.",
+      cityStateZip: "Buffalo, TX 75831",
+      directionsUrl: "https://www.google.com/maps/search/?api=1&query=2871+W.+Commerce+St.+Buffalo+TX+75831",
+      shopUrl: "/Products.aspx",
+      makeMyStoreUrl: "/AccountSettings.aspx?cms=1",
+      reviewUrl: "#",
+      heroImage: "",
+      intro:
+        "Buffalo offers local access to lumber, hardware, paint, and building materials with in-store pickup, curbside pickup, and delivery options.",
+      hours: [
+        { label: "Monday - Friday", value: "7:30am - 5:30pm" },
+        { label: "Saturday", value: "7:30am - 4:00pm" },
+        { label: "Sunday", value: "Closed" }
+      ]
+    }
+  };
+
+  var currentStore = null;
+
+  if (pg && stores[pg]) {
+    currentStore = stores[pg];
+  } else if (pl1 && stores[pl1]) {
+    currentStore = stores[pl1];
+  }
+
+  if (!currentStore) {
+    console.log(LOG, "Not a supported store product group. Exiting.");
     return;
   }
 
-  var store = {
-    name: "Brenham",
-    company: "Woodson Lumber Co. of Brenham",
-    phoneDisplay: "(979) 836-7933",
-    phoneHref: "tel:+19798367933",
-    address1: "301 E. Clinton St.",
-    address2: "Brenham, TX 77833",
-    directionsUrl: "https://www.google.com/maps/search/?api=1&query=301+E.+Clinton+St.+Brenham+TX+77833",
-    reviewUrl: "https://g.page/r/CfQ5jL2A8vA5EBM/review",
-    shopUrl: "/Products.aspx",
-    makeMyStoreUrl: "/AccountSettings.aspx?cms=1",
-    heroImage: "https://static.wixstatic.com/media/08f6fd_447518369a884dbf9e64c8e6f7c64d6b~mv2.jpg",
-    hours: [
-      { label: "Monday - Friday", value: "7:30am - 5:30pm" },
-      { label: "Saturday", value: "7:30am - 12:00pm" },
-      { label: "Sunday", value: "Closed" }
-    ],
-    features: [
-      {
-        title: "Same-Day In-Store Pickup",
-        text: "Available on in-stock items so you can get what you need and keep the job moving."
-      },
-      {
-        title: "Curbside Pickup Available",
-        text: "Convenient pickup options help customers get in and out quickly."
-      },
-      {
-        title: "Delivery Available",
-        text: "From planned projects to everyday needs, delivery support helps extend the store to your jobsite."
-      }
-    ],
-    intro:
-      "From building materials and lumber to everyday hardware needs, Brenham is one of Woodson’s local store pages where we can highlight branch-specific services, shopping paths, and community presence."
-  };
+  console.log(LOG, "Matched store:", currentStore.name);
 
   function injectStyles() {
-    if (document.getElementById("wl-brenham-styles")) return;
+    if (document.getElementById("wl-storepage-styles")) return;
 
     var css = `
       #MainLayoutRow {
         display: block !important;
       }
 
-      #wl-brenham-root {
+      #wl-storepage-root {
         width: 100%;
-        max-width: 1440px;
+        max-width: 1460px;
         margin: 0 auto;
         padding: 20px;
         box-sizing: border-box;
@@ -75,38 +226,38 @@
         color: #222;
       }
 
-      .wlb-breadcrumb {
+      .wlsp-breadcrumb {
         margin: 4px 0 18px;
         font-size: 14px;
       }
 
-      .wlb-breadcrumb a {
+      .wlsp-breadcrumb a {
         color: #6b0014;
         text-decoration: none;
         font-weight: 700;
       }
 
-      .wlb-breadcrumb a:hover {
+      .wlsp-breadcrumb a:hover {
         text-decoration: underline;
       }
 
-      .wlb-hero {
+      .wlsp-hero {
         display: grid;
-        grid-template-columns: 1.15fr 0.85fr;
-        gap: 22px;
+        grid-template-columns: 1.1fr 0.9fr;
+        gap: 24px;
         align-items: stretch;
         margin-bottom: 24px;
       }
 
-      .wlb-hero-copy {
-        background: linear-gradient(135deg, #6b0014 0%, #8c1630 100%);
+      .wlsp-hero-copy {
+        background: linear-gradient(135deg, #6b0014 0%, #8d1028 100%);
         color: #fff;
         border-radius: 22px;
         padding: 30px 28px;
         box-shadow: 0 10px 30px rgba(0,0,0,0.14);
       }
 
-      .wlb-kicker {
+      .wlsp-kicker {
         font-size: 13px;
         text-transform: uppercase;
         letter-spacing: 1.4px;
@@ -114,29 +265,29 @@
         margin-bottom: 10px;
       }
 
-      .wlb-title {
+      .wlsp-title {
         font-size: 42px;
         line-height: 1.04;
         font-weight: 800;
         margin: 0 0 12px;
       }
 
-      .wlb-subtitle {
+      .wlsp-subtitle {
         font-size: 17px;
-        line-height: 1.6;
+        line-height: 1.65;
         margin: 0 0 18px;
         max-width: 760px;
-        opacity: 0.96;
+        opacity: 0.97;
       }
 
-      .wlb-actions {
+      .wlsp-actions {
         display: flex;
         flex-wrap: wrap;
         gap: 12px;
         margin-top: 18px;
       }
 
-      .wlb-btn {
+      .wlsp-btn {
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -149,42 +300,42 @@
         transition: all 0.18s ease;
       }
 
-      .wlb-btn-primary {
+      .wlsp-btn-primary {
         background: #ffffff;
         color: #6b0014;
       }
 
-      .wlb-btn-primary:hover {
-        background: #f5eef0;
+      .wlsp-btn-primary:hover {
+        background: #f6eef0;
         color: #540010;
       }
 
-      .wlb-btn-secondary {
+      .wlsp-btn-secondary {
         background: transparent;
         color: #ffffff;
         border-color: rgba(255,255,255,0.55);
       }
 
-      .wlb-btn-secondary:hover {
-        background: rgba(255,255,255,0.1);
+      .wlsp-btn-secondary:hover {
+        background: rgba(255,255,255,0.10);
         color: #ffffff;
       }
 
-      .wlb-quickfacts {
+      .wlsp-quickfacts {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 12px;
         margin-top: 22px;
       }
 
-      .wlb-fact {
+      .wlsp-fact {
         background: rgba(255,255,255,0.12);
         border: 1px solid rgba(255,255,255,0.16);
         border-radius: 16px;
         padding: 14px;
       }
 
-      .wlb-fact-label {
+      .wlsp-fact-label {
         font-size: 11px;
         text-transform: uppercase;
         letter-spacing: 1.2px;
@@ -192,21 +343,26 @@
         margin-bottom: 6px;
       }
 
-      .wlb-fact-value {
+      .wlsp-fact-value {
         font-size: 15px;
         line-height: 1.45;
         font-weight: 700;
       }
 
-      .wlb-hero-media {
-        min-height: 100%;
+      .wlsp-fact-value a {
+        color: #fff;
+        text-decoration: none;
+      }
+
+      .wlsp-hero-media {
         border-radius: 22px;
         overflow: hidden;
         box-shadow: 0 10px 30px rgba(0,0,0,0.10);
+        min-height: 100%;
         background: #f3f3f3;
       }
 
-      .wlb-hero-media img {
+      .wlsp-hero-media img {
         display: block;
         width: 100%;
         height: 100%;
@@ -214,14 +370,52 @@
         object-fit: cover;
       }
 
-      .wlb-main-grid {
-        display: grid;
-        grid-template-columns: 1.2fr 0.8fr;
-        gap: 22px;
-        margin-bottom: 24px;
+      .wlsp-hero-fallback {
+        min-height: 420px;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        background: linear-gradient(135deg, #efe3e6 0%, #ffffff 60%);
+        padding: 28px;
+        box-sizing: border-box;
       }
 
-      .wlb-card {
+      .wlsp-hero-fallback-badge {
+        width: 72px;
+        height: 72px;
+        border-radius: 18px;
+        background: #6b0014;
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+        font-weight: 800;
+        margin-bottom: 18px;
+      }
+
+      .wlsp-hero-fallback h2 {
+        margin: 0 0 8px;
+        font-size: 30px;
+        color: #6b0014;
+      }
+
+      .wlsp-hero-fallback p {
+        margin: 0;
+        color: #444;
+        font-size: 15px;
+        line-height: 1.65;
+      }
+
+      .wlsp-main-grid {
+        display: grid;
+        grid-template-columns: 1.15fr 0.85fr;
+        gap: 22px;
+        margin-bottom: 22px;
+      }
+
+      .wlsp-card {
         background: #fff;
         border: 1px solid #e8e8e8;
         border-radius: 18px;
@@ -229,39 +423,39 @@
         box-shadow: 0 8px 24px rgba(0,0,0,0.05);
       }
 
-      .wlb-card h2 {
+      .wlsp-card h2 {
         margin: 0 0 14px;
         font-size: 26px;
         line-height: 1.15;
         color: #1f1f1f;
       }
 
-      .wlb-card p {
+      .wlsp-card p {
         margin: 0 0 14px;
         font-size: 15px;
         line-height: 1.7;
         color: #444;
       }
 
-      .wlb-info-list {
+      .wlsp-info-list {
         display: grid;
         gap: 14px;
       }
 
-      .wlb-info-row {
+      .wlsp-info-row {
         display: grid;
-        grid-template-columns: 130px 1fr;
+        grid-template-columns: 150px 1fr;
         gap: 12px;
         padding-bottom: 12px;
         border-bottom: 1px solid #efefef;
       }
 
-      .wlb-info-row:last-child {
+      .wlsp-info-row:last-child {
         border-bottom: none;
         padding-bottom: 0;
       }
 
-      .wlb-info-label {
+      .wlsp-info-label {
         font-size: 12px;
         text-transform: uppercase;
         letter-spacing: 1.1px;
@@ -269,24 +463,24 @@
         font-weight: 800;
       }
 
-      .wlb-info-value,
-      .wlb-info-value a {
+      .wlsp-info-value,
+      .wlsp-info-value a {
         font-size: 16px;
         color: #222;
         text-decoration: none;
         font-weight: 700;
       }
 
-      .wlb-info-value a:hover {
+      .wlsp-info-value a:hover {
         color: #6b0014;
       }
 
-      .wlb-hours {
+      .wlsp-hours {
         display: grid;
         gap: 12px;
       }
 
-      .wlb-hours-row {
+      .wlsp-hours-row {
         display: flex;
         justify-content: space-between;
         gap: 16px;
@@ -294,28 +488,28 @@
         border-bottom: 1px solid #efefef;
       }
 
-      .wlb-hours-row:last-child {
+      .wlsp-hours-row:last-child {
         border-bottom: none;
       }
 
-      .wlb-hours-day {
+      .wlsp-hours-day {
         font-weight: 700;
         color: #222;
       }
 
-      .wlb-hours-time {
+      .wlsp-hours-time {
         color: #555;
         font-weight: 700;
         text-align: right;
       }
 
-      .wlb-feature-grid {
+      .wlsp-feature-grid {
         display: grid;
         grid-template-columns: repeat(3, minmax(0, 1fr));
         gap: 16px;
       }
 
-      .wlb-feature {
+      .wlsp-feature {
         background: #fff;
         border: 1px solid #e8e8e8;
         border-radius: 18px;
@@ -323,21 +517,21 @@
         box-shadow: 0 8px 24px rgba(0,0,0,0.05);
       }
 
-      .wlb-feature h3 {
+      .wlsp-feature h3 {
         margin: 0 0 10px;
         font-size: 21px;
         line-height: 1.2;
         color: #6b0014;
       }
 
-      .wlb-feature p {
+      .wlsp-feature p {
         margin: 0;
         font-size: 15px;
         line-height: 1.7;
         color: #444;
       }
 
-      .wlb-bottom-cta {
+      .wlsp-bottom-cta {
         margin-top: 24px;
         background: #f7f2f3;
         border: 1px solid #eadcdf;
@@ -349,111 +543,114 @@
         gap: 18px;
       }
 
-      .wlb-bottom-cta-copy h2 {
+      .wlsp-bottom-cta-copy h2 {
         margin: 0 0 8px;
         font-size: 28px;
         color: #222;
       }
 
-      .wlb-bottom-cta-copy p {
+      .wlsp-bottom-cta-copy p {
         margin: 0;
         color: #4c4c4c;
         font-size: 15px;
         line-height: 1.7;
       }
 
-      .wlb-bottom-cta-actions {
+      .wlsp-bottom-cta-actions {
         display: flex;
         flex-wrap: wrap;
         gap: 12px;
       }
 
-      .wlb-bottom-cta .wlb-btn-primary {
+      .wlsp-bottom-cta .wlsp-btn-primary {
         background: #6b0014;
         color: #fff;
       }
 
-      .wlb-bottom-cta .wlb-btn-primary:hover {
+      .wlsp-bottom-cta .wlsp-btn-primary:hover {
         background: #540010;
         color: #fff;
       }
 
-      .wlb-bottom-cta .wlb-btn-secondary {
+      .wlsp-bottom-cta .wlsp-btn-secondary {
         color: #6b0014;
         border-color: #6b0014;
         background: #fff;
       }
 
-      .wlb-bottom-cta .wlb-btn-secondary:hover {
+      .wlsp-bottom-cta .wlsp-btn-secondary:hover {
         background: #f9f4f5;
       }
 
       @media (max-width: 1100px) {
-        .wlb-hero,
-        .wlb-main-grid,
-        .wlb-feature-grid {
+        .wlsp-hero,
+        .wlsp-main-grid,
+        .wlsp-feature-grid {
           grid-template-columns: 1fr;
         }
 
-        .wlb-quickfacts {
+        .wlsp-quickfacts {
           grid-template-columns: 1fr;
         }
 
-        .wlb-hero-media img {
+        .wlsp-hero-media img,
+        .wlsp-hero-fallback {
           min-height: 300px;
         }
 
-        .wlb-bottom-cta {
+        .wlsp-bottom-cta {
           flex-direction: column;
           align-items: flex-start;
         }
       }
 
       @media (max-width: 700px) {
-        #wl-brenham-root {
+        #wl-storepage-root {
           padding: 14px;
         }
 
-        .wlb-hero-copy,
-        .wlb-card,
-        .wlb-feature,
-        .wlb-bottom-cta {
+        .wlsp-hero-copy,
+        .wlsp-card,
+        .wlsp-feature,
+        .wlsp-bottom-cta {
           padding: 18px;
         }
 
-        .wlb-title {
+        .wlsp-title {
           font-size: 32px;
         }
 
-        .wlb-info-row {
+        .wlsp-info-row {
           grid-template-columns: 1fr;
           gap: 6px;
         }
 
-        .wlb-hours-row {
+        .wlsp-hours-row {
           flex-direction: column;
           align-items: flex-start;
           gap: 4px;
         }
 
-        .wlb-hours-time {
+        .wlsp-hours-time {
           text-align: left;
         }
       }
     `;
 
     var style = document.createElement("style");
-    style.id = "wl-brenham-styles";
+    style.id = "wl-storepage-styles";
     style.textContent = css;
     document.head.appendChild(style);
   }
 
-  function setPrettyUrl() {
+  function setPrettyUrl(store) {
+    if (!store || !store.view) return;
+
     try {
       window.history.replaceState(
-        { wlPrettyRoute: "store-brenham" },
+        { wlPrettyRoute: store.view },
         "",
-        "/Default.aspx?view=store-brenham"
+        "/Default.aspx?view=" + encodeURIComponent(store.view)
       );
       console.log(LOG, "Pretty URL applied.");
     } catch (e) {
@@ -461,84 +658,133 @@
     }
   }
 
-  function buildHoursMarkup() {
+  function buildHoursMarkup(store) {
     return store.hours.map(function (row) {
       return [
-        '<div class="wlb-hours-row">',
-        '  <div class="wlb-hours-day">' + row.label + "</div>",
-        '  <div class="wlb-hours-time">' + row.value + "</div>",
-        "</div>"
+        '<div class="wlsp-hours-row">',
+        '  <div class="wlsp-hours-day">' + row.label + '</div>',
+        '  <div class="wlsp-hours-time">' + row.value + '</div>',
+        '</div>'
       ].join("");
     }).join("");
   }
 
   function buildFeaturesMarkup() {
-    return store.features.map(function (item) {
+    var features = [
+      {
+        title: "Same-Day In-Store Pickup",
+        text: "Available on in-stock items so customers can get what they need quickly and keep their projects moving."
+      },
+      {
+        title: "Curbside Pickup Available",
+        text: "A convenient option for customers who want the speed of pickup with less time spent in-store."
+      },
+      {
+        title: "Delivery Available",
+        text: "From jobsite needs to larger purchases, delivery support extends the store beyond the counter."
+      }
+    ];
+
+    return features.map(function (item) {
       return [
-        '<div class="wlb-feature">',
-        "  <h3>" + item.title + "</h3>",
-        "  <p>" + item.text + "</p>",
-        "</div>"
+        '<div class="wlsp-feature">',
+        '  <h3>' + item.title + '</h3>',
+        '  <p>' + item.text + '</p>',
+        '</div>'
       ].join("");
     }).join("");
   }
 
-  function buildMarkup() {
+  function buildHeroMedia(store) {
+    if (store.heroImage) {
+      return [
+        '<div class="wlsp-hero-media">',
+        '  <img src="' + store.heroImage + '" alt="Woodson Lumber ' + store.name + ' store image">',
+        '</div>'
+      ].join("");
+    }
+
     return [
-      '<div id="wl-brenham-root">',
-      '  <div class="wlb-breadcrumb"><a href="/Default.aspx?view=storelocations">← Back to Store Locations</a></div>',
+      '<div class="wlsp-hero-media">',
+      '  <div class="wlsp-hero-fallback">',
+      '    <div class="wlsp-hero-fallback-badge">' + store.name.charAt(0) + '</div>',
+      '    <h2>' + store.name + '</h2>',
+      '    <p>Custom hero image can be added here later with a Sirv or other hosted image URL, while the page remains fully usable today.</p>',
+      '  </div>',
+      '</div>'
+    ].join("");
+  }
 
-      '  <section class="wlb-hero">',
-      '    <div class="wlb-hero-copy">',
-      '      <div class="wlb-kicker">Woodson Lumber Location</div>',
-      '      <h1 class="wlb-title">' + store.name + "</h1>",
-      '      <p class="wlb-subtitle">' + store.intro + "</p>",
-      '      <div class="wlb-actions">',
-      '        <a class="wlb-btn wlb-btn-primary" href="' + store.shopUrl + '">Shop This Store</a>',
-      '        <a class="wlb-btn wlb-btn-secondary" href="' + store.makeMyStoreUrl + '">Make This My Store</a>',
-      "      </div>",
-      '      <div class="wlb-quickfacts">',
-      '        <div class="wlb-fact"><div class="wlb-fact-label">Phone</div><div class="wlb-fact-value"><a href="' + store.phoneHref + '" style="color:#fff;text-decoration:none;">' + store.phoneDisplay + "</a></div></div>",
-      '        <div class="wlb-fact"><div class="wlb-fact-label">Address</div><div class="wlb-fact-value">' + store.address1 + "<br>" + store.address2 + "</div></div>",
-      '        <div class="wlb-fact"><div class="wlb-fact-label">Pickup</div><div class="wlb-fact-value">Same-Day In-Store Pickup Available</div></div>",
-      "      </div>",
-      "    </div>",
-      '    <div class="wlb-hero-media">',
-      '      <img src="' + store.heroImage + '" alt="Woodson Lumber Brenham store photo">',
-      "    </div>",
-      "  </section>",
+  function buildMarkup(store) {
+    return [
+      '<div id="wl-storepage-root">',
 
-      '  <section class="wlb-main-grid">',
-      '    <div class="wlb-card">',
-      "      <h2>Contact & Store Details</h2>",
-      '      <div class="wlb-info-list">',
-      '        <div class="wlb-info-row"><div class="wlb-info-label">Location</div><div class="wlb-info-value">' + store.company + "</div></div>",
-      '        <div class="wlb-info-row"><div class="wlb-info-label">Phone</div><div class="wlb-info-value"><a href="' + store.phoneHref + '">' + store.phoneDisplay + "</a></div></div>",
-      '        <div class="wlb-info-row"><div class="wlb-info-label">Address</div><div class="wlb-info-value">' + store.address1 + "<br>" + store.address2 + "</div></div>",
-      '        <div class="wlb-info-row"><div class="wlb-info-label">Directions</div><div class="wlb-info-value"><a href="' + store.directionsUrl + '" target="_blank" rel="noopener">Open in Maps</a></div></div>',
-      '        <div class="wlb-info-row"><div class="wlb-info-label">Review Us</div><div class="wlb-info-value"><a href="' + store.reviewUrl + '" target="_blank" rel="noopener">Leave a Review</a></div></div>',
-      "      </div>",
-      "    </div>",
+      '  <div class="wlsp-breadcrumb">',
+      '    <a href="/Default.aspx?view=storelocations">← Back to Store Locations</a>',
+      '  </div>',
 
-      '    <div class="wlb-card">',
-      "      <h2>Store Hours</h2>",
-      '      <div class="wlb-hours">' + buildHoursMarkup() + "</div>",
-      "    </div>",
-      "  </section>",
+      '  <section class="wlsp-hero">',
+      '    <div class="wlsp-hero-copy">',
+      '      <div class="wlsp-kicker">Woodson Lumber Location</div>',
+      '      <h1 class="wlsp-title">' + store.name + '</h1>',
+      '      <p class="wlsp-subtitle">' + store.intro + '</p>',
 
-      '  <section class="wlb-feature-grid">' + buildFeaturesMarkup() + "</section>",
+      '      <div class="wlsp-actions">',
+      '        <a class="wlsp-btn wlsp-btn-primary" href="' + store.shopUrl + '">Shop This Store</a>',
+      '        <a class="wlsp-btn wlsp-btn-secondary" href="' + store.makeMyStoreUrl + '">Make This My Store</a>',
+      '      </div>',
 
-      '  <section class="wlb-bottom-cta">',
-      '    <div class="wlb-bottom-cta-copy">',
-      "      <h2>Ready to shop Brenham?</h2>",
-      "      <p>Use this location page as the branch hub for Brenham-specific shopping, local updates, featured departments, and services.</p>",
-      "    </div>",
-      '    <div class="wlb-bottom-cta-actions">',
-      '      <a class="wlb-btn wlb-btn-primary" href="' + store.shopUrl + '">Start Shopping</a>',
-      '      <a class="wlb-btn wlb-btn-secondary" href="/Default.aspx?view=storelocations">All Locations</a>',
-      "    </div>",
-      "  </section>",
-      "</div>"
+      '      <div class="wlsp-quickfacts">',
+      '        <div class="wlsp-fact">',
+      '          <div class="wlsp-fact-label">' + store.phoneLabel + '</div>',
+      '          <div class="wlsp-fact-value"><a href="' + store.phoneHref + '">' + store.phoneDisplay + '</a></div>',
+      '        </div>',
+      '        <div class="wlsp-fact">',
+      '          <div class="wlsp-fact-label">Address</div>',
+      '          <div class="wlsp-fact-value">' + store.address1 + '<br>' + store.cityStateZip + '</div>',
+      '        </div>',
+      '        <div class="wlsp-fact">',
+      '          <div class="wlsp-fact-label">Pickup</div>',
+      '          <div class="wlsp-fact-value">Same-Day In-Store Pickup Available</div>',
+      '        </div>',
+      '      </div>',
+      '    </div>',
+
+      buildHeroMedia(store),
+      '  </section>',
+
+      '  <section class="wlsp-main-grid">',
+      '    <div class="wlsp-card">',
+      '      <h2>Contact & Store Details</h2>',
+      '      <div class="wlsp-info-list">',
+      '        <div class="wlsp-info-row"><div class="wlsp-info-label">Location</div><div class="wlsp-info-value">' + store.company + '</div></div>',
+      '        <div class="wlsp-info-row"><div class="wlsp-info-label">' + store.phoneLabel + '</div><div class="wlsp-info-value"><a href="' + store.phoneHref + '">' + store.phoneDisplay + '</a></div></div>',
+      '        <div class="wlsp-info-row"><div class="wlsp-info-label">Address</div><div class="wlsp-info-value">' + store.address1 + '<br>' + store.cityStateZip + '</div></div>',
+      '        <div class="wlsp-info-row"><div class="wlsp-info-label">Directions</div><div class="wlsp-info-value"><a href="' + store.directionsUrl + '" target="_blank" rel="noopener">Open in Maps</a></div></div>',
+      '        <div class="wlsp-info-row"><div class="wlsp-info-label">Reviews</div><div class="wlsp-info-value"><a href="' + store.reviewUrl + '">Leave a Review</a></div></div>',
+      '      </div>',
+      '    </div>',
+
+      '    <div class="wlsp-card">',
+      '      <h2>Store Hours</h2>',
+      '      <div class="wlsp-hours">' + buildHoursMarkup(store) + '</div>',
+      '    </div>',
+      '  </section>',
+
+      '  <section class="wlsp-feature-grid">' + buildFeaturesMarkup() + '</section>',
+
+      '  <section class="wlsp-bottom-cta">',
+      '    <div class="wlsp-bottom-cta-copy">',
+      '      <h2>Ready to shop ' + store.name + '?</h2>',
+      '      <p>Use this page as the local hub for ' + store.name + '-specific shopping, services, contact information, and future branch promotions or events.</p>',
+      '    </div>',
+      '    <div class="wlsp-bottom-cta-actions">',
+      '      <a class="wlsp-btn wlsp-btn-primary" href="' + store.shopUrl + '">Start Shopping</a>',
+      '      <a class="wlsp-btn wlsp-btn-secondary" href="/Default.aspx?view=storelocations">All Locations</a>',
+      '    </div>',
+      '  </section>',
+
+      '</div>'
     ].join("");
   }
 
@@ -552,9 +798,9 @@
     }
 
     console.log(LOG, "Rendering into #MainLayoutRow");
-    container.innerHTML = buildMarkup();
-    setPrettyUrl();
-    console.log(LOG, "Brenham page rendered.");
+    container.innerHTML = buildMarkup(currentStore);
+    setPrettyUrl(currentStore);
+    console.log(LOG, "Store page rendered.");
   }
 
   function waitForContainerThenRender() {
