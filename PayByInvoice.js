@@ -5290,14 +5290,37 @@ bankMount.onclick = (e)=>{
 
       try{ sessionStorage.setItem(STEP_KEY, '3'); }catch(e){}
 
-      const nextBtn = $('w3Next');
-      if (typeof jumpToWizardStep === 'function'){
-        try{ jumpToWizardStep(3); }catch(e){}
-      }
-      if (nextBtn && Number(sessionStorage.getItem(STEP_KEY) || '0') === 2){
-        try{ nextBtn.click(); return; }catch(e){}
-      }
-      try{ jumpToWizardStep(3); }catch(e){}
+      // Force the wizard UI itself to the final payment step.
+      try{
+        if (typeof setStep === 'function'){
+          setStep(3);
+          return;
+        }
+      }catch(e){}
+
+      try{
+        if (typeof jumpToWizardStep === 'function'){
+          jumpToWizardStep(3);
+          return;
+        }
+      }catch(e){}
+
+      // Last-resort DOM toggle if helper functions are unavailable.
+      try{
+        const wiz = $('wlApWizard3');
+        if (wiz) wiz.setAttribute('data-step', '3');
+        document.querySelectorAll('#wlApWizard3 [data-pill]').forEach(p=>{
+          p.classList.toggle('on', Number(p.getAttribute('data-pill')) === 3);
+        });
+        document.querySelectorAll('#wlApWizard3 .w3-panel').forEach(p=>{
+          p.classList.toggle('on', Number(p.getAttribute('data-step')) === 3);
+        });
+        const next = $('w3Next');
+        const back = $('w3Back');
+        if (next) next.textContent = 'Make a Payment';
+        if (back) back.disabled = false;
+        if ($('w3Review') && typeof buildReviewHTML === 'function') $('w3Review').innerHTML = buildReviewHTML();
+      }catch(e){}
     }, 80);
   };
 
@@ -5491,6 +5514,32 @@ function setStep(n){
     });
 
     setStep(step);
+
+
+    function paymentSuccessVisible(){
+      try{
+        const body = document.querySelector('.bodyFlexItem');
+        const receipt = document.querySelector('.paymentDataTable');
+        const okText = body && /Your account payment was successful/i.test(body.textContent || '');
+        return !!(receipt && okText);
+      }catch(e){ return false; }
+    }
+
+    function syncWizardVisibilityForSuccess(){
+      try{
+        const wizEl = $('wlApWizard3');
+        if (!wizEl) return;
+        const success = paymentSuccessVisible();
+        wizEl.style.display = success ? 'none' : '';
+      }catch(e){}
+    }
+
+    syncWizardVisibilityForSuccess();
+
+    try{
+      const obs = new MutationObserver(()=>{ syncWizardVisibilityForSuccess(); });
+      obs.observe(document.body, { childList:true, subtree:true, characterData:true });
+    }catch(e){}
     return true;
   
     try { pinBillingToStep1({ attempt: 0 }); } catch {}
