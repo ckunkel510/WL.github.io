@@ -7,6 +7,9 @@
 
    Injection rules:
    - Inject if querystring starts with "?pg=0" OR homepage-like (no pl1, no pid, and pg missing or pg=0)
+
+   Additional update:
+   - Excludes Store Locations hub/store product groups from Recently Viewed / intent logic
 */
 
 (function WL_HomeMerch() {
@@ -23,7 +26,7 @@
     GROUP_CATALOG_CSV_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vS-3Rdml5LGrt8dn1yzvZJYqHQDn0BIXrUjycLG_Q0xtu7c-OcVTnO5BvhjXFb2o0H4zlC2lThUUx0V/pub?output=csv",
     COL_GROUP_ID: "ProductGroupID",
     COL_IMAGE_URL: "ImageURL",
-    COL_TITLE: "Title", // <-- set this to your header name if different
+    COL_TITLE: "Title",
 
     COLD_START_SEEDS: ["18"],
 
@@ -40,6 +43,9 @@
     MAX_AFFINITY_SHELVES: 4,
     AFFINITY_ITEMS_PER_SHELF: 10,
     STATIC_GRID_TILE_COUNT: 4,
+
+    // Store location hub + store detail product groups
+    EXCLUDED_RECENT_GROUPS: ["4731", "4733", "4734", "4735", "4736", "4737", "4738", "4739"],
 
     DEBUG: true
   };
@@ -76,6 +82,15 @@
   const now = () => Date.now();
   const trim = (s) => (s == null ? "" : String(s).trim());
 
+  const EXCLUDED_GROUPS = new Set(
+    (CFG.EXCLUDED_RECENT_GROUPS || []).map(v => String(v))
+  );
+
+  function isExcludedGroupId(groupId) {
+    const gid = normalizeGroupId(groupId);
+    return !!gid && EXCLUDED_GROUPS.has(String(gid));
+  }
+
   function cleanTitle(raw) {
     const t = trim(raw)
       .replace(/\s+/g, " ")
@@ -88,7 +103,6 @@
   function isBadTitle(t) {
     const s = cleanTitle(t).toLowerCase();
     if (!s) return true;
-    // common failure cases when grabbing whole card textContent
     if (s.includes("continue")) return true;
     if (/\b\d+\s+products\b/.test(s)) return true;
     if (s.length > 80) return true;
@@ -96,10 +110,9 @@
   }
 
   function getPreferredGroupIdFromHref(href) {
-    // Prefer pl1 when present (that is the ProductLevel1 / "current group"),
-    // and fall back to pg.
     return normalizeGroupId(getParamFromHref(href, "pl1") || getParamFromHref(href, "pg"));
   }
+
   function log(...args) { if (CFG.DEBUG) console.log("[WLHM]", ...args); }
   function warn(...args) { console.warn("[WLHM]", ...args); }
 
@@ -132,9 +145,6 @@
   }
 
   function isGroupDrilldownHref(href) {
-    // Group drilldowns can be either:
-    //  - pl1=<ProductLevel1GroupId>&pg=<ProductGroupPageId>
-    //  - pg=<ProductGroupId>
     const pl1 = getParamFromHref(href, "pl1");
     const pg = getParamFromHref(href, "pg");
     if (pl1) return true;
@@ -147,8 +157,8 @@
     const abs = getAbsUrl(href);
     if (!abs) return null;
 
-    const pg = getParamFromHref(href, "pg");
-    if (!pg || String(pg) === "0") return null;
+    const preferredGroupId = getPreferredGroupIdFromHref(href);
+    if (!preferredGroupId || preferredGroupId === "0") return null;
 
     let title = trim(a.textContent);
     const card = a.closest('fieldset[id="productGroupCard"]') || a.closest("fieldset") || null;
@@ -164,8 +174,8 @@
     }
 
     return {
-      pg: String(pg),
-      title: title || `Group ${pg}`,
+      pg: String(preferredGroupId),
+      title: title || `Group ${preferredGroupId}`,
       link: abs.replace(location.origin, ""),
       img,
       ts: now()
@@ -175,15 +185,18 @@
   // ---------- Storage ----------
   function loadRecent() {
     const arr = safeJsonParse(localStorage.getItem(CFG.LS_RECENT), []);
-    return Array.isArray(arr) ? arr : [];
+    const safeArr = Array.isArray(arr) ? arr : [];
+    return safeArr.filter(x => x && x.pg && !isExcludedGroupId(x.pg));
   }
+
   function saveRecent(arr) {
-    localStorage.setItem(CFG.LS_RECENT, JSON.stringify(arr));
+    const cleaned = (Array.isArray(arr) ? arr : []).filter(x => x && x.pg && !isExcludedGroupId(x.pg));
+    localStorage.setItem(CFG.LS_RECENT, JSON.stringify(cleaned));
   }
 
   function bumpIntent(groupId) {
     const gid = normalizeGroupId(groupId);
-    if (!gid) return;
+    if (!gid || isExcludedGroupId(gid)) return;
 
     const raw = localStorage.getItem(CFG.LS_INTENT);
     const parsed = safeJsonParse(raw, {});
@@ -197,6 +210,11 @@
     if (!meta || !meta.pg) return;
     const gid = normalizeGroupId(meta.pg);
     if (!gid) return;
+
+    if (isExcludedGroupId(gid)) {
+      log("Skipping excluded group visit:", gid, meta.title || "");
+      return;
+    }
 
     bumpIntent(gid);
 
@@ -227,12 +245,29 @@
   function trackLandingContext() {
     if (pl1) {
       const gid = normalizeGroupId(pl1);
-      if (gid) recordGroupVisit({ pg: gid, title: `Group ${gid}`, link: location.pathname + location.search, img: "", ts: now() });
+      if (gid) {
+        recordGroupVisit({
+          pg: gid,
+          title: `Group ${gid}`,
+          link: location.pathname + location.search,
+          img: "",
+          ts: now()
+        });
+      }
       return;
     }
+
     if (pgParam && String(pgParam) !== "0") {
       const gid = normalizeGroupId(pgParam);
-      if (gid) recordGroupVisit({ pg: gid, title: `Group ${gid}`, link: location.pathname + location.search, img: "", ts: now() });
+      if (gid) {
+        recordGroupVisit({
+          pg: gid,
+          title: `Group ${gid}`,
+          link: location.pathname + location.search,
+          img: "",
+          ts: now()
+        });
+      }
     }
   }
 
@@ -273,8 +308,12 @@
     if (now() > parsed.expiresAt) return null;
     return parsed.map;
   }
+
   function saveAffinityCache(mapObj) {
-    localStorage.setItem(CFG.LS_AFF_CACHE, JSON.stringify({ expiresAt: now() + CFG.AFFINITY_CACHE_TTL_MS, map: mapObj }));
+    localStorage.setItem(CFG.LS_AFF_CACHE, JSON.stringify({
+      expiresAt: now() + CFG.AFFINITY_CACHE_TTL_MS,
+      map: mapObj
+    }));
   }
 
   async function fetchAffinityMap() {
@@ -313,6 +352,7 @@
       }
       if (related.length) mapObj[id] = related;
     }
+
     saveAffinityCache(mapObj);
     return mapObj;
   }
@@ -454,15 +494,20 @@
 
     const ranked = Object.entries(obj)
       .map(([k, v]) => ({ k, v: Number(v) || 0 }))
-      .filter(x => x.k && x.v > 0)
+      .filter(x => x.k && x.v > 0 && !isExcludedGroupId(x.k))
       .sort((a, b) => b.v - a.v)
       .map(x => x.k);
 
-    return ranked.length ? ranked : (CFG.COLD_START_SEEDS || []).map(normalizeGroupId).filter(Boolean);
+    return ranked.length
+      ? ranked
+      : (CFG.COLD_START_SEEDS || []).map(normalizeGroupId).filter(gid => gid && !isExcludedGroupId(gid));
   }
 
   function buildRecentCards(catalog) {
-    const recent = loadRecent().slice(0, CFG.SHELF_RECENT_COUNT);
+    const recent = loadRecent()
+      .filter(r => r && r.pg && !isExcludedGroupId(r.pg))
+      .slice(0, CFG.SHELF_RECENT_COUNT);
+
     return recent.map(r => {
       const gid = String(r.pg);
 
@@ -483,14 +528,21 @@
     const top = pickTopIntentGroups().slice(0, 5);
     if (!top.length) return [];
 
-    const seen = new Set(loadRecent().map(x => String(x.pg)));
+    const seen = new Set(
+      loadRecent()
+        .filter(x => x && x.pg && !isExcludedGroupId(x.pg))
+        .map(x => String(x.pg))
+    );
+
     const score = {};
 
     top.forEach(src => {
+      if (isExcludedGroupId(src)) return;
+
       const rel = (affMap && affMap[String(src)]) ? affMap[String(src)] : [];
       rel.forEach(pg => {
         const gid = String(pg);
-        if (!gid || seen.has(gid)) return;
+        if (!gid || seen.has(gid) || isExcludedGroupId(gid)) return;
         score[gid] = (score[gid] || 0) + 1;
       });
     });
@@ -509,7 +561,7 @@
   }
 
   function buildAffinityShelves(affMap, catalog) {
-    const recent = loadRecent();
+    const recent = loadRecent().filter(r => r && r.pg && !isExcludedGroupId(r.pg));
     if (!recent.length) return [];
 
     const shelves = [];
@@ -518,14 +570,14 @@
 
     for (const r of recent) {
       const src = String(r.pg);
-      if (!src || usedSource.has(src)) continue;
+      if (!src || usedSource.has(src) || isExcludedGroupId(src)) continue;
 
       const rel = (affMap && affMap[src]) ? affMap[src] : [];
       if (!rel.length) continue;
 
       const targets = rel
         .map(String)
-        .filter(gid => gid && gid !== src && !usedTarget.has(gid));
+        .filter(gid => gid && gid !== src && !usedTarget.has(gid) && !isExcludedGroupId(gid));
 
       if (!targets.length) continue;
 
