@@ -1,17 +1,34 @@
-<script>
 (function () {
-  var path = (window.location.pathname || "").toLowerCase();
-  var searchParams = new URLSearchParams(window.location.search || "");
-  var href = (window.location.href || "").toLowerCase();
+  "use strict";
 
-  // Only run on Default.aspx
-  if (!(path.endsWith("/default.aspx") || path === "/default.aspx")) return;
+  const LOG = "[WL DefaultRouter]";
+  const loc = window.location;
+  const href = (loc.href || "").toLowerCase();
+  const path = (loc.pathname || "").toLowerCase();
+  const search = loc.search || "";
+  const params = new URLSearchParams(search);
 
-  // Safety: do not do anything if somehow already on Products.aspx
-  if (href.indexOf("/products.aspx") !== -1) return;
+  console.log(`${LOG} Script loaded.`);
+  console.log(`${LOG} href:`, loc.href);
+  console.log(`${LOG} path:`, loc.pathname);
+  console.log(`${LOG} search:`, search);
 
-  // Central route map
-  var routeMap = {
+  // Treat these as homepage/default entry points
+  const isDefaultLike =
+    path === "/" ||
+    path === "" ||
+    path.endsWith("/default.aspx") ||
+    path === "/default.aspx";
+
+  console.log(`${LOG} isDefaultLike:`, isDefaultLike);
+
+  if (!isDefaultLike) {
+    console.log(`${LOG} Not a default/home route. Exiting.`);
+    return;
+  }
+
+  // Route map
+  const routeMap = {
     "storelocations": { pl1: 4731, pg: 4731 },
     "stores": { pl1: 4731, pg: 4731 },
     "store-locations": { pl1: 4731, pg: 4731 },
@@ -38,35 +55,35 @@
     "buffalo": { pl1: 4739, pg: 4739 }
   };
 
-  // Preferred route pattern:
-  // default.aspx?view=storelocations
-  // default.aspx?view=store-caldwell
-  var view = (searchParams.get("view") || "").trim().toLowerCase();
+  let view = (params.get("view") || "").trim().toLowerCase();
+  console.log(`${LOG} initial view param:`, view || "(none)");
 
-  // Optional fallback support for naked querystring patterns like:
-  // default.aspx?storelocations
-  // default.aspx?brenham
-  // default.aspx?store-caldwell
+  // Fallback for naked querystring patterns like ?storelocations
   if (!view) {
-    var rawSearch = (window.location.search || "").replace(/^\?/, "").trim().toLowerCase();
+    const rawSearch = search.replace(/^\?/, "").trim().toLowerCase();
+    console.log(`${LOG} rawSearch fallback check:`, rawSearch || "(none)");
 
     if (rawSearch && rawSearch.indexOf("=") === -1 && routeMap[rawSearch]) {
       view = rawSearch;
+      console.log(`${LOG} matched rawSearch fallback route:`, view);
     }
   }
 
-  // If a mapped route was requested, send user to that product group page
+  // Route to mapped store page
   if (view && routeMap[view]) {
-    var target = routeMap[view];
-    var destination =
+    const target = routeMap[view];
+    const destination =
       "/Products.aspx?pl1=" + encodeURIComponent(target.pl1) +
-      "&pg=" + encodeURIComponent(target.pg);
+      "&pg=" + encodeURIComponent(target.pg) +
+      "&pretty=" + encodeURIComponent(view);
 
+    console.log(`${LOG} matched route for "${view}"`);
+    console.log(`${LOG} redirecting to:`, destination);
     window.location.replace(destination);
     return;
   }
 
-  // Default homepage behavior
+  // No special route -> normal homepage behavior
+  console.log(`${LOG} no special route matched; redirecting to /Products.aspx`);
   window.location.replace("/Products.aspx");
 })();
-</script>
