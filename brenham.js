@@ -136,7 +136,8 @@
       intro:
         "Groesbeck is set up as a local source for lumber, hardware, paint, and building materials with pickup and delivery options built into the store experience.",
       hours: [
-        { label: "Monday - Friday", value: "7:30am - 5:30pm" },
+        { label: "Monday, Wednesday, Friday", value: "7:30am - 5:30pm" },
+        { label: "Tuesday,Thursday", value: "7:30am - 7:00pm" },
         { label: "Saturday", value: "7:30am - 4:00pm" },
         { label: "Sunday", value: "Closed" }
       ]
@@ -161,7 +162,8 @@
       intro:
         "Mexia is positioned as a local hardware and lumber store with a practical mix of building materials, pickup convenience, and delivery support.",
       hours: [
-        { label: "Monday - Friday", value: "7:30am - 5:30pm" },
+        { label: "Monday, Wednesday, Friday", value: "7:30am - 5:30pm" },
+        { label: "Tuesday,Thursday", value: "7:30am - 7:00pm" },
         { label: "Saturday", value: "7:30am - 4:00pm" },
         { label: "Sunday", value: "Closed" }
       ]
