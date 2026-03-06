@@ -16,33 +16,26 @@
     if (document.getElementById("wl-header-enhancer-styles")) return;
 
     var css = `
-      /* ===== overall page header polish ===== */
       #PageHeaderDiv {
         position: relative;
         z-index: 50;
         box-shadow: 0 2px 12px rgba(0,0,0,0.05);
       }
 
-      #siteHeaderContent {
-        background: #ffffff !important;
-      }
-
-      #ctl00_PageHeader_branding {
-        background: #ffffff !important;
-      }
-
+      #siteHeaderContent,
+      #ctl00_PageHeader_branding,
       #brandingLogo {
         width: 100%;
+        background: #ffffff !important;
       }
 
-      /* ===== top custom Woodson header ===== */
       #wlcheader {
         width: 100% !important;
-        min-height: 96px !important;
+        min-height: 88px !important;
         height: auto !important;
         display: flex !important;
         align-items: center !important;
-        justify-content: space-between !important;
+        justify-content: flex-start !important;
         gap: 18px !important;
         padding: 10px 16px !important;
         box-sizing: border-box !important;
@@ -79,56 +72,13 @@
         float: none !important;
       }
 
-      #wlcheadersect2 {
-        flex: 1 1 auto !important;
-        width: auto !important;
-        padding-top: 0 !important;
-        padding-left: 0 !important;
-        color: #fff !important;
-        font-size: 13px !important;
-        line-height: 1.5 !important;
-        font-weight: 700 !important;
-      }
-
-      #wlcheadersect3 {
-        display: none !important;
-      }
-
+      #wlcheadersect2,
+      #wlcheadersect3,
       #wlcheadersect4,
       #wlcheadersect5 {
-        width: auto !important;
-        padding-top: 0 !important;
-        text-align: center !important;
-      }
-
-      #wlcheadersect4 a,
-      #wlcheadersect5 a {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        min-height: 42px;
-        padding: 10px 14px;
-        border-radius: 999px;
-        color: #fff !important;
-        font-size: 14px !important;
-        font-weight: 800 !important;
-        text-decoration: none !important;
-        border: 1px solid rgba(255,255,255,0.32);
-        background: rgba(255,255,255,0.08);
-        transition: all 0.18s ease;
-      }
-
-      #wlcheadersect4 a:hover,
-      #wlcheadersect5 a:hover {
-        background: rgba(255,255,255,0.16);
-      }
-
-      #wlcheadersect4 p,
-      #wlcheadersect5 p {
         display: none !important;
       }
 
-      /* ===== second row links ===== */
       #wlcheaderpromolinks,
       #wlcheaderquicklinks {
         height: auto !important;
@@ -175,7 +125,6 @@
         color: #6b0014 !important;
       }
 
-      /* ===== search/menu row ===== */
       #ctl00_PageHeader_searchBarTableRow {
         gap: 12px;
         padding: 10px 16px 14px 16px;
@@ -212,7 +161,6 @@
         overflow: hidden;
       }
 
-      /* ===== desktop locations CTA ===== */
       .wl-header-locations-desktop {
         display: inline-flex;
         align-items: center;
@@ -250,30 +198,17 @@
         fill: currentColor;
       }
 
-      /* ===== mobile locations CTA ===== */
       .wl-header-locations-mobile {
         display: none;
       }
 
-      /* ===== responsive ===== */
       @media (max-width: 991px) {
         #wlcheader {
-          flex-wrap: wrap !important;
-          justify-content: flex-start !important;
+          padding: 10px 12px !important;
         }
 
-        #wlcheader > a {
-          margin-right: auto;
-        }
-
-        #wlcheadersect2 {
-          order: 3;
-          width: 100% !important;
-        }
-
-        #wlcheadersect4,
-        #wlcheadersect5 {
-          order: 2;
+        #wlcheader > a img {
+          width: 140px !important;
         }
 
         #wlcheaderpromolinks,
@@ -281,10 +216,6 @@
           float: none !important;
           width: 100% !important;
           justify-content: flex-start !important;
-        }
-
-        #ctl00_PageHeader_searchBarTableRow {
-          align-items: center !important;
         }
 
         .wl-header-locations-desktop {
@@ -322,14 +253,6 @@
       }
 
       @media (max-width: 767px) {
-        #wlcheader {
-          padding: 10px 12px !important;
-        }
-
-        #wlcheader > a img {
-          width: 130px !important;
-        }
-
         #wlcheaderpromolinks,
         #wlcheaderquicklinks,
         #ctl00_PageHeader_searchBarTableRow {
@@ -347,13 +270,6 @@
       }
 
       @media (max-width: 575px) {
-        #wlcheadersect4 a,
-        #wlcheadersect5 a {
-          min-height: 38px;
-          padding: 8px 10px;
-          font-size: 13px !important;
-        }
-
         #wlcheaderpromolinks a,
         #wlcheaderquicklinks a {
           font-size: 12px !important;
@@ -382,23 +298,11 @@
     );
   }
 
-  function updateHeaderActionsText() {
-    var signInWrap = document.getElementById("wlcheadersect4");
-    var acctWrap = document.getElementById("wlcheadersect5");
-
-    if (signInWrap) {
-      var signInLink = signInWrap.querySelector("a");
-      if (signInLink && !signInLink.textContent.trim()) {
-        signInLink.textContent = "Sign In";
-      }
-    }
-
-    if (acctWrap) {
-      var acctLink = acctWrap.querySelector("a");
-      if (acctLink && !acctLink.textContent.trim()) {
-        acctLink.textContent = "Account";
-      }
-    }
+  function removeUnusedHeaderSections() {
+    ["wlcheadersect2", "wlcheadersect3", "wlcheadersect4", "wlcheadersect5"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.style.setProperty("display", "none", "important");
+    });
   }
 
   function addDesktopLocationsButton() {
@@ -428,19 +332,6 @@
     row.insertBefore(anchor, row.lastElementChild);
   }
 
-  function updateBrandAreaCopy() {
-    var sect2 = document.getElementById("wlcheadersect2");
-    if (!sect2) return;
-
-    if (!sect2.dataset.wlEnhanced) {
-      sect2.innerHTML =
-        '<div style="font-size:13px; line-height:1.45; font-weight:700;">' +
-          'Your local source for lumber, hardware, building materials, paint, and project support.' +
-        '</div>';
-      sect2.dataset.wlEnhanced = "true";
-    }
-  }
-
   function upgradeTopLinksAccessibility() {
     var promo = document.getElementById("wlcheaderpromolinks");
     var quick = document.getElementById("wlcheaderquicklinks");
@@ -456,8 +347,7 @@
   function run() {
     console.log(LOG, "running");
     injectStyles();
-    updateHeaderActionsText();
-    updateBrandAreaCopy();
+    removeUnusedHeaderSections();
     upgradeTopLinksAccessibility();
     addDesktopLocationsButton();
     addMobileLocationsButton();
