@@ -70,12 +70,6 @@
       #wlcheadersect4,
       #wlcheadersect5 {
         float: none !important;
-      }
-
-      #wlcheadersect2,
-      #wlcheadersect3,
-      #wlcheadersect4,
-      #wlcheadersect5 {
         display: none !important;
       }
 
@@ -126,10 +120,21 @@
       }
 
       #ctl00_PageHeader_searchBarTableRow {
+        display: flex !important;
+        align-items: center !important;
         gap: 12px;
         padding: 10px 16px 14px 16px;
         background: #ffffff;
         border-top: 1px solid #f0f0f0;
+      }
+
+      #ctl00_PageHeader_searchBarTableRow > div:first-child {
+        flex: 0 0 auto;
+      }
+
+      #ctl00_PageHeader_searchBarTableRow > .flex-grow-1 {
+        flex: 1 1 auto;
+        min-width: 0;
       }
 
       .prod-search-wrapper {
@@ -140,6 +145,7 @@
         display: flex;
         align-items: center;
         gap: 10px;
+        width: 100%;
       }
 
       #c50_1,
@@ -149,16 +155,59 @@
 
       #c50_1 {
         width: 190px;
+        flex: 0 0 190px;
       }
 
       #c50_2 {
         flex: 1 1 auto;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-width: 0;
+      }
+
+      #c50_2 > .RadSearchBox,
+      #c50_2 > .RadSearchBox_MetroTouch,
+      #c50_2 > div:first-child,
+      #ctl00_PageHeader_GlobalSearchControl_SearchPanel {
+        min-width: 0;
+      }
+
+      #ctl00_PageHeader_GlobalSearchControl_RadSearchBox1 {
+        width: 100% !important;
+      }
+
+      #ctl00_PageHeader_GlobalSearchControl_RadSearchBox1 .rsbInner {
+        display: flex !important;
+        align-items: center;
+        min-height: 46px;
+      }
+
+      #ctl00_PageHeader_GlobalSearchControl_RadSearchBox1_Input {
+        width: 100% !important;
       }
 
       .RadComboBox_MetroTouch,
       .RadSearchBox_MetroTouch .rsbInner {
         border-radius: 14px !important;
         overflow: hidden;
+      }
+
+      #barcode-scanner-container {
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+      }
+
+      #start-scanner {
+        width: 46px !important;
+        height: 46px !important;
+        min-width: 46px !important;
+        min-height: 46px !important;
+        border-radius: 12px;
+        background-color: #f4f4f4 !important;
+        box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08);
       }
 
       .wl-header-locations-desktop {
@@ -236,11 +285,29 @@
           text-decoration: none !important;
           box-shadow: 0 8px 18px rgba(107,0,20,0.18);
           flex: 0 0 auto;
+          order: 2;
         }
 
         .wl-header-locations-mobile:hover {
           color: #fff !important;
           background: #540010;
+        }
+
+        #ctl00_PageHeader_searchBarTableRow {
+          flex-wrap: wrap;
+          align-items: stretch !important;
+          gap: 10px;
+        }
+
+        #ctl00_PageHeader_searchBarTableRow > div:first-child {
+          order: 1;
+          flex: 0 0 auto;
+        }
+
+        #ctl00_PageHeader_searchBarTableRow > .flex-grow-1 {
+          order: 3;
+          flex: 1 1 100%;
+          width: 100%;
         }
 
         #Div_SearchControls {
@@ -249,6 +316,7 @@
 
         #c50_1 {
           width: 130px;
+          flex: 0 0 130px;
         }
       }
 
@@ -261,23 +329,79 @@
         }
 
         #Div_SearchControls {
-          flex-wrap: nowrap;
+          flex-wrap: wrap;
+          align-items: stretch;
         }
 
         #c50_1 {
-          width: 115px;
+          width: 100%;
+          flex: 1 1 100%;
+          order: 1;
+        }
+
+        #c50_2 {
+          width: 100%;
+          flex: 1 1 100%;
+          order: 2;
+        }
+
+        #c50_2 > div:first-child,
+        #c50_2 > .RadSearchBox,
+        #c50_2 > .RadSearchBox_MetroTouch,
+        #ctl00_PageHeader_GlobalSearchControl_SearchPanel {
+          flex: 1 1 auto;
+          width: auto !important;
+        }
+
+        #barcode-scanner-container {
+          flex: 0 0 auto;
+          align-self: stretch;
+        }
+
+        #start-scanner {
+          width: 44px !important;
+          height: 44px !important;
+          min-width: 44px !important;
+          min-height: 44px !important;
         }
       }
 
       @media (max-width: 575px) {
+        #wlcheader {
+          gap: 10px !important;
+          padding: 8px 10px !important;
+        }
+
+        #wlcheader > a img {
+          width: 124px !important;
+          padding: 6px !important;
+          border-radius: 10px;
+        }
+
         #wlcheaderpromolinks a,
         #wlcheaderquicklinks a {
           font-size: 12px !important;
           padding: 6px 10px !important;
         }
 
+        #ctl00_PageHeader_searchBarTableRow {
+          gap: 8px;
+        }
+
         #c50_1 {
           display: none;
+        }
+
+        #c50_2 {
+          flex-wrap: nowrap;
+        }
+
+        #c50_2 > div:first-child,
+        #c50_2 > .RadSearchBox,
+        #c50_2 > .RadSearchBox_MetroTouch,
+        #ctl00_PageHeader_GlobalSearchControl_SearchPanel {
+          flex: 1 1 auto;
+          min-width: 0;
         }
       }
     `;
