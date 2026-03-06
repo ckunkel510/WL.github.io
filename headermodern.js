@@ -253,15 +253,27 @@
 
       @media (max-width: 991px) {
         #wlcheader {
-          padding: 10px 12px !important;
+          min-height: 72px !important;
+          justify-content: center !important;
+          padding: 8px 12px !important;
+        }
+
+        #wlcheader > a {
+          width: 100%;
+          justify-content: center;
         }
 
         #wlcheader > a img {
-          width: 140px !important;
+          width: 136px !important;
+        }
+
+        #wl-weather-closure-banner {
+          display: none !important;
         }
 
         #wlcheaderpromolinks,
         #wlcheaderquicklinks {
+          display: none !important;
           float: none !important;
           width: 100% !important;
           justify-content: flex-start !important;
@@ -368,24 +380,21 @@
 
       @media (max-width: 575px) {
         #wlcheader {
-          gap: 10px !important;
-          padding: 8px 10px !important;
+          min-height: 64px !important;
+          gap: 8px !important;
+          padding: 6px 10px !important;
         }
 
         #wlcheader > a img {
-          width: 124px !important;
-          padding: 6px !important;
+          width: 110px !important;
+          padding: 5px !important;
           border-radius: 10px;
-        }
-
-        #wlcheaderpromolinks a,
-        #wlcheaderquicklinks a {
-          font-size: 12px !important;
-          padding: 6px 10px !important;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.12);
         }
 
         #ctl00_PageHeader_searchBarTableRow {
           gap: 8px;
+          padding-top: 10px;
         }
 
         #c50_1 {
