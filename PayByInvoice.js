@@ -5518,10 +5518,11 @@ function setStep(n){
 
     function paymentSuccessVisible(){
       try{
-        const body = document.querySelector('.bodyFlexItem');
         const receipt = document.querySelector('.paymentDataTable');
-        const okText = body && /Your account payment was successful/i.test(body.textContent || '');
-        return !!(receipt && okText);
+        if (!receipt) return false;
+        const successBlock = receipt.closest('.bodyFlexItem') || receipt.parentElement || document.body;
+        const txt = (successBlock.textContent || '').replace(/\s+/g, ' ').trim();
+        return /Your account payment was successful/i.test(txt);
       }catch(e){ return false; }
     }
 
@@ -5531,6 +5532,13 @@ function setStep(n){
         if (!wizEl) return;
         const success = paymentSuccessVisible();
         wizEl.style.display = success ? 'none' : '';
+        if (success) {
+          wizEl.setAttribute('aria-hidden', 'true');
+          wizEl.classList.add('wl-hidden-after-success');
+        } else {
+          wizEl.removeAttribute('aria-hidden');
+          wizEl.classList.remove('wl-hidden-after-success');
+        }
       }catch(e){}
     }
 
