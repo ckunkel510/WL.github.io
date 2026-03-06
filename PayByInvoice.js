@@ -1175,7 +1175,7 @@ return {
       const back = wiz.querySelector('#w3Back');
       const next = wiz.querySelector('#w3Next');
       if (back) back.disabled = (step === 0);
-      if (next) next.textContent = (step === 3) ? 'Ready' : 'Next';
+      if (next) next.textContent = (step === 3) ? 'Make a Payment' : 'Next';
     }catch(e){}
     try{ wiz.scrollIntoView({behavior:'smooth', block:'start'}); }catch(e){}
     return true;
@@ -4463,7 +4463,7 @@ function buildReviewHTML(){
     const amtDisp = amtEl?.value ? ('$' + String(amtEl.value).trim()) : '(none)';
     return `
       <div class="wl-card" style="margin-bottom:14px;">
-        <div class="wl-card-head">Review</div>
+        <div class="wl-card-head">Make a Payment</div>
         <div class="wl-card-body">
           <div style="display:grid; gap:10px;">
             <div><b>Amount:</b> <span style="font-weight:1000;">${amtDisp}</span></div>
@@ -4555,7 +4555,7 @@ function buildReviewHTML(){
           <span class="w3-pill" data-pill="0">1) Info</span>
           <span class="w3-pill" data-pill="1">2) Select</span>
           <span class="w3-pill" data-pill="2">3) Pay Method</span>
-          <span class="w3-pill" data-pill="3">4) Review</span>
+          <span class="w3-pill" data-pill="3">4) Make a Payment</span>
         </div>
       </div>
       <div class="w3-body">
@@ -5262,7 +5262,7 @@ try{
       };
 
       
-// ----- Bank level click handler (no postback; selection happens at final submit) -----
+// ----- Bank level click handler (auto-advance to final payment step) -----
 bankMount.onclick = (e)=>{
   const btn = e.target.closest('.wl-pay-card[data-bank]');
   if (!btn) return;
@@ -5282,6 +5282,24 @@ bankMount.onclick = (e)=>{
       try{ sel.dispatchEvent(new Event('change',{bubbles:true})); }catch(e){}
     }catch(e){}
   };
+  const autoAdvanceToFinalPaymentStep = ()=>{
+    setTimeout(()=>{
+      try{ reconcileNativeFromState(); }catch(e){}
+      try{ renderPayCards(); }catch(e){}
+      try{ renderSummary(); }catch(e){}
+
+      try{ sessionStorage.setItem(STEP_KEY, '3'); }catch(e){}
+
+      const nextBtn = $('w3Next');
+      if (typeof jumpToWizardStep === 'function'){
+        try{ jumpToWizardStep(3); }catch(e){}
+      }
+      if (nextBtn && Number(sessionStorage.getItem(STEP_KEY) || '0') === 2){
+        try{ nextBtn.click(); return; }catch(e){}
+      }
+      try{ jumpToWizardStep(3); }catch(e){}
+    }, 80);
+  };
 
   if (kind === 'new'){
     const st = loadPayState() || {};
@@ -5294,8 +5312,7 @@ bankMount.onclick = (e)=>{
     setRadioSilent(rbCheck);
     try{ setSelectSilent(getCofSel(), '-1'); }catch(e){}
 
-    setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 0);
-    setTimeout(()=>{ try{ jumpToWizardStep(3); }catch(e){} }, 80);
+    autoAdvanceToFinalPaymentStep();
     return;
   }
 
@@ -5315,8 +5332,7 @@ bankMount.onclick = (e)=>{
   setRadioSilent(rbCof);
   try{ setSelectSilent(getCofSel(), val); }catch(e){}
 
-  setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 0);
-  setTimeout(()=>{ try{ jumpToWizardStep(3); }catch(e){} }, 80);
+  autoAdvanceToFinalPaymentStep();
 };
     }
 // Initial render + rerender after MS AJAX updates
@@ -5400,7 +5416,7 @@ function setStep(n){
       });
 
       $('w3Back').disabled = (step === 0);
-      $('w3Next').textContent = (step === 3) ? 'Ready' : 'Next';
+      $('w3Next').textContent = (step === 3) ? 'Make a Payment' : 'Next';
 
       if (step === 3){
         $('w3Review').innerHTML = buildReviewHTML();
