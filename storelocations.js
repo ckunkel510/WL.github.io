@@ -15,88 +15,73 @@
     return;
   }
 
-  var routeMap = {
-    "4731": {
-      type: "hub",
-      name: "Store Locations",
-      view: "storelocations",
-      pl1: "4731",
-      pg: "4731"
-    },
-    "4733": {
-      type: "store",
+  var hubPage = {
+    type: "hub",
+    name: "Store Locations",
+    view: "storelocations",
+    pl1: "4731",
+    pg: "4731"
+  };
+
+  var storeCards = [
+    {
       name: "Brenham",
       view: "store-brenham",
-      pl1: "4733",
-      pg: "4733"
+      image: "https://static.wixstatic.com/media/aba64d_e4bef13eccc0407385a7152fcff2f035~mv2.png/v1/crop/x_128%2Cy_20%2Cw_1126%2Ch_516/fill/w_980%2Ch_456%2Cal_c%2Cq_95%2Cusm_0.66_1.00_0.01%2Cenc_avif%2Cquality_auto/aba64d_e4bef13eccc0407385a7152fcff2f035~mv2.png",
+      teaser: "Hardware, lumber, and project support from your Brenham team."
     },
-    "4734": {
-      type: "store",
+    {
       name: "Bryan",
       view: "store-bryan",
-      pl1: "4734",
-      pg: "4734"
+      image: "https://static.wixstatic.com/media/aba64d_bac1afac1160451b8a1872fbdbde7363~mv2.png/v1/crop/x_144%2Cy_0%2Cw_1191%2Ch_554/fill/w_980%2Ch_456%2Cal_c%2Cq_95%2Cusm_0.66_1.00_0.01%2Cenc_avif%2Cquality_auto/store-bryan.png",
+      teaser: "Contractor-friendly access to building materials and everyday essentials."
     },
-    "4735": {
-      type: "store",
+    {
       name: "Caldwell",
       view: "store-caldwell",
-      pl1: "4735",
-      pg: "4735"
+      image: "https://static.wixstatic.com/media/aba64d_10d6752e582f4cf5b147bef46f4ee4a2~mv2.png/v1/crop/x_144%2Cy_0%2Cw_1191%2Ch_554/fill/w_980%2Ch_456%2Cal_c%2Cq_95%2Cusm_0.66_1.00_0.01%2Cenc_avif%2Cquality_auto/store-caldwell.png",
+      teaser: "A full local lumber and hardware experience for home and jobsite needs."
     },
-    "4736": {
-      type: "store",
+    {
       name: "Lexington",
       view: "store-lexington",
-      pl1: "4736",
-      pg: "4736"
+      image: "https://static.wixstatic.com/media/aba64d_5d638a9ba44446ab879100b3e51c3d19~mv2.png/v1/crop/x_144%2Cy_0%2Cw_1191%2Ch_554/fill/w_980%2Ch_456%2Cal_c%2Cq_95%2Cusm_0.66_1.00_0.01%2Cenc_avif%2Cquality_auto/store-lexington.png",
+      teaser: "Local pickup, delivery support, and a straightforward store experience."
     },
-    "4737": {
-      type: "store",
+    {
       name: "Groesbeck",
       view: "store-groesbeck",
-      pl1: "4737",
-      pg: "4737"
+      image: "https://static.wixstatic.com/media/aba64d_9c60a78b90c1467d9a82f162181f0f3e~mv2.png/v1/crop/x_144%2Cy_0%2Cw_1191%2Ch_554/fill/w_980%2Ch_456%2Cal_c%2Cq_95%2Cusm_0.66_1.00_0.01%2Cenc_avif%2Cquality_auto/store-groesbeck.png",
+      teaser: "Paint, lumber, hardware, and local service all in one place."
     },
-    "4738": {
-      type: "store",
+    {
       name: "Mexia",
       view: "store-mexia",
-      pl1: "4738",
-      pg: "4738"
+      image: "https://static.wixstatic.com/media/aba64d_a640e6f19e2a49ea849b31d2dd5007fd~mv2.png/v1/crop/x_144%2Cy_0%2Cw_1191%2Ch_554/fill/w_980%2Ch_456%2Cal_c%2Cq_95%2Cusm_0.66_1.00_0.01%2Cenc_avif%2Cquality_auto/store-mexia.png",
+      teaser: "Building materials and practical convenience for everyday projects."
     },
-    "4739": {
-      type: "store",
+    {
       name: "Buffalo",
       view: "store-buffalo",
-      pl1: "4739",
-      pg: "4739"
+      image: "https://static.wixstatic.com/media/aba64d_f374f2a488944e169c04fe0ecfd41300~mv2.png/v1/crop/x_144%2Cy_0%2Cw_1191%2Ch_554/fill/w_980%2Ch_456%2Cal_c%2Cq_95%2Cusm_0.66_1.00_0.01%2Cenc_avif%2Cquality_auto/store-buffalo.png",
+      teaser: "A local source for paint, hardware, lumber, and more."
     }
-  };
+  ];
 
   var pg = (params.get("pg") || "").trim();
   var pl1 = (params.get("pl1") || "").trim();
-  var pretty = (params.get("pretty") || "").trim().toLowerCase();
 
   console.log(LOG, "pg:", pg || "(none)");
   console.log(LOG, "pl1:", pl1 || "(none)");
-  console.log(LOG, "pretty:", pretty || "(none)");
 
-  var currentKey = null;
+  var isHub = (pg === hubPage.pg || pl1 === hubPage.pl1);
 
-  if (pg && routeMap[pg]) {
-    currentKey = pg;
-  } else if (pl1 && routeMap[pl1]) {
-    currentKey = pl1;
-  }
-
-  if (!currentKey) {
-    console.log(LOG, "Not a store-locations page. Exiting.");
+  if (!isHub) {
+    console.log(LOG, "Not the Store Locations hub. Exiting.");
     return;
   }
 
-  var currentPage = routeMap[currentKey];
-  console.log(LOG, "Matched route:", currentPage);
+  console.log(LOG, "Matched hub page:", hubPage);
 
   function injectStyles() {
     if (document.getElementById("wl-storelocations-styles")) return;
@@ -108,177 +93,182 @@
 
       #wl-storelocations-root {
         width: 100%;
-        max-width: 1400px;
-        margin: 20px auto 30px auto;
+        max-width: 1460px;
+        margin: 0 auto 32px auto;
         padding: 20px;
         box-sizing: border-box;
-        font-family: Arial, sans-serif;
+        font-family: Arial, Helvetica, sans-serif;
       }
 
       .wl-store-hero {
+        position: relative;
+        overflow: hidden;
         background: linear-gradient(135deg, #6b0014 0%, #8d1028 100%);
         color: #fff;
-        border-radius: 16px;
-        padding: 28px 24px;
-        margin-bottom: 24px;
+        border-radius: 24px;
+        padding: 34px 30px;
+        margin-bottom: 26px;
+        box-shadow: 0 12px 32px rgba(0,0,0,0.12);
+      }
+
+      .wl-store-hero::after {
+        content: "";
+        position: absolute;
+        right: -40px;
+        top: -40px;
+        width: 220px;
+        height: 220px;
+        border-radius: 50%;
+        background: rgba(255,255,255,0.08);
+        pointer-events: none;
       }
 
       .wl-store-kicker {
+        position: relative;
+        z-index: 1;
         font-size: 13px;
         text-transform: uppercase;
-        letter-spacing: 1.2px;
-        opacity: 0.9;
-        margin-bottom: 8px;
+        letter-spacing: 1.3px;
+        opacity: 0.92;
+        margin-bottom: 10px;
       }
 
       .wl-store-title {
-        font-size: 34px;
-        line-height: 1.1;
-        font-weight: 700;
-        margin: 0 0 10px 0;
+        position: relative;
+        z-index: 1;
+        font-size: 40px;
+        line-height: 1.05;
+        font-weight: 800;
+        margin: 0 0 12px 0;
       }
 
       .wl-store-subtitle {
-        font-size: 16px;
-        line-height: 1.5;
-        max-width: 850px;
+        position: relative;
+        z-index: 1;
+        font-size: 17px;
+        line-height: 1.65;
+        max-width: 860px;
         margin: 0;
-        opacity: 0.95;
+        opacity: 0.96;
       }
 
       .wl-store-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 16px;
-        margin-top: 24px;
+        grid-template-columns: repeat(auto-fit, minmax(255px, 1fr));
+        gap: 18px;
       }
 
       .wl-store-card {
+        position: relative;
         display: block;
+        min-height: 350px;
+        border-radius: 22px;
+        overflow: hidden;
         text-decoration: none;
-        color: #222;
-        background: #fff;
-        border: 1px solid #e6e6e6;
-        border-radius: 14px;
-        padding: 18px;
-        box-shadow: 0 4px 18px rgba(0,0,0,0.05);
-        transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+        color: #fff;
+        background: #ddd center center / cover no-repeat;
+        box-shadow: 0 10px 28px rgba(0,0,0,0.12);
+        transition: transform 0.22s ease, box-shadow 0.22s ease;
       }
 
       .wl-store-card:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 8px 24px rgba(0,0,0,0.08);
-        border-color: #d7c0c6;
+        transform: translateY(-4px);
+        box-shadow: 0 16px 34px rgba(0,0,0,0.18);
+      }
+
+      .wl-store-card::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(to top, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.30) 45%, rgba(0,0,0,0.12) 100%);
+      }
+
+      .wl-store-card-inner {
+        position: relative;
+        z-index: 1;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        justify-content: flex-end;
+        padding: 22px 20px;
+      }
+
+      .wl-store-card-eyebrow {
+        font-size: 11px;
+        text-transform: uppercase;
+        letter-spacing: 1.2px;
+        opacity: 0.88;
+        margin-bottom: 8px;
       }
 
       .wl-store-card h3 {
-        margin: 0 0 8px 0;
-        font-size: 21px;
-        color: #6b0014;
+        margin: 0 0 10px 0;
+        font-size: 28px;
+        line-height: 1.1;
+        font-weight: 800;
+        color: #fff;
       }
 
       .wl-store-card p {
-        margin: 0;
+        margin: 0 0 14px 0;
         font-size: 14px;
-        line-height: 1.5;
-        color: #444;
+        line-height: 1.55;
+        color: rgba(255,255,255,0.94);
+        max-width: 95%;
       }
 
-      .wl-store-actions {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 12px;
-        margin-top: 20px;
-      }
-
-      .wl-store-btn {
+      .wl-store-card-cta {
         display: inline-flex;
         align-items: center;
-        justify-content: center;
-        min-height: 44px;
-        padding: 12px 18px;
-        border-radius: 999px;
-        text-decoration: none;
-        font-weight: 700;
-        border: 1px solid #6b0014;
-        transition: all 0.18s ease;
-      }
-
-      .wl-store-btn-primary {
-        background: #6b0014;
-        color: #fff;
-      }
-
-      .wl-store-btn-primary:hover {
-        background: #540010;
-        color: #fff;
-      }
-
-      .wl-store-btn-secondary {
-        background: #fff;
-        color: #6b0014;
-      }
-
-      .wl-store-btn-secondary:hover {
-        background: #f9f4f5;
-        color: #6b0014;
-      }
-
-      .wl-store-panels {
-        display: grid;
-        grid-template-columns: 1.2fr 1fr;
-        gap: 18px;
-        margin-top: 22px;
-      }
-
-      .wl-store-panel {
-        background: #fff;
-        border: 1px solid #e8e8e8;
-        border-radius: 14px;
-        padding: 20px;
-        box-shadow: 0 4px 18px rgba(0,0,0,0.04);
-      }
-
-      .wl-store-panel h2 {
-        margin: 0 0 12px 0;
-        font-size: 22px;
-        color: #222;
-      }
-
-      .wl-store-panel p,
-      .wl-store-panel li {
-        font-size: 15px;
-        line-height: 1.6;
-        color: #444;
-      }
-
-      .wl-store-panel ul {
-        margin: 0;
-        padding-left: 18px;
-      }
-
-      .wl-store-breadcrumb {
-        margin-bottom: 14px;
+        gap: 8px;
         font-size: 14px;
+        font-weight: 800;
+        color: #fff;
       }
 
-      .wl-store-breadcrumb a {
-        color: #6b0014;
-        text-decoration: none;
-        font-weight: 600;
+      .wl-store-card-cta::after {
+        content: "→";
+        font-size: 16px;
+        line-height: 1;
+        transition: transform 0.18s ease;
       }
 
-      .wl-store-breadcrumb a:hover {
-        text-decoration: underline;
+      .wl-store-card:hover .wl-store-card-cta::after {
+        transform: translateX(3px);
       }
 
       @media (max-width: 900px) {
-        .wl-store-panels {
-          grid-template-columns: 1fr;
+        .wl-store-title {
+          font-size: 31px;
         }
 
-        .wl-store-title {
-          font-size: 28px;
+        .wl-store-subtitle {
+          font-size: 15px;
+        }
+
+        .wl-store-card {
+          min-height: 300px;
+        }
+      }
+
+      @media (max-width: 640px) {
+        #wl-storelocations-root {
+          padding: 14px;
+        }
+
+        .wl-store-hero {
+          padding: 24px 18px;
+          border-radius: 18px;
+        }
+
+        .wl-store-card {
+          min-height: 260px;
+          border-radius: 18px;
+        }
+
+        .wl-store-card h3 {
+          font-size: 24px;
         }
       }
     `;
@@ -319,21 +309,15 @@
   }
 
   function createHubMarkup() {
-    var stores = [
-      routeMap["4733"],
-      routeMap["4734"],
-      routeMap["4735"],
-      routeMap["4736"],
-      routeMap["4737"],
-      routeMap["4738"],
-      routeMap["4739"]
-    ];
-
-    var cards = stores.map(function (store) {
+    var cards = storeCards.map(function (store) {
       return `
-        <a class="wl-store-card" href="/Default.aspx?view=${encodeURIComponent(store.view)}">
-          <h3>${store.name}</h3>
-          <p>Visit the ${store.name} location page for store details, featured departments, services, and shopping links.</p>
+        <a class="wl-store-card" href="/Default.aspx?view=${encodeURIComponent(store.view)}" style="background-image:url('${store.image}');">
+          <div class="wl-store-card-inner">
+            <div class="wl-store-card-eyebrow">Woodson Lumber Location</div>
+            <h3>${store.name}</h3>
+            <p>${store.teaser}</p>
+            <span class="wl-store-card-cta">Dive In</span>
+          </div>
         </a>
       `;
     }).join("");
@@ -344,60 +328,12 @@
           <div class="wl-store-kicker">Woodson Lumber</div>
           <h1 class="wl-store-title">Store Locations</h1>
           <p class="wl-store-subtitle">
-            Choose a location to view branch-specific details, local services, and a more tailored shopping experience.
+            Choose a location to explore its page, see the space, and dive into a more local Woodson experience.
           </p>
         </section>
 
         <section class="wl-store-grid">
           ${cards}
-        </section>
-      </div>
-    `;
-  }
-
-  function createStoreMarkup(page) {
-    return `
-      <div id="wl-storelocations-root">
-        <div class="wl-store-breadcrumb">
-          <a href="/Default.aspx?view=storelocations">← Back to Store Locations</a>
-        </div>
-
-        <section class="wl-store-hero">
-          <div class="wl-store-kicker">Woodson Lumber Location</div>
-          <h1 class="wl-store-title">${page.name}</h1>
-          <p class="wl-store-subtitle">
-            This is the custom location page shell for ${page.name}. Next we can drop in store-specific content like hours, services, featured categories, map links, contact info, promotions, and “shop this store” actions.
-          </p>
-
-          <div class="wl-store-actions">
-            <a class="wl-store-btn wl-store-btn-primary" href="/Products.aspx">Start Shopping</a>
-            <a class="wl-store-btn wl-store-btn-secondary" href="/Default.aspx?view=storelocations">All Locations</a>
-          </div>
-        </section>
-
-        <section class="wl-store-panels">
-          <div class="wl-store-panel">
-            <h2>Store Page Placeholder</h2>
-            <p>
-              You are successfully routing into the <strong>${page.name}</strong> store page product group.
-              This confirms the router and injected page shell are working.
-            </p>
-            <p>
-              In the next step, we can replace this with the actual branch layout and store-specific content.
-            </p>
-          </div>
-
-          <div class="wl-store-panel">
-            <h2>Suggested Next Content</h2>
-            <ul>
-              <li>Store photo or hero image</li>
-              <li>Address, phone, and hours</li>
-              <li>Store services</li>
-              <li>Featured departments and brands</li>
-              <li>Branch-specific promo/event blocks</li>
-              <li>Set this as my store button</li>
-            </ul>
-          </div>
         </section>
       </div>
     `;
@@ -409,15 +345,10 @@
     var container = findContentContainer();
     if (!container) return;
 
-    console.log(LOG, "Rendering into #MainLayoutRow");
-
-    container.innerHTML = currentPage.type === "hub"
-      ? createHubMarkup()
-      : createStoreMarkup(currentPage);
-
-    setPrettyUrl(currentPage);
-
-    console.log(LOG, "Custom store page rendered into #MainLayoutRow.");
+    console.log(LOG, "Rendering hub into #MainLayoutRow");
+    container.innerHTML = createHubMarkup();
+    setPrettyUrl(hubPage);
+    console.log(LOG, "Store Locations hub rendered.");
   }
 
   function waitForContainerThenRender() {
