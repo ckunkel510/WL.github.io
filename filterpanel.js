@@ -9,6 +9,16 @@
   const CFG = {
     allowPages: new Set(["products.aspx"]),
     hideSections: ["keywords"],
+    hiddenGroupIds: new Set([
+      "4731",
+      "4733",
+      "4734",
+      "4735",
+      "4736",
+      "4737",
+      "4738",
+      "4739",
+    ]),
     dedupeOptions: true,
 
     responsive: {
@@ -55,6 +65,31 @@
     s = s.replace(/\bft\.\b/g, "ft").replace(/\bin\.\b/g, "in");
     return normSpace(s);
   };
+
+  function extractGroupIdFromHref(href) {
+    if (!href) return "";
+    try {
+      const url = new URL(href, location.origin);
+      return url.searchParams.get("pg") || "";
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function hideConfiguredGroupOptions(sectionLi) {
+    if (!CFG.hiddenGroupIds || !CFG.hiddenGroupIds.size) return;
+
+    const groupItems = sectionLi.querySelectorAll(".rpGroup.rpLevel1 > li.rpItem");
+    groupItems.forEach((item) => {
+      const link = item.querySelector(":scope > a.rpLink");
+      if (!link) return;
+
+      const groupId = extractGroupIdFromHref(link.getAttribute("href"));
+      if (!CFG.hiddenGroupIds.has(groupId)) return;
+
+      item.style.display = "none";
+    });
+  }
 
   function injectStylesOnce() {
     if (document.getElementById("wl-refine-responsive-css")) return;
@@ -602,6 +637,8 @@
         hideSection(li);
         return;
       }
+
+      hideConfiguredGroupOptions(li);
 
       if (CFG.dedupeOptions) {
         try { dedupeSectionOptions(li); } catch (_) {}
