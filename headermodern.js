@@ -39,7 +39,6 @@
         gap: 18px !important;
         padding: 10px 16px !important;
         box-sizing: border-box !important;
-        background: linear-gradient(135deg, #6b0014 0%, #8d1028 100%) !important;
         border-top: none !important;
         border-radius: 0 !important;
       }
