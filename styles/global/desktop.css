@@ -78,7 +78,7 @@ background-color: #6b0005 !important;
 }
 #TopNavInputSearch{
 position: absolute;
-top: 50px;
+top: 25px;
 height: 45px;
 width: 40%;
 left: 30%;
@@ -89,7 +89,7 @@ border-radius:5px;
 }
 #TopNavInputSearch{
 position: absolute;
-top: 50px;
+top: 25px;
 height: 45px;
 width: 40%;
 left: 30%;
