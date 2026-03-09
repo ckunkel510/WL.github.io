@@ -13,7 +13,7 @@ height: 150px !important;
         display: flex !important;
 }
 #ctl00_PageHeader_searchBarTableRow{
-background-color: white;
+background-color: none;
 margin-top:0px !important;
 }
 #wlcheaderpromolinks{
@@ -129,7 +129,11 @@ color: white !important;
 background-color: black !important;
 margin-left: 5px;
 }
-
+#wlcheader{
+        float: none !important;
+        width: 50% !important;
+        margin: auto !important;
+}
 
 #wlcheader a img{
 height: 50px !important;
