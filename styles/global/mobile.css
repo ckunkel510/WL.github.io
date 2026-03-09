@@ -120,7 +120,7 @@ div#ctl00_PageHeader_searchBarTableRow{
 width: 100%;
 position: absolute;
 top:10px;
-z-index: 150;
+z-index: 9;
 }
 
 .rmRootToggle{
