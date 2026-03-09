@@ -13,7 +13,7 @@ height: 150px !important;
         display: flex !important;
 }
 #ctl00_PageHeader_searchBarTableRow{
-background-color: none;
+background-color: none !important;
 margin-top:0px !important;
 }
 #wlcheaderpromolinks{
