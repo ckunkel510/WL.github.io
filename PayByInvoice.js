@@ -9,21 +9,13 @@
      URL + Session Pref Handling
      ============================= */
   const url = new URL(location.href);
+  const HAS_PARAMS = [
+    'utm_invoices','utm_total','utm_jobs','utm_remit','utm_notes','utm_clear','utm_back','utm_docs'
+  ].some(k => url.searchParams.has(k));
+  if (!HAS_PARAMS) return;
+
   const $ = (id)=> document.getElementById(id);
   const KEY = 'wl_ap_prefill_v3';
-
-  function hasStoredPref(){
-    try{
-      return !!(sessionStorage.getItem(KEY) || localStorage.getItem(KEY));
-    }catch(e){
-      return false;
-    }
-  }
-
-  const HAS_PARAMS = [
-    'utm_invoices','utm_total','utm_jobs','utm_remit','utm_notes','utm_note','utm_clear','utm_back','utm_docs','utm_source','utm_action'
-  ].some(k => url.searchParams.has(k));
-  if (!HAS_PARAMS && !hasStoredPref()) return;
 
   function savePref(p){ try{ sessionStorage.setItem(KEY, JSON.stringify(p)); }catch(e){} }
   function loadPref(){ try{ return JSON.parse(sessionStorage.getItem(KEY) || '{}'); }catch{ return {}; } }
@@ -236,7 +228,7 @@
   const urlTot   = url.searchParams.get('utm_total')    || '';
   const urlJobs  = url.searchParams.get('utm_jobs')     || '';
   const urlRemit = url.searchParams.get('utm_remit')    || '';
-  const urlNotes = url.searchParams.get('utm_notes')    || url.searchParams.get('utm_note') || '';
+  const urlNotes = url.searchParams.get('utm_notes')    || '';
   const urlBack  = url.searchParams.get('utm_back')     || '';
   const doClear  = isTruthyFlag(url.searchParams.get('utm_clear'));
 
