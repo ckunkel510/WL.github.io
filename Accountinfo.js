@@ -151,7 +151,14 @@
     const lastStmtAmtVal = mNum(last['Last Statement Amount']?.amount);
     const hasStatements  = !!(stmtDate || stmtNetAmt>0 || lastStmtAmtVal>0);
     const stmtDue    = next10(stmtDate);
-    const payStmtUrl = (()=>{ const q=new URLSearchParams(); if(stmtNetAmt>0) q.set('utm_total', stmtNetAmt.toFixed(2)); if(stmtDate) q.set('utm_note',`Statement ${stmtDate.toLocaleDateString()}`); q.set('utm_source','AccountInfo'); q.set('utm_action','PayStatement'); return `AccountPayment_r.aspx?${q.toString()}`; })();
+    const payStmtPayload = (()=>({
+      total: stmtNetAmt>0 ? stmtNetAmt.toFixed(2) : '',
+      notes: stmtDate ? `Statement ${stmtDate.toLocaleDateString()}` : '',
+      source: 'AccountInfo',
+      action: 'PayStatement',
+      back: 'AccountInfo_R.aspx'
+    }))();
+    const payStmtUrl = (()=>{ const q=new URLSearchParams(); if(payStmtPayload.total) q.set('utm_total', payStmtPayload.total); if(payStmtPayload.notes) q.set('utm_notes', payStmtPayload.notes); q.set('utm_source', payStmtPayload.source); q.set('utm_action', payStmtPayload.action); q.set('utm_back', payStmtPayload.back); return `AccountPayment_r.aspx?${q.toString()}`; })();
 
     // Cash account (store credit) — shown separately from Net Balance
     const cashCredit = getCashBalanceCredit();
@@ -391,6 +398,51 @@ if (snapshotActions) {
       btn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); toggle(!menu.classList.contains('open')); return false; });
       document.addEventListener('click', (e)=>{ if(!menu.classList.contains('open')) return; if(!menu.contains(e.target) && e.target!==btn){ toggle(false); } });
       btn.setAttribute('onclick','return false;');
+    })();
+
+    /* payment handoff */
+    (function paymentHandoff(){
+      const PREF_KEY = 'wl_ap_prefill_v3';
+      const payStmtBtn = $('#wl-pay-statement', container);
+      const topPayBtn  = $('#wl-top-pay', container);
+
+      function savePref(payload){
+        try{ sessionStorage.setItem(PREF_KEY, JSON.stringify(payload||{})); }catch(e){}
+      }
+
+      if (payStmtBtn && !payStmtBtn.__wlBound){
+        payStmtBtn.__wlBound = true;
+        payStmtBtn.addEventListener('click', ()=>{
+          savePref({
+            docs:'',
+            total: payStmtPayload.total || '',
+            jobs:'',
+            remit:'',
+            notes: payStmtPayload.notes || '',
+            back: payStmtPayload.back || 'AccountInfo_R.aspx',
+            clear:false,
+            source: payStmtPayload.source || 'AccountInfo',
+            action: payStmtPayload.action || 'PayStatement'
+          });
+        });
+      }
+
+      if (topPayBtn && !topPayBtn.__wlBound){
+        topPayBtn.__wlBound = true;
+        topPayBtn.addEventListener('click', ()=>{
+          savePref({
+            docs:'',
+            total:'',
+            jobs:'',
+            remit:'',
+            notes:'',
+            back:'AccountInfo_R.aspx',
+            clear:false,
+            source:'AccountInfo',
+            action:'MakePayment'
+          });
+        });
+      }
     })();
 
     /* COMM PREFS storage */
