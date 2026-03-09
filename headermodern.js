@@ -26,7 +26,7 @@
       #ctl00_PageHeader_branding,
       #brandingLogo {
         width: 100%;
-        background: #ffffff !important;
+        
       }
 
       #wlcheader {
