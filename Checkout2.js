@@ -2455,6 +2455,158 @@ window.WLCheckout.refreshDateUI = function () {
     } catch {}
 
     // -------------------------------------------------------------------------
+    // O) Stock shortage modal smoothing
+    // Replace the blocking shortage warning with a calmer inline notice and
+    // automatically continue using the native Yes button.
+    // -------------------------------------------------------------------------
+    (function () {
+      function getStepPane(stepNum) {
+        return wizard.querySelector(`.checkout-step[data-step="${stepNum}"]`) || wizard;
+      }
+
+      function ensureShortageStyles() {
+        if (document.getElementById("wlShortageStyles")) return;
+        const style = document.createElement("style");
+        style.id = "wlShortageStyles";
+        style.textContent = `
+          .wl-shortage-notice {
+            margin: 0 0 14px;
+            padding: 14px 16px;
+            border: 1px solid rgba(107,0,20,.16);
+            border-left: 4px solid #6b0014;
+            border-radius: 10px;
+            background: #fff8f8;
+            color: #3f3f46;
+            box-shadow: 0 4px 14px rgba(0,0,0,.05);
+          }
+          .wl-shortage-notice strong { color: #6b0014; }
+          .wl-shortage-notice .wl-shortage-sub { margin-top: 4px; }
+          .wl-shortage-notice .wl-shortage-lines { margin: 10px 0 0 18px; padding: 0; }
+          .wl-shortage-notice .wl-shortage-lines li { margin: 0 0 4px; }
+          .wl-shortage-notice .wl-shortage-meta { margin-top: 8px; font-size: 12px; opacity: .82; }
+        `;
+        document.head.appendChild(style);
+      }
+
+      function parseShortageModal(modal) {
+        if (!modal) return null;
+        const branchTxt = (modal.querySelector('.modal-body .text-center:nth-of-type(2)')?.textContent || '').trim();
+        const branch = branchTxt.replace(/^Branch:\s*/i, '').trim();
+        const rows = Array.from(modal.querySelectorAll('tbody tr')).slice(1).map(function (tr) {
+          const tds = Array.from(tr.querySelectorAll('td')).map(td => (td.textContent || '').replace(/\s+/g, ' ').trim());
+          return {
+            productCode: tds[0] || '',
+            stockLevel: tds[1] || '',
+            orderQty: tds[2] || '',
+            leadTime: tds[3] || ''
+          };
+        }).filter(r => r.productCode || r.stockLevel || r.orderQty);
+
+        const msg = (modal.querySelector('.modal-body .text-center')?.textContent || '').replace(/\s+/g, ' ').trim();
+        const sig = JSON.stringify({ branch, rows, msg });
+        return { branch, rows, msg, sig };
+      }
+
+      function renderShortageNotice(data) {
+        if (!data) return;
+        ensureShortageStyles();
+        const pane = getStepPane(5);
+        if (!pane) return;
+
+        let box = pane.querySelector('.wl-shortage-notice');
+        if (!box) {
+          box = document.createElement('div');
+          box.className = 'wl-shortage-notice';
+          pane.insertBefore(box, pane.firstChild);
+        }
+
+        const lines = data.rows.length
+          ? `<ul class="wl-shortage-lines">${data.rows.map(function (r) {
+              const detailBits = [];
+              if (r.orderQty) detailBits.push(`requested ${r.orderQty}`);
+              if (r.stockLevel) detailBits.push(`current store stock ${r.stockLevel}`);
+              return `<li><strong>${r.productCode || 'Item'}</strong>${detailBits.length ? ' — ' + detailBits.join(', ') : ''}</li>`;
+            }).join('')}</ul>`
+          : '';
+
+        const branchLine = data.branch
+          ? `We don’t have the full quantity at ${data.branch} right now, but your order can still move forward.`
+          : `We don’t have the full quantity at the selected store right now, but your order can still move forward.`;
+
+        box.innerHTML = `
+          <div><strong>Some items need a little extra time.</strong></div>
+          <div class="wl-shortage-sub">${branchLine}</div>
+          <div class="wl-shortage-sub">We’ll source the remaining quantity from available inventory or our normal replenishment flow and confirm timing for pickup or delivery as needed.</div>
+          ${lines}
+          <div class="wl-shortage-meta">Your checkout continued automatically so you do not have to stop and re-enter anything.</div>
+        `;
+      }
+
+      function hideShortageModalChrome(modal) {
+        try { modal.classList.remove('show'); } catch {}
+        try { modal.setAttribute('aria-hidden', 'true'); } catch {}
+        try { modal.style.display = 'none'; } catch {}
+        try { document.body.classList.remove('modal-open'); } catch {}
+        try { document.body.style.removeProperty('padding-right'); } catch {}
+        try { document.querySelectorAll('.modal-backdrop').forEach(el => el.remove()); } catch {}
+      }
+
+      function handleShortageModal(modal) {
+        if (!modal) return false;
+        const yesBtn = modal.querySelector('#ctl00_PageBody_YesButton');
+        if (!yesBtn) return false;
+
+        const data = parseShortageModal(modal);
+        if (!data) return false;
+
+        renderShortageNotice(data);
+
+        if (modal.dataset.wlHandledSig === data.sig) {
+          hideShortageModalChrome(modal);
+          return true;
+        }
+
+        modal.dataset.wlHandledSig = data.sig;
+        hideShortageModalChrome(modal);
+
+        try { setStep(5); } catch {}
+        try { showStep(5); } catch {}
+
+        setTimeout(function () {
+          try { yesBtn.click(); } catch {}
+        }, 30);
+
+        return true;
+      }
+
+      function watchForShortageModal() {
+        const run = function () {
+          const modal = document.getElementById('stockModal');
+          if (!modal) return;
+          const visible = modal.classList.contains('show') || modal.style.display === 'block' || modal.getAttribute('aria-modal') === 'true';
+          if (visible) handleShortageModal(modal);
+        };
+
+        run();
+
+        try {
+          const obs = new MutationObserver(function () { run(); });
+          obs.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style', 'aria-modal'] });
+        } catch {}
+
+        document.addEventListener('click', function (e) {
+          const t = e.target && e.target.closest ? e.target.closest('#ctl00_PageBody_ContinueButton1, #ctl00_PageBody_ContinueButton2, .wl-proxy-continue, #ctl00_PageBody_PlaceOrderButton') : null;
+          if (!t) return;
+          setTimeout(run, 150);
+          setTimeout(run, 500);
+          setTimeout(run, 1200);
+        }, true);
+      }
+
+      watchForShortageModal();
+    })();
+
+    // -------------------------------------------------------------------------
     // O) Place order / Back to cart → reset wizard state
     // -------------------------------------------------------------------------
     (function () {
