@@ -3,7 +3,7 @@ height: 150px !important;
 }
 
 #siteHeaderContent{
-        
+        background-color: transparent !important;
         height: 150px !important;
         display: inline !important;
 }
@@ -13,7 +13,7 @@ height: 150px !important;
         display: flex !important;
 }
 #ctl00_PageHeader_searchBarTableRow{
-background-color: none !important;
+ background-color: transparent !important;
 margin-top:0px !important;
 }
 #wlcheaderpromolinks{
