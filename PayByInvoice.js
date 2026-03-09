@@ -9,13 +9,21 @@
      URL + Session Pref Handling
      ============================= */
   const url = new URL(location.href);
-  const HAS_PARAMS = [
-    'utm_invoices','utm_total','utm_jobs','utm_remit','utm_notes','utm_clear','utm_back','utm_docs'
-  ].some(k => url.searchParams.has(k));
-  if (!HAS_PARAMS) return;
-
   const $ = (id)=> document.getElementById(id);
   const KEY = 'wl_ap_prefill_v3';
+
+  function hasStoredPref(){
+    try{
+      return !!(sessionStorage.getItem(KEY) || localStorage.getItem(KEY));
+    }catch(e){
+      return false;
+    }
+  }
+
+  const HAS_PARAMS = [
+    'utm_invoices','utm_total','utm_jobs','utm_remit','utm_notes','utm_note','utm_clear','utm_back','utm_docs','utm_source','utm_action'
+  ].some(k => url.searchParams.has(k));
+  if (!HAS_PARAMS && !hasStoredPref()) return;
 
   function savePref(p){ try{ sessionStorage.setItem(KEY, JSON.stringify(p)); }catch(e){} }
   function loadPref(){ try{ return JSON.parse(sessionStorage.getItem(KEY) || '{}'); }catch{ return {}; } }
@@ -140,6 +148,55 @@
   }
   function clearBillDraft(){ try{ sessionStorage.removeItem(BILL_DRAFT_KEY); }catch(e){} }
 
+
+  // Local fallbacks so this prefill module never hard-crashes if later modules
+  // define their own scoped versions of these helpers.
+  function injectCSS(){
+    if (document.getElementById('wl-ap-prefill-css')) return;
+    const s = document.createElement('style');
+    s.id = 'wl-ap-prefill-css';
+    s.textContent = `
+      #wlPrefillSummary{margin:12px 0;padding:10px 12px;border:1px solid #e5e7eb;border-radius:12px;background:#f8fafc;color:#334155;font:600 13px/1.4 system-ui,Segoe UI,Roboto,Arial,sans-serif}
+      #wlPrefillSummary .wl-prefill-row{display:flex;gap:8px;flex-wrap:wrap;margin:2px 0}
+      #wlPrefillSummary .wl-prefill-lbl{font-weight:800;color:#475569}
+    `;
+    try{ document.head.appendChild(s); }catch(e){}
+  }
+  function renderSummary(pref){
+    try{
+      const amt = String(pref?.total || '').trim();
+      const notes = String(pref?.notes || '').trim();
+      const docs = String(pref?.docs || '').trim();
+      if (!amt && !notes && !docs) return;
+      const host = document.getElementById('ctl00_PageBody_PaymentAmountTextBox')?.closest('.epi-form-group-acctPayment')?.parentElement
+        || document.getElementById('ctl00_PageBody_RemittanceAdviceTextBox')?.closest('.epi-form-group-acctPayment')?.parentElement
+        || document.getElementById('ctl00_PageBody_UpdatePanel1')
+        || document.body;
+      if (!host) return;
+      let box = document.getElementById('wlPrefillSummary');
+      if (!box){
+        box = document.createElement('div');
+        box.id = 'wlPrefillSummary';
+        host.insertBefore(box, host.firstChild || null);
+      }
+      const rows = [];
+      if (amt) rows.push(`<div class="wl-prefill-row"><span class="wl-prefill-lbl">Amount:</span><span>${amt}</span></div>`);
+      if (docs) rows.push(`<div class="wl-prefill-row"><span class="wl-prefill-lbl">Docs:</span><span>${docs}</span></div>`);
+      if (notes) rows.push(`<div class="wl-prefill-row"><span class="wl-prefill-lbl">Notes:</span><span>${notes}</span></div>`);
+      box.innerHTML = rows.join('');
+    }catch(e){}
+  }
+  function triggerAmountChangeOnce(){
+    try{
+      const amt = document.getElementById('ctl00_PageBody_PaymentAmountTextBox');
+      if (!amt || amt.__wlAmtTriggered) return;
+      amt.__wlAmtTriggered = true;
+      amt.dispatchEvent(new Event('input', { bubbles:true }));
+      amt.dispatchEvent(new Event('change', { bubbles:true }));
+      if (typeof amt.onchange === 'function') { try{ amt.onchange(); }catch(e){} }
+    }catch(e){}
+  }
+
   /* ---------- parsing helpers ---------- */
   function trim(s){ return String(s||'').trim(); }
   function isTruthyFlag(v){
@@ -228,7 +285,7 @@
   const urlTot   = url.searchParams.get('utm_total')    || '';
   const urlJobs  = url.searchParams.get('utm_jobs')     || '';
   const urlRemit = url.searchParams.get('utm_remit')    || '';
-  const urlNotes = url.searchParams.get('utm_notes')    || '';
+  const urlNotes = url.searchParams.get('utm_notes')    || url.searchParams.get('utm_note') || '';
   const urlBack  = url.searchParams.get('utm_back')     || '';
   const doClear  = isTruthyFlag(url.searchParams.get('utm_clear'));
 
