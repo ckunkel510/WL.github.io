@@ -1,3 +1,7 @@
+#wlcheader{
+        background: none !important;
+}
+
 #ctl00_PageHeader_searchBarTableRow{
 background-color: white;
 margin-top:0px !important;
@@ -83,8 +87,7 @@ height:40px;
 height: 100px;
 width:100% !important;
 box-shadow: 1px 1px 5px 1px grey;
-float: left;
-margin-bottom: 40px;
+background: none !important;
 }
 
 #TopNavInputSearch{
@@ -106,7 +109,8 @@ display: none;
 div#ctl00_PageHeader_searchBarTableRow{
 width: 100%;
 position: absolute;
-top:150px;
+top:10px;
+z-index: -50;
 }
 
 .rmRootToggle{
@@ -116,12 +120,6 @@ background-color: black !important;
 margin-left: 5px;
 }
 
-#wlcheader a{
-background-color: rgba(0,0,0, 0.8);
-position: absolute;
-top: 70px;
-right: 35vw;
-}
 
 #wlcheader a img{
 height: 50px !important;
@@ -130,9 +128,7 @@ object-fit: cover;
 padding: 0px !important;
 }
 
-div#ctl00_PageHeader_branding{
-height: 90px;
-}
+
 div#PaymentOptionWrapper{
 float: right;
 z-index: 1000;
