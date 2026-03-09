@@ -2454,195 +2454,200 @@ window.WLCheckout.refreshDateUI = function () {
       });
     } catch {}
 
+
     // -------------------------------------------------------------------------
-    // O) Stock shortage flow smoothing (safer version)
-    // - Only watch immediately after the final continue action.
-    // - Preserve the native WebForms Yes postback.
-    // - Carry a friendly notice forward to the next load via sessionStorage.
+    // N.5) Auto-handle stock shortage modal with a softer flow
+    // - Watches specifically for #stockModal becoming visible on the final step
+    // - Immediately hides the blocking modal/backdrop and triggers native Yes
+    // - Drops a friendly inline notice for the customer
     // -------------------------------------------------------------------------
     (function () {
-      const NOTICE_KEY = "wl_stock_shortage_notice";
-      let shortageWatchTimer = null;
-      let shortageWatchStartedAt = 0;
-      let autoContinueFired = false;
+      const STOCK_NOTICE_KEY = "wl_stock_shortage_notice";
+      let stockProceeding = false;
+      let stockLastTriggerAt = 0;
+      let stockObserver = null;
+      let stockPoll = null;
 
-      function getStepPane(stepNum) {
-        return wizard.querySelector(`.checkout-step[data-step="${stepNum}"]`) || wizard;
+      function isVisible(el) {
+        if (!el) return false;
+        const style = window.getComputedStyle(el);
+        if (style.display === "none" || style.visibility === "hidden") return false;
+        if (el.classList.contains("show")) return true;
+        if (el.getAttribute("aria-modal") === "true") return true;
+        return el.offsetParent !== null;
       }
 
-      function ensureShortageStyles() {
-        if (document.getElementById("wlShortageStyles")) return;
-        const style = document.createElement("style");
-        style.id = "wlShortageStyles";
-        style.textContent = `
-          .wl-shortage-notice {
-            margin: 0 0 14px;
-            padding: 14px 16px;
-            border: 1px solid rgba(107,0,20,.16);
-            border-left: 4px solid #6b0014;
-            border-radius: 10px;
-            background: #fff8f8;
-            color: #3f3f46;
-            box-shadow: 0 4px 14px rgba(0,0,0,.05);
+      function removeStockModalArtifacts() {
+        try { document.body.classList.remove("modal-open"); } catch {}
+        try { document.body.style.removeProperty("padding-right"); } catch {}
+        try {
+          document.querySelectorAll(".modal-backdrop, .stock-modal-backdrop").forEach((el) => el.remove());
+        } catch {}
+      }
+
+      function buildShortageMessage(modal) {
+        try {
+          const rows = Array.from(modal.querySelectorAll("table tr")).slice(1);
+          const count = rows.length;
+          if (count > 1) {
+            return "Some items in your order may need a little extra time. We’ll continue processing your order and confirm timing for any quantity that needs to be sourced from available inventory or normal replenishment.";
           }
-          .wl-shortage-notice strong { color: #6b0014; }
-          .wl-shortage-notice .wl-shortage-sub { margin-top: 4px; }
-          .wl-shortage-notice .wl-shortage-lines { margin: 10px 0 0 18px; padding: 0; }
-          .wl-shortage-notice .wl-shortage-lines li { margin: 0 0 4px; }
-          .wl-shortage-notice .wl-shortage-meta { margin-top: 8px; font-size: 12px; opacity: .82; }
-        `;
+          return "This order includes an item that may need a little extra time. We’ll continue processing your order and confirm timing for any quantity that needs to be sourced from available inventory or normal replenishment.";
+        } catch {
+          return "Some items in your order may need a little extra time. We’ll continue processing your order and confirm timing as needed.";
+        }
+      }
+
+      function persistShortageNotice(message) {
+        try {
+          sessionStorage.setItem(STOCK_NOTICE_KEY, JSON.stringify({ message: message || "Some items in your order may need a little extra time.", ts: Date.now() }));
+        } catch {}
+      }
+
+      function renderShortageNotice() {
+        let payload = null;
+        try {
+          const raw = sessionStorage.getItem(STOCK_NOTICE_KEY);
+          if (!raw) return;
+          sessionStorage.removeItem(STOCK_NOTICE_KEY);
+          payload = JSON.parse(raw);
+        } catch {
+          return;
+        }
+        if (!payload || !payload.message) return;
+
+        const existing = document.getElementById("wlStockNotice");
+        if (existing) existing.remove();
+
+        const notice = document.createElement("div");
+        notice.id = "wlStockNotice";
+        notice.className = "wl-stock-notice";
+        notice.innerHTML = '<div class="wl-stock-notice__title">Order update</div><div class="wl-stock-notice__body"></div>';
+        const body = notice.querySelector('.wl-stock-notice__body');
+        if (body) body.textContent = payload.message;
+
+        const target =
+          document.querySelector('.checkout-step[data-step="5"] .checkout-nav') ||
+          document.querySelector('.checkout-step[data-step="5"]') ||
+          document.querySelector('.checkout-wizard') ||
+          document.querySelector('.container');
+        if (target) {
+          target.parentNode.insertBefore(notice, target);
+        }
+      }
+
+      function injectStockNoticeCss() {
+        if (document.getElementById("wl-stock-notice-css")) return;
+        const style = document.createElement("style");
+        style.id = "wl-stock-notice-css";
+        style.textContent = [
+          '.wl-stock-notice{margin:12px 0 16px;padding:14px 16px;border-radius:12px;background:#f8fafc;border:1px solid #dbe5ef;color:#243447;box-shadow:0 1px 2px rgba(0,0,0,.04);}',
+          '.wl-stock-notice__title{font-weight:700;margin-bottom:4px;}',
+          '.wl-stock-notice__body{line-height:1.45;}',
+          '#stockModal.wl-auto-bypass{display:none !important;visibility:hidden !important;opacity:0 !important;pointer-events:none !important;}'
+        ].join('');
         document.head.appendChild(style);
       }
 
-      function parseShortageModal(modal) {
-        if (!modal) return null;
-        const branchTxt = (modal.querySelector('.modal-body .text-center:nth-of-type(2)')?.textContent || '').trim();
-        const branch = branchTxt.replace(/^Branch:\s*/i, '').trim();
-        const rows = Array.from(modal.querySelectorAll('tbody tr')).slice(1).map(function (tr) {
-          const tds = Array.from(tr.querySelectorAll('td')).map(td => (td.textContent || '').replace(/\s+/g, ' ').trim());
-          return {
-            productCode: tds[0] || '',
-            stockLevel: tds[1] || '',
-            orderQty: tds[2] || ''
-          };
-        }).filter(r => r.productCode || r.stockLevel || r.orderQty);
-        return { branch, rows };
-      }
+      function triggerStockYes(modal) {
+        const yes = modal && modal.querySelector('#ctl00_PageBody_YesButton');
+        if (!yes) return false;
 
-      function buildShortageHtml(data) {
-        const lines = data && data.rows && data.rows.length
-          ? `<ul class="wl-shortage-lines">${data.rows.map(function (r) {
-              const detailBits = [];
-              if (r.orderQty) detailBits.push(`requested ${r.orderQty}`);
-              if (r.stockLevel) detailBits.push(`current store stock ${r.stockLevel}`);
-              return `<li><strong>${r.productCode || 'Item'}</strong>${detailBits.length ? ' — ' + detailBits.join(', ') : ''}</li>`;
-            }).join('')}</ul>`
-          : '';
+        persistShortageNotice(buildShortageMessage(modal));
 
-        const branchLine = data && data.branch
-          ? `We don’t have the full quantity at ${data.branch} right now, but your order is still moving forward.`
-          : `We don’t have the full quantity at the selected store right now, but your order is still moving forward.`;
+        try { modal.classList.add('wl-auto-bypass'); } catch {}
+        try { modal.setAttribute('aria-hidden', 'true'); } catch {}
+        try { modal.style.display = 'none'; } catch {}
+        removeStockModalArtifacts();
 
-        return `
-          <div><strong>Some items need a little extra time.</strong></div>
-          <div class="wl-shortage-sub">${branchLine}</div>
-          <div class="wl-shortage-sub">We’ll source the remaining quantity from available inventory or our normal replenishment flow and confirm timing for pickup or delivery as needed.</div>
-          ${lines}
-          <div class="wl-shortage-meta">You did not need to stop checkout to continue.</div>
-        `;
-      }
-
-      function renderSavedShortageNotice() {
-        let raw = null;
-        try { raw = sessionStorage.getItem(NOTICE_KEY); } catch {}
-        if (!raw) return;
-
-        let data = null;
-        try { data = JSON.parse(raw); } catch {}
-        try { sessionStorage.removeItem(NOTICE_KEY); } catch {}
-        if (!data) return;
-
-        ensureShortageStyles();
-        const pane = getStepPane(5);
-        if (!pane) return;
-
-        let box = pane.querySelector('.wl-shortage-notice');
-        if (!box) {
-          box = document.createElement('div');
-          box.className = 'wl-shortage-notice';
-          pane.insertBefore(box, pane.firstChild);
-        }
-        box.innerHTML = buildShortageHtml(data);
-
-        try { setStep(5); } catch {}
-        try { showStep(5); } catch {}
-      }
-
-      function softenModalAndContinue(modal) {
-        if (!modal || autoContinueFired) return false;
-        const yesBtn = modal.querySelector('#ctl00_PageBody_YesButton');
-        if (!yesBtn) return false;
-
-        const data = parseShortageModal(modal) || { branch: '', rows: [] };
-        try { sessionStorage.setItem(NOTICE_KEY, JSON.stringify(data)); } catch {}
+        stockProceeding = true;
+        stockLastTriggerAt = Date.now();
 
         try {
-          const title = modal.querySelector('.modal-title');
-          if (title) title.textContent = 'Availability Update';
+          yes.setAttribute('data-wl-autoclicked', '1');
+          yes.click();
+          return true;
         } catch {}
+
         try {
-          const body = modal.querySelector('.modal-body');
-          if (body) {
-            body.innerHTML = `
-              <div style="text-align:center; line-height:1.45;">
-                <div style="font-weight:600; margin-bottom:6px;">Some items need a little extra time.</div>
-                <div>We’ll continue your order and source the remaining quantity from available inventory or our normal replenishment flow.</div>
-                <div style="margin-top:6px;">We can confirm pickup or delivery timing as needed.</div>
-              </div>
-            `;
+          const href = yes.getAttribute('href') || '';
+          if (href.indexOf('javascript:') === 0) {
+            eval(href.replace(/^javascript:/i, ''));
+            return true;
           }
         } catch {}
+
         try {
-          const cancelBtn = modal.querySelector('.modal-footer button[data-bs-dismiss="modal"]');
-          if (cancelBtn) cancelBtn.style.display = 'none';
-        } catch {}
-        try {
-          const span = yesBtn.querySelector('span');
-          if (span) span.textContent = 'Continue';
+          const uniqueName = yes.getAttribute('name') || 'ctl00$PageBody$YesButton';
+          if (typeof WebForm_DoPostBackWithOptions === 'function' && typeof WebForm_PostBackOptions === 'function') {
+            WebForm_DoPostBackWithOptions(new WebForm_PostBackOptions(uniqueName, '', true, '', '', false, true));
+            return true;
+          }
         } catch {}
 
-        autoContinueFired = true;
-        setTimeout(function () {
-          try {
-            if (typeof yesBtn.click === 'function') yesBtn.click();
-            else if (yesBtn.href) window.location.href = yesBtn.href;
-          } catch {}
-        }, 250);
-        return true;
+        try {
+          if (typeof __doPostBack === 'function') {
+            __doPostBack('ctl00$PageBody$YesButton', '');
+            return true;
+          }
+        } catch {}
+
+        stockProceeding = false;
+        return false;
       }
 
-      function pollForShortageModal() {
+      function maybeHandleStockModal() {
         const modal = document.getElementById('stockModal');
-        const visible = !!(modal && (modal.classList.contains('show') || modal.style.display === 'block' || modal.getAttribute('aria-modal') === 'true'));
-        if (visible) {
-          softenModalAndContinue(modal);
-          stopWatching();
-          return;
+        if (!modal || !isVisible(modal)) return false;
+
+        const now = Date.now();
+        if (stockProceeding && (now - stockLastTriggerAt) < 2500) {
+          try { modal.classList.add('wl-auto-bypass'); modal.style.display = 'none'; } catch {}
+          removeStockModalArtifacts();
+          return true;
         }
-        if (Date.now() - shortageWatchStartedAt > 6000) {
-          stopWatching();
-        }
+
+        return triggerStockYes(modal);
       }
 
-      function startWatching() {
-        stopWatching();
-        autoContinueFired = false;
-        shortageWatchStartedAt = Date.now();
-        shortageWatchTimer = window.setInterval(pollForShortageModal, 120);
+      function bindStockModalBypass() {
+        injectStockNoticeCss();
+        renderShortageNotice();
+
+        try {
+          if (!stockObserver && document.body) {
+            stockObserver = new MutationObserver(function () {
+              maybeHandleStockModal();
+            });
+            stockObserver.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style', 'aria-modal'] });
+          }
+        } catch {}
+
+        try {
+          if (!stockPoll) stockPoll = window.setInterval(maybeHandleStockModal, 250);
+        } catch {}
+
+        try { maybeHandleStockModal(); } catch {}
       }
 
-      function stopWatching() {
-        if (shortageWatchTimer) {
-          clearInterval(shortageWatchTimer);
-          shortageWatchTimer = null;
-        }
-      }
-
-      renderSavedShortageNotice();
-
-      document.addEventListener('click', function (e) {
-        const t = e.target && e.target.closest ? e.target.closest('#ctl00_PageBody_ContinueButton1, #ctl00_PageBody_ContinueButton2, .wl-proxy-continue') : null;
-        if (!t) return;
-        startWatching();
-      }, true);
+      bindStockModalBypass();
 
       try {
-        window.addEventListener('beforeunload', function () {
-          stopWatching();
-        });
+        const prm = window.Sys && window.Sys.WebForms && window.Sys.WebForms.PageRequestManager
+          ? window.Sys.WebForms.PageRequestManager.getInstance()
+          : null;
+        if (prm && !prm.__wlStockModalHooked) {
+          prm.__wlStockModalHooked = true;
+          prm.add_endRequest(function () {
+            stockProceeding = false;
+            injectStockNoticeCss();
+            renderShortageNotice();
+            setTimeout(maybeHandleStockModal, 0);
+            setTimeout(maybeHandleStockModal, 150);
+          });
+        }
       } catch {}
     })();
-
 
     // -------------------------------------------------------------------------
     // O) Place order / Back to cart → reset wizard state
