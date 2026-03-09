@@ -1,7 +1,13 @@
-#wlcheader{
-        background: none !important;
-}
 
+#siteHeaderContent{
+        background: none !important;
+        height: 150px !important;
+}
+.image-with-flags{
+        justify-content: center;
+        margin: auto;
+        display: flex !important;
+}
 #ctl00_PageHeader_searchBarTableRow{
 background-color: white;
 margin-top:0px !important;
