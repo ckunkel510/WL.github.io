@@ -1,6 +1,7 @@
 #ct100_PageHeader_branding{
-height: 150px;
+height: 150px !important;
 }
+
 #siteHeaderContent{
         background: none !important;
         height: 150px !important;
