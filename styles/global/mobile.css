@@ -2,6 +2,7 @@
 #siteHeaderContent{
         background: none !important;
         height: 150px !important;
+        display: inline !important;
 }
 .image-with-flags{
         justify-content: center;
