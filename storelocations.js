@@ -28,43 +28,43 @@
       name: "Brenham",
       view: "store-brenham",
       image: "https://static.wixstatic.com/media/aba64d_e4bef13eccc0407385a7152fcff2f035~mv2.png/v1/crop/x_128%2Cy_20%2Cw_1126%2Ch_516/fill/w_980%2Ch_456%2Cal_c%2Cq_95%2Cusm_0.66_1.00_0.01%2Cenc_avif%2Cquality_auto/aba64d_e4bef13eccc0407385a7152fcff2f035~mv2.png",
-      teaser: "Hardware, lumber, and project support from your Brenham team."
+      teaser: " "
     },
     {
       name: "Bryan",
       view: "store-bryan",
       image: "https://static.wixstatic.com/media/aba64d_bac1afac1160451b8a1872fbdbde7363~mv2.png/v1/crop/x_144%2Cy_0%2Cw_1191%2Ch_554/fill/w_980%2Ch_456%2Cal_c%2Cq_95%2Cusm_0.66_1.00_0.01%2Cenc_avif%2Cquality_auto/store-bryan.png",
-      teaser: "Contractor-friendly access to building materials and everyday essentials."
+      teaser: " "
     },
     {
       name: "Caldwell",
       view: "store-caldwell",
       image: "https://static.wixstatic.com/media/aba64d_10d6752e582f4cf5b147bef46f4ee4a2~mv2.png/v1/crop/x_144%2Cy_0%2Cw_1191%2Ch_554/fill/w_980%2Ch_456%2Cal_c%2Cq_95%2Cusm_0.66_1.00_0.01%2Cenc_avif%2Cquality_auto/store-caldwell.png",
-      teaser: "A full local lumber and hardware experience for home and jobsite needs."
+      teaser: " "
     },
     {
       name: "Lexington",
       view: "store-lexington",
       image: "https://static.wixstatic.com/media/aba64d_5d638a9ba44446ab879100b3e51c3d19~mv2.png/v1/crop/x_144%2Cy_0%2Cw_1191%2Ch_554/fill/w_980%2Ch_456%2Cal_c%2Cq_95%2Cusm_0.66_1.00_0.01%2Cenc_avif%2Cquality_auto/store-lexington.png",
-      teaser: "Local pickup, delivery support, and a straightforward store experience."
+      teaser: " "
     },
     {
       name: "Groesbeck",
       view: "store-groesbeck",
       image: "https://static.wixstatic.com/media/aba64d_9c60a78b90c1467d9a82f162181f0f3e~mv2.png/v1/crop/x_144%2Cy_0%2Cw_1191%2Ch_554/fill/w_980%2Ch_456%2Cal_c%2Cq_95%2Cusm_0.66_1.00_0.01%2Cenc_avif%2Cquality_auto/store-groesbeck.png",
-      teaser: "Paint, lumber, hardware, and local service all in one place."
+      teaser: " "
     },
     {
       name: "Mexia",
       view: "store-mexia",
       image: "https://static.wixstatic.com/media/aba64d_a640e6f19e2a49ea849b31d2dd5007fd~mv2.png/v1/crop/x_144%2Cy_0%2Cw_1191%2Ch_554/fill/w_980%2Ch_456%2Cal_c%2Cq_95%2Cusm_0.66_1.00_0.01%2Cenc_avif%2Cquality_auto/store-mexia.png",
-      teaser: "Building materials and practical convenience for everyday projects."
+      teaser: " "
     },
     {
       name: "Buffalo",
       view: "store-buffalo",
       image: "https://static.wixstatic.com/media/aba64d_f374f2a488944e169c04fe0ecfd41300~mv2.png/v1/crop/x_144%2Cy_0%2Cw_1191%2Ch_554/fill/w_980%2Ch_456%2Cal_c%2Cq_95%2Cusm_0.66_1.00_0.01%2Cenc_avif%2Cquality_auto/store-buffalo.png",
-      teaser: "A local source for paint, hardware, lumber, and more."
+      teaser: " "
     }
   ];
 
@@ -313,10 +313,10 @@
       return `
         <a class="wl-store-card" href="/Default.aspx?view=${encodeURIComponent(store.view)}" style="background-image:url('${store.image}');">
           <div class="wl-store-card-inner">
-            <div class="wl-store-card-eyebrow">Woodson Lumber Location</div>
+            <div class="wl-store-card-eyebrow"></div>
             <h3>${store.name}</h3>
             <p>${store.teaser}</p>
-            <span class="wl-store-card-cta">Dive In</span>
+            <span class="wl-store-card-cta">Store Details</span>
           </div>
         </a>
       `;
