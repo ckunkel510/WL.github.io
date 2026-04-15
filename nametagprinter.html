@@ -1,6 +1,8 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Name Tag Label</title>
   <style>
     @media print {
@@ -22,7 +24,8 @@
       align-items: center;
       justify-content: center;
       overflow: hidden;
-      font-family: sans-serif;
+      font-family: Arial, sans-serif;
+      background: #fff;
     }
 
     #label {
@@ -34,18 +37,36 @@
       width: 100%;
       height: 100%;
       padding: 0.2in;
+      box-sizing: border-box;
     }
 
     #nameLine {
       font-weight: bold;
       font-size: clamp(18px, 9vw, 90px);
-      line-height: 1.1;
+      line-height: 1.05;
+      max-width: 100%;
+      word-break: break-word;
     }
 
     #businessLine {
-      font-size: clamp(16px, 5vw, 40px);
+      font-size: clamp(14px, 4.7vw, 34px);
       font-style: italic;
       margin-top: 0.25em;
+      max-width: 100%;
+      word-break: break-word;
+    }
+
+    #topGolfLine {
+      display: none;
+      margin-top: 0.35em;
+      padding: 0.18em 0.6em;
+      border: 2px solid #000;
+      border-radius: 999px;
+      font-size: clamp(11px, 3.2vw, 22px);
+      font-weight: 700;
+      line-height: 1.1;
+      max-width: 100%;
+      word-break: break-word;
     }
   </style>
 </head>
@@ -53,9 +74,12 @@
   <div id="label">
     <div id="nameLine"></div>
     <div id="businessLine"></div>
+    <div id="topGolfLine"></div>
   </div>
 
   <script>
+    const RETURN_URL = 'https://ckunkel510.github.io/WL.github.io/BuilderNightRegistration.html';
+
     function getQueryParam(param) {
       const urlParams = new URLSearchParams(window.location.search);
       return urlParams.get(param) || '';
@@ -64,15 +88,25 @@
     function printPage() {
       const name = getQueryParam('name');
       const business = getQueryParam('business');
+      const afterHours = String(getQueryParam('afterHours') || '').trim().toLowerCase();
 
       document.getElementById('nameLine').innerText = name;
       document.getElementById('businessLine').innerText = business;
 
-      setTimeout(() => {
+      const topGolfLine = document.getElementById('topGolfLine');
+      if (afterHours === 'yes') {
+        topGolfLine.innerText = 'Top Golf Experience';
+        topGolfLine.style.display = 'inline-block';
+      } else {
+        topGolfLine.innerText = '';
+        topGolfLine.style.display = 'none';
+      }
+
+      setTimeout(function () {
         window.print();
 
-        setTimeout(() => {
-          window.location.href = "https://ckunkel510.github.io/WL.github.io/BuilderNightRegistration.html";
+        setTimeout(function () {
+          window.location.href = RETURN_URL;
         }, 2000);
       }, 500);
     }
