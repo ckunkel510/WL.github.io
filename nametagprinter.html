@@ -10,8 +10,18 @@
         size: 4in 2in portrait;
         margin: 0;
       }
+
+      html,
       body {
-        margin: 0;
+        width: 4in;
+        height: 2in;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+      }
+
+      body {
+        display: block;
       }
     }
 
@@ -20,24 +30,29 @@
       height: 2in;
       margin: 0;
       padding: 0;
+      overflow: hidden;
+      background: #fff;
+      font-family: Arial, sans-serif;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+
+    body {
       display: flex;
       align-items: center;
       justify-content: center;
-      overflow: hidden;
-      font-family: Arial, sans-serif;
-      background: #fff;
     }
 
     #label {
+      width: 4in;
+      height: 2in;
+      box-sizing: border-box;
+      padding: 0.2in;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       text-align: center;
-      width: 100%;
-      height: 100%;
-      padding: 0.2in;
-      box-sizing: border-box;
     }
 
     #nameLine {
@@ -70,7 +85,7 @@
     }
   </style>
 </head>
-<body onload="printPage()">
+<body>
   <div id="label">
     <div id="nameLine"></div>
     <div id="businessLine"></div>
@@ -79,22 +94,43 @@
 
   <script>
     const RETURN_URL = 'https://ckunkel510.github.io/WL.github.io/BuilderNightRegistration.html';
+    let hasPrinted = false;
+    let hasRedirected = false;
 
     function getQueryParam(param) {
       const urlParams = new URLSearchParams(window.location.search);
       return urlParams.get(param) || '';
     }
 
+    function normalizeYesNo(value) {
+      const raw = String(value || '').trim().toLowerCase();
+      if (!raw) return '';
+      if (raw === 'yes' || raw === 'y' || raw === 'true' || raw === '1') return 'Yes';
+      if (raw === 'no' || raw === 'n' || raw === 'false' || raw === '0') return 'No';
+      if (raw.includes('yes')) return 'Yes';
+      if (raw.includes('no')) return 'No';
+      return '';
+    }
+
+    function returnToCheckIn() {
+      if (hasRedirected) return;
+      hasRedirected = true;
+      window.location.replace(RETURN_URL);
+    }
+
     function printPage() {
+      if (hasPrinted) return;
+      hasPrinted = true;
+
       const name = getQueryParam('name');
       const business = getQueryParam('business');
-      const afterHours = String(getQueryParam('afterHours') || '').trim().toLowerCase();
+      const afterHours = normalizeYesNo(getQueryParam('afterHours'));
 
       document.getElementById('nameLine').innerText = name;
       document.getElementById('businessLine').innerText = business;
 
       const topGolfLine = document.getElementById('topGolfLine');
-      if (afterHours === 'yes') {
+      if (afterHours === 'Yes') {
         topGolfLine.innerText = 'Top Golf Experience';
         topGolfLine.style.display = 'inline-block';
       } else {
@@ -104,12 +140,19 @@
 
       setTimeout(function () {
         window.print();
-
-        setTimeout(function () {
-          window.location.href = RETURN_URL;
-        }, 2000);
-      }, 500);
+      }, 300);
     }
+
+    window.addEventListener('load', printPage, { once: true });
+    window.addEventListener('afterprint', function () {
+      setTimeout(returnToCheckIn, 250);
+    });
+
+    setTimeout(function () {
+      if (hasPrinted && !hasRedirected) {
+        returnToCheckIn();
+      }
+    }, 15000);
   </script>
 </body>
 </html>
