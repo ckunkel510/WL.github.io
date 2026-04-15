@@ -1,74 +1,467 @@
 <!DOCTYPE html>
 <html>
 <head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Builder Night Check-In</title>
   <style>
-    body {
-      font-family: sans-serif;
-      text-align: center;
-      margin-top: 100px;
-    }
-    input {
-      font-size: 24px;
-      padding: 10px;
-      width: 300px;
-    }
-    button {
-      font-size: 24px;
-      padding: 10px 20px;
-      margin-top: 20px;
-    }
-    #logo {
-  max-width: 300px;
-  max-height: 300px;
-  margin-bottom: 20px;
-}
+    * { box-sizing: border-box; }
 
+    body {
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      margin: 0;
+      padding: 24px;
+      color: #222;
+    }
+
+    .wrap {
+      max-width: 760px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 14px;
+      padding: 24px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    }
+
+    #logo {
+      display: block;
+      max-width: 240px;
+      width: 100%;
+      height: auto;
+      margin: 0 auto 18px;
+    }
+
+    h1, h2 {
+      text-align: center;
+      margin: 0;
+    }
+
+    h1 { font-size: 34px; }
+    h2 {
+      font-size: 28px;
+      margin-top: 4px;
+      margin-bottom: 24px;
+      font-weight: 700;
+    }
+
+    .field {
+      margin-bottom: 16px;
+    }
+
+    .field label {
+      display: block;
+      font-weight: 700;
+      margin-bottom: 6px;
+      text-align: left;
+    }
+
+    .field input,
+    .field select,
+    .readonly-box {
+      width: 100%;
+      padding: 12px 14px;
+      font-size: 18px;
+      border: 1px solid #cfcfcf;
+      border-radius: 10px;
+      background: #fff;
+    }
+
+    .readonly-box {
+      background: #f7f7f7;
+      min-height: 50px;
+      display: flex;
+      align-items: center;
+    }
+
+    .search-wrap {
+      position: relative;
+    }
+
+    #results {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      right: 0;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 8px 18px rgba(0,0,0,0.08);
+      display: none;
+      z-index: 999;
+      max-height: 320px;
+      overflow-y: auto;
+    }
+
+    .result-item {
+      padding: 12px 14px;
+      border-bottom: 1px solid #ececec;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .result-item:last-child { border-bottom: none; }
+    .result-item:hover { background: #f3f3f3; }
+
+    .result-name {
+      font-weight: 700;
+      font-size: 17px;
+    }
+
+    .result-meta {
+      font-size: 14px;
+      color: #666;
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+
+    .checked-badge {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      margin-left: 8px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      color: #7a5700;
+      background: #fff2c8;
+      border: 1px solid #ebd17a;
+      vertical-align: middle;
+    }
+
+    #checkedNotice,
+    #statusMessage {
+      display: none;
+      margin: 10px 0 18px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      text-align: left;
+      font-weight: 600;
+      line-height: 1.45;
+    }
+
+    #checkedNotice {
+      background: #fff4d6;
+      border: 1px solid #f1d17a;
+      color: #6b4f00;
+    }
+
+    #statusMessage {
+      background: #eef5ff;
+      border: 1px solid #c6dcff;
+      color: #174a8b;
+    }
+
+    .buttons {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+
+    button {
+      appearance: none;
+      border: none;
+      border-radius: 10px;
+      padding: 14px 20px;
+      font-size: 18px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    .primary {
+      background: #6b0016;
+      color: #fff;
+    }
+
+    .secondary {
+      background: #dedede;
+      color: #222;
+    }
+
+    .button-note {
+      margin-top: 14px;
+      font-size: 14px;
+      color: #666;
+      text-align: left;
+    }
+
+    @media (max-width: 640px) {
+      body { padding: 12px; }
+      .wrap { padding: 18px; }
+      h1 { font-size: 28px; }
+      h2 { font-size: 24px; }
+      .field input, .readonly-box { font-size: 16px; }
+      button { width: 100%; }
+    }
   </style>
 </head>
 <body>
-  <img src="https://static.wixstatic.com/media/d72fe8_ac01356b6ed448008a4c2ec117a6bb04~mv2.png/v1/crop/x_308,y_426,w_1103,h_385/fill/w_139,h_45,al_c,q_95,usm_0.66_1.00_0.01,enc_avif,quality_auto/d72fe8_ac01356b6ed448008a4c2ec117a6bb04~mv2.png" alt="Logo" id="logo" />
-  <h1>Builder Night</h1>
-  <h1>Check In</h1>
+  <div class="wrap">
+    <img src="https://static.wixstatic.com/media/d72fe8_ac01356b6ed448008a4c2ec117a6bb04~mv2.png/v1/crop/x_308,y_426,w_1103,h_385/fill/w_139,h_45,al_c,q_95,usm_0.66_1.00_0.01,enc_avif,quality_auto/d72fe8_ac01356b6ed448008a4c2ec117a6bb04~mv2.png" alt="Woodson Lumber Logo" id="logo" />
+    <h1>Builder Night</h1>
+    <h2>Check In</h2>
 
-  <!-- NAME INPUT -->
-  <input type="text" id="name" placeholder="Your Name" />
-  <br><br>
+    <div class="field">
+      <label for="searchBox">Search Preregistration</label>
+      <div class="search-wrap">
+        <input type="text" id="searchBox" placeholder="Start typing name, business, email, or phone" autocomplete="off" />
+        <div id="results"></div>
+      </div>
+    </div>
 
-  <!-- BUSINESS INPUT -->
-  <input type="text" id="business" placeholder="Your Business" />
-  <br><br>
+    <div id="checkedNotice"></div>
+    <div id="statusMessage"></div>
 
-  <button onclick="submitForm()">Submit</button>
+    <input type="hidden" id="preRegRow" />
+    <input type="hidden" id="afterHours" />
+
+    <div class="field">
+      <label for="firstName">First Name</label>
+      <input type="text" id="firstName" placeholder="First Name" />
+    </div>
+
+    <div class="field">
+      <label for="lastName">Last Name</label>
+      <input type="text" id="lastName" placeholder="Last Name" />
+    </div>
+
+    <div class="field">
+      <label for="business">Business</label>
+      <input type="text" id="business" placeholder="Business" />
+    </div>
+
+    <div class="field">
+      <label for="email">Email</label>
+      <input type="text" id="email" placeholder="Email" />
+    </div>
+
+    <div class="field">
+      <label for="phone">Phone</label>
+      <input type="text" id="phone" placeholder="Phone" />
+    </div>
+
+    <div class="field">
+      <label>Top Golf Status</label>
+      <div id="afterHoursDisplay" class="readonly-box">Not selected from preregistration</div>
+    </div>
+
+    <div class="buttons">
+      <button class="primary" onclick="submitForm()">Check In &amp; Print</button>
+      <button class="secondary" onclick="clearForm()">Clear</button>
+    </div>
+
+    <div class="button-note">
+      Search and select a preregistration when possible. Walk-ins can still be typed in manually.
+    </div>
+  </div>
 
   <script>
-    function submitForm() {
-      const name = document.getElementById("name").value.trim();
-      const business = document.getElementById("business").value.trim();
+    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxQ8N128Pdq3bf-sqwziG-xhADjo3c3dOC9QzvUCHn1ebWM9vkVkjhOdyq_dx8Vrl4a/exec';
+    const PRINT_URL = 'https://ckunkel510.github.io/WL.github.io/nametagprinter.html';
 
-      if (!name) {
-        alert("Please enter your name.");
+    let selectedRecord = null;
+    let searchTimer = null;
+
+    const searchBox = document.getElementById('searchBox');
+    const resultsEl = document.getElementById('results');
+    const checkedNoticeEl = document.getElementById('checkedNotice');
+    const statusMessageEl = document.getElementById('statusMessage');
+
+    searchBox.addEventListener('input', function () {
+      const q = searchBox.value.trim();
+      clearTimeout(searchTimer);
+      selectedRecord = null;
+      document.getElementById('preRegRow').value = '';
+      hideCheckedNotice();
+
+      if (q.length < 2) {
+        renderResults([]);
         return;
       }
 
-      const scriptURL = "https://script.google.com/macros/s/AKfycbxQ8N128Pdq3bf-sqwziG-xhADjo3c3dOC9QzvUCHn1ebWM9vkVkjhOdyq_dx8Vrl4a/exec"; // <-- Replace with your real URL
-      const formData = new FormData();
-      formData.append("name", name);
-      formData.append("business", business);
+      searchTimer = setTimeout(function () {
+        searchPreRegs(q);
+      }, 200);
+    });
 
-      fetch(scriptURL, {
+    document.addEventListener('click', function (event) {
+      if (!resultsEl.contains(event.target) && event.target !== searchBox) {
+        resultsEl.style.display = 'none';
+      }
+    });
+
+    function searchPreRegs(query) {
+      const old = document.getElementById('jsonp-search');
+      if (old) old.remove();
+
+      const script = document.createElement('script');
+      script.id = 'jsonp-search';
+      script.src = SCRIPT_URL + '?action=search&q=' + encodeURIComponent(query) + '&callback=handlePreRegSearch&_=' + Date.now();
+      document.body.appendChild(script);
+    }
+
+    window.handlePreRegSearch = function (results) {
+      renderResults(results || []);
+    };
+
+    function renderResults(results) {
+      resultsEl.innerHTML = '';
+
+      if (!results || !results.length) {
+        resultsEl.style.display = 'none';
+        return;
+      }
+
+      results.forEach(function (item) {
+        const div = document.createElement('div');
+        div.className = 'result-item';
+
+        const checkedBadge = item.checkedIn ? '<span class="checked-badge">Already checked in</span>' : '';
+
+        div.innerHTML =
+          '<div class="result-name">' + escapeHtml(item.fullName || '') + checkedBadge + '</div>' +
+          '<div class="result-meta">' +
+            escapeHtml(item.business || '') +
+            (item.email ? ' | ' + escapeHtml(item.email) : '') +
+            (item.phone ? ' | ' + escapeHtml(item.phone) : '') +
+          '</div>';
+
+        div.addEventListener('click', function () {
+          chooseRecord(item);
+        });
+
+        resultsEl.appendChild(div);
+      });
+
+      resultsEl.style.display = 'block';
+    }
+
+    function chooseRecord(item) {
+      selectedRecord = item;
+      resultsEl.style.display = 'none';
+      searchBox.value = item.fullName || '';
+
+      document.getElementById('preRegRow').value = item.rowNumber || '';
+      document.getElementById('firstName').value = item.firstName || '';
+      document.getElementById('lastName').value = item.lastName || '';
+      document.getElementById('business').value = item.business || '';
+      document.getElementById('email').value = item.email || '';
+      document.getElementById('phone').value = item.phone || '';
+
+      const afterHoursValue = normalizeYesNo(item.afterHours);
+      document.getElementById('afterHours').value = afterHoursValue;
+      document.getElementById('afterHoursDisplay').textContent =
+        afterHoursValue === 'Yes' ? 'Yes - Top Golf' :
+        afterHoursValue === 'No' ? 'No' :
+        'Not provided';
+
+      if (item.checkedIn) {
+        checkedNoticeEl.style.display = 'block';
+        checkedNoticeEl.textContent = item.checkedInTimeDisplay
+          ? 'This guest already checked in at ' + item.checkedInTimeDisplay + '. Clicking Check In & Print will treat this as a reprint only.'
+          : 'This guest already checked in. Clicking Check In & Print will treat this as a reprint only.';
+      } else {
+        hideCheckedNotice();
+      }
+    }
+
+    function submitForm() {
+      const firstName = document.getElementById('firstName').value.trim();
+      const lastName = document.getElementById('lastName').value.trim();
+      const business = document.getElementById('business').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const phone = document.getElementById('phone').value.trim();
+      const afterHours = document.getElementById('afterHours').value.trim();
+      const preRegRow = document.getElementById('preRegRow').value.trim();
+
+      if (!firstName && !lastName) {
+        alert('Please enter at least a first or last name.');
+        return;
+      }
+
+      let reprintOnly = 'No';
+      if (selectedRecord && selectedRecord.checkedIn) {
+        const ok = confirm('This guest already checked in. Press OK to reprint the tag without logging a second check-in, or Cancel to stop.');
+        if (!ok) return;
+        reprintOnly = 'Yes';
+      }
+
+      showStatus('Submitting check-in...');
+
+      const formData = new FormData();
+      formData.append('preRegRow', preRegRow);
+      formData.append('firstName', firstName);
+      formData.append('lastName', lastName);
+      formData.append('business', business);
+      formData.append('email', email);
+      formData.append('phone', phone);
+      formData.append('afterHours', afterHours);
+      formData.append('reprintOnly', reprintOnly);
+
+      fetch(SCRIPT_URL, {
         method: 'POST',
         mode: 'no-cors',
         body: formData
       })
-      .then(() => {
-        // Redirect to the label print page
-        window.location.href = `https://ckunkel510.github.io/WL.github.io/nametagprinter.html?name=${encodeURIComponent(name)}&business=${encodeURIComponent(business)}`;
+      .then(function () {
+        const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
+        window.location.href = PRINT_URL + '?name=' + encodeURIComponent(fullName) + '&business=' + encodeURIComponent(business) + '&afterHours=' + encodeURIComponent(afterHours);
       })
-      .catch(error => {
-        alert("Error submitting form.");
-        console.error("Submission error:", error);
+      .catch(function (error) {
+        hideStatus();
+        alert('Error submitting check-in.');
+        console.error('Submission error:', error);
       });
+    }
+
+    function clearForm() {
+      selectedRecord = null;
+      searchBox.value = '';
+      document.getElementById('preRegRow').value = '';
+      document.getElementById('firstName').value = '';
+      document.getElementById('lastName').value = '';
+      document.getElementById('business').value = '';
+      document.getElementById('email').value = '';
+      document.getElementById('phone').value = '';
+      document.getElementById('afterHours').value = '';
+      document.getElementById('afterHoursDisplay').textContent = 'Not selected from preregistration';
+      resultsEl.innerHTML = '';
+      resultsEl.style.display = 'none';
+      hideCheckedNotice();
+      hideStatus();
+      searchBox.focus();
+    }
+
+    function normalizeYesNo(value) {
+      const v = String(value || '').trim().toLowerCase();
+      if (v === 'yes' || v === 'y' || v === 'true' || v === '1') return 'Yes';
+      if (v === 'no' || v === 'n' || v === 'false' || v === '0') return 'No';
+      return '';
+    }
+
+    function showStatus(message) {
+      statusMessageEl.style.display = 'block';
+      statusMessageEl.textContent = message;
+    }
+
+    function hideStatus() {
+      statusMessageEl.style.display = 'none';
+      statusMessageEl.textContent = '';
+    }
+
+    function hideCheckedNotice() {
+      checkedNoticeEl.style.display = 'none';
+      checkedNoticeEl.textContent = '';
+    }
+
+    function escapeHtml(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
     }
   </script>
 </body>
