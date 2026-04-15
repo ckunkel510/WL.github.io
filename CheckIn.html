@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f6f6f6;
+      margin: 0;
+      padding: 24px;
+    }
+
+    .wrap {
+      max-width: 760px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 12px;
+      padding: 24px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.08);
+    }
+
+    .logo {
+      display: block;
+      max-width: 240px;
+      max-height: 180px;
+      margin: 0 auto 16px;
+    }
+
+    h1 {
+      text-align: center;
+      margin: 0 0 20px;
+    }
+
+    .field {
+      margin-bottom: 14px;
+    }
+
+    .field label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+
+    .field input,
+    .field select {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 12px;
+      font-size: 18px;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+    }
+
+    .search-wrap {
+      position: relative;
+    }
+
+    .results {
+      position: absolute;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      background: #fff;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      max-height: 300px;
+      overflow-y: auto;
+      z-index: 999;
+      display: none;
+    }
+
+    .result-item {
+      padding: 12px;
+      border-bottom: 1px solid #eee;
+      cursor: pointer;
+    }
+
+    .result-item:last-child {
+      border-bottom: none;
+    }
+
+    .result-item:hover {
+      background: #f2f2f2;
+    }
+
+    .result-name {
+      font-weight: 700;
+    }
+
+    .result-meta {
+      font-size: 14px;
+      color: #666;
+      margin-top: 4px;
+    }
+
+    .checked-badge {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      color: #8a5a00;
+      background: #fff4d6;
+      border: 1px solid #f1d17a;
+      border-radius: 999px;
+      padding: 2px 8px;
+      margin-left: 8px;
+    }
+
+    .notice {
+      display: none;
+      margin: 12px 0 18px;
+      padding: 12px;
+      border-radius: 8px;
+      background: #fff4d6;
+      border: 1px solid #f1d17a;
+      color: #6b4f00;
+      font-weight: 600;
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-top: 20px;
+    }
+
+    .actions button {
+      padding: 14px 18px;
+      font-size: 18px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .primary {
+      background: #6b0016;
+      color: #fff;
+    }
+
+    .secondary {
+      background: #ddd;
+      color: #222;
+    }
+
+    .status {
+      margin-top: 16px;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <img class="logo" src="https://webtrack.woodsonlumber.com/images/user_content/WebTrackImage_3243.png" alt="Woodson Lumber Logo">
+    <h1>Builder Night Check-In</h1>
+
+    <div class="field">
+      <label for="searchBox">Search preregistration</label>
+      <div class="search-wrap">
+        <input type="text" id="searchBox" placeholder="Start typing name, business, email, or phone">
+        <div id="results" class="results"></div>
+      </div>
+    </div>
+
+    <div id="checkedNotice" class="notice"></div>
+
+    <input type="hidden" id="preRegRow">
+
+    <div class="field">
+      <label for="firstName">First Name</label>
+      <input type="text" id="firstName">
+    </div>
+
+    <div class="field">
+      <label for="lastName">Last Name</label>
+      <input type="text" id="lastName">
+    </div>
+
+    <div class="field">
+      <label for="business">Business</label>
+      <input type="text" id="business">
+    </div>
+
+    <div class="field">
+      <label for="email">Email</label>
+      <input type="text" id="email">
+    </div>
+
+    <div class="field">
+      <label for="phone">Phone</label>
+      <input type="text" id="phone">
+    </div>
+
+    <div class="field">
+      <label for="afterHours">Top Golf After Hours</label>
+      <select id="afterHours">
+        <option value=""></option>
+        <option value="Yes">Yes</option>
+        <option value="No">No</option>
+      </select>
+    </div>
+
+    <div class="actions">
+      <button class="primary" onclick="submitCheckIn(false)">Check In & Print</button>
+      <button class="secondary" onclick="clearForm()">Clear</button>
+    </div>
+
+    <div id="status" class="status"></div>
+  </div>
+
+  <script>
+    const APP_URL = <?= JSON.stringify(appUrl) ?>;
+    let searchTimer = null;
+    let selectedRecord = null;
+
+    const searchBox = document.getElementById('searchBox');
+    const resultsEl = document.getElementById('results');
+    const checkedNoticeEl = document.getElementById('checkedNotice');
+    const statusEl = document.getElementById('status');
+
+    searchBox.addEventListener('input', function () {
+      const value = searchBox.value.trim();
+      selectedRecord = null;
+      document.getElementById('preRegRow').value = '';
+      hideCheckedNotice();
+
+      clearTimeout(searchTimer);
+
+      if (value.length < 2) {
+        resultsEl.style.display = 'none';
+        resultsEl.innerHTML = '';
+        return;
+      }
+
+      searchTimer = setTimeout(function () {
+        google.script.run
+          .withSuccessHandler(renderResults)
+          .withFailureHandler(showError)
+          .searchPreRegistrations(value);
+      }, 200);
+    });
+
+    document.addEventListener('click', function (e) {
+      if (!resultsEl.contains(e.target) && e.target !== searchBox) {
+        resultsEl.style.display = 'none';
+      }
+    });
+
+    function renderResults(results) {
+      resultsEl.innerHTML = '';
+
+      if (!results || !results.length) {
+        resultsEl.style.display = 'none';
+        return;
+      }
+
+      results.forEach(function (item) {
+        const div = document.createElement('div');
+        div.className = 'result-item';
+
+        const checkedHtml = item.checkedIn
+          ? `<span class="checked-badge">Already checked in</span>`
+          : '';
+
+        div.innerHTML = `
+          <div class="result-name">${escapeHtml(item.fullName || '')}${checkedHtml}</div>
+          <div class="result-meta">
+            ${escapeHtml(item.business || '')}
+            ${item.email ? ' | ' + escapeHtml(item.email) : ''}
+            ${item.phone ? ' | ' + escapeHtml(item.phone) : ''}
+          </div>
+        `;
+
+        div.addEventListener('click', function () {
+          chooseRecord(item);
+        });
+
+        resultsEl.appendChild(div);
+      });
+
+      resultsEl.style.display = 'block';
+    }
+
+    function chooseRecord(item) {
+      selectedRecord = item;
+      resultsEl.style.display = 'none';
+      searchBox.value = item.fullName || '';
+
+      document.getElementById('preRegRow').value = item.rowNumber || '';
+      document.getElementById('firstName').value = item.firstName || '';
+      document.getElementById('lastName').value = item.lastName || '';
+      document.getElementById('business').value = item.business || '';
+      document.getElementById('email').value = item.email || '';
+      document.getElementById('phone').value = item.phone || '';
+      document.getElementById('afterHours').value = normalizeYesNo(item.afterHours);
+
+      if (item.checkedIn) {
+        checkedNoticeEl.style.display = 'block';
+        checkedNoticeEl.textContent = item.checkedInTimeDisplay
+          ? `This guest already checked in at ${item.checkedInTimeDisplay}. If you continue, you will be asked whether you want to reprint only.`
+          : `This guest already checked in. If you continue, you will be asked whether you want to reprint only.`;
+      } else {
+        hideCheckedNotice();
+      }
+    }
+
+    function submitCheckIn(forceReprint) {
+      statusEl.textContent = 'Working...';
+
+      const payload = {
+        preRegRow: document.getElementById('preRegRow').value,
+        firstName: document.getElementById('firstName').value.trim(),
+        lastName: document.getElementById('lastName').value.trim(),
+        business: document.getElementById('business').value.trim(),
+        email: document.getElementById('email').value.trim(),
+        phone: document.getElementById('phone').value.trim(),
+        afterHours: document.getElementById('afterHours').value.trim(),
+        forceReprint: forceReprint ? 'true' : 'false'
+      };
+
+      google.script.run
+        .withSuccessHandler(function (result) {
+          handleSubmitResult(result, payload);
+        })
+        .withFailureHandler(showError)
+        .submitCheckIn(payload);
+    }
+
+    function handleSubmitResult(result, payload) {
+      if (!result) {
+        showError({ message: 'No response returned.' });
+        return;
+      }
+
+      if (result.status === 'already_checked_in') {
+        statusEl.textContent = '';
+
+        const message = result.checkedInTimeDisplay
+          ? `This guest already checked in at ${result.checkedInTimeDisplay}. Click OK to reprint the tag without logging a new check-in.`
+          : 'This guest already checked in. Click OK to reprint the tag without logging a new check-in.';
+
+        if (confirm(message)) {
+          submitCheckIn(true);
+        }
+        return;
+      }
+
+      if (result.status === 'checked_in' || result.status === 'reprint') {
+        const fullName = result.fullName || [payload.firstName, payload.lastName].filter(Boolean).join(' ');
+        const business = result.business || payload.business || '';
+        const url = APP_URL +
+          '?page=print&name=' + encodeURIComponent(fullName) +
+          '&business=' + encodeURIComponent(business);
+
+        window.location.href = url;
+        return;
+      }
+
+      showError({ message: 'Unexpected response.' });
+    }
+
+    function clearForm() {
+      searchBox.value = '';
+      document.getElementById('preRegRow').value = '';
+      document.getElementById('firstName').value = '';
+      document.getElementById('lastName').value = '';
+      document.getElementById('business').value = '';
+      document.getElementById('email').value = '';
+      document.getElementById('phone').value = '';
+      document.getElementById('afterHours').value = '';
+      resultsEl.innerHTML = '';
+      resultsEl.style.display = 'none';
+      selectedRecord = null;
+      hideCheckedNotice();
+      statusEl.textContent = '';
+      searchBox.focus();
+    }
+
+    function hideCheckedNotice() {
+      checkedNoticeEl.style.display = 'none';
+      checkedNoticeEl.textContent = '';
+    }
+
+    function normalizeYesNo(value) {
+      const v = String(value || '').trim().toLowerCase();
+      if (v === 'yes' || v === 'y' || v === 'true') return 'Yes';
+      if (v === 'no' || v === 'n' || v === 'false') return 'No';
+      return '';
+    }
+
+    function showError(err) {
+      console.error(err);
+      statusEl.textContent = (err && err.message) ? err.message : 'Something went wrong.';
+    }
+
+    function escapeHtml(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+  </script>
+</body>
+</html>
