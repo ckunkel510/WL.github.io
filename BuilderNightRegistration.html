@@ -457,14 +457,16 @@
       if (!raw) return '';
 
       const v = raw.toLowerCase();
-      if (/^yes/.test(v)) return 'Yes';
-      if (/^no/.test(v)) return 'No';
-      if (v === 'y' || v === 'true' || v === '1') return 'Yes';
-      if (v === 'n' || v === 'false' || v === '0') return 'No';
+
+      if (v === 'yes' || v === 'y' || v === 'true' || v === '1') return 'Yes';
+      if (v === 'no' || v === 'n' || v === 'false' || v === '0') return 'No';
+      if (v.startsWith('yes')) return 'Yes';
+      if (v.startsWith('no')) return 'No';
       if (v.indexOf('yes i would like to attend top golf') > -1) return 'Yes';
       if (v.indexOf('no i will not be able to golf') > -1) return 'No';
       if (v.indexOf('top golf') > -1 && v.indexOf('yes') > -1) return 'Yes';
       if (v.indexOf('golf') > -1 && v.indexOf('no') > -1) return 'No';
+
       return '';
     }
 
