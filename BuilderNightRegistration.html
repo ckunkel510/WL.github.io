@@ -57,7 +57,6 @@
     }
 
     .field input,
-    .field select,
     .readonly-box {
       width: 100%;
       padding: 12px 14px;
@@ -298,10 +297,18 @@
       const script = document.createElement('script');
       script.id = 'jsonp-search';
       script.src = SCRIPT_URL + '?action=search&q=' + encodeURIComponent(query) + '&callback=handlePreRegSearch&_=' + Date.now();
+      script.onerror = function () {
+        showStatus('Search request failed.');
+      };
       document.body.appendChild(script);
     }
 
     window.handlePreRegSearch = function (results) {
+      if (results && results.ok === false) {
+        showStatus(results.error || 'Search failed.');
+        return;
+      }
+      hideStatus();
       renderResults(results || []);
     };
 
@@ -389,31 +396,43 @@
 
       showStatus('Submitting check-in...');
 
-      const formData = new FormData();
-      formData.append('preRegRow', preRegRow);
-      formData.append('firstName', firstName);
-      formData.append('lastName', lastName);
-      formData.append('business', business);
-      formData.append('email', email);
-      formData.append('phone', phone);
-      formData.append('afterHours', afterHours);
-      formData.append('reprintOnly', reprintOnly);
+      const old = document.getElementById('jsonp-checkin');
+      if (old) old.remove();
 
-      fetch(SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors',
-        body: formData
-      })
-      .then(function () {
-        const fullName = [firstName, lastName].filter(Boolean).join(' ').trim();
-        window.location.href = PRINT_URL + '?name=' + encodeURIComponent(fullName) + '&business=' + encodeURIComponent(business) + '&afterHours=' + encodeURIComponent(afterHours);
-      })
-      .catch(function (error) {
-        hideStatus();
-        alert('Error submitting check-in.');
-        console.error('Submission error:', error);
-      });
+      const script = document.createElement('script');
+      script.id = 'jsonp-checkin';
+      script.src = SCRIPT_URL +
+        '?action=checkin' +
+        '&callback=handleCheckInResponse' +
+        '&preRegRow=' + encodeURIComponent(preRegRow) +
+        '&firstName=' + encodeURIComponent(firstName) +
+        '&lastName=' + encodeURIComponent(lastName) +
+        '&business=' + encodeURIComponent(business) +
+        '&email=' + encodeURIComponent(email) +
+        '&phone=' + encodeURIComponent(phone) +
+        '&afterHours=' + encodeURIComponent(afterHours) +
+        '&reprintOnly=' + encodeURIComponent(reprintOnly) +
+        '&_=' + Date.now();
+
+      script.onerror = function () {
+        showStatus('Check-in request failed.');
+      };
+
+      document.body.appendChild(script);
     }
+
+    window.handleCheckInResponse = function (result) {
+      if (!result || result.ok === false) {
+        showStatus((result && result.error) ? result.error : 'Check-in failed.');
+        return;
+      }
+
+      const fullName = result.fullName || [document.getElementById('firstName').value.trim(), document.getElementById('lastName').value.trim()].filter(Boolean).join(' ').trim();
+      const business = result.business || document.getElementById('business').value.trim();
+      const afterHours = result.afterHours || document.getElementById('afterHours').value.trim();
+
+      window.location.href = PRINT_URL + '?name=' + encodeURIComponent(fullName) + '&business=' + encodeURIComponent(business) + '&afterHours=' + encodeURIComponent(afterHours);
+    };
 
     function clearForm() {
       selectedRecord = null;
