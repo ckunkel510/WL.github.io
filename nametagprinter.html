@@ -10,18 +10,8 @@
         size: 4in 2in portrait;
         margin: 0;
       }
-
-      html,
       body {
-        width: 4in;
-        height: 2in;
-        margin: 0 !important;
-        padding: 0 !important;
-        overflow: hidden !important;
-      }
-
-      body {
-        display: block;
+        margin: 0;
       }
     }
 
@@ -30,62 +20,58 @@
       height: 2in;
       margin: 0;
       padding: 0;
-      overflow: hidden;
-      background: #fff;
-      font-family: Arial, sans-serif;
-      -webkit-print-color-adjust: exact;
-      print-color-adjust: exact;
-    }
-
-    body {
       display: flex;
       align-items: center;
       justify-content: center;
+      overflow: hidden;
+      font-family: Arial, sans-serif;
+      background: #fff;
     }
 
     #label {
-      width: 4in;
-      height: 2in;
-      box-sizing: border-box;
-      padding: 0.2in;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
       text-align: center;
+      width: 100%;
+      height: 100%;
+      padding: 0.16in 0.18in;
+      box-sizing: border-box;
     }
 
     #nameLine {
       font-weight: bold;
-      font-size: clamp(18px, 9vw, 90px);
-      line-height: 1.05;
+      font-size: clamp(24px, 12vw, 122px);
+      line-height: 1.02;
       max-width: 100%;
       word-break: break-word;
     }
 
     #businessLine {
-      font-size: clamp(14px, 4.7vw, 34px);
+      font-size: clamp(19px, 6.3vw, 46px);
       font-style: italic;
-      margin-top: 0.25em;
+      margin-top: 0.18em;
       max-width: 100%;
       word-break: break-word;
+      line-height: 1.05;
     }
 
     #topGolfLine {
       display: none;
-      margin-top: 0.35em;
-      padding: 0.18em 0.6em;
+      margin-top: 0.25em;
+      padding: 0.2em 0.65em;
       border: 2px solid #000;
       border-radius: 999px;
-      font-size: clamp(11px, 3.2vw, 22px);
+      font-size: clamp(15px, 4.3vw, 30px);
       font-weight: 700;
-      line-height: 1.1;
+      line-height: 1.05;
       max-width: 100%;
       word-break: break-word;
     }
   </style>
 </head>
-<body>
+<body onload="printPage()">
   <div id="label">
     <div id="nameLine"></div>
     <div id="businessLine"></div>
@@ -94,43 +80,22 @@
 
   <script>
     const RETURN_URL = 'https://ckunkel510.github.io/WL.github.io/BuilderNightRegistration.html';
-    let hasPrinted = false;
-    let hasRedirected = false;
 
     function getQueryParam(param) {
       const urlParams = new URLSearchParams(window.location.search);
       return urlParams.get(param) || '';
     }
 
-    function normalizeYesNo(value) {
-      const raw = String(value || '').trim().toLowerCase();
-      if (!raw) return '';
-      if (raw === 'yes' || raw === 'y' || raw === 'true' || raw === '1') return 'Yes';
-      if (raw === 'no' || raw === 'n' || raw === 'false' || raw === '0') return 'No';
-      if (raw.includes('yes')) return 'Yes';
-      if (raw.includes('no')) return 'No';
-      return '';
-    }
-
-    function returnToCheckIn() {
-      if (hasRedirected) return;
-      hasRedirected = true;
-      window.location.replace(RETURN_URL);
-    }
-
     function printPage() {
-      if (hasPrinted) return;
-      hasPrinted = true;
-
       const name = getQueryParam('name');
       const business = getQueryParam('business');
-      const afterHours = normalizeYesNo(getQueryParam('afterHours'));
+      const afterHours = String(getQueryParam('afterHours') || '').trim().toLowerCase();
 
       document.getElementById('nameLine').innerText = name;
       document.getElementById('businessLine').innerText = business;
 
       const topGolfLine = document.getElementById('topGolfLine');
-      if (afterHours === 'Yes') {
+      if (afterHours === 'yes') {
         topGolfLine.innerText = 'Top Golf Experience';
         topGolfLine.style.display = 'inline-block';
       } else {
@@ -140,19 +105,12 @@
 
       setTimeout(function () {
         window.print();
-      }, 300);
+
+        setTimeout(function () {
+          window.location.href = RETURN_URL;
+        }, 2000);
+      }, 500);
     }
-
-    window.addEventListener('load', printPage, { once: true });
-    window.addEventListener('afterprint', function () {
-      setTimeout(returnToCheckIn, 250);
-    });
-
-    setTimeout(function () {
-      if (hasPrinted && !hasRedirected) {
-        returnToCheckIn();
-      }
-    }, 15000);
   </script>
 </body>
 </html>
