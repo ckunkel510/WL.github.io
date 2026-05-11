@@ -1,196 +1,312 @@
+(function () {
+  'use strict';
 
-window.addEventListener("load", function () {
-  const cartPanel = document.querySelector("#ctl00_PageBody_ShoppingCartDetailPanel");
-  if (!cartPanel) return;
+  if (!/ShoppingCart\.aspx/i.test(location.pathname)) return;
 
-  /* =============================
-     Quote request CTA (under Shopping Cart header)
-     ============================= */
-  (function injectQuoteUnderHeader() {
-    try {
-      const QUOTE_URL = "https://woodsonwholesaleinc.formstack.com/forms/request_a_quote";
+  const QUOTE_URL = 'https://woodsonwholesaleinc.formstack.com/forms/request_a_quote';
+  const SHOP_MORE_URL = '/Products.aspx';
 
-      // Find the cart header (native markup on the page)
-      const header = cartPanel.querySelector(".cart-header");
-      if (!header) {
-        console.warn("[QuoteCTA] .cart-header not found inside cartPanel");
-        return;
+  function ready(fn) {
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
+    else fn();
+  }
+
+  function text(v) { return String(v || '').trim(); }
+
+  function moneyFromText(raw) {
+    const match = String(raw || '').match(/\$\s*([\d,]+(?:\.\d{2})?)/);
+    return match ? Number(match[1].replace(/,/g, '')) || 0 : 0;
+  }
+
+  function formatMoney(n) {
+    return '$' + (Number(n) || 0).toFixed(2);
+  }
+
+  function injectCss() {
+    if (document.getElementById('wl-cart-css')) return;
+    const style = document.createElement('style');
+    style.id = 'wl-cart-css';
+    style.textContent = `
+      .wl-native-cart-hidden{position:absolute!important;left:-9999px!important;top:auto!important;width:1px!important;height:1px!important;overflow:hidden!important;opacity:0!important;pointer-events:none!important;}
+      .wl-cart{margin:1rem 0 2rem;padding:18px;border-radius:16px;background:#f8f8f8;border:1px solid #e4e4e4;}
+      .wl-cart-header{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;justify-content:space-between;margin-bottom:14px;}
+      .wl-cart-title{font-size:1.35rem;font-weight:800;color:#222;margin:0;}
+      .wl-cart-sub{font-size:.95rem;color:#555;margin-top:4px;line-height:1.35;}
+      .wl-quote-cta{border:1px solid rgba(0,0,0,.125);background:#fff;border-radius:14px;margin:0 0 14px;padding:14px;}
+      .wl-quote-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;}
+      .wl-cart-list{display:grid;gap:10px;}
+      .wl-cart-item{display:grid;grid-template-columns:86px 1fr auto;gap:14px;align-items:center;background:#fff;border:1px solid #e1e1e1;border-radius:14px;padding:12px;}
+      .wl-cart-img{width:76px;height:76px;object-fit:contain;border-radius:8px;background:#fff;border:1px solid #eee;}
+      .wl-cart-code{font-weight:800;color:#004080;text-decoration:none;}
+      .wl-cart-name{font-size:.98rem;color:#222;margin-top:2px;line-height:1.3;}
+      .wl-cart-stock{font-size:.85rem;color:#2e7d32;margin-top:4px;line-height:1.3;}
+      .wl-cart-controls{text-align:right;min-width:160px;}
+      .wl-cart-price{font-weight:800;margin-bottom:8px;}
+      .wl-cart-qty{display:inline-flex;align-items:center;gap:6px;margin-bottom:8px;}
+      .wl-cart-qty input{width:70px;padding:6px 8px;border:1px solid #ccc;border-radius:8px;}
+      .wl-cart-total{margin-bottom:6px;}
+      .wl-remove{background:none;border:0;color:#b00020;cursor:pointer;padding:4px 0;font-weight:700;}
+      .wl-cart-footer{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;margin-top:18px;padding-top:14px;border-top:1px solid #ddd;}
+      .wl-cart-actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:flex-end;}
+      .wl-cart-secondary-actions{width:100%;display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;margin-top:8px;}
+      .wl-btn{display:inline-flex;align-items:center;justify-content:center;border-radius:10px;border:1px solid #ccc;padding:10px 14px;text-decoration:none;cursor:pointer;background:#fff;color:#222;line-height:1.1;}
+      .wl-btn-primary{background:#6b0016;border-color:#6b0016;color:#fff;}
+      .wl-btn-danger{background:#fff;border-color:#b00020;color:#b00020;}
+      .wl-btn-muted{background:#f1f1f1;color:#222;}
+      .wl-empty-cart{padding:24px;background:#fff;border:1px solid #e1e1e1;border-radius:14px;text-align:center;}
+      @media (max-width:700px){
+        .wl-cart{padding:12px;}
+        .wl-cart-item{grid-template-columns:72px 1fr;}
+        .wl-cart-img{width:64px;height:64px;}
+        .wl-cart-controls{grid-column:1 / -1;text-align:left;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;}
+        .wl-cart-footer,.wl-cart-actions,.wl-cart-secondary-actions{justify-content:stretch;}
+        .wl-btn,.wl-cart-secondary-actions .epi-button{width:100%;}
       }
-
-      // Avoid duplicates
-      if (cartPanel.querySelector(".wl-quote-cta")) return;
-
-      const wrap = document.createElement("div");
-      wrap.className = "wl-quote-cta card mb-3";
-      wrap.style.border = "1px solid rgba(0,0,0,.125)";
-
-      wrap.innerHTML = `
-        <div class="card-body p-3">
-          <div class="d-flex flex-wrap align-items-start justify-content-between gap-2">
-            <div style="min-width:240px; flex:1;">
-              <div class="fw-bold" style="font-size: 1.05rem;">Need a Quote?</div>
-              <div class="text-muted" style="line-height:1.35;">
-                Pricing a bigger order or not seeing exactly what you need? Submit a quick request and we’ll get back to you.
-              </div>
-            </div>
-
-            <a class="btn btn-outline-primary"
-               href="${QUOTE_URL}"
-               target="_blank"
-               rel="noopener">
-              Request a Quote
-            </a>
-          </div>
-        </div>
-      `;
-
-      // Insert right under the header
-      header.insertAdjacentElement("afterend", wrap);
-
-      console.log("[QuoteCTA] Injected under Shopping Cart header");
-    } catch (e) {
-      console.error("[QuoteCTA] Failed to inject:", e);
-    }
-  })();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  
-
-  // Build a wrapper for the custom cart
-  const customCartWrapper = document.createElement("div");
-  customCartWrapper.style.padding = "2rem";
-  customCartWrapper.style.marginTop = "1rem";
-  customCartWrapper.style.background = "#f8f8f8";
-  customCartWrapper.style.borderRadius = "8px";
-
-  let subtotal = 0;
-
-  // Loop through real cart rows
-  const cartItems = cartPanel.querySelectorAll(".shopping-cart-item");
-  cartItems.forEach((row) => {
-    const img = row.querySelector("img.ThumbnailImage");
-    const codeLink = row.querySelector("a.portalGridLink")?.closest("a");
-    const code = codeLink?.innerText?.trim() || "";
-    const name = codeLink?.parentElement?.nextElementSibling?.innerText?.trim() || "";
-    const stock = row.querySelector(".col-sm-6 div:nth-child(2) div")?.innerText?.trim() || "";
-    const qtyInput = row.querySelector("input.riTextBox");
-    const qtyState = row.querySelector("input[type='hidden'][id$='_ClientState']");
-    const updateBtn = row.querySelector("a.refresh-cart-line-total");
-    const deleteBtn = row.querySelector("a i.fas.fa-times")?.parentElement;
-
-    // Total parsing
-    const totalMatch = row.querySelector(".col-sm-3")?.textContent?.match(/\$([\d,.]+)/);
-    const total = totalMatch ? parseFloat(totalMatch[1].replace(",", "")) : 0;
-    subtotal += total;
-
-    const priceText = row.querySelector(".col-6")?.textContent?.match(/\$([\d,.]+)/)?.[0] || "";
-
-    // Create visual cart item
-    const itemDiv = document.createElement("div");
-    itemDiv.style.display = "flex";
-    itemDiv.style.justifyContent = "space-between";
-    itemDiv.style.alignItems = "center";
-    itemDiv.style.borderBottom = "1px solid #ccc";
-    itemDiv.style.padding = "12px 0";
-
-    itemDiv.innerHTML = `
-      <div style="display: flex; gap: 16px; align-items: center;">
-        <img src="${img?.src}" style="width: 80px; height: auto; border-radius: 4px;" />
-        <div>
-          <a href="${codeLink?.href}" style="font-weight: bold; color: #004080;">${code}</a>
-          <div>${name}</div>
-          <div style="color: green;">${stock}</div>
-        </div>
-      </div>
-      <div style="text-align: right;">
-        <div><strong>${priceText}</strong> ea</div>
-        <div style="margin-top: 4px;">
-          Qty: <input type="number" value="${qtyInput.value}" style="width: 60px; padding: 4px;" 
-            data-qty-id="${qtyInput.id}" data-state-id="${qtyState?.id}" data-update-id="${updateBtn?.id}" />
-        </div>
-        <div style="margin-top: 4px;">Total: <strong>$${total.toFixed(2)}</strong></div>
-        <button class="remove-btn" data-delete-id="${deleteBtn?.id}" 
-          style="margin-top: 6px; background: none; color: red; border: none; cursor: pointer;">
-          ✕ Remove
-        </button>
-      </div>
     `;
-    customCartWrapper.appendChild(itemDiv);
-  });
+    document.head.appendChild(style);
+  }
 
-  // Subtotal + action row
-  const footerDiv = document.createElement("div");
-  footerDiv.style.marginTop = "2rem";
-  footerDiv.style.display = "flex";
-  footerDiv.style.justifyContent = "space-between";
-  footerDiv.style.alignItems = "center";
-  footerDiv.innerHTML = `
-    <div style="font-size: 1.2rem;"><strong>Subtotal:</strong> $${subtotal.toFixed(2)}</div>
-    <div style="display: flex; gap: 10px;">
-      <a class="btn btn-success" href="javascript:WebForm_DoPostBackWithOptions(new WebForm_PostBackOptions('ctl00$PageBody$PlaceOrderButton', '', true, '', '', false, true))">
-        Place Order
-      </a>
-      <a class="btn btn-secondary" href="https://webtrack.woodsonlumber.com/ProductDetail.aspx?pg=4553&pid=152">
-        Shop for More
-      </a>
-      <a class="btn btn-danger" href="#" onclick="event.preventDefault(); WebForm_DoPostBackWithOptions(new WebForm_PostBackOptions('ctl00$PageBody$EmptyCartButton', '', true, '', '', false, true));">
-        Empty Cart
-      </a>
-    </div>
-  `;
-  customCartWrapper.appendChild(footerDiv);
-
-
-  
-
-
-  // Insert after the real panel (still present for WebForms)
-  cartPanel.insertAdjacentElement("afterend", customCartWrapper);
-
-  // Update qty and trigger real update
-  customCartWrapper.querySelectorAll("input[type='number']").forEach(input => {
-    input.addEventListener("change", function () {
-      const realQtyInput = document.getElementById(this.dataset.qtyId);
-      const stateInput = document.getElementById(this.dataset.stateId);
-      const updateBtn = document.getElementById(this.dataset.updateId);
-      if (realQtyInput && stateInput && updateBtn) {
-        realQtyInput.value = this.value;
-        // Update Telerik state field
-        const state = JSON.parse(stateInput.value);
-        state.validationText = this.value;
-        state.valueAsString = this.value;
-        state.lastSetTextBoxValue = this.value;
-        stateInput.value = JSON.stringify(state);
-        updateBtn.click();
+  function runNative(btn) {
+    if (!btn) return false;
+    try {
+      const href = btn.getAttribute('href') || '';
+      if (/^javascript:/i.test(href)) {
+        window.eval(href.replace(/^javascript:/i, ''));
+        return true;
       }
-    });
-  });
+    } catch (e) {
+      console.warn('[WLCart] href postback failed, falling back to click', e);
+    }
+    try { btn.click(); return true; } catch (e) { console.warn('[WLCart] native click failed', e); }
+    return false;
+  }
 
-  // Remove item logic
-  customCartWrapper.querySelectorAll(".remove-btn").forEach(btn => {
-    btn.addEventListener("click", function () {
-      const realDelete = document.getElementById(this.dataset.deleteId);
-      if (realDelete) realDelete.click();
-    });
-  });
-});
+  function getNativeButton(selectors) {
+    for (const sel of selectors) {
+      const found = document.querySelector(sel);
+      if (found) return found;
+    }
+    return null;
+  }
 
+  function injectQuoteUnderHeader(cartPanel) {
+    const header = cartPanel.querySelector('.cart-header');
+    if (!header || cartPanel.querySelector('.wl-quote-cta')) return;
+
+    const wrap = document.createElement('div');
+    wrap.className = 'wl-quote-cta';
+
+    const row = document.createElement('div');
+    row.className = 'wl-quote-row';
+
+    const copy = document.createElement('div');
+    copy.style.minWidth = '240px';
+    copy.style.flex = '1';
+    const title = document.createElement('div');
+    title.style.fontWeight = '800';
+    title.style.fontSize = '1.05rem';
+    title.textContent = 'Need a Quote?';
+    const sub = document.createElement('div');
+    sub.style.color = '#666';
+    sub.style.lineHeight = '1.35';
+    sub.textContent = 'Pricing a bigger order or not seeing exactly what you need? Submit a quick request and we’ll get back to you.';
+    copy.append(title, sub);
+
+    const link = document.createElement('a');
+    link.className = 'wl-btn';
+    link.href = QUOTE_URL;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = 'Request a Quote';
+
+    row.append(copy, link);
+    wrap.appendChild(row);
+    header.insertAdjacentElement('afterend', wrap);
+  }
+
+  function parseItem(row) {
+    const img = row.querySelector('img.ThumbnailImage');
+    const codeLink = row.querySelector('a.portalGridLink');
+    const qtyInput = row.querySelector('input.riTextBox');
+    const qtyState = row.querySelector("input[type='hidden'][id$='_ClientState']");
+    const updateBtn = row.querySelector('a.refresh-cart-line-total');
+    const deleteBtn = row.querySelector('a i.fas.fa-times')?.parentElement || row.querySelector('[id*="Delete"], [href*="Delete"]');
+
+    const code = text(codeLink?.textContent);
+    const name = text(codeLink?.parentElement?.nextElementSibling?.textContent) || text(row.querySelector('[data-title="Description"], .description, .ProductDescription')?.textContent);
+    const stock = text(row.querySelector('.col-sm-6 div:nth-child(2) div')?.textContent);
+    const total = moneyFromText(row.querySelector('.col-sm-3')?.textContent);
+    const price = text(row.querySelector('.col-6')?.textContent?.match(/\$\s*[\d,]+(?:\.\d{2})?/)?.[0]) || '';
+
+    return { row, img, codeLink, code, name, stock, qtyInput, qtyState, updateBtn, deleteBtn, total, price };
+  }
+
+  function updateRealQuantity(item, value) {
+    const qty = Math.max(1, parseInt(value, 10) || 1);
+    if (!item.qtyInput || !item.updateBtn) return false;
+
+    item.qtyInput.value = String(qty);
+
+    if (item.qtyState && item.qtyState.value) {
+      try {
+        const state = JSON.parse(item.qtyState.value);
+        state.validationText = String(qty);
+        state.valueAsString = String(qty);
+        state.lastSetTextBoxValue = String(qty);
+        item.qtyState.value = JSON.stringify(state);
+      } catch (e) {
+        console.warn('[WLCart] Could not update Telerik qty state. Continuing with input value.', e);
+      }
+    }
+
+    runNative(item.updateBtn);
+    return true;
+  }
+
+  function buildCartItem(item) {
+    const card = document.createElement('div');
+    card.className = 'wl-cart-item';
+
+    const image = document.createElement('img');
+    image.className = 'wl-cart-img';
+    image.alt = item.name || item.code || 'Product image';
+    image.src = item.img?.src || '';
+
+    const details = document.createElement('div');
+    const link = document.createElement('a');
+    link.className = 'wl-cart-code';
+    link.href = item.codeLink?.href || '#';
+    link.textContent = item.code || 'Item';
+    const name = document.createElement('div');
+    name.className = 'wl-cart-name';
+    name.textContent = item.name || '';
+    const stock = document.createElement('div');
+    stock.className = 'wl-cart-stock';
+    stock.textContent = item.stock || '';
+    details.append(link, name);
+    if (item.stock) details.appendChild(stock);
+
+    const controls = document.createElement('div');
+    controls.className = 'wl-cart-controls';
+
+    const price = document.createElement('div');
+    price.className = 'wl-cart-price';
+    price.textContent = item.price ? `${item.price} ea` : '';
+
+    const qtyWrap = document.createElement('label');
+    qtyWrap.className = 'wl-cart-qty';
+    qtyWrap.append(document.createTextNode('Qty:'));
+    const qty = document.createElement('input');
+    qty.type = 'number';
+    qty.min = '1';
+    qty.step = '1';
+    qty.value = item.qtyInput?.value || '1';
+    qty.addEventListener('change', () => updateRealQuantity(item, qty.value));
+    qtyWrap.appendChild(qty);
+
+    const total = document.createElement('div');
+    total.className = 'wl-cart-total';
+    total.innerHTML = 'Total: <strong>' + formatMoney(item.total) + '</strong>';
+
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'wl-remove';
+    remove.textContent = '✕ Remove';
+    remove.addEventListener('click', () => {
+      if (!confirm('Remove this item from your cart?')) return;
+      runNative(item.deleteBtn);
+    });
+
+    controls.append(price, qtyWrap, total, remove);
+    card.append(image, details, controls);
+    return card;
+  }
+
+  function buildCustomCart(cartPanel) {
+    if (document.getElementById('wlCustomCart')) return;
+
+    const rows = Array.from(cartPanel.querySelectorAll('.shopping-cart-item'));
+    if (!rows.length) return;
+
+    const items = rows.map(parseItem);
+    const subtotal = items.reduce((sum, item) => sum + item.total, 0);
+
+    const wrapper = document.createElement('div');
+    wrapper.id = 'wlCustomCart';
+    wrapper.className = 'wl-cart';
+
+    const header = document.createElement('div');
+    header.className = 'wl-cart-header';
+    const headCopy = document.createElement('div');
+    const title = document.createElement('h2');
+    title.className = 'wl-cart-title';
+    title.textContent = 'Shopping Cart';
+    const sub = document.createElement('div');
+    sub.className = 'wl-cart-sub';
+    sub.textContent = 'Review your items, update quantities, then choose the checkout path that works best for you.';
+    headCopy.append(title, sub);
+    header.appendChild(headCopy);
+
+    const list = document.createElement('div');
+    list.className = 'wl-cart-list';
+    items.forEach(item => list.appendChild(buildCartItem(item)));
+
+    const footer = document.createElement('div');
+    footer.className = 'wl-cart-footer';
+
+    const subtotalDiv = document.createElement('div');
+    subtotalDiv.style.fontSize = '1.2rem';
+    subtotalDiv.innerHTML = '<strong>Subtotal:</strong> ' + formatMoney(subtotal);
+
+    const actions = document.createElement('div');
+    actions.className = 'wl-cart-actions';
+
+    const proceed = document.createElement('button');
+    proceed.type = 'button';
+    proceed.className = 'wl-btn wl-btn-primary';
+    proceed.textContent = 'Proceed to Checkout';
+    proceed.addEventListener('click', () => {
+      const nativeProceed = getNativeButton(['#ctl00_PageBody_PlaceOrderButton', '[name="ctl00$PageBody$PlaceOrderButton"]']);
+      runNative(nativeProceed);
+    });
+
+    const shopMore = document.createElement('a');
+    shopMore.className = 'wl-btn wl-btn-muted';
+    shopMore.href = SHOP_MORE_URL;
+    shopMore.textContent = 'Shop for More';
+
+    const empty = document.createElement('button');
+    empty.type = 'button';
+    empty.className = 'wl-btn wl-btn-danger';
+    empty.textContent = 'Empty Cart';
+    empty.addEventListener('click', () => {
+      if (!confirm('Empty your cart?')) return;
+      const nativeEmpty = getNativeButton(['#ctl00_PageBody_EmptyCartButton', '[name="ctl00$PageBody$EmptyCartButton"]']);
+      runNative(nativeEmpty);
+    });
+
+    actions.append(proceed, shopMore, empty);
+
+    const secondaryActions = document.createElement('div');
+    secondaryActions.id = 'wl_guest_actions_mount';
+    secondaryActions.className = 'wl-cart-secondary-actions';
+
+    footer.append(subtotalDiv, actions, secondaryActions);
+    wrapper.append(header, list, footer);
+
+    cartPanel.insertAdjacentElement('afterend', wrapper);
+    cartPanel.classList.add('wl-native-cart-hidden');
+
+    // Let Guestcheckout.updated.js mount its buttons if it has already loaded.
+    try { window.dispatchEvent(new Event('resize')); } catch {}
+  }
+
+  ready(function () {
+    const cartPanel = document.querySelector('#ctl00_PageBody_ShoppingCartDetailPanel');
+    if (!cartPanel) return;
+
+    injectCss();
+    injectQuoteUnderHeader(cartPanel);
+    buildCustomCart(cartPanel);
+  });
+})();
