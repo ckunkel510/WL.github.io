@@ -17,7 +17,7 @@
     if (el && el.checked) return true;
     // Fallback: modern selector buttons (no radio checked yet)
     try {
-      const btn = document.querySelector(`.modern-shipping-selector button[data-value="rbDelivered"].is-selected, .modern-shipping-selector button[data-value="rbDelivered"].selected, .modern-shipping-selector button[data-value="rbDelivered"].active`);
+      const btn = document.querySelector(`.modern-shipping-selector button[data-value="rbDelivered"].is-selected, .modern-shipping-selector button[data-value="rbDelivered"].selected, .modern-shipping-selector button[data-value="rbDelivered"].active, .modern-shipping-selector button[data-value="rbDelivered"].wl-selected`);
       if (btn) return true;
     } catch {}
     return false;
@@ -27,7 +27,7 @@
     if (el && el.checked) return true;
     // Fallback: modern selector buttons (no radio checked yet)
     try {
-      const btn = document.querySelector(`.modern-shipping-selector button[data-value="rbCollectLater"].is-selected, .modern-shipping-selector button[data-value="rbCollectLater"].selected, .modern-shipping-selector button[data-value="rbCollectLater"].active`);
+      const btn = document.querySelector(`.modern-shipping-selector button[data-value="rbCollectLater"].is-selected, .modern-shipping-selector button[data-value="rbCollectLater"].selected, .modern-shipping-selector button[data-value="rbCollectLater"].active, .modern-shipping-selector button[data-value="rbCollectLater"].wl-selected`);
       if (btn) return true;
     } catch {}
     return false;
@@ -193,6 +193,15 @@
     const container = document.querySelector(".container");
     if (!container) return;
 
+    // Do not build the checkout wizard on the regular cart page or unrelated WebTrack pages.
+    // The page must have at least one of the actual checkout controls.
+    const hasCheckoutControls =
+      document.getElementById("ctl00_PageBody_SaleTypeSelector_rbDelivered") ||
+      document.getElementById("ctl00_PageBody_SaleTypeSelector_rbCollectLater") ||
+      document.getElementById("ctl00_PageBody_InvoiceAddress_GoogleAddressSearchWrapper") ||
+      document.getElementById("ctl00_PageBody_SpecialInstructionsTextBox");
+    if (!hasCheckoutControls) return;
+
     if (document.querySelector(".checkout-wizard")) return;
 
     const wizard = document.createElement("div");
@@ -291,10 +300,15 @@
       if (!field) return false;
       const v = norm(field.value);
       if (!v || v === "0") return false;
-      if (field.tagName === "SELECT" && field.selectedIndex <= 0) {
-        const opt0 = field.options && field.options[0] ? norm(field.options[0].value) : "";
-        if (!opt0 || opt0 === "0") return false;
+
+      if (field.tagName === "SELECT") {
+        const selected = field.options && field.selectedIndex >= 0 ? field.options[field.selectedIndex] : null;
+        const txt = selected ? norm(selected.textContent || selected.text || "") : "";
+        if (!txt || /^select/i.test(txt)) return false;
       }
+
+      return true;
+    }
 
     // --------------------------------------------------
     // Branch picker UI (Pickup only): cards + "selected" summary
@@ -302,7 +316,6 @@
     function wlCleanBranchText(txt) {
       const t = norm(txt);
       if (!t) return "";
-      // Remove "PO BOX ..." chunks (common in WebTrack address strings)
       return t
         .replace(/,\s*PO BOX[^,]*,/gi, ",")
         .replace(/,\s*PO BOX[^,]*$/gi, "")
@@ -313,7 +326,6 @@
 
     function wlParseBranchOption(label) {
       const raw = wlCleanBranchText(label);
-      // Expected format: "Caldwell - 702 W Buck St, Caldwell, Texas, 77836, United States"
       const parts = raw.split(" - ");
       if (parts.length >= 2) {
         return { name: parts[0].trim(), address: parts.slice(1).join(" - ").trim() };
@@ -321,14 +333,22 @@
       return { name: raw, address: "" };
     }
 
+    function wlHtml(s) {
+      return String(s || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
     function wlTriggerBranchPostback(selectEl) {
       if (!selectEl) return;
+      try { sessionStorage.setItem("wl_pendingStep", "2"); } catch {}
       try {
-        // fire native onchange (inline attribute should be invoked on real change event)
         const ev = new Event("change", { bubbles: true });
         selectEl.dispatchEvent(ev);
       } catch {}
-      // Fallback: if WebForms postback isn't wired via event listeners, call __doPostBack directly.
       try {
         if (typeof __doPostBack === "function") {
           setTimeout(function () {
@@ -339,19 +359,16 @@
     }
 
     function enhanceBranchPicker() {
-      // Only enhance for Pickup (Branch step is pickup-only, but be explicit)
       if (!getPickupSelected()) return;
 
       const sel = document.getElementById("ctl00_PageBody_BranchDropDownList") || getBranchField();
       if (!sel || sel.tagName !== "SELECT") return;
 
-      // Ensure label copy is pickup-specific
       try {
         const label = sel.closest(".epi-form-group-checkout")?.querySelector("label");
         if (label) label.textContent = "Select pickup branch:";
       } catch {}
 
-      // Create container once
       const host = sel.closest(".epi-form-group-checkout") || sel.parentElement;
       if (!host) return;
 
@@ -360,79 +377,83 @@
         wrap = document.createElement("div");
         wrap.id = "wlBranchCardsWrap";
         wrap.className = "wl-branch-wrap";
-        // Insert after the select (keep select in DOM for server validation/postback)
         const overflowWrap = sel.closest(".overflow-hidden") || sel.parentElement;
         (overflowWrap || host).appendChild(wrap);
       }
 
-      // Hide the dropdown but keep it functional for server controls
       try { sel.classList.add("wl-hidden-select"); } catch {}
-      try { sel.style.position = "absolute"; sel.style.left = "-9999px"; sel.style.width = "1px"; sel.style.height = "1px"; sel.style.opacity = "0"; } catch {}
+      try {
+        sel.style.position = "absolute";
+        sel.style.left = "-9999px";
+        sel.style.width = "1px";
+        sel.style.height = "1px";
+        sel.style.opacity = "0";
+      } catch {}
 
-      // Build data
-      const opts = Array.from(sel.options || []).map(function (o) {
-        const parsed = wlParseBranchOption(o.textContent || o.label || "");
-        return {
-          value: norm(o.value),
-          selected: !!o.selected,
-          name: parsed.name,
-          address: parsed.address,
-          raw: wlCleanBranchText(o.textContent || o.label || "")
-        };
-      });
+      const opts = Array.from(sel.options || [])
+        .map(function (o) {
+          const parsed = wlParseBranchOption(o.textContent || o.label || "");
+          return {
+            value: norm(o.value),
+            selected: !!o.selected,
+            name: parsed.name,
+            address: parsed.address,
+            raw: wlCleanBranchText(o.textContent || o.label || "")
+          };
+        })
+        .filter(function (o) {
+          return o.value && o.value !== "0" && o.name && !/^select/i.test(o.name);
+        });
 
       if (!opts.length) return;
 
-      const current = opts.find(o => o.selected) || opts[0];
+      const selectedValue = norm(sel.value);
+      const current = opts.find(o => o.value === selectedValue) || null;
+      const choices = current ? opts.filter(o => o.value !== current.value) : opts;
 
-      // Render cards
       wrap.innerHTML = `
         <div class="wl-branch-selected">
           <div class="wl-branch-selected-title">Pickup branch</div>
-          <div class="wl-branch-card wl-branch-card-selected" data-value="${current.value}">
-            <div class="wl-branch-name">${current.name}</div>
-            <div class="wl-branch-addr">${current.address}</div>
-            <div class="wl-branch-cta">Selected</div>
-          </div>
+          ${current ? `
+            <div class="wl-branch-card wl-branch-card-selected">
+              <div class="wl-branch-name">${wlHtml(current.name)}</div>
+              <div class="wl-branch-addr">${wlHtml(current.address)}</div>
+              <div class="wl-branch-cta">Selected</div>
+            </div>
+          ` : `
+            <div class="wl-branch-card wl-branch-card-empty">
+              <div class="wl-branch-name">Choose your pickup store</div>
+              <div class="wl-branch-addr">Select the location where you want to pick up your order.</div>
+            </div>
+          `}
         </div>
-        <div class="wl-branch-list-title">Other stores</div>
+        <div class="wl-branch-list-title">${current ? "Other stores" : "Stores"}</div>
         <div class="wl-branch-grid">
-          ${opts.filter(o => o.value !== current.value).map(o => `
-            <button type="button" class="wl-branch-card wl-branch-card-option" data-value="${o.value}">
-              <div class="wl-branch-name">${o.name}</div>
-              <div class="wl-branch-addr">${o.address}</div>
+          ${choices.map(o => `
+            <button type="button" class="wl-branch-card wl-branch-card-option" data-value="${wlHtml(o.value)}">
+              <div class="wl-branch-name">${wlHtml(o.name)}</div>
+              <div class="wl-branch-addr">${wlHtml(o.address)}</div>
               <div class="wl-branch-cta">Choose this store</div>
             </button>
           `).join("")}
         </div>
       `;
 
-      // Click binding
-      wrap.querySelectorAll("[data-value]").forEach(function (el) {
-        el.addEventListener("click", function () {
+      wrap.querySelectorAll(".wl-branch-card-option[data-value]").forEach(function (card) {
+        card.addEventListener("click", function () {
           const v = (this.getAttribute("data-value") || "").trim();
           if (!v) return;
 
-          // update select
           try { sel.value = v; } catch {}
-          // mark selected option
           try {
             Array.from(sel.options).forEach(o => { o.selected = (norm(o.value) === v); });
           } catch {}
-
-          // Persist
           try { localStorage.setItem("wl_last_branch", v); } catch {}
 
-          // Rerender UI immediately
           try { enhanceBranchPicker(); } catch {}
-
-          // Trigger server postback
           wlTriggerBranchPostback(sel);
-        }, { passive: true });
+        });
       });
-    }
-
-      return true;
     }
 
     function autoSelectDefaultBranch() {
@@ -1205,10 +1226,15 @@ document.addEventListener("click", function (ev) {
   // after UpdatePanel refreshes (the direct listeners may be lost).
   if (btn.dataset && btn.dataset.wlNext) {
     ev.preventDefault();
+    ev.stopPropagation();
+    if (typeof ev.stopImmediatePropagation === "function") ev.stopImmediatePropagation();
+
     const cur = (typeof getActiveStep === "function") ? getActiveStep() : 1;
-    // Mark Billing as confirmed when leaving Step 4 in pickup flow
-    if (cur === 4 && getPickupSelected()) setBillingConfirmed(true);
     if (typeof validateStep === "function" && !validateStep(cur)) return;
+
+    // Mark Billing as confirmed only after Step 4 validates.
+    if (cur === 4 && getPickupSelected()) setBillingConfirmed(true);
+
     if (typeof goNextFrom === "function") { goNextFrom(cur); return; }
     const to = parseInt(btn.dataset.wlNext, 10);
     if (Number.isFinite(to)) showStep(to);
@@ -1217,9 +1243,11 @@ document.addEventListener("click", function (ev) {
 
   if (btn.dataset && btn.dataset.wlBack) {
     ev.preventDefault();
+    ev.stopPropagation();
+    if (typeof ev.stopImmediatePropagation === "function") ev.stopImmediatePropagation();
+
     const cur = (typeof getActiveStep === "function") ? getActiveStep() : 1;
     const to = parseInt(btn.dataset.wlBack, 10);
-    // Prefer explicit back target if present, otherwise just go back one step.
     if (Number.isFinite(to)) { showStep(to); return; }
     showStep(Math.max(1, cur - 1));
     return;
@@ -2362,7 +2390,9 @@ window.WLCheckout.refreshDateUI = function () {
             $btnDelivered.css({ opacity: 1, pointerEvents: "auto" });
             $btnPickup.css({ opacity: 1, pointerEvents: "auto" });
 
+            const hasSelection = val === "rbDelivered" || val === "rbCollectLater";
             const isDelivered = val === "rbDelivered";
+            const isPickup = val === "rbCollectLater";
 
             // Visual styling (use classes + !important CSS to defeat theme overrides)
             try {
@@ -2386,17 +2416,21 @@ window.WLCheckout.refreshDateUI = function () {
               };
 
               setSelected($btnDelivered, isDelivered);
-              setSelected($btnPickup, !isDelivered);
+              setSelected($btnPickup, isPickup);
             } catch (e) {}
 
-            // Persist selection for other modules
-            document.cookie = "pickupSelected=" + (isDelivered ? "false" : "true") + ";path=/";
-// Keep underlying panels sane (does not trigger postback)
-            try { ensureShippingPanelVisibility(isDelivered); } catch (e) {}
+            // Persist selection for other modules only after the customer/system has actually selected a sale type.
+            if (hasSelection) {
+              document.cookie = "pickupSelected=" + (isDelivered ? "false" : "true") + ";path=/";
+            }
+            // Keep underlying panels sane (does not trigger postback)
+            if (hasSelection) {
+              try { ensureShippingPanelVisibility(isDelivered); } catch (e) {}
+            }
 
             // IMPORTANT: on initial load we only want Step 1 (selection) visible.
             // Only on user interaction do we select the WebTrack radio + advance.
-            if (!silent) {
+            if (!silent && hasSelection) {
               // Changing ship/pickup selection resets Billing confirmation gates
               try { sessionStorage.removeItem("wl_billing_confirmed_delivered"); } catch {}
               const nextStep = isDelivered ? 3 : 2;
@@ -2433,10 +2467,10 @@ window.WLCheckout.refreshDateUI = function () {
           }
 
 
-          updateShippingStyles(
-            $("#ctl00_PageBody_SaleTypeSelector_rbDelivered").is(":checked") ? "rbDelivered" : "rbCollectLater",
-            { silent: true }
-          );
+          const initialSaleType = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered").is(":checked")
+            ? "rbDelivered"
+            : ($("#ctl00_PageBody_SaleTypeSelector_rbCollectLater").is(":checked") ? "rbCollectLater" : "");
+          updateShippingStyles(initialSaleType, { silent: true });
 
           $(document).on("click", ".modern-shipping-selector button", function () {
             updateShippingStyles($(this).data("value"));
@@ -2677,12 +2711,16 @@ window.WLCheckout.refreshDateUI = function () {
     const returnStep = consumeReturnStep();
     const saved = getStep();
 
-    // Always start on Step 1 (Delivery / Pickup selection) when Checkout loads.
-    // If this load is a postback return, the pending-step / validation logic below will jump as needed.
-    const initial = 1;
+    // Restore the step WebForms meant to return to. This keeps customers from being
+    // bounced back to Ship/Pickup after choosing a branch, copying billing, or hitting
+    // a server-side validation refresh.
+    let initial = returnStep || saved || 1;
+    initial = parseInt(initial, 10);
+    if (!Number.isFinite(initial)) initial = 1;
+    if (initial >= 5 && !isBillingSeen()) initial = 4;
+
     setStep(initial);
     showStep(initial);
-    // Apply pickup-mode visibility immediately on load
     try { updatePickupModeUI(); } catch {}
 
     if (expectedNav) {
@@ -2692,7 +2730,7 @@ window.WLCheckout.refreshDateUI = function () {
         setTimeout(tryJump, 300);
         setTimeout(tryJump, 1200);
         setTimeout(() => {
-          if (!tryJump()) showStep(returnStep || saved || 2);
+          if (!tryJump()) showStep(returnStep || saved || initial || 2);
         }, 1600);
       }
     }
