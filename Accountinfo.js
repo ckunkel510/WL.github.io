@@ -1,17 +1,26 @@
 
 /* ==========================================================
    Woodson — Account Overview (AccountInfo_R.aspx)
-   v3.5 — Cart Snapshot from ShoppingCart.aspx (only),
-          robust parsing + silent hides
+   v3.6 — Payment Methods link, tax wording,
+          modal scroll fixes + Constant Contact-ready prefs
    ========================================================== */
 (function(){
   'use strict';
   if (!/AccountInfo_R\.aspx/i.test(location.pathname)) return;
 
-  /* Optional: Google Sheet endpoints (leave blank for local only) */
+  /* Optional endpoints (leave blank for local-only fallback)
+     IMPORTANT: Constant Contact API calls should go through a secure backend route.
+     Do not put Constant Contact client secrets/tokens in this browser file.
+
+     Example Vercel/Apps Script route for COMM_PREFS_POST:
+     https://wlmarketingdashboard.vercel.app/api/constant-contact/preferences
+  */
   const SHEET_API_GET  = '';
   const SHEET_API_POST = '';
   const SHEET_REQ_POST = '';
+  const COMM_PREFS_POST = '';
+
+  const PAYMENT_METHODS_URL = 'https://webtrack.woodsonlumber.com/CustomerTokens.aspx';
 
   /* utils */
   const BRAND = { primary:'#6b0016', primaryHover:'#540011', bgSoft:'#fbf5f6', border:'#e6e6e6' };
@@ -87,12 +96,12 @@
   .wl-cart-code{font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px}
   .wl-cart-right{display:flex;align-items:center;gap:8px}
 
-  /* MODALS (same as previous) */
-  .wl-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.35);z-index:9999}
+  /* MODALS */
+  .wl-modal{position:fixed;inset:0;display:none;align-items:flex-start;justify-content:center;background:rgba(0,0,0,.35);z-index:9999;padding:16px;overflow:auto}
   .wl-modal.open{display:flex}
-  .wl-modal-card{width:min(780px,94vw);background:#fff;border-radius:12px;border:1px solid ${BRAND.border};box-shadow:0 10px 28px rgba(0,0,0,.18);overflow:hidden}
-  .wl-modal-head{background:${BRAND.primary};color:#fff;padding:12px 16px;font-weight:750}
-  .wl-modal-body{padding:16px}
+  .wl-modal-card{width:min(780px,94vw);max-height:calc(100vh - 32px);margin:auto 0;background:#fff;border-radius:12px;border:1px solid ${BRAND.border};box-shadow:0 10px 28px rgba(0,0,0,.18);overflow:hidden;display:flex;flex-direction:column}
+  .wl-modal-head{background:${BRAND.primary};color:#fff;padding:12px 16px;font-weight:750;flex:0 0 auto}
+  .wl-modal-body{padding:16px;overflow:auto;flex:1 1 auto}
   .wl-form{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:10px}
   .wl-field{grid-column:span 12}
   .wl-field.half{grid-column:span 6}
@@ -100,9 +109,10 @@
   .wl-field input[type="text"], .wl-field input[type="email"], .wl-field input[type="tel"], .wl-field select, .wl-field textarea{
     width:100%; padding:10px 12px; border:1px solid #ddd; border-radius:8px; background:#fff; font:inherit;
   }
-  .wl-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px}
+  .wl-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px;position:sticky;bottom:0;background:#fff;padding:12px 0 0;z-index:2}
   .wl-modal-actions .wl-btn{min-width:160px}
-  @media (max-width:560px){ .wl-form .half{grid-column:span 12} .wl-modal-actions{flex-wrap:wrap} .wl-modal-actions .wl-btn{flex:1 1 100%} }
+  .wl-consent{font-size:.82rem;color:#666;line-height:1.35;background:#fff;border:1px solid #eee;border-radius:8px;padding:10px}
+  @media (max-width:560px){ .wl-modal{padding:10px} .wl-modal-card{max-height:calc(100vh - 20px)} .wl-form .half{grid-column:span 12} .wl-modal-actions{flex-wrap:wrap} .wl-modal-actions .wl-btn{flex:1 1 100%} }
 
   /* Switch toggles */
   .wl-switch{display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid #ddd;border-radius:10px;padding:10px}
@@ -200,14 +210,14 @@
             <div class="wl-body">
               <div class="wl-actions" style="margin-bottom:6px">
                 <a class="wl-btn" href="AccountSettings.aspx">Edit Account Settings</a>
-                <a class="wl-btn" href="CustomerCards.aspx">Manage Stored Cards</a>
+                <a class="wl-btn" href="${PAYMENT_METHODS_URL}">Payment Methods</a>
                 <a class="wl-btn" href="AddressList_R.aspx">Addresses</a>
                 <a class="wl-btn" href="Contacts_r.aspx">Contacts</a>
-                <a class="wl-btn" href="https://woodsonwholesaleinc.formstack.com/forms/agtimber2027" target="_blank" rel="noopener">Apply Tax Exemption</a>
+                <a class="wl-btn" href="https://woodsonwholesaleinc.formstack.com/forms/agtimber2027" target="_blank" rel="noopener">Apply for Tax Exemption</a>
                 <a class="wl-btn" id="wl-comm-open" href="#">Edit Communication Preferences</a>
                 <a class="wl-btn" id="wl-req-open" href="#">Request Account Changes</a>
               </div>
-              <div class="wl-meta">Manage profile, cards, addresses, contacts, and preferences.</div>
+              <div class="wl-meta">Manage profile, payment methods, addresses, contacts, and preferences.</div>
             </div>
           </div>
 
@@ -280,7 +290,8 @@
                 <div class="wl-field half"><label for="comm_email">Email address</label><input type="email" id="comm_email" placeholder="name@example.com"></div>
                 <div class="wl-field half"><label><input type="checkbox" id="comm_sms_mkt"> SMS marketing</label></div>
                 <div class="wl-field half"><label for="comm_sms_phone">SMS phone</label><input type="tel" id="comm_sms_phone" placeholder="(###) ###-####"></div>
-                <div class="wl-field"><div class="wl-meta">We’ll remember these on this device and (optionally) in our preference store.</div></div>
+                <div class="wl-field"><div class="wl-consent">By choosing SMS marketing, the customer is requesting marketing text messages from Woodson Lumber. Message and data rates may apply. Reply STOP to opt out. Final compliance language should match the Constant Contact SMS program settings before launch.</div></div>
+                <div class="wl-field"><div class="wl-meta">Preferences save locally immediately and can also sync to Constant Contact through the configured backend endpoint.</div></div>
                 <div class="wl-modal-actions">
                   <button type="button" class="wl-btn" id="wl-comm-cancel">Cancel</button>
                   <button type="submit" class="wl-btn primary">Save Preferences</button>
@@ -392,8 +403,21 @@ if (snapshotActions) {
       const btn = $('#wl-ham-btn', container);
       const menu = $('#wl-ham-menu', container);
       if (leftNav) { $$('.rmRootGroup .rmItem a', leftNav).forEach(a=> menu.appendChild(dom(`<a role="menuitem" href="${a.href}">${a.textContent.trim()}</a>`))); }
-      else { ['Invoices_r.aspx','CreditNotes_r.aspx','OpenOrders_r.aspx','Statements_R.aspx','ProductsPurchased_R.aspx','AccountPayment_r.aspx','AccountSettings.aspx','AddressList_R.aspx','Contacts_r.aspx','ShoppingCart.aspx']
-        .forEach(h=> menu.appendChild(dom(`<a role="menuitem" href="${h}">${h.replace(/_r\.aspx|\.aspx/,'').replace(/_/g,' ')}</a>`))); }
+      else {
+        [
+          ['Invoices_r.aspx','Invoices'],
+          ['CreditNotes_r.aspx','Credit Notes'],
+          ['OpenOrders_r.aspx','Open Orders'],
+          ['Statements_R.aspx','Statements'],
+          ['ProductsPurchased_R.aspx','Products Purchased'],
+          ['AccountPayment_r.aspx','Make a Payment'],
+          ['AccountSettings.aspx','Account Settings'],
+          [PAYMENT_METHODS_URL,'Payment Methods'],
+          ['AddressList_R.aspx','Addresses'],
+          ['Contacts_r.aspx','Contacts'],
+          ['ShoppingCart.aspx','Shopping Cart']
+        ].forEach(([h,label])=> menu.appendChild(dom(`<a role="menuitem" href="${h}">${label}</a>`)));
+      }
       const toggle=(open)=>{ menu.classList.toggle('open', open); btn.setAttribute('aria-expanded', open?'true':'false'); };
       btn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); toggle(!menu.classList.contains('open')); return false; });
       document.addEventListener('click', (e)=>{ if(!menu.classList.contains('open')) return; if(!menu.contains(e.target) && e.target!==btn){ toggle(false); } });
@@ -445,12 +469,41 @@ if (snapshotActions) {
       }
     })();
 
+    /* Normalize account/payment links copied from legacy navigation */
+    (function normalizePaymentLinks(){
+      $$('a', container).forEach(a=>{
+        const label = (a.textContent || '').trim();
+        const url = a.getAttribute('href') || '';
+        if (/CustomerCards\.aspx/i.test(url) || /customer\s*cards/i.test(label) || /stored\s*cards/i.test(label)) {
+          a.setAttribute('href', PAYMENT_METHODS_URL);
+          a.textContent = 'Payment Methods';
+        }
+        if (/Apply\s+Tax\s+Exemption/i.test(label)) {
+          a.textContent = 'Apply for Tax Exemption';
+        }
+      });
+    })();
+
     /* COMM PREFS storage */
     const COMM_KEY = (k)=> `wl_comm_prefs_v3_${k}`;
     function getLocalPrefs(){ try { return JSON.parse(localStorage.getItem(COMM_KEY(accountKey))||'{}'); } catch { return {}; } }
     function setLocalPrefs(v){ try { localStorage.setItem(COMM_KEY(accountKey), JSON.stringify(v)); } catch {} }
     async function fetchRemotePrefs(){ if (!SHEET_API_GET) return null; try{ const u=new URL(SHEET_API_GET); u.searchParams.set('accountKey',accountKey); const r=await fetch(u.toString(),{credentials:'omit'}); if(!r.ok) return null; return await r.json(); }catch{ return null; } }
     async function postRemotePrefs(v){ if (!SHEET_API_POST) return false; try{ const r=await fetch(SHEET_API_POST,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)}); return r.ok; }catch{ return false; } }
+    async function postCommunicationPrefs(v){
+      if (COMM_PREFS_POST) {
+        try {
+          const r = await fetch(COMM_PREFS_POST, {
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            credentials:'omit',
+            body:JSON.stringify(v)
+          });
+          return r.ok;
+        } catch { return false; }
+      }
+      return postRemotePrefs(v);
+    }
 
     (function commModal(){
       const openBtn = $('#wl-comm-open', container);
@@ -477,17 +530,23 @@ if (snapshotActions) {
         if (wantsSMS) { const p=digits($('#comm_sms_phone').value); if (p.length<7) { alert('Please enter a valid phone number for SMS.'); $('#comm_sms_phone').focus(); return; } $('#comm_sms_phone').value=p; }
         const payload = {
           accountKey,
+          source: 'AccountInfo_R.aspx',
           email: ($('#comm_email').value||'').trim(),
           emailMarketing: $('#comm_email_mkt').checked,
           emailBilling: $('#comm_email_billing').checked,
           emailDelivery: $('#comm_email_delivery').checked,
           smsMarketing: $('#comm_sms_mkt').checked,
           smsPhone: digits($('#comm_sms_phone').value||''),
+          constantContact: {
+            emailListIntent: $('#comm_email_mkt').checked ? 'subscribe' : 'unsubscribe_or_no_change',
+            smsListIntent: $('#comm_sms_mkt').checked ? 'subscribe' : 'unsubscribe_or_no_change'
+          },
           updatedAt: new Date().toISOString()
         };
         setLocalPrefs(payload);
-        if (SHEET_API_POST) await postRemotePrefs(payload);
-        closeModal('#wl-comm-modal'); alert('Your communication preferences have been saved.');
+        const remoteSaved = await postCommunicationPrefs(payload);
+        closeModal('#wl-comm-modal');
+        alert(remoteSaved ? 'Your communication preferences have been saved.' : 'Your communication preferences have been saved on this device.');
       });
     })();
 
