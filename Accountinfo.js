@@ -18,7 +18,7 @@
   const SHEET_API_GET  = '';
   const SHEET_API_POST = '';
   const SHEET_REQ_POST = '';
-  const COMM_PREFS_POST = 'https://script.google.com/macros/s/AKfycbzmUdU2XZ0JGNEzorkbifFLdvnYQxHl6pUFbsJzi29dg_3jFbBLD9zkixZiwSNiUPRJvQ/exec';
+  const COMM_PREFS_POST = 'https://script.google.com/macros/s/AKfycbzmUdU2XZ0JGNEzorkbifFLdvnYQxHl6pUFbsJzi29dg_3jFbBLD9zkixZiwSNiUPRJvQ/exec?action=savePreferences';
 
   const PAYMENT_METHODS_URL = 'https://webtrack.woodsonlumber.com/CustomerTokens.aspx';
 
