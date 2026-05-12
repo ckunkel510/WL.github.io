@@ -4748,8 +4748,16 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
       try{
         // Common selectors for "Checks on File" dropdown. Re-resolve every time because
         // WebForms partial postbacks can replace the original select element.
+        // Prefer the known containers first because their inner controls can be replaced by MS AJAX.
+        const liveC1 = document.getElementById('ctl00_PageBody_ChecksOnFileContainer');
+        const liveC2 = document.getElementById('ctl00_PageBody_ChecksOnFileContainer1');
         const sel =
-          document.querySelector('select[id*="ChecksOnFile"], select[id*="CheckOnFile"], select[name*="ChecksOnFile"], select[name*="CheckOnFile"]') ||
+          (liveC1?.querySelector?.('select') || liveC2?.querySelector?.('select') || null) ||
+          document.getElementById('ctl00_PageBody_ChecksOnFileDropDownList') ||
+          document.getElementById('ctl00_PageBody_CheckOnFileDropDownList') ||
+          document.getElementById('ctl00_PageBody_ChecksOnFileList') ||
+          document.getElementById('ctl00_PageBody_CheckOnFileList') ||
+          document.querySelector('select[id*="ChecksOnFile"], select[id*="CheckOnFile"], select[name*="ChecksOnFile"], select[name*="CheckOnFile"], select[id*="SavedBank"], select[name*="SavedBank"], select[id*="SavedACH"], select[name*="SavedACH"], select[id*="ECheck"], select[name*="ECheck"]') ||
           (typeof cofSel !== 'undefined' ? cofSel : null);
         return sel || null;
       }catch(e){ return null; }
@@ -4950,13 +4958,20 @@ function reconcileNativeFromState(){
       if (sel && st.bank?.value && sel.value !== st.bank.value){
         sel.value = st.bank.value;
       }
-    } else {
+    } else if (st.bank?.mode === 'new'){
+      // Only force/clear saved ACH when the customer explicitly chose Add new.
       if (rbCheck) rbCheck.checked = true;
       if (rbCof) rbCof.checked = false;
       try{
         const sel = getCofSel();
         if (sel) clearSelectToPlaceholder(sel, false);
       }catch(e){}
+    } else {
+      // Bank method has been opened, but the customer has not chosen Add New or a saved account yet.
+      // Do NOT switch back to PayByCheck and do NOT clear the Check-on-File select here. The server
+      // may still be loading saved methods after PayByCheckOnFile was clicked.
+      if (rbCred) rbCred.checked = false;
+      if (rbCardOnFile) rbCardOnFile.checked = false;
     }
   }catch(e){}
 }
@@ -5169,13 +5184,18 @@ function renderPayCards(){
         if (st.method === 'bank' && st.bank?.mode === 'saved') return 'bank_saved';
         if (st.method === 'bank' && st.bank?.mode === 'new') return 'bank_new';
 
+        // The customer clicked the top-level Bank card but has not chosen Add New or a saved account.
+        // Keep second-level options visible without making Add New appear selected.
+        if (st.method === 'bank' && !(st.__pickedAccount || st.bank?.__pickedAccount)) return 'bank_pending';
+
         // Fallback inference (no saved state)
-        const hasCofSelection = !!(cofSel && cofSel.value && cofSel.value !== '-1');
+        const freshCofSel = getCofSel();
+        const hasCofSelection = !!(freshCofSel && freshCofSel.value && freshCofSel.value !== '-1');
         // If "Add new" is selected (PayByCheck), treat as NEW regardless of COF select retaining a value
         if (rbCheck?.checked) return 'bank_new';
         if (rbCof?.checked || hasCofSelection) return 'bank_saved';
 
-        return 'bank_new';
+        return 'bank_pending';
       }
 
       const mode = currentMode2();
@@ -5260,7 +5280,7 @@ const selectedCofVal = (freshCofSelForMode && freshCofSelForMode.value) ? String
         `;
       }).join('');
       const bankLoadingCard = (userPicked2 && !bankOpts.length && rbCof)
-        ? `<div class="wl-pay-card is-disabled" aria-disabled="true"><div class="wl-pay-title">Loading stored bank accounts…</div><div class="wl-pay-sub">Choose Add new if you do not want to use a saved account.</div></div>`
+        ? `<button type="button" class="wl-pay-card wl-bank-card" data-bank="load_saved"><div class="wl-pay-title">Loading stored bank accounts…</div><div class="wl-pay-sub">Still loading? Click here to retry loading saved accounts, or choose Add new.</div></button>`
         : '';
 
       const bankAddNewSelected = (userPicked && stBank && stBank.__pickedAccount && mode === 'bank_new');
@@ -5490,6 +5510,23 @@ bankMount.onclick = (e)=>{
     }, 80);
   };
 
+  if (kind === 'load_saved'){
+    const st = loadPayState() || {};
+    st.__userPicked = true;
+    st.method = 'bank';
+    st.bank = st.bank || {};
+    delete st.bank.mode;
+    delete st.bank.value;
+    delete st.bank.text;
+    delete st.bank.__pickedAccount;
+    delete st.__pickedAccount;
+    savePayState(st);
+    try{ window.WLPayMode?.ensureCheckOnFileUI?.(); }catch(e){}
+    try{ clickWebFormsRadio($('ctl00_PageBody_RadioButton_PayByCheckOnFile') || rbCof); }catch(e){}
+    setTimeout(()=>{ try{ reconcileNativeFromState(); }catch(e){} try{ renderPayCards(); }catch(e){} try{ renderSummary(); }catch(e){} }, 300);
+    return;
+  }
+
   if (kind === 'new'){
     const st = loadPayState() || {};
     st.__userPicked = true;
@@ -5656,6 +5693,17 @@ function setStep(n){
           alert('Enter a payment amount (or use statement/jobs/invoices to fill it).');
           return false;
         }
+      }
+      if (step === 2){
+        try{
+          const st = loadPayState() || {};
+          const pickedBank = st.method === 'bank' && (st.__pickedAccount || st.bank?.__pickedAccount) && (st.bank?.mode === 'new' || (st.bank?.mode === 'saved' && st.bank?.value));
+          const pickedCard = (st.method === 'card' || st.method === 'credit') && (st.__pickedAccount || st.card?.__pickedAccount) && (st.card?.mode === 'new' || (st.card?.mode === 'saved' && st.card?.value));
+          if (!pickedBank && !pickedCard){
+            alert('Choose Add new bank account or select a saved payment method before continuing.');
+            return false;
+          }
+        }catch(e){}
       }
       return true;
     }
