@@ -1,7 +1,7 @@
 
 (function () {
   'use strict';
-  console.log('[AP] PayByInvoice version v35 loaded');
+  console.log('[AP] PayByInvoice version v35.2 loaded');
 
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
@@ -5228,12 +5228,19 @@ function renderPayCards(){
       const accountAlreadyPicked = !!(stBank?.__pickedAccount || stBank?.bank?.__pickedAccount);
       if (userPicked2 && !isCardMode && !explicitlyNewBank && !accountAlreadyPicked && (!bankOpts.length) && rbCof && !rbCof.checked){
         try{
-          // Switch to COF only when the user has not explicitly picked New.
+          // Load the Check-on-File dropdown so saved bank choices can be rendered,
+          // but do NOT save mode:'saved' yet. The customer has only chosen the
+          // Bank method, not a specific stored account.
           clickWebFormsRadio(rbCof);
           const st = loadPayState() || {};
+          st.__userPicked = true;
           st.method = 'bank';
           st.bank = st.bank || {};
-          st.bank.mode = 'saved';
+          delete st.bank.mode;
+          delete st.bank.value;
+          delete st.bank.text;
+          delete st.bank.__pickedAccount;
+          delete st.__pickedAccount;
           savePayState(st);
         }catch(e){}
       }
@@ -5252,6 +5259,9 @@ const selectedCofVal = (freshCofSelForMode && freshCofSelForMode.value) ? String
           </button>
         `;
       }).join('');
+      const bankLoadingCard = (userPicked2 && !bankOpts.length && rbCof)
+        ? `<div class="wl-pay-card is-disabled" aria-disabled="true"><div class="wl-pay-title">Loading stored bank accounts…</div><div class="wl-pay-sub">Choose Add new if you do not want to use a saved account.</div></div>`
+        : '';
 
       const bankAddNewSelected = (userPicked && stBank && stBank.__pickedAccount && mode === 'bank_new');
       bankMount.innerHTML = `
@@ -5260,7 +5270,7 @@ const selectedCofVal = (freshCofSelForMode && freshCofSelForMode.value) ? String
           <div class="wl-pay-title">Add new bank account</div>
           <div class="wl-pay-sub">Enter bank details (ACH).</div>
         </button>
-        ${bankSavedCards || ''}
+        ${bankSavedCards || bankLoadingCard || ''}
       `;
 
       // ----- CARD second level (only shown when card selected) -----
@@ -5386,18 +5396,32 @@ try{
             else if (isRadioAvailable(rbCardOnFile)) clickWebFormsRadio(rbCardOnFile);
           }catch(e){}
         } else {
-          // Bank is the default
+          // Bank is the default. IMPORTANT: choosing the top-level Bank method
+          // should NOT immediately lock the customer into "Add new" or "Saved".
+          // It should reveal both second-level choices. If saved accounts have not
+          // loaded yet, we briefly ask WebForms for the Check-on-File UI, but we do
+          // not mark a saved account as selected until the customer clicks one.
           const st = loadPayState() || {};
-          const preferSaved = !!(st?.bank?.mode === 'saved' && st?.bank?.value);
-          savePayState({ __userPicked:true, method:'bank', bank: preferSaved ? st.bank : { mode:'new' } });
+          const accountAlreadyPicked = !!(st?.__pickedAccount || st?.bank?.__pickedAccount);
+          const keepBank = accountAlreadyPicked ? (st.bank || {}) : {};
+          const nextState = { __userPicked:true, method:'bank', bank: keepBank };
+          if (accountAlreadyPicked) nextState.__pickedAccount = true;
+          savePayState(nextState);
 
           
     try{ markPickedThisRun(); }catch(e){}
 try{
-            if (preferSaved) clickWebFormsRadio(rbCof);
-            else clickWebFormsRadio(rbCheck);
-          }catch(e){}
-          ensureCofVisible();
+            const liveCofSel = getCofSel();
+            const hasSavedOptions = !!(liveCofSel && Array.from(liveCofSel.options || []).some(o=>{
+              const v = String(o.value || '').trim();
+              const t = String(o.text || '').trim();
+              return v && v !== '-1' && t && !/select/i.test(t);
+            }));
+            if (accountAlreadyPicked && keepBank?.mode === 'saved') clickWebFormsRadio(rbCof);
+            else if (accountAlreadyPicked && keepBank?.mode === 'new') clickWebFormsRadio(rbCheck);
+            else if (!hasSavedOptions && rbCof) clickWebFormsRadio(rbCof); // load saved-account list only
+            else ensureCofVisible();
+          }catch(e){ try{ ensureCofVisible(); }catch(_){} }
         }
 
         setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 80);
