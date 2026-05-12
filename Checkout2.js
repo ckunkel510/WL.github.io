@@ -635,6 +635,302 @@
       if (box) box.remove();
     }
 
+
+    // -------------------------------------------------------------------------
+    // Guided checkout validation + persistence helpers
+    // -------------------------------------------------------------------------
+    const WL_CHECKOUT_SNAPSHOT_KEY = "wl_checkout_form_snapshot_v2";
+    const WL_REQUIRED_CLASS = "wl-field-invalid";
+
+    const WL_FIELD_LABELS = {
+      "ContactFirstNameTextBox": "First name",
+      "ContactLastNameTextBox": "Last name",
+      "ContactTelephoneTextBox": "Phone",
+      "EmailAddressTextBox": "Email",
+      "AddressLine1": "Street address",
+      "City": "City",
+      "Postcode": "ZIP",
+      "CountySelector_CountyList": "State",
+      "CountrySelector": "Country",
+      "CountrySelector1": "Country"
+    };
+
+    function wlDigits(v) { return String(v || "").replace(/[^\d]/g, ""); }
+
+    function wlIsPlaceholderText(t) {
+      const x = String(t || "").trim().toLowerCase();
+      return !x || x === "0" || x === "00" || x === "select" || x === "[select]" || /select\s+(state|county|country|province)/i.test(x) || /^\[?select/i.test(x);
+    }
+
+    function wlSelectedText(selectEl) {
+      if (!selectEl) return "";
+      const opt = selectEl.selectedOptions && selectEl.selectedOptions[0] ? selectEl.selectedOptions[0] : null;
+      return String((opt && (opt.text || opt.textContent)) || "").trim();
+    }
+
+    function wlSelectIsValid(selectEl) {
+      if (!selectEl) return false;
+      const v = String(selectEl.value || "").trim();
+      const t = wlSelectedText(selectEl);
+      return !!v && v !== "0" && v !== "00" && !wlIsPlaceholderText(t || v);
+    }
+
+    function wlNormalizeZipValue(raw) {
+      const original = String(raw || "").trim();
+      const d = wlDigits(original);
+      if (d.length === 5) return d;
+      if (d.length === 9) return d.slice(0, 5) + "-" + d.slice(5);
+      return original;
+    }
+
+    function wlNormalizePhoneValue(raw) {
+      const d = wlDigits(raw);
+      if (d.length === 10) return `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`;
+      if (d.length === 11 && d[0] === "1") return `(${d.slice(1,4)}) ${d.slice(4,7)}-${d.slice(7)}`;
+      return String(raw || "").trim();
+    }
+
+    function wlSetPlainValue(el, value) {
+      if (!el) return;
+      try { el.value = value; } catch {}
+    }
+
+    function wlNormalizeFieldValues(prefix) {
+      try {
+        const zip = document.getElementById(`ctl00_PageBody_${prefix}_Postcode`);
+        if (zip && zip.value) zip.value = wlNormalizeZipValue(zip.value);
+      } catch {}
+      try {
+        const phone = document.getElementById(`ctl00_PageBody_${prefix}_ContactTelephoneTextBox`) ||
+          (prefix === "InvoiceAddress" ? document.getElementById("ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox") : null);
+        if (phone && phone.value) phone.value = wlNormalizePhoneValue(phone.value);
+      } catch {}
+      try {
+        const country = document.getElementById(`ctl00_PageBody_${prefix}_CountrySelector${prefix === "InvoiceAddress" ? "1" : ""}`);
+        if (country && (!String(country.value || "").trim() || String(country.value || "").trim() === "00" || wlIsPlaceholderText(wlSelectedText(country)))) {
+          country.value = "USA";
+        }
+      } catch {}
+    }
+
+    function wlFieldLabel(el, fallback) {
+      if (!el) return fallback || "Required field";
+      const id = el.id || "";
+      for (const key in WL_FIELD_LABELS) {
+        if (id.indexOf(key) >= 0) return WL_FIELD_LABELS[key];
+      }
+      try {
+        const label = el.closest(".epi-form-group-checkout,.epi-form-group,div")?.querySelector("label");
+        if (label && String(label.textContent || "").trim()) return String(label.textContent || "").replace(/[:*]/g, "").trim();
+      } catch {}
+      return fallback || "Required field";
+    }
+
+    function wlClearFieldInvalid(root) {
+      try {
+        (root || document).querySelectorAll("." + WL_REQUIRED_CLASS).forEach((el) => el.classList.remove(WL_REQUIRED_CLASS));
+        (root || document).querySelectorAll(".wl-field-msg").forEach((el) => el.remove());
+      } catch {}
+    }
+
+    function wlMarkFieldInvalid(el, label) {
+      if (!el) return;
+      try { el.classList.add(WL_REQUIRED_CLASS); } catch {}
+      try {
+        const host = el.closest(".epi-form-group-checkout,.epi-form-group,.form-group") || el.parentElement;
+        if (host && !host.querySelector(".wl-field-msg")) {
+          const msg = document.createElement("div");
+          msg.className = "wl-field-msg";
+          msg.textContent = label || "Please complete this field.";
+          host.appendChild(msg);
+        }
+      } catch {}
+    }
+
+    function wlOpenAddressEditor(prefix) {
+      try {
+        if (prefix === "DeliveryAddress" && window.WLCheckout?.showDeliveryEditor) window.WLCheckout.showDeliveryEditor();
+        if (prefix === "InvoiceAddress" && window.WLCheckout?.showInvoiceEditor) window.WLCheckout.showInvoiceEditor();
+      } catch {}
+    }
+
+    function wlAddressValidation(prefix, requireEmail, opts) {
+      opts = opts || {};
+      const mark = !!opts.mark;
+      wlNormalizeFieldValues(prefix);
+
+      const scope = document.querySelector(`.checkout-step[data-step="${prefix === "DeliveryAddress" ? 3 : 4}"]`) || document;
+      if (mark) wlClearFieldInvalid(scope);
+
+      const line1 = document.getElementById(`ctl00_PageBody_${prefix}_AddressLine1`);
+      const city  = document.getElementById(`ctl00_PageBody_${prefix}_City`);
+      const zip   = document.getElementById(`ctl00_PageBody_${prefix}_Postcode`);
+      const state = document.getElementById(`ctl00_PageBody_${prefix}_CountySelector_CountyList`);
+      const country = document.getElementById(`ctl00_PageBody_${prefix}_CountrySelector${prefix === "InvoiceAddress" ? "1" : ""}`);
+      const first = document.getElementById(`ctl00_PageBody_${prefix}_ContactFirstNameTextBox`);
+      const last = document.getElementById(`ctl00_PageBody_${prefix}_ContactLastNameTextBox`);
+      const phone = document.getElementById(`ctl00_PageBody_${prefix}_ContactTelephoneTextBox`);
+      const email = prefix === "InvoiceAddress" ? document.getElementById("ctl00_PageBody_InvoiceAddress_EmailAddressTextBox") : null;
+      const phoneFallback = (!phone && prefix === "InvoiceAddress") ? document.getElementById("ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox") : null;
+
+      const missing = [];
+      const add = (el, label) => {
+        missing.push({ el, label });
+        if (mark) wlMarkFieldInvalid(el, label);
+      };
+      const val = (el) => (el && typeof el.value !== "undefined" ? String(el.value).trim() : "");
+
+      // Contact fields are only required if present in this build. This avoids blocking older WebTrack layouts.
+      if (first && !val(first)) add(first, "First name");
+      if (last && !val(last)) add(last, "Last name");
+
+      if (!val(line1)) add(line1, "Street address");
+      if (!val(city)) add(city, "City");
+      if (state && !wlSelectIsValid(state)) add(state, "State");
+
+      const z = val(zip);
+      if (!/^\d{5}(-\d{4})?$/.test(z)) add(zip, "ZIP must be 5 digits or ZIP+4");
+
+      const pval = val(phone) || val(phoneFallback);
+      if (phone || phoneFallback) {
+        if (wlDigits(pval).length < 10) add(phone || phoneFallback, "Phone number");
+      }
+
+      if (requireEmail && email) {
+        const e = val(email).replace(/^\([^)]*\)\s*/, "");
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) add(email, "Valid email address");
+      }
+
+      if (country && (!String(country.value || "").trim() || String(country.value || "").trim() === "00" || wlIsPlaceholderText(wlSelectedText(country)))) {
+        country.value = "USA";
+      }
+
+      return { valid: missing.length === 0, missing };
+    }
+
+    function wlAddressBlockIsValid(prefix, requireEmail) {
+      return wlAddressValidation(prefix, requireEmail, { mark: false }).valid;
+    }
+
+    function wlShowAddressError(prefix, stepNum, requireEmail) {
+      const result = wlAddressValidation(prefix, requireEmail, { mark: true });
+      if (result.valid) {
+        clearInlineError(stepNum);
+        return true;
+      }
+
+      wlOpenAddressEditor(prefix);
+      const labels = result.missing.map((m) => m.label).filter(Boolean);
+      showInlineError(stepNum,
+        `<strong>Please fix the highlighted fields below.</strong><br>` +
+        `<span>${labels.join(", ")}</span>`
+      );
+
+      try {
+        const first = result.missing.find((m) => m.el)?.el;
+        if (first) {
+          first.scrollIntoView({ behavior: "smooth", block: "center" });
+          setTimeout(() => { try { first.focus(); } catch {} }, 150);
+        }
+      } catch {}
+      return false;
+    }
+
+    function wlSnapshotValue(id) {
+      const el = document.getElementById(id);
+      if (!el) return null;
+      if (el.type === "radio") return el.checked ? el.value || "1" : null;
+      return String(el.value || "");
+    }
+
+    function wlSaveCheckoutSnapshot() {
+      try {
+        const ids = [
+          "ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox",
+          "ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox",
+          "ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox",
+          "ctl00_PageBody_DeliveryAddress_AddressLine1",
+          "ctl00_PageBody_DeliveryAddress_AddressLine2",
+          "ctl00_PageBody_DeliveryAddress_AddressLine3",
+          "ctl00_PageBody_DeliveryAddress_City",
+          "ctl00_PageBody_DeliveryAddress_Postcode",
+          "ctl00_PageBody_DeliveryAddress_CountrySelector",
+          "ctl00_PageBody_DeliveryAddress_CountySelector_CountyList",
+          "ctl00_PageBody_InvoiceAddress_ContactFirstNameTextBox",
+          "ctl00_PageBody_InvoiceAddress_ContactLastNameTextBox",
+          "ctl00_PageBody_InvoiceAddress_ContactTelephoneTextBox",
+          "ctl00_PageBody_InvoiceAddress_EmailAddressTextBox",
+          "ctl00_PageBody_InvoiceAddress_AddressLine1",
+          "ctl00_PageBody_InvoiceAddress_AddressLine2",
+          "ctl00_PageBody_InvoiceAddress_AddressLine3",
+          "ctl00_PageBody_InvoiceAddress_City",
+          "ctl00_PageBody_InvoiceAddress_Postcode",
+          "ctl00_PageBody_InvoiceAddress_CountrySelector1",
+          "ctl00_PageBody_InvoiceAddress_CountySelector_CountyList",
+          "ctl00_PageBody_PurchaseOrderNumberTextBox",
+          "ctl00_PageBody_SpecialInstructionsTextBox"
+        ];
+        const data = { ts: Date.now(), fields: {} };
+        ids.forEach((id) => {
+          const v = wlSnapshotValue(id);
+          if (v !== null) data.fields[id] = v;
+        });
+        sessionStorage.setItem(WL_CHECKOUT_SNAPSHOT_KEY, JSON.stringify(data));
+      } catch {}
+    }
+
+    function wlRestoreCheckoutSnapshot() {
+      try {
+        const raw = sessionStorage.getItem(WL_CHECKOUT_SNAPSHOT_KEY);
+        if (!raw) return;
+        const data = JSON.parse(raw);
+        if (!data || !data.fields || (Date.now() - (data.ts || 0)) > (60 * 60 * 1000)) return;
+        Object.keys(data.fields).forEach((id) => {
+          const el = document.getElementById(id);
+          if (!el) return;
+          const current = String(el.value || "").trim();
+          const stored = String(data.fields[id] || "");
+          if (!stored) return;
+          if (el.tagName === "SELECT") {
+            if (!current || current === "0" || current === "00" || wlIsPlaceholderText(wlSelectedText(el))) el.value = stored;
+          } else if (!current) {
+            el.value = stored;
+          }
+        });
+      } catch {}
+    }
+
+    function wlInstallSnapshotListeners() {
+      try {
+        document.addEventListener("input", function (ev) {
+          const id = ev.target && ev.target.id ? ev.target.id : "";
+          if (/PageBody_(DeliveryAddress|InvoiceAddress|PurchaseOrderNumberTextBox|SpecialInstructionsTextBox)/.test(id)) {
+            try { ev.target.classList.remove(WL_REQUIRED_CLASS); } catch {}
+            try { ev.target.closest(".epi-form-group-checkout,.epi-form-group,.form-group")?.querySelector(".wl-field-msg")?.remove(); } catch {}
+            wlSaveCheckoutSnapshot();
+          }
+        }, true);
+        document.addEventListener("change", function (ev) {
+          const id = ev.target && ev.target.id ? ev.target.id : "";
+          if (/PageBody_(DeliveryAddress|InvoiceAddress|PurchaseOrderNumberTextBox|SpecialInstructionsTextBox)/.test(id)) {
+            try { ev.target.classList.remove(WL_REQUIRED_CLASS); } catch {}
+            try { ev.target.closest(".epi-form-group-checkout,.epi-form-group,.form-group")?.querySelector(".wl-field-msg")?.remove(); } catch {}
+            wlSaveCheckoutSnapshot();
+          }
+        }, true);
+      } catch {}
+    }
+
+    try {
+      window.WLCheckout = window.WLCheckout || {};
+      window.WLCheckout.addressBlockIsValid = wlAddressBlockIsValid;
+      window.WLCheckout.saveCheckoutSnapshot = wlSaveCheckoutSnapshot;
+      window.WLCheckout.restoreCheckoutSnapshot = wlRestoreCheckoutSnapshot;
+    } catch {}
+
+    wlRestoreCheckoutSnapshot();
+    wlInstallSnapshotListeners();
+
     
     // Hide legacy/native checkout fields we do not want customers to see (they can re-appear after UpdatePanel postbacks)
     function hideLegacyCheckoutFields() {
@@ -660,12 +956,11 @@
     }
 
 function validateZip(zip) {
-      const z = norm(zip).replace(/\s/g, "");
+      const z = wlNormalizeZipValue(zip);
       return /^\d{5}(-\d{4})?$/.test(z);
     }
     function validatePhone(phone) {
-      const p = norm(phone).replace(/[^\d]/g, "");
-      return p.length >= 10;
+      return wlDigits(phone).length >= 10;
     }
     function validateEmail(email) {
       const e = norm(email).replace(/^\([^)]*\)\s*/, "");
@@ -673,84 +968,7 @@ function validateZip(zip) {
     }
 
     function validateAddressBlock(prefix, stepNum, requireEmail) {
-      // prefix: "DeliveryAddress" or "InvoiceAddress"
-      const line1 = document.getElementById(`ctl00_PageBody_${prefix}_AddressLine1`);
-      const city  = document.getElementById(`ctl00_PageBody_${prefix}_City`);
-      const zip   = document.getElementById(`ctl00_PageBody_${prefix}_Postcode`);
-      const state = document.getElementById(`ctl00_PageBody_${prefix}_CountySelector_CountyList`);
-      const country = document.getElementById(`ctl00_PageBody_${prefix}_CountrySelector${prefix==="InvoiceAddress" ? "1" : ""}`);
-      const phone = document.getElementById(`ctl00_PageBody_${prefix}_ContactTelephoneTextBox`);
-      const email = prefix==="InvoiceAddress" ? document.getElementById("ctl00_PageBody_InvoiceAddress_EmailAddressTextBox") : null;
-
-      // Some WebTrack builds don’t have a Billing/Invoice phone field.
-      // In those cases, validate (and later submit) the Delivery phone field instead.
-      const phoneFallback = (!phone && prefix==="InvoiceAddress")
-        ? document.getElementById("ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox")
-        : null;
-
-      const isVisible = (el) => {
-        if (!el) return false;
-        const cs = window.getComputedStyle(el);
-        if (cs.display === "none" || cs.visibility === "hidden") return false;
-        // offsetParent is null for display:none; keep fallback for fixed/absolute
-        return el.offsetParent !== null || cs.position === "fixed";
-      };
-
-      const val = (el) => (el && typeof el.value !== "undefined" ? String(el.value).trim() : "");
-
-      const missing = [];
-
-      if (!val(line1)) missing.push("Street address");
-      if (!val(city)) missing.push("City");
-
-      // State can be "selected" even if the underlying value is blank in some themed dropdowns.
-      let stateOk = false;
-      if (state) {
-        const v = val(state);
-        if (v && v !== "0") stateOk = true;
-        else if (state.selectedIndex != null && state.selectedIndex > 0) {
-          const t = state.selectedOptions && state.selectedOptions[0] ? String(state.selectedOptions[0].text || "").trim() : "";
-          if (t && !/^select/i.test(t)) stateOk = true;
-        }
-      }
-      if (!stateOk) missing.push("State");
-
-      if (!validateZip(val(zip))) missing.push("ZIP");
-
-      // Phone: prefer a visible phone input; otherwise accept fallback if it has digits
-      let phoneVal = "";
-      if (phone && (isVisible(phone) || val(phone))) phoneVal = val(phone);
-      else if (phoneFallback) phoneVal = val(phoneFallback);
-
-      if (!validatePhone(phoneVal)) missing.push("Phone");
-
-      // Email: only enforce if the field exists and is visible OR has a value.
-      if (requireEmail && email) {
-        const emailVal = val(email);
-        if ((isVisible(email) || emailVal) && !validateEmail(emailVal)) {
-          missing.push("Email");
-        }
-      }
-
-      // Default country quietly
-      if (country) {
-        const cv = val(country);
-        if (!cv || cv === "00") {
-          try { country.value = "USA"; } catch {}
-          try { country.dispatchEvent(new Event("change", { bubbles: true })); } catch {}
-        }
-      }
-
-      if (missing.length) {
-        showInlineError(stepNum,
-          `<strong>We just need a bit more info.</strong><br>` +
-          `Please enter: <em>${missing.join(", ")}</em>.`
-        );
-        return false;
-      }
-
-      clearInlineError(stepNum);
-      return true;
+      return wlShowAddressError(prefix, stepNum, requireEmail);
     }
 
     function syncBillingToDelivery(opts) {
@@ -995,7 +1213,9 @@ const navDiv = document.createElement("div");
           proxy.addEventListener("click", function () {
             // Clear any sticky inline errors on Step 5 before submitting
             try { clearInlineError(5); } catch {}
-            const ok = (typeof validateStep === "function") ? validateStep(5) : true;
+            const ok = (window.WLCheckout && typeof window.WLCheckout.validateBeforeFinalSubmit === "function")
+              ? window.WLCheckout.validateBeforeFinalSubmit()
+              : ((typeof validateStep === "function") ? validateStep(5) : true);
             if (!ok) return;
 
             // Trigger native submit/postback
@@ -1310,7 +1530,7 @@ document.addEventListener("click", function (ev) {
             showInlineError(2, "<strong>Please select a store/branch</strong> so we can route your pickup order.");
             return false;
           }
-          clearInlineError(3);
+          clearInlineError(2);
           // Remember for next time
           try { if (field && norm(field.value)) localStorage.setItem("wl_last_branch", norm(field.value)); } catch {}
           return true;
@@ -1358,6 +1578,13 @@ document.addEventListener("click", function (ev) {
           try { ensureDeliveryRequiredForPickup(); } catch { try { syncBillingToDelivery({force:false}); } catch {} }
           // Also, if Delivery Address step is hidden (pickup), make sure required server fields are not blank.
           clearInlineError(2);
+        }
+        return true;
+      }
+
+      if (stepNum === 5) {
+        if (window.WLCheckout && typeof window.WLCheckout.validateDateInstructions === "function") {
+          return window.WLCheckout.validateDateInstructions(true);
         }
         return true;
       }
@@ -1418,22 +1645,24 @@ document.addEventListener("click", function (ev) {
     bindReturnStepFor("#ctl00_PageBody_BranchSelector input", 2, "change");
 
     // -------------------------------------------------------------------------
-    // G) Delivery summary/edit (Step 5)
+    // G) Delivery summary/edit (Step 3)
+    // Only collapse into summary mode after the address is actually valid.
     // -------------------------------------------------------------------------
     (function () {
-      const pane4 = wizard.querySelector('.checkout-step[data-step="3"]');
-      if (!pane4) return;
+      const pane3 = wizard.querySelector('.checkout-step[data-step="3"]');
+      if (!pane3) return;
 
-      const col = pane4.querySelector(".epi-form-col-single-checkout");
+      const col = pane3.querySelector(".epi-form-col-single-checkout");
       if (!col) return;
 
       const wrap = document.createElement("div");
       const sum = document.createElement("div");
       wrap.className = "delivery-inputs";
-      sum.className = "delivery-summary";
+      sum.className = "delivery-summary wl-address-summary";
 
       while (col.firstChild) wrap.appendChild(col.firstChild);
       col.appendChild(wrap);
+      col.insertBefore(sum, wrap);
 
       function safeVal(sel) {
         const el = wrap.querySelector(sel);
@@ -1441,55 +1670,51 @@ document.addEventListener("click", function (ev) {
       }
       function safeTextSelected(sel) {
         const el = wrap.querySelector(sel);
-        if (!el || !el.selectedOptions || !el.selectedOptions[0]) return "";
-        return el.selectedOptions[0].text || "";
+        const text = el && el.selectedOptions && el.selectedOptions[0] ? el.selectedOptions[0].text || "" : "";
+        return wlIsPlaceholderText(text) ? "" : text;
       }
 
       function upd() {
+        wlNormalizeFieldValues("DeliveryAddress");
         const a1 = safeVal("#ctl00_PageBody_DeliveryAddress_AddressLine1").trim();
         const a2 = safeVal("#ctl00_PageBody_DeliveryAddress_AddressLine2").trim();
         const c = safeVal("#ctl00_PageBody_DeliveryAddress_City").trim();
         const s = safeTextSelected("#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList").trim();
         const z = safeVal("#ctl00_PageBody_DeliveryAddress_Postcode").trim();
+        const phone = (wrap.querySelector("#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox")?.value || "").trim();
 
         sum.innerHTML = `<strong>Delivery Address</strong><br>
           ${a1}${a2 ? "<br>" + a2 : ""}<br>
           ${c}${c && (s || z) ? ", " : ""}${s} ${z}<br>
-          <button type="button" id="editDelivery" class="btn btn-link">Edit</button>`;
+          ${phone ? "Phone: " + phone + "<br>" : ""}
+          <button type="button" id="editDelivery" class="btn btn-link">Edit delivery address</button>`;
       }
 
-      col.insertBefore(sum, wrap);
+      function showInputs() {
+        sum.style.display = "none";
+        wrap.style.display = "";
+      }
 
-      // Expose for other modules (prefill, pickup sync)
-      try { window.WLCheckout = window.WLCheckout || {}; window.WLCheckout.refreshDeliverySummary = upd;
-      try { window.WLCheckout.showDeliverySummaryIfFilled = function(){
-        try {
-          const hasAny = safeVal("#ctl00_PageBody_DeliveryAddress_AddressLine1").trim() ||
-                         safeVal("#ctl00_PageBody_DeliveryAddress_City").trim() ||
-                         safeVal("#ctl00_PageBody_DeliveryAddress_Postcode").trim();
-          if (hasAny) { upd(); wrap.style.display = "none"; sum.style.display = ""; }
-        } catch {}
-      }; } catch {}
- } catch {}
-
-      // If delivery already has data, show summary; otherwise keep inputs visible
-      const hasAny = safeVal("#ctl00_PageBody_DeliveryAddress_AddressLine1").trim() ||
-                     safeVal("#ctl00_PageBody_DeliveryAddress_City").trim() ||
-                     safeVal("#ctl00_PageBody_DeliveryAddress_Postcode").trim();
-      if (hasAny) {
+      function showSummaryIfValid() {
+        if (getPickupSelected()) return false;
+        if (!wlAddressBlockIsValid("DeliveryAddress", false)) {
+          showInputs();
+          return false;
+        }
         upd();
         wrap.style.display = "none";
         sum.style.display = "";
-      } else {
-        wrap.style.display = "";
-        sum.style.display = "none";
+        clearInlineError(3);
+        return true;
       }
+
+      // Start in summary mode only if it is valid. Otherwise keep fields open.
+      if (!showSummaryIfValid()) showInputs();
 
       sum.addEventListener("click", (e) => {
         if (e.target.id !== "editDelivery") return;
         e.preventDefault();
-        sum.style.display = "none";
-        wrap.style.display = "";
+        showInputs();
         try { wrap.scrollIntoView({ behavior: "smooth" }); } catch {}
 
         if (!wrap.querySelector("#saveDelivery")) {
@@ -1497,10 +1722,11 @@ document.addEventListener("click", function (ev) {
           btn.type = "button";
           btn.id = "saveDelivery";
           btn.className = "btn btn-primary mt-2";
-          btn.textContent = "Save";
+          btn.textContent = "Save Delivery Address";
           wrap.appendChild(btn);
 
           btn.addEventListener("click", () => {
+            if (!validateAddressBlock("DeliveryAddress", 3, false)) return;
             upd();
             try {
               const same = document.getElementById('sameAsDeliveryCheck');
@@ -1508,14 +1734,19 @@ document.addEventListener("click", function (ev) {
                 window.WLCheckout.refreshInvoiceSummary(true);
               }
             } catch {}
-            wrap.style.display = "none";
-            sum.style.display = "";
+            showSummaryIfValid();
             setStep(4);
           });
         }
       });
 
-      upd();
+      try {
+        window.WLCheckout = window.WLCheckout || {};
+        window.WLCheckout.refreshDeliverySummary = upd;
+        window.WLCheckout.showDeliveryEditor = showInputs;
+        window.WLCheckout.showDeliverySummaryIfFilled = showSummaryIfValid;
+        window.WLCheckout.showDeliverySummaryIfValid = showSummaryIfValid;
+      } catch {}
     })();
 
     // -------------------------------------------------------------------------
@@ -1546,7 +1777,7 @@ document.addEventListener("click", function (ev) {
       const wrapInv = document.createElement("div");
       const sumInv = document.createElement("div");
       wrapInv.className = "invoice-inputs";
-      sumInv.className = "invoice-summary";
+      sumInv.className = "invoice-summary wl-address-summary";
 
       while (colInv.firstChild) wrapInv.appendChild(colInv.firstChild);
       colInv.appendChild(wrapInv);
@@ -1586,8 +1817,9 @@ document.addEventListener("click", function (ev) {
         const a1 = (q("#ctl00_PageBody_InvoiceAddress_AddressLine1")?.value || "").trim();
         const a2 = (q("#ctl00_PageBody_InvoiceAddress_AddressLine2")?.value || "").trim();
         const c = (q("#ctl00_PageBody_InvoiceAddress_City")?.value || "").trim();
-        const st =
+        let st =
           q("#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList")?.selectedOptions?.[0]?.text || "";
+        if (wlIsPlaceholderText(st)) st = "";
         const z = (q("#ctl00_PageBody_InvoiceAddress_Postcode")?.value || "").trim();
         const e = (q("#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox")?.value || "").trim();
 
@@ -1638,8 +1870,13 @@ document.addEventListener("click", function (ev) {
       if (sameStored) {
         copyDeliveryToInvoice(true);
         refreshInv();
-        wrapInv.style.display = "none";
-        sumInv.style.display = "";
+        if (wlAddressBlockIsValid("InvoiceAddress", true)) {
+          wrapInv.style.display = "none";
+          sumInv.style.display = "";
+        } else {
+          sumInv.style.display = "none";
+          wrapInv.style.display = "";
+        }
       } else {
         wrapInv.style.display = "";
         sumInv.style.display = "none";
@@ -1656,17 +1893,18 @@ document.addEventListener("click", function (ev) {
           copyDeliveryToInvoice(true);
 
           refreshInv();
-          // Show summary mode (collapsed) after copying.
-          wrapInv.style.display = "none";
-          sumInv.style.display = "";
-
-          // After copying, re-validate Step 4 and clear any stale inline warning.
-          try {
+          // Show summary mode only if the copied billing info is complete.
+          if (wlAddressBlockIsValid("InvoiceAddress", true)) {
+            wrapInv.style.display = "none";
+            sumInv.style.display = "";
             clearInlineError(4);
+          } else {
+            sumInv.style.display = "none";
+            wrapInv.style.display = "";
             setTimeout(function(){
               try { validateAddressBlock("InvoiceAddress", 4, true); } catch {}
             }, 60);
-          } catch {}
+          }
 
           // If your WebTrack installation requires server-side copy logic, we can re-enable this postback.
           // try { __doPostBack("ctl00$PageBody$CopyDeliveryAddressLinkButton", ""); } catch {}
@@ -1712,8 +1950,13 @@ document.addEventListener("click", function (ev) {
 
           copyDeliveryToInvoice(true);
           refreshInv();
-          wrapInv.style.display = "none";
-          sumInv.style.display = "";
+          if (wlAddressBlockIsValid("InvoiceAddress", true)) {
+            wrapInv.style.display = "none";
+            sumInv.style.display = "";
+          } else {
+            sumInv.style.display = "none";
+            wrapInv.style.display = "";
+          }
         } catch {}
       }
 
@@ -1733,14 +1976,8 @@ document.addEventListener("click", function (ev) {
             // Ensure invoice has something to summarize (prefill happens elsewhere; this is just defensive)
             try { refreshInv(); } catch {}
 
-            // Show summary if we have any billing data; otherwise show inputs.
-            const invHasAny =
-              (q("#ctl00_PageBody_InvoiceAddress_AddressLine1")?.value || "").trim() ||
-              (q("#ctl00_PageBody_InvoiceAddress_City")?.value || "").trim() ||
-              (q("#ctl00_PageBody_InvoiceAddress_Postcode")?.value || "").trim() ||
-              (q("#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox")?.value || "").trim();
-
-            if (invHasAny) {
+            // Show summary only if billing data is complete; otherwise leave fields open.
+            if (wlAddressBlockIsValid("InvoiceAddress", true)) {
               wrapInv.style.display = "none";
               sumInv.style.display = "";
             } else {
@@ -1754,8 +1991,13 @@ document.addEventListener("click", function (ev) {
             if (stored) {
               copyDeliveryToInvoice(true);
               refreshInv();
-              wrapInv.style.display = "none";
-              sumInv.style.display = "";
+              if (wlAddressBlockIsValid("InvoiceAddress", true)) {
+                wrapInv.style.display = "none";
+                sumInv.style.display = "";
+              } else {
+                sumInv.style.display = "none";
+                wrapInv.style.display = "";
+              }
             } else {
               sumInv.style.display = "none";
               wrapInv.style.display = "";
@@ -1778,8 +2020,7 @@ document.addEventListener("click", function (ev) {
       // This mirrors the Pickup confirmation UX, but does NOT auto-advance.
       function applyInvoiceDefaultView() {
         try {
-          const hasAny = !invoiceLooksBlank();
-          if (hasAny) {
+          if (wlAddressBlockIsValid("InvoiceAddress", true)) {
             refreshInv();
             wrapInv.style.display = "none";
             sumInv.style.display = "";
@@ -1795,6 +2036,10 @@ document.addEventListener("click", function (ev) {
         window.WLCheckout.refreshInvoiceSummary = function(forceCopy){
           if (forceCopy) copyDeliveryToInvoice(true);
           refreshInv();
+        };
+        window.WLCheckout.showInvoiceEditor = function(){
+          sumInv.style.display = "none";
+          wrapInv.style.display = "";
         };
 
         window.WLCheckout.applyInvoiceDefaultView = applyInvoiceDefaultView;
@@ -1977,6 +2222,73 @@ document.addEventListener("click", function (ev) {
       const pickupTimeSel = pickupDiv.querySelector("#pickupTime");
       const deliveryInput = deliveryDiv.querySelector("#deliveryDate");
 
+      const WL_DATE_STATE_KEY = "wl_checkout_date_state_v2";
+
+      function clearDateFieldErrors() {
+        try {
+          p6.querySelectorAll(".wl-field-invalid").forEach((el) => el.classList.remove("wl-field-invalid"));
+          p6.querySelectorAll(".wl-field-msg").forEach((el) => el.remove());
+        } catch {}
+      }
+
+      function markDateInvalid(el, label) {
+        if (!el) return;
+        try { el.classList.add("wl-field-invalid"); } catch {}
+        try {
+          const host = el.closest(".form-group") || el.parentElement;
+          if (host && !host.querySelector(".wl-field-msg")) {
+            const msg = document.createElement("div");
+            msg.className = "wl-field-msg";
+            msg.textContent = label;
+            host.appendChild(msg);
+          }
+        } catch {}
+      }
+
+      function saveDateState() {
+        try {
+          const selectedDeliveryTime = deliveryDiv.querySelector('input[name="deliveryTime"]:checked');
+          sessionStorage.setItem(WL_DATE_STATE_KEY, JSON.stringify({
+            ts: Date.now(),
+            pickupDate: pickupInput.value || "",
+            pickupTime: pickupTimeSel.value || "",
+            pickupPerson: pickupDiv.querySelector("#pickupPerson")?.value || "",
+            deliveryDate: deliveryInput.value || "",
+            deliveryTime: selectedDeliveryTime ? selectedDeliveryTime.value : "",
+            extra: specialExtra.value || "",
+            special: specialIns.value || ""
+          }));
+        } catch {}
+      }
+
+      function restoreDateState(opts) {
+        opts = opts || {};
+        const onlyBlank = !!opts.onlyBlank;
+        try {
+          const raw = sessionStorage.getItem(WL_DATE_STATE_KEY);
+          if (!raw) return;
+          const data = JSON.parse(raw);
+          if (!data || (Date.now() - (data.ts || 0)) > 60 * 60 * 1000) return;
+
+          if (data.pickupDate && (!onlyBlank || !pickupInput.value)) {
+            pickupInput.value = data.pickupDate;
+            try { populatePickupTimes(parseLocalDate(data.pickupDate)); } catch {}
+          }
+          if (data.pickupTime && (!onlyBlank || !pickupTimeSel.value)) {
+            try { pickupTimeSel.value = data.pickupTime; } catch {}
+          }
+          const pickupPerson = pickupDiv.querySelector("#pickupPerson");
+          if (pickupPerson && data.pickupPerson && (!onlyBlank || !pickupPerson.value)) pickupPerson.value = data.pickupPerson;
+          if (data.deliveryDate && (!onlyBlank || !deliveryInput.value)) deliveryInput.value = data.deliveryDate;
+          if (data.deliveryTime) {
+            const r = deliveryDiv.querySelector(`input[name="deliveryTime"][value="${data.deliveryTime}"]`);
+            if (r && (!onlyBlank || !deliveryDiv.querySelector('input[name="deliveryTime"]:checked'))) r.checked = true;
+          }
+          if (data.extra && (!onlyBlank || !specialExtra.value)) specialExtra.value = data.extra;
+          if (data.special && (!onlyBlank || !specialIns.value)) specialIns.value = data.special;
+        } catch {}
+      }
+
       pickupInput.setAttribute("min", isoToday);
       pickupInput.setAttribute("max", formatLocal(maxPickupD));
       deliveryInput.setAttribute("min", formatLocal(minDelD));
@@ -2112,6 +2424,7 @@ document.addEventListener("click", function (ev) {
         }
 
         specialIns.value = baseText + (specialExtra.value ? " – " + specialExtra.value : "");
+        saveDateState();
       }
 
       function onShip() {
@@ -2142,20 +2455,80 @@ document.addEventListener("click", function (ev) {
         .forEach((r) => r.addEventListener("change", updateSpecial));
       specialExtra.addEventListener("input", updateSpecial);
 
-      try { window.WLCheckout = window.WLCheckout || {}; window.WLCheckout.refreshDateUI = onShip; } catch {}
+      function validateDateInstructions(mark) {
+        mark = !!mark;
+        if (mark) clearDateFieldErrors();
+        const errors = [];
+        const add = (el, msg) => { errors.push(msg); if (mark) markDateInvalid(el, msg); };
 
+        if (getDeliveredSelected() && !getPickupSelected()) {
+          if (!deliveryInput.value) add(deliveryInput, "Please select a requested delivery date.");
+          const t = deliveryDiv.querySelector('input[name="deliveryTime"]:checked');
+          if (!t) add(deliveryDiv.querySelector('input[name="deliveryTime"]'), "Please choose Morning or Afternoon.");
+        }
+
+        if (getPickupSelected()) {
+          if (!pickupInput.value) add(pickupInput, "Please select a requested pickup date.");
+          const pickupPerson = pickupDiv.querySelector("#pickupPerson");
+          if (!pickupPerson.value.trim()) add(pickupPerson, "Please enter who will pick up the order.");
+          if (pickupTimeSel.disabled || !pickupTimeSel.value) add(pickupTimeSel, "Please select an available pickup time.");
+        }
+
+        if (errors.length) {
+          if (mark) {
+            showInlineError(5, `<strong>Please finish the Date & Instructions step.</strong><br>${errors.join("<br>")}`);
+            try {
+              const first = p6.querySelector(".wl-field-invalid");
+              if (first) first.scrollIntoView({ behavior: "smooth", block: "center" });
+            } catch {}
+          }
+          return false;
+        }
+        clearInlineError(5);
+        return true;
+      }
+
+      function validateBeforeFinalSubmit() {
+        try { wlSaveCheckoutSnapshot(); } catch {}
+        if (!validateStep(1)) { showStep(1); return false; }
+        if (getPickupSelected() && !validateStep(2)) { showStep(2); return false; }
+        if (getDeliveredSelected() && !getPickupSelected() && !validateStep(3)) { showStep(3); return false; }
+        if (!validateStep(4)) { showStep(4); return false; }
+        showStep(5);
+        return validateDateInstructions(true);
+      }
+
+      [pickupInput, pickupTimeSel, pickupDiv.querySelector("#pickupPerson"), deliveryInput, specialExtra]
+        .filter(Boolean)
+        .forEach((node) => {
+          node.addEventListener("input", saveDateState, true);
+          node.addEventListener("change", saveDateState, true);
+        });
+      deliveryDiv.querySelectorAll('input[name="deliveryTime"]').forEach((node) => node.addEventListener("change", saveDateState, true));
+
+      restoreDateState({ onlyBlank: true });
       onShip();
 
-// Expose a refresh hook so UpdatePanel partial postbacks can restore visibility/state.
-window.WLCheckout = window.WLCheckout || {};
-window.WLCheckout.refreshDateUI = function () {
-  try { onShip(); } catch {}
-};
+      // Expose refresh hooks so UpdatePanel partial postbacks can restore visibility/state.
+      window.WLCheckout = window.WLCheckout || {};
+      window.WLCheckout.refreshDateUI = function () {
+        try { restoreDateState({ onlyBlank: true }); } catch {}
+        try { onShip(); } catch {}
+      };
+      window.WLCheckout.validateDateInstructions = validateDateInstructions;
+      window.WLCheckout.validateBeforeFinalSubmit = validateBeforeFinalSubmit;
 
 
       // Client validation on Continue buttons
       if ($) {
         $("#ctl00_PageBody_ContinueButton1, #ctl00_PageBody_ContinueButton2").on("click", function (e) {
+          try {
+            if (!validateBeforeFinalSubmit()) {
+              e.preventDefault();
+              setExpectedNav(false);
+              return;
+            }
+          } catch {}
           // Ensure pickup orders don't get blocked by required delivery fields
           try {
             if (getPickupSelected()) {
@@ -2364,6 +2737,10 @@ window.WLCheckout.refreshDateUI = function () {
 .wl-branch-card-option{cursor:pointer;}
 .wl-branch-card-option:hover{border-color:#6b0016;box-shadow:0 2px 8px rgba(107,0,22,.18);}
 .wl-branch-card-selected{border-color:#6b0016;}
+.wl-field-invalid{border-color:#b00020 !important;box-shadow:0 0 0 3px rgba(176,0,32,.12) !important;background:#fffafa !important;}
+.wl-field-msg{font-size:12px;color:#b00020;margin-top:4px;line-height:1.3;}
+.wl-inline-error{border-left:4px solid #b00020;}
+.wl-address-summary{border:1px solid #ddd;border-radius:12px;padding:12px;background:#fff;margin-bottom:12px;}
 .wl-branch-grid{display:grid;grid-template-columns:1fr;gap:10px;}
 @media (min-width: 900px){.wl-branch-grid{grid-template-columns:1fr 1fr;}}
 `;
