@@ -557,3 +557,176 @@
 
 
 
+
+
+
+
+/* ==========================================================
+   Woodson — Signup Communication Preferences
+   Captures marketing / account communication preferences on UserSignup.aspx
+   and sends them through the same Apps Script + Constant Contact bridge.
+   ========================================================== */
+(function () {
+  if (!/(UserSignup|signup)\.aspx/i.test(window.location.href)) return;
+
+  const COMM_PREFS_POST = 'https://script.google.com/macros/s/AKfycbzmUdU2XZ0JGNEzorkbifFLdvnYQxHl6pUFbsJzi29dg_3jFbBLD9zkixZiwSNiUPRJvQ/exec?action=savePreferences';
+
+  const IDS = {
+    signupButton: 'ctl00_PageBody_SignupButton',
+    firstName: 'ctl00_PageBody_FirstNameTextBox',
+    lastName: 'ctl00_PageBody_LastNameTextBox',
+    contactName: 'ctl00_PageBody_ContactNameTextBox',
+    email: 'ctl00_PageBody_EmailAddressTextBox',
+    phone: 'ctl00_PageBody_ContactTelephoneTextBox'
+  };
+
+  const $id = id => document.getElementById(id);
+  const val = id => ($id(id)?.value || '').trim();
+  const digits = value => String(value || '').replace(/\D+/g, '').slice(0, 15);
+  const emailOK = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').trim());
+
+  function injectPreferenceBox() {
+    if (document.getElementById('wl-signup-comm-prefs')) return;
+
+    const emailGroup = $id(IDS.email)?.closest('.epi-form-group-signup2');
+    const phoneGroup = $id(IDS.phone)?.closest('.epi-form-group-signup2');
+    const anchor = phoneGroup || emailGroup;
+    if (!anchor || !anchor.parentNode) return;
+
+    const style = document.createElement('style');
+    style.textContent = `
+      #wl-signup-comm-prefs{margin:16px 0;padding:14px;border:1px solid #e4d3d7;border-radius:12px;background:#fbf5f6;color:#2f3746;font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif}
+      #wl-signup-comm-prefs h3{margin:0 0 6px;color:#6b0016;font-size:1.1rem;font-weight:800}
+      #wl-signup-comm-prefs p{margin:0 0 10px;font-size:.92rem;color:#5f6673}
+      .wl-signup-pref-row{display:block;margin:8px 0;font-weight:600;line-height:1.3}
+      .wl-signup-pref-row input{margin-right:8px;vertical-align:middle}
+      .wl-signup-pref-note{font-size:.82rem;color:#666;line-height:1.35;margin-top:10px;background:#fff;border:1px solid #eee;border-radius:8px;padding:9px}
+      #wl-signup-pref-status{font-size:.8rem;color:#5f6673;margin-top:8px;display:none}
+    `;
+    document.head.appendChild(style);
+
+    const box = document.createElement('div');
+    box.id = 'wl-signup-comm-prefs';
+    box.innerHTML = `
+      <h3>Communication Preferences</h3>
+      <p>Choose how you would like to hear from Woodson Lumber.</p>
+
+      <label class="wl-signup-pref-row">
+        <input type="checkbox" id="wl_signup_email_mkt">
+        Email me sales, helpful tips, and product updates
+      </label>
+
+      <label class="wl-signup-pref-row">
+        <input type="checkbox" id="wl_signup_email_billing" checked>
+        Email invoices and statements
+      </label>
+
+      <label class="wl-signup-pref-row">
+        <input type="checkbox" id="wl_signup_email_delivery" checked>
+        Email delivery and order updates
+      </label>
+
+      <label class="wl-signup-pref-row">
+        <input type="checkbox" id="wl_signup_sms_mkt">
+        Text me sales, helpful tips, and product updates
+      </label>
+
+      <div class="wl-signup-pref-note">
+        By selecting text updates, you agree to receive marketing text messages from Woodson Lumber at the phone number provided. Message and data rates may apply. Reply STOP to opt out.
+      </div>
+      <div id="wl-signup-pref-status"></div>
+    `;
+
+    anchor.insertAdjacentElement('afterend', box);
+  }
+
+  function buildPreferencePayload() {
+    const firstName = val(IDS.firstName);
+    const lastName = val(IDS.lastName);
+    const contactName = val(IDS.contactName) || [firstName, lastName].filter(Boolean).join(' ');
+    const email = val(IDS.email).toLowerCase();
+    const phone = digits(val(IDS.phone));
+    const emailMarketing = !!document.getElementById('wl_signup_email_mkt')?.checked;
+    const smsMarketing = !!document.getElementById('wl_signup_sms_mkt')?.checked;
+
+    if (!emailOK(email)) return null;
+
+    return {
+      accountKey: contactName || email,
+      source: 'UserSignup.aspx',
+      email,
+      firstName,
+      lastName,
+      companyName: contactName || [firstName, lastName].filter(Boolean).join(' '),
+      phone,
+      emailMarketing,
+      emailBilling: !!document.getElementById('wl_signup_email_billing')?.checked,
+      emailDelivery: !!document.getElementById('wl_signup_email_delivery')?.checked,
+      smsMarketing,
+      smsPhone: phone,
+      emailListIntent: emailMarketing ? 'subscribe' : 'no_change',
+      smsListIntent: smsMarketing ? 'subscribe' : 'no_change',
+      constantContact: {
+        emailListIntent: emailMarketing ? 'subscribe' : 'no_change',
+        smsListIntent: smsMarketing ? 'subscribe' : 'no_change',
+        preferenceCustomFieldsReady: true
+      },
+      updatedAt: new Date().toISOString()
+    };
+  }
+
+  function sendPreferences(payload) {
+    if (!COMM_PREFS_POST || !payload) return false;
+
+    const body = JSON.stringify(payload);
+    try {
+      const status = document.getElementById('wl-signup-pref-status');
+      if (status) {
+        status.textContent = 'Saving communication preferences…';
+        status.style.display = 'block';
+      }
+
+      if (navigator.sendBeacon) {
+        const blob = new Blob([body], { type: 'text/plain;charset=utf-8' });
+        return navigator.sendBeacon(COMM_PREFS_POST, blob);
+      }
+
+      fetch(COMM_PREFS_POST, {
+        method: 'POST',
+        mode: 'no-cors',
+        keepalive: true,
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body
+      }).catch(() => {});
+      return true;
+    } catch (err) {
+      console.warn('Could not save signup communication preferences:', err);
+      return false;
+    }
+  }
+
+  function wireSubmitCapture() {
+    const btn = $id(IDS.signupButton);
+    if (btn && !btn.__wlSignupPrefsBound) {
+      btn.__wlSignupPrefsBound = true;
+      btn.addEventListener('click', function () {
+        sendPreferences(buildPreferencePayload());
+      }, true);
+    }
+
+    document.addEventListener('submit', function () {
+      sendPreferences(buildPreferencePayload());
+    }, true);
+  }
+
+  function init() {
+    injectPreferenceBox();
+    wireSubmitCapture();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+  } else {
+    init();
+  }
+})();
