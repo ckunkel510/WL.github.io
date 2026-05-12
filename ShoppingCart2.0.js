@@ -52,6 +52,7 @@
       .wl-btn{display:inline-flex;align-items:center;justify-content:center;border-radius:10px;border:1px solid #ccc;padding:10px 14px;text-decoration:none;cursor:pointer;background:#fff;color:#222;line-height:1.1;}
       .wl-btn-primary{background:#6b0016;border-color:#6b0016;color:#fff;}
       .wl-btn-danger{background:#fff;border-color:#b00020;color:#b00020;}
+      .wl-btn[disabled],.wl-btn.wl-loading{opacity:.65;cursor:wait;pointer-events:none;}
       .wl-btn-muted{background:#f1f1f1;color:#222;}
       .wl-empty-cart{padding:24px;background:#fff;border:1px solid #e1e1e1;border-radius:14px;text-align:center;}
       @media (max-width:700px){
@@ -243,7 +244,7 @@
     title.textContent = 'Shopping Cart';
     const sub = document.createElement('div');
     sub.className = 'wl-cart-sub';
-    sub.textContent = 'Review your items, update quantities, then choose the checkout path that works best for you.';
+    sub.textContent = 'Review your items, update quantities, then continue as a signed-in customer or use Guest Checkout below.';
     headCopy.append(title, sub);
     header.appendChild(headCopy);
 
@@ -266,8 +267,17 @@
     proceed.className = 'wl-btn wl-btn-primary';
     proceed.textContent = 'Proceed to Checkout';
     proceed.addEventListener('click', () => {
+      proceed.classList.add('wl-loading');
+      proceed.disabled = true;
+      proceed.textContent = 'Opening Checkout…';
+      try { sessionStorage.setItem('wl_expect_nav', '1'); } catch {}
       const nativeProceed = getNativeButton(['#ctl00_PageBody_PlaceOrderButton', '[name="ctl00$PageBody$PlaceOrderButton"]']);
-      runNative(nativeProceed);
+      if (!runNative(nativeProceed)) {
+        proceed.classList.remove('wl-loading');
+        proceed.disabled = false;
+        proceed.textContent = 'Proceed to Checkout';
+        alert('Checkout did not start. Please use the original checkout button or refresh the cart.');
+      }
     });
 
     const shopMore = document.createElement('a');
