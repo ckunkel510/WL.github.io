@@ -640,7 +640,15 @@
     // Guided checkout validation + persistence helpers
     // -------------------------------------------------------------------------
     const WL_CHECKOUT_SNAPSHOT_KEY = "wl_checkout_form_snapshot_v2";
+    const WL_CHECKOUT_MODE_KEY = "wl_checkout_mode";
+    const WL_GUEST_KEY = "wl_guest_checkout_payload";
+    const WL_GUEST_AUTOFILL_KEY = "wl_guest_checkout_needs_autofill";
+    const WL_DATE_STATE_KEY_GLOBAL = "wl_checkout_date_state_v2";
     const WL_REQUIRED_CLASS = "wl-field-invalid";
+
+    function wlCheckoutMode() {
+      try { return sessionStorage.getItem(WL_CHECKOUT_MODE_KEY) || ""; } catch { return ""; }
+    }
 
     const WL_FIELD_LABELS = {
       "ContactFirstNameTextBox": "First name",
@@ -870,7 +878,7 @@
           "ctl00_PageBody_PurchaseOrderNumberTextBox",
           "ctl00_PageBody_SpecialInstructionsTextBox"
         ];
-        const data = { ts: Date.now(), fields: {} };
+        const data = { ts: Date.now(), mode: wlCheckoutMode(), fields: {} };
         ids.forEach((id) => {
           const v = wlSnapshotValue(id);
           if (v !== null) data.fields[id] = v;
@@ -884,7 +892,11 @@
         const raw = sessionStorage.getItem(WL_CHECKOUT_SNAPSHOT_KEY);
         if (!raw) return;
         const data = JSON.parse(raw);
-        if (!data || !data.fields || (Date.now() - (data.ts || 0)) > (60 * 60 * 1000)) return;
+        if (!data || !data.fields || (Date.now() - (data.ts || 0)) > (45 * 60 * 1000)) return;
+        // Do not hydrate a new signed-in/employee checkout with an older guest/customer snapshot.
+        // New snapshots include a mode; old snapshots without one are ignored on purpose.
+        const currentMode = wlCheckoutMode();
+        if (!data.mode || !currentMode || data.mode !== currentMode) return;
         Object.keys(data.fields).forEach((id) => {
           const el = document.getElementById(id);
           if (!el) return;
@@ -2199,15 +2211,22 @@ document.addEventListener("click", function (ev) {
         </div>`;
       deliveryDiv.style.display = "none";
 
+      const shippingAutoNote = document.createElement("div");
+      shippingAutoNote.className = "alert alert-info wl-auto-ship-note";
+      shippingAutoNote.style.display = "none";
+      shippingAutoNote.style.marginTop = "10px";
+      shippingAutoNote.innerHTML = "<strong>Shipping order:</strong> For addresses outside Texas, we’ll handle the shipping date/time automatically and continue the order as an afternoon shipping request.";
+
       siWrap.insertAdjacentElement("afterend", pickupDiv);
       pickupDiv.insertAdjacentElement("afterend", deliveryDiv);
+      deliveryDiv.insertAdjacentElement("afterend", shippingAutoNote);
 
       const extraDiv = document.createElement("div");
       extraDiv.className = "form-group";
       extraDiv.innerHTML = `
         <label for="specialInsExtra">Additional instructions:</label>
         <textarea id="specialInsExtra" class="form-control" placeholder="Optional additional notes"></textarea>`;
-      deliveryDiv.insertAdjacentElement("afterend", extraDiv);
+      shippingAutoNote.insertAdjacentElement("afterend", extraDiv);
 
       const specialExtra = document.getElementById("specialInsExtra");
 
@@ -2402,6 +2421,43 @@ document.addEventListener("click", function (ev) {
         return ["75", "76", "77", "78", "79"].includes((z || "").substring(0, 2));
       }
 
+      function deliveryStateText() {
+        const state = document.getElementById("ctl00_PageBody_DeliveryAddress_CountySelector_CountyList");
+        if (!state) return "";
+        const txt = state.selectedOptions && state.selectedOptions[0] ? (state.selectedOptions[0].text || state.selectedOptions[0].textContent || "") : "";
+        return String(txt || state.value || "").trim();
+      }
+
+      function isTexasDeliveryAddress() {
+        const s = deliveryStateText().toLowerCase();
+        return s === "tx" || s === "texas";
+      }
+
+      function isOutOfTexasDelivery() {
+        if (!(rbDel && rbDel.checked) || (rbPick && rbPick.checked)) return false;
+        const s = deliveryStateText().toLowerCase();
+        if (!s || /^\[?select/i.test(s) || s === "0" || s === "00") return false;
+        return !isTexasDeliveryAddress();
+      }
+
+      function nextValidDeliveryDate() {
+        const d = new Date(minDelD.getFullYear(), minDelD.getMonth(), minDelD.getDate());
+        if (d.getDay() === 0) d.setDate(d.getDate() + 1);
+        return formatLocal(d);
+      }
+
+      function selectDeliveryTime(value) {
+        const r = deliveryDiv.querySelector(`input[name="deliveryTime"][value="${value}"]`);
+        if (r) r.checked = true;
+      }
+
+      function applyOutOfTexasDeliveryDefaults() {
+        if (!isOutOfTexasDelivery()) return false;
+        if (!deliveryInput.value) deliveryInput.value = nextValidDeliveryDate();
+        selectDeliveryTime("Afternoon");
+        return true;
+      }
+
       function updateSpecial() {
         let baseText = "";
 
@@ -2414,12 +2470,15 @@ document.addEventListener("click", function (ev) {
           baseText = "Pickup on " + d + (t ? " at " + t : "") + (p ? " for " + p : "");
         } else if (rbDel && rbDel.checked) {
           specialIns.readOnly = true;
-          if (inZone(zipInput ? zipInput.value : "")) {
+          const outOfTexas = applyOutOfTexasDeliveryDefaults();
+          if (!outOfTexas && inZone(zipInput ? zipInput.value : "")) {
             const d2 = deliveryInput.value;
             const t2 = deliveryDiv.querySelector('input[name="deliveryTime"]:checked');
             baseText = "Delivery on " + d2 + (t2 ? " (" + t2.value + ")" : "");
           } else {
-            baseText = "Ship via 3rd party delivery on next screen.";
+            const t3 = deliveryDiv.querySelector('input[name="deliveryTime"]:checked');
+            const d3 = deliveryInput.value;
+            baseText = "Ship via 3rd party delivery" + (d3 ? " requested " + d3 : "") + (t3 ? " (" + t3.value + ")" : "") + " on next screen.";
           }
         }
 
@@ -2431,21 +2490,32 @@ document.addEventListener("click", function (ev) {
         if (rbPick && rbPick.checked) {
           pickupDiv.style.display = "block";
           deliveryDiv.style.display = "none";
+          shippingAutoNote.style.display = "none";
 
           // If date already chosen, enforce same-day rule immediately
           if (pickupInput.value) populatePickupTimes(parseLocalDate(pickupInput.value));
         } else if (rbDel && rbDel.checked) {
           pickupDiv.style.display = "none";
-          deliveryDiv.style.display = "block";
+          const outOfTexas = applyOutOfTexasDeliveryDefaults();
+          deliveryDiv.style.display = outOfTexas ? "none" : "block";
+          shippingAutoNote.style.display = outOfTexas ? "block" : "none";
         } else {
           pickupDiv.style.display = "none";
           deliveryDiv.style.display = "none";
+          shippingAutoNote.style.display = "none";
         }
         updateSpecial();
       }
 
       if (rbPick) rbPick.addEventListener("change", onShip);
       if (rbDel) rbDel.addEventListener("change", onShip);
+      ["ctl00_PageBody_DeliveryAddress_CountySelector_CountyList", "ctl00_PageBody_DeliveryAddress_Postcode"].forEach(function(id) {
+        const node = document.getElementById(id);
+        if (node) {
+          node.addEventListener("change", onShip, true);
+          node.addEventListener("input", onShip, true);
+        }
+      });
 
       pickupDiv.querySelector("#pickupPerson").addEventListener("input", updateSpecial);
       pickupTimeSel.addEventListener("change", updateSpecial);
@@ -2462,9 +2532,10 @@ document.addEventListener("click", function (ev) {
         const add = (el, msg) => { errors.push(msg); if (mark) markDateInvalid(el, msg); };
 
         if (getDeliveredSelected() && !getPickupSelected()) {
-          if (!deliveryInput.value) add(deliveryInput, "Please select a requested delivery date.");
+          const outOfTexas = applyOutOfTexasDeliveryDefaults();
+          if (!deliveryInput.value) add(deliveryInput, outOfTexas ? "Shipping date could not be defaulted. Please review the delivery address." : "Please select a requested delivery date.");
           const t = deliveryDiv.querySelector('input[name="deliveryTime"]:checked');
-          if (!t) add(deliveryDiv.querySelector('input[name="deliveryTime"]'), "Please choose Morning or Afternoon.");
+          if (!t) add(deliveryDiv.querySelector('input[name="deliveryTime"]'), outOfTexas ? "Shipping time could not be defaulted." : "Please choose Morning or Afternoon.");
         }
 
         if (getPickupSelected()) {
@@ -3074,6 +3145,14 @@ document.addEventListener("click", function (ev) {
           sessionStorage.removeItem("wl_returnStep");
           sessionStorage.removeItem("wl_expect_nav");
           sessionStorage.removeItem("wl_autocopy_done");
+          sessionStorage.removeItem("wl_billing_confirmed");
+          sessionStorage.removeItem("wl_billing_seen");
+          sessionStorage.removeItem("wl_billing_confirmed_delivered");
+          sessionStorage.removeItem(WL_CHECKOUT_SNAPSHOT_KEY);
+          sessionStorage.removeItem(WL_DATE_STATE_KEY_GLOBAL);
+          sessionStorage.removeItem(WL_GUEST_KEY);
+          sessionStorage.removeItem(WL_GUEST_AUTOFILL_KEY);
+          sessionStorage.removeItem(WL_CHECKOUT_MODE_KEY);
         } catch {}
       }
 
