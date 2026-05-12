@@ -1,8 +1,8 @@
 
 /* ==========================================================
    Woodson — Account Overview (AccountInfo_R.aspx)
-   v4.3 — customer-facing preference messaging,
-          linked account emails + button-only modal close
+   v4.4 — selected-email preference editing fix,
+          customer fields ready + button-only modal close
    ========================================================== */
 (function(){
   'use strict';
@@ -344,7 +344,7 @@
                 </div>
 
                 <div class="wl-field"><div class="wl-consent">By choosing SMS marketing, you agree to receive marketing text messages from Woodson Lumber at the phone number listed above. Message and data rates may apply. Reply STOP to opt out.</div></div>
-                <div class="wl-field"><div class="wl-meta">Your marketing email status is checked from our email system. Emails linked to this account can be selected above and managed one at a time. Invoice, statement, and delivery update preferences help us know how you would like to receive account and order communications.</div></div>
+                <div class="wl-field"><div class="wl-meta">Select an email above to manage preferences for that contact. Marketing email status is checked from our email system. Invoice, statement, delivery update, and text preferences are saved for the selected email.</div></div>
                 <div class="wl-modal-actions">
                   <button type="button" class="wl-btn" id="wl-comm-cancel">Cancel</button>
                   <button type="submit" class="wl-btn primary">Save Preferences</button>
@@ -648,7 +648,11 @@ if (snapshotActions) {
 
     async function fetchRemotePrefs(seedEmail=''){
       const accountSettingsEmail = await fetchAccountSettingsEmail();
-      const email = (accountSettingsEmail || seedEmail || '').trim();
+      // Important: when the user selects a linked email, that selected email must win.
+      // The previous version prioritized the AccountSettings email and kept reloading
+      // the primary account email, which made linked-email checkbox edits look like
+      // they were being undone.
+      const email = (seedEmail || accountSettingsEmail || '').trim();
 
       // This is the source of truth for the popup. It asks Apps Script to query
       // Constant Contact by the AccountSettings email and return current list status.
@@ -951,7 +955,8 @@ if (snapshotActions) {
           smsPhone: smsPhone,
           constantContact: {
             emailListIntent: $('#comm_email_mkt').checked ? 'subscribe' : 'remove_from_marketing_list',
-            smsListIntent: $('#comm_sms_mkt').checked ? 'subscribe' : 'unsubscribe_or_no_change'
+            smsListIntent: $('#comm_sms_mkt').checked ? 'subscribe' : 'unsubscribe_or_no_change',
+            preferenceCustomFieldsReady: true
           },
           updatedAt: new Date().toISOString()
         };
@@ -960,7 +965,7 @@ if (snapshotActions) {
         setLocalPrefs(payload);
         const remoteSaved = await postCommunicationPrefs(payload);
         closeModal('#wl-comm-modal');
-        alert(remoteSaved ? 'Your communication preferences have been saved and submitted.' : 'Your communication preferences have been saved on this device.');
+        alert(remoteSaved ? 'Your communication preferences have been saved for the selected email.' : 'Your communication preferences have been saved on this device.');
       });
     })();
 
