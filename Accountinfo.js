@@ -1,8 +1,8 @@
 
 /* ==========================================================
    Woodson — Account Overview (AccountInfo_R.aspx)
-   v3.8 — Payment Methods link, Apps Script Constant Contact prefs,
-          JSONP preference lookup + no-CORS preference submit
+   v3.9 — Pull AccountSettings email, live Constant Contact
+          preference hydration + Apps Script no-CORS submit
    ========================================================== */
 (function(){
   'use strict';
@@ -25,6 +25,12 @@
   const COMM_PREFS_GET = COMM_PREFS_POST.replace('action=savePreferences', 'action=getPreferences');
 
   const PAYMENT_METHODS_URL = 'https://webtrack.woodsonlumber.com/CustomerTokens.aspx';
+
+  // Same-origin lookup used to pull the account email from AccountSettings.aspx
+  // instead of relying on localStorage or requiring the customer to re-type it.
+  const ACCOUNT_SETTINGS_URL = 'AccountSettings.aspx';
+  const ACCOUNT_SETTINGS_EMAIL_SELECTOR = '#ctl00_PageBody_ChangeUserDetailsControl_EmailAddressInput';
+  let accountSettingsEmailPromise = null;
 
   /* utils */
   const BRAND = { primary:'#6b0016', primaryHover:'#540011', bgSoft:'#fbf5f6', border:'#e6e6e6' };
@@ -492,6 +498,26 @@ if (snapshotActions) {
     const COMM_KEY = (k)=> `wl_comm_prefs_v3_${k}`;
     function getLocalPrefs(){ try { return JSON.parse(localStorage.getItem(COMM_KEY(accountKey))||'{}'); } catch { return {}; } }
     function setLocalPrefs(v){ try { localStorage.setItem(COMM_KEY(accountKey), JSON.stringify(v)); } catch {} }
+
+    async function fetchAccountSettingsEmail(){
+      if (accountSettingsEmailPromise) return accountSettingsEmailPromise;
+      accountSettingsEmailPromise = (async()=>{
+        try {
+          const r = await fetch(ACCOUNT_SETTINGS_URL, { credentials:'same-origin' });
+          if (!r.ok) return '';
+          const html = await r.text();
+          const doc = new DOMParser().parseFromString(html, 'text/html');
+          const input = doc.querySelector(ACCOUNT_SETTINGS_EMAIL_SELECTOR);
+          const email = ((input && (input.value || input.getAttribute('value'))) || '').trim();
+          return emailOK(email) ? email : '';
+        } catch(err) {
+          console.warn('Could not read account email from AccountSettings.aspx:', err);
+          return '';
+        }
+      })();
+      return accountSettingsEmailPromise;
+    }
+
     function jsonpRequest(url, params={}, timeout=8000){
       return new Promise((resolve, reject)=>{
         if (!url) return resolve(null);
@@ -527,10 +553,12 @@ if (snapshotActions) {
     }
 
     async function fetchRemotePrefs(seedEmail=''){
-      const local = getLocalPrefs();
-      const email = (seedEmail || local.email || '').trim();
+      const accountSettingsEmail = await fetchAccountSettingsEmail();
+      const email = (accountSettingsEmail || seedEmail || '').trim();
 
-      if (COMM_PREFS_GET) {
+      // This is the source of truth for the popup. It asks Apps Script to query
+      // Constant Contact by the AccountSettings email and return current list status.
+      if (COMM_PREFS_GET && emailOK(email)) {
         try {
           const data = await jsonpRequest(COMM_PREFS_GET, { accountKey, email });
           if (data && data.ok) return data.preferences || data;
@@ -539,14 +567,17 @@ if (snapshotActions) {
         }
       }
 
-      if (!SHEET_API_GET) return null;
+      // Optional legacy fallback only. Do not use localStorage as the source of truth.
+      if (!SHEET_API_GET) return email ? { email } : null;
       try{
         const u=new URL(SHEET_API_GET);
         u.searchParams.set('accountKey',accountKey);
+        if (email) u.searchParams.set('email',email);
         const r=await fetch(u.toString(),{credentials:'omit'});
-        if(!r.ok) return null;
-        return await r.json();
-      }catch{ return null; }
+        if(!r.ok) return email ? { email } : null;
+        const v = await r.json();
+        return Object.assign({}, email ? { email } : {}, v || {});
+      }catch{ return email ? { email } : null; }
     }
 
     async function postRemotePrefs(v){ if (!SHEET_API_POST) return false; try{ const r=await fetch(SHEET_API_POST,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)}); return r.ok; }catch{ return false; } }
@@ -585,6 +616,15 @@ if (snapshotActions) {
         sms_mkt: $('#comm_sms_mkt', modal),
         sms_phone: $('#comm_sms_phone', modal)
       };
+      function resetPrefs(){
+        f.email_mkt.checked=false;
+        f.email_billing.checked=false;
+        f.email_delivery.checked=false;
+        f.email.value='';
+        f.sms_mkt.checked=false;
+        f.sms_phone.value='';
+      }
+
       function applyPrefs(v){
         if (!v) return;
         f.email_mkt.checked=!!v.emailMarketing;
@@ -596,20 +636,20 @@ if (snapshotActions) {
       }
 
       async function hydrate(){
-        const local=getLocalPrefs();
-        applyPrefs(local);
-        const remote=await fetchRemotePrefs(local.email || f.email.value);
-        applyPrefs(Object.assign({}, local, remote||{}));
+        resetPrefs();
+        const accountSettingsEmail = await fetchAccountSettingsEmail();
+        if (accountSettingsEmail) f.email.value = accountSettingsEmail;
+        const remote = await fetchRemotePrefs(accountSettingsEmail || f.email.value);
+        applyPrefs(remote || (accountSettingsEmail ? { email: accountSettingsEmail } : null));
       }
 
-      openBtn.addEventListener('click', (e)=>{ e.preventDefault(); hydrate(); openModal('#wl-comm-modal'); });
+      openBtn.addEventListener('click', (e)=>{ e.preventDefault(); openModal('#wl-comm-modal'); hydrate(); });
 
       f.email.addEventListener('blur', async ()=>{
         const email = (f.email.value || '').trim();
         if (!emailOK(email)) return;
-        const local = getLocalPrefs();
         const remote = await fetchRemotePrefs(email);
-        applyPrefs(Object.assign({}, local, remote || {}, { email }));
+        applyPrefs(remote || { email });
       });
       cancel.addEventListener('click', ()=> closeModal('#wl-comm-modal'));
       modal.addEventListener('click', (e)=>{ if (e.target===modal) closeModal('#wl-comm-modal'); });
@@ -634,6 +674,8 @@ if (snapshotActions) {
           },
           updatedAt: new Date().toISOString()
         };
+        // Keep a local copy only as a convenience/audit fallback; opening the modal always
+        // re-checks AccountSettings + Constant Contact instead of relying on localStorage.
         setLocalPrefs(payload);
         const remoteSaved = await postCommunicationPrefs(payload);
         closeModal('#wl-comm-modal');
