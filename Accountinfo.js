@@ -1,8 +1,8 @@
 
 /* ==========================================================
    Woodson — Account Overview (AccountInfo_R.aspx)
-   v3.6 — Payment Methods link, tax wording,
-          modal scroll fixes + Constant Contact-ready prefs
+   v3.7 — Payment Methods link, tax wording,
+          modal scroll fixes + Apps Script Constant Contact prefs
    ========================================================== */
 (function(){
   'use strict';
@@ -12,8 +12,8 @@
      IMPORTANT: Constant Contact API calls should go through a secure backend route.
      Do not put Constant Contact client secrets/tokens in this browser file.
 
-     Example Vercel/Apps Script route for COMM_PREFS_POST:
-     https://wlmarketingdashboard.vercel.app/api/constant-contact/preferences
+     Example Apps Script route for COMM_PREFS_POST:
+     https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec?action=savePreferences
   */
   const SHEET_API_GET  = '';
   const SHEET_API_POST = '';
@@ -493,14 +493,29 @@ if (snapshotActions) {
     async function postCommunicationPrefs(v){
       if (COMM_PREFS_POST) {
         try {
-          const r = await fetch(COMM_PREFS_POST, {
+          /*
+            Google Apps Script web apps typically do not return CORS headers.
+            Use a simple no-cors POST so WebTrack can submit the preference
+            payload without exposing Constant Contact credentials in the browser.
+            Because no-cors responses are opaque, a completed fetch means
+            "submitted" but not "verified by browser response." The Apps
+            Script log sheet is the source of truth for backend success/failure.
+          */
+          await fetch(COMM_PREFS_POST, {
             method:'POST',
-            headers:{'Content-Type':'application/json'},
+            mode:'no-cors',
             credentials:'omit',
-            body:JSON.stringify(v)
+            headers:{'Content-Type':'text/plain;charset=utf-8'},
+            body:JSON.stringify({
+              ...v,
+              source: v.source || 'WebTrack AccountInfo'
+            })
           });
-          return r.ok;
-        } catch { return false; }
+          return true;
+        } catch (err) {
+          console.warn('Communication preference sync failed:', err);
+          return false;
+        }
       }
       return postRemotePrefs(v);
     }
