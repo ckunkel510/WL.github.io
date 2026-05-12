@@ -1,8 +1,8 @@
 
 /* ==========================================================
    Woodson — Account Overview (AccountInfo_R.aspx)
-   v3.9 — Pull AccountSettings email, live Constant Contact
-          preference hydration + Apps Script no-CORS submit
+   v4.0 — live Constant Contact prefs, improved modal footer,
+          richer contact sync fields + alternate email lookup
    ========================================================== */
 (function(){
   'use strict';
@@ -30,6 +30,7 @@
   // instead of relying on localStorage or requiring the customer to re-type it.
   const ACCOUNT_SETTINGS_URL = 'AccountSettings.aspx';
   const ACCOUNT_SETTINGS_EMAIL_SELECTOR = '#ctl00_PageBody_ChangeUserDetailsControl_EmailAddressInput';
+  let accountSettingsDetailsPromise = null;
   let accountSettingsEmailPromise = null;
 
   /* utils */
@@ -119,9 +120,16 @@
   .wl-field input[type="text"], .wl-field input[type="email"], .wl-field input[type="tel"], .wl-field select, .wl-field textarea{
     width:100%; padding:10px 12px; border:1px solid #ddd; border-radius:8px; background:#fff; font:inherit;
   }
-  .wl-modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px;position:sticky;bottom:0;background:#fff;padding:12px 0 0;z-index:2}
+  .wl-modal-actions{grid-column:1 / -1;display:flex;justify-content:flex-end;gap:10px;margin:12px -16px -16px;padding:12px 16px 16px;position:sticky;bottom:-16px;background:#fff;border-top:1px solid #eee;z-index:2}
   .wl-modal-actions .wl-btn{min-width:160px}
   .wl-consent{font-size:.82rem;color:#666;line-height:1.35;background:#fff;border:1px solid #eee;border-radius:8px;padding:10px}
+  .wl-lookup-box{background:#fff;border:1px solid #eee;border-radius:10px;padding:10px}
+  .wl-lookup-box label{font-weight:700;margin-bottom:6px}
+  .wl-lookup-result{margin-top:8px;font-size:.88rem;color:#444}
+  .wl-lookup-result.good{color:#27632a}
+  .wl-lookup-result.warn{color:#8a5a00}
+  .wl-lookup-result.bad{color:#8a1c1c}
+  .wl-btn.small{min-width:auto;padding:8px 10px;font-size:.9rem}
   @media (max-width:560px){ .wl-modal{padding:10px} .wl-modal-card{max-height:calc(100vh - 20px)} .wl-form .half{grid-column:span 12} .wl-modal-actions{flex-wrap:wrap} .wl-modal-actions .wl-btn{flex:1 1 100%} }
 
   /* Switch toggles */
@@ -297,11 +305,29 @@
                 <div class="wl-field half"><label><input type="checkbox" id="comm_email_mkt"> Email marketing</label></div>
                 <div class="wl-field half"><label><input type="checkbox" id="comm_email_billing"> Email invoices & statements</label></div>
                 <div class="wl-field half"><label><input type="checkbox" id="comm_email_delivery"> Email delivery updates</label></div>
-                <div class="wl-field half"><label for="comm_email">Email address</label><input type="email" id="comm_email" placeholder="name@example.com"></div>
                 <div class="wl-field half"><label><input type="checkbox" id="comm_sms_mkt"> SMS marketing</label></div>
+
+                <div class="wl-field half"><label for="comm_first_name">First name</label><input type="text" id="comm_first_name" autocomplete="given-name"></div>
+                <div class="wl-field half"><label for="comm_last_name">Last name</label><input type="text" id="comm_last_name" autocomplete="family-name"></div>
+                <div class="wl-field half"><label for="comm_email">Primary email address</label><input type="email" id="comm_email" placeholder="name@example.com" autocomplete="email"></div>
+                <div class="wl-field half"><label for="comm_phone">Primary phone</label><input type="tel" id="comm_phone" placeholder="(###) ###-####" autocomplete="tel"></div>
+                <div class="wl-field half"><label for="comm_company">Company / account name</label><input type="text" id="comm_company" autocomplete="organization"></div>
                 <div class="wl-field half"><label for="comm_sms_phone">SMS phone</label><input type="tel" id="comm_sms_phone" placeholder="(###) ###-####"></div>
+
+                <div class="wl-field">
+                  <div class="wl-lookup-box">
+                    <label for="comm_lookup_email">Look up or use another email</label>
+                    <div class="wl-inline">
+                      <input type="email" id="comm_lookup_email" placeholder="alternate@example.com" style="min-width:min(320px,100%);flex:1 1 260px">
+                      <button type="button" class="wl-btn small" id="wl-comm-lookup-btn">Look Up</button>
+                      <button type="button" class="wl-btn small" id="wl-comm-use-lookup-btn" style="display:none">Use This Email</button>
+                    </div>
+                    <div class="wl-lookup-result" id="wl-comm-lookup-result">Use this only when a customer wants to check a different email address. It does not delete or merge old Constant Contact records.</div>
+                  </div>
+                </div>
+
                 <div class="wl-field"><div class="wl-consent">By choosing SMS marketing, the customer is requesting marketing text messages from Woodson Lumber. Message and data rates may apply. Reply STOP to opt out. Final compliance language should match the Constant Contact SMS program settings before launch.</div></div>
-                <div class="wl-field"><div class="wl-meta">Preferences save locally immediately and can also sync to Constant Contact through the configured backend endpoint.</div></div>
+                <div class="wl-field"><div class="wl-meta">Marketing list status is checked live from Constant Contact. Billing and delivery preferences are logged through the backend unless separate Constant Contact lists/custom fields are configured.</div></div>
                 <div class="wl-modal-actions">
                   <button type="button" class="wl-btn" id="wl-comm-cancel">Cancel</button>
                   <button type="submit" class="wl-btn primary">Save Preferences</button>
@@ -499,22 +525,73 @@ if (snapshotActions) {
     function getLocalPrefs(){ try { return JSON.parse(localStorage.getItem(COMM_KEY(accountKey))||'{}'); } catch { return {}; } }
     function setLocalPrefs(v){ try { localStorage.setItem(COMM_KEY(accountKey), JSON.stringify(v)); } catch {} }
 
-    async function fetchAccountSettingsEmail(){
-      if (accountSettingsEmailPromise) return accountSettingsEmailPromise;
-      accountSettingsEmailPromise = (async()=>{
+    function getInputValueByLabel(doc, labelPattern){
+      const labels = Array.from(doc.querySelectorAll('label'));
+      for (const label of labels) {
+        const labelText = (label.textContent || '').replace(/:\s*$/,'').trim();
+        if (!labelPattern.test(labelText)) continue;
+        let input = null;
+        const forId = label.getAttribute('for');
+        if (forId) input = doc.getElementById(forId);
+        if (!input) input = label.closest('div, .epi-form-group-acctSettings, .form-group')?.querySelector('input, select, textarea');
+        if (input) return ((input.value || input.getAttribute('value') || input.textContent || '') + '').trim();
+      }
+      return '';
+    }
+
+    function splitName(fullName){
+      const cleaned = String(fullName || '').replace(/\([^)]*\)/g,'').replace(/Account Information for/i,'').trim();
+      if (!cleaned) return { firstName:'', lastName:'' };
+      const parts = cleaned.split(/\s+/).filter(Boolean);
+      if (parts.length === 1) return { firstName:parts[0], lastName:'' };
+      return { firstName:parts.slice(0,-1).join(' '), lastName:parts.slice(-1)[0] };
+    }
+
+    async function fetchAccountSettingsDetails(){
+      if (accountSettingsDetailsPromise) return accountSettingsDetailsPromise;
+      accountSettingsDetailsPromise = (async()=>{
+        const details = {
+          email:'',
+          firstName:'',
+          lastName:'',
+          companyName: accountKey || '',
+          phone:'',
+          jobTitle:''
+        };
         try {
           const r = await fetch(ACCOUNT_SETTINGS_URL, { credentials:'same-origin' });
-          if (!r.ok) return '';
+          if (!r.ok) return details;
           const html = await r.text();
           const doc = new DOMParser().parseFromString(html, 'text/html');
-          const input = doc.querySelector(ACCOUNT_SETTINGS_EMAIL_SELECTOR);
-          const email = ((input && (input.value || input.getAttribute('value'))) || '').trim();
-          return emailOK(email) ? email : '';
+
+          const emailInput = doc.querySelector(ACCOUNT_SETTINGS_EMAIL_SELECTOR);
+          const email = ((emailInput && (emailInput.value || emailInput.getAttribute('value'))) || getInputValueByLabel(doc, /email\s*address|email/i)).trim();
+          if (emailOK(email)) details.email = email;
+
+          details.firstName = getInputValueByLabel(doc, /first\s*name|given\s*name/i);
+          details.lastName  = getInputValueByLabel(doc, /last\s*name|surname|family\s*name/i);
+          details.phone     = digits(getInputValueByLabel(doc, /phone|mobile|telephone/i));
+          details.jobTitle  = getInputValueByLabel(doc, /job\s*title|title/i);
+
+          const company = getInputValueByLabel(doc, /company|business|organization|account\s*name/i);
+          if (company) details.companyName = company;
+
+          if (!details.firstName && !details.lastName) {
+            const parsed = splitName(acctName || accountKey || '');
+            details.firstName = parsed.firstName;
+            details.lastName = parsed.lastName;
+          }
         } catch(err) {
-          console.warn('Could not read account email from AccountSettings.aspx:', err);
-          return '';
+          console.warn('Could not read account details from AccountSettings.aspx:', err);
         }
+        return details;
       })();
+      return accountSettingsDetailsPromise;
+    }
+
+    async function fetchAccountSettingsEmail(){
+      if (accountSettingsEmailPromise) return accountSettingsEmailPromise;
+      accountSettingsEmailPromise = fetchAccountSettingsDetails().then(d => d.email || '');
       return accountSettingsEmailPromise;
     }
 
@@ -613,16 +690,48 @@ if (snapshotActions) {
         email_billing: $('#comm_email_billing', modal),
         email_delivery: $('#comm_email_delivery', modal),
         email: $('#comm_email', modal),
+        first_name: $('#comm_first_name', modal),
+        last_name: $('#comm_last_name', modal),
+        company: $('#comm_company', modal),
+        phone: $('#comm_phone', modal),
         sms_mkt: $('#comm_sms_mkt', modal),
-        sms_phone: $('#comm_sms_phone', modal)
+        sms_phone: $('#comm_sms_phone', modal),
+        lookup_email: $('#comm_lookup_email', modal),
+        lookup_btn: $('#wl-comm-lookup-btn', modal),
+        use_lookup_btn: $('#wl-comm-use-lookup-btn', modal),
+        lookup_result: $('#wl-comm-lookup-result', modal)
       };
+
       function resetPrefs(){
         f.email_mkt.checked=false;
         f.email_billing.checked=false;
         f.email_delivery.checked=false;
         f.email.value='';
+        f.first_name.value='';
+        f.last_name.value='';
+        f.company.value='';
+        f.phone.value='';
         f.sms_mkt.checked=false;
         f.sms_phone.value='';
+        f.lookup_email.value='';
+        setLookupMessage('Use this only when a customer wants to check a different email address. It does not delete or merge old Constant Contact records.','');
+        f.use_lookup_btn.style.display='none';
+      }
+
+      function setLookupMessage(message, tone){
+        if (!f.lookup_result) return;
+        f.lookup_result.textContent = message || '';
+        f.lookup_result.className = `wl-lookup-result${tone ? ' ' + tone : ''}`;
+      }
+
+      function applyAccountDetails(d){
+        if (!d) return;
+        if (d.email && !f.email.value) f.email.value = d.email;
+        if (d.firstName && !f.first_name.value) f.first_name.value = d.firstName;
+        if (d.lastName && !f.last_name.value) f.last_name.value = d.lastName;
+        if (d.companyName && !f.company.value) f.company.value = d.companyName;
+        if (d.phone && !f.phone.value) f.phone.value = d.phone;
+        if (d.phone && !f.sms_phone.value) f.sms_phone.value = d.phone;
       }
 
       function applyPrefs(v){
@@ -631,16 +740,51 @@ if (snapshotActions) {
         f.email_billing.checked=!!v.emailBilling;
         f.email_delivery.checked=!!v.emailDelivery;
         if(v.email) f.email.value=v.email;
+        if(v.firstName) f.first_name.value=v.firstName;
+        if(v.lastName) f.last_name.value=v.lastName;
+        if(v.companyName) f.company.value=v.companyName;
+        if(v.phone) f.phone.value=digits(v.phone);
         f.sms_mkt.checked=!!v.smsMarketing;
-        if(v.smsPhone) f.sms_phone.value=v.smsPhone;
+        if(v.smsPhone) f.sms_phone.value=digits(v.smsPhone);
       }
 
-      async function hydrate(){
+      async function hydrate(seedEmail=''){
         resetPrefs();
-        const accountSettingsEmail = await fetchAccountSettingsEmail();
-        if (accountSettingsEmail) f.email.value = accountSettingsEmail;
-        const remote = await fetchRemotePrefs(accountSettingsEmail || f.email.value);
-        applyPrefs(remote || (accountSettingsEmail ? { email: accountSettingsEmail } : null));
+        const accountDetails = await fetchAccountSettingsDetails();
+        applyAccountDetails(accountDetails);
+        const remote = await fetchRemotePrefs(seedEmail || accountDetails.email || f.email.value);
+        applyPrefs(remote || accountDetails || null);
+      }
+
+      async function lookupEmail(email){
+        email = (email || '').trim();
+        if (!emailOK(email)) {
+          setLookupMessage('Enter a valid email address to look it up.','bad');
+          f.use_lookup_btn.style.display='none';
+          return null;
+        }
+        setLookupMessage('Checking Constant Contact…','');
+        try {
+          const data = await jsonpRequest(COMM_PREFS_GET.replace('action=getPreferences','action=debugContact'), { email });
+          if (!data || !data.ok) {
+            setLookupMessage((data && data.error) || 'Could not check that email.','bad');
+            f.use_lookup_btn.style.display='none';
+            return null;
+          }
+          if (data.found) {
+            const member = data.isEmailListMember ? 'is on the selected marketing list' : 'exists, but is not on the selected marketing list';
+            setLookupMessage(`${email} ${member}. Click “Use This Email” to make it the email this form updates.`, data.isEmailListMember ? 'good' : 'warn');
+          } else {
+            setLookupMessage(`${email} was not found in Constant Contact. Click “Use This Email” to create/update it when this form is saved.`, 'warn');
+          }
+          f.use_lookup_btn.style.display='';
+          return data;
+        } catch(err) {
+          console.warn('Additional email lookup failed:', err);
+          setLookupMessage('Email lookup failed. Check Apps Script execution logs if this keeps happening.','bad');
+          f.use_lookup_btn.style.display='none';
+          return null;
+        }
       }
 
       openBtn.addEventListener('click', (e)=>{ e.preventDefault(); openModal('#wl-comm-modal'); hydrate(); });
@@ -651,6 +795,18 @@ if (snapshotActions) {
         const remote = await fetchRemotePrefs(email);
         applyPrefs(remote || { email });
       });
+
+      f.lookup_btn.addEventListener('click', async ()=>{ await lookupEmail(f.lookup_email.value); });
+      f.lookup_email.addEventListener('keydown', async (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); await lookupEmail(f.lookup_email.value); } });
+      f.use_lookup_btn.addEventListener('click', async ()=>{
+        const email = (f.lookup_email.value || '').trim();
+        if (!emailOK(email)) return;
+        f.email.value = email;
+        const remote = await fetchRemotePrefs(email);
+        applyPrefs(remote || { email });
+        setLookupMessage(`${email} is now selected as the primary email for this preference update.`, 'good');
+      });
+
       cancel.addEventListener('click', ()=> closeModal('#wl-comm-modal'));
       modal.addEventListener('click', (e)=>{ if (e.target===modal) closeModal('#wl-comm-modal'); });
       form.addEventListener('submit', async (e)=>{
@@ -658,18 +814,24 @@ if (snapshotActions) {
         const wantsEmail = $('#comm_email_mkt').checked || $('#comm_email_billing').checked || $('#comm_email_delivery').checked;
         const wantsSMS   = $('#comm_sms_mkt').checked;
         if (wantsEmail && !emailOK($('#comm_email').value)) { alert('Please enter a valid email address.'); $('#comm_email').focus(); return; }
-        if (wantsSMS) { const p=digits($('#comm_sms_phone').value); if (p.length<7) { alert('Please enter a valid phone number for SMS.'); $('#comm_sms_phone').focus(); return; } $('#comm_sms_phone').value=p; }
+        const mainPhone = digits($('#comm_phone').value || '');
+        let smsPhone = digits($('#comm_sms_phone').value || '') || mainPhone;
+        if (wantsSMS) { if (smsPhone.length<7) { alert('Please enter a valid phone number for SMS.'); $('#comm_sms_phone').focus(); return; } $('#comm_sms_phone').value=smsPhone; }
         const payload = {
           accountKey,
           source: 'AccountInfo_R.aspx',
           email: ($('#comm_email').value||'').trim(),
+          firstName: ($('#comm_first_name').value||'').trim(),
+          lastName: ($('#comm_last_name').value||'').trim(),
+          companyName: ($('#comm_company').value||'').trim() || accountKey,
+          phone: mainPhone,
           emailMarketing: $('#comm_email_mkt').checked,
           emailBilling: $('#comm_email_billing').checked,
           emailDelivery: $('#comm_email_delivery').checked,
           smsMarketing: $('#comm_sms_mkt').checked,
-          smsPhone: digits($('#comm_sms_phone').value||''),
+          smsPhone: smsPhone,
           constantContact: {
-            emailListIntent: $('#comm_email_mkt').checked ? 'subscribe' : 'unsubscribe_or_no_change',
+            emailListIntent: $('#comm_email_mkt').checked ? 'subscribe' : 'remove_from_marketing_list',
             smsListIntent: $('#comm_sms_mkt').checked ? 'subscribe' : 'unsubscribe_or_no_change'
           },
           updatedAt: new Date().toISOString()
