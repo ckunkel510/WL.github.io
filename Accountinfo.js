@@ -954,7 +954,7 @@ if (snapshotActions) {
           smsMarketing: $('#comm_sms_mkt').checked,
           smsPhone: smsPhone,
           constantContact: {
-            emailListIntent: $('#comm_email_mkt').checked ? 'subscribe' : 'remove_from_marketing_list',
+            emailListIntent: $('#comm_email_mkt').checked ? 'subscribe' : 'unsubscribe',
             smsListIntent: $('#comm_sms_mkt').checked ? 'subscribe' : 'unsubscribe_or_no_change',
             preferenceCustomFieldsReady: true
           },
