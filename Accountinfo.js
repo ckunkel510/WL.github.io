@@ -1,7 +1,7 @@
 
 /* ==========================================================
    Woodson — Account Overview (AccountInfo_R.aspx)
-   v4.2 — live Constant Contact prefs, improved modal footer,
+   v4.3 — customer-facing preference messaging,
           linked account emails + button-only modal close
    ========================================================== */
 (function(){
@@ -320,31 +320,31 @@
 
                 <div class="wl-field">
                   <div class="wl-lookup-box">
-                    <label for="comm_linked_email_select">Emails linked to this WebTrack account</label>
+                    <label for="comm_linked_email_select">Emails linked to this account</label>
                     <div class="wl-inline">
                       <select id="comm_linked_email_select" style="min-width:min(360px,100%);flex:1 1 300px">
                         <option value="">Loading linked emails…</option>
                       </select>
                       <button type="button" class="wl-btn small" id="wl-comm-refresh-linked-btn">Refresh</button>
                     </div>
-                    <div class="wl-lookup-result" id="wl-comm-linked-result">Choose an email to view or update that contact’s preferences.</div>
+                    <div class="wl-lookup-result" id="wl-comm-linked-result">Choose an email to view or update its preferences.</div>
                   </div>
                 </div>
 
                 <div class="wl-field">
                   <div class="wl-lookup-box">
-                    <label for="comm_lookup_email">Look up and link another email to this account</label>
+                    <label for="comm_lookup_email">Link another email to this account</label>
                     <div class="wl-inline">
                       <input type="email" id="comm_lookup_email" placeholder="alternate@example.com" style="min-width:min(320px,100%);flex:1 1 260px">
                       <button type="button" class="wl-btn small" id="wl-comm-lookup-btn">Look Up</button>
                       <button type="button" class="wl-btn small" id="wl-comm-use-lookup-btn" style="display:none">Link Email to Account</button>
                     </div>
-                    <div class="wl-lookup-result" id="wl-comm-lookup-result">Use this when a customer has more than one email. Linking does not delete or merge Constant Contact records; it associates the email with this WebTrack account so it can be managed here.</div>
+                    <div class="wl-lookup-result" id="wl-comm-lookup-result">Have another email you use with this account? Look it up and link it here so you can manage preferences for that email too.</div>
                   </div>
                 </div>
 
-                <div class="wl-field"><div class="wl-consent">By choosing SMS marketing, the customer is requesting marketing text messages from Woodson Lumber. Message and data rates may apply. Reply STOP to opt out. Final compliance language should match the Constant Contact SMS program settings before launch.</div></div>
-                <div class="wl-field"><div class="wl-meta">Marketing list status is checked live from Constant Contact. Linked emails are stored by account in the backend so multiple customer emails can be managed from this page. Billing and delivery preferences are logged through the backend unless separate Constant Contact lists/custom fields are configured.</div></div>
+                <div class="wl-field"><div class="wl-consent">By choosing SMS marketing, you agree to receive marketing text messages from Woodson Lumber at the phone number listed above. Message and data rates may apply. Reply STOP to opt out.</div></div>
+                <div class="wl-field"><div class="wl-meta">Your marketing email status is checked from our email system. Emails linked to this account can be selected above and managed one at a time. Invoice, statement, and delivery update preferences help us know how you would like to receive account and order communications.</div></div>
                 <div class="wl-modal-actions">
                   <button type="button" class="wl-btn" id="wl-comm-cancel">Cancel</button>
                   <button type="submit" class="wl-btn primary">Save Preferences</button>
@@ -735,8 +735,8 @@ if (snapshotActions) {
         f.sms_phone.value='';
         f.lookup_email.value='';
         if (f.linked_select) f.linked_select.innerHTML = '<option value="">Loading linked emails…</option>';
-        setLinkedMessage('Choose an email to view or update that contact’s preferences.','');
-        setLookupMessage('Use this when a customer has more than one email. Linking does not delete or merge Constant Contact records; it associates the email with this WebTrack account so it can be managed here.','');
+        setLinkedMessage('Choose an email to view or update its preferences.','');
+        setLookupMessage('Have another email you use with this account? Look it up and link it here so you can manage preferences for that email too.','');
         f.use_lookup_btn.style.display='none';
       }
 
@@ -799,19 +799,19 @@ if (snapshotActions) {
           if (selected && !seen.has(selected)) options.unshift({ email: selected, label: selected + ' — current account email' });
 
           if (!options.length) {
-            f.linked_select.innerHTML = '<option value="">No linked emails found</option>';
-            setLinkedMessage('No linked emails have been saved for this account yet. The AccountSettings email will be used by default.','warn');
+            f.linked_select.innerHTML = '<option value="">No additional emails found</option>';
+            setLinkedMessage('No additional emails are linked to this account yet. The primary account email will be used by default.','warn');
             return [];
           }
 
           f.linked_select.innerHTML = options.map(opt => `<option value="${escapeAttr(opt.email)}">${escapeHtml(opt.label)}</option>`).join('');
           if (selected && options.some(opt => opt.email === selected)) f.linked_select.value = selected;
-          setLinkedMessage(`${options.length} email${options.length === 1 ? '' : 's'} linked to this account. Select one to edit that contact’s preferences.`, 'good');
+          setLinkedMessage(`${options.length} email${options.length === 1 ? '' : 's'} linked to this account. Select an email to update its preferences.`, 'good');
           return options;
         } catch(err) {
           console.warn('Linked email lookup failed:', err);
-          f.linked_select.innerHTML = selected ? `<option value="${escapeAttr(selected)}">${escapeHtml(selected)}</option>` : '<option value="">Unable to load linked emails</option>';
-          setLinkedMessage('Could not load linked emails. You can still save preferences for the displayed email.', 'bad');
+          f.linked_select.innerHTML = selected ? `<option value="${escapeAttr(selected)}">${escapeHtml(selected)}</option>` : '<option value="">Unable to load emails</option>';
+          setLinkedMessage('We could not load additional linked emails right now. You can still save preferences for the email shown.', 'bad');
           return [];
         }
       }
@@ -819,7 +819,7 @@ if (snapshotActions) {
       async function linkEmailToAccount(email){
         email = String(email || '').trim().toLowerCase();
         if (!emailOK(email)) {
-          setLookupMessage('Enter a valid email address before linking it to this account.','bad');
+          setLookupMessage('Enter a valid email address to link it to this account.','bad');
           return false;
         }
 
@@ -842,7 +842,7 @@ if (snapshotActions) {
             credentials:'omit',
             body:JSON.stringify(payload)
           });
-          setLookupMessage(`${email} has been linked to this WebTrack account and sent to Constant Contact with this account detail. You can now select it from the linked email list.`, 'good');
+          setLookupMessage(`${email} has been linked to this account. You can now select it above and manage its preferences.`, 'good');
           f.email.value = email;
           await loadLinkedEmails(email);
           const remote = await fetchRemotePrefs(email);
@@ -850,7 +850,7 @@ if (snapshotActions) {
           return true;
         } catch(err) {
           console.warn('Email link failed:', err);
-          setLookupMessage('That email could not be linked. Check Apps Script executions if this keeps happening.','bad');
+          setLookupMessage('That email could not be linked right now. Please try again in a moment.','bad');
           return false;
         }
       }
@@ -872,7 +872,7 @@ if (snapshotActions) {
           f.use_lookup_btn.style.display='none';
           return null;
         }
-        setLookupMessage('Checking Constant Contact…','');
+        setLookupMessage('Checking email preferences…','');
         try {
           const data = await jsonpRequest(COMM_PREFS_GET.replace('action=getPreferences','action=debugContact'), { email });
           if (!data || !data.ok) {
@@ -882,9 +882,9 @@ if (snapshotActions) {
           }
           if (data.found) {
             const member = data.isEmailListMember ? 'is on the selected marketing list' : 'exists, but is not on the selected marketing list';
-            setLookupMessage(`${email} ${member}. Click “Link Email to Account” to associate it with this WebTrack account.`, data.isEmailListMember ? 'good' : 'warn');
+            setLookupMessage(`${email} ${member}. Click “Link Email to Account” to connect it to this account.`, data.isEmailListMember ? 'good' : 'warn');
           } else {
-            setLookupMessage(`${email} was not found in Constant Contact. Click “Link Email to Account” to associate it with this account. Linking will create/update the Constant Contact contact with this WebTrack account detail, but it will not opt the email into marketing unless Email marketing is selected and saved.`, 'warn');
+            setLookupMessage(`We did not find ${email} in our email preferences yet. Click “Link Email to Account” to add it to this account. It will not be signed up for marketing unless Email marketing is selected and saved.`, 'warn');
           }
           f.use_lookup_btn.style.display='';
           return data;
