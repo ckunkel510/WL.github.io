@@ -1623,7 +1623,7 @@ const IDS = {
 
 // Keep the actual WebForms/Forte Make Payment button as the visible final-step button.
 // This preserves the native gateway click handler instead of proxying it.
-window.__WL_AP_USE_NATIVE_VISIBLE_SUBMIT = true;
+window.__WL_AP_USE_NATIVE_VISIBLE_SUBMIT = false;
 
 /* ======================================================
    SUBMIT BRIDGE (proxy to native, respect pay mode)
@@ -1648,8 +1648,9 @@ window.__WL_AP_USE_NATIVE_VISIBLE_SUBMIT = true;
   })();
 
   function restoreSubmitPanel(){
-    // Forte/WebForms expects the real submit button to remain inside the native
-    // MakePaymentPanel. The wizard should display only our proxy button.
+    // Forte/WebForms expects the real submit controls to remain under the native
+    // MakePaymentPanel. Do not display:none them and do not leave them inside the
+    // wizard/summary cards; both can break the gateway click path.
     const nativePanel = document.getElementById('ctl00_PageBody_MakePaymentPanel');
     if (!nativePanel) return;
 
@@ -1657,29 +1658,20 @@ window.__WL_AP_USE_NATIVE_VISIBLE_SUBMIT = true;
       '#wlSubmitMount .submit-button-panel, #w3SubmitInner .submit-button-panel, #wlApWizard3 .submit-button-panel'
     );
 
-    // The current fix intentionally keeps the real WebForms/Forte submit control
-    // visible in the wizard final step. Proxying this button was causing the
-    // page to post back into the raw native form instead of opening Forte.
-    if (window.__WL_AP_USE_NATIVE_VISIBLE_SUBMIT){
-      const native = nativePanel.querySelector('.submit-button-panel') || movedPanel;
-      if (native){
-        native.classList.remove('wl-hidden-native');
-        native.style.removeProperty('display');
-        native.style.removeProperty('visibility');
-      }
-      return;
-    }
-
     if (movedPanel && !nativePanel.contains(movedPanel)){
       const movedWrap = movedPanel.closest('.epi-form-group-acctPayment') || movedPanel;
       nativePanel.appendChild(movedWrap);
       log.info('submit panel restored to native MakePaymentPanel');
     }
 
-    const native = nativePanel.querySelector('.submit-button-panel');
-    if (native && !native.classList.contains('wl-hidden-native')){
-      native.classList.add('wl-hidden-native'); // keep in DOM for Forte/gateway hooks
-      log.debug('native submit panel visually hidden (kept in DOM)');
+    const native = nativePanel.querySelector('.submit-button-panel') || nativePanel.querySelector('input[type="submit"], input[type="button"], button, a');
+    const nativeWrap = native?.closest?.('.submit-button-panel') || native;
+    if (nativeWrap){
+      nativeWrap.classList.add('wl-hidden-native'); // keep in DOM for Forte/gateway hooks
+      nativeWrap.style.removeProperty('display');
+      nativeWrap.style.removeProperty('visibility');
+      try{ nativeWrap.hidden = false; }catch(e){}
+      log.debug('native submit kept in native panel and visually hidden');
     }
   }
 
@@ -4443,6 +4435,10 @@ if (jobBtn){
       #wlApWizard3 .w3-btn.primary{ background:#111827; color:#fff; border-color:#111827; }
       #wlApWizard3 .w3-btn[disabled]{ opacity:.5; cursor:not-allowed; }
       #wlApWizard3 .w3-help{ font-size:12px; color:#475569; margin-top:8px; line-height:1.35; }
+      /* Wizard owns the submit flow. Hide the old summary/proxy submit so
+         customers only get one Make Payment button on the final step. */
+      #wlApWizard3 #wlProxySubmit,
+      #wlApWizard3 #wlSubmitMount{ display:none !important; }
 
       /* COF hard-show */
       #ctl00_PageBody_ChecksOnFileContainer,
@@ -4630,6 +4626,7 @@ function buildReviewHTML(){
     const inputs = Array.from(document.querySelectorAll('input[type="submit"], input[type="button"], button'));
     return inputs.find(x =>
       x.id !== 'wlProxySubmit' &&
+      x.id !== 'wlFinalMakePaymentBtn' &&
       /make\s+payment|process\s+payment|submit\s+payment/i.test((x.value||x.textContent||'').trim())
     ) || null;
   }
@@ -5706,48 +5703,80 @@ bankMount.onclick = (e)=>{
     }catch(e){}
 
 
-    // Submit card: use the REAL WebForms/Forte Make Payment button.
-    // The prior proxy-only version could show the right final step but the click
-    // posted back to the raw native form instead of launching the Forte prompt.
-    const mp = findMakePaymentButton();
-    if (mp){
-      const wrap = mp.closest('.epi-form-group-acctPayment') || mp.closest('.submit-button-panel') || mp.parentElement;
-      const submitCard = document.createElement('div');
-      submitCard.className = 'wl-card';
-      submitCard.innerHTML = `<div class="wl-card-head">Submit</div><div class="wl-card-body" id="w3SubmitInner"></div>`;
-      const reviewHost = $('w3Step3') || $('w3Review')?.parentElement || payHost;
-      (reviewHost || payHost).appendChild(submitCard);
-      const sub = $('w3SubmitInner');
-      if (wrap) sub.appendChild(wrap);
-      else sub.appendChild(mp);
+    // Submit card: final wizard button that triggers the real WebForms/Forte button
+    // while leaving that native button in ctl00_PageBody_MakePaymentPanel.
+    (function mountFinalSubmitCard(){
+      const nativePanel = $('ctl00_PageBody_MakePaymentPanel');
+      const mp = findMakePaymentButton();
+      if (!mp) return;
 
+      // If previous versions moved the real submit panel into the summary or wizard,
+      // put it back before we create our customer-facing button.
       try{
-        const panel = sub.querySelector('.submit-button-panel') || (mp.classList?.contains('submit-button-panel') ? mp : null);
+        const wrap = mp.closest('.epi-form-group-acctPayment') || mp.closest('.submit-button-panel') || mp.parentElement;
+        if (nativePanel && wrap && !nativePanel.contains(wrap)) nativePanel.appendChild(wrap);
+        const panel = nativePanel?.querySelector?.('.submit-button-panel') || mp.closest('.submit-button-panel') || mp;
         if (panel){
-          panel.classList.remove('wl-hidden-native');
+          panel.classList.add('wl-hidden-native');
           panel.style.removeProperty('display');
           panel.style.removeProperty('visibility');
-          panel.style.removeProperty('position');
-          panel.style.removeProperty('left');
-          panel.style.removeProperty('top');
-          panel.style.removeProperty('width');
-          panel.style.removeProperty('height');
-          panel.style.removeProperty('overflow');
-        }
-        mp.classList.add('wl-cta');
-        mp.style.removeProperty('display');
-        mp.style.removeProperty('visibility');
-        mp.disabled = false;
-        mp.removeAttribute('disabled');
-        if (!mp.__wlNativeFinalSync){
-          mp.__wlNativeFinalSync = true;
-          mp.addEventListener('click', function(){
-            try{ stampRealControlsBeforePayment(); }catch(e){}
-            try{ window.WLPayPreSubmit?.(); }catch(e){}
-          }, true);
+          try{ panel.hidden = false; }catch(e){}
         }
       }catch(e){}
-    }
+
+      const reviewHost = $('w3Step3') || $('w3Review')?.parentElement || payHost;
+      if (!reviewHost) return;
+
+      let submitCard = $('wlFinalSubmitCard');
+      if (!submitCard){
+        submitCard = document.createElement('div');
+        submitCard.id = 'wlFinalSubmitCard';
+        submitCard.className = 'wl-card';
+        submitCard.innerHTML = `
+          <div class="wl-card-head">Submit</div>
+          <div class="wl-card-body">
+            <button type="button" class="wl-cta" id="wlFinalMakePaymentBtn">Make Payment</button>
+            <div class="w3-help" id="wlFinalPayHelp">This will open the secure Forte payment form.</div>
+          </div>`;
+        reviewHost.appendChild(submitCard);
+      }
+
+      const finalBtn = $('wlFinalMakePaymentBtn');
+      if (finalBtn && !finalBtn.__wlFinalSubmitBound){
+        finalBtn.__wlFinalSubmitBound = true;
+        finalBtn.addEventListener('click', function(ev){
+          try{ ev.preventDefault(); ev.stopPropagation(); }catch(e){}
+          try{ sessionStorage.setItem(STEP_KEY, '3'); }catch(e){}
+          try{ stampRealControlsBeforePayment(); }catch(e){}
+          try{ window.WLPayPreSubmit?.(); }catch(e){}
+
+          const real = findMakePaymentButton();
+          if (!real || real.id === 'wlFinalMakePaymentBtn' || real.id === 'wlProxySubmit'){
+            alert('The secure payment button is still loading. Please wait a moment and try again.');
+            return;
+          }
+
+          try{
+            real.disabled = false;
+            real.removeAttribute('disabled');
+            real.style.removeProperty('display');
+            real.style.removeProperty('visibility');
+          }catch(e){}
+
+          try{ console.log('[AP] Final wizard button triggering native Forte/WebForms submit', { id: real.id, name: real.name, tag: real.tagName }); }catch(e){}
+          try{ real.click(); }
+          catch(e){
+            try{
+              const onclick = real.getAttribute && real.getAttribute('onclick');
+              if (onclick && typeof window.__doPostBack === 'function'){
+                const m = onclick.match(/__doPostBack\(['"]([^'"]+)['"],\s*['"]([^'"]*)['"]\)/);
+                if (m) window.__doPostBack(m[1], m[2] || '');
+              }
+            }catch(_e){}
+          }
+        }, true);
+      }
+    })();
 
     // Step state
     // Preserve wizard step across full postbacks/reloads so a delayed WebForms postback
@@ -5865,9 +5894,20 @@ function setStep(n){
         // Keep them on Step 1 after any round-trip.
         try{ sessionStorage.setItem(STEP_KEY, '1'); }catch(e){}
 
-        // If they already typed billing, trigger the same postback path as "Make Payment" (throttled).
+        // Do not click the Make Payment/Forte submit path just to leave Step 1.
+        // Earlier versions used forceWizardRoundTrip() here, which could post the raw
+        // WebForms payment form before the wizard was complete and leave the final
+        // Forte trigger unsatisfied. Only stamp/notify the billing input.
         if (v){
-          try{ forceWizardRoundTrip('step0-next'); }catch(e){}
+          try{
+            const real = $('ctl00_PageBody_BillingAddressTextBox');
+            if (real){
+              real.value = v;
+              real.defaultValue = v;
+              real.dispatchEvent(new Event('input', { bubbles:true }));
+              real.dispatchEvent(new Event('change', { bubbles:true }));
+            }
+          }catch(e){}
         }
 
         setStep(1);
