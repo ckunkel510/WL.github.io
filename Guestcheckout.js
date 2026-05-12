@@ -14,6 +14,51 @@
   const SIGNUP_PATH = location.origin + '/UserSignup.aspx';
   const KEY = 'wl_guest_checkout_payload';
   const AUTOFILL_KEY = 'wl_guest_checkout_needs_autofill';
+  const MODE_KEY = 'wl_checkout_mode';
+  const CHECKOUT_SNAPSHOT_KEY = 'wl_checkout_form_snapshot_v2';
+  const DATE_STATE_KEY = 'wl_checkout_date_state_v2';
+
+  function getCheckoutMode() { try { return sessionStorage.getItem(MODE_KEY) || ''; } catch { return ''; } }
+  function setCheckoutMode(mode) { try { sessionStorage.setItem(MODE_KEY, mode); } catch {} }
+
+  function clearGuestState() {
+    try { sessionStorage.removeItem(KEY); } catch {}
+    try { sessionStorage.removeItem(AUTOFILL_KEY); } catch {}
+  }
+
+  function resetCheckoutDraftStateForGuest() {
+    try { sessionStorage.removeItem(CHECKOUT_SNAPSHOT_KEY); } catch {}
+    try { sessionStorage.removeItem(DATE_STATE_KEY); } catch {}
+    try { sessionStorage.removeItem('wl_billing_confirmed'); } catch {}
+    try { sessionStorage.removeItem('wl_billing_seen'); } catch {}
+    try { sessionStorage.removeItem('wl_billing_confirmed_delivered'); } catch {}
+  }
+
+  function cartHasNativeSigninOption() {
+    const cell = document.getElementById('ctl00_PageBody_OptionalSigninButton');
+    if (!cell) return false;
+    return !!cell.querySelector('a[href*="Signin.aspx"], a[href*="Login"], input[value*="Sign In"], button');
+  }
+
+  function isSignedInCartContext() {
+    if (!IS_CART_PAGE) return false;
+    if (cartHasNativeSigninOption()) return false;
+    const wrapper = document.getElementById('wlCustomCart');
+    if (wrapper && wrapper.dataset.wlSignedIn === '1') return true;
+    const linkText = Array.from(document.querySelectorAll('a,button,input[type=submit],input[type=button]'))
+      .map(el => (el.value || el.textContent || el.getAttribute('title') || '').trim().toLowerCase())
+      .join(' | ');
+    if (/sign\s*out|log\s*out|my\s+account|account\s+settings/.test(linkText)) return true;
+    return !document.getElementById('ctl00_PageBody_OptionalSigninButton');
+  }
+
+  function removeGuestActionsFromCart() {
+    ['gc_guest_btn','gc_signin_btn','gc_below_proceed'].forEach((id) => {
+      try { document.getElementById(id)?.remove(); } catch {}
+    });
+    const mount = document.getElementById('wl_guest_actions_mount');
+    if (mount) { mount.innerHTML = ''; mount.style.display = 'none'; }
+  }
 
   const STATE_LONG = {
     AL: 'Alabama', AK: 'Alaska', AZ: 'Arizona', AR: 'Arkansas', CA: 'California',
@@ -46,6 +91,8 @@
   }
 
   function saveGuest(payload) {
+    setCheckoutMode('guest');
+    resetCheckoutDraftStateForGuest();
     try { sessionStorage.setItem(KEY, JSON.stringify(payload)); } catch {}
     try { sessionStorage.setItem(AUTOFILL_KEY, '1'); } catch {}
   }
@@ -234,19 +281,12 @@
     if (clone) return clone;
 
     const td = getSignInCell();
-    const origA = td ? td.querySelector('a[href*="Signin.aspx"]') : null;
-    if (origA) {
-      td.style.display = 'none';
-      clone = origA.cloneNode(true);
-      clone.id = 'gc_signin_btn';
-      return clone;
-    }
+    const origA = td ? td.querySelector('a[href*="Signin.aspx"], a[href*="Login"]') : null;
+    if (!origA) return null;
 
-    clone = document.createElement('a');
+    td.style.display = 'none';
+    clone = origA.cloneNode(true);
     clone.id = 'gc_signin_btn';
-    clone.className = 'epi-button';
-    clone.href = location.origin + '/Signin.aspx?Redirect=' + encodeURIComponent('/ShoppingCart.aspx');
-    clone.innerHTML = '<span>Sign In</span>';
     return clone;
   }
 
@@ -266,11 +306,21 @@
   }
 
   function placeAdjacentUI() {
+    if (isSignedInCartContext()) {
+      if (getCheckoutMode() !== 'guest') {
+        setCheckoutMode('signed_in');
+        clearGuestState();
+      }
+      removeGuestActionsFromCart();
+      return false;
+    }
+
     const proceed = getProceedBtn();
     const customMount = document.getElementById('wl_guest_actions_mount');
     if (!proceed && !customMount) return false;
 
     const cont = getOrCreateBelowContainer(proceed);
+    if (cont) cont.style.display = '';
     const guest = getOrCreateGuestBtn();
     const signin = getOrCreateSignInClone();
 
@@ -510,6 +560,7 @@
   }
 
   function continueCheckoutAndHookBilling() {
+    setCheckoutMode('guest');
     try { sessionStorage.setItem(AUTOFILL_KEY, '1'); } catch {}
     installBillingObserver();
 
@@ -598,13 +649,23 @@
     }, true);
 
     if (IS_CART_PAGE) {
-      buildModal();
-      startPlacementWatcher();
+      if (isSignedInCartContext()) {
+        if (getCheckoutMode() !== 'guest') {
+          setCheckoutMode('signed_in');
+          clearGuestState();
+        }
+        removeGuestActionsFromCart();
+      } else {
+        buildModal();
+        startPlacementWatcher();
+      }
     }
 
     const payload = loadGuest();
     const wantsAutofill = (() => { try { return sessionStorage.getItem(AUTOFILL_KEY) === '1'; } catch { return false; } })();
-    if (payload && payload.email && (wantsAutofill || IS_CHECKOUT_PAGE)) {
+    // Never apply an old guest payload just because the shopper is on checkout.
+    // It should only hydrate the page when this checkout was explicitly started as Guest Checkout.
+    if (payload && payload.email && wantsAutofill && getCheckoutMode() === 'guest') {
       installBillingObserver();
     }
 
