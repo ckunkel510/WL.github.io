@@ -1,7 +1,7 @@
 
 /* ==========================================================
    Woodson — Account Overview (AccountInfo_R.aspx)
-   v4.1 — live Constant Contact prefs, improved modal footer,
+   v4.2 — live Constant Contact prefs, improved modal footer,
           linked account emails + button-only modal close
    ========================================================== */
 (function(){
@@ -842,7 +842,7 @@ if (snapshotActions) {
             credentials:'omit',
             body:JSON.stringify(payload)
           });
-          setLookupMessage(`${email} has been linked to this WebTrack account. You can now select it from the linked email list.`, 'good');
+          setLookupMessage(`${email} has been linked to this WebTrack account and sent to Constant Contact with this account detail. You can now select it from the linked email list.`, 'good');
           f.email.value = email;
           await loadLinkedEmails(email);
           const remote = await fetchRemotePrefs(email);
@@ -884,7 +884,7 @@ if (snapshotActions) {
             const member = data.isEmailListMember ? 'is on the selected marketing list' : 'exists, but is not on the selected marketing list';
             setLookupMessage(`${email} ${member}. Click “Link Email to Account” to associate it with this WebTrack account.`, data.isEmailListMember ? 'good' : 'warn');
           } else {
-            setLookupMessage(`${email} was not found in Constant Contact. Click “Link Email to Account” to associate it with this account. It will only be created in Constant Contact if preferences are saved with marketing consent.`, 'warn');
+            setLookupMessage(`${email} was not found in Constant Contact. Click “Link Email to Account” to associate it with this account. Linking will create/update the Constant Contact contact with this WebTrack account detail, but it will not opt the email into marketing unless Email marketing is selected and saved.`, 'warn');
           }
           f.use_lookup_btn.style.display='';
           return data;
