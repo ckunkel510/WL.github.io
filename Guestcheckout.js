@@ -108,6 +108,8 @@
       .gc-section{font-size:16px;font-weight:700;margin:14px 0 8px;color:#222;}
       .gc-field label{font-size:12px;color:#333;margin-bottom:4px;display:block;}
       .gc-field input{width:100%;padding:10px;border:1px solid #ddd;border-radius:10px;box-sizing:border-box;}
+      .gc-field input.gc-invalid{border-color:#b00020;box-shadow:0 0 0 3px rgba(176,0,32,.12);background:#fffafa;}
+      .gc-field-msg{font-size:12px;color:#b00020;margin-top:4px;line-height:1.25;}
       .gc-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;}
       .gc-btn{padding:10px 14px;border-radius:10px;border:1px solid #ddd;background:#f6f6f6;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;}
       .gc-btn.primary{background:#6b0016;color:#fff;border-color:#6b0016;}
@@ -299,28 +301,93 @@
   }
 
   function validateEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean(email)); }
-  function validateZip(zip) { return /^\d{5}(-\d{4})?$/.test(clean(zip)); }
+  function normalizeZip(zip) {
+    const d = digits(zip);
+    if (d.length === 5) return d;
+    if (d.length === 9) return `${d.slice(0,5)}-${d.slice(5)}`;
+    return clean(zip);
+  }
+  function validateZip(zip) { return /^\d{5}(-\d{4})?$/.test(normalizeZip(zip)); }
+  function normalizePhone(phone) {
+    const d = digits(phone);
+    if (d.length === 10) return `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}`;
+    if (d.length === 11 && d[0] === '1') return `(${d.slice(1,4)}) ${d.slice(4,7)}-${d.slice(7)}`;
+    return clean(phone);
+  }
+
+  function clearGuestFieldErrors() {
+    document.querySelectorAll('.gc-invalid').forEach(el => el.classList.remove('gc-invalid'));
+    document.querySelectorAll('.gc-field-msg').forEach(el => el.remove());
+    const box = $('#gc_error');
+    if (box) { box.textContent = ''; box.style.display = 'none'; }
+  }
+
+  function markGuestInvalid(id, msg) {
+    const input = byId(id);
+    if (!input) return;
+    input.classList.add('gc-invalid');
+    const host = input.closest('.gc-field') || input.parentElement;
+    if (host && !host.querySelector('.gc-field-msg')) {
+      const div = document.createElement('div');
+      div.className = 'gc-field-msg';
+      div.textContent = msg;
+      host.appendChild(div);
+    }
+  }
 
   function collectGuestPayload() {
+    clearGuestFieldErrors();
+
     const email = clean($('#gc_email')?.value);
-    const phone = digits($('#gc_phone')?.value);
+    const phoneDigits = digits($('#gc_phone')?.value);
+    const phone = phoneDigits;
     const fname = clean($('#gc_fname')?.value);
     const lname = clean($('#gc_lname')?.value);
     const d_addr1 = clean($('#gc_del_addr1')?.value);
     const d_city = clean($('#gc_del_city')?.value);
     const d_state = clean($('#gc_del_state')?.value).toUpperCase();
-    const d_zip = clean($('#gc_del_zip')?.value);
+    const d_zip = normalizeZip($('#gc_del_zip')?.value);
     const billSame = !!$('#gc_bill_same')?.checked;
     const i_addr1 = billSame ? d_addr1 : clean($('#gc_inv_addr1')?.value);
     const i_city = billSame ? d_city : clean($('#gc_inv_city')?.value);
     const i_state2 = billSame ? d_state : clean($('#gc_inv_state')?.value).toUpperCase();
-    const i_zip = billSame ? d_zip : clean($('#gc_inv_zip')?.value);
+    const i_zip = billSame ? d_zip : normalizeZip($('#gc_inv_zip')?.value);
 
-    if (!validateEmail(email)) return { error: 'Please enter a valid email address.' };
-    if (phone.length < 10) return { error: 'Please enter a valid phone number.' };
-    if (!fname || !lname) return { error: 'Please enter first and last name.' };
-    if (!d_addr1 || !d_city || !d_state || !validateZip(d_zip)) return { error: 'Please complete the address, including a valid ZIP code.' };
-    if (!billSame && (!i_addr1 || !i_city || !i_state2 || !validateZip(i_zip))) return { error: 'Please complete the billing address or check “Billing same as this address.”' };
+    // Put normalized values back so the customer sees the fix before continuing.
+    const phoneInput = $('#gc_phone');
+    if (phoneInput && phoneDigits.length >= 10) phoneInput.value = normalizePhone(phoneInput.value);
+    const dz = $('#gc_del_zip');
+    if (dz) dz.value = d_zip;
+    const iz = $('#gc_inv_zip');
+    if (iz && !billSame) iz.value = i_zip;
+
+    const errors = [];
+    const add = (id, msg) => { errors.push(msg); markGuestInvalid(id, msg); };
+
+    if (!validateEmail(email)) add('gc_email', 'Please enter a valid email address.');
+    if (phoneDigits.length < 10) add('gc_phone', 'Please enter a valid phone number.');
+    if (!fname) add('gc_fname', 'First name is required.');
+    if (!lname) add('gc_lname', 'Last name is required.');
+    if (!d_addr1) add('gc_del_addr1', 'Street address is required.');
+    if (!d_city) add('gc_del_city', 'City is required.');
+    if (!/^[A-Z]{2}$/.test(d_state)) add('gc_del_state', 'Use a 2-letter state, like TX.');
+    if (!validateZip(d_zip)) add('gc_del_zip', 'ZIP must be 5 digits or ZIP+4.');
+
+    if (!billSame) {
+      if (!i_addr1) add('gc_inv_addr1', 'Billing street address is required.');
+      if (!i_city) add('gc_inv_city', 'Billing city is required.');
+      if (!/^[A-Z]{2}$/.test(i_state2)) add('gc_inv_state', 'Use a 2-letter state, like TX.');
+      if (!validateZip(i_zip)) add('gc_inv_zip', 'Billing ZIP must be 5 digits or ZIP+4.');
+    }
+
+    if (errors.length) {
+      try {
+        const first = document.querySelector('.gc-invalid');
+        if (first) first.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setTimeout(() => { try { first?.focus(); } catch {} }, 100);
+      } catch {}
+      return { error: 'Please fix the highlighted fields before continuing.' };
+    }
 
     return {
       email, phone, fname, lname,
@@ -523,6 +590,12 @@
 
   function init() {
     injectStyles();
+    document.addEventListener('input', (ev) => {
+      if (ev.target && ev.target.classList && ev.target.classList.contains('gc-invalid')) {
+        ev.target.classList.remove('gc-invalid');
+        try { ev.target.closest('.gc-field')?.querySelector('.gc-field-msg')?.remove(); } catch {}
+      }
+    }, true);
 
     if (IS_CART_PAGE) {
       buildModal();
