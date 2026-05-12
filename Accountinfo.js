@@ -18,7 +18,7 @@
   const SHEET_API_GET  = '';
   const SHEET_API_POST = '';
   const SHEET_REQ_POST = '';
-  const COMM_PREFS_POST = '';
+  const COMM_PREFS_POST = '5448d1ed-e57c-4d4e-b689-5e82d14e178a';
 
   const PAYMENT_METHODS_URL = 'https://webtrack.woodsonlumber.com/CustomerTokens.aspx';
 
