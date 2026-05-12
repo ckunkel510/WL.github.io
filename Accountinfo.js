@@ -1,8 +1,8 @@
 
 /* ==========================================================
    Woodson — Account Overview (AccountInfo_R.aspx)
-   v3.7 — Payment Methods link, tax wording,
-          modal scroll fixes + Apps Script Constant Contact prefs
+   v3.8 — Payment Methods link, Apps Script Constant Contact prefs,
+          JSONP preference lookup + no-CORS preference submit
    ========================================================== */
 (function(){
   'use strict';
@@ -12,13 +12,17 @@
      IMPORTANT: Constant Contact API calls should go through a secure backend route.
      Do not put Constant Contact client secrets/tokens in this browser file.
 
-     Example Apps Script route for COMM_PREFS_POST:
-     https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec?action=savePreferences
+     Example Vercel/Apps Script route for COMM_PREFS_POST:
+     https://wlmarketingdashboard.vercel.app/api/constant-contact/preferences
   */
   const SHEET_API_GET  = '';
   const SHEET_API_POST = '';
   const SHEET_REQ_POST = '';
   const COMM_PREFS_POST = 'https://script.google.com/macros/s/AKfycbzmUdU2XZ0JGNEzorkbifFLdvnYQxHl6pUFbsJzi29dg_3jFbBLD9zkixZiwSNiUPRJvQ/exec?action=savePreferences';
+
+  // Used to pull the customer's current Constant Contact/list status back into the modal.
+  // Apps Script does not reliably support CORS JSON reads, so this route is called by JSONP below.
+  const COMM_PREFS_GET = COMM_PREFS_POST.replace('action=savePreferences', 'action=getPreferences');
 
   const PAYMENT_METHODS_URL = 'https://webtrack.woodsonlumber.com/CustomerTokens.aspx';
 
@@ -488,32 +492,80 @@ if (snapshotActions) {
     const COMM_KEY = (k)=> `wl_comm_prefs_v3_${k}`;
     function getLocalPrefs(){ try { return JSON.parse(localStorage.getItem(COMM_KEY(accountKey))||'{}'); } catch { return {}; } }
     function setLocalPrefs(v){ try { localStorage.setItem(COMM_KEY(accountKey), JSON.stringify(v)); } catch {} }
-    async function fetchRemotePrefs(){ if (!SHEET_API_GET) return null; try{ const u=new URL(SHEET_API_GET); u.searchParams.set('accountKey',accountKey); const r=await fetch(u.toString(),{credentials:'omit'}); if(!r.ok) return null; return await r.json(); }catch{ return null; } }
+    function jsonpRequest(url, params={}, timeout=8000){
+      return new Promise((resolve, reject)=>{
+        if (!url) return resolve(null);
+        const cbName = `wlCommPrefs_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+        const script = document.createElement('script');
+        const timer = setTimeout(()=>{
+          cleanup();
+          reject(new Error('Preference lookup timed out.'));
+        }, timeout);
+        function cleanup(){
+          clearTimeout(timer);
+          try { delete window[cbName]; } catch { window[cbName] = undefined; }
+          script.remove();
+        }
+        window[cbName] = (data)=>{
+          cleanup();
+          resolve(data || null);
+        };
+        try {
+          const u = new URL(url);
+          Object.entries(params || {}).forEach(([k,v])=>{
+            if (v !== undefined && v !== null && String(v).trim() !== '') u.searchParams.set(k, v);
+          });
+          u.searchParams.set('callback', cbName);
+          script.onerror = ()=>{ cleanup(); reject(new Error('Preference lookup failed.')); };
+          script.src = u.toString();
+          document.head.appendChild(script);
+        } catch(err){
+          cleanup();
+          reject(err);
+        }
+      });
+    }
+
+    async function fetchRemotePrefs(seedEmail=''){
+      const local = getLocalPrefs();
+      const email = (seedEmail || local.email || '').trim();
+
+      if (COMM_PREFS_GET) {
+        try {
+          const data = await jsonpRequest(COMM_PREFS_GET, { accountKey, email });
+          if (data && data.ok) return data.preferences || data;
+        } catch(err) {
+          console.warn('Communication preference lookup failed:', err);
+        }
+      }
+
+      if (!SHEET_API_GET) return null;
+      try{
+        const u=new URL(SHEET_API_GET);
+        u.searchParams.set('accountKey',accountKey);
+        const r=await fetch(u.toString(),{credentials:'omit'});
+        if(!r.ok) return null;
+        return await r.json();
+      }catch{ return null; }
+    }
+
     async function postRemotePrefs(v){ if (!SHEET_API_POST) return false; try{ const r=await fetch(SHEET_API_POST,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)}); return r.ok; }catch{ return false; } }
+
     async function postCommunicationPrefs(v){
       if (COMM_PREFS_POST) {
         try {
-          /*
-            Google Apps Script web apps typically do not return CORS headers.
-            Use a simple no-cors POST so WebTrack can submit the preference
-            payload without exposing Constant Contact credentials in the browser.
-            Because no-cors responses are opaque, a completed fetch means
-            "submitted" but not "verified by browser response." The Apps
-            Script log sheet is the source of truth for backend success/failure.
-          */
+          // Apps Script web apps usually cannot be read cross-domain by fetch because of CORS.
+          // Use a simple no-CORS text/plain POST so the submission reaches doPost reliably.
           await fetch(COMM_PREFS_POST, {
             method:'POST',
             mode:'no-cors',
-            credentials:'omit',
             headers:{'Content-Type':'text/plain;charset=utf-8'},
-            body:JSON.stringify({
-              ...v,
-              source: v.source || 'WebTrack AccountInfo'
-            })
+            credentials:'omit',
+            body:JSON.stringify({ ...v, source: v.source || 'WebTrack AccountInfo' })
           });
           return true;
-        } catch (err) {
-          console.warn('Communication preference sync failed:', err);
+        } catch(err) {
+          console.warn('Communication preference submit failed:', err);
           return false;
         }
       }
@@ -533,8 +585,32 @@ if (snapshotActions) {
         sms_mkt: $('#comm_sms_mkt', modal),
         sms_phone: $('#comm_sms_phone', modal)
       };
-      async function hydrate(){ const local=getLocalPrefs(); const remote=await fetchRemotePrefs(); const v=Object.assign({}, local, remote||{}); f.email_mkt.checked=!!v.emailMarketing; f.email_billing.checked=!!v.emailBilling; f.email_delivery.checked=!!v.emailDelivery; if(v.email) f.email.value=v.email; f.sms_mkt.checked=!!v.smsMarketing; if(v.smsPhone) f.sms_phone.value=v.smsPhone; }
+      function applyPrefs(v){
+        if (!v) return;
+        f.email_mkt.checked=!!v.emailMarketing;
+        f.email_billing.checked=!!v.emailBilling;
+        f.email_delivery.checked=!!v.emailDelivery;
+        if(v.email) f.email.value=v.email;
+        f.sms_mkt.checked=!!v.smsMarketing;
+        if(v.smsPhone) f.sms_phone.value=v.smsPhone;
+      }
+
+      async function hydrate(){
+        const local=getLocalPrefs();
+        applyPrefs(local);
+        const remote=await fetchRemotePrefs(local.email || f.email.value);
+        applyPrefs(Object.assign({}, local, remote||{}));
+      }
+
       openBtn.addEventListener('click', (e)=>{ e.preventDefault(); hydrate(); openModal('#wl-comm-modal'); });
+
+      f.email.addEventListener('blur', async ()=>{
+        const email = (f.email.value || '').trim();
+        if (!emailOK(email)) return;
+        const local = getLocalPrefs();
+        const remote = await fetchRemotePrefs(email);
+        applyPrefs(Object.assign({}, local, remote || {}, { email }));
+      });
       cancel.addEventListener('click', ()=> closeModal('#wl-comm-modal'));
       modal.addEventListener('click', (e)=>{ if (e.target===modal) closeModal('#wl-comm-modal'); });
       form.addEventListener('submit', async (e)=>{
@@ -561,7 +637,7 @@ if (snapshotActions) {
         setLocalPrefs(payload);
         const remoteSaved = await postCommunicationPrefs(payload);
         closeModal('#wl-comm-modal');
-        alert(remoteSaved ? 'Your communication preferences have been saved.' : 'Your communication preferences have been saved on this device.');
+        alert(remoteSaved ? 'Your communication preferences have been saved and submitted.' : 'Your communication preferences have been saved on this device.');
       });
     })();
 
