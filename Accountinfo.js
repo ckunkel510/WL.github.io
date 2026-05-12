@@ -1,8 +1,8 @@
 
 /* ==========================================================
    Woodson — Account Overview (AccountInfo_R.aspx)
-   v4.0 — live Constant Contact prefs, improved modal footer,
-          richer contact sync fields + alternate email lookup
+   v4.1 — live Constant Contact prefs, improved modal footer,
+          linked account emails + button-only modal close
    ========================================================== */
 (function(){
   'use strict';
@@ -23,6 +23,8 @@
   // Used to pull the customer's current Constant Contact/list status back into the modal.
   // Apps Script does not reliably support CORS JSON reads, so this route is called by JSONP below.
   const COMM_PREFS_GET = COMM_PREFS_POST.replace('action=savePreferences', 'action=getPreferences');
+  const COMM_PREFS_LINK = COMM_PREFS_POST.replace('action=savePreferences', 'action=linkEmail');
+  const COMM_PREFS_ACCOUNT_EMAILS = COMM_PREFS_POST.replace('action=savePreferences', 'action=getAccountEmails');
 
   const PAYMENT_METHODS_URL = 'https://webtrack.woodsonlumber.com/CustomerTokens.aspx';
 
@@ -53,6 +55,8 @@
     return mNum(el.textContent);
   }
   function waitFor(sel,{timeout=1000,interval=120}={}){return new Promise((res,rej)=>{const t0=Date.now();const tick=()=>{const el=$(sel);if(el) return res(el); if(Date.now()-t0>=timeout) return rej(new Error('timeout '+sel)); setTimeout(tick,interval)}; (document.readyState==='loading')?document.addEventListener('DOMContentLoaded',tick,{once:true}):tick();});}
+  function escapeHtml(value){ return String(value||'').replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch])); }
+  function escapeAttr(value){ return escapeHtml(value).replace(/'/g,'&#39;'); }
 
   /* ----------- styles ----------- */
   const styles = `
@@ -316,18 +320,31 @@
 
                 <div class="wl-field">
                   <div class="wl-lookup-box">
-                    <label for="comm_lookup_email">Look up or use another email</label>
+                    <label for="comm_linked_email_select">Emails linked to this WebTrack account</label>
+                    <div class="wl-inline">
+                      <select id="comm_linked_email_select" style="min-width:min(360px,100%);flex:1 1 300px">
+                        <option value="">Loading linked emails…</option>
+                      </select>
+                      <button type="button" class="wl-btn small" id="wl-comm-refresh-linked-btn">Refresh</button>
+                    </div>
+                    <div class="wl-lookup-result" id="wl-comm-linked-result">Choose an email to view or update that contact’s preferences.</div>
+                  </div>
+                </div>
+
+                <div class="wl-field">
+                  <div class="wl-lookup-box">
+                    <label for="comm_lookup_email">Look up and link another email to this account</label>
                     <div class="wl-inline">
                       <input type="email" id="comm_lookup_email" placeholder="alternate@example.com" style="min-width:min(320px,100%);flex:1 1 260px">
                       <button type="button" class="wl-btn small" id="wl-comm-lookup-btn">Look Up</button>
-                      <button type="button" class="wl-btn small" id="wl-comm-use-lookup-btn" style="display:none">Use This Email</button>
+                      <button type="button" class="wl-btn small" id="wl-comm-use-lookup-btn" style="display:none">Link Email to Account</button>
                     </div>
-                    <div class="wl-lookup-result" id="wl-comm-lookup-result">Use this only when a customer wants to check a different email address. It does not delete or merge old Constant Contact records.</div>
+                    <div class="wl-lookup-result" id="wl-comm-lookup-result">Use this when a customer has more than one email. Linking does not delete or merge Constant Contact records; it associates the email with this WebTrack account so it can be managed here.</div>
                   </div>
                 </div>
 
                 <div class="wl-field"><div class="wl-consent">By choosing SMS marketing, the customer is requesting marketing text messages from Woodson Lumber. Message and data rates may apply. Reply STOP to opt out. Final compliance language should match the Constant Contact SMS program settings before launch.</div></div>
-                <div class="wl-field"><div class="wl-meta">Marketing list status is checked live from Constant Contact. Billing and delivery preferences are logged through the backend unless separate Constant Contact lists/custom fields are configured.</div></div>
+                <div class="wl-field"><div class="wl-meta">Marketing list status is checked live from Constant Contact. Linked emails are stored by account in the backend so multiple customer emails can be managed from this page. Billing and delivery preferences are logged through the backend unless separate Constant Contact lists/custom fields are configured.</div></div>
                 <div class="wl-modal-actions">
                   <button type="button" class="wl-btn" id="wl-comm-cancel">Cancel</button>
                   <button type="submit" class="wl-btn primary">Save Preferences</button>
@@ -696,6 +713,9 @@ if (snapshotActions) {
         phone: $('#comm_phone', modal),
         sms_mkt: $('#comm_sms_mkt', modal),
         sms_phone: $('#comm_sms_phone', modal),
+        linked_select: $('#comm_linked_email_select', modal),
+        linked_result: $('#wl-comm-linked-result', modal),
+        refresh_linked_btn: $('#wl-comm-refresh-linked-btn', modal),
         lookup_email: $('#comm_lookup_email', modal),
         lookup_btn: $('#wl-comm-lookup-btn', modal),
         use_lookup_btn: $('#wl-comm-use-lookup-btn', modal),
@@ -714,7 +734,9 @@ if (snapshotActions) {
         f.sms_mkt.checked=false;
         f.sms_phone.value='';
         f.lookup_email.value='';
-        setLookupMessage('Use this only when a customer wants to check a different email address. It does not delete or merge old Constant Contact records.','');
+        if (f.linked_select) f.linked_select.innerHTML = '<option value="">Loading linked emails…</option>';
+        setLinkedMessage('Choose an email to view or update that contact’s preferences.','');
+        setLookupMessage('Use this when a customer has more than one email. Linking does not delete or merge Constant Contact records; it associates the email with this WebTrack account so it can be managed here.','');
         f.use_lookup_btn.style.display='none';
       }
 
@@ -722,6 +744,12 @@ if (snapshotActions) {
         if (!f.lookup_result) return;
         f.lookup_result.textContent = message || '';
         f.lookup_result.className = `wl-lookup-result${tone ? ' ' + tone : ''}`;
+      }
+
+      function setLinkedMessage(message, tone){
+        if (!f.linked_result) return;
+        f.linked_result.textContent = message || '';
+        f.linked_result.className = `wl-lookup-result${tone ? ' ' + tone : ''}`;
       }
 
       function applyAccountDetails(d){
@@ -748,11 +776,92 @@ if (snapshotActions) {
         if(v.smsPhone) f.sms_phone.value=digits(v.smsPhone);
       }
 
+      async function loadLinkedEmails(selectedEmail=''){
+        const selected = (selectedEmail || f.email.value || '').trim().toLowerCase();
+        if (!f.linked_select) return [];
+
+        try {
+          f.linked_select.innerHTML = '<option value="">Loading linked emails…</option>';
+          const data = await jsonpRequest(COMM_PREFS_ACCOUNT_EMAILS, { accountKey, email: selected });
+          const emails = Array.isArray(data && data.emails) ? data.emails : [];
+          const seen = new Set();
+          const options = [];
+
+          emails.forEach(item=>{
+            const email = String(item.email || '').trim().toLowerCase();
+            if (!email || seen.has(email)) return;
+            seen.add(email);
+            const name = [item.firstName, item.lastName].filter(Boolean).join(' ').trim();
+            const status = item.isEmailListMember === true ? ' • marketing on' : item.isEmailListMember === false ? ' • marketing off' : '';
+            options.push({ email, label: `${email}${name ? ' — ' + name : ''}${status}` });
+          });
+
+          if (selected && !seen.has(selected)) options.unshift({ email: selected, label: selected + ' — current account email' });
+
+          if (!options.length) {
+            f.linked_select.innerHTML = '<option value="">No linked emails found</option>';
+            setLinkedMessage('No linked emails have been saved for this account yet. The AccountSettings email will be used by default.','warn');
+            return [];
+          }
+
+          f.linked_select.innerHTML = options.map(opt => `<option value="${escapeAttr(opt.email)}">${escapeHtml(opt.label)}</option>`).join('');
+          if (selected && options.some(opt => opt.email === selected)) f.linked_select.value = selected;
+          setLinkedMessage(`${options.length} email${options.length === 1 ? '' : 's'} linked to this account. Select one to edit that contact’s preferences.`, 'good');
+          return options;
+        } catch(err) {
+          console.warn('Linked email lookup failed:', err);
+          f.linked_select.innerHTML = selected ? `<option value="${escapeAttr(selected)}">${escapeHtml(selected)}</option>` : '<option value="">Unable to load linked emails</option>';
+          setLinkedMessage('Could not load linked emails. You can still save preferences for the displayed email.', 'bad');
+          return [];
+        }
+      }
+
+      async function linkEmailToAccount(email){
+        email = String(email || '').trim().toLowerCase();
+        if (!emailOK(email)) {
+          setLookupMessage('Enter a valid email address before linking it to this account.','bad');
+          return false;
+        }
+
+        const payload = {
+          accountKey,
+          email,
+          firstName: ($('#comm_first_name').value||'').trim(),
+          lastName: ($('#comm_last_name').value||'').trim(),
+          companyName: ($('#comm_company').value||'').trim() || accountKey,
+          phone: digits($('#comm_phone').value||''),
+          source: 'AccountInfo_R.aspx link email',
+          updatedAt: new Date().toISOString()
+        };
+
+        try {
+          await fetch(COMM_PREFS_LINK, {
+            method:'POST',
+            mode:'no-cors',
+            headers:{'Content-Type':'text/plain;charset=utf-8'},
+            credentials:'omit',
+            body:JSON.stringify(payload)
+          });
+          setLookupMessage(`${email} has been linked to this WebTrack account. You can now select it from the linked email list.`, 'good');
+          f.email.value = email;
+          await loadLinkedEmails(email);
+          const remote = await fetchRemotePrefs(email);
+          applyPrefs(remote || { email, companyName: payload.companyName });
+          return true;
+        } catch(err) {
+          console.warn('Email link failed:', err);
+          setLookupMessage('That email could not be linked. Check Apps Script executions if this keeps happening.','bad');
+          return false;
+        }
+      }
+
       async function hydrate(seedEmail=''){
         resetPrefs();
         const accountDetails = await fetchAccountSettingsDetails();
         applyAccountDetails(accountDetails);
-        const remote = await fetchRemotePrefs(seedEmail || accountDetails.email || f.email.value);
+        const startingEmail = seedEmail || accountDetails.email || f.email.value;
+        await loadLinkedEmails(startingEmail);
+        const remote = await fetchRemotePrefs(startingEmail);
         applyPrefs(remote || accountDetails || null);
       }
 
@@ -773,9 +882,9 @@ if (snapshotActions) {
           }
           if (data.found) {
             const member = data.isEmailListMember ? 'is on the selected marketing list' : 'exists, but is not on the selected marketing list';
-            setLookupMessage(`${email} ${member}. Click “Use This Email” to make it the email this form updates.`, data.isEmailListMember ? 'good' : 'warn');
+            setLookupMessage(`${email} ${member}. Click “Link Email to Account” to associate it with this WebTrack account.`, data.isEmailListMember ? 'good' : 'warn');
           } else {
-            setLookupMessage(`${email} was not found in Constant Contact. Click “Use This Email” to create/update it when this form is saved.`, 'warn');
+            setLookupMessage(`${email} was not found in Constant Contact. Click “Link Email to Account” to associate it with this account. It will only be created in Constant Contact if preferences are saved with marketing consent.`, 'warn');
           }
           f.use_lookup_btn.style.display='';
           return data;
@@ -799,16 +908,26 @@ if (snapshotActions) {
       f.lookup_btn.addEventListener('click', async ()=>{ await lookupEmail(f.lookup_email.value); });
       f.lookup_email.addEventListener('keydown', async (e)=>{ if(e.key === 'Enter'){ e.preventDefault(); await lookupEmail(f.lookup_email.value); } });
       f.use_lookup_btn.addEventListener('click', async ()=>{
-        const email = (f.lookup_email.value || '').trim();
-        if (!emailOK(email)) return;
-        f.email.value = email;
-        const remote = await fetchRemotePrefs(email);
-        applyPrefs(remote || { email });
-        setLookupMessage(`${email} is now selected as the primary email for this preference update.`, 'good');
+        await linkEmailToAccount(f.lookup_email.value);
       });
 
+      if (f.refresh_linked_btn) {
+        f.refresh_linked_btn.addEventListener('click', async ()=>{ await loadLinkedEmails(f.email.value); });
+      }
+
+      if (f.linked_select) {
+        f.linked_select.addEventListener('change', async ()=>{
+          const email = (f.linked_select.value || '').trim();
+          if (!emailOK(email)) return;
+          f.email.value = email;
+          const remote = await fetchRemotePrefs(email);
+          applyPrefs(remote || { email });
+        });
+      }
+
       cancel.addEventListener('click', ()=> closeModal('#wl-comm-modal'));
-      modal.addEventListener('click', (e)=>{ if (e.target===modal) closeModal('#wl-comm-modal'); });
+      // Intentionally do not close this modal from backdrop clicks.
+      // Users should close it only with Cancel or Save so preference edits are not lost accidentally.
       form.addEventListener('submit', async (e)=>{
         e.preventDefault();
         const wantsEmail = $('#comm_email_mkt').checked || $('#comm_email_billing').checked || $('#comm_email_delivery').checked;
@@ -874,7 +993,8 @@ if (snapshotActions) {
 
       openBtn.addEventListener('click', (e)=>{ e.preventDefault(); show(); openModal('#wl-req-modal'); });
       cancel.addEventListener('click', ()=> closeModal('#wl-req-modal'));
-      modal.addEventListener('click', (e)=>{ if (e.target===modal) closeModal('#wl-req-modal'); });
+      // Intentionally do not close this modal from backdrop clicks.
+      // Users should close it only with Cancel or Submit so request edits are not lost accidentally.
 
       form.addEventListener('submit', async (e)=>{
         e.preventDefault();
