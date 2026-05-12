@@ -6,6 +6,48 @@
   const QUOTE_URL = 'https://woodsonwholesaleinc.formstack.com/forms/request_a_quote';
   const SHOP_MORE_URL = '/Products.aspx';
 
+  const CHECKOUT_MODE_KEY = 'wl_checkout_mode';
+  const GUEST_KEY = 'wl_guest_checkout_payload';
+  const GUEST_AUTOFILL_KEY = 'wl_guest_checkout_needs_autofill';
+  const CHECKOUT_SNAPSHOT_KEY = 'wl_checkout_form_snapshot_v2';
+  const DATE_STATE_KEY = 'wl_checkout_date_state_v2';
+
+  function cartHasNativeSigninOption() {
+    const cell = document.getElementById('ctl00_PageBody_OptionalSigninButton');
+    if (!cell) return false;
+    return !!cell.querySelector('a[href*="Signin.aspx"], a[href*="Login"], input[value*="Sign In"], button');
+  }
+
+  function isSignedInCart() {
+    // WebTrack exposes the optional sign-in cell only when the shopper is not signed in.
+    if (cartHasNativeSigninOption()) return false;
+
+    // Extra positive checks for employee/customer sessions.
+    const linksText = Array.from(document.querySelectorAll('a,button,input[type=submit],input[type=button]'))
+      .map(el => (el.value || el.textContent || el.getAttribute('title') || '').trim().toLowerCase())
+      .join(' | ');
+    if (/sign\s*out|log\s*out|my\s+account|account\s+settings/.test(linksText)) return true;
+
+    // If the page has no optional sign-in prompt, assume this is already an authenticated checkout context.
+    return true;
+  }
+
+  function clearGuestCheckoutState() {
+    try { sessionStorage.removeItem(GUEST_KEY); } catch {}
+    try { sessionStorage.removeItem(GUEST_AUTOFILL_KEY); } catch {}
+  }
+
+  function startSignedInCheckoutFlow() {
+    try { sessionStorage.setItem(CHECKOUT_MODE_KEY, 'signed_in'); } catch {}
+    clearGuestCheckoutState();
+    // Important for employee checkout: do not let a prior customer's checkout snapshot hydrate this order.
+    try { sessionStorage.removeItem(CHECKOUT_SNAPSHOT_KEY); } catch {}
+    try { sessionStorage.removeItem(DATE_STATE_KEY); } catch {}
+    try { sessionStorage.removeItem('wl_billing_confirmed'); } catch {}
+    try { sessionStorage.removeItem('wl_billing_seen'); } catch {}
+    try { sessionStorage.removeItem('wl_billing_confirmed_delivered'); } catch {}
+  }
+
   function ready(fn) {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn);
     else fn();
@@ -244,7 +286,12 @@
     title.textContent = 'Shopping Cart';
     const sub = document.createElement('div');
     sub.className = 'wl-cart-sub';
-    sub.textContent = 'Review your items, update quantities, then continue as a signed-in customer or use Guest Checkout below.';
+    const signedIn = isSignedInCart();
+    wrapper.dataset.wlSignedIn = signedIn ? '1' : '0';
+
+    sub.textContent = signedIn
+      ? 'Review your items, update quantities, then continue to checkout.'
+      : 'Review your items, update quantities, then continue as a signed-in customer or use Guest Checkout below.';
     headCopy.append(title, sub);
     header.appendChild(headCopy);
 
@@ -270,6 +317,7 @@
       proceed.classList.add('wl-loading');
       proceed.disabled = true;
       proceed.textContent = 'Opening Checkout…';
+      startSignedInCheckoutFlow();
       try { sessionStorage.setItem('wl_expect_nav', '1'); } catch {}
       const nativeProceed = getNativeButton(['#ctl00_PageBody_PlaceOrderButton', '[name="ctl00$PageBody$PlaceOrderButton"]']);
       if (!runNative(nativeProceed)) {
@@ -300,8 +348,10 @@
     const secondaryActions = document.createElement('div');
     secondaryActions.id = 'wl_guest_actions_mount';
     secondaryActions.className = 'wl-cart-secondary-actions';
+    secondaryActions.style.display = signedIn ? 'none' : '';
 
-    footer.append(subtotalDiv, actions, secondaryActions);
+    footer.append(subtotalDiv, actions);
+    if (!signedIn) footer.appendChild(secondaryActions);
     wrapper.append(header, list, footer);
 
     cartPanel.insertAdjacentElement('afterend', wrapper);
