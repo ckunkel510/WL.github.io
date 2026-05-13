@@ -1,7 +1,7 @@
 
 (function () {
   'use strict';
-  console.log('[AP] PayByInvoice version v35 loaded');
+  console.log('[AP] PayByInvoice version v36 submit-safe bank sync loaded');
 
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
@@ -1818,9 +1818,28 @@ const IDS = {
 
   function proxyFire(){
     const mode = currentPayMode();
+    // If a prior WebForms AJAX postback is still running from selecting a saved ACH account,
+    // wait for it instead of clicking Forte during the async request. That click can be swallowed.
+    try{
+      if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
+        const prm = Sys.WebForms.PageRequestManager.getInstance();
+        if (prm && typeof prm.get_isInAsyncPostBack === 'function' && prm.get_isInAsyncPostBack()){
+          const now = Date.now();
+          const started = Number(sessionStorage.getItem('__WL_PROXY_WAIT_STARTED') || now);
+          sessionStorage.setItem('__WL_PROXY_WAIT_STARTED', String(started));
+          if (now - started < 5000){
+            log.warn('proxy delaying native submit; WebForms async postback still in progress');
+            setTimeout(proxyFire, 275);
+            return true;
+          }
+        } else {
+          try{ sessionStorage.removeItem('__WL_PROXY_WAIT_STARTED'); }catch(e){}
+        }
+      }
+    }catch(e){}
+
     // Final safety net: before clicking the native Forte/WebForms trigger, sync the real
-    // radios/dropdowns from wlPayState. This is what prevents "summary says Add New"
-    // while the native form still posts the saved ACH account.
+    // radios/dropdowns from wlPayState SILENTLY. Do not fire ddlChecksOnFile change here.
     try{ window.WLPaySyncNative?.('proxyFire'); }catch(e){}
     try{ window.ensureShadowPayBy?.(); }catch(e){}
     const real = findNativeTrigger();
@@ -5073,14 +5092,21 @@ function syncNativeBankChoice(mode, value, fireChange){
   }catch(e){ return false; }
 }
 
-// Let the submit bridge sync the real WebForms controls immediately before opening Forte.
+// Sync the real WebForms controls from the card state.
+// Important: final submit must NOT dispatch ddlChecksOnFile change events.
+// The payload Cody captured showed __EVENTTARGET=ctl00$PageBody$ddlChecksOnFile around the final click,
+// which means the saved-account dropdown postback was stealing the Forte submit. During proxyFire we only
+// stamp values silently, then click the native Forte/WebForms submit.
 try{
   window.WLPaySyncNative = function(reason){
     try{
       const st = loadPayState() || {};
+      const r = String(reason || '').toLowerCase();
+      const isFinalSubmit = /proxy|submit|makepayment|make_payment|forte|final/.test(r);
+      const fireChange = !isFinalSubmit;
       if (st.method === 'bank'){
-        if (st.bank?.mode === 'saved') return syncNativeBankChoice('saved', st.bank.value, true);
-        return syncNativeBankChoice('new', '', true);
+        if (st.bank?.mode === 'saved') return syncNativeBankChoice('saved', st.bank.value, fireChange);
+        return syncNativeBankChoice('new', '', fireChange);
       }
       return reconcileNativeFromState();
     }catch(e){}
