@@ -1,7 +1,7 @@
 
 (function () {
   'use strict';
-  console.log('[AP] PayByInvoice version v35.2 loaded');
+  console.log('[AP] PayByInvoice version v35 saved-account-minimal-fix loaded');
 
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
@@ -1621,10 +1621,6 @@ const IDS = {
   else { boot(); }
 })();
 
-// Keep the actual WebForms/Forte Make Payment button as the visible final-step button.
-// This preserves the native gateway click handler instead of proxying it.
-window.__WL_AP_USE_NATIVE_VISIBLE_SUBMIT = false;
-
 /* ======================================================
    SUBMIT BRIDGE (proxy to native, respect pay mode)
    ====================================================== */
@@ -1648,30 +1644,16 @@ window.__WL_AP_USE_NATIVE_VISIBLE_SUBMIT = false;
   })();
 
   function restoreSubmitPanel(){
-    // Forte/WebForms expects the real submit controls to remain under the native
-    // MakePaymentPanel. Do not display:none them and do not leave them inside the
-    // wizard/summary cards; both can break the gateway click path.
-    const nativePanel = document.getElementById('ctl00_PageBody_MakePaymentPanel');
-    if (!nativePanel) return;
-
-    const movedPanel = document.querySelector(
-      '#wlSubmitMount .submit-button-panel, #w3SubmitInner .submit-button-panel, #wlApWizard3 .submit-button-panel'
-    );
-
-    if (movedPanel && !nativePanel.contains(movedPanel)){
-      const movedWrap = movedPanel.closest('.epi-form-group-acctPayment') || movedPanel;
-      nativePanel.appendChild(movedWrap);
-      log.info('submit panel restored to native MakePaymentPanel');
+    const nativeCtl = document.querySelector('#ctl00_PageBody_MakePaymentPanel .epi-form-group-acctPayment > div:nth-child(2)');
+    const moved = document.querySelector('#wlSubmitMount .submit-button-panel');
+    if (nativeCtl && moved && moved.parentNode !== nativeCtl){
+      nativeCtl.appendChild(moved);
+      log.info('submit panel restored to native container');
     }
-
-    const native = nativePanel.querySelector('.submit-button-panel') || nativePanel.querySelector('input[type="submit"], input[type="button"], button, a');
-    const nativeWrap = native?.closest?.('.submit-button-panel') || native;
-    if (nativeWrap){
-      nativeWrap.classList.add('wl-hidden-native'); // keep in DOM for Forte/gateway hooks
-      nativeWrap.style.removeProperty('display');
-      nativeWrap.style.removeProperty('visibility');
-      try{ nativeWrap.hidden = false; }catch(e){}
-      log.debug('native submit kept in native panel and visually hidden');
+    const native = document.querySelector('#ctl00_PageBody_MakePaymentPanel .submit-button-panel');
+    if (native && !native.classList.contains('wl-hidden-native')){
+      native.classList.add('wl-hidden-native'); // keep in DOM for Forte
+      log.debug('native submit panel visually hidden (kept in DOM)');
     }
   }
 
@@ -1835,10 +1817,6 @@ window.__WL_AP_USE_NATIVE_VISIBLE_SUBMIT = false;
   }
 
   function proxyFire(){
-    // Last client-side sync before the native WebForms/Forte submit path runs.
-    // This prevents the gateway from reusing a stale saved bank selection when
-    // the customer selected "Add new bank account" in the custom card UI.
-    try{ window.WLPayPreSubmit?.(); }catch(e){}
     const mode = currentPayMode();
     try{ window.ensureShadowPayBy?.(); }catch(e){}
     const real = findNativeTrigger();
@@ -1873,22 +1851,12 @@ window.__WL_AP_USE_NATIVE_VISIBLE_SUBMIT = false;
   function wireProxy(){
     const btn = document.getElementById('wlProxySubmit');
     if (!btn || btn.__wlBridgeBound) return;
-    btn.type = 'button';
     btn.addEventListener('click', proxyFire);
     btn.__wlBridgeBound = true;
     log.info('proxy wired to native submit');
     // Add 1-click + loading UX behavior
     makePaymentOneClick();
   }
-
-  // Expose a small bridge API so the wizard can create/move only the proxy button
-  // while the real WebForms/Forte trigger stays in its native container.
-  window.WLPaySubmitNow = proxyFire;
-  window.WLPayWireProxy = wireProxy;
-  window.WLPayBridgeRestoreSubmit = function(){
-    restoreSubmitPanel();
-    wireProxy();
-  };
 
   function afterAjax(){
     restoreSubmitPanel();
@@ -4435,10 +4403,6 @@ if (jobBtn){
       #wlApWizard3 .w3-btn.primary{ background:#111827; color:#fff; border-color:#111827; }
       #wlApWizard3 .w3-btn[disabled]{ opacity:.5; cursor:not-allowed; }
       #wlApWizard3 .w3-help{ font-size:12px; color:#475569; margin-top:8px; line-height:1.35; }
-      /* Wizard owns the submit flow. Hide the old summary/proxy submit so
-         customers only get one Make Payment button on the final step. */
-      #wlApWizard3 #wlProxySubmit,
-      #wlApWizard3 #wlSubmitMount{ display:none !important; }
 
       /* COF hard-show */
       #ctl00_PageBody_ChecksOnFileContainer,
@@ -4569,66 +4533,9 @@ function buildReviewHTML(){
     `;
   }
 
-  function stampRealControlsBeforePayment(){
-    // Mirror the wizard/proxy values back into the real WebForms controls
-    // immediately before the native Forte/WebForms button handles the click.
-    try{ sanitizeEmailInPlace(); }catch(e){}
-
-    try{
-      const realBill = $('ctl00_PageBody_BillingAddressTextBox');
-      const proxyBill = document.getElementById('wlProxyBillingInput');
-      const lockedBill = (typeof loadBillingLock === 'function') ? loadBillingLock() : '';
-      const draftBill = (typeof loadBillDraft === 'function') ? loadBillDraft() : '';
-      const billVal = (proxyBill?.value || realBill?.value || lockedBill || draftBill || '').trim();
-      if (realBill && billVal){
-        realBill.value = billVal;
-        realBill.defaultValue = billVal;
-      }
-    }catch(e){}
-
-    try{
-      const amt = $('ctl00_PageBody_PaymentAmountTextBox');
-      if (amt && amt.value){
-        amt.defaultValue = amt.value;
-        amt.dispatchEvent(new Event('input', { bubbles:true }));
-      }
-    }catch(e){}
-
-    try{
-      const rem = $('ctl00_PageBody_RemittanceAdviceTextBox');
-      if (rem){
-        rem.defaultValue = rem.value || '';
-        rem.dispatchEvent(new Event('input', { bubbles:true }));
-      }
-    }catch(e){}
-
-    try{
-      const st = loadPayState() || {};
-      if (st.method === 'bank' && st.bank?.mode === 'new'){
-        forceBankNewNativeState({ fireChange:false });
-      } else if (st.method === 'bank' && st.bank?.mode === 'saved' && st.bank?.value){
-        forceBankSavedNativeState(st.bank.value, { fireChange:false });
-      } else {
-        reconcileNativeFromState();
-      }
-      if (window.WLPayPending && typeof window.WLPayPending.apply === 'function') window.WLPayPending.apply();
-    }catch(e){}
-  }
-
   function findMakePaymentButton(){
-    // Prefer the actual WebForms/Forte trigger in MakePaymentPanel. Do not
-    // accidentally grab our proxy button from the summary/right card.
-    const native = document.querySelector(
-      '#ctl00_PageBody_MakePaymentPanel .submit-button-panel input[type="submit"], #ctl00_PageBody_MakePaymentPanel .submit-button-panel input[type="button"], #ctl00_PageBody_MakePaymentPanel .submit-button-panel button, #ctl00_PageBody_MakePaymentPanel input[type="submit"], #ctl00_PageBody_MakePaymentPanel input[type="button"], #ctl00_PageBody_MakePaymentPanel button'
-    );
-    if (native && native.id !== 'wlProxySubmit') return native;
-
     const inputs = Array.from(document.querySelectorAll('input[type="submit"], input[type="button"], button'));
-    return inputs.find(x =>
-      x.id !== 'wlProxySubmit' &&
-      x.id !== 'wlFinalMakePaymentBtn' &&
-      /make\s+payment|process\s+payment|submit\s+payment/i.test((x.value||x.textContent||'').trim())
-    ) || null;
+    return inputs.find(x => /make\s+payment|process\s+payment|submit\s+payment/i.test((x.value||x.textContent||'').trim())) || null;
   }
 
   function triggerMakePayment(reason){
@@ -4834,19 +4741,11 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
     }
 
     function getCofSel(){
+      // On WebForms postbacks, the Checks-on-File select can be replaced; always re-resolve when needed.
       try{
-        // Common selectors for "Checks on File" dropdown. Re-resolve every time because
-        // WebForms partial postbacks can replace the original select element.
-        // Prefer the known containers first because their inner controls can be replaced by MS AJAX.
-        const liveC1 = document.getElementById('ctl00_PageBody_ChecksOnFileContainer');
-        const liveC2 = document.getElementById('ctl00_PageBody_ChecksOnFileContainer1');
         const sel =
-          (liveC1?.querySelector?.('select') || liveC2?.querySelector?.('select') || null) ||
-          document.getElementById('ctl00_PageBody_ChecksOnFileDropDownList') ||
-          document.getElementById('ctl00_PageBody_CheckOnFileDropDownList') ||
-          document.getElementById('ctl00_PageBody_ChecksOnFileList') ||
-          document.getElementById('ctl00_PageBody_CheckOnFileList') ||
-          document.querySelector('select[id*="ChecksOnFile"], select[id*="CheckOnFile"], select[name*="ChecksOnFile"], select[name*="CheckOnFile"], select[id*="SavedBank"], select[name*="SavedBank"], select[id*="SavedACH"], select[name*="SavedACH"], select[id*="ECheck"], select[name*="ECheck"]') ||
+          document.querySelector('#ctl00_PageBody_ChecksOnFileContainer select, #ctl00_PageBody_ChecksOnFileContainer1 select') ||
+          document.querySelector('select[id*="ChecksOnFile"], select[id*="CheckOnFile"], select[name*="ChecksOnFile"], select[name*="CheckOnFile"]') ||
           (typeof cofSel !== 'undefined' ? cofSel : null);
         return sel || null;
       }catch(e){ return null; }
@@ -5043,24 +4942,17 @@ function reconcileNativeFromState(){
     if (st.bank?.mode === 'saved'){
       if (rbCof) rbCof.checked = true;
       if (rbCheck) rbCheck.checked = false;
-      const sel = getCofSel();
-      if (sel && st.bank?.value && sel.value !== st.bank.value){
-        sel.value = st.bank.value;
+      const liveCofSel = getCofSel();
+      if (liveCofSel && st.bank?.value && liveCofSel.value !== st.bank.value){
+        liveCofSel.value = st.bank.value;
       }
-    } else if (st.bank?.mode === 'new'){
-      // Only force/clear saved ACH when the customer explicitly chose Add new.
+    } else {
       if (rbCheck) rbCheck.checked = true;
       if (rbCof) rbCof.checked = false;
       try{
         const sel = getCofSel();
         if (sel) clearSelectToPlaceholder(sel, false);
       }catch(e){}
-    } else {
-      // Bank method has been opened, but the customer has not chosen Add New or a saved account yet.
-      // Do NOT switch back to PayByCheck and do NOT clear the Check-on-File select here. The server
-      // may still be loading saved methods after PayByCheckOnFile was clicked.
-      if (rbCred) rbCred.checked = false;
-      if (rbCardOnFile) rbCardOnFile.checked = false;
     }
   }catch(e){}
 }
@@ -5093,86 +4985,11 @@ function clearSelectToPlaceholder(sel, fireChange){
       try{ sel.insertBefore(minus1, sel.firstChild); }catch(e){}
     }
     sel.value = '-1';
-    try{
-      // Also clear selected attributes because some WebForms/gateway scripts read
-      // the DOM option state instead of only select.value.
-      Array.from(sel.options || []).forEach(o=>{
-        o.selected = (String(o.value) === '-1');
-        if (String(o.value) !== '-1') o.removeAttribute('selected');
-      });
-    }catch(e){}
     if (fireChange){
-      try{ sel.dispatchEvent(new Event('input', { bubbles:true })); }catch(e){}
       try{ sel.dispatchEvent(new Event('change', { bubbles:true })); }catch(e){}
     }
   }catch(e){}
 }
-
-function forceBankNewNativeState(opts){
-  const fireChange = !!(opts && opts.fireChange);
-  const liveRbCheck = $('ctl00_PageBody_RadioButton_PayByCheck') || rbCheck;
-  const liveRbCof = $('ctl00_PageBody_RadioButton_PayByCheckOnFile') || rbCof;
-  const liveRbCred = $('ctl00_PageBody_RadioButton_PayByCredit') || rbCred;
-  const liveRbCardOnFile = $('ctl00_PageBody_RadioButton_PayByCardOnFile') || rbCardOnFile;
-  try{
-    if (liveRbCheck){ liveRbCheck.disabled = false; liveRbCheck.removeAttribute('disabled'); liveRbCheck.checked = true; }
-    if (liveRbCof) liveRbCof.checked = false;
-    if (liveRbCred) liveRbCred.checked = false;
-    if (liveRbCardOnFile) liveRbCardOnFile.checked = false;
-  }catch(e){}
-  try{
-    const sel = getCofSel();
-    if (sel) clearSelectToPlaceholder(sel, fireChange);
-  }catch(e){}
-  try{
-    window.WLPayPending = window.WLPayPending || {};
-    window.WLPayPending.__cofPendingVal = '__CLEAR__';
-    window.WLPayPending.__cofPendingText = null;
-  }catch(e){}
-}
-
-function forceBankSavedNativeState(value, opts){
-  const fireChange = !!(opts && opts.fireChange);
-  const liveRbCheck = $('ctl00_PageBody_RadioButton_PayByCheck') || rbCheck;
-  const liveRbCof = $('ctl00_PageBody_RadioButton_PayByCheckOnFile') || rbCof;
-  const liveRbCred = $('ctl00_PageBody_RadioButton_PayByCredit') || rbCred;
-  const liveRbCardOnFile = $('ctl00_PageBody_RadioButton_PayByCardOnFile') || rbCardOnFile;
-  try{
-    if (liveRbCof){ liveRbCof.disabled = false; liveRbCof.removeAttribute('disabled'); liveRbCof.checked = true; }
-    if (liveRbCheck) liveRbCheck.checked = false;
-    if (liveRbCred) liveRbCred.checked = false;
-    if (liveRbCardOnFile) liveRbCardOnFile.checked = false;
-  }catch(e){}
-  try{
-    const sel = getCofSel();
-    if (sel && value){
-      sel.value = String(value);
-      if (fireChange){
-        try{ sel.dispatchEvent(new Event('input', { bubbles:true })); }catch(e){}
-        try{ sel.dispatchEvent(new Event('change', { bubbles:true })); }catch(e){}
-      }
-    }
-  }catch(e){}
-}
-
-// Exposed for the submit bridge module, which lives outside this wizard scope.
-// The final click runs this before the real WebForms/Forte payment trigger.
-window.WLPayPreSubmit = function(){
-  try{
-    const st = loadPayState() || {};
-    if (st.method === 'bank' && st.bank?.mode === 'new'){
-      forceBankNewNativeState({ fireChange:true });
-      return true;
-    }
-    if (st.method === 'bank' && st.bank?.mode === 'saved'){
-      forceBankSavedNativeState(st.bank.value, { fireChange:true });
-      return true;
-    }
-    reconcileNativeFromState();
-    try{ if (window.WLPayPending && typeof window.WLPayPending.apply === 'function') window.WLPayPending.apply(); }catch(e){}
-  }catch(e){}
-  return true;
-};
 
 function setSelectedCard(cardEl, isSelected){
       if (!cardEl) return;
@@ -5199,7 +5016,8 @@ function setSelectedCard(cardEl, isSelected){
       if (st?.method === 'bank' && st?.bank?.mode === 'new') return 'bank_new';
 
       // Fallback inference (no saved state)
-      const hasCofSelection = !!(cofSel && cofSel.value && cofSel.value !== '-1');
+      const liveCofSel = getCofSel();
+      const hasCofSelection = !!(liveCofSel && liveCofSel.value && liveCofSel.value !== '-1');
       // If PayByCheck is checked, treat as NEW regardless of COF select retaining a value
       if (rbCheck?.checked) return 'bank_new';
       if (rbCof?.checked) return 'bank_saved';
@@ -5273,18 +5091,14 @@ function renderPayCards(){
         if (st.method === 'bank' && st.bank?.mode === 'saved') return 'bank_saved';
         if (st.method === 'bank' && st.bank?.mode === 'new') return 'bank_new';
 
-        // The customer clicked the top-level Bank card but has not chosen Add New or a saved account.
-        // Keep second-level options visible without making Add New appear selected.
-        if (st.method === 'bank' && !(st.__pickedAccount || st.bank?.__pickedAccount)) return 'bank_pending';
-
         // Fallback inference (no saved state)
-        const freshCofSel = getCofSel();
-        const hasCofSelection = !!(freshCofSel && freshCofSel.value && freshCofSel.value !== '-1');
+        const liveCofSel = getCofSel();
+      const hasCofSelection = !!(liveCofSel && liveCofSel.value && liveCofSel.value !== '-1');
         // If "Add new" is selected (PayByCheck), treat as NEW regardless of COF select retaining a value
         if (rbCheck?.checked) return 'bank_new';
         if (rbCof?.checked || hasCofSelection) return 'bank_saved';
 
-        return 'bank_pending';
+        return 'bank_new';
       }
 
       const mode = currentMode2();
@@ -5315,10 +5129,10 @@ function renderPayCards(){
 
       // Bank account cards (Add new + saved)
       const bankOpts = [];
+      const liveCofSelForCards = getCofSel();
       try{
-        const liveCofSel = getCofSel();
-        if (liveCofSel && liveCofSel.options){
-          for (const o of Array.from(liveCofSel.options)){
+        if (liveCofSelForCards && liveCofSelForCards.options){
+          for (const o of Array.from(liveCofSelForCards.options)){
             const val = String(o.value || '').trim();
             const txt = String(o.text || '').trim();
             if (!val || val === '-1') continue;
@@ -5330,31 +5144,20 @@ function renderPayCards(){
 
       const stBank = loadPayState() || {};
       
-      // If saved accounts are not loaded yet, do NOT automatically switch from
-      // PayByCheck to PayByCheckOnFile after the customer has chosen Add New.
-      // That silent COF switch is what can make the gateway reuse the stored bank.
-      const explicitlyNewBank = !!(stBank?.method === 'bank' && stBank?.bank?.mode === 'new');
-      const accountAlreadyPicked = !!(stBank?.__pickedAccount || stBank?.bank?.__pickedAccount);
-      if (userPicked2 && !isCardMode && !explicitlyNewBank && !accountAlreadyPicked && (!bankOpts.length) && rbCof && !rbCof.checked){
+      // If we're in ACH mode and saved accounts exist but aren't visible yet (common until COF mode is activated),
+      // prefer showing saved accounts by default.
+      if (!isCardMode && (!bankOpts.length) && rbCof && !rbCof.checked){
         try{
-          // Load the Check-on-File dropdown so saved bank choices can be rendered,
-          // but do NOT save mode:'saved' yet. The customer has only chosen the
-          // Bank method, not a specific stored account.
+          // Switch to COF behind the scenes so the select options populate.
           clickWebFormsRadio(rbCof);
           const st = loadPayState() || {};
-          st.__userPicked = true;
           st.method = 'bank';
           st.bank = st.bank || {};
-          delete st.bank.mode;
-          delete st.bank.value;
-          delete st.bank.text;
-          delete st.bank.__pickedAccount;
-          delete st.__pickedAccount;
+          st.bank.mode = 'saved';
           savePayState(st);
         }catch(e){}
       }
-const freshCofSelForMode = getCofSel();
-const selectedCofVal = (freshCofSelForMode && freshCofSelForMode.value) ? String(freshCofSelForMode.value) : '';
+const selectedCofVal = (liveCofSelForCards && liveCofSelForCards.value) ? String(liveCofSelForCards.value) : '';
       const desiredSavedVal = (stBank?.method === 'bank' && stBank?.bank?.mode === 'saved' && stBank?.bank?.value) ? String(stBank.bank.value) : '';
       const bankMatchVal = desiredSavedVal || selectedCofVal;
 
@@ -5368,18 +5171,21 @@ const selectedCofVal = (freshCofSelForMode && freshCofSelForMode.value) ? String
           </button>
         `;
       }).join('');
-      const bankLoadingCard = (userPicked2 && !bankOpts.length && rbCof)
-        ? `<button type="button" class="wl-pay-card wl-bank-card" data-bank="load_saved"><div class="wl-pay-title">Loading stored bank accounts…</div><div class="wl-pay-sub">Still loading? Click here to retry loading saved accounts, or choose Add new.</div></button>`
-        : '';
 
       const bankAddNewSelected = (userPicked && stBank && stBank.__pickedAccount && mode === 'bank_new');
+      const bankLoadingCard = (!bankOpts.length && userPicked2 && !isCardMode && rbCof) ? `
+        <button type="button" class="wl-pay-card wl-bank-card" data-method="bank" data-retry-cof="1">
+          <div class="wl-pay-title">Load stored bank accounts</div>
+          <div class="wl-pay-sub">Click if saved methods do not appear automatically.</div>
+        </button>` : '';
+
       bankMount.innerHTML = `
         <button type="button" class="wl-pay-card wl-bank-card ${bankAddNewSelected ? 'is-selected':''}"
                 data-bank="new">
           <div class="wl-pay-title">Add new bank account</div>
           <div class="wl-pay-sub">Enter bank details (ACH).</div>
         </button>
-        ${bankSavedCards || bankLoadingCard || ''}
+        ${bankSavedCards || bankLoadingCard}
       `;
 
       // ----- CARD second level (only shown when card selected) -----
@@ -5505,40 +5311,37 @@ try{
             else if (isRadioAvailable(rbCardOnFile)) clickWebFormsRadio(rbCardOnFile);
           }catch(e){}
         } else {
-          // Bank is the default. IMPORTANT: choosing the top-level Bank method
-          // should NOT immediately lock the customer into "Add new" or "Saved".
-          // It should reveal both second-level choices. If saved accounts have not
-          // loaded yet, we briefly ask WebForms for the Check-on-File UI, but we do
-          // not mark a saved account as selected until the customer clicks one.
+          // Bank is the default. Do not immediately force Add New here; first let the customer
+          // choose between Add New and any stored bank accounts. Switching to Check-on-File here
+          // allows WebForms to populate the saved-account dropdown without committing a saved account.
           const st = loadPayState() || {};
-          const accountAlreadyPicked = !!(st?.__pickedAccount || st?.bank?.__pickedAccount);
-          const keepBank = accountAlreadyPicked ? (st.bank || {}) : {};
-          const nextState = { __userPicked:true, method:'bank', bank: keepBank };
-          if (accountAlreadyPicked) nextState.__pickedAccount = true;
-          savePayState(nextState);
+          const preferSaved = !!(st?.bank?.mode === 'saved' && st?.bank?.value);
+          savePayState({ __userPicked:true, method:'bank', bank: preferSaved ? st.bank : {} });
 
           
     try{ markPickedThisRun(); }catch(e){}
 try{
-            const liveCofSel = getCofSel();
-            const hasSavedOptions = !!(liveCofSel && Array.from(liveCofSel.options || []).some(o=>{
-              const v = String(o.value || '').trim();
-              const t = String(o.text || '').trim();
-              return v && v !== '-1' && t && !/select/i.test(t);
-            }));
-            if (accountAlreadyPicked && keepBank?.mode === 'saved') clickWebFormsRadio(rbCof);
-            else if (accountAlreadyPicked && keepBank?.mode === 'new') clickWebFormsRadio(rbCheck);
-            else if (!hasSavedOptions && rbCof) clickWebFormsRadio(rbCof); // load saved-account list only
-            else ensureCofVisible();
-          }catch(e){ try{ ensureCofVisible(); }catch(_){} }
+            if (preferSaved) clickWebFormsRadio(rbCof);
+            else if (rbCof) clickWebFormsRadio(rbCof);
+          }catch(e){}
+          ensureCofVisible();
         }
 
-        [80, 350, 900, 1800].forEach(ms=>setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, ms));
+        setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){} }, 80);
       };
 
       
 // ----- Bank level click handler (auto-advance to final payment step) -----
 bankMount.onclick = (e)=>{
+  const retry = e.target.closest('.wl-pay-card[data-retry-cof]');
+  if (retry){
+    e.preventDefault();
+    try{ ensureCofVisible(); }catch(e){}
+    try{ if (rbCof) clickWebFormsRadio(rbCof); }catch(e){}
+    setTimeout(()=>{ try{ renderPayCards(); }catch(e){} }, 250);
+    return;
+  }
+
   const btn = e.target.closest('.wl-pay-card[data-bank]');
   if (!btn) return;
   e.preventDefault();
@@ -5599,23 +5402,6 @@ bankMount.onclick = (e)=>{
     }, 80);
   };
 
-  if (kind === 'load_saved'){
-    const st = loadPayState() || {};
-    st.__userPicked = true;
-    st.method = 'bank';
-    st.bank = st.bank || {};
-    delete st.bank.mode;
-    delete st.bank.value;
-    delete st.bank.text;
-    delete st.bank.__pickedAccount;
-    delete st.__pickedAccount;
-    savePayState(st);
-    try{ window.WLPayMode?.ensureCheckOnFileUI?.(); }catch(e){}
-    try{ clickWebFormsRadio($('ctl00_PageBody_RadioButton_PayByCheckOnFile') || rbCof); }catch(e){}
-    [250, 700, 1400, 2400].forEach(ms=>setTimeout(()=>{ try{ reconcileNativeFromState(); }catch(e){} try{ renderPayCards(); }catch(e){} try{ renderSummary(); }catch(e){} }, ms));
-    return;
-  }
-
   if (kind === 'new'){
     const st = loadPayState() || {};
     st.__userPicked = true;
@@ -5623,15 +5409,17 @@ bankMount.onclick = (e)=>{
     st.bank = { mode:'new', __pickedAccount:true };
     st.__pickedAccount = true;
     savePayState(st);
-    try{ markPickedThisRun(); }catch(e){}
 
-    // This is the critical part: do not only set .checked client-side.
-    // Fire the real WebForms PayByCheck path so the server/gateway stops
-    // carrying the previously selected CheckOnFile token into the Forte modal.
-    try{ sessionStorage.setItem(STEP_KEY, '3'); }catch(e){}
-    try{ forceBankNewNativeState({ fireChange:true }); }catch(e){}
-    try{ if (window.WLPayPending && typeof window.WLPayPending.apply === 'function') window.WLPayPending.apply(); }catch(e){}
-    try{ clickWebFormsRadio($('ctl00_PageBody_RadioButton_PayByCheck') || rbCheck); }catch(e){}
+    try{ markPickedThisRun(); }catch(e){}
+    try{
+      if (window.WLPayPending){ window.WLPayPending.__cofPendingVal = '__CLEAR__'; window.WLPayPending.__cofPendingText = null; }
+    }catch(e){}
+
+    setRadioSilent(rbCheck);
+    try{ if (rbCof) rbCof.checked = false; }catch(e){}
+    try{ if (rbCred) rbCred.checked = false; }catch(e){}
+    try{ if (rbCardOnFile) rbCardOnFile.checked = false; }catch(e){}
+    try{ setSelectSilent(getCofSel(), '-1'); }catch(e){}
 
     autoAdvanceToFinalPaymentStep();
     return;
@@ -5647,17 +5435,21 @@ bankMount.onclick = (e)=>{
   st.bank = { mode:'saved', value: val, text, __pickedAccount:true };
   st.__pickedAccount = true;
   savePayState(st);
+
   try{ markPickedThisRun(); }catch(e){}
-
-  ensureCofVisible();
-
   try{
     window.WLPayPending = window.WLPayPending || {};
     window.WLPayPending.__cofPendingVal = val;
     window.WLPayPending.__cofPendingText = text;
   }catch(e){}
-  try{ forceBankSavedNativeState(val, { fireChange:true }); }catch(e){}
-  try{ const liveCof = $('ctl00_PageBody_RadioButton_PayByCheckOnFile') || rbCof; if (liveCof && !liveCof.checked) clickWebFormsRadio(liveCof); }catch(e){}
+
+  ensureCofVisible();
+
+  setRadioSilent(rbCof);
+  try{ if (rbCheck) rbCheck.checked = false; }catch(e){}
+  try{ if (rbCred) rbCred.checked = false; }catch(e){}
+  try{ if (rbCardOnFile) rbCardOnFile.checked = false; }catch(e){}
+  try{ setSelectSilent(getCofSel(), val); }catch(e){}
 
   autoAdvanceToFinalPaymentStep();
 };
@@ -5675,27 +5467,10 @@ bankMount.onclick = (e)=>{
     renderPayCards();
     try{ renderSummary(); }catch(e){}
     try{
-      // If the native Checks-on-File dropdown/options are injected without a clean
-      // PageRequestManager endRequest, refresh the custom saved-account cards.
-      if (!window.__WL_COF_CARD_OBS && nativeHost){
-        window.__WL_COF_CARD_OBS = true;
-        let __cofObsTimer = null;
-        const obs = new MutationObserver(function(){
-          clearTimeout(__cofObsTimer);
-          __cofObsTimer = setTimeout(function(){
-            try{ reconcileNativeFromState(); }catch(e){}
-            try{ renderPayCards(); }catch(e){}
-            try{ renderSummary(); }catch(e){}
-          }, 80);
-        });
-        obs.observe(nativeHost, { childList:true, subtree:true, attributes:true });
-      }
-    }catch(e){}
-    try{
       if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
         const prm = Sys.WebForms.PageRequestManager.getInstance();
         if (!prm.__wlPayCardsBound){
-          prm.add_endRequest(()=>{ setTimeout(()=>{ try{ if (window.WLPayPending && typeof window.WLPayPending.apply === 'function') window.WLPayPending.apply(); }catch(e){} reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){};
+          prm.add_endRequest(()=>{ setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){};
             try{ /* no auto-submit on selection */ }catch(e){} }, 0); });
           prm.__wlPayCardsBound = true;
         }
@@ -5703,80 +5478,19 @@ bankMount.onclick = (e)=>{
     }catch(e){}
 
 
-    // Submit card: final wizard button that triggers the real WebForms/Forte button
-    // while leaving that native button in ctl00_PageBody_MakePaymentPanel.
-    (function mountFinalSubmitCard(){
-      const nativePanel = $('ctl00_PageBody_MakePaymentPanel');
-      const mp = findMakePaymentButton();
-      if (!mp) return;
-
-      // If previous versions moved the real submit panel into the summary or wizard,
-      // put it back before we create our customer-facing button.
-      try{
-        const wrap = mp.closest('.epi-form-group-acctPayment') || mp.closest('.submit-button-panel') || mp.parentElement;
-        if (nativePanel && wrap && !nativePanel.contains(wrap)) nativePanel.appendChild(wrap);
-        const panel = nativePanel?.querySelector?.('.submit-button-panel') || mp.closest('.submit-button-panel') || mp;
-        if (panel){
-          panel.classList.add('wl-hidden-native');
-          panel.style.removeProperty('display');
-          panel.style.removeProperty('visibility');
-          try{ panel.hidden = false; }catch(e){}
-        }
-      }catch(e){}
-
+    // Move Make Payment button
+    const mp = findMakePaymentButton();
+    if (mp){
+      const wrap = mp.closest('.epi-form-group-acctPayment') || mp.parentElement;
+      const submitCard = document.createElement('div');
+      submitCard.className = 'wl-card';
+      submitCard.innerHTML = `<div class="wl-card-head">Submit</div><div class="wl-card-body" id="w3SubmitInner"></div>`;
       const reviewHost = $('w3Step3') || $('w3Review')?.parentElement || payHost;
-      if (!reviewHost) return;
-
-      let submitCard = $('wlFinalSubmitCard');
-      if (!submitCard){
-        submitCard = document.createElement('div');
-        submitCard.id = 'wlFinalSubmitCard';
-        submitCard.className = 'wl-card';
-        submitCard.innerHTML = `
-          <div class="wl-card-head">Submit</div>
-          <div class="wl-card-body">
-            <button type="button" class="wl-cta" id="wlFinalMakePaymentBtn">Make Payment</button>
-            <div class="w3-help" id="wlFinalPayHelp">This will open the secure Forte payment form.</div>
-          </div>`;
-        reviewHost.appendChild(submitCard);
-      }
-
-      const finalBtn = $('wlFinalMakePaymentBtn');
-      if (finalBtn && !finalBtn.__wlFinalSubmitBound){
-        finalBtn.__wlFinalSubmitBound = true;
-        finalBtn.addEventListener('click', function(ev){
-          try{ ev.preventDefault(); ev.stopPropagation(); }catch(e){}
-          try{ sessionStorage.setItem(STEP_KEY, '3'); }catch(e){}
-          try{ stampRealControlsBeforePayment(); }catch(e){}
-          try{ window.WLPayPreSubmit?.(); }catch(e){}
-
-          const real = findMakePaymentButton();
-          if (!real || real.id === 'wlFinalMakePaymentBtn' || real.id === 'wlProxySubmit'){
-            alert('The secure payment button is still loading. Please wait a moment and try again.');
-            return;
-          }
-
-          try{
-            real.disabled = false;
-            real.removeAttribute('disabled');
-            real.style.removeProperty('display');
-            real.style.removeProperty('visibility');
-          }catch(e){}
-
-          try{ console.log('[AP] Final wizard button triggering native Forte/WebForms submit', { id: real.id, name: real.name, tag: real.tagName }); }catch(e){}
-          try{ real.click(); }
-          catch(e){
-            try{
-              const onclick = real.getAttribute && real.getAttribute('onclick');
-              if (onclick && typeof window.__doPostBack === 'function'){
-                const m = onclick.match(/__doPostBack\(['"]([^'"]+)['"],\s*['"]([^'"]*)['"]\)/);
-                if (m) window.__doPostBack(m[1], m[2] || '');
-              }
-            }catch(_e){}
-          }
-        }, true);
-      }
-    })();
+      (reviewHost || payHost).appendChild(submitCard);
+      const sub = $('w3SubmitInner');
+      if (wrap) sub.appendChild(wrap);
+      else sub.appendChild(mp);
+    }
 
     // Step state
     // Preserve wizard step across full postbacks/reloads so a delayed WebForms postback
@@ -5862,17 +5576,6 @@ function setStep(n){
           return false;
         }
       }
-      if (step === 2){
-        try{
-          const st = loadPayState() || {};
-          const pickedBank = st.method === 'bank' && (st.__pickedAccount || st.bank?.__pickedAccount) && (st.bank?.mode === 'new' || (st.bank?.mode === 'saved' && st.bank?.value));
-          const pickedCard = (st.method === 'card' || st.method === 'credit') && (st.__pickedAccount || st.card?.__pickedAccount) && (st.card?.mode === 'new' || (st.card?.mode === 'saved' && st.card?.value));
-          if (!pickedBank && !pickedCard){
-            alert('Choose Add new bank account or select a saved payment method before continuing.');
-            return false;
-          }
-        }catch(e){}
-      }
       return true;
     }
 
@@ -5894,20 +5597,9 @@ function setStep(n){
         // Keep them on Step 1 after any round-trip.
         try{ sessionStorage.setItem(STEP_KEY, '1'); }catch(e){}
 
-        // Do not click the Make Payment/Forte submit path just to leave Step 1.
-        // Earlier versions used forceWizardRoundTrip() here, which could post the raw
-        // WebForms payment form before the wizard was complete and leave the final
-        // Forte trigger unsatisfied. Only stamp/notify the billing input.
+        // If they already typed billing, trigger the same postback path as "Make Payment" (throttled).
         if (v){
-          try{
-            const real = $('ctl00_PageBody_BillingAddressTextBox');
-            if (real){
-              real.value = v;
-              real.defaultValue = v;
-              real.dispatchEvent(new Event('input', { bubbles:true }));
-              real.dispatchEvent(new Event('change', { bubbles:true }));
-            }
-          }catch(e){}
+          try{ forceWizardRoundTrip('step0-next'); }catch(e){}
         }
 
         setStep(1);
