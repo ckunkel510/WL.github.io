@@ -1,5 +1,5 @@
 /* =========================================================================
-   Woodson — Previous Purchases / Reorder Center (v1.4)
+   Woodson — Previous Purchases / Reorder Center (v1.4.1)
    - ProductsPurchased_R.aspx rewrite
    - Adds new grouped account menu
    - Reframes page as previous purchases + reorder helper
@@ -1268,26 +1268,64 @@
     return fd;
   }
 
+  function extractPostbackTargetFromHref(href) {
+    var match = String(href || '').match(/__doPostBack\(['"]([^'"]+)['"]/i);
+    return match && match[1] ? match[1] : '';
+  }
+
   function findAddToCartTarget(doc) {
-    var selectors = [
+    // Important:
+    // ProductDetail pages may also contain "Add to Saved For Later" / Quicklist links.
+    // Do NOT use a generic "anything with Add" match or it can save the item instead of adding to cart.
+    var blocked = /saved|later|quicklist|wish|favorite/i;
+    var strongCart = /add\s*(to)?\s*(cart|basket)|cart|basket|addproductbutton/i;
+
+    var preferredSelectors = [
       'a[href^="javascript:__doPostBack"][id*="AddProductButton"]',
       'a[href^="javascript:__doPostBack"][id*="AddToCart"]',
-      'a[href^="javascript:__doPostBack"]'
+      'a[href^="javascript:__doPostBack"][id*="AddCart"]',
+      'a[href^="javascript:__doPostBack"][id*="Cart"]',
+      'button[id*="AddProductButton"]',
+      'button[id*="AddToCart"]',
+      'input[id*="AddProductButton"]',
+      'input[id*="AddToCart"]'
     ];
 
-    for (var i = 0; i < selectors.length; i++) {
-      var links = Array.prototype.slice.call(doc.querySelectorAll(selectors[i]));
-      for (var j = 0; j < links.length; j++) {
-        var link = links[j];
-        var label = (link.textContent || '').replace(/\s+/g, ' ').trim();
-        var href = link.getAttribute('href') || '';
-        if (!/add/i.test(label + ' ' + link.id + ' ' + href)) continue;
+    for (var i = 0; i < preferredSelectors.length; i++) {
+      var controls = Array.prototype.slice.call(doc.querySelectorAll(preferredSelectors[i]));
+      for (var j = 0; j < controls.length; j++) {
+        var control = controls[j];
+        var label = (control.textContent || control.value || control.getAttribute('title') || control.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim();
+        var id = control.id || '';
+        var name = control.name || '';
+        var href = control.getAttribute('href') || '';
+        var combined = [label, id, name, href].join(' ');
 
-        var match = href.match(/__doPostBack\(['"]([^'"]+)['"]/i);
-        if (match && match[1]) return match[1];
+        if (blocked.test(combined)) continue;
+        if (!strongCart.test(combined)) continue;
+
+        var target = extractPostbackTargetFromHref(href);
+        if (target) return target;
+
+        if (name) return name;
+        if (id) return id.replace(/_/g, '$');
       }
     }
 
+    // Last safe pass: only use postback links that explicitly mention cart/basket and do not mention saved/quicklist.
+    var links = Array.prototype.slice.call(doc.querySelectorAll('a[href^="javascript:__doPostBack"]'));
+    for (var k = 0; k < links.length; k++) {
+      var link = links[k];
+      var linkText = (link.textContent || '').replace(/\s+/g, ' ').trim();
+      var linkCombined = [linkText, link.id || '', link.getAttribute('href') || ''].join(' ');
+      if (blocked.test(linkCombined)) continue;
+      if (!strongCart.test(linkCombined)) continue;
+
+      var linkTarget = extractPostbackTargetFromHref(link.getAttribute('href') || '');
+      if (linkTarget) return linkTarget;
+    }
+
+    // This is the same cart postback target used by the existing Saved For Later cart script fallback.
     return 'ctl00$PageBody$productDetail$ctl00$AddProductButton';
   }
 
@@ -2056,7 +2094,7 @@
   });
 
   window.WLPreviousPurchases = {
-    version: '1.4',
+    version: '1.4.1',
     rerender: render
   };
 })();
