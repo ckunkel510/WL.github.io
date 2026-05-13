@@ -3826,6 +3826,24 @@ if (jobBtn){
     catch { return {}; }
   }
 
+  function clearPaymentSessionAfterSuccess(){
+    [
+      PREF_KEY,
+      '__WL_AP_WIZ3_STEP',
+      'wlPayState',
+      'wlPayPickedThisRun',
+      'wlPayPendingSubmit',
+      'wl_pay_step3_initialized_v1',
+      '__WL_AP_FORCE_NEW_ACH_RELOAD_V1',
+      '__WL_AP_REFRESH_DRAFT_V1',
+      '__WL_COF_OPTIONS_LOAD_TS',
+      '__WL_COF_LOAD_TRIES',
+      '__WL_COF_LOAD_LAST_TS',
+      '__WL_PROXY_WAIT_STARTED',
+      'wl_shadowPayBy'
+    ].forEach(k=>{ try{ sessionStorage.removeItem(k); }catch(e){} });
+  }
+
   // Detect confirmation view by presence of the success payment table
   function isSuccessView() {
     const t = document.querySelector('table.paymentDataTable');
@@ -4282,6 +4300,9 @@ if (jobBtn){
     const selText = applySuccessEnhancements();
     hideWizardOnSuccess();
     renderSuccessConfirmation(selText);
+    // After the receipt UI has captured what it needs, clear stale wizard/payment state so
+    // a customer making another payment does not inherit the prior ACH choice or amount.
+    clearPaymentSessionAfterSuccess();
   }
 
   // Initial
@@ -4375,6 +4396,123 @@ if (jobBtn){
 
   const STEP_KEY = '__WL_AP_WIZ3_STEP';
 
+  // When WebTrack has already selected a saved ACH account, the native application
+  // can keep that Check-on-File state until the page is reloaded. To switch back to
+  // Add New ACH reliably, save the wizard fields, reload once, restore them, and
+  // force the real PayByCheck path before Forte is opened.
+  const ACH_FORCE_NEW_KEY = '__WL_AP_FORCE_NEW_ACH_RELOAD_V1';
+  const ACH_REFRESH_DRAFT_KEY = '__WL_AP_REFRESH_DRAFT_V1';
+
+  function safeJsonParse(raw, fallback){
+    try{ return raw ? JSON.parse(raw) : fallback; }catch(e){ return fallback; }
+  }
+
+  function getActiveAddNewAchIntent(){
+    try{
+      const obj = safeJsonParse(sessionStorage.getItem(ACH_FORCE_NEW_KEY), null);
+      if (!obj || !obj.t) return null;
+      // Do not let an old reload intent poison a later customer/payment.
+      if (Date.now() - Number(obj.t) > 2 * 60 * 1000){
+        sessionStorage.removeItem(ACH_FORCE_NEW_KEY);
+        return null;
+      }
+      return obj;
+    }catch(e){ return null; }
+  }
+
+  function isForceAddNewAchActive(){ return !!getActiveAddNewAchIntent(); }
+
+  function captureRefreshDraft(){
+    const ids = [
+      'ctl00_PageBody_BillingAddressTextBox',
+      'ctl00_PageBody_PostalCodeTextBox',
+      'ctl00_PageBody_BillingPostalCodeTextBox',
+      'ctl00_PageBody_EmailAddressTextBox',
+      'ctl00_PageBody_PaymentAmountTextBox',
+      'ctl00_PageBody_NotesTextBox',
+      'ctl00_PageBody_RemittanceAdviceTextBox'
+    ];
+    const fields = {};
+    ids.forEach(id=>{
+      const el = document.getElementById(id);
+      if (el && 'value' in el) fields[id] = el.value;
+    });
+    try{ return { t: Date.now(), fields, pref: safeJsonParse(sessionStorage.getItem('wl_ap_prefill_v3'), null) }; }
+    catch(e){ return { t: Date.now(), fields }; }
+  }
+
+  function restoreRefreshDraftIfNeeded(){
+    try{
+      const intent = getActiveAddNewAchIntent();
+      if (!intent) return false;
+      const draft = safeJsonParse(sessionStorage.getItem(ACH_REFRESH_DRAFT_KEY), null);
+      if (!draft || !draft.fields) return false;
+      Object.keys(draft.fields).forEach(id=>{
+        const el = document.getElementById(id);
+        if (!el || !('value' in el)) return;
+        el.value = draft.fields[id] || '';
+        try{ el.defaultValue = el.value; }catch(e){}
+        // Input only: avoid firing WebForms onchange postbacks while restoring.
+        try{ el.dispatchEvent(new Event('input', { bubbles:true })); }catch(e){}
+      });
+      if (draft.pref){
+        try{ sessionStorage.setItem('wl_ap_prefill_v3', JSON.stringify(draft.pref)); }catch(e){}
+      }
+      return true;
+    }catch(e){ return false; }
+  }
+
+  function showSwitchingToNewAchOverlay(){
+    try{
+      let el = document.getElementById('wlAchSwitchOverlay');
+      if (!el){
+        el = document.createElement('div');
+        el.id = 'wlAchSwitchOverlay';
+        el.style.cssText = 'position:fixed;inset:0;z-index:999999;background:rgba(15,23,42,.72);display:flex;align-items:center;justify-content:center;color:#fff;font:700 15px system-ui,Segoe UI,Arial,sans-serif;text-align:center;padding:24px;';
+        el.innerHTML = '<div style="max-width:420px;background:#111827;border:1px solid rgba(255,255,255,.18);border-radius:16px;padding:18px 20px;box-shadow:0 20px 60px rgba(0,0,0,.35);"><div style="font-size:18px;font-weight:1000;margin-bottom:6px;">Preparing new bank entry…</div><div style="opacity:.86;font-size:13px;line-height:1.4;">Keeping the payment details you already entered and resetting the saved-account selection.</div></div>';
+        document.body.appendChild(el);
+      }
+      el.style.display = 'flex';
+    }catch(e){}
+  }
+
+  function beginAddNewAchRefresh(reason){
+    try{
+      sessionStorage.setItem(ACH_REFRESH_DRAFT_KEY, JSON.stringify(captureRefreshDraft()));
+      sessionStorage.setItem(ACH_FORCE_NEW_KEY, JSON.stringify({ t: Date.now(), reason: reason || 'switch-to-new-ach' }));
+      sessionStorage.setItem(STEP_KEY, '3');
+      sessionStorage.setItem('wlPayPickedThisRun', '1');
+      sessionStorage.setItem('wlPayState', JSON.stringify({ __userPicked:true, __pickedAccount:true, method:'bank', bank:{ mode:'new', __pickedAccount:true } }));
+      // Prevent stale pending saved-account postbacks from re-applying after reload.
+      sessionStorage.removeItem('__WL_COF_OPTIONS_LOAD_TS');
+      sessionStorage.removeItem('__WL_COF_LOAD_TRIES');
+      sessionStorage.removeItem('__WL_COF_LOAD_LAST_TS');
+      showSwitchingToNewAchOverlay();
+      setTimeout(()=>{ try{ location.reload(); }catch(e){ location.href = location.href; } }, 80);
+      return true;
+    }catch(e){
+      return false;
+    }
+  }
+
+  function clearPaymentFlowStateForNextPayment(){
+    [
+      STEP_KEY,
+      ACH_FORCE_NEW_KEY,
+      ACH_REFRESH_DRAFT_KEY,
+      'wlPayState',
+      'wlPayPickedThisRun',
+      'wlPayPendingSubmit',
+      'wl_pay_step3_initialized_v1',
+      '__WL_COF_OPTIONS_LOAD_TS',
+      '__WL_COF_LOAD_TRIES',
+      '__WL_COF_LOAD_LAST_TS',
+      '__WL_PROXY_WAIT_STARTED',
+      'wl_shadowPayBy',
+      'wl_ap_prefill_v3'
+    ].forEach(k=>{ try{ sessionStorage.removeItem(k); }catch(e){} });
+  }
+
   // Reset wizard state when arriving from another page (but keep state across same-page postbacks).
   const PAGE_KEY = "wl_ap_lastPath";
   function cameFromOtherPage(){
@@ -4392,6 +4530,12 @@ if (jobBtn){
     try{ sessionStorage.removeItem("wl_bill_lock"); }catch(e){}
     try{ sessionStorage.removeItem("wl_bill_draft"); }catch(e){}
     try{ sessionStorage.removeItem("wl_bill_postback_pending"); }catch(e){}
+    try{ sessionStorage.removeItem('wlPayState'); }catch(e){}
+    try{ sessionStorage.removeItem('wlPayPickedThisRun'); }catch(e){}
+    try{ sessionStorage.removeItem('wlPayPendingSubmit'); }catch(e){}
+    try{ sessionStorage.removeItem('wl_pay_step3_initialized_v1'); }catch(e){}
+    try{ sessionStorage.removeItem(ACH_FORCE_NEW_KEY); }catch(e){}
+    try{ sessionStorage.removeItem(ACH_REFRESH_DRAFT_KEY); }catch(e){}
   }
   // If we navigated in from elsewhere, clear step so customers start at Step 1.
   try{
@@ -4717,6 +4861,10 @@ moveFieldGroupById('ctl00_PageBody_BillingPostalCodeTextBox', infoInner);
 
 // Email last (after billing info)
 moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
+
+// If we intentionally refreshed to escape WebTrack's saved-ACH state, put the user-entered
+// details back into the native fields before summary/review rendering.
+try{ restoreRefreshDraftIfNeeded(); }catch(e){}
 
 // Keep the rest of the original UI (amount/quick-pay/remit/etc.) out of Step 0:
 // put the existing cards into Step 1 instead.
@@ -5103,6 +5251,18 @@ function syncNativeBankChoice(mode, value, fireChange){
   }catch(e){ return false; }
 }
 
+function applyForcedNewAchAfterReload(){
+  try{
+    const intent = getActiveAddNewAchIntent();
+    if (!intent) return false;
+    sessionStorage.setItem(STEP_KEY, '3');
+    savePayState({ __userPicked:true, __pickedAccount:true, method:'bank', bank:{ mode:'new', __pickedAccount:true } });
+    try{ markPickedThisRun(); }catch(e){}
+    try{ syncNativeBankChoice('new', '', false); }catch(e){}
+    return true;
+  }catch(e){ return false; }
+}
+
 // Sync the real WebForms controls from the card state.
 // Important: final submit must NOT dispatch ddlChecksOnFile change events.
 // The payload Cody captured showed __EVENTTARGET=ctl00$PageBody$ddlChecksOnFile around the final click,
@@ -5174,6 +5334,15 @@ function setSelectedCard(cardEl, isSelected){
   function hasExplicitlyPickedAddNewBank(st){
     try{
       return !!(st && st.method === 'bank' && st.bank?.mode === 'new' && hasPickedBankAccount(st));
+    }catch(e){ return false; }
+  }
+
+  function isPaymentMethodStepActive(){
+    try{
+      const wiz = $('wlApWizard3');
+      if (!wiz) return false;
+      if (String(wiz.getAttribute('data-step') || '') === '2') return true;
+      return !!document.querySelector('#wlApWizard3 .w3-panel[data-step="2"].on');
     }catch(e){ return false; }
   }
 
@@ -5291,21 +5460,17 @@ function renderPayCards(){
       const stSel = loadPayState() || {};
       const userPicked = !!stSel.__userPicked;
 
-      if (!userPicked){
-        setSelectedCard(bankMethodCard, false);
-        setSelectedCard(cardMethodCard, false);
-      } else {
-        setSelectedCard(bankMethodCard, !isCardMode);
-        setSelectedCard(cardMethodCard, isCardMode);
-      }
+      // Bank is the default payment family. Show the bank account choices immediately so
+      // saved ACH methods are visible without first clicking the top-level Bank card.
+      setSelectedCard(bankMethodCard, !isCardMode);
+      setSelectedCard(cardMethodCard, isCardMode && !!userPicked);
+
       // ----- Second level visibility -----
-      // Keep everything visually unselected at first load. Once the customer picks a method,
-      // show the appropriate second level (Bank accounts or Cards) and let the native radios postback
-      // to populate the saved lists.
+      // Bank accounts are visible by default; card choices only show after Card is selected.
       const stPick = loadPayState() || {};
       const userPicked2 = !!stPick.__userPicked;
 
-      bankMount.style.display = (userPicked2 && !isCardMode) ? 'grid' : 'none';
+      bankMount.style.display = (!isCardMode) ? 'grid' : 'none';
       cardMount.style.display = (userPicked2 && isCardMode) ? 'grid' : 'none';
 
       // Bank account cards (Add new + saved)
@@ -5331,7 +5496,7 @@ function renderPayCards(){
       // If the customer has opened ACH but has not selected Add New or a saved account yet,
       // activate the real Check-on-File radio only to make WebForms render ddlChecksOnFile.
       // Do NOT set st.bank.mode='saved' here; otherwise the UI/server can default to the first saved account.
-      if (!explicitlyPickedAddNew && !hasPickedBank && !isCardMode && (!bankOpts.length) && rbCof){
+      if (!explicitlyPickedAddNew && !hasPickedBank && !isCardMode && (!bankOpts.length) && rbCof && (isPaymentMethodStepActive() || userPicked2)){
         try{ requestSavedBankOptionsLoad('render-no-options'); }catch(e){}
       }
 const liveCofSelForMatch = getCofSel();
@@ -5581,6 +5746,24 @@ bankMount.onclick = (e)=>{
   };
 
   if (kind === 'new'){
+    const previousState = loadPayState() || {};
+    const currentSel = getCofSel();
+    const hasSavedSelectionInNative = !!(currentSel && currentSel.value && currentSel.value !== '-1');
+    const wasUsingSavedBank = !!(
+      (previousState.method === 'bank' && previousState.bank?.mode === 'saved') ||
+      previousState.__pickedAccount ||
+      rbCof?.checked ||
+      hasSavedSelectionInNative
+    );
+
+    // Native WebTrack/Forte can keep Check-on-File server state after a saved ACH has been selected.
+    // The reliable escape hatch is a controlled reload. We save the wizard fields, reload, restore
+    // them, then force PayByCheck/Add New before the customer reaches Forte.
+    if (wasUsingSavedBank && !isForceAddNewAchActive()){
+      beginAddNewAchRefresh('selected-add-new-after-saved-ach');
+      return;
+    }
+
     const st = loadPayState() || {};
     st.__userPicked = true;
     st.method = 'bank';
@@ -5690,6 +5873,7 @@ bankMount.onclick = (e)=>{
         savePayState({ method:'bank', bank:{} });
       }
     }
+    applyForcedNewAchAfterReload();
     reconcileNativeFromState();
     renderPayCards();
     try{ renderSummary(); }catch(e){}
@@ -5774,15 +5958,19 @@ function setStep(n){
           const k = 'wl_pay_step3_initialized_v1';
           if (sessionStorage.getItem(k) !== '1'){
             sessionStorage.setItem(k, '1');
-            // Clear any stale "picked" flags from prior attempts so Add New isn't pre-selected.
-            clearPickedThisRun();
-            const st = loadPayState() || {};
-            st.__userPicked = false;
-            delete st.__pickedAccount;
-            if (st.bank){ delete st.bank.__pickedAccount; delete st.bank.mode; delete st.bank.value; delete st.bank.text; }
-            if (st.card){ delete st.card.__pickedAccount; delete st.card.mode; delete st.card.value; delete st.card.text; }
-            savePayState(st);
-            // Re-render cards immediately to remove any lingering selected styles.
+            // If we intentionally reloaded to Add New ACH, preserve that explicit choice.
+            // Otherwise start with Bank visible but no specific account selected.
+            if (!isForceAddNewAchActive()){
+              clearPickedThisRun();
+              const st = loadPayState() || {};
+              st.__userPicked = true;
+              delete st.__pickedAccount;
+              st.method = 'bank';
+              if (st.bank){ delete st.bank.__pickedAccount; delete st.bank.mode; delete st.bank.value; delete st.bank.text; }
+              if (st.card){ delete st.card.__pickedAccount; delete st.card.mode; delete st.card.value; delete st.card.text; }
+              savePayState(st);
+            }
+            // Re-render cards immediately to show saved ACH options by default.
             try{ renderPayCards(); }catch(e){}
           }
         }catch(e){}
