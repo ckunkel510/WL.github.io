@@ -653,7 +653,7 @@
     }
 
     var isCashAccount = getStoredCashAccountFlag();
-    var paymentHref = isCashAccount === true ? 'AccountInfo_R.aspx#reloadBalance' : 'AccountPayment_r.aspx';
+    var paymentHref = 'AccountPayment_r.aspx';
     var paymentLabel = isCashAccount === true ? 'Reload Balance' : (isCashAccount === false ? 'Make a Payment' : 'Make a Payment / Reload Balance');
 
     var accountSettingLinks = [
