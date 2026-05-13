@@ -1,1224 +1,949 @@
-/* =========================================================
-   Open Orders — Amazon-style Card UI (Mobile + Desktop)
-   + Tracking Overlay for ?tracking=
-   ========================================================= */
-
-/* ===== 1) Cardified order list with inline details ===== */
-(function(){
-  if (window.__WL_OPENORDERS_ENHANCED__) return;
-  window.__WL_OPENORDERS_ENHANCED__ = true;
-
-  const t0 = performance.now();
-  const log = (...a)=>console.log('%cOpenOrders UI','color:#6b0016;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
-
-  // ---------- Styles ----------
-  (function injectCSS(){
-    const css = document.createElement('style');
-    css.textContent = `
-      /* Make grid render as a list of cards across breakpoints */
-      .wl-cardify tr.rgRow, .wl-cardify tr.rgAltRow{
-        display:block; background:#fff; border:1px solid #e5e7eb; border-radius:16px;
-        margin:12px 0; box-shadow:0 6px 18px rgba(0,0,0,.05); overflow:hidden; position:relative
-      }
-      /* Hide original cells (we'll extract content and render our own) */
-      .wl-cardify tr.rgRow>td, .wl-cardify tr.rgAltRow>td{ display:none !important; }
-
-      /* Hide original grid header (we render card heads instead) */
-.wl-cardify thead { 
-  display: none !important;
-}
-
-
-      /* Card header */
-      .wl-row-head{
-        display:grid; gap:8px; padding:14px 14px 10px 14px; align-items:center
-      }
-      /* Desktop: two-column header layout */
-      @media (min-width: 1024px){
-        .wl-row-head{ grid-template-columns: 1fr auto; }
-        .wl-row-head .wl-head-left{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-        .wl-row-head .wl-head-right{ display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
-      }
-      @media (max-width: 1023.98px){
-        .wl-head-left{ display:flex; flex-wrap:wrap; gap:10px; }
-        .wl-head-right{ display:flex; flex-wrap:wrap; gap:8px; }
-      }
-
-      .wl-order-id{ font-weight:900; font-size:16px; letter-spacing:.2px; }
-      @media (min-width:1024px){ .wl-order-id{ font-size:18px; } }
-
-      /* Status pill + palette */
-      .wl-chip{ display:inline-flex; align-items:center; gap:6px; font-weight:800; border-radius:999px; padding:6px 10px; font-size:12px; text-transform:capitalize; }
-      .wl-chip--slate{ background:#e2e8f0; color:#0f172a; }
-      .wl-chip--green{ background:#dcfce7; color:#065f46; }
-      .wl-chip--blue{ background:#dbeafe; color:#1e3a8a; }
-      .wl-chip--amber{ background:#fef3c7; color:#92400e; }
-      .wl-chip--orange{ background:#ffedd5; color:#9a3412; }
-      .wl-chip--red{ background:#fee2e2; color:#7f1d1d; }
-      .wl-chip--maroon{ background:#f2e6ea; color:#6b0016; }
-
-      .wl-meta{ display:flex; gap:12px; flex-wrap:wrap; font-size:12px; color:#475569; }
-      .wl-meta span{ white-space:nowrap; }
-
-      .wl-actions{ display:flex; gap:8px; flex-wrap:wrap; }
-      .wl-btn{ appearance:none; border:none; border-radius:12px; font-weight:900; padding:10px 14px; text-decoration:none; cursor:pointer; }
-      .wl-btn:disabled{ opacity:.6; cursor:default; }
-      .wl-btn--primary{ background:#6b0016; color:#fff; }
-      .wl-btn--ghost{ background:#f8fafc; color:#111827; border:1px solid #e5e7eb; }
-
-      /* Details area */
-      .wl-details{ display:none; border-top:1px solid #eef0f3; padding:12px 14px 16px; }
-      .wl-details.show{ display:block; }
-
-      .wl-lines{ display:flex; flex-direction:column; gap:10px; }
-      .wl-line{ display:flex; gap:12px; align-items:flex-start; justify-content:space-between; border:1px solid #eef0f3; border-radius:12px; padding:10px; }
-      .wl-sku{ font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:800; min-width:86px; }
-      .wl-desc{ flex:1; min-width:160px; }
-      .wl-qty{ white-space:nowrap; font-weight:700; }
-
-      .wl-tracking-pills{ display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
-      .wl-pill{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; font-weight:800; font-size:12px; text-decoration:none; }
-      .wl-pill--ups{ background:#111827; color:#fff; }
-      .wl-pill--ups:hover{ opacity:.92; }
-
-      /* Footer actions inside details */
-      .wl-foot-actions{ margin-top:12px; display:flex; gap:8px; flex-wrap:wrap; }
-    `;
-    document.head.appendChild(css);
-  })();
-
-  // ---------- DOM helpers ----------
-  const host = document.querySelector('#ctl00_PageBody_OrdersGrid, .RadGrid[id*="OrdersGrid"]');
-  if (!host) { log('Grid host not found'); return; }
-  const master = host.querySelector('#ctl00_PageBody_OrdersGrid_ctl00, .rgMasterTable');
-  if (!master) { log('Master table not found'); return; }
-  master.classList.add('wl-cardify');
-
-  const rows = Array.from(master.querySelectorAll('tr.rgRow, tr.rgAltRow'));
-
-  // Extractors from the original cells (before we hide them via CSS)
-  function grab(tr, selector){
-    const el = tr.querySelector(selector);
-    return el ? el.textContent.trim() : '';
-  }
-  function findAnchor(tr){ return tr.querySelector('a[href*="oid="]') || null; }
-  function getOid(href){ const m = /[?&]oid=(\d+)/.exec(href||''); return m ? m[1] : null; }
-
-  // Status -> color mapping
-  function statusColor(status){
-    const s = (status||'').toLowerCase();
-    if (s.includes('cancel')) return 'red';
-    if (s.includes('backorder')) return 'orange';
-    if (s.includes('invoice') || s.includes('billed') || s.includes('invoiced')) return 'slate';
-    if (s.includes('delivered') || s.includes('shipped') || s.includes('complete')) return 'green';
-    if (s.includes('ready') || s.includes('awaiting pickup')) return 'blue';
-    if (s.includes('pick') || s.includes('picking') || s.includes('processing')) return 'amber';
-    return 'slate';
-  }
-
-  // UPS helpers
-  const UPS_RX = /^1Z[0-9A-Z]{16}$/i;
-  const upsUrl = n => `https://www.ups.com/track?tracknum=${encodeURIComponent(n)}`;
-
-  // Build a full card UI per row
-  function enhanceRow(tr){
-  const a = findAnchor(tr);
-  if (!a) return;
-
-  const href = new URL(a.getAttribute('href')||'', location.origin).toString();
-  const oid  = getOid(href);
-  if (!oid) return;
-
-  // ✅ Use the human-facing order number from the link text (fallback to oid)
-  const orderNo = (a.textContent || '').trim() || oid;
-
-  // Gather fields from the original cells
-  const status  = grab(tr, 'td[data-title="Status"]');
-  const created = grab(tr, 'td[data-title="Created"]');
-  const branch  = grab(tr, 'td[data-title="Branch"]');
-  const total   = grab(tr, 'td[data-title="Total Amount"], td[data-title="Goods Total"]');
-
-  // Hide the original link but keep for fallback/postback
-  a.style.position='absolute'; a.style.width='1px'; a.style.height='1px';
-  a.style.overflow='hidden'; a.style.clip='rect(1px,1px,1px,1px)'; a.setAttribute('aria-hidden','true');
-
-  // Header (✅ show the real order number, not the oid)
-  const head = document.createElement('div');
-  head.className = 'wl-row-head';
-  head.innerHTML = `
-    <div class="wl-head-left">
-      <span class="wl-order-id">Order #${orderNo}</span>
-      <span class="wl-chip wl-chip--${statusColor(status)}">${status || 'Status'}</span>
-      <div class="wl-meta">
-        ${created ? `<span>Created: ${created}</span>` : ``}
-        ${branch ? `<span>Branch: ${branch}</span>` : ``}
-        ${total  ? `<span>Total: ${total}</span>` : ``}
-      </div>
-    </div>
-    <div class="wl-head-right">
-      <button class="wl-btn wl-btn--primary" type="button" data-action="toggle-details">View details</button>
-      <a class="wl-btn wl-btn--ghost" href="${href}">Open full order</a>
-    </div>
-  `;
-  tr.insertAdjacentElement('afterbegin', head);
-
-  // Details container
-  const details = document.createElement('div');
-  details.className = 'wl-details';
-  details.dataset.state = 'idle';
-  tr.appendChild(details);
-
-  // Toggle + lazy load
-  const btn = head.querySelector('[data-action="toggle-details"]');
-  btn.addEventListener('click', async (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (details.dataset.state === 'idle') {
-      await loadDetails(details, href, oid, btn);
-    }
-    details.classList.toggle('show');
-    btn.textContent = details.classList.contains('show') ? 'Hide details' : 'View details';
-  });
-}
-
-
-  // Fetch & render the order lines from the details page
-  async function loadDetails(container, href, oid, btn){
-    try{
-      container.dataset.state = 'loading';
-      btn.disabled = true; btn.textContent = 'Loading…';
-
-      const html = await fetch(href, { credentials:'same-origin' }).then(r=>r.text());
-      const doc = new DOMParser().parseFromString(html, 'text/html');
-
-      const table =
-        doc.querySelector('#ctl00_PageBody_ctl02_OrderDetailsGrid_ctl00') ||
-        doc.querySelector('#ctl00_PageBody_ctl02_OrderDetailsGrid .rgMasterTable') ||
-        doc.querySelector('.rgMasterTable');
-
-      const lines = [];
-      const upsNumbers = [];
-
-      if (table){
-        table.querySelectorAll('tr').forEach(tr => {
-          const codeEl = tr.querySelector('td[data-title="Product Code"]') || tr.querySelector('td:nth-child(1)');
-          const descEl = tr.querySelector('td[data-title="Description"]') || tr.querySelector('td:nth-child(2)');
-          const qtyEl  = tr.querySelector('td[data-title="Quantity"]') || tr.querySelector('td:nth-child(3)');
-          if (!codeEl || !descEl) return;
-
-          const code = (codeEl.textContent||'').trim();
-          const desc = (descEl.textContent||'').trim().replace(/\s+/g,' ');
-          const qty  = qtyEl ? (qtyEl.textContent||'').trim() : '';
-
-          // Capture UPS tracking line(s)
-          if ((code||'').toUpperCase() === 'UPS') {
-            const raw = desc.replace(/\s+/g,'').toUpperCase();
-            if (UPS_RX.test(raw)) upsNumbers.push(raw);
-            else if (raw.length >= 8) upsNumbers.push(raw);
-            return;
-          }
-
-          if (!code && !desc) return;
-          lines.push({ code, desc, qty });
-        });
-      }
-
-      container.innerHTML = `
-        ${lines.length ? `
-          <div class="wl-lines">
-            ${lines.map(l => `
-              <div class="wl-line">
-                <div class="wl-sku">${l.code || '-'}</div>
-                <div class="wl-desc">${l.desc || ''}</div>
-                <div class="wl-qty">${l.qty ? 'Qty: '+l.qty : ''}</div>
-              </div>
-            `).join('')}
-          </div>
-        ` : `<div style="color:#475569;padding:8px 0;">No line items found.</div>`}
-
-        ${upsNumbers.length ? `
-          <div class="wl-tracking-pills">
-            ${upsNumbers.map(n => `
-              <a class="wl-pill wl-pill--ups" href="${upsUrl(n)}" target="_blank" rel="noopener" title="UPS ${n}">
-                UPS · ${n}
-              </a>
-            `).join('')}
-          </div>
-        ` : ``}
-
-        <div class="wl-foot-actions">
-          <a class="wl-btn wl-btn--ghost" href="/OpenOrders_r.aspx">← Back to Orders</a>
-          <a class="wl-btn wl-btn--primary" href="${href}">Open full order page</a>
-        </div>
-      `;
-
-      container.dataset.state = 'ready';
-    } catch(err){
-      console.error(err);
-      container.innerHTML = `<div style="color:#7f1d1d;background:#fee2e2;border:1px solid #fecaca;border-radius:10px;padding:10px;">
-        Sorry, we couldn’t load order details. You can still <a href="${href}">open the full order page</a>.
-      </div>`;
-      container.dataset.state = 'error';
-    } finally {
-      btn.disabled = false;
-      if (container.classList.contains('show')) btn.textContent = 'Hide details';
-      else btn.textContent = 'View details';
-    }
-  }
-
-  // Enhance all rows
-  const enhanced = [];
-  rows.forEach(tr => {
-    try {
-      enhanceRow(tr);
-      enhanced.push(1);
-    } catch(e){ console.warn('Enhance row failed', e); }
-  });
-  log('Enhanced rows:', enhanced.length);
-})();
-
-/* ===== 2) Tracking overlay (?tracking=…) stays for deep links ===== */
+/* ==========================================================
+   Woodson — Open Orders Override
+   Page: OpenOrders_r.aspx
+   Purpose:
+   - Apply Woodson grouped account menu
+   - Replace legacy order table with modern status-grouped cards
+   - Keep Open Orders as the default view
+   - Add front-end search/filtering and status filters
+   - Use modal order details instead of inline table expansion
+   - Preserve UPS tracking behavior from the previous Tracking.js flow
+   ========================================================== */
 (function () {
-  const qs = new URLSearchParams(location.search);
-  const trackingParam = qs.get('tracking');
-  if (!trackingParam) return;
-  if (window.__WL_TRACKING_VIEW__) return;
-  window.__WL_TRACKING_VIEW__ = true;
+  'use strict';
 
-  const ORDER_ID = qs.get('oid') || '';
-  const explicitNumber = trackingParam && trackingParam.toLowerCase() !== 'yes'
-    ? trackingParam.trim()
-    : null;
+  if (!/OpenOrders_r\.aspx/i.test(window.location.pathname)) return;
+  if (window.__WL_OPEN_ORDERS_REWRITE__) return;
+  window.__WL_OPEN_ORDERS_REWRITE__ = true;
 
-  const UPS_REGEX = /^1Z[0-9A-Z]{16}$/i;
-  const toUPS = n => `https://www.ups.com/track?tracknum=${encodeURIComponent(n)}`;
+  var BRAND = {
+    primary: '#6b0016',
+    primaryHover: '#540011',
+    bgSoft: '#fbf5f6',
+    border: '#e6e6e6',
+    text: '#222',
+    muted: '#666',
+    danger: '#9f1d1d',
+    dangerBg: '#fff5f5',
+    warning: '#8a5a00',
+    warningBg: '#fff9e9',
+    success: '#2f6b3c',
+    successBg: '#f3fbf5',
+    blue: '#1e3a8a',
+    blueBg: '#eef5ff'
+  };
 
-  function hideMainContent() {
-    document.querySelectorAll('.bodyFlexContainer, #ctl00_PageBody_OrdersGrid, .paging-control')
-      .forEach(el => { el.style.display = 'none'; });
+  var CONFIG = {
+    ITEMS_PER_PAGE: 48,
+    AUTO_EXPAND_ITEMS_PER_PAGE: true,
+    ORDER_PAGE: 'OpenOrders_r.aspx'
+  };
+
+  var STATUS_BUCKETS = [
+    {
+      key: 'waiting',
+      title: 'Waiting for Stock',
+      shortLabel: 'Waiting for stock',
+      help: 'Some items are still being received by Woodson before this order can move forward.',
+      pillClass: 'wloo-pill-waiting'
+    },
+    {
+      key: 'picking',
+      title: 'Being Prepared',
+      shortLabel: 'Being prepared',
+      help: 'Woodson is pulling or preparing the products on this order.',
+      pillClass: 'wloo-pill-picking'
+    },
+    {
+      key: 'delivery',
+      title: 'Delivery Status',
+      shortLabel: 'Delivery status',
+      help: 'This order is being prepared for delivery, dispatched, or waiting for a delivery update.',
+      pillClass: 'wloo-pill-delivery'
+    },
+    {
+      key: 'pickup',
+      title: 'Ready for Pickup',
+      shortLabel: 'Ready for pickup',
+      help: 'This order is ready, or nearly ready, for customer pickup.',
+      pillClass: 'wloo-pill-pickup'
+    },
+    {
+      key: 'other',
+      title: 'Other Open Orders',
+      shortLabel: 'Open order',
+      help: 'These orders are open but do not have a more specific customer-facing status yet.',
+      pillClass: 'wloo-pill-other'
+    }
+  ];
+
+  var BUCKET_INDEX = STATUS_BUCKETS.reduce(function (acc, bucket, index) {
+    acc[bucket.key] = index;
+    return acc;
+  }, {});
+
+  function ready(fn) {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', fn, { once: true });
+    } else {
+      fn();
+    }
   }
 
-  function renderView(numbers, state) {
-    const overlay = document.createElement('div');
-    overlay.className = 'wl-tracking-overlay';
-    overlay.innerHTML = `
-      <div class="wl-track-card">
-        <div class="wl-track-header">
-          <div class="wl-track-title">Track your shipment</div>
-          ${ORDER_ID ? `<div class="wl-track-sub">Order #${ORDER_ID}</div>` : ``}
-        </div>
-
-        ${state === 'loading' ? `
-          <div class="wl-track-loading">Looking for tracking on your order…</div>
-        ` : numbers.length ? `
-          <div class="wl-track-list">
-            ${numbers.map((n,i)=>`
-              <div class="wl-track-line">
-                <div class="wl-track-num">UPS ${n}</div>
-                <a class="wl-track-btn" target="_blank" rel="noopener" href="${toUPS(n)}">
-                  View status on UPS
-                </a>
-              </div>
-            `).join('')}
-          </div>
-        ` : `
-          <div class="wl-track-empty">
-            We don’t see a tracking number on this order yet.
-            If you just received this link, give it a little time or contact us and we’ll check for you.
-          </div>
-        `}
-
-        <div class="wl-actions">
-          <a class="wl-back" href="/OpenOrders_r.aspx">← Back to Orders</a>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(overlay);
-
-    const css = document.createElement('style');
-    css.textContent = `
-      .wl-tracking-overlay {
-        position: fixed; inset: 0; display: grid; place-items: center; padding: 24px;
-        background: rgba(255,255,255,0.98); z-index: 9999;
-      }
-      .wl-track-card {
-        width: min(760px, 92vw); background: #fff; border: 1px solid #e5e7eb; border-radius: 16px;
-        box-shadow: 0 12px 36px rgba(0,0,0,.08); padding: 20px; font-family: inherit;
-      }
-      .wl-track-header { margin-bottom: 10px; }
-      .wl-track-title { font-size: 22px; font-weight: 800; }
-      .wl-track-sub { color: #64748b; margin-top: 2px; }
-      .wl-track-loading, .wl-track-empty { color: #475569; padding: 12px 0; }
-      .wl-track-list { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
-      .wl-track-line { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
-        border: 1px solid #eef0f3; border-radius: 12px; padding: 12px; }
-      .wl-track-num { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 700; }
-      .wl-track-btn {
-        text-decoration: none; background: #6b0016; color: #fff; padding: 10px 14px; border-radius: 10px; font-weight: 700;
-      }
-      .wl-track-btn:hover { opacity: .92; }
-      .wl-actions { display: flex; justify-content: flex-start; margin-top: 16px; }
-      .wl-back { text-decoration: none; color: #0f172a; border-bottom: 1px dashed #cbd5e1; padding-bottom: 2px; }
-      @media (max-width: 480px) {
-        .wl-track-line { align-items: flex-start; }
-        .wl-track-btn { width: 100%; text-align: center; }
-      }
-    `;
-    document.head.appendChild(css);
+  function $(selector, root) {
+    return (root || document).querySelector(selector);
   }
 
-  function findUPSNumbers() {
-    if (explicitNumber) return [explicitNumber];
+  function $$(selector, root) {
+    return Array.prototype.slice.call((root || document).querySelectorAll(selector));
+  }
 
-    const candidates = [];
-    const table =
-      document.querySelector('#ctl00_PageBody_ctl02_OrderDetailsGrid_ctl00') ||
-      document.querySelector('#ctl00_PageBody_ctl02_OrderDetailsGrid .rgMasterTable') ||
-      document.querySelector('.rgMasterTable');
-    if (!table) return candidates;
+  function txt(el) {
+    return ((el && el.textContent) || '').replace(/\u00a0/g, ' ').replace(/\s+/g, ' ').trim();
+  }
 
-    table.querySelectorAll('tr').forEach(tr => {
-      const code = tr.querySelector('td[data-title="Product Code"]') || tr.querySelector('td:nth-child(1)');
-      const desc = tr.querySelector('td[data-title="Description"]') || tr.querySelector('td:nth-child(2)');
-      if (!code || !desc) return;
-      if ((code.textContent||'').trim().toUpperCase() === 'UPS') {
-        const raw = (desc.textContent||'').trim().replace(/\s+/g,'');
-        if (raw) candidates.push(raw);
-      }
+  function dom(html) {
+    var t = document.createElement('template');
+    t.innerHTML = html.trim();
+    return t.content.firstElementChild;
+  }
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value).replace(/[&<>\"]/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch];
     });
-    return candidates;
   }
 
-  hideMainContent();
-  renderView([], 'loading');
-
-  function updateOnce() {
-    const nums = findUPSNumbers();
-    const overlay = document.querySelector('.wl-tracking-overlay');
-    if (overlay) overlay.remove();
-    renderView(nums, nums.length ? 'ready' : 'empty');
+  function escapeAttr(value) {
+    return escapeHtml(value).replace(/'/g, '&#39;');
   }
 
-  setTimeout(updateOnce, 150);
-  setTimeout(updateOnce, 1200);
-})();
+  function money(value) {
+    var n = parseFloat(String(value || '').replace(/[^0-9.\-]/g, ''));
+    if (!Number.isFinite(n)) return value || '—';
+    return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n);
+  }
 
+  function getHost() {
+    return $('#MainLayoutRow .col') || $('td.pageContentBody') || document.body;
+  }
 
+  function getStoredCashAccountFlag() {
+    try {
+      var raw = localStorage.getItem('wl_account_is_cash_v1');
+      if (raw === 'true') return true;
+      if (raw === 'false') return false;
+    } catch (err) {}
+    return null;
+  }
 
+  function getOidFromHref(href) {
+    var m = String(href || '').match(/[?&]oid=(\d+)/i);
+    return m ? m[1] : '';
+  }
 
+  function orderDetailsHref(oid) {
+    if (!oid) return '#';
+    return 'OrderDetails_r.aspx?oid=' + encodeURIComponent(oid) + '&returnUrl=%7e%2fOpenOrders_r.aspx';
+  }
 
+  function normalizeMenuLabel(label) {
+    label = String(label || '').trim();
+    if (/^Account Information$/i.test(label)) return 'Account Dashboard';
+    if (/^Quicklists$/i.test(label)) return 'Shopping Lists';
+    if (/Customer\s*Cards|Stored\s*Cards/i.test(label)) return 'Payment Methods';
+    return label;
+  }
 
+  function classifyStatus(status, order) {
+    var s = String(status || '').toLowerCase();
+    var hay = [s, order && order.deliveryText, order && order.vehicleTracking].join(' ').toLowerCase();
 
+    if (/back\s*order|backorder|waiting|awaiting stock|stock|vendor|special order|on order|ordered|purchase order|po\b/.test(hay)) {
+      return 'waiting';
+    }
 
+    if (/deliver|delivery|dispatch|truck|route|out for delivery|shipped|shipment/.test(hay)) {
+      return 'delivery';
+    }
 
+    if (/pickup|pick up|ready|will call|collect/.test(hay)) {
+      return 'pickup';
+    }
 
+    if (/pick|picking|pull|pulling|processing|prepare|preparing|allocated|staged/.test(hay)) {
+      return 'picking';
+    }
 
+    return 'other';
+  }
 
+  function bucketFor(key) {
+    return STATUS_BUCKETS.filter(function (bucket) { return bucket.key === key; })[0] || STATUS_BUCKETS[STATUS_BUCKETS.length - 1];
+  }
 
+  function maybeNormalizeOpenOrdersUrl() {
+    if (!CONFIG.AUTO_EXPAND_ITEMS_PER_PAGE) return false;
 
+    var params = new URLSearchParams(window.location.search || '');
+    if (params.has('tracking') || params.has('oid')) return false;
+    if (params.has('searchType') || params.has('startDate') || params.has('endDate')) return false;
+    if (params.get('itemsPerPage') === String(CONFIG.ITEMS_PER_PAGE)) return false;
 
+    params.set('itemsPerPage', String(CONFIG.ITEMS_PER_PAGE));
+    var next = CONFIG.ORDER_PAGE + '?' + params.toString();
+    window.location.replace(next);
+    return true;
+  }
 
+  function injectStyles() {
+    if ($('#wloo-styles')) return;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/* ===========================
-   1) OPEN ORDERS (LIST) ENHANCER
-   =========================== */
-(function(){
-  if (window.__WL_OPENORDERS_ENHANCED__) return;
-  window.__WL_OPENORDERS_ENHANCED__ = true;
-
-  const t0 = performance.now();
-  const log  = (...a)=>console.log('%cWL1','color:#6b0016;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
-  const warn = (...a)=>console.warn('%cWL1','color:#c2410c;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
-
-  if (!/OpenOrders_r\.aspx/i.test(location.pathname)) { log('Not on OpenOrders list'); return; }
-
-  // CSS
-  (function css(){
-    const style = document.createElement('style');
+    var style = document.createElement('style');
+    style.id = 'wloo-styles';
     style.textContent = `
-      /* Hide legacy table header since we render card-like rows */
-      #ctl00_PageBody_OrdersGrid thead,
-      .RadGrid[id*="OrdersGrid"] thead { display:none !important; }
-
-      .wl-track-btn{
-        display:inline-block;padding:6px 10px;border-radius:8px;font-weight:800;
-        text-decoration:none;background:#6b0016;color:#fff;white-space:nowrap;margin-left:6px
+      .wloo-root, .wloo-root * { box-sizing: border-box; }
+      .wloo-root {
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        width: 100%;
+        color: ${BRAND.text};
       }
-      .wl-track-btn:hover{ opacity:.92 }
-      @media (max-width:640px){
-        .wl-track-btn{ margin-left:0; margin-top:6px; display:inline-flex }
+
+      .wloo-hide {
+        position: absolute !important;
+        left: -9999px !important;
+        width: 1px !important;
+        height: 1px !important;
+        overflow: hidden !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
+      }
+
+      .wloo-top {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin: 8px 0 14px;
+      }
+
+      .wloo-title-wrap { min-width: 0; }
+      .wloo-title { font-size: 1.24rem; line-height: 1.2; font-weight: 850; color: ${BRAND.primary}; }
+      .wloo-subtitle { margin-top: 3px; color: ${BRAND.muted}; font-size: .92rem; }
+
+      .wloo-menu-wrap { display: flex; align-items: center; gap: 10px; min-width: 0; }
+      .wloo-menu-btn {
+        display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+        border: 1px solid ${BRAND.border}; background: #fff; color: ${BRAND.primary};
+        font-weight: 800; border-radius: 10px; padding: 9px 13px; cursor: pointer; line-height: 1.1; white-space: nowrap;
+      }
+      .wloo-menu-btn:hover { background: ${BRAND.bgSoft}; }
+      .wloo-menu {
+        position: absolute; left: 0; top: 46px; z-index: 7001; width: min(390px, 92vw);
+        max-height: 0; overflow: auto; padding: 0 8px; background: #fff; border: 1px solid ${BRAND.border};
+        border-radius: 14px; box-shadow: 0 12px 30px rgba(0,0,0,.16); opacity: 0; pointer-events: none;
+        transition: max-height .25s ease, opacity .18s ease, padding .18s ease;
+      }
+      .wloo-menu.open { max-height: 72vh; opacity: 1; pointer-events: auto; padding: 8px; }
+      .wloo-menu-section + .wloo-menu-section { border-top: 1px solid #eee; margin-top: 6px; padding-top: 6px; }
+      .wloo-menu-label { color: ${BRAND.primary}; font-size: .72rem; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; padding: 5px 10px 3px; }
+      .wloo-menu a { display: block; padding: 9px 10px; color: #111; text-decoration: none; border-radius: 9px; font-weight: 650; }
+      .wloo-menu a:hover, .wloo-menu a[aria-current="page"] { background: ${BRAND.bgSoft}; color: ${BRAND.primary}; }
+
+      .wloo-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
+      .wloo-btn {
+        display: inline-flex; align-items: center; justify-content: center; gap: 7px; min-height: 38px; padding: 9px 14px;
+        border-radius: 10px; border: 1px solid ${BRAND.border}; background: #fff; color: #111 !important;
+        text-decoration: none !important; font-weight: 800; cursor: pointer; line-height: 1.1; white-space: nowrap; font-size: .92rem;
+      }
+      .wloo-btn:hover { background: ${BRAND.bgSoft}; color: ${BRAND.primary} !important; }
+      .wloo-btn-primary { background: ${BRAND.primary}; border-color: ${BRAND.primary}; color: #fff !important; }
+      .wloo-btn-primary:hover { background: ${BRAND.primaryHover}; border-color: ${BRAND.primaryHover}; color: #fff !important; }
+      .wloo-btn-small { min-height: 34px; padding: 8px 10px; font-size: .86rem; }
+
+      .wloo-tools, .wloo-panel, .wloo-summary-card {
+        background: #fff; border: 1px solid ${BRAND.border}; border-radius: 14px; box-shadow: 0 2px 8px rgba(0,0,0,.05); overflow: hidden;
+      }
+      .wloo-tools { padding: 12px; margin-bottom: 14px; display: grid; grid-template-columns: minmax(250px, 1fr) auto; gap: 10px; align-items: end; }
+      .wloo-field label { display: block; margin-bottom: 6px; color: ${BRAND.muted}; font-weight: 750; font-size: .9rem; }
+      .wloo-input { width: 100%; min-height: 40px; border: 1px solid #ddd; border-radius: 10px; padding: 9px 11px; font: inherit; background: #fff; }
+      .wloo-input:focus { outline: 2px solid rgba(107,0,22,.18); border-color: ${BRAND.primary}; }
+
+      .wloo-status-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 14px; }
+      .wloo-tab { border: 1px solid #ead4d9; background: #fff; color: ${BRAND.primary}; border-radius: 999px; padding: 8px 12px; font-weight: 850; cursor: pointer; }
+      .wloo-tab.active { background: ${BRAND.primary}; color: #fff; border-color: ${BRAND.primary}; }
+
+      .wloo-summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 14px; }
+      .wloo-summary-card { padding: 12px; }
+      .wloo-summary-label { color: ${BRAND.muted}; font-size: .82rem; font-weight: 850; }
+      .wloo-summary-value { color: ${BRAND.primary}; font-size: 1.45rem; font-weight: 950; line-height: 1.1; margin-top: 4px; }
+
+      .wloo-panel { margin-bottom: 14px; }
+      .wloo-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: ${BRAND.primary}; color: #fff; padding: 11px 14px; }
+      .wloo-panel-title { font-weight: 850; letter-spacing: .1px; }
+      .wloo-panel-meta { color: rgba(255,255,255,.88); font-size: .88rem; white-space: nowrap; }
+      .wloo-panel-body { background: ${BRAND.bgSoft}; padding: 13px; }
+
+      .wloo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 12px; }
+      .wloo-card { min-width: 0; background: #fff; border: 1px solid #ead4d9; border-radius: 14px; padding: 13px; box-shadow: 0 1px 4px rgba(0,0,0,.04); display: flex; flex-direction: column; gap: 10px; }
+      .wloo-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+      .wloo-order-no { color: ${BRAND.primary}; font-size: 1.08rem; font-weight: 950; line-height: 1.2; }
+      .wloo-muted { color: ${BRAND.muted}; font-size: .88rem; line-height: 1.35; }
+      .wloo-note { background: #fff; border: 1px dashed #e2c4ca; border-radius: 12px; padding: 10px; color: ${BRAND.muted}; line-height: 1.4; font-size: .9rem; }
+
+      .wloo-pill { display: inline-flex; align-items: center; gap: 5px; border: 1px solid #e2c4ca; background: #fff; color: ${BRAND.primary}; border-radius: 999px; padding: 4px 9px; font-size: .78rem; font-weight: 850; white-space: nowrap; }
+      .wloo-pill-waiting { border-color: #efdca4; background: ${BRAND.warningBg}; color: ${BRAND.warning}; }
+      .wloo-pill-picking { border-color: #efdca4; background: #fff5e8; color: #9a3412; }
+      .wloo-pill-delivery { border-color: #cfe0ff; background: ${BRAND.blueBg}; color: ${BRAND.blue}; }
+      .wloo-pill-pickup { border-color: #d8eadc; background: ${BRAND.successBg}; color: ${BRAND.success}; }
+      .wloo-pill-other { border-color: #e5e7eb; background: #f8fafc; color: #334155; }
+
+      .wloo-money { display: grid; grid-template-columns: repeat(3, minmax(90px, 1fr)); gap: 8px; }
+      .wloo-money-box { border: 1px solid #ecd6db; border-radius: 11px; background: #fff; padding: 9px; }
+      .wloo-money-label { color: ${BRAND.muted}; font-size: .78rem; font-weight: 800; margin-bottom: 2px; }
+      .wloo-money-value { color: ${BRAND.primary}; font-weight: 900; }
+
+      .wloo-info-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 10px; font-size: .88rem; }
+      .wloo-info-grid strong { color: #333; }
+      .wloo-card-actions { display: flex; gap: 7px; flex-wrap: wrap; margin-top: auto; }
+
+      .wloo-empty { background: #fff; border: 1px dashed #e2c4ca; border-radius: 12px; padding: 18px; color: ${BRAND.muted}; text-align: center; }
+
+      .wloo-modal { position: fixed; inset: 0; z-index: 9999; display: none; align-items: flex-start; justify-content: center; padding: 18px; background: rgba(0,0,0,.45); overflow: auto; }
+      .wloo-modal.open { display: flex; }
+      .wloo-modal-card { width: min(1120px, 96vw); margin: auto 0; background: #fff; border-radius: 16px; border: 1px solid ${BRAND.border}; box-shadow: 0 18px 44px rgba(0,0,0,.22); overflow: hidden; max-height: calc(100vh - 36px); display: flex; flex-direction: column; }
+      .wloo-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; background: ${BRAND.primary}; color: #fff; padding: 12px 14px; flex: 0 0 auto; }
+      .wloo-modal-title { font-weight: 900; font-size: 1.05rem; }
+      .wloo-modal-subtitle { color: rgba(255,255,255,.88); font-size: .88rem; margin-top: 2px; }
+      .wloo-modal-close { border: 1px solid rgba(255,255,255,.55); background: rgba(255,255,255,.12); color: #fff; border-radius: 10px; min-height: 36px; padding: 7px 11px; font-weight: 850; cursor: pointer; }
+      .wloo-modal-close:hover { background: rgba(255,255,255,.22); }
+      .wloo-modal-body { padding: 14px; background: ${BRAND.bgSoft}; overflow: auto; }
+
+      .wloo-lines { display: grid; gap: 10px; }
+      .wloo-line { background: #fff; border: 1px solid #ead4d9; border-radius: 12px; padding: 11px; display: grid; grid-template-columns: minmax(130px, 170px) minmax(240px, 1fr) auto; align-items: center; gap: 10px; }
+      .wloo-line-code { color: ${BRAND.primary}; font-weight: 900; word-break: break-word; }
+      .wloo-line-desc { color: #222; font-weight: 650; line-height: 1.3; }
+      .wloo-line-meta { color: ${BRAND.muted}; font-size: .86rem; white-space: nowrap; }
+      .wloo-line-price { color: #111; font-weight: 900; white-space: nowrap; }
+      .wloo-tracking-pills { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+      .wloo-track-pill { display: inline-flex; align-items: center; gap: 6px; padding: 8px 11px; border-radius: 999px; font-weight: 900; font-size: .86rem; text-decoration: none !important; background: #111827; color: #fff !important; }
+      .wloo-track-pill:hover { opacity: .92; color: #fff !important; }
+
+      .wloo-loading { color: ${BRAND.muted}; padding: 16px; background: #fff; border-radius: 12px; border: 1px dashed #e2c4ca; }
+      .wloo-error { color: ${BRAND.danger}; background: ${BRAND.dangerBg}; border: 1px solid #f0caca; border-radius: 12px; padding: 12px; }
+
+      .wloo-track-overlay { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; background: rgba(255,255,255,.98); z-index: 10000; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+      .wloo-track-card { width: min(760px, 92vw); background: #fff; border: 1px solid #e5e7eb; border-radius: 16px; box-shadow: 0 12px 36px rgba(0,0,0,.08); padding: 20px; }
+      .wloo-track-title { font-size: 22px; font-weight: 900; color: ${BRAND.primary}; }
+      .wloo-track-sub { color: #64748b; margin-top: 2px; }
+      .wloo-track-list { display: grid; gap: 12px; margin-top: 14px; }
+      .wloo-track-line { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; border: 1px solid #eef0f3; border-radius: 12px; padding: 12px; }
+      .wloo-track-num { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 800; }
+
+      @media (max-width: 860px) {
+        .wloo-top { align-items: flex-start; flex-direction: column; }
+        .wloo-actions { width: 100%; justify-content: stretch; }
+        .wloo-actions .wloo-btn, .wloo-tools .wloo-btn { flex: 1 1 auto; }
+        .wloo-tools { grid-template-columns: 1fr; }
+        .wloo-panel-head { align-items: flex-start; flex-direction: column; }
+        .wloo-panel-meta { white-space: normal; }
+        .wloo-line { grid-template-columns: 1fr; }
+        .wloo-money { grid-template-columns: 1fr; }
       }
     `;
     document.head.appendChild(style);
-    log('List CSS injected');
-  })();
-
-  const host = document.querySelector('#ctl00_PageBody_OrdersGrid, .RadGrid[id*="OrdersGrid"]');
-  if (!host) { warn('Orders grid host not found'); return; }
-  const master = host.querySelector('#ctl00_PageBody_OrdersGrid_ctl00, .rgMasterTable');
-  if (!master) { warn('Master table not found'); return; }
-
-  const rows = Array.from(master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow'));
-  const oids = [];
-  const getOid = (tr) => {
-    const a = tr.querySelector('td.wide-only a[href*="oid="], td.narrow-only a[href*="oid="], a[href*="OrderDetails_r.aspx?oid="]');
-    const m = a && /[?&]oid=(\d+)/.exec(a.getAttribute('href')||'');
-    return m ? m[1] : null;
-  };
-  const inject = (tr, oid) => {
-    if (!oid || tr.querySelector('.wl-track-btn')) return;
-    const vt = tr.querySelector('td[data-title="Vehicle Tracking"] span[id*="VehicleTracking"]');
-    const target = vt || tr.lastElementChild || tr;
-    const a = document.createElement('a');
-    a.className = 'wl-track-btn';
-    a.href = `/OpenOrders_r.aspx?oid=${encodeURIComponent(oid)}&tracking=yes#detailsAnchor`;
-    a.textContent = 'Track order';
-    target.appendChild(a);
-  };
-
-  rows.forEach(tr => { const oid = getOid(tr); if (oid) { oids.push(oid); inject(tr, oid); } });
-  log('Buttons injected for OIDs:', oids.join(', ') || '(none)');
-})();
-
-/* ===========================
-   2) TRACKING OVERLAY (on list page with ?tracking=...)
-   =========================== */
-(function () {
-  const qs = new URLSearchParams(location.search);
-  const trackingParam = qs.get('tracking');
-  if (!/OpenOrders_r\.aspx/i.test(location.pathname)) return;
-  if (!trackingParam) return;
-  if (window.__WL_TRACKING_VIEW__) return;
-  window.__WL_TRACKING_VIEW__ = true;
-
-  const t0 = performance.now();
-  const log  = (...a)=>console.log('%cWL2','color:#6b0016;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
-  const ORDER_ID = qs.get('oid') || '';
-  const explicitNumber = trackingParam && trackingParam.toLowerCase() !== 'yes'
-    ? trackingParam.trim()
-    : null;
-
-  const toUPS = n => `https://www.ups.com/track?tracknum=${encodeURIComponent(n)}`;
-
-  function hideMainContent() {
-    document.querySelectorAll('.bodyFlexContainer, #ctl00_PageBody_OrdersGrid, .paging-control')
-      .forEach(el => { el.style.display = 'none'; });
   }
 
-  function renderView(numbers, state) {
-    const overlay = document.createElement('div');
-    overlay.className = 'wl-tracking-overlay';
-    overlay.innerHTML = `
-      <div class="wl-track-card">
-        <div class="wl-track-header">
-          <div class="wl-track-title">Track your shipment</div>
-          ${ORDER_ID ? `<div class="wl-track-sub">Order #${ORDER_ID}</div>` : ``}
+  function buildMenu(root) {
+    var menu = $('.wloo-menu', root);
+    var btn = $('.wloo-menu-btn', root);
+    var currentPath = (window.location.pathname || '').split('/').pop().toLowerCase();
+    var isCashAccount = getStoredCashAccountFlag();
+    var paymentLabel = isCashAccount === true ? 'Reload Balance' : (isCashAccount === false ? 'Make a Payment' : 'Make a Payment / Reload Balance');
+
+    var accountSettingLinks = [
+      ['Quicklists_R.aspx', 'Shopping Lists']
+    ];
+
+    if (isCashAccount !== true) {
+      accountSettingLinks.push(['Statements_R.aspx', 'Statements']);
+    }
+
+    accountSettingLinks = accountSettingLinks.concat([
+      ['CustomerTokens.aspx', 'Payment Methods'],
+      ['AccountSettings.aspx', 'Change Password / Account Settings'],
+      ['AddressList_R.aspx', 'Addresses'],
+      ['Contacts_r.aspx', 'Contacts']
+    ]);
+
+    var groups = [
+      { label: '', links: [['AccountInfo_R.aspx', 'Account Dashboard']] },
+      {
+        label: 'Transactions',
+        links: [
+          ['AccountPayment_r.aspx', paymentLabel],
+          ['OpenQuotes_r.aspx', 'Quotes'],
+          ['OpenOrders_r.aspx', 'Orders'],
+          ['Invoices_r.aspx', 'Invoices'],
+          ['CreditNotes_r.aspx', 'Credit Notes'],
+          ['ProductsPurchased_R.aspx', 'Products Purchased']
+        ]
+      },
+      { label: 'Account Settings', links: accountSettingLinks }
+    ];
+
+    menu.innerHTML = groups.map(function (group) {
+      return '<div class="wloo-menu-section">' +
+        (group.label ? '<div class="wloo-menu-label">' + escapeHtml(group.label) + '</div>' : '') +
+        group.links.map(function (link) {
+          var href = link[0];
+          var label = normalizeMenuLabel(link[1]);
+          var path = String(href || '').split('?')[0].split('#')[0].split('/').pop().toLowerCase();
+          var current = path === currentPath ? ' aria-current="page"' : '';
+          return '<a role="menuitem" href="' + escapeAttr(href) + '"' + current + '>' + escapeHtml(label) + '</a>';
+        }).join('') +
+      '</div>';
+    }).join('');
+
+    function toggle(open) {
+      menu.classList.toggle('open', !!open);
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+
+    btn.addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      toggle(!menu.classList.contains('open'));
+    });
+
+    document.addEventListener('click', function (e) {
+      if (!menu.classList.contains('open')) return;
+      if (!menu.contains(e.target) && e.target !== btn) toggle(false);
+    });
+  }
+
+  function parseOrders() {
+    var grid = $('#ctl00_PageBody_OrdersGrid');
+    if (!grid) return [];
+
+    var rows = $$('tbody tr.rgRow, tbody tr.rgAltRow', grid);
+
+    return rows.map(function (row) {
+      var wideLink = $('td[data-title="Order #"].wide-only a', row);
+      var narrowLink = $('td[data-title="Order #"].narrow-only a', row);
+      var link = wideLink || narrowLink || $('td[data-title="Order #"] a', row) || $('a[href*="oid="]', row);
+      var rawHref = link ? (link.getAttribute('href') || link.href || '#') : '#';
+      var oid = getOidFromHref(rawHref);
+      var status = txt($('td[data-title="Status"]', row));
+
+      var order = {
+        row: row,
+        orderNumber: txt(link) || txt($('td[data-title="Order #"]', row)) || oid || 'Order',
+        oid: oid,
+        fullHref: orderDetailsHref(oid),
+        status: status || 'Open',
+        invoice: txt($('td[data-title="Invoice #"]', row)),
+        vehicleTracking: txt($('td[data-title="Vehicle Tracking"]', row)),
+        yourRef: txt($('td[data-title="Your Ref"]', row)) || '—',
+        jobRef: txt($('td[data-title="Job Ref"]', row)) || '—',
+        created: txt($('td[data-title="Created"]', row)) || '—',
+        required: txt($('td[data-title="Required"]', row)) || '—',
+        subtotal: txt($('td[data-title="Goods Total"]', row)) || '0',
+        tax: txt($('td[data-title="Tax"]', row)) || '0',
+        total: txt($('td[data-title="Total Amount"]', row)) || txt($('td[data-title="Goods Total"]', row)) || '0',
+        lines: txt($('td[data-title="Lines"]', row)) || '0',
+        branch: txt($('td[data-title="Branch"]', row)) || '—',
+        salesRep: txt($('td[data-title="Sales Rep"]', row)) || '—'
+      };
+
+      order.bucketKey = classifyStatus(order.status, order);
+      order.bucket = bucketFor(order.bucketKey);
+      order.searchText = [
+        order.orderNumber,
+        order.status,
+        order.yourRef,
+        order.jobRef,
+        order.created,
+        order.required,
+        order.subtotal,
+        order.tax,
+        order.total,
+        order.lines,
+        order.branch,
+        order.salesRep,
+        order.invoice,
+        order.vehicleTracking
+      ].join(' ').toLowerCase();
+
+      return order;
+    }).sort(function (a, b) {
+      var ai = BUCKET_INDEX[a.bucketKey] == null ? 99 : BUCKET_INDEX[a.bucketKey];
+      var bi = BUCKET_INDEX[b.bucketKey] == null ? 99 : BUCKET_INDEX[b.bucketKey];
+      if (ai !== bi) return ai - bi;
+      return String(b.created || '').localeCompare(String(a.created || ''));
+    });
+  }
+
+  function buildSummary(orders) {
+    var counts = orders.reduce(function (acc, order) {
+      acc[order.bucketKey] = (acc[order.bucketKey] || 0) + 1;
+      return acc;
+    }, {});
+
+    var root = dom('<div class="wloo-summary-grid"></div>');
+    STATUS_BUCKETS.forEach(function (bucket) {
+      root.appendChild(dom(`
+        <div class="wloo-summary-card">
+          <div class="wloo-summary-label">${escapeHtml(bucket.shortLabel)}</div>
+          <div class="wloo-summary-value">${counts[bucket.key] || 0}</div>
+        </div>
+      `));
+    });
+    return root;
+  }
+
+  function buildStatusTabs(orders) {
+    var counts = orders.reduce(function (acc, order) {
+      acc[order.bucketKey] = (acc[order.bucketKey] || 0) + 1;
+      return acc;
+    }, {});
+
+    var root = dom('<div class="wloo-status-tabs" role="tablist"></div>');
+    root.appendChild(dom('<button type="button" class="wloo-tab active" data-status-filter="all">All Orders (' + orders.length + ')</button>'));
+
+    STATUS_BUCKETS.forEach(function (bucket) {
+      root.appendChild(dom('<button type="button" class="wloo-tab" data-status-filter="' + escapeAttr(bucket.key) + '">' + escapeHtml(bucket.shortLabel) + ' (' + (counts[bucket.key] || 0) + ')</button>'));
+    });
+
+    return root;
+  }
+
+  function buildTools() {
+    return dom(`
+      <div class="wloo-tools">
+        <div class="wloo-field">
+          <label for="wloo-filter">Search open orders</label>
+          <input id="wloo-filter" class="wloo-input" type="search" placeholder="Search order #, status, branch, ref, product after opening details...">
+        </div>
+        <button type="button" class="wloo-btn" id="wloo-clear-filter">Clear Search</button>
+      </div>
+    `);
+  }
+
+  function orderCard(order) {
+    var card = dom(`
+      <article class="wloo-card" data-status-bucket="${escapeAttr(order.bucketKey)}" data-order-search="${escapeAttr(order.searchText)}">
+        <div class="wloo-card-top">
+          <div>
+            <div class="wloo-order-no">Order #${escapeHtml(order.orderNumber)}</div>
+            <div class="wloo-muted">Created ${escapeHtml(order.created)} • Required ${escapeHtml(order.required)}</div>
+          </div>
+          <span class="wloo-pill ${escapeAttr(order.bucket.pillClass)}">${escapeHtml(order.bucket.shortLabel)}</span>
         </div>
 
-        ${state === 'loading' ? `
-          <div class="wl-track-loading">Looking for tracking on your order…</div>
-        ` : numbers.length ? `
-          <div class="wl-track-list">
-            ${numbers.map((n)=>`
-              <div class="wl-track-line">
-                <div class="wl-track-num">UPS ${n}</div>
-                <a class="wl-track-btn" target="_blank" rel="noopener" href="${toUPS(n)}">View status on UPS</a>
-              </div>
-            `).join('')}
-          </div>
-        ` : `
-          <div class="wl-track-empty">
-            We don’t see a tracking number on this order yet.
-            If you just received this link, give it a little time or contact us and we’ll check for you.
-          </div>
-        `}
+        <div class="wloo-money">
+          <div class="wloo-money-box"><div class="wloo-money-label">Subtotal</div><div class="wloo-money-value">${escapeHtml(money(order.subtotal))}</div></div>
+          <div class="wloo-money-box"><div class="wloo-money-label">Tax</div><div class="wloo-money-value">${escapeHtml(money(order.tax))}</div></div>
+          <div class="wloo-money-box"><div class="wloo-money-label">Total</div><div class="wloo-money-value">${escapeHtml(money(order.total))}</div></div>
+        </div>
 
-        <div class="wl-actions">
-          <a class="wl-back" href="/OpenOrders_r.aspx">← Back to Orders</a>
+        <div class="wloo-info-grid">
+          <div><strong>Status:</strong> ${escapeHtml(order.status)}</div>
+          <div><strong>Lines:</strong> ${escapeHtml(order.lines)}</div>
+          <div><strong>Branch:</strong> ${escapeHtml(order.branch)}</div>
+          <div><strong>Sales Rep:</strong> ${escapeHtml(order.salesRep)}</div>
+          <div><strong>Your Ref:</strong> ${escapeHtml(order.yourRef)}</div>
+          <div><strong>Job Ref:</strong> ${escapeHtml(order.jobRef)}</div>
+        </div>
+
+        <div class="wloo-note">${escapeHtml(order.bucket.help)}</div>
+
+        <div class="wloo-card-actions">
+          <button type="button" class="wloo-btn wloo-btn-primary" data-open-order="${escapeAttr(order.oid)}">View Details</button>
+          <a class="wloo-btn" href="${escapeAttr(order.fullHref)}">Open Full Order</a>
+        </div>
+      </article>
+    `);
+    return card;
+  }
+
+  function buildOrderSection(bucket, orders) {
+    var section = dom(`
+      <section class="wloo-panel" data-section-bucket="${escapeAttr(bucket.key)}">
+        <div class="wloo-panel-head">
+          <div>
+            <div class="wloo-panel-title">${escapeHtml(bucket.title)}</div>
+            <div class="wloo-panel-meta">${escapeHtml(bucket.help)}</div>
+          </div>
+          <div class="wloo-panel-meta">${orders.length} order${orders.length === 1 ? '' : 's'}</div>
+        </div>
+        <div class="wloo-panel-body">
+          <div class="wloo-grid"></div>
+        </div>
+      </section>
+    `);
+
+    var grid = $('.wloo-grid', section);
+    if (!orders.length) {
+      grid.replaceWith(dom('<div class="wloo-empty">No orders currently fall into this status.</div>'));
+    } else {
+      orders.forEach(function (order) {
+        grid.appendChild(orderCard(order));
+      });
+    }
+
+    return section;
+  }
+
+  function findOrderDetailsTable(doc) {
+    var candidates = $$('.rgMasterTable', doc);
+    return candidates.filter(function (table) {
+      return /Product Code/i.test(txt(table)) && /Description/i.test(txt(table));
+    })[0] ||
+      $('#ctl00_PageBody_ctl02_OrderDetailsGrid_ctl00', doc) ||
+      $('#ctl00_PageBody_ctl00_OrderDetailsGrid_ctl00', doc) ||
+      $('#ctl00_PageBody_ctl02_OrderDetailsGrid .rgMasterTable', doc) ||
+      $('#ctl00_PageBody_ctl00_OrderDetailsGrid .rgMasterTable', doc);
+  }
+
+  function parseOrderLinesFromDoc(doc) {
+    var table = findOrderDetailsTable(doc);
+    var lines = [];
+    var upsNumbers = [];
+    var UPS_RX = /^1Z[0-9A-Z]{16}$/i;
+
+    if (!table) return { lines: lines, upsNumbers: upsNumbers };
+
+    $$('tbody tr, tr', table).forEach(function (row) {
+      if (row.querySelector('th')) return;
+      var cells = $$('td', row);
+      if (!cells.length) return;
+
+      var codeEl = $('td[data-title="Product Code"]', row) || cells[0];
+      var descEl = $('td[data-title="Description"]', row) || cells[1];
+      var qtyEl = $('td[data-title="Quantity"]', row) || $('td[data-title="Qty"]', row) || cells[2];
+      var priceEl = $('td[data-title="Price"]', row) || $('td[data-title="Net Price"]', row);
+
+      var code = txt(codeEl);
+      var desc = txt(descEl);
+      var qty = txt(qtyEl);
+      var price = txt(priceEl);
+      if (!code && !desc) return;
+
+      if (code.toUpperCase() === 'UPS') {
+        var raw = desc.replace(/\s+/g, '').toUpperCase();
+        if (raw && (UPS_RX.test(raw) || raw.length >= 8)) upsNumbers.push(raw);
+        return;
+      }
+
+      lines.push({ code: code, description: desc, qty: qty, price: price });
+    });
+
+    return { lines: lines, upsNumbers: upsNumbers };
+  }
+
+  function upsUrl(number) {
+    return 'https://www.ups.com/track?tracknum=' + encodeURIComponent(number);
+  }
+
+  async function fetchOrderDetails(order) {
+    var html = await fetch(order.fullHref, { credentials: 'same-origin', cache: 'no-cache' }).then(function (response) {
+      if (!response.ok) throw new Error('Order details request failed: ' + response.status);
+      return response.text();
+    });
+
+    var doc = new DOMParser().parseFromString(html, 'text/html');
+    return parseOrderLinesFromDoc(doc);
+  }
+
+  function openOrderModal(order) {
+    var existing = $('#wloo-detail-modal');
+    if (existing) existing.remove();
+
+    var modal = dom(`
+      <div class="wloo-modal open" id="wloo-detail-modal" role="dialog" aria-modal="true" aria-labelledby="wloo-modal-title">
+        <div class="wloo-modal-card">
+          <div class="wloo-modal-head">
+            <div>
+              <div class="wloo-modal-title" id="wloo-modal-title">Order #${escapeHtml(order.orderNumber)}</div>
+              <div class="wloo-modal-subtitle">${escapeHtml(order.bucket.shortLabel)} • ${escapeHtml(order.branch)} • Total ${escapeHtml(money(order.total))}</div>
+            </div>
+            <button type="button" class="wloo-modal-close" id="wloo-modal-close">Close</button>
+          </div>
+          <div class="wloo-modal-body">
+            <div class="wloo-loading">Loading order details…</div>
+          </div>
         </div>
       </div>
-    `;
-    document.body.appendChild(overlay);
+    `);
 
-    const css = document.createElement('style');
-    css.textContent = `
-      .wl-tracking-overlay {
-        position: fixed; inset: 0; display: grid; place-items: center; padding: 24px;
-        background: rgba(255,255,255,0.98); z-index: 9999;
-      }
-      .wl-track-card {
-        width: min(760px, 92vw); background: #fff; border: 1px solid #e5e7eb; border-radius: 16px;
-        box-shadow: 0 12px 36px rgba(0,0,0,.08); padding: 20px; font-family: inherit;
-      }
-      .wl-track-header { margin-bottom: 10px; }
-      .wl-track-title { font-size: 22px; font-weight: 800; }
-      .wl-track-sub { color: #64748b; margin-top: 2px; }
-      .wl-track-loading, .wl-track-empty { color: #475569; padding: 12px 0; }
-      .wl-track-list { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
-      .wl-track-line { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
-        border: 1px solid #eef0f3; border-radius: 12px; padding: 12px; }
-      .wl-track-num { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 700; }
-      .wl-track-btn {
-        text-decoration: none; background: #6b0016; color: #fff; padding: 10px 14px; border-radius: 10px; font-weight: 700;
-      }
-      .wl-track-btn:hover { opacity: .92; }
-      .wl-actions { display: flex; justify-content: flex-start; margin-top: 16px; }
-      .wl-back { text-decoration: none; color: #0f172a; border-bottom: 1px dashed #cbd5e1; padding-bottom: 2px; }
-      @media (max-width: 480px) {
-        .wl-track-line { align-items: flex-start; }
-        .wl-track-btn { width: 100%; text-align: center; }
-      }
-    `;
-    document.head.appendChild(css);
-  }
+    document.body.appendChild(modal);
 
-  function findUPSNumbers() {
-    if (explicitNumber) return [explicitNumber];
-    const candidates = [];
-    const table =
-      document.querySelector('#ctl00_PageBody_ctl02_OrderDetailsGrid_ctl00') ||
-      document.querySelector('#ctl00_PageBody_ctl02_OrderDetailsGrid .rgMasterTable') ||
-      document.querySelector('.rgMasterTable');
-    if (!table) return candidates;
+    function closeModal() {
+      modal.classList.remove('open');
+      setTimeout(function () { modal.remove(); }, 160);
+    }
 
-    table.querySelectorAll('tr').forEach(tr => {
-      const code = tr.querySelector('td[data-title="Product Code"]') || tr.querySelector('td:nth-child(1)');
-      const desc = tr.querySelector('td[data-title="Description"]') || tr.querySelector('td:nth-child(2)');
-      if (!code || !desc) return;
-      if (code.textContent.trim().toUpperCase() === 'UPS') {
-        const raw = desc.textContent.trim().replace(/\s+/g,'');
-        if (raw) candidates.push(raw);
-      }
+    $('#wloo-modal-close', modal).addEventListener('click', closeModal);
+    modal.addEventListener('click', function (event) {
+      if (event.target === modal) closeModal();
     });
-    return candidates;
-  }
 
-  hideMainContent();
-  renderView([], 'loading');
-
-  function updateOnce() {
-    const nums = findUPSNumbers();
-    const overlay = document.querySelector('.wl-tracking-overlay');
-    if (overlay) overlay.remove();
-    renderView(nums, nums.length ? 'ready' : 'empty');
-    log('Overlay updated; numbers:', nums);
-  }
-
-  setTimeout(updateOnce, 150);
-  setTimeout(updateOnce, 1200);
-})();
-
-/* ===========================
-   3) ORDER DETAILS ENHANCER (WL3)
-   - Share, Download PDF (generator-first)
-   - Need help (tawk.to) with attributes/tags
-   - UPS pills
-   - Per-line Add to Cart (placeholder; productId resolver TBD)
-   - INLINE mobile pickup barcode (SO;{ORDERNO})
-   =========================== */
-(function(){
-  const isDetails = /OrderDetails_r\.aspx/i.test(location.pathname);
-  if (!isDetails) { console.debug('WL3: not on OrderDetails page, skip'); return; }
-  if (window.__WL_ORDERDETAILS_ENHANCED__) { console.debug('WL3: already enhanced, skip'); return; }
-  window.__WL_ORDERDETAILS_ENHANCED__ = true;
-
-  function start(){
-    const t0 = performance.now();
-    const log  = (...a)=>console.log('%cWL3','color:#6b0016;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
-    const warn = (...a)=>console.warn('%cWL3','color:#c2410c;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
-    const err  = (...a)=>console.error('%cWL3','color:#7f1d1d;font-weight:700;',`[+${(performance.now()-t0).toFixed(1)}ms]`,...a);
-
-    /* ---------- CSS ---------- */
-    (function injectCSS(){
-      const css = document.createElement('style');
-      css.textContent = `
-        .bodyFlexContainer{ gap:14px; }
-        .listPageHeader{ display:none !important; }
-
-        .wl-od-header{
-          display:flex; flex-wrap:wrap; gap:12px; align-items:center; justify-content:space-between;
-          background:#fff; border:1px solid #e5e7eb; border-radius:16px; padding:14px 16px;
-          box-shadow:0 6px 18px rgba(0,0,0,.05);
-        }
-        .wl-od-header-inner{
-          display:flex; flex-direction:column; gap:8px; width:100%;
-        }
-        .wl-od-top{
-          display:flex; flex-wrap:wrap; gap:10px; align-items:center; justify-content:space-between;
-        }
-        .wl-od-title{ display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
-        .wl-od-title .wl-order-no{ font-weight:900; font-size:20px; letter-spacing:.2px; }
-        .wl-chip{ display:inline-flex; align-items:center; gap:6px; font-weight:800; border-radius:999px; padding:6px 10px; font-size:12px; text-transform:capitalize; }
-        .wl-chip--slate{ background:#e2e8f0; color:#0f172a }
-        .wl-chip--green{ background:#dcfce7; color:#065f46 }
-        .wl-chip--blue{ background:#dbeafe; color:#1e3a8a }
-        .wl-chip--amber{ background:#fef3c7; color:#92400e }
-        .wl-chip--orange{ background:#ffedd5; color:#9a3412 }
-        .wl-chip--red{ background:#fee2e2; color:#7f1d1d }
-        .wl-chip--maroon{ background:#f2e6ea; color:#6b0016 }
-
-        .wl-od-actions{ display:flex; gap:8px; flex-wrap:wrap; }
-        .wl-btn{ appearance:none; border:none; border-radius:12px; font-weight:900; padding:10px 14px; text-decoration:none; cursor:pointer; }
-        .wl-btn--primary{ background:#6b0016; color:#fff }
-        .wl-btn--ghost{ background:#f8fafc; color:#111827; border:1px solid #e5e7eb }
-
-        .panel.panelAccountInfo{
-          width:100%; border:1px solid #e5e7eb; border-radius:16px; overflow:hidden;
-          box-shadow:0 6px 18px rgba(0,0,0,.05); background:#fff;
-        }
-        .panel.panelAccountInfo .panelBodyHeader{
-          font-weight:800; padding:10px 14px; background:#f8fafc; border-bottom:1px solid #eef0f3;
-        }
-        .panel.panelAccountInfo .panelBody{ padding:12px 14px; }
-
-        #ctl00_PageBody_ctl00_OrderDetailsGrid .rgMasterTable{
-          border-collapse:separate !important; border-spacing:0 10px; table-layout:auto;
-        }
-        #ctl00_PageBody_ctl00_OrderDetailsGrid thead{ display:none !important; }
-        #ctl00_PageBody_ctl00_OrderDetailsGrid .rgRow,
-        #ctl00_PageBody_ctl00_OrderDetailsGrid .rgAltRow{
-          background:#fff; border:1px solid #eef0f3; border-radius:12px;
-        }
-        #ctl00_PageBody_ctl00_OrderDetailsGrid td{
-          padding:10px; border:none !important; vertical-align:top;
-        }
-        #ctl00_PageBody_ctl00_OrderDetailsGrid td[data-title="Product Code"]{
-          font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:800; min-width:86px;
-        }
-        #ctl00_PageBody_ctl00_OrderDetailsGrid td[data-title="Description"]{ width:100%; }
-
-        .wl-line-add{
-          display:inline-flex; align-items:center; gap:6px;
-          padding:6px 10px; border-radius:999px; font-weight:800; font-size:12px;
-          border:1px solid #e5e7eb; background:#f8fafc; color:#111827; cursor:pointer; text-decoration:none;
-        }
-
-        .wl-od-tracking{
-          display:flex; flex-wrap:wrap; gap:8px; margin-top:4px; margin-bottom:4px;
-        }
-        .wl-pill{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:999px; font-weight:800; font-size:12px; text-decoration:none; }
-        .wl-pill--ups{ background:#111827; color:#fff; }
-
-        /* INLINE barcode */
-        .wl-barcode-inline{
-          display:flex; align-items:center; gap:12px; background:#fff; border:1px solid #e5e7eb;
-          border-radius:12px; padding:8px 10px; width:100%;
-        }
-        .wl-barcode-inline svg{ display:block; height:56px; width:auto; }
-        .wl-barcode-caption{ display:flex; flex-direction:column; line-height:1.2; }
-        .wl-barcode-caption .lbl{ font-weight:800; font-size:12px; color:#334155; }
-        .wl-barcode-caption .val{ font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:800; font-size:14px; }
-        @media (min-width:769px){
-          .wl-barcode-inline{ display:none; } /* mobile-only inline barcode */
-        }
-      `;
-      document.head.appendChild(css);
-      log('CSS injected');
-    })();
-
-    /* ---------- Helpers ---------- */
-    const UPS_RX = /^1Z[0-9A-Z]{16}$/i;
-    const toUPS = n => `https://www.ups.com/track?tracknum=${encodeURIComponent(n)}`;
-    const isMobile = () => matchMedia('(max-width: 768px)').matches;
-
-    function statusColor(s){
-      const x = (s||'').toLowerCase();
-      if (x.includes('cancel')) return 'red';
-      if (x.includes('backorder')) return 'orange';
-      if (x.includes('invoice') || x.includes('billed') || x.includes('invoiced')) return 'slate';
-      if (x.includes('delivered') || x.includes('shipped') || x.includes('complete')) return 'green';
-      if (x.includes('ready') || x.includes('awaiting pickup')) return 'blue';
-      if (x.includes('pick') || x.includes('picking') || x.includes('processing')) return 'amber';
-      return 'slate';
-    }
-
-    function pickDocLinks(){
-      const imgLink = document.getElementById('ctl00_PageBody_ctl00_ShowOrderImageLink')
-                   || document.getElementById('ctl00_PageBody_ctl00_ShowOrderImageDropDown');
-      const docLink = document.getElementById('ctl00_PageBody_ctl00_ShowOrderDocumentLink')
-                   || document.getElementById('ctl00_PageBody_ctl00_ShowOrderDocumentDropDown');
-      const imgHref = imgLink && imgLink.getAttribute('href');
-      const docHref = docLink && docLink.getAttribute('href');
-      const abs = (u)=>{ try{ return new URL(u, location.origin).toString(); }catch{ return u; } };
-      const links = {
-        generator: docHref ? abs(docHref) : null,   // ProcessDocument.aspx
-        pdf:       imgHref && /toPdf=1/i.test(imgHref) ? abs(imgHref) : null // GetDocument.aspx … toPdf=1
-      };
-      log('Doc links (generator first):', links);
-      return links;
-    }
-
-    async function tryFetchOk(url){
-      try{
-        const r = await fetch(url, { credentials:'same-origin', cache:'no-cache' });
-        log('Fetch check', url, '->', r.status, r.ok);
-        return r.ok;
-      }catch(ex){ warn('Fetch failed', url, ex); return false; }
-    }
-
-    // Code128B -> SVG (supports needed chars, incl. ';')
-    function code128B_SVG(data, opts={}){
-      const CHART = (()=>{ const map={};
-        const rows = [
-          [0," ","212222"],[1,"!","222122"],[2,'"',"222221"],[3,"#","121223"],[4,"$","121322"],[5,"%","131222"],
-          [6,"&","122213"],[7,"'","122312"],[8,"(","132212"],[9,")","221213"],[10,"*","221312"],[11,"+","231212"],
-          [12,",","112232"],[13,"-","122132"],[14,".","122231"],[15,"/","113222"],[16,"0","123122"],[17,"1","123221"],
-          [18,"2","223211"],[19,"3","221132"],[20,"4","221231"],[21,"5","213212"],[22,"6","223112"],[23,"7","312131"],
-          [24,"8","311222"],[25,"9","321122"],[26,":","321221"],[27,";","312212"],[29,"=","322211"],[33,"A","111323"],
-          [34,"B","131123"],[35,"C","131321"],[36,"D","112313"],[37,"E","132113"],[38,"F","132311"],[39,"G","211313"],
-          [40,"H","231113"],[41,"I","231311"],[42,"J","112133"],[43,"K","112331"],[44,"L","132131"],[45,"M","113123"],
-          [46,"N","113321"],[47,"O","133121"],[48,"P","313121"],[49,"Q","211331"],[50,"R","231131"],[51,"S","213113"],
-          [52,"T","213311"],[53,"U","213131"],[54,"V","311123"],[55,"W","311321"],[56,"X","331121"],[57,"Y","312113"],
-          [58,"Z","312311"],[59,"[","332111"],[60,"\\","314111"],[61,"]","221411"],[62,"^","431111"],[63,"_","111224"],
-          [64,"`","111422"],[65,"a","121124"],[66,"b","121421"],[67,"c","141122"],[68,"d","141221"],[69,"e","112214"],
-          [70,"f","112412"],[71,"g","122114"],[72,"h","122411"],[73,"i","142112"],[74,"j","142211"],[75,"k","241211"],
-          [76,"l","221114"],[77,"m","413111"],[78,"n","241112"],[79,"o","134111"],[80,"p","111242"],[81,"q","121142"],
-          [82,"r","121241"],[83,"s","114212"],[84,"t","124112"],[85,"u","124211"],[86,"v","411212"],[87,"w","421112"],
-          [88,"x","421211"],[89,"y","212141"],[90,"z","214121"],[91,"{","412121"],[92,"|","111143"],[93,"}","111341"],
-          [94,"~","131141"],[103,"StartA","211412"],[104,"StartB","211214"],[105,"StartC","211232"],[106,"Stop","2331112"]
-        ];
-        rows.forEach(([v,ch,p])=>{ if (typeof ch==='string' && ch.length===1) map[ch]=[v,p]; });
-        return map;
-      })();
-      const START_B = { val:104, pattern:"211214" };
-      const STOP    = { val:106, pattern:"2331112" };
-
-      const codes = [START_B];
-      let checksum = START_B.val;
-      for (let i=0;i<data.length;i++){
-        const ch = data[i];
-        const entry = CHART[ch];
-        if (!entry){ throw new Error("Code128B unsupported char: "+ch); }
-        const [val, pattern] = entry;
-        codes.push({ val, pattern });
-        checksum += val * (i+1);
+    var keyHandler = function (event) {
+      if (event.key === 'Escape' && modal.classList.contains('open')) {
+        closeModal();
+        document.removeEventListener('keydown', keyHandler);
       }
-      const checkVal = checksum % 103;
-      function patternForValue(v){
-        for (const k in CHART){ if (Object.prototype.hasOwnProperty.call(CHART,k)){
-          if (CHART[k][0] === v) return CHART[k][1];
-        }}
-        const specials = { 100:"114131",101:"311141",102:"411131" };
-        return specials[v] || "111111";
-      }
-      const checksumPattern = patternForValue(checkVal);
-      const allPatterns = [START_B.pattern, ...codes.slice(1).map(c=>c.pattern), checksumPattern, STOP.pattern];
+    };
+    document.addEventListener('keydown', keyHandler);
 
-      const module = opts.module || 2;
-      const height = opts.height || 120;
-      let x = 0, bar = true;
-      const rects = [];
-      allPatterns.join('').split('').forEach(d=>{
-        const w = parseInt(d,10) * module;
-        if (bar) rects.push(`<rect x="${x}" y="0" width="${w}" height="${height}" />`);
-        x += w; bar = !bar;
-      });
-      return `<svg xmlns="http://www.w3.org/2000/svg" width="${x}" height="${height}" viewBox="0 0 ${x} ${height}" fill="#000">${rects.join('')}</svg>`;
-    }
+    fetchOrderDetails(order).then(function (detail) {
+      var body = $('.wloo-modal-body', modal);
+      var trackingHtml = detail.upsNumbers.length ? `
+        <div class="wloo-tracking-pills">
+          ${detail.upsNumbers.map(function (n) {
+            return '<a class="wloo-track-pill" href="' + escapeAttr(upsUrl(n)) + '" target="_blank" rel="noopener">UPS · ' + escapeHtml(n) + '</a>';
+          }).join('')}
+        </div>
+      ` : '';
 
-    // read grid/table
-    const grid = document.querySelector('#ctl00_PageBody_ctl00_OrderDetailsGrid');
-    const table = grid && grid.querySelector('.rgMasterTable');
-    log('Grid present:', !!grid, 'Table present:', !!table);
-
-    function parseUPS(){
-      const list = [];
-      if (!table) return list;
-      table.querySelectorAll('tr').forEach(tr=>{
-        const codeEl = tr.querySelector('td[data-title="Product Code"]') || tr.children[0];
-        const descEl = tr.querySelector('td[data-title="Description"]') || tr.children[1];
-        if (!codeEl || !descEl) return;
-        if ((codeEl.textContent||'').trim().toUpperCase() !== 'UPS') return;
-        const raw = (descEl.textContent||'').trim().replace(/\s+/g,'').toUpperCase();
-        if (raw && (UPS_RX.test(raw) || raw.length>=8)) list.push(raw);
-      });
-      return list;
-    }
-    const UPS_LIST = parseUPS();
-    log('UPS numbers:', UPS_LIST);
-
-    /* ---------- Build header (Share / Download / Copy / Help / INLINE Mobile Barcode) ---------- */
-    (function buildHeader(){
-      const container = document.querySelector('.bodyFlexContainer');
-      if (!container) { warn('No .bodyFlexContainer'); return; }
-
-      const oldHeader = document.querySelector('.listPageHeader');
-      const orderText = oldHeader ? oldHeader.children?.[0]?.textContent?.trim() : '';
-      const statusText = oldHeader ? oldHeader.children?.[1]?.textContent?.trim() : '';
-      const orderNo = (orderText || '').replace(/[^\d]/g,'');
-      const statusOnly = (statusText || '').replace(/^Status:\s*/i,'');
-      log('Header parsed:', { orderNo, statusOnly });
-
-      const backLink = document.getElementById('ctl00_PageBody_ctl00_BackButton');
-      const imgLink  = document.getElementById('ctl00_PageBody_ctl00_ShowOrderImageLink')
-                     || document.getElementById('ctl00_PageBody_ctl00_ShowOrderImageDropDown');
-      const docLink  = document.getElementById('ctl00_PageBody_ctl00_ShowOrderDocumentLink')
-                     || document.getElementById('ctl00_PageBody_ctl00_ShowOrderDocumentDropDown');
-      const copyLink = document.getElementById('ctl00_PageBody_ctl00_AddToCart')
-                     || document.getElementById('ctl00_PageBody_ctl00_AddToCartDropDown');
-
-      // Pickup heuristic
-      const isPickup = /Sales Address/i.test(document.body.innerText||'');
-
-      // Header scaffolding with INLINE barcode container slot
-      const head = document.createElement('div');
-      head.className = 'wl-od-header';
-      head.innerHTML = `
-        <div class="wl-od-header-inner">
-          <div class="wl-od-top">
-            <div class="wl-od-title">
-              <div class="wl-order-no">Order #${orderNo || ''}</div>
-              ${statusOnly ? `<span class="wl-chip wl-chip--${statusColor(statusOnly)}">${statusOnly}</span>` : ``}
-            </div>
-            <div class="wl-od-actions">
-              ${backLink ? `<a class="wl-btn wl-btn--ghost" href="${backLink.getAttribute('href')||'/OpenOrders_r.aspx'}">← Back</a>` : ``}
-              ${imgLink  ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${imgLink.getAttribute('href')||'#'}">View Image</a>` : ``}
-              ${docLink  ? `<a class="wl-btn wl-btn--ghost" target="_blank" rel="noopener" href="${docLink.getAttribute('href')||'#'}">View Document</a>` : ``}
-              ${docLink || imgLink ? `<button class="wl-btn wl-btn--ghost" type="button" id="wl-share-doc">Share</button>` : ``}
-              ${docLink || imgLink ? `<button class="wl-btn wl-btn--ghost" type="button" id="wl-download-doc">Download PDF</button>` : ``}
-              ${copyLink ? `<button class="wl-btn wl-btn--primary" type="button" id="wl-copy-lines">Copy Lines to Cart</button>` : ``}
-              <button class="wl-btn wl-btn--primary" type="button" id="wl-need-help">Need help</button>
-            </div>
-          </div>
-
-          ${ (isPickup && isMobile()) ? `
-            <div class="wl-barcode-inline" aria-label="Pickup barcode">
-              <div id="wl-barcode-inline-svg" aria-hidden="true"></div>
-              <div class="wl-barcode-caption">
-                <div class="lbl">Show this at pickup</div>
-                <div class="val">${orderNo}</div>
-              </div>
-            </div>
-          ` : ``}
+      body.innerHTML = `
+        <div class="wloo-summary-grid">
+          <div class="wloo-summary-card"><div class="wloo-summary-label">Status</div><div class="wloo-summary-value" style="font-size:1rem">${escapeHtml(order.status)}</div></div>
+          <div class="wloo-summary-card"><div class="wloo-summary-label">Required</div><div class="wloo-summary-value" style="font-size:1rem">${escapeHtml(order.required)}</div></div>
+          <div class="wloo-summary-card"><div class="wloo-summary-label">Total</div><div class="wloo-summary-value" style="font-size:1rem">${escapeHtml(money(order.total))}</div></div>
+          <div class="wloo-summary-card"><div class="wloo-summary-label">Branch</div><div class="wloo-summary-value" style="font-size:1rem">${escapeHtml(order.branch)}</div></div>
+        </div>
+        ${trackingHtml}
+        <div class="wloo-lines"></div>
+        <div class="wloo-actions" style="margin-top:12px;justify-content:flex-start">
+          <a class="wloo-btn wloo-btn-primary" href="${escapeAttr(order.fullHref)}">Open Full Order Page</a>
         </div>
       `;
-      container.insertAdjacentElement('afterbegin', head);
-      log('Header injected; pickup?', isPickup, 'mobile?', isMobile());
 
-      // Render INLINE barcode if present
-      const inlineSvgHost = head.querySelector('#wl-barcode-inline-svg');
-      if (inlineSvgHost){
-        try{
-          inlineSvgHost.innerHTML = code128B_SVG(`SO-${orderNo}`, { module: 2, height: 80 });
-          log('Inline barcode rendered: SO;', orderNo);
-        }catch(ex){ err('Inline barcode render failed', ex); }
+      var linesWrap = $('.wloo-lines', body);
+      if (!detail.lines.length) {
+        linesWrap.appendChild(dom('<div class="wloo-empty">No line items were found for this order.</div>'));
+        return;
       }
 
-      // Share
-      const shareBtn = head.querySelector('#wl-share-doc');
-      if (shareBtn){
-        shareBtn.addEventListener('click', async (e)=>{
-          e.preventDefault();
-          const { generator, pdf } = pickDocLinks();
-          const url = pdf || generator;
-          log('Share clicked, url:', url);
-          if (!url) { alert('Document not available yet.'); return; }
-          const title = `Order #${orderNo} Document`;
-          const text  = `Document for Order #${orderNo}`;
-          try{
-            if (navigator.share) { await navigator.share({ title, text, url }); log('Share via Web Share'); }
-            else {
-              location.href = `mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(text+':\n\n'+url)}`;
-              log('Share via mailto');
-            }
-          }catch(ex){ err('Share failed', ex); }
-        });
-      }
-
-      // Download (generator-first)
-      const dlBtn = head.querySelector('#wl-download-doc');
-      if (dlBtn){
-        dlBtn.addEventListener('click', async (e)=>{
-          e.preventDefault();
-          const { generator, pdf } = pickDocLinks();
-          log('Download click (generator first):', { generator, pdf });
-          if (!generator && !pdf) { alert('Document not available yet.'); return; }
-
-          if (pdf && await tryFetchOk(pdf)) {
-            const a = document.createElement('a'); a.href = pdf; a.download = ''; document.body.appendChild(a); a.click(); requestAnimationFrame(()=>a.remove());
-            log('Downloaded existing PDF'); return;
-          }
-
-          if (generator){
-            const iframe = document.createElement('iframe');
-            iframe.style.display = 'none'; iframe.src = generator; document.body.appendChild(iframe);
-            log('Generator kicked:', generator);
-            setTimeout(async ()=>{
-              if (pdf && await tryFetchOk(pdf)) {
-                const a = document.createElement('a'); a.href = pdf; a.download = ''; document.body.appendChild(a); a.click(); requestAnimationFrame(()=>a.remove());
-                log('Downloaded PDF after gen');
-              } else {
-                window.open(generator, '_blank', 'noopener');
-                log('Opened generator tab (fallback)');
-              }
-              requestAnimationFrame(()=>iframe.remove());
-            }, 900);
-          } else if (pdf) {
-            window.open(pdf, '_blank', 'noopener');
-            log('Opened PDF directly (no generator link)');
-          }
-        });
-      }
-
-      // Copy Lines to Cart
-      const copyBtn = head.querySelector('#wl-copy-lines');
-      if (copyBtn && copyLink){
-        copyBtn.addEventListener('click', (e)=>{
-          e.preventDefault();
-          const href = copyLink.getAttribute('href')||'';
-          log('Copy Lines ->', href);
-          try{
-            if (href.startsWith('javascript:')) { /* eslint-disable-next-line no-eval */ eval(href.replace(/^javascript:/,'')); }
-            else { location.assign(new URL(href, location.origin).toString()); }
-          }catch(ex){ err('Copy Lines failed', ex); }
-        });
-      }
-
-      // Need help (Tawk)
-      const helpBtn = head.querySelector('#wl-need-help');
-      if (helpBtn){
-        helpBtn.addEventListener('click', (e)=>{
-          e.preventDefault();
-          const getCellText = (label) => {
-            const tds = Array.from(document.querySelectorAll('.panel.panelAccountInfo td'));
-            for (let i=0;i<tds.length-1;i++){
-              const lhs = (tds[i].textContent||'').trim().replace(/\u00a0/g,' ');
-              if (lhs.toLowerCase().startsWith(label.toLowerCase())) return (tds[i+1].textContent||'').trim();
-            }
-            return '';
-          };
-          const contactName = getCellText('Contact:') || '';
-          const telRaw = getCellText('Tel:') || '';
-          const phone = telRaw.replace(/[^\d+]/g,'');
-          const attrs = {
-            'order-id': orderNo || '',
-            'status'  : statusOnly || '',
-            'url'     : location.href,
-            'branch'  : isPickup ? 'Pickup' : 'Delivery',
-            'tracking': (UPS_LIST||[]).join(', ')
-          };
-          if (contactName) attrs['contact-name'] = contactName;
-          if (phone) attrs['phone'] = phone;
-
-          window.Tawk_API = window.Tawk_API || {};
-          try { if (window.Tawk_API.start) { window.Tawk_API.start({ showWidget:true }); log('Tawk start(showWidget:true)'); } } catch{}
-          const apply = () => {
-            try { window.Tawk_API.setAttributes && window.Tawk_API.setAttributes(attrs, ()=>log('Tawk setAttributes OK')); } catch(ex){ err('Tawk setAttributes fail', ex); }
-            try { window.Tawk_API.addTags && window.Tawk_API.addTags(['order-help', `order-${orderNo}`], ()=>log('Tawk addTags OK')); } catch(ex){ err('Tawk addTags fail', ex); }
-            try {
-              if (window.Tawk_API.maximize) window.Tawk_API.maximize();
-              else if (window.Tawk_API.toggle) window.Tawk_API.toggle();
-              else if (window.Tawk_API.popup) window.Tawk_API.popup();
-              log('Tawk opened');
-            } catch(ex){ warn('Tawk open fail', ex); }
-          };
-          if (window.Tawk_API.onLoad && !window.__WL_TAWK_HOOKED__){
-            window.__WL_TAWK_HOOKED__ = true;
-            const prev = window.Tawk_API.onLoad;
-            window.Tawk_API.onLoad = function(){ try{ prev&&prev(); }catch{} apply(); };
-            log('Tawk onLoad hook set');
-          }
-          apply();
-        });
-      }
-    })();
-
-    /* ---------- UPS pills (above grid) ---------- */
-    (function upsPills(){
-      const grid = document.querySelector('#ctl00_PageBody_ctl00_OrderDetailsGrid');
-      const table = grid && grid.querySelector('.rgMasterTable');
-      if (!grid || !table) return;
-
-      const list = [];
-      table.querySelectorAll('tr').forEach(tr=>{
-        const codeEl = tr.querySelector('td[data-title="Product Code"]') || tr.children[0];
-        const descEl = tr.querySelector('td[data-title="Description"]') || tr.children[1];
-        if (!codeEl || !descEl) return;
-        if ((codeEl.textContent||'').trim().toUpperCase() !== 'UPS') return;
-        const raw = (descEl.textContent||'').trim().replace(/\s+/g,'').toUpperCase();
-        if (raw && (UPS_RX.test(raw) || raw.length>=8)) list.push(raw);
+      detail.lines.forEach(function (line) {
+        linesWrap.appendChild(dom(`
+          <div class="wloo-line">
+            <div class="wloo-line-code">${escapeHtml(line.code || '—')}</div>
+            <div>
+              <div class="wloo-line-desc">${escapeHtml(line.description || '—')}</div>
+              ${line.qty ? '<div class="wloo-line-meta">Qty: ' + escapeHtml(line.qty) + '</div>' : ''}
+            </div>
+            <div class="wloo-line-price">${line.price ? escapeHtml(money(line.price)) : ''}</div>
+          </div>
+        `));
       });
-      if (!list.length) return;
-
-      const wrap = document.createElement('div');
-      wrap.className = 'wl-od-tracking';
-      wrap.innerHTML = list.map(n=>`<a class="wl-pill wl-pill--ups" href="${toUPS(n)}" target="_blank" rel="noopener">UPS · ${n}</a>`).join('');
-      grid.insertAdjacentElement('beforebegin', wrap);
-      log('UPS pills injected:', list);
-    })();
-
-    /* ---------- Per-line Add to Cart (placeholder until productId resolver exists) ---------- */
-    (function lineAddButtons(){
-      const grid = document.querySelector('#ctl00_PageBody_ctl00_OrderDetailsGrid');
-      const table = grid && grid.querySelector('.rgMasterTable');
-      if (!grid || !table) return;
-
-      let added = 0;
-      table.querySelectorAll('tr').forEach(tr=>{
-        const codeEl = tr.querySelector('td[data-title="Product Code"]') || tr.children[0];
-        const descEl = tr.querySelector('td[data-title="Description"]') || tr.children[1];
-        const qtyEl  = tr.querySelector('td[data-title="Qty"]') || tr.querySelector('td[data-title="Quantity"]') || tr.children[3];
-        const actionCell = tr.querySelector('td:last-child') || tr.children[tr.children.length-1];
-        if (!codeEl || !descEl || !actionCell) return;
-
-        const code = (codeEl.textContent||'').trim().toUpperCase();
-        if (!code || code === 'UPS') return;
-
-        const qtyRaw = (qtyEl && qtyEl.textContent||'').trim();
-        let qty = Math.max(1, Math.round(parseFloat(qtyRaw || '1')));
-        if (!isFinite(qty)) qty = 1;
-
-        const btn = document.createElement('button');
-        btn.className = 'wl-line-add';
-        btn.type = 'button';
-        btn.textContent = `Add to cart${qty>1?` (${qty})`:''}`;
-        btn.addEventListener('click', (e)=>{
-          e.preventDefault();
-          const placeholder = new URL(`/ShoppingCart.aspx?products=${encodeURIComponent(code)}:${qty}&cart_origin=reorder`, location.origin);
-          warn('Cart needs productId (not code). Placeholder nav ->', placeholder.toString());
-          location.assign(placeholder.toString());
-        });
-
-        actionCell.appendChild(btn);
-        added++;
-      });
-      log('Per-line Add buttons injected:', added);
-    })();
-
-    log('Order Details enhanced: ready');
+    }).catch(function (err) {
+      console.error(err);
+      $('.wloo-modal-body', modal).innerHTML = `
+        <div class="wloo-error">
+          Sorry, we could not load the order details in this view. You can still open the full order page.
+        </div>
+        <div class="wloo-actions" style="margin-top:12px;justify-content:flex-start">
+          <a class="wloo-btn wloo-btn-primary" href="${escapeAttr(order.fullHref)}">Open Full Order Page</a>
+        </div>
+      `;
+    });
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', start, { once:true });
-  } else {
-    start();
+  async function renderTrackingOverlay() {
+    var params = new URLSearchParams(window.location.search || '');
+    var trackingParam = params.get('tracking');
+    if (!trackingParam) return false;
+
+    // Block the older Tracking.js overlay if this rewrite is loaded first.
+    window.__WL_TRACKING_VIEW__ = true;
+    $$('.wl-tracking-overlay').forEach(function (el) { el.remove(); });
+
+    var oid = params.get('oid') || '';
+    var explicitNumber = trackingParam && trackingParam.toLowerCase() !== 'yes' ? trackingParam.trim() : '';
+    var overlay = dom(`
+      <div class="wloo-track-overlay">
+        <div class="wloo-track-card">
+          <div class="wloo-track-title">Track your shipment</div>
+          <div class="wloo-track-sub">${oid ? 'Order ID ' + escapeHtml(oid) : 'Shipment tracking'}</div>
+          <div class="wloo-loading" style="margin-top:14px">Looking for tracking on your order…</div>
+        </div>
+      </div>
+    `);
+    document.body.appendChild(overlay);
+
+    var numbers = [];
+    if (explicitNumber) {
+      numbers = [explicitNumber];
+    } else if (oid) {
+      try {
+        var parsed = await fetchOrderDetails({ fullHref: orderDetailsHref(oid) });
+        numbers = parsed.upsNumbers || [];
+      } catch (err) {
+        console.warn('Tracking lookup failed', err);
+      }
+    } else {
+      numbers = parseOrderLinesFromDoc(document).upsNumbers || [];
+    }
+
+    var card = $('.wloo-track-card', overlay);
+    card.innerHTML = `
+      <div class="wloo-track-title">Track your shipment</div>
+      <div class="wloo-track-sub">${oid ? 'Order ID ' + escapeHtml(oid) : 'Shipment tracking'}</div>
+      ${numbers.length ? `
+        <div class="wloo-track-list">
+          ${numbers.map(function (n) {
+            return '<div class="wloo-track-line"><div class="wloo-track-num">UPS ' + escapeHtml(n) + '</div><a class="wloo-btn wloo-btn-primary" target="_blank" rel="noopener" href="' + escapeAttr(upsUrl(n)) + '">View status on UPS</a></div>';
+          }).join('')}
+        </div>
+      ` : `
+        <div class="wloo-empty" style="margin-top:14px;text-align:left">
+          We do not see a tracking number on this order yet. If you just received this link, give it a little time or contact us and we will check for you.
+        </div>
+      `}
+      <div class="wloo-actions" style="margin-top:16px;justify-content:flex-start">
+        <a class="wloo-btn" href="OpenOrders_r.aspx">Back to Orders</a>
+      </div>
+    `;
+
+    return true;
   }
+
+  function buildUI() {
+    injectStyles();
+
+    var host = getHost();
+    if (!host) return;
+
+    var existing = $('#wloo-root');
+    if (existing) existing.remove();
+
+    var orders = parseOrders();
+
+    var root = dom(`
+      <div class="wloo-root" id="wloo-root">
+        <div class="wloo-top">
+          <div class="wloo-menu-wrap">
+            <button type="button" class="wloo-menu-btn" aria-expanded="false" aria-controls="wloo-menu">☰ Menu</button>
+            <div class="wloo-title-wrap">
+              <div class="wloo-title">Open Orders</div>
+              <div class="wloo-subtitle">Track order progress by status, view details, and check delivery or pickup readiness.</div>
+            </div>
+            <div class="wloo-menu" id="wloo-menu" role="menu"></div>
+          </div>
+          <div class="wloo-actions">
+            <a class="wloo-btn" href="AccountInfo_R.aspx">Account Dashboard</a>
+          </div>
+        </div>
+        <div id="wloo-content"></div>
+      </div>
+    `);
+
+    buildMenu(root);
+
+    var content = $('#wloo-content', root);
+    content.appendChild(buildSummary(orders));
+    content.appendChild(buildTools());
+    content.appendChild(buildStatusTabs(orders));
+
+    STATUS_BUCKETS.forEach(function (bucket) {
+      var bucketOrders = orders.filter(function (order) { return order.bucketKey === bucket.key; });
+      if (bucketOrders.length || orders.length <= 5) {
+        content.appendChild(buildOrderSection(bucket, bucketOrders));
+      }
+    });
+
+    if (!orders.length) {
+      content.appendChild(dom('<div class="wloo-empty">No open orders were found.</div>'));
+    }
+
+    var firstContainer = $('.bodyFlexContainer', host) || host.firstChild;
+    host.insertBefore(root, firstContainer);
+
+    var activeStatus = 'all';
+    var filterText = '';
+
+    function applyFilters() {
+      filterText = String($('#wloo-filter', root).value || '').trim().toLowerCase();
+      var visibleBySection = {};
+
+      $$('.wloo-card', root).forEach(function (card) {
+        var bucket = card.getAttribute('data-status-bucket') || 'other';
+        var hay = card.getAttribute('data-order-search') || '';
+        var statusMatch = activeStatus === 'all' || bucket === activeStatus;
+        var textMatch = !filterText || hay.indexOf(filterText) >= 0;
+        var show = statusMatch && textMatch;
+        card.style.display = show ? '' : 'none';
+        if (show) visibleBySection[bucket] = (visibleBySection[bucket] || 0) + 1;
+      });
+
+      $$('[data-section-bucket]', root).forEach(function (section) {
+        var key = section.getAttribute('data-section-bucket');
+        var hasAnyCards = !!$('.wloo-card', section);
+        section.style.display = !hasAnyCards || visibleBySection[key] ? '' : 'none';
+      });
+    }
+
+    $('#wloo-filter', root).addEventListener('input', applyFilters);
+    $('#wloo-clear-filter', root).addEventListener('click', function () {
+      $('#wloo-filter', root).value = '';
+      applyFilters();
+      $('#wloo-filter', root).focus();
+    });
+
+    $$('.wloo-tab', root).forEach(function (tab) {
+      tab.addEventListener('click', function () {
+        $$('.wloo-tab', root).forEach(function (t) { t.classList.remove('active'); });
+        tab.classList.add('active');
+        activeStatus = tab.getAttribute('data-status-filter') || 'all';
+        applyFilters();
+      });
+    });
+
+    $$('.wloo-card [data-open-order]', root).forEach(function (button) {
+      button.addEventListener('click', function () {
+        var oid = button.getAttribute('data-open-order');
+        var order = orders.filter(function (o) { return o.oid === oid; })[0];
+        if (order) openOrderModal(order);
+      });
+    });
+
+    hideLegacy();
+
+    document.title = (document.title || '').replace(/Open Orders/ig, 'Open Orders');
+  }
+
+  function hideLegacy() {
+    var legacyNav = $('#ctl00_LeftSidebarContents_MainNav_NavigationMenu');
+    if (legacyNav) legacyNav.classList.add('wloo-hide');
+
+    [
+      '#ctl00_PageBody_Panel1',
+      '#ctl00_PageBody_OrdersGrid',
+      '.paging-control',
+      '.wl-row-head',
+      '.wl-details'
+    ].forEach(function (selector) {
+      $$(selector).forEach(function (el) { el.classList.add('wloo-hide'); });
+    });
+
+    $$('.bodyFlexItem.listPageHeader').forEach(function (header) {
+      if (/Open Orders/i.test(txt(header))) header.classList.add('wloo-hide');
+    });
+  }
+
+  ready(async function () {
+    injectStyles();
+
+    if (await renderTrackingOverlay()) return;
+    if (maybeNormalizeOpenOrdersUrl()) return;
+
+    buildUI();
+    window.setTimeout(function () {
+      if (!$('#wloo-root')) buildUI();
+    }, 600);
+  });
 })();
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-document.addEventListener("DOMContentLoaded", function() {
-  const panel = document.getElementById("ctl00_PageBody_Panel1");
-  if (panel) {
-    const backBtn = document.createElement("a");
-    backBtn.href = "https://webtrack.woodsonlumber.com/AccountInfo_R.aspx";
-    backBtn.textContent = "← Back to My Account";
-    backBtn.style.display = "inline-block";
-    backBtn.style.marginBottom = "12px";
-    backBtn.style.padding = "8px 14px";
-    backBtn.style.background = "#6b0016";
-    backBtn.style.color = "#fff";
-    backBtn.style.borderRadius = "6px";
-    backBtn.style.textDecoration = "none";
-    backBtn.style.fontWeight = "bold";
-    backBtn.onmouseover = function() {
-      backBtn.style.background = "#8d8d8d";
-    };
-    backBtn.onmouseout = function() {
-      backBtn.style.background = "#6b0016";
-    };
-
-    // Insert before Panel1
-    panel.parentNode.insertBefore(backBtn, panel);
-  }
-});
