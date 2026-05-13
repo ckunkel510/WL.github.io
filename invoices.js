@@ -1,5 +1,5 @@
 /* =========================================================================
-   Woodson — Invoices UI (v4.0)
+   Woodson — Invoices UI (v4.1)
    - Same working logic (AP crawl + date-range + badges + filters)
    - Card UI formatting
    - NEW: Always-visible custom checkbox in each card header
@@ -23,7 +23,7 @@
     debug(...a){ if (LOG>=LVL.debug) console.log('[INV]',...a); },
   };
 
-  const VERSION = '4.0';
+  const VERSION = '4.1';
   log.info('Version', VERSION, 'booting…');
 
   /* ---------- CSS ---------- */
@@ -279,6 +279,145 @@
         font-size:12px;
         line-height:1.35;
       }
+      .wl-inv-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: none;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 18px;
+        background: rgba(0,0,0,.45);
+        overflow: auto;
+      }
+      .wl-inv-modal.open { display: flex; }
+      .wl-inv-modal-card {
+        width: min(1120px, 96vw);
+        margin: auto 0;
+        background: #fff;
+        border-radius: 16px;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 18px 44px rgba(0,0,0,.22);
+        overflow: hidden;
+        max-height: calc(100vh - 36px);
+        display: flex;
+        flex-direction: column;
+      }
+      .wl-inv-modal-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        background: #6b0016;
+        color: #fff;
+        padding: 12px 14px;
+        flex: 0 0 auto;
+      }
+      .wl-inv-modal-title { font-weight: 900; font-size: 1.05rem; }
+      .wl-inv-modal-subtitle { color: rgba(255,255,255,.88); font-size: .88rem; margin-top: 2px; }
+      .wl-inv-modal-close {
+        border: 1px solid rgba(255,255,255,.55);
+        background: rgba(255,255,255,.12);
+        color: #fff;
+        border-radius: 10px;
+        min-height: 36px;
+        padding: 7px 11px;
+        font-weight: 850;
+        cursor: pointer;
+      }
+      .wl-inv-modal-close:hover { background: rgba(255,255,255,.22); }
+      .wl-inv-modal-body {
+        padding: 14px;
+        background: #fbf5f6;
+        overflow: auto;
+      }
+      .wl-inv-modal-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin: 12px 0;
+      }
+      .wl-inv-modal-note {
+        background: #fff;
+        border: 1px solid #ead4d9;
+        border-radius: 12px;
+        color: #64748b;
+        font-size: .88rem;
+        line-height: 1.4;
+        padding: 10px 12px;
+        margin: 8px 0 12px;
+      }
+      .wl-inv-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+        gap: 9px;
+      }
+      .wl-inv-summary-card {
+        background: #fff;
+        border: 1px solid #ead4d9;
+        border-radius: 12px;
+        padding: 10px;
+      }
+      .wl-inv-summary-label {
+        color: #64748b;
+        font-size: .78rem;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: .04em;
+      }
+      .wl-inv-summary-value {
+        margin-top: 2px;
+        color: #6b0016;
+        font-weight: 900;
+      }
+      .wl-inv-lines {
+        display: grid;
+        gap: 10px;
+      }
+      .wl-inv-line {
+        background: #fff;
+        border: 1px solid #ead4d9;
+        border-radius: 12px;
+        padding: 11px;
+        display: grid;
+        grid-template-columns: minmax(120px, 170px) minmax(220px, 1fr) repeat(3, auto);
+        align-items: center;
+        gap: 10px;
+      }
+      .wl-inv-line-code {
+        color: #6b0016;
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-weight: 900;
+        word-break: break-word;
+      }
+      .wl-inv-line-desc { color:#222; font-weight:650; line-height:1.3; }
+      .wl-inv-line-meta { color:#64748b; font-size:.86rem; white-space:nowrap; }
+      .wl-inv-line-price { color:#111; font-weight:900; white-space:nowrap; }
+      .wl-inv-loading,
+      .wl-inv-error,
+      .wl-inv-empty {
+        background:#fff;
+        border:1px solid #ead4d9;
+        border-radius:12px;
+        padding:14px;
+        color:#64748b;
+        line-height:1.45;
+      }
+      .wl-inv-error {
+        color:#7f1d1d;
+        background:#fee2e2;
+        border-color:#fecaca;
+      }
+      .wl-inv-post-frame {
+        position:absolute !important;
+        left:-9999px !important;
+        top:-9999px !important;
+        width:1px !important;
+        height:1px !important;
+        border:0 !important;
+        opacity:0 !important;
+      }
+
       @media (max-width: 760px) {
         .wl-toolbar { grid-template-columns:1fr; }
         .wl-toolbar-controls { justify-content:flex-start; }
@@ -679,6 +818,296 @@
   }
 
   /* ---------- card rendering ---------- */
+  function invoiceIdFromHref(href){
+    const m = String(href || '').match(/[?&](?:id|oid)=(\d+)/i);
+    return m ? m[1] : '';
+  }
+
+  function findFirst(root, selectors){
+    for (const selector of selectors){
+      const found = root.querySelector(selector);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  function parseInvoiceDetailMeta(doc){
+    const headerText = txt(doc.querySelector('.listPageHeader'));
+    const invoiceMatch = headerText.match(/Details\s+for\s+Invoice\s+(\S+)/i);
+
+    const panelText = txt(doc.querySelector('.panel.panelAccountInfo')) || '';
+    const getField = (label)=>{
+      const m = panelText.match(new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*:?\\s*([^\\n\\r]+?)(?=\\s+[A-Z][A-Za-z ]+\\s*:|$)', 'i'));
+      return m ? m[1].trim() : '';
+    };
+
+    return {
+      invoiceNumber: invoiceMatch ? invoiceMatch[1] : '',
+      orderNumber: getField('Order Number'),
+      invoiceDate: getField('Invoice Date'),
+      paymentTerms: getField('Payment Terms'),
+      discount: getField('Discount')
+    };
+  }
+
+  function parseInvoiceActionsFromDoc(doc){
+    const invoiceLink = findFirst(doc, [
+      '#ctl00_PageBody_ctl00_ShowInvoiceLink',
+      '#ctl00_PageBody_ctl00_ShowInvoiceDropDown',
+      'a[id*="ShowInvoice"]'
+    ]);
+    const orderImageLink = findFirst(doc, [
+      '#ctl00_PageBody_ctl00_ShowOrderImageLink',
+      '#ctl00_PageBody_ctl00_ShowOrderImageDropDown',
+      'a[id*="ShowOrderImage"]'
+    ]);
+    const orderDocumentLink = findFirst(doc, [
+      '#ctl00_PageBody_ctl00_ShowOrderDocumentLink',
+      '#ctl00_PageBody_ctl00_ShowOrderDocumentDropDown',
+      'a[id*="ShowOrderDocument"]'
+    ]);
+    const addToCartLink = findFirst(doc, [
+      '#ctl00_PageBody_ctl00_AddToCart',
+      '#ctl00_PageBody_ctl00_AddToCartDropDown',
+      'a[id*="AddToCart"]'
+    ]);
+
+    const addHref = addToCartLink ? (addToCartLink.getAttribute('href') || addToCartLink.href || '') : '';
+    const targetMatch = addHref.match(/__doPostBack\(['"]([^'"]+)['"]\s*,\s*['"]([^'"]*)['"]\)/i);
+
+    return {
+      invoicePdfHref: invoiceLink ? abs(invoiceLink.getAttribute('href') || invoiceLink.href || '') : '',
+      orderImageHref: orderImageLink ? abs(orderImageLink.getAttribute('href') || orderImageLink.href || '') : '',
+      orderDocumentHref: orderDocumentLink ? abs(orderDocumentLink.getAttribute('href') || orderDocumentLink.href || '') : '',
+      addToCartHref: addHref,
+      addToCartTarget: targetMatch ? targetMatch[1] : '',
+      hasAddToCart: !!addToCartLink
+    };
+  }
+
+  function parseInvoiceLinesFromDoc(doc){
+    const table =
+      doc.querySelector('#ctl00_PageBody_ctl00_InvoiceDetailsGrid_ctl00') ||
+      doc.querySelector('#ctl00_PageBody_ctl00_InvoiceDetailsGrid .rgMasterTable') ||
+      doc.querySelector('#ctl00_PageBody_ctl02_InvoiceDetailsGrid_ctl00') ||
+      doc.querySelector('#ctl00_PageBody_ctl02_InvoiceDetailsGrid .rgMasterTable');
+
+    const lines = [];
+    if (table){
+      table.querySelectorAll('tbody > tr, tr.rgRow, tr.rgAltRow').forEach(row=>{
+        if (row.querySelector('th')) return;
+        const code = txt(row.querySelector('td[data-title="Product Code"]'));
+        const description = txt(row.querySelector('td[data-title="Description"]'));
+        const qty = txt(row.querySelector('td[data-title="Qty"]'));
+        const per = txt(row.querySelector('td[data-title="Per"]'));
+        const price = txt(row.querySelector('td[data-title="Price"]'));
+        const uom = txt(row.querySelector('td[data-title="UOM"]'));
+        const tax = txt(row.querySelector('td[data-title="Tax"]'));
+        const total = txt(row.querySelector('td[data-title="Total"]'));
+        if ((code + description).trim()) lines.push({ code, description, qty, per, price, uom, tax, total });
+      });
+    }
+
+    return lines;
+  }
+
+  async function fetchInvoiceDetail(invHref){
+    const html = await fetch(invHref, { credentials:'same-origin', cache:'no-cache' }).then(r=>{
+      if (!r.ok) throw new Error('Invoice details request failed: ' + r.status);
+      return r.text();
+    });
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    return {
+      doc,
+      meta: parseInvoiceDetailMeta(doc),
+      actions: parseInvoiceActionsFromDoc(doc),
+      lines: parseInvoiceLinesFromDoc(doc)
+    };
+  }
+
+  function submitInvoiceDetailPost(invHref, actionTarget, button){
+    if (!invHref || !actionTarget) return Promise.reject(new Error('Missing invoice add-to-cart target.'));
+
+    return fetch(invHref, { credentials:'same-origin', cache:'no-cache' })
+      .then(r=>{
+        if (!r.ok) throw new Error('Could not reload invoice details page: ' + r.status);
+        return r.text();
+      })
+      .then(html=>{
+        const doc = new DOMParser().parseFromString(html, 'text/html');
+        const sourceForm = doc.querySelector('form');
+        if (!sourceForm) throw new Error('Invoice details form was not found.');
+
+        const form = document.createElement('form');
+        form.method = (sourceForm.getAttribute('method') || 'post').toLowerCase();
+        form.action = abs(sourceForm.getAttribute('action') || invHref);
+        form.style.display = 'none';
+
+        sourceForm.querySelectorAll('input, select, textarea').forEach(field=>{
+          const name = field.getAttribute('name');
+          if (!name) return;
+          if ((field.type === 'checkbox' || field.type === 'radio') && !field.checked) return;
+
+          const input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = name;
+          input.value = field.value || '';
+          form.appendChild(input);
+        });
+
+        const setHidden = (name, value)=>{
+          let input = form.querySelector(`input[name="${String(name).replace(/"/g, '\\"')}"]`);
+          if (!input){
+            input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = name;
+            form.appendChild(input);
+          }
+          input.value = value || '';
+        };
+
+        setHidden('__EVENTTARGET', actionTarget);
+        setHidden('__EVENTARGUMENT', '');
+
+        document.body.appendChild(form);
+        form.submit();
+      });
+  }
+
+  function addInvoiceToCart(invHref, actions, button){
+    const originalText = button ? button.textContent : '';
+    let target = actions && actions.addToCartTarget;
+
+    if (!target && actions && actions.addToCartHref){
+      const m = String(actions.addToCartHref).match(/__doPostBack\(['"]([^'"]+)['"]\s*,\s*['"]([^'"]*)['"]\)/i);
+      if (m) target = m[1];
+    }
+
+    if (button){
+      button.disabled = true;
+      button.textContent = 'Adding to Cart…';
+    }
+
+    submitInvoiceDetailPost(invHref, target, button).catch(err=>{
+      console.error('Add invoice to cart failed', err);
+      if (button){
+        button.disabled = false;
+        button.textContent = originalText || 'Add Invoice to Cart';
+      }
+      alert('We could not add this invoice to the cart from this pop-up. The invoice details page will open so you can add it from there.');
+      location.href = invHref;
+    });
+  }
+
+  function openInvoiceModal(inv){
+    const existing = document.getElementById('wl-inv-detail-modal');
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.className = 'wl-inv-modal open';
+    modal.id = 'wl-inv-detail-modal';
+    modal.setAttribute('role', 'dialog');
+    modal.setAttribute('aria-modal', 'true');
+    modal.innerHTML = `
+      <div class="wl-inv-modal-card">
+        <div class="wl-inv-modal-head">
+          <div>
+            <div class="wl-inv-modal-title">Invoice #${escapeHtml(inv.invNo || '')}</div>
+            <div class="wl-inv-modal-subtitle">${escapeHtml(inv.invDate || '')}${inv.orderNo ? ' • Order ' + escapeHtml(inv.orderNo) : ''}${inv.total ? ' • Total ' + escapeHtml(inv.total) : ''}</div>
+          </div>
+          <button type="button" class="wl-inv-modal-close">Close</button>
+        </div>
+        <div class="wl-inv-modal-body">
+          <div class="wl-inv-loading">Loading invoice details…</div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const closeModal = ()=>{
+      modal.classList.remove('open');
+      setTimeout(()=>modal.remove(), 160);
+    };
+
+    modal.querySelector('.wl-inv-modal-close').addEventListener('click', closeModal);
+    modal.addEventListener('click', e=>{ if (e.target === modal) closeModal(); });
+    const keyHandler = (e)=>{
+      if (e.key === 'Escape' && modal.classList.contains('open')){
+        closeModal();
+        document.removeEventListener('keydown', keyHandler);
+      }
+    };
+    document.addEventListener('keydown', keyHandler);
+
+    fetchInvoiceDetail(inv.href).then(detail=>{
+      const body = modal.querySelector('.wl-inv-modal-body');
+      const meta = detail.meta || {};
+      const actions = detail.actions || {};
+
+      const invoiceNo = meta.invoiceNumber || inv.invNo || '';
+      const orderNo = meta.orderNumber || inv.orderNo || '';
+      const invoiceDate = meta.invoiceDate || inv.invDate || '';
+      const paymentTerms = meta.paymentTerms || '';
+      const discount = meta.discount || '';
+
+      body.innerHTML = `
+        <div class="wl-inv-summary-grid">
+          <div class="wl-inv-summary-card"><div class="wl-inv-summary-label">Invoice</div><div class="wl-inv-summary-value">#${escapeHtml(invoiceNo)}</div></div>
+          <div class="wl-inv-summary-card"><div class="wl-inv-summary-label">Order</div><div class="wl-inv-summary-value">${escapeHtml(orderNo || '—')}</div></div>
+          <div class="wl-inv-summary-card"><div class="wl-inv-summary-label">Invoice Date</div><div class="wl-inv-summary-value">${escapeHtml(invoiceDate || '—')}</div></div>
+          <div class="wl-inv-summary-card"><div class="wl-inv-summary-label">Due Date</div><div class="wl-inv-summary-value">${escapeHtml(inv.dueDate || '—')}</div></div>
+          <div class="wl-inv-summary-card"><div class="wl-inv-summary-label">Terms</div><div class="wl-inv-summary-value">${escapeHtml(paymentTerms || '—')}</div></div>
+          <div class="wl-inv-summary-card"><div class="wl-inv-summary-label">Total</div><div class="wl-inv-summary-value">${escapeHtml(inv.total || '—')}</div></div>
+        </div>
+
+        <div class="wl-inv-modal-actions">
+          ${actions.hasAddToCart ? '<button type="button" class="wl-btn wl-btn--primary" id="wl-inv-add-cart">Add Invoice to Cart</button>' : ''}
+          ${actions.invoicePdfHref ? '<a class="wl-btn wl-btn--ghost" href="' + escapeAttr(actions.invoicePdfHref) + '" target="_blank" rel="noopener">Download Invoice PDF</a>' : ''}
+          ${actions.orderImageHref ? '<a class="wl-btn wl-btn--ghost" href="' + escapeAttr(actions.orderImageHref) + '" target="_blank" rel="noopener">View Delivery Images</a>' : ''}
+          ${actions.orderDocumentHref ? '<a class="wl-btn wl-btn--ghost" href="' + escapeAttr(actions.orderDocumentHref) + '" target="_blank" rel="noopener">Download Order PDF</a>' : ''}
+        </div>
+
+        <div class="wl-inv-modal-note">
+          Download Invoice PDF opens the generated invoice document. Delivery images open only when images are attached to the original order.
+        </div>
+
+        <div class="wl-inv-lines"></div>
+      `;
+
+      const addBtn = body.querySelector('#wl-inv-add-cart');
+      if (addBtn) addBtn.addEventListener('click', ()=>addInvoiceToCart(inv.href, actions, addBtn));
+
+      const linesWrap = body.querySelector('.wl-inv-lines');
+      if (!detail.lines.length){
+        linesWrap.appendChild(document.createRange().createContextualFragment('<div class="wl-inv-empty">No line items were found for this invoice.</div>'));
+        return;
+      }
+
+      detail.lines.forEach(line=>{
+        const el = document.createElement('div');
+        el.className = 'wl-inv-line';
+        el.innerHTML = `
+          <div class="wl-inv-line-code">${escapeHtml(line.code || '—')}</div>
+          <div class="wl-inv-line-desc">${escapeHtml(line.description || '—')}</div>
+          <div class="wl-inv-line-meta">${line.qty ? 'Qty: ' + escapeHtml(line.qty) : ''}${line.per ? ' ' + escapeHtml(line.per) : ''}</div>
+          <div class="wl-inv-line-price">${line.price ? escapeHtml(line.price) : ''}</div>
+          <div class="wl-inv-line-meta">${line.total ? 'Total: ' + escapeHtml(line.total) : ''}</div>
+        `;
+        linesWrap.appendChild(el);
+      });
+    }).catch(err=>{
+      console.error('Invoice modal load failed', err);
+      const body = modal.querySelector('.wl-inv-modal-body');
+      body.innerHTML = `
+        <div class="wl-inv-error">Sorry, we could not load invoice details in this view.</div>
+        <div class="wl-inv-modal-actions">
+          <a class="wl-btn wl-btn--primary" href="${escapeAttr(inv.href)}">Open Invoice Details</a>
+        </div>
+      `;
+    });
+  }
+
   function buildCardForRow(tr){
     if (tr.__wlCard) return;
     const a = findInvoiceAnchor(tr);
@@ -719,7 +1148,7 @@
         </div>
       </div>
       <div class="wl-head-right">
-        ${invHref !== '#' ? `<a class="wl-btn wl-btn--ghost" href="${invHref}">View Invoice</a>` : ``}
+        ${invHref !== '#' ? `<button class="wl-btn wl-btn--ghost" type="button" data-act="invoice-modal">View Invoice</button>` : ``}
         <button class="wl-btn wl-btn--primary" type="button" data-act="toggle">Line Details</button>
       </div>
     `;
@@ -731,6 +1160,22 @@
     const details = document.createElement('div');
     details.className = 'wl-details';
     tr.appendChild(details);
+
+    const modalBtn = head.querySelector('[data-act="invoice-modal"]');
+    if (modalBtn) {
+      modalBtn.addEventListener('click', (e)=>{
+        e.preventDefault();
+        openInvoiceModal({
+          invNo,
+          href: invHref,
+          orderNo,
+          invDate,
+          dueDate,
+          total,
+          branch
+        });
+      });
+    }
 
     head.querySelector('[data-act="toggle"]').addEventListener('click', async (e)=>{
       e.preventDefault();
