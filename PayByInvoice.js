@@ -4571,11 +4571,18 @@ function buildReviewHTML(){
   }
 
   function ensureCOFLoaded(){
-  // Only attempt to load COF accounts when COF is actually selected.
+  // WebTrack may not render ddlChecksOnFile until Check-on-File has been selected.
+  // If the customer has not explicitly chosen Add New, let the COF radio load the saved ACH list.
   window.WLPayMode?.ensureCheckOnFileUI?.();
 
   const rb = $('ctl00_PageBody_RadioButton_PayByCheckOnFile');
-  if (!rb || !rb.checked) return;
+  if (!rb) return;
+
+  try{
+    const st = (function(){ try{ return JSON.parse(sessionStorage.getItem('wlPayState') || '{}'); }catch(e){ return {}; } })();
+    const pickedAddNew = !!(st && st.method === 'bank' && st.bank?.mode === 'new' && (st.__pickedAccount || st.bank?.__pickedAccount));
+    if (pickedAddNew) return;
+  }catch(e){}
 
   const c1 = $('ctl00_PageBody_ChecksOnFileContainer');
   const c2 = $('ctl00_PageBody_ChecksOnFileContainer1');
@@ -4588,11 +4595,15 @@ function buildReviewHTML(){
   const lastTs = Number(sessionStorage.getItem(TS_KEY) || '0');
   const now = Date.now();
 
-  // If select looks empty, try at most 2 times, no more than once per 2 seconds
-  const looksEmpty = !!(sel && sel.options && sel.options.length <= 1);
-  if (!looksEmpty) return;
+  // If the select is missing or empty, try at most 3 times, no more than once per 2 seconds
+  const hasRealOptions = !!(sel && sel.options && Array.from(sel.options).some(o=>{
+    const v = String(o.value || '').trim();
+    const t = String(o.text || '').trim();
+    return v && v !== '-1' && t && !/select/i.test(t);
+  }));
+  if (hasRealOptions) return;
 
-  if (tries >= 2) return;
+  if (tries >= 3) return;
   if (now - lastTs < 2000) return;
 
   sessionStorage.setItem(TRY_KEY, String(tries + 1));
@@ -5153,6 +5164,54 @@ function setSelectedCard(cardEl, isSelected){
     // Do NOT auto-click PayByCheckOnFile here, because that breaks "Add new bank account".
     try{ window.WLPayMode?.ensureCheckOnFileUI?.(); }catch(e){}
   }
+
+  function hasPickedBankAccount(st){
+    try{
+      return !!(st && st.method === 'bank' && (st.__pickedAccount || st.bank?.__pickedAccount));
+    }catch(e){ return false; }
+  }
+
+  function hasExplicitlyPickedAddNewBank(st){
+    try{
+      return !!(st && st.method === 'bank' && st.bank?.mode === 'new' && hasPickedBankAccount(st));
+    }catch(e){ return false; }
+  }
+
+  function requestSavedBankOptionsLoad(reason){
+    // WebTrack only renders ddlChecksOnFile after the Check-on-File radio path is selected.
+    // This is only a loader; it should never mark a saved account as selected in wlPayState.
+    try{
+      if (hasExplicitlyPickedAddNewBank(loadPayState())) return false;
+      const sel = getCofSel();
+      const hasOpts = !!(sel && sel.options && Array.from(sel.options).some(o=>{
+        const v = String(o.value || '').trim();
+        const t = String(o.text || '').trim();
+        return v && v !== '-1' && t && !/select/i.test(t);
+      }));
+      if (hasOpts) return true;
+      if (!rbCof) return false;
+
+      window.WLPayMode?.ensureCheckOnFileUI?.();
+      rbCof.disabled = false;
+      rbCof.removeAttribute('disabled');
+
+      // Avoid rapid duplicate postbacks while the customer is on this step.
+      const now = Date.now();
+      const key = '__WL_COF_OPTIONS_LOAD_TS';
+      const last = Number(sessionStorage.getItem(key) || '0');
+      if (now - last < 1200) return false;
+      sessionStorage.setItem(key, String(now));
+
+      try{ rbCof.click(); }catch(e){}
+      try{
+        if (typeof window.__doPostBack === 'function'){
+          const target = rbCof.id ? String(rbCof.id).replace(/_/g, '$') : 'ctl00$PageBody$RadioButton_PayByCheckOnFile';
+          setTimeout(()=>{ try{ window.__doPostBack(target, ''); }catch(e){} }, 0);
+        }
+      }catch(e){}
+      return true;
+    }catch(e){ return false; }
+  }
 function renderPayCards(){
     // If user hasn't chosen a payment option in *this run*, force the cards to start unselected.
     try{
@@ -5266,20 +5325,14 @@ function renderPayCards(){
       }catch(e){}
 
       const stBank = loadPayState() || {};
-      const explicitlyPickedAddNew = !!(stBank?.method === 'bank' && stBank?.bank?.mode === 'new' && (stBank.__userPicked || stBank.__pickedAccount || stBank.bank.__pickedAccount));
+      const explicitlyPickedAddNew = hasExplicitlyPickedAddNewBank(stBank);
+      const hasPickedBank = hasPickedBankAccount(stBank);
       
-      // If we're in ACH mode and saved accounts aren't visible yet, we may need to activate COF to populate them.
-      // Do NOT do this after the customer explicitly picked Add New, or the native form snaps back to saved ACH.
-      if (!explicitlyPickedAddNew && !isCardMode && (!bankOpts.length) && rbCof && !rbCof.checked){
-        try{
-          // Switch to COF behind the scenes so the select options populate.
-          clickWebFormsRadio(rbCof);
-          const st = loadPayState() || {};
-          st.method = 'bank';
-          st.bank = st.bank || {};
-          st.bank.mode = 'saved';
-          savePayState(st);
-        }catch(e){}
+      // If the customer has opened ACH but has not selected Add New or a saved account yet,
+      // activate the real Check-on-File radio only to make WebForms render ddlChecksOnFile.
+      // Do NOT set st.bank.mode='saved' here; otherwise the UI/server can default to the first saved account.
+      if (!explicitlyPickedAddNew && !hasPickedBank && !isCardMode && (!bankOpts.length) && rbCof){
+        try{ requestSavedBankOptionsLoad('render-no-options'); }catch(e){}
       }
 const liveCofSelForMatch = getCofSel();
 const selectedCofVal = (liveCofSelForMatch && liveCofSelForMatch.value) ? String(liveCofSelForMatch.value) : '';
@@ -5298,13 +5351,20 @@ const selectedCofVal = (liveCofSelForMatch && liveCofSelForMatch.value) ? String
       }).join('');
 
       const bankAddNewSelected = (userPicked && stBank && stBank.__pickedAccount && mode === 'bank_new');
+      const bankLoadingCard = (!bankOpts.length && rbCof && !explicitlyPickedAddNew && !hasPickedBank) ? `
+        <button type="button" class="wl-pay-card wl-bank-card" data-bank-load="1">
+          <div class="wl-pay-title">Loading saved bank accounts…</div>
+          <div class="wl-pay-sub">Click here if they do not appear.</div>
+        </button>
+      ` : '';
+
       bankMount.innerHTML = `
         <button type="button" class="wl-pay-card wl-bank-card ${bankAddNewSelected ? 'is-selected':''}"
                 data-bank="new">
           <div class="wl-pay-title">Add new bank account</div>
           <div class="wl-pay-sub">Enter bank details (ACH).</div>
         </button>
-        ${bankSavedCards || ''}
+        ${bankSavedCards || bankLoadingCard || ''}
       `;
 
       // ----- CARD second level (only shown when card selected) -----
@@ -5430,16 +5490,18 @@ try{
             else if (isRadioAvailable(rbCardOnFile)) clickWebFormsRadio(rbCardOnFile);
           }catch(e){}
         } else {
-          // Bank is the default
+          // Bank is the default. Selecting the top-level ACH method should only open
+          // the bank choices; it must not commit the customer to Add New or a saved account.
           const st = loadPayState() || {};
-          const preferSaved = !!(st?.bank?.mode === 'saved' && st?.bank?.value);
-          savePayState({ __userPicked:true, method:'bank', bank: preferSaved ? st.bank : { mode:'new' } });
+          const preferSaved = !!(st?.bank?.mode === 'saved' && st?.bank?.value && hasPickedBankAccount(st));
+          const nextBank = preferSaved ? st.bank : {};
+          savePayState({ __userPicked:true, method:'bank', bank: nextBank });
 
           
     try{ markPickedThisRun(); }catch(e){}
 try{
             if (preferSaved) clickWebFormsRadio(rbCof);
-            else clickWebFormsRadio(rbCheck);
+            else requestSavedBankOptionsLoad('bank-method-click');
           }catch(e){}
           ensureCofVisible();
         }
@@ -5450,6 +5512,14 @@ try{
       
 // ----- Bank level click handler (auto-advance to final payment step) -----
 bankMount.onclick = (e)=>{
+  const loadBtn = e.target.closest('.wl-pay-card[data-bank-load]');
+  if (loadBtn){
+    e.preventDefault();
+    try{ requestSavedBankOptionsLoad('manual-loading-card'); }catch(e){}
+    setTimeout(()=>{ try{ if (window.WLPayPending && typeof window.WLPayPending.apply === 'function') window.WLPayPending.apply(); }catch(e){} try{ renderPayCards(); }catch(e){} }, 250);
+    return;
+  }
+
   const btn = e.target.closest('.wl-pay-card[data-bank]');
   if (!btn) return;
   e.preventDefault();
@@ -5613,11 +5683,11 @@ bankMount.onclick = (e)=>{
     }
 // Initial render + rerender after MS AJAX updates
     if (!loadPayState()){
-      savePayState({ method:'bank', bank:{ mode:'new' } });
+      savePayState({ method:'bank', bank:{} });
     } else {
       const st0 = loadPayState();
       if ((st0?.method === 'credit' || st0?.method === 'card') && !isCreditAvailable()){
-        savePayState({ method:'bank', bank:{ mode:'new' } });
+        savePayState({ method:'bank', bank:{} });
       }
     }
     reconcileNativeFromState();
