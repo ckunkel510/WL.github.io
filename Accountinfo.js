@@ -70,6 +70,10 @@
   .wl-ham-menu.open{max-height:70vh; opacity:1; pointer-events:auto}
   .wl-ham-menu a{display:block;padding:8px 10px;border-radius:8px;color:#111;text-decoration:none}
   .wl-ham-menu a:hover{background:${BRAND.bgSoft}}
+  .wl-ham-menu-section{padding:4px 0}
+  .wl-ham-menu-section + .wl-ham-menu-section{border-top:1px solid #eee;margin-top:4px;padding-top:8px}
+  .wl-ham-menu-label{padding:5px 10px 4px;color:#6f6264;font-size:.72rem;font-weight:900;letter-spacing:.08em;text-transform:uppercase}
+  .wl-ham-menu a[aria-current="page"]{background:${BRAND.bgSoft};color:${BRAND.primary}}
   .wl-hide{position:absolute !important;left:-9999px !important;width:1px !important;height:1px !important;overflow:hidden !important}
 
   /* GRID ROWS */
@@ -455,22 +459,48 @@ if (snapshotActions) {
     (function menu(){
       const btn = $('#wl-ham-btn', container);
       const menu = $('#wl-ham-menu', container);
-      if (leftNav) { $$('.rmRootGroup .rmItem a', leftNav).forEach(a=> menu.appendChild(dom(`<a role="menuitem" href="${a.href}">${a.textContent.trim()}</a>`))); }
-      else {
-        [
-          ['Invoices_r.aspx','Invoices'],
-          ['CreditNotes_r.aspx','Credit Notes'],
-          ['OpenOrders_r.aspx','Open Orders'],
-          ['Statements_R.aspx','Statements'],
-          ['ProductsPurchased_R.aspx','Products Purchased'],
-          ['AccountPayment_r.aspx','Make a Payment'],
-          ['AccountSettings.aspx','Account Settings'],
-          [PAYMENT_METHODS_URL,'Payment Methods'],
-          ['AddressList_R.aspx','Addresses'],
-          ['Contacts_r.aspx','Contacts'],
-          ['ShoppingCart.aspx','Shopping Cart']
-        ].forEach(([h,label])=> menu.appendChild(dom(`<a role="menuitem" href="${h}">${label}</a>`)));
-      }
+      const currentPath = (window.location.pathname || '').split('/').pop().toLowerCase();
+
+      const groups = [
+        {
+          label: 'Transactions',
+          links: [
+            ['AccountInfo_R.aspx', 'Account Information'],
+            ['AccountPayment_r.aspx', 'Make a Payment'],
+            ['Quicklists_R.aspx', 'Shopping Lists'],
+            ['OpenQuotes_r.aspx', 'Quotes'],
+            ['OpenOrders_r.aspx', 'Orders'],
+            ['Invoices_r.aspx', 'Invoices'],
+            ['CreditNotes_r.aspx', 'Credit Notes'],
+            ['ProductsPurchased_R.aspx', 'Products Purchased'],
+            ['Statements_R.aspx', 'Statements'],
+            ['ShoppingCart.aspx', 'Shopping Cart']
+          ]
+        },
+        {
+          label: 'Account Settings',
+          links: [
+            [PAYMENT_METHODS_URL, 'Payment Methods'],
+            ['AccountSettings.aspx', 'Change Password / Account Settings'],
+            ['AddressList_R.aspx', 'Addresses'],
+            ['Contacts_r.aspx', 'Contacts']
+          ]
+        }
+      ];
+
+      menu.innerHTML = groups.map(group => {
+        const links = group.links.map(([href, label]) => {
+          const path = String(href || '').split('?')[0].split('/').pop().toLowerCase();
+          const current = path === currentPath ? ' aria-current="page"' : '';
+          return `<a role="menuitem" href="${escapeAttr(href)}"${current}>${escapeHtml(label)}</a>`;
+        }).join('');
+
+        return `<div class="wl-ham-menu-section">
+          <div class="wl-ham-menu-label">${escapeHtml(group.label)}</div>
+          ${links}
+        </div>`;
+      }).join('');
+
       const toggle=(open)=>{ menu.classList.toggle('open', open); btn.setAttribute('aria-expanded', open?'true':'false'); };
       btn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); toggle(!menu.classList.contains('open')); return false; });
       document.addEventListener('click', (e)=>{ if(!menu.classList.contains('open')) return; if(!menu.contains(e.target) && e.target!==btn){ toggle(false); } });
