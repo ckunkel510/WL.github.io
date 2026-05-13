@@ -7,7 +7,7 @@
    - Keep quote details on the same page via existing details anchor URLs
    - Show expired quote details/download, but do NOT expose "Copy Quote Lines to Cart"
    - Re-label quote money fields as Subtotal / Tax / Total
-   - Add an all-time date default/search refresh helper
+   - Default to all-time quote results and use a modal for selected quote details
    ========================================================== */
 (function () {
   'use strict';
@@ -121,7 +121,7 @@
       encodeURIComponent(yyyy + '-' + mm + '-' + dd + 'T23:59:59') +
       '&itemsPerPage=' + CONFIG.ITEMS_PER_PAGE +
       '&oid=' + encodeURIComponent(oid) +
-      '#detailsAnchor';
+      '';
   }
 
   function processDocumentHref(oid) {
@@ -172,12 +172,6 @@
 
     var params = new URLSearchParams(window.location.search);
     if (params.has('searchType') || params.has('startDate') || params.has('endDate') || params.has('oid')) return false;
-
-    var key = 'wl_open_quotes_alltime_redirect_v1';
-    try {
-      if (sessionStorage.getItem(key) === 'done') return false;
-      sessionStorage.setItem(key, 'done');
-    } catch (err) {}
 
     var now = new Date();
     var yyyy = now.getFullYear();
@@ -420,7 +414,7 @@
         padding: 12px;
         margin-bottom: 14px;
         display: grid;
-        grid-template-columns: minmax(240px, 1fr) auto auto;
+        grid-template-columns: minmax(240px, 1fr) auto;
         gap: 10px;
         align-items: end;
       }
@@ -573,6 +567,83 @@
         border-color: #efdca4;
         background: ${BRAND.warningBg};
         color: ${BRAND.warning};
+      }
+
+      .wloq-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: none;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 18px;
+        background: rgba(0,0,0,.45);
+        overflow: auto;
+      }
+
+      .wloq-modal.open {
+        display: flex;
+      }
+
+      .wloq-modal-card {
+        width: min(1120px, 96vw);
+        margin: auto 0;
+        background: #fff;
+        border-radius: 16px;
+        border: 1px solid ${BRAND.border};
+        box-shadow: 0 18px 44px rgba(0,0,0,.22);
+        overflow: hidden;
+        max-height: calc(100vh - 36px);
+        display: flex;
+        flex-direction: column;
+      }
+
+      .wloq-modal-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        background: ${BRAND.primary};
+        color: #fff;
+        padding: 12px 14px;
+        flex: 0 0 auto;
+      }
+
+      .wloq-modal-title {
+        font-weight: 900;
+        font-size: 1.05rem;
+      }
+
+      .wloq-modal-subtitle {
+        color: rgba(255,255,255,.88);
+        font-size: .88rem;
+        margin-top: 2px;
+      }
+
+      .wloq-modal-close {
+        border: 1px solid rgba(255,255,255,.55);
+        background: rgba(255,255,255,.12);
+        color: #fff;
+        border-radius: 10px;
+        min-height: 36px;
+        padding: 7px 11px;
+        font-weight: 850;
+        cursor: pointer;
+      }
+
+      .wloq-modal-close:hover {
+        background: rgba(255,255,255,.22);
+      }
+
+      .wloq-modal-body {
+        padding: 14px;
+        background: ${BRAND.bgSoft};
+        overflow: auto;
+      }
+
+      .wloq-modal-body .wloq-panel {
+        margin-bottom: 0;
+        box-shadow: none;
       }
 
       .wloq-detail-summary {
@@ -934,7 +1005,7 @@
           <div class="wloq-actions wloq-detail-actions"></div>
         </div>
         <div class="wloq-panel-body">
-          ${selectedQuote.expired ? '<div class="wloq-note wloq-note-warning" style="margin-bottom:12px">This quote is expired, so the option to copy quote lines to the cart is hidden. The customer can still view or download the quote for reference.</div>' : ''}
+          ${selectedQuote.expired ? '<div class="wloq-note wloq-note-warning" style="margin-bottom:12px">This quoted price has expired. Please reach out to request an updated quote before placing an order.</div>' : ''}
           <div class="wloq-detail-summary">
             <div class="wloq-summary-box"><div class="wloq-summary-label">Subtotal</div><div class="wloq-summary-value">${escapeHtml(money(selectedQuote.subtotal))}</div></div>
             <div class="wloq-summary-box"><div class="wloq-summary-label">Tax</div><div class="wloq-summary-value">${escapeHtml(money(selectedQuote.tax))}</div></div>
@@ -985,6 +1056,53 @@
     return panel;
   }
 
+
+  function buildDetailsModal(selectedQuote) {
+    var detailPanel = buildDetailsPanel(selectedQuote);
+    if (!detailPanel) return null;
+
+    // The panel already has its own action area; inside the modal it becomes the body content.
+    var modal = dom(`
+      <div class="wloq-modal open" id="wloq-detail-modal" role="dialog" aria-modal="true" aria-labelledby="wloq-modal-title">
+        <div class="wloq-modal-card">
+          <div class="wloq-modal-head">
+            <div>
+              <div class="wloq-modal-title" id="wloq-modal-title">Quote #${escapeHtml(selectedQuote.quoteNumber)}</div>
+              <div class="wloq-modal-subtitle">${selectedQuote.expired ? 'Expired quote — request an updated quote before ordering.' : 'Open quote details and line items.'}</div>
+            </div>
+            <button type="button" class="wloq-modal-close" id="wloq-modal-close">Close</button>
+          </div>
+          <div class="wloq-modal-body"></div>
+        </div>
+      </div>
+    `);
+
+    $('.wloq-modal-body', modal).appendChild(detailPanel);
+
+    var closeBtn = $('#wloq-modal-close', modal);
+    function closeModal() {
+      modal.classList.remove('open');
+
+      // Remove the oid/hash from the address bar after closing so refresh returns to the list view.
+      try {
+        var url = new URL(window.location.href);
+        url.searchParams.delete('oid');
+        url.hash = '';
+        window.history.replaceState({}, document.title, url.pathname + (url.search ? url.search : ''));
+      } catch (err) {}
+    }
+
+    closeBtn.addEventListener('click', closeModal);
+    modal.addEventListener('click', function (event) {
+      if (event.target === modal) closeModal();
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && modal.classList.contains('open')) closeModal();
+    });
+
+    return modal;
+  }
+
   function buildTools(root, quotes) {
     var tools = dom(`
       <div class="wloq-tools">
@@ -992,14 +1110,12 @@
           <label for="wloq-filter">Filter visible quotes</label>
           <input id="wloq-filter" class="wloq-input" type="search" placeholder="Search quote #, branch, ref, date, total...">
         </div>
-        <button type="button" class="wloq-btn" id="wloq-alltime">Show All-Time Quotes</button>
         <button type="button" class="wloq-btn" id="wloq-clear-filter">Clear Filter</button>
       </div>
     `);
 
     var input = $('#wloq-filter', tools);
     var clear = $('#wloq-clear-filter', tools);
-    var allTime = $('#wloq-alltime', tools);
 
     function applyFilter() {
       var needle = String(input.value || '').trim().toLowerCase();
@@ -1111,11 +1227,6 @@
     var content = $('#wloq-content', root);
     content.appendChild(buildTools(root, quotes));
 
-    if (selectedQuote) {
-      var detailsPanel = buildDetailsPanel(selectedQuote);
-      if (detailsPanel) content.appendChild(detailsPanel);
-    }
-
     content.appendChild(buildQuoteSection('Open Quotes', activeQuotes, 'No open quotes were found in the current results.'));
     content.appendChild(buildQuoteSection('Expired Quotes', expiredQuotes, 'No expired quotes were found in the current results.'));
 
@@ -1123,6 +1234,11 @@
     host.insertBefore(root, firstContainer);
 
     hideLegacy(selectedQuote);
+
+    if (selectedQuote) {
+      var detailModal = buildDetailsModal(selectedQuote);
+      if (detailModal) document.body.appendChild(detailModal);
+    }
 
     document.title = (document.title || '').replace(/Open Quotes|Quote Results/ig, 'Quotes');
   }
