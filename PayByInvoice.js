@@ -1,7 +1,7 @@
 
 (function () {
   'use strict';
-  console.log('[AP] PayByInvoice version v35 saved-account-minimal-fix loaded');
+  console.log('[AP] PayByInvoice version v35 loaded');
 
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
@@ -1818,6 +1818,10 @@ const IDS = {
 
   function proxyFire(){
     const mode = currentPayMode();
+    // Final safety net: before clicking the native Forte/WebForms trigger, sync the real
+    // radios/dropdowns from wlPayState. This is what prevents "summary says Add New"
+    // while the native form still posts the saved ACH account.
+    try{ window.WLPaySyncNative?.('proxyFire'); }catch(e){}
     try{ window.ensureShadowPayBy?.(); }catch(e){}
     const real = findNativeTrigger();
     if (real){
@@ -4741,13 +4745,23 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
     }
 
     function getCofSel(){
-      // On WebForms postbacks, the Checks-on-File select can be replaced; always re-resolve when needed.
+      // On WebForms/AJAX postbacks, the saved-bank <select> can be replaced.
+      // This must be in the outer payment scope; if it is nested inside getCardSel(),
+      // Add New can look selected in our summary while the native form still posts the old saved account.
       try{
-        const sel =
-          document.querySelector('#ctl00_PageBody_ChecksOnFileContainer select, #ctl00_PageBody_ChecksOnFileContainer1 select') ||
-          document.querySelector('select[id*="ChecksOnFile"], select[id*="CheckOnFile"], select[name*="ChecksOnFile"], select[name*="CheckOnFile"]') ||
-          (typeof cofSel !== 'undefined' ? cofSel : null);
-        return sel || null;
+        const byContainer =
+          document.querySelector('#ctl00_PageBody_ChecksOnFileContainer select')
+          || document.querySelector('#ctl00_PageBody_ChecksOnFileContainer1 select')
+          || null;
+        const byIdName = document.querySelector([
+          'select[id*="ChecksOnFile"]',
+          'select[id*="CheckOnFile"]',
+          'select[name*="ChecksOnFile"]',
+          'select[name*="CheckOnFile"]',
+          'select[id*="PayByCheckOnFile"]',
+          'select[name*="PayByCheckOnFile"]'
+        ].join(','));
+        return byContainer || byIdName || cofSel || null;
       }catch(e){ return null; }
     }
 
@@ -4775,10 +4789,10 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
             if (sel2){
               if (String(this.__cofPendingVal) === '__CLEAR__'){
                 clearSelectToPlaceholder(sel2, true);
+                try{ sel2.disabled = true; sel2.setAttribute('disabled','disabled'); }catch(e){}
               } else {
                 try{
-                  sel2.value = String(this.__cofPendingVal);
-                  sel2.dispatchEvent(new Event('change', { bubbles:true }));
+                  setSelectValueStrong(sel2, String(this.__cofPendingVal), true);
                 }catch(e){}
               }
               this.__cofPendingVal = undefined;
@@ -4919,40 +4933,25 @@ function reconcileNativeFromState(){
   try{
     // CARD (new card) selected
     if ((st.method === 'credit' || st.method === 'card') && isCreditAvailable() && rbCred){
-      rbCred.checked = true;
-      if (rbCheck) rbCheck.checked = false;
-      if (rbCof) rbCof.checked = false;
-      if (rbCardOnFile) rbCardOnFile.checked = false;
+      setRadioCheckedExclusive(rbCred);
 
       // If we're using a saved card, ensure CardOnFile radio + dropdown are set after any postback
       if (st.card?.mode === 'saved' && rbCardOnFile){
-        rbCardOnFile.checked = true;
-        rbCred.checked = false;
+        setRadioCheckedExclusive(rbCardOnFile);
         const sel = getCardSel();
         if (sel && st.card?.value && sel.value !== st.card.value){
-          try{ sel.value = st.card.value; }catch(e){}
+          try{ setSelectValueStrong(sel, st.card.value, false); }catch(e){}
         }
       }
       return;
     }
     // default bank
-    if (rbCred) rbCred.checked = false;
     if (st.method !== 'bank') st.method = 'bank';
 
     if (st.bank?.mode === 'saved'){
-      if (rbCof) rbCof.checked = true;
-      if (rbCheck) rbCheck.checked = false;
-      const liveCofSel = getCofSel();
-      if (liveCofSel && st.bank?.value && liveCofSel.value !== st.bank.value){
-        liveCofSel.value = st.bank.value;
-      }
+      syncNativeBankChoice('saved', st.bank?.value || '', false);
     } else {
-      if (rbCheck) rbCheck.checked = true;
-      if (rbCof) rbCof.checked = false;
-      try{
-        const sel = getCofSel();
-        if (sel) clearSelectToPlaceholder(sel, false);
-      }catch(e){}
+      syncNativeBankChoice('new', '', false);
     }
   }catch(e){}
 }
@@ -4976,20 +4975,117 @@ function clickWebFormsRadio(rb){
 function clearSelectToPlaceholder(sel, fireChange){
   try{
     if (!sel) return;
-    const opts = Array.from(sel.options || []);
+    let opts = Array.from(sel.options || []);
     let minus1 = opts.find(o => String(o.value) === '-1');
     if (!minus1){
       minus1 = document.createElement('option');
       minus1.value = '-1';
       minus1.text = 'Select a saved account';
       try{ sel.insertBefore(minus1, sel.firstChild); }catch(e){}
+      opts = Array.from(sel.options || []);
     }
-    sel.value = '-1';
+
+    // Important: clear BOTH the live value and any selected attributes.
+    // Some gateway/WebForms code reads selectedIndex/selected attributes instead of only .value.
+    opts.forEach(o=>{
+      try{ o.selected = false; }catch(e){}
+      try{ o.removeAttribute('selected'); }catch(e){}
+    });
+    try{ minus1.selected = true; minus1.setAttribute('selected','selected'); }catch(e){}
+    try{ sel.selectedIndex = Math.max(0, Array.from(sel.options || []).indexOf(minus1)); }catch(e){}
+    try{ sel.value = '-1'; }catch(e){}
+    try{ sel.defaultValue = '-1'; }catch(e){}
+
     if (fireChange){
+      try{ sel.dispatchEvent(new Event('input', { bubbles:true })); }catch(e){}
       try{ sel.dispatchEvent(new Event('change', { bubbles:true })); }catch(e){}
     }
   }catch(e){}
 }
+
+function setRadioCheckedExclusive(target){
+  try{
+    [rbCheck, rbCof, rbCred, rbCardOnFile].forEach(r=>{
+      if (!r) return;
+      if (r === target){
+        r.disabled = false;
+        r.removeAttribute('disabled');
+        r.checked = true;
+        try{ r.setAttribute('checked','checked'); }catch(e){}
+      } else {
+        r.checked = false;
+        try{ r.removeAttribute('checked'); }catch(e){}
+      }
+    });
+    if (target){
+      try{ target.dispatchEvent(new Event('input', { bubbles:true })); }catch(e){}
+      try{ target.dispatchEvent(new Event('change', { bubbles:true })); }catch(e){}
+    }
+  }catch(e){}
+}
+
+function setSelectValueStrong(sel, value, fireChange){
+  try{
+    if (!sel) return false;
+    sel.disabled = false;
+    sel.removeAttribute('disabled');
+    const v = String(value || '');
+    let found = false;
+    Array.from(sel.options || []).forEach(o=>{
+      const match = String(o.value || '') === v;
+      try{ o.selected = match; }catch(e){}
+      try{ if (match) o.setAttribute('selected','selected'); else o.removeAttribute('selected'); }catch(e){}
+      if (match) found = true;
+    });
+    try{ sel.value = v; }catch(e){}
+    if (fireChange){
+      try{ sel.dispatchEvent(new Event('input', { bubbles:true })); }catch(e){}
+      try{ sel.dispatchEvent(new Event('change', { bubbles:true })); }catch(e){}
+    }
+    return found || !!v;
+  }catch(e){ return false; }
+}
+
+function syncNativeBankChoice(mode, value, fireChange){
+  try{
+    const sel = getCofSel();
+    if (String(mode||'').toLowerCase() === 'saved'){
+      setRadioCheckedExclusive(rbCof);
+      if (sel) setSelectValueStrong(sel, value, fireChange !== false);
+      return true;
+    }
+
+    // Add new bank account: make the native form unmistakably NOT check-on-file.
+    setRadioCheckedExclusive(rbCheck);
+    if (sel){
+      clearSelectToPlaceholder(sel, fireChange !== false);
+      // Disabled controls are not posted, which prevents a stale saved-account token/value
+      // from being consumed by Forte/WebForms after the customer selected Add New.
+      try{ sel.disabled = true; sel.setAttribute('disabled','disabled'); }catch(e){}
+    }
+    try{
+      if (window.WLPayPending){
+        window.WLPayPending.__cofPendingVal = '__CLEAR__';
+        window.WLPayPending.__cofPendingText = null;
+      }
+    }catch(e){}
+    return true;
+  }catch(e){ return false; }
+}
+
+// Let the submit bridge sync the real WebForms controls immediately before opening Forte.
+try{
+  window.WLPaySyncNative = function(reason){
+    try{
+      const st = loadPayState() || {};
+      if (st.method === 'bank'){
+        if (st.bank?.mode === 'saved') return syncNativeBankChoice('saved', st.bank.value, true);
+        return syncNativeBankChoice('new', '', true);
+      }
+      return reconcileNativeFromState();
+    }catch(e){}
+  };
+}catch(e){}
 
 function setSelectedCard(cardEl, isSelected){
       if (!cardEl) return;
@@ -5092,8 +5188,7 @@ function renderPayCards(){
         if (st.method === 'bank' && st.bank?.mode === 'new') return 'bank_new';
 
         // Fallback inference (no saved state)
-        const liveCofSel = getCofSel();
-      const hasCofSelection = !!(liveCofSel && liveCofSel.value && liveCofSel.value !== '-1');
+        const hasCofSelection = !!(cofSel && cofSel.value && cofSel.value !== '-1');
         // If "Add new" is selected (PayByCheck), treat as NEW regardless of COF select retaining a value
         if (rbCheck?.checked) return 'bank_new';
         if (rbCof?.checked || hasCofSelection) return 'bank_saved';
@@ -5129,10 +5224,9 @@ function renderPayCards(){
 
       // Bank account cards (Add new + saved)
       const bankOpts = [];
-      const liveCofSelForCards = getCofSel();
       try{
-        if (liveCofSelForCards && liveCofSelForCards.options){
-          for (const o of Array.from(liveCofSelForCards.options)){
+        if (cofSel && cofSel.options){
+          for (const o of Array.from(cofSel.options)){
             const val = String(o.value || '').trim();
             const txt = String(o.text || '').trim();
             if (!val || val === '-1') continue;
@@ -5157,7 +5251,8 @@ function renderPayCards(){
           savePayState(st);
         }catch(e){}
       }
-const selectedCofVal = (liveCofSelForCards && liveCofSelForCards.value) ? String(liveCofSelForCards.value) : '';
+const liveCofSelForMatch = getCofSel();
+const selectedCofVal = (liveCofSelForMatch && liveCofSelForMatch.value) ? String(liveCofSelForMatch.value) : '';
       const desiredSavedVal = (stBank?.method === 'bank' && stBank?.bank?.mode === 'saved' && stBank?.bank?.value) ? String(stBank.bank.value) : '';
       const bankMatchVal = desiredSavedVal || selectedCofVal;
 
@@ -5173,19 +5268,13 @@ const selectedCofVal = (liveCofSelForCards && liveCofSelForCards.value) ? String
       }).join('');
 
       const bankAddNewSelected = (userPicked && stBank && stBank.__pickedAccount && mode === 'bank_new');
-      const bankLoadingCard = (!bankOpts.length && userPicked2 && !isCardMode && rbCof) ? `
-        <button type="button" class="wl-pay-card wl-bank-card" data-method="bank" data-retry-cof="1">
-          <div class="wl-pay-title">Load stored bank accounts</div>
-          <div class="wl-pay-sub">Click if saved methods do not appear automatically.</div>
-        </button>` : '';
-
       bankMount.innerHTML = `
         <button type="button" class="wl-pay-card wl-bank-card ${bankAddNewSelected ? 'is-selected':''}"
                 data-bank="new">
           <div class="wl-pay-title">Add new bank account</div>
           <div class="wl-pay-sub">Enter bank details (ACH).</div>
         </button>
-        ${bankSavedCards || bankLoadingCard}
+        ${bankSavedCards || ''}
       `;
 
       // ----- CARD second level (only shown when card selected) -----
@@ -5311,18 +5400,16 @@ try{
             else if (isRadioAvailable(rbCardOnFile)) clickWebFormsRadio(rbCardOnFile);
           }catch(e){}
         } else {
-          // Bank is the default. Do not immediately force Add New here; first let the customer
-          // choose between Add New and any stored bank accounts. Switching to Check-on-File here
-          // allows WebForms to populate the saved-account dropdown without committing a saved account.
+          // Bank is the default
           const st = loadPayState() || {};
           const preferSaved = !!(st?.bank?.mode === 'saved' && st?.bank?.value);
-          savePayState({ __userPicked:true, method:'bank', bank: preferSaved ? st.bank : {} });
+          savePayState({ __userPicked:true, method:'bank', bank: preferSaved ? st.bank : { mode:'new' } });
 
           
     try{ markPickedThisRun(); }catch(e){}
 try{
             if (preferSaved) clickWebFormsRadio(rbCof);
-            else if (rbCof) clickWebFormsRadio(rbCof);
+            else clickWebFormsRadio(rbCheck);
           }catch(e){}
           ensureCofVisible();
         }
@@ -5333,15 +5420,6 @@ try{
       
 // ----- Bank level click handler (auto-advance to final payment step) -----
 bankMount.onclick = (e)=>{
-  const retry = e.target.closest('.wl-pay-card[data-retry-cof]');
-  if (retry){
-    e.preventDefault();
-    try{ ensureCofVisible(); }catch(e){}
-    try{ if (rbCof) clickWebFormsRadio(rbCof); }catch(e){}
-    setTimeout(()=>{ try{ renderPayCards(); }catch(e){} }, 250);
-    return;
-  }
-
   const btn = e.target.closest('.wl-pay-card[data-bank]');
   if (!btn) return;
   e.preventDefault();
@@ -5410,16 +5488,11 @@ bankMount.onclick = (e)=>{
     st.__pickedAccount = true;
     savePayState(st);
 
-    try{ markPickedThisRun(); }catch(e){}
-    try{
-      if (window.WLPayPending){ window.WLPayPending.__cofPendingVal = '__CLEAR__'; window.WLPayPending.__cofPendingText = null; }
-    }catch(e){}
-
-    setRadioSilent(rbCheck);
-    try{ if (rbCof) rbCof.checked = false; }catch(e){}
-    try{ if (rbCred) rbCred.checked = false; }catch(e){}
-    try{ if (rbCardOnFile) rbCardOnFile.checked = false; }catch(e){}
-    try{ setSelectSilent(getCofSel(), '-1'); }catch(e){}
+    // Strongly sync the real WebForms controls so Forte does not receive a stale saved-account token.
+    try{ syncNativeBankChoice('new', '', true); }catch(e){
+      setRadioSilent(rbCheck);
+      try{ setSelectSilent(getCofSel(), '-1'); }catch(e2){}
+    }
 
     autoAdvanceToFinalPaymentStep();
     return;
@@ -5436,20 +5509,12 @@ bankMount.onclick = (e)=>{
   st.__pickedAccount = true;
   savePayState(st);
 
-  try{ markPickedThisRun(); }catch(e){}
-  try{
-    window.WLPayPending = window.WLPayPending || {};
-    window.WLPayPending.__cofPendingVal = val;
-    window.WLPayPending.__cofPendingText = text;
-  }catch(e){}
-
   ensureCofVisible();
 
-  setRadioSilent(rbCof);
-  try{ if (rbCheck) rbCheck.checked = false; }catch(e){}
-  try{ if (rbCred) rbCred.checked = false; }catch(e){}
-  try{ if (rbCardOnFile) rbCardOnFile.checked = false; }catch(e){}
-  try{ setSelectSilent(getCofSel(), val); }catch(e){}
+  try{ syncNativeBankChoice('saved', val, true); }catch(e){
+    setRadioSilent(rbCof);
+    try{ setSelectSilent(getCofSel(), val); }catch(e2){}
+  }
 
   autoAdvanceToFinalPaymentStep();
 };
