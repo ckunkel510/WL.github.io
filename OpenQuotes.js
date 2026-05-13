@@ -5,7 +5,7 @@
    - Apply Woodson account menu pattern
    - Rebuild quote results as modern active/expired quote cards
    - Keep quote details on the same page via existing details anchor URLs
-   - Show expired quote details/download, but do NOT expose "Copy Quote Lines to Cart"
+   - Show expired quote details/download, but do NOT expose "Add Quote to Cart"
    - Re-label quote money fields as Subtotal / Tax / Total
    - Default to all-time quote results and use a modal for selected quote details
    ========================================================== */
@@ -1030,7 +1030,7 @@
     }
 
     if (!selectedQuote.expired && addToCart) {
-      actions.appendChild(makeActionFromOriginal(addToCart, 'Copy Lines to Cart', 'wloq-btn wloq-btn-primary'));
+      actions.appendChild(makeActionFromOriginal(addToCart, 'Add Quote to Cart', 'wloq-btn wloq-btn-primary'));
     }
 
     var lineWrap = $('.wloq-lines', panel);
@@ -1130,20 +1130,6 @@
       input.value = '';
       applyFilter();
       input.focus();
-    });
-
-    allTime.addEventListener('click', function () {
-      var now = new Date();
-      var yyyy = now.getFullYear();
-      var mm = String(now.getMonth() + 1).padStart(2, '0');
-      var dd = String(now.getDate()).padStart(2, '0');
-
-      window.location.href =
-        'OpenQuotes_r.aspx?searchType=DateCreated&startDate=' +
-        encodeURIComponent(CONFIG.ALL_TIME_START_ISO) +
-        '&endDate=' +
-        encodeURIComponent(yyyy + '-' + mm + '-' + dd + 'T23:59:59') +
-        '&itemsPerPage=' + CONFIG.ITEMS_PER_PAGE;
     });
 
     return tools;
