@@ -1241,7 +1241,7 @@
             <button type="button" class="wloq-menu-btn" aria-expanded="false" aria-controls="wloq-menu">☰ Menu</button>
             <div class="wloq-title-wrap">
               <div class="wloq-title">Quotes</div>
-              <div class="wloq-subtitle">Review open quotes first, keep expired quotes available for reference, and avoid copying expired pricing to the cart.</div>
+              <div class="wloq-subtitle"></div>
             </div>
             <div class="wloq-menu" id="wloq-menu" role="menu"></div>
           </div>
