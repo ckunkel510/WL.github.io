@@ -1,5 +1,5 @@
 /* =========================================================================
-   Woodson — Previous Purchases / Reorder Center (v1.1)
+   Woodson — Previous Purchases / Reorder Center (v1.2)
    - ProductsPurchased_R.aspx rewrite
    - Adds new grouped account menu
    - Reframes page as previous purchases + reorder helper
@@ -301,6 +301,67 @@
         display: flex;
         flex-direction: column;
       }
+      .wlpp-media {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 4 / 3;
+        background: linear-gradient(135deg, #fafafa, #f1f5f9);
+        border-bottom: 1px solid #eef0f3;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+      }
+      .wlpp-media img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+        background: #fff;
+      }
+      .wlpp-media-fallback {
+        padding: 16px;
+        text-align: center;
+        color: var(--wlpp-brand);
+        font-weight: 900;
+        line-height: 1.25;
+      }
+      .wlpp-media-badge {
+        position: absolute;
+        right: 10px;
+        bottom: 10px;
+        background: rgba(255,255,255,.92);
+        color: #334155;
+        border: 1px solid #e2e8f0;
+        border-radius: 999px;
+        padding: 4px 8px;
+        font-size: 11px;
+        font-weight: 900;
+      }
+      .wlpp-modal-product {
+        display: grid;
+        grid-template-columns: 180px minmax(0, 1fr);
+        gap: 14px;
+        align-items: start;
+        margin-bottom: 12px;
+      }
+      .wlpp-modal-media {
+        width: 100%;
+        aspect-ratio: 1 / 1;
+        border: 1px solid #ead4d9;
+        border-radius: 14px;
+        overflow: hidden;
+        background: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .wlpp-modal-media img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        display: block;
+      }
       .wlpp-product.hidden { display: none; }
       .wlpp-card-head { padding: 13px 14px 9px; border-bottom: 1px solid #eef0f3; }
       .wlpp-code { color: var(--wlpp-brand); font-family: ui-monospace, Menlo, Consolas, monospace; font-weight: 950; font-size: 1rem; word-break: break-word; }
@@ -407,6 +468,7 @@
         .wlpp-toolbar { grid-template-columns: 1fr; }
         .wlpp-controls { justify-content: flex-start; }
         .wlpp-table { display: block; overflow-x: auto; white-space: nowrap; }
+        .wlpp-modal-product { grid-template-columns: 1fr; }
       }
     `;
     document.head.appendChild(style);
@@ -747,9 +809,18 @@
             url = CONFIG.PRODUCT_DETAIL_URL_TEMPLATE.replace(/\{ProductID\}/g, encodeURIComponent(productId));
           }
 
+          var image = item.image || item.image_link || item['image link'] || '';
+          var additional = item.additional_image_link || item['additional image link'] || '';
+
           if (url) {
+            var payload = {
+              url: abs(url),
+              image: image ? abs(image) : '',
+              additionalImage: additional ? abs(additional) : '',
+              title: item.title || ''
+            };
             possibleCodes.forEach(function (code) {
-              if (code) map.set(normalize(code), abs(url));
+              if (code) map.set(normalize(code), payload);
             });
           }
         });
@@ -766,6 +837,9 @@
       var mpnIdx = pickHeader(headers, ['mpn', 'MPN']);
       var productIdIdx = pickHeader(headers, ['ProductID', 'productid', 'Product ID', 'product_id']);
       var urlIdx = pickHeader(headers, ['ProductURL', 'producturl', 'Product URL', 'Product Page URL', 'link', 'url', 'mobile link', 'mobile_link']);
+      var imageIdx = pickHeader(headers, ['image link', 'image_link', 'image']);
+      var additionalImageIdx = pickHeader(headers, ['additional image link', 'additional_image_link']);
+      var titleIdx = pickHeader(headers, ['title', 'name']);
 
       csvRows.forEach(function (cells) {
         var possibleCodes = [
@@ -782,8 +856,14 @@
         }
 
         if (url) {
+          var payload = {
+            url: abs(url),
+            image: imageIdx >= 0 && cells[imageIdx] ? abs(cells[imageIdx]) : '',
+            additionalImage: additionalImageIdx >= 0 && cells[additionalImageIdx] ? abs(cells[additionalImageIdx]) : '',
+            title: titleIdx >= 0 ? (cells[titleIdx] || '') : ''
+          };
           possibleCodes.forEach(function (code) {
-            if (code) map.set(normalize(code), abs(url));
+            if (code) map.set(normalize(code), payload);
           });
         }
       });
@@ -795,27 +875,58 @@
     }
   }
 
+
+  function productMediaHtml(item, compact) {
+    var image = item.productImage || item.productAdditionalImage || '';
+    if (image) {
+      return `
+        <div class="${compact ? 'wlpp-modal-media' : 'wlpp-media'}">
+          <img src="${attr(image)}" alt="${attr(item.description || item.code || 'Product image')}" loading="lazy">
+          ${!compact && item.productUrlSource === 'feed' ? '<span class="wlpp-media-badge">Feed image</span>' : ''}
+        </div>
+      `;
+    }
+
+    return `
+      <div class="${compact ? 'wlpp-modal-media' : 'wlpp-media'}">
+        <div class="wlpp-media-fallback">
+          <div>${html(item.code || 'Product')}</div>
+          ${item.description ? '<div style="font-size:.85rem;margin-top:6px;color:#64748b;font-weight:700;">' + html(item.description) + '</div>' : ''}
+        </div>
+      </div>
+    `;
+  }
+
   function productFallbackUrl(item) {
     return CONFIG.PRODUCT_SEARCH_URL(item.code, item.description);
   }
 
   function applyProductUrls(products, feedMap) {
     var matched = 0;
+    var imageMatched = 0;
 
     products.forEach(function (item) {
-      var url = feedMap.get(normalize(item.code));
-      if (url) {
-        item.productUrl = url;
+      var payload = feedMap.get(normalize(item.code));
+      if (payload && payload.url) {
+        item.productUrl = payload.url;
         item.productUrlSource = 'feed';
+        item.productImage = payload.image || '';
+        item.productAdditionalImage = payload.additionalImage || '';
+        item.feedTitle = payload.title || '';
         matched++;
+        if (item.productImage || item.productAdditionalImage) imageMatched++;
       } else {
         item.productUrl = productFallbackUrl(item);
         item.productUrlSource = 'search';
+        item.productImage = '';
+        item.productAdditionalImage = '';
+        item.feedTitle = '';
       }
     });
 
     window.WLPreviousPurchasesFeedMatches = {
       matched: matched,
+      imageMatched: imageMatched,
       total: products.length,
       feedEnabled: !!CONFIG.PRODUCT_FEED_URL
     };
@@ -889,7 +1000,7 @@
           <button type="button" class="wlpp-chip" data-filter="recent">Recent</button>
           <button type="button" class="wlpp-chip" data-filter="clear">Clear</button>
         </div>
-        <div class="wlpp-note" id="wlpp-note">Delivery, shipping, fuel, and service-charge lines are hidden from the product list.</div>
+        <div class="wlpp-note" id="wlpp-note">Delivery, shipping, fuel, and service-charge lines are hidden from the product list. Feed images are used when available.</div>
       </div>
 
       <div class="wlpp-toolbar">
@@ -1038,6 +1149,10 @@
         <div class="wlpp-summary-label">Product Links Matched</div>
         <div class="wlpp-summary-value">${(window.WLPreviousPurchasesFeedMatches && window.WLPreviousPurchasesFeedMatches.matched) || 0}</div>
       </div>
+      <div class="wlpp-summary-card">
+        <div class="wlpp-summary-label">Images Matched</div>
+        <div class="wlpp-summary-value">${(window.WLPreviousPurchasesFeedMatches && window.WLPreviousPurchasesFeedMatches.imageMatched) || 0}</div>
+      </div>
     `;
   }
 
@@ -1050,9 +1165,10 @@
 
     return `
       <div class="wlpp-product" data-key="${attr(item.key)}">
+        ${productMediaHtml(item, false)}
         <div class="wlpp-card-head">
           <div class="wlpp-code">${html(item.code || 'No product code')}</div>
-          <div class="wlpp-desc">${html(item.description || 'No description')}</div>
+          <div class="wlpp-desc">${html(item.description || item.feedTitle || 'No description')}</div>
           <div class="wlpp-tags">
             ${item.suggested ? '<span class="wlpp-tag wlpp-tag-reorder">Suggested reorder</span>' : '<span class="wlpp-tag wlpp-tag-ready">Purchased before</span>'}
             ${item.purchaseCount > 1 ? '<span class="wlpp-tag">Repeat item</span>' : ''}
@@ -1215,11 +1331,21 @@
           <button type="button" class="wlpp-modal-close">Close</button>
         </div>
         <div class="wlpp-modal-body">
-          <div class="wlpp-summary" style="margin-bottom:12px;">
+          <div class="wlpp-modal-product">
+            ${productMediaHtml(item, true)}
+            <div>
+              <div class="wlpp-summary" style="margin-bottom:12px;">
             <div class="wlpp-summary-card"><div class="wlpp-summary-label">Times Bought</div><div class="wlpp-summary-value">${item.purchaseCount}</div></div>
             <div class="wlpp-summary-card"><div class="wlpp-summary-label">Total Qty</div><div class="wlpp-summary-value">${Number(item.totalQty.toFixed(2)).toLocaleString()}</div></div>
             <div class="wlpp-summary-card"><div class="wlpp-summary-label">Loaded Spend</div><div class="wlpp-summary-value">${money(item.totalSpend)}</div></div>
             <div class="wlpp-summary-card"><div class="wlpp-summary-label">Reorder Timing</div><div class="wlpp-summary-value" style="font-size:1rem;">${html(item.avgIntervalDays ? item.avgIntervalDays + ' days avg.' : 'Not enough history')}</div></div>
+              </div>
+              <div class="wlpp-last" style="margin-top:4px;">
+                ${item.suggestReason ? '<strong>' + html(item.suggestReason) + '</strong><br>' : ''}
+                ${item.feedTitle && normalize(item.feedTitle) !== normalize(item.description) ? 'Feed title: ' + html(item.feedTitle) + '<br>' : ''}
+                ${item.productImage || item.productAdditionalImage ? 'Product imagery pulled from the published merchant feed.' : 'No product image match was found in the feed for this item.'}
+              </div>
+            </div>
           </div>
           <div class="wlpp-card-actions" style="padding:0 0 12px;">
             <a class="wlpp-btn wlpp-btn-primary" href="${attr(item.productUrl)}">${item.productUrlSource === 'feed' ? 'View Product' : 'Find Product'}</a>
@@ -1345,7 +1471,7 @@
   });
 
   window.WLPreviousPurchases = {
-    version: '1.1',
+    version: '1.2',
     rerender: render
   };
 })();
