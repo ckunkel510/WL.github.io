@@ -1,5 +1,5 @@
 /* =========================================================================
-   Woodson — Previous Purchases / Reorder Center (v1.0)
+   Woodson — Previous Purchases / Reorder Center (v1.1)
    - ProductsPurchased_R.aspx rewrite
    - Adds new grouped account menu
    - Reframes page as previous purchases + reorder helper
@@ -24,8 +24,8 @@
     // Optional:
     // Set window.WL_PREVIOUS_PURCHASES_PRODUCT_FEED_URL before this file loads,
     // or paste a published CSV/JSON URL here.
-    // Expected helpful headers: ProductCode, productcode, Product Page URL, producturl, link, ProductID, productid, id.
-    PRODUCT_FEED_URL: window.WL_PREVIOUS_PURCHASES_PRODUCT_FEED_URL || '',
+    // Expected helpful headers: id, mpn, ProductCode, productcode, link, Product Page URL, producturl, ProductID, productid.
+    PRODUCT_FEED_URL: window.WL_PREVIOUS_PURCHASES_PRODUCT_FEED_URL || 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQgGN3k90_sRn2oHrmM4OZiL6-EaxOT7ggSDfXo5EpBdLJ4mPTh4P1FLEpGlUWu98b_MEhVVRabv1og/pub?output=csv',
 
     // Fallback when no product URL is available. This keeps customers on WebTrack search by product code.
     PRODUCT_SEARCH_URL: function (productCode, description) {
@@ -730,13 +730,28 @@
         var json = await response.json();
         var arr = Array.isArray(json) ? json : (Array.isArray(json.items) ? json.items : []);
         arr.forEach(function (item) {
-          var code = item.ProductCode || item.productcode || item.product_code || item.sku || item.id || '';
-          var productId = item.ProductID || item.productid || item.product_id || '';
-          var url = item.ProductURL || item.producturl || item.product_url || item.link || item.url || '';
+          var possibleCodes = [
+            item.ProductCode,
+            item.productcode,
+            item.product_code,
+            item.sku,
+            item.id,
+            item.mpn,
+            item.MPN
+          ].filter(Boolean);
+
+          var productId = item.ProductID || item.productid || item.product_id || item.id || '';
+          var url = item.ProductURL || item.producturl || item.product_url || item.link || item.url || item.mobile_link || item['mobile link'] || '';
+
           if (!url && productId && CONFIG.PRODUCT_DETAIL_URL_TEMPLATE) {
             url = CONFIG.PRODUCT_DETAIL_URL_TEMPLATE.replace(/\{ProductID\}/g, encodeURIComponent(productId));
           }
-          if (code && url) map.set(normalize(code), abs(url));
+
+          if (url) {
+            possibleCodes.forEach(function (code) {
+              if (code) map.set(normalize(code), abs(url));
+            });
+          }
         });
         return map;
       }
@@ -746,20 +761,31 @@
       if (!csvRows.length) return map;
 
       var headers = csvRows.shift();
-      var codeIdx = pickHeader(headers, ['ProductCode', 'productcode', 'Product Code', 'sku', 'id', 'item id']);
+      var codeIdx = pickHeader(headers, ['ProductCode', 'productcode', 'Product Code', 'sku', 'item id']);
+      var idIdx = pickHeader(headers, ['id']);
+      var mpnIdx = pickHeader(headers, ['mpn', 'MPN']);
       var productIdIdx = pickHeader(headers, ['ProductID', 'productid', 'Product ID', 'product_id']);
-      var urlIdx = pickHeader(headers, ['ProductURL', 'producturl', 'Product URL', 'Product Page URL', 'link', 'url']);
+      var urlIdx = pickHeader(headers, ['ProductURL', 'producturl', 'Product URL', 'Product Page URL', 'link', 'url', 'mobile link', 'mobile_link']);
 
       csvRows.forEach(function (cells) {
-        var code = codeIdx >= 0 ? cells[codeIdx] : '';
-        var productId = productIdIdx >= 0 ? cells[productIdIdx] : '';
+        var possibleCodes = [
+          codeIdx >= 0 ? cells[codeIdx] : '',
+          idIdx >= 0 ? cells[idIdx] : '',
+          mpnIdx >= 0 ? cells[mpnIdx] : ''
+        ].filter(Boolean);
+
+        var productId = productIdIdx >= 0 ? cells[productIdIdx] : (idIdx >= 0 ? cells[idIdx] : '');
         var url = urlIdx >= 0 ? cells[urlIdx] : '';
 
         if (!url && productId && CONFIG.PRODUCT_DETAIL_URL_TEMPLATE) {
           url = CONFIG.PRODUCT_DETAIL_URL_TEMPLATE.replace(/\{ProductID\}/g, encodeURIComponent(productId));
         }
 
-        if (code && url) map.set(normalize(code), abs(url));
+        if (url) {
+          possibleCodes.forEach(function (code) {
+            if (code) map.set(normalize(code), abs(url));
+          });
+        }
       });
 
       return map;
@@ -774,16 +800,25 @@
   }
 
   function applyProductUrls(products, feedMap) {
+    var matched = 0;
+
     products.forEach(function (item) {
       var url = feedMap.get(normalize(item.code));
       if (url) {
         item.productUrl = url;
         item.productUrlSource = 'feed';
+        matched++;
       } else {
         item.productUrl = productFallbackUrl(item);
         item.productUrlSource = 'search';
       }
     });
+
+    window.WLPreviousPurchasesFeedMatches = {
+      matched: matched,
+      total: products.length,
+      feedEnabled: !!CONFIG.PRODUCT_FEED_URL
+    };
   }
 
   function setServerDateRange(value) {
@@ -998,6 +1033,10 @@
       <div class="wlpp-summary-card">
         <div class="wlpp-summary-label">Service Lines Hidden</div>
         <div class="wlpp-summary-value">${services}</div>
+      </div>
+      <div class="wlpp-summary-card">
+        <div class="wlpp-summary-label">Product Links Matched</div>
+        <div class="wlpp-summary-value">${(window.WLPreviousPurchasesFeedMatches && window.WLPreviousPurchasesFeedMatches.matched) || 0}</div>
       </div>
     `;
   }
@@ -1306,7 +1345,7 @@
   });
 
   window.WLPreviousPurchases = {
-    version: '1.0',
+    version: '1.1',
     rerender: render
   };
 })();
