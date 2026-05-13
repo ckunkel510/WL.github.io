@@ -1,5 +1,5 @@
 /* =========================================================================
-   Woodson — Invoices Card UI (v3.9)
+   Woodson — Invoices UI (v4.0)
    - Same working logic (AP crawl + date-range + badges + filters)
    - Card UI formatting
    - NEW: Always-visible custom checkbox in each card header
@@ -23,12 +23,144 @@
     debug(...a){ if (LOG>=LVL.debug) console.log('[INV]',...a); },
   };
 
-  const VERSION = '3.9';
+  const VERSION = '4.0';
   log.info('Version', VERSION, 'booting…');
 
   /* ---------- CSS ---------- */
   (function injectCSS(){
     const css = `
+      .wl-inv-shell, .wl-inv-shell * { box-sizing:border-box; }
+      .wl-inv-shell {
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+        color:#222;
+        margin: 8px 0 14px;
+      }
+      .wl-inv-top {
+        position:relative;
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:12px;
+        margin-bottom:12px;
+      }
+      .wl-inv-title-wrap { min-width:0; }
+      .wl-inv-title {
+        color:#6b0016;
+        font-size:1.24rem;
+        line-height:1.2;
+        font-weight:900;
+      }
+      .wl-inv-subtitle {
+        color:#64748b;
+        margin-top:3px;
+        font-size:.92rem;
+        line-height:1.35;
+      }
+      .wl-inv-menu-wrap {
+        display:flex;
+        align-items:center;
+        gap:10px;
+        min-width:0;
+      }
+      .wl-inv-menu-btn {
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        gap:8px;
+        border:1px solid #e5e7eb;
+        background:#fff;
+        color:#6b0016;
+        font-weight:900;
+        border-radius:10px;
+        padding:9px 13px;
+        cursor:pointer;
+        line-height:1.1;
+        white-space:nowrap;
+      }
+      .wl-inv-menu-btn:hover { background:#fbf5f6; }
+      .wl-inv-menu {
+        position:absolute;
+        left:0;
+        top:46px;
+        z-index:7001;
+        width:min(390px, 92vw);
+        max-height:0;
+        overflow:auto;
+        padding:0 8px;
+        background:#fff;
+        border:1px solid #e5e7eb;
+        border-radius:14px;
+        box-shadow:0 12px 30px rgba(0,0,0,.16);
+        opacity:0;
+        pointer-events:none;
+        transition:max-height .25s ease, opacity .18s ease, padding .18s ease;
+      }
+      .wl-inv-menu.open {
+        max-height:72vh;
+        opacity:1;
+        pointer-events:auto;
+        padding:8px;
+      }
+      .wl-inv-menu-section + .wl-inv-menu-section {
+        border-top:1px solid #eee;
+        margin-top:6px;
+        padding-top:6px;
+      }
+      .wl-inv-menu-label {
+        color:#6b0016;
+        font-size:.72rem;
+        font-weight:900;
+        text-transform:uppercase;
+        letter-spacing:.06em;
+        padding:5px 10px 3px;
+      }
+      .wl-inv-menu a {
+        display:block;
+        padding:9px 10px;
+        color:#111;
+        text-decoration:none;
+        border-radius:9px;
+        font-weight:700;
+      }
+      .wl-inv-menu a:hover,
+      .wl-inv-menu a[aria-current="page"] {
+        background:#fbf5f6;
+        color:#6b0016;
+      }
+      .wl-inv-top-actions {
+        display:flex;
+        align-items:center;
+        justify-content:flex-end;
+        gap:8px;
+        flex-wrap:wrap;
+      }
+      .wl-inv-top-actions a {
+        display:inline-flex;
+        align-items:center;
+        justify-content:center;
+        min-height:38px;
+        padding:9px 14px;
+        border-radius:10px;
+        border:1px solid #e5e7eb;
+        background:#fff;
+        color:#111;
+        text-decoration:none;
+        font-weight:850;
+      }
+      .wl-inv-top-actions a:hover {
+        background:#fbf5f6;
+        color:#6b0016;
+      }
+      .wl-inv-hide {
+        position:absolute !important;
+        left:-9999px !important;
+        width:1px !important;
+        height:1px !important;
+        overflow:hidden !important;
+        opacity:0 !important;
+        pointer-events:none !important;
+      }
+
       /* Hide all header th except first (Select-All) */
       #ctl00_PageBody_InvoicesGrid thead th:not(:first-child),
       .RadGrid[id*="InvoicesGrid"] thead th:not(:first-child){ display:none !important; }
@@ -92,14 +224,66 @@
       .wl-details.show{ display:block; }
 
       /* Toolbar */
-      .wl-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin: 8px 0 10px; }
+      .wl-toolbar {
+        display:grid;
+        grid-template-columns:minmax(260px, 1fr) auto;
+        gap:10px;
+        margin: 8px 0 12px;
+        padding:12px;
+        background:#fff;
+        border:1px solid #e5e7eb;
+        border-radius:16px;
+        box-shadow:0 4px 14px rgba(15,23,42,.05);
+      }
+      .wl-toolbar-search { min-width:0; }
+      .wl-toolbar-search label {
+        display:block;
+        margin-bottom:6px;
+        color:#475569;
+        font-size:12px;
+        font-weight:900;
+        text-transform:uppercase;
+        letter-spacing:.04em;
+      }
+      .wl-inv-filter-input {
+        width:100%;
+        min-height:40px;
+        border:1px solid #e5e7eb;
+        border-radius:12px;
+        padding:9px 11px;
+        font:inherit;
+        background:#fff;
+      }
+      .wl-inv-filter-input:focus {
+        outline:2px solid rgba(107,0,22,.18);
+        border-color:#6b0016;
+      }
+      .wl-toolbar-controls {
+        display:flex;
+        align-items:end;
+        justify-content:flex-end;
+        gap:8px;
+        flex-wrap:wrap;
+      }
       .wl-chipbtn {
-        border:1px solid #e5e7eb; border-radius:999px; padding:6px 10px; font-weight:700;
+        border:1px solid #e5e7eb; border-radius:999px; padding:7px 11px; font-weight:800;
         background:#fff; color:#0f172a; font-size:12px; cursor:pointer; user-select:none;
       }
-      .wl-chipbtn[data-active="true"] { border-color:#0ea5e9; background:#e0f2fe; color:#075985; }
-      .wl-spacer { flex:1 1 auto; }
-      .wl-act { border:1px solid #e5e7eb; border-radius:10px; padding:6px 10px; font-weight:700; background:#f8fafc; font-size:12px; cursor:pointer; }
+      .wl-chipbtn[data-active="true"] { border-color:#6b0016; background:#fbf5f6; color:#6b0016; }
+      .wl-spacer { display:none; }
+      .wl-act { border:1px solid #e5e7eb; border-radius:10px; padding:8px 11px; font-weight:800; background:#f8fafc; font-size:12px; cursor:pointer; }
+      .wl-act[data-action="pay-selected"] { background:#6b0016; border-color:#6b0016; color:#fff; }
+      .wl-inv-results-note {
+        grid-column:1 / -1;
+        color:#64748b;
+        font-size:12px;
+        line-height:1.35;
+      }
+      @media (max-width: 760px) {
+        .wl-toolbar { grid-template-columns:1fr; }
+        .wl-toolbar-controls { justify-content:flex-start; }
+        .wl-inv-top { align-items:flex-start; flex-direction:column; }
+      }
     `;
     const el = document.createElement('style'); el.textContent = css; document.head.appendChild(el);
   })();
@@ -228,6 +412,157 @@
   }
   const grab = (tr, sel) => { const el = tr.querySelector(sel); return el ? el.textContent.trim() : ''; };
   const abs  = (u)=>{ try{ return new URL(u, location.origin).toString(); }catch{ return u; } };
+
+  const escapeHtml = (value)=> String(value == null ? '' : value).replace(/[&<>"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
+  const escapeAttr = (value)=> escapeHtml(value).replace(/'/g, '&#39;');
+
+  function getStoredCashAccountFlag(){
+    try{
+      const raw = localStorage.getItem('wl_account_is_cash_v1');
+      if (raw === 'true') return true;
+      if (raw === 'false') return false;
+    }catch{}
+    return null;
+  }
+
+  function normalizeMenuLabel(label){
+    label = String(label || '').trim();
+    if (/^Account Information$/i.test(label)) return 'Account Dashboard';
+    if (/^Quicklists$/i.test(label)) return 'Shopping Lists';
+    return label;
+  }
+
+  function buildAccountMenu(root){
+    const menu = root.querySelector('.wl-inv-menu');
+    const btn = root.querySelector('.wl-inv-menu-btn');
+    if (!menu || !btn || btn.__wlMenuBound) return;
+
+    const currentPath = (window.location.pathname || '').split('/').pop().toLowerCase();
+    const isCashAccount = getStoredCashAccountFlag();
+    const paymentLabel = isCashAccount === true ? 'Reload Balance' : (isCashAccount === false ? 'Make a Payment' : 'Make a Payment / Reload Balance');
+
+    let accountSettingLinks = [
+      ['Quicklists_R.aspx', 'Shopping Lists']
+    ];
+
+    if (isCashAccount !== true) {
+      accountSettingLinks.push(['Statements_R.aspx', 'Statements']);
+    }
+
+    accountSettingLinks = accountSettingLinks.concat([
+      ['CustomerTokens.aspx', 'Payment Methods'],
+      ['AccountSettings.aspx', 'Change Password / Account Settings'],
+      ['AddressList_R.aspx', 'Addresses'],
+      ['Contacts_r.aspx', 'Contacts']
+    ]);
+
+    const groups = [
+      { label:'', links:[['AccountInfo_R.aspx', 'Account Dashboard']] },
+      {
+        label:'Transactions',
+        links:[
+          ['AccountPayment_r.aspx', paymentLabel],
+          ['OpenQuotes_r.aspx', 'Quotes'],
+          ['OpenOrders_r.aspx', 'Orders'],
+          ['Invoices_r.aspx', 'Invoices'],
+          ['CreditNotes_r.aspx', 'Credit Notes'],
+          ['ProductsPurchased_R.aspx', 'Products Purchased']
+        ]
+      },
+      { label:'Account Settings', links:accountSettingLinks }
+    ];
+
+    menu.innerHTML = groups.map(group => `
+      <div class="wl-inv-menu-section">
+        ${group.label ? `<div class="wl-inv-menu-label">${escapeHtml(group.label)}</div>` : ''}
+        ${group.links.map(([href, label]) => {
+          const path = String(href || '').split('?')[0].split('#')[0].split('/').pop().toLowerCase();
+          const current = path === currentPath ? ' aria-current="page"' : '';
+          return `<a role="menuitem" href="${escapeAttr(href)}"${current}>${escapeHtml(normalizeMenuLabel(label))}</a>`;
+        }).join('')}
+      </div>
+    `).join('');
+
+    const toggle = (open)=>{
+      menu.classList.toggle('open', !!open);
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
+
+    btn.addEventListener('click', (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      toggle(!menu.classList.contains('open'));
+    });
+
+    document.addEventListener('click', (e)=>{
+      if (!menu.classList.contains('open')) return;
+      if (!menu.contains(e.target) && e.target !== btn) toggle(false);
+    });
+
+    btn.__wlMenuBound = true;
+  }
+
+  function ensureInvoicesShell(){
+    const grid = document.getElementById('ctl00_PageBody_InvoicesGrid');
+    const bodyFlex = grid?.closest('.bodyFlexContainer') || document.querySelector('.bodyFlexContainer');
+    const host = bodyFlex?.parentElement || document.querySelector('#MainLayoutRow .col') || document.body;
+    if (!host) return null;
+
+    if (document.querySelector('.wl-inv-shell')) return document.querySelector('.wl-inv-shell');
+
+    const legacyTitle = Array.from(document.querySelectorAll('.bodyFlexItem.listPageHeader, .listPageHeader'))
+      .find(el => /Invoice/i.test(el.textContent || ''));
+    if (legacyTitle) legacyTitle.classList.add('wl-inv-hide');
+
+    const legacyNav = document.getElementById('ctl00_LeftSidebarContents_MainNav_NavigationMenu');
+    if (legacyNav) legacyNav.classList.add('wl-inv-hide');
+
+    const shell = document.createElement('div');
+    shell.className = 'wl-inv-shell';
+    shell.innerHTML = `
+      <div class="wl-inv-top">
+        <div class="wl-inv-menu-wrap">
+          <button type="button" class="wl-inv-menu-btn" aria-expanded="false" aria-controls="wl-inv-menu">☰ Menu</button>
+          <div class="wl-inv-title-wrap">
+            <div class="wl-inv-title">Invoices</div>
+            <div class="wl-inv-subtitle">Review invoice history, check payment status, select invoices, and send selected open balances to payment.</div>
+          </div>
+          <div class="wl-inv-menu" id="wl-inv-menu" role="menu"></div>
+        </div>
+        <div class="wl-inv-top-actions">
+          <a href="AccountPayment_r.aspx">Make a Payment</a>
+        </div>
+      </div>
+    `;
+
+    host.insertBefore(shell, host.firstChild);
+    buildAccountMenu(shell);
+    return shell;
+  }
+
+  function invoiceHaystack(tr){
+    const parts = [
+      grab(tr, 'td[data-title="Invoice #"]'),
+      grab(tr, 'td[data-title="Order #"]'),
+      grab(tr, 'td[data-title="Your Ref"]'),
+      grab(tr, 'td[data-title="Job Ref"]'),
+      grab(tr, 'td[data-title="Invoice Date"]'),
+      grab(tr, 'td[data-title="Due Date"]'),
+      grab(tr, 'td[data-title="Goods Total"]'),
+      grab(tr, 'td[data-title="Tax"]'),
+      grab(tr, 'td[data-title="Total Amount"]'),
+      grab(tr, 'td[data-title="Lines"]'),
+      grab(tr, 'td[data-title="Branch"]')
+    ];
+    const cardText = tr.querySelector('.wl-row-head')?.textContent || '';
+    return (parts.join(' ') + ' ' + cardText).replace(/\s+/g, ' ').toLowerCase();
+  }
+
+  function getActiveInvoiceFilter(){
+    return document.querySelector('.wl-toolbar .wl-chipbtn[data-active="true"]')?.dataset.filter || 'all';
+  }
+
+
 
   /* ---------- NEW: Custom card checkbox (proxy to REAL chkSelect) ---------- */
   function findRealCheckbox(tr){
@@ -384,8 +719,8 @@
         </div>
       </div>
       <div class="wl-head-right">
-        ${invHref !== '#' ? `<a class="wl-btn wl-btn--ghost" href="${invHref}">Open</a>` : ``}
-        <button class="wl-btn wl-btn--primary" type="button" data-act="toggle">View details</button>
+        ${invHref !== '#' ? `<a class="wl-btn wl-btn--ghost" href="${invHref}">View Invoice</a>` : ``}
+        <button class="wl-btn wl-btn--primary" type="button" data-act="toggle">Line Details</button>
       </div>
     `;
     tr.insertAdjacentElement('afterbegin', head);
@@ -433,7 +768,7 @@
         }
       }
       details.classList.toggle('show');
-      e.currentTarget.textContent = details.classList.contains('show') ? 'Hide details' : 'View details';
+      e.currentTarget.textContent = details.classList.contains('show') ? 'Hide Details' : 'Line Details';
     });
 
     tr.__wlCard = true;
@@ -461,6 +796,7 @@
 
     // After cards exist, sync all custom checkboxes from real ones
     syncAllCardChecks(master);
+    applyFilter(getActiveInvoiceFilter());
   }
 
   /* ---------- toolbar ---------- */
@@ -473,17 +809,30 @@
     const bar = document.createElement('div');
     bar.className = 'wl-toolbar';
     bar.innerHTML = `
-  <button type="button" class="wl-chipbtn" data-filter="all" data-active="true">All</button>
-  <button type="button" class="wl-chipbtn" data-filter="open">Open</button>
-  <button type="button" class="wl-chipbtn" data-filter="partial">Partial</button>
-  <button type="button" class="wl-chipbtn" data-filter="paid">Paid</button>
-  <div class="wl-spacer"></div>
-  <button type="button" class="wl-act" data-action="select-filtered">Select filtered</button>
-  <button type="button" class="wl-act" data-action="pay-selected" title="Go to Account Payment with selected invoices prefilled">Pay selected</button>
+  <div class="wl-toolbar-search">
+    <label for="wl-inv-filter-text">Search invoices</label>
+    <input id="wl-inv-filter-text" class="wl-inv-filter-input" type="search" placeholder="Search invoice #, order #, branch, job, reference, date, or amount...">
+  </div>
+  <div class="wl-toolbar-controls">
+    <button type="button" class="wl-chipbtn" data-filter="all" data-active="true">All</button>
+    <button type="button" class="wl-chipbtn" data-filter="open">Open</button>
+    <button type="button" class="wl-chipbtn" data-filter="partial">Partial</button>
+    <button type="button" class="wl-chipbtn" data-filter="paid">Paid</button>
+    <button type="button" class="wl-act" data-action="clear-search">Clear</button>
+    <button type="button" class="wl-act" data-action="select-filtered">Select filtered</button>
+    <button type="button" class="wl-act" data-action="pay-selected" title="Go to Account Payment with selected invoices prefilled">Pay selected</button>
+  </div>
+  <div class="wl-inv-results-note" id="wl-inv-results-note">Showing invoices from the current WebTrack result set.</div>
 `;
 
 
     flex.insertBefore(bar, flex.firstChild);
+
+    const searchInput = bar.querySelector('#wl-inv-filter-text');
+    if (searchInput && !searchInput.__wlBound){
+      searchInput.addEventListener('input', ()=> applyFilter(getActiveInvoiceFilter()));
+      searchInput.__wlBound = true;
+    }
 
     bar.addEventListener('click',(e)=>{
   const chip = e.target.closest('.wl-chipbtn');
@@ -500,6 +849,13 @@
       selectFilteredOnPage();
     } else if (act.dataset.action==='pay-selected'){
       paySelected();
+    } else if (act.dataset.action==='clear-search'){
+      if (searchInput) searchInput.value = '';
+      bar.querySelectorAll('.wl-chipbtn').forEach(b=>b.dataset.active='false');
+      const all = bar.querySelector('.wl-chipbtn[data-filter="all"]');
+      if (all) all.dataset.active = 'true';
+      applyFilter('all');
+      if (searchInput) searchInput.focus();
     }
   }
 });
@@ -508,12 +864,25 @@
   }
   function applyFilter(filter){
     const master = document.querySelector('#ctl00_PageBody_InvoicesGrid .rgMasterTable'); if (!master) return;
-    const rows = master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow');
+    const rows = Array.from(master.querySelectorAll('tbody > tr.rgRow, tbody > tr.rgAltRow'));
+    const needle = (document.getElementById('wl-inv-filter-text')?.value || '').trim().toLowerCase();
+
+    let shown = 0;
     rows.forEach(tr=>{
       const status = tr.dataset.status || 'unknown';
-      const show = (filter === 'all') ? true : (status === filter);
+      const statusMatch = (filter === 'all') ? true : (status === filter);
+      const textMatch = !needle || invoiceHaystack(tr).indexOf(needle) >= 0;
+      const show = statusMatch && textMatch;
       tr.style.display = show ? '' : 'none';
+      if (show) shown++;
     });
+
+    const note = document.getElementById('wl-inv-results-note');
+    if (note) {
+      const total = rows.length;
+      const label = filter === 'all' ? 'all statuses' : filter;
+      note.textContent = `Showing ${shown} of ${total} invoices from the current WebTrack result set (${label}${needle ? ', filtered by search' : ''}).`;
+    }
   }
   function selectFilteredOnPage(){
     const root = document.getElementById('ctl00_PageBody_InvoicesGrid'); if (!root) return;
@@ -633,6 +1002,7 @@
         prm.add_initializeRequest(()=>{ observeSuspended = true; });
         prm.add_endRequest(()=> {
           observeSuspended = false; lastKey = ''; runsForKey = 0;
+          ensureInvoicesShell();
           const master = document.querySelector('#ctl00_PageBody_InvoicesGrid_ctl00, #ctl00_PageBody_InvoicesGrid .rgMasterTable, .RadGrid[id*="InvoicesGrid"] .rgMasterTable');
           if (master) enhanceOnce(master, 'ajax-endRequest');
         });
@@ -653,6 +1023,7 @@
 
   /* ---------- boot ---------- */
   async function boot(){
+    ensureInvoicesShell();
     const master = await getMasterTable(); if (!master) return;
     ensureToolbar();
     try{ await ensureApIndex(); }catch{}
