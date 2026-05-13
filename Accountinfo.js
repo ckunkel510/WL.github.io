@@ -199,6 +199,8 @@
     // Cash account (store credit) — shown separately from Net Balance
     const cashCredit = getCashBalanceCredit();
     const cashCreditDisplay = cashCredit > 0 ? fmtMoney(cashCredit) : '—';
+    const isCashAccount = !!document.getElementById('ctl00_PageBody_btnLoadCashAccountBalance');
+    try { localStorage.setItem('wl_account_is_cash_v1', isCashAccount ? 'true' : 'false'); } catch(e) {}
 
     /* mount */
     const container = dom(`
@@ -210,7 +212,7 @@
             <div id="wl-ham-menu" class="wl-ham-menu" role="menu"></div>
           </div>
           <div class="wl-actions">
-            <a class="wl-btn primary" id="wl-top-pay" href="AccountPayment_r.aspx?utm_source=AccountInfo&utm_action=MakePayment">Make a Payment</a>
+            <a class="wl-btn primary" id="wl-top-pay" href="${isCashAccount ? '#reloadBalance' : 'AccountPayment_r.aspx?utm_source=AccountInfo&utm_action=MakePayment'}">${isCashAccount ? 'Reload Balance' : 'Make a Payment'}</a>
           </div>
         </div>
 
@@ -445,7 +447,7 @@ if (snapshotActions) {
       rowCart.appendChild(cartCard);
     } else {
       if (stmtCard) stmtCard.style.display = 'none';
-      if (topPay) topPay.style.display = 'none';
+      if (topPay && !isCashAccount) topPay.style.display = 'none';
       row1.appendChild(cartCard);            // take Statement’s place up top
     }
 
@@ -461,42 +463,58 @@ if (snapshotActions) {
       const menu = $('#wl-ham-menu', container);
       const currentPath = (window.location.pathname || '').split('/').pop().toLowerCase();
 
+      const paymentHref = isCashAccount ? 'AccountInfo_R.aspx#reloadBalance' : 'AccountPayment_r.aspx';
+      const paymentLabel = isCashAccount ? 'Reload Balance' : 'Make a Payment';
+
+      let accountSettingLinks = [
+        ['Quicklists_R.aspx', 'Shopping Lists']
+      ];
+
+      if (!isCashAccount) {
+        accountSettingLinks.push(['Statements_R.aspx', 'Statements']);
+      }
+
+      accountSettingLinks = accountSettingLinks.concat([
+        [PAYMENT_METHODS_URL, 'Payment Methods'],
+        ['AccountSettings.aspx', 'Change Password / Account Settings'],
+        ['AddressList_R.aspx', 'Addresses'],
+        ['Contacts_r.aspx', 'Contacts']
+      ]);
+
       const groups = [
+        {
+          label: '',
+          links: [
+            ['AccountInfo_R.aspx', 'Account Dashboard']
+          ]
+        },
         {
           label: 'Transactions',
           links: [
-            ['AccountInfo_R.aspx', 'Account Information'],
-            ['AccountPayment_r.aspx', 'Make a Payment'],
-            ['Quicklists_R.aspx', 'Shopping Lists'],
+            [paymentHref, paymentLabel],
             ['OpenQuotes_r.aspx', 'Quotes'],
             ['OpenOrders_r.aspx', 'Orders'],
             ['Invoices_r.aspx', 'Invoices'],
             ['CreditNotes_r.aspx', 'Credit Notes'],
             ['ProductsPurchased_R.aspx', 'Products Purchased'],
-            ['Statements_R.aspx', 'Statements'],
             ['ShoppingCart.aspx', 'Shopping Cart']
           ]
         },
         {
           label: 'Account Settings',
-          links: [
-            [PAYMENT_METHODS_URL, 'Payment Methods'],
-            ['AccountSettings.aspx', 'Change Password / Account Settings'],
-            ['AddressList_R.aspx', 'Addresses'],
-            ['Contacts_r.aspx', 'Contacts']
-          ]
+          links: accountSettingLinks
         }
       ];
 
       menu.innerHTML = groups.map(group => {
         const links = group.links.map(([href, label]) => {
-          const path = String(href || '').split('?')[0].split('/').pop().toLowerCase();
+          const path = String(href || '').split('?')[0].split('#')[0].split('/').pop().toLowerCase();
           const current = path === currentPath ? ' aria-current="page"' : '';
           return `<a role="menuitem" href="${escapeAttr(href)}"${current}>${escapeHtml(label)}</a>`;
         }).join('');
 
         return `<div class="wl-ham-menu-section">
-          <div class="wl-ham-menu-label">${escapeHtml(group.label)}</div>
+          ${group.label ? `<div class="wl-ham-menu-label">${escapeHtml(group.label)}</div>` : ''}
           ${links}
         </div>`;
       }).join('');
@@ -536,7 +554,14 @@ if (snapshotActions) {
 
       if (topPayBtn && !topPayBtn.__wlBound){
         topPayBtn.__wlBound = true;
-        topPayBtn.addEventListener('click', ()=>{
+        topPayBtn.addEventListener('click', (e)=>{
+          if (isCashAccount) {
+            e.preventDefault();
+            const reloadBtn = document.getElementById('wl-reload-cash');
+            if (reloadBtn) reloadBtn.click();
+            return;
+          }
+
           savePref({
             docs:'',
             total:'',
@@ -1183,7 +1208,20 @@ function mountCashAccountReload(container){
     realBtn.click(); // Trigger the real ASP.NET postback
   });
 
+  const anchor = document.createElement('span');
+  anchor.id = 'reloadBalance';
+  anchor.style.position = 'relative';
+  anchor.style.top = '-80px';
+
+  container.appendChild(anchor);
   container.appendChild(branded);
+
+  if (window.location.hash === '#reloadBalance') {
+    setTimeout(() => {
+      branded.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      try { branded.focus(); } catch(e) {}
+    }, 150);
+  }
 }
 
 
