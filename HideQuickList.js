@@ -226,6 +226,25 @@
         color: ${BRAND.primary};
       }
 
+      .wlql-menu-section {
+        padding: 4px 0;
+      }
+
+      .wlql-menu-section + .wlql-menu-section {
+        border-top: 1px solid #eee;
+        margin-top: 4px;
+        padding-top: 8px;
+      }
+
+      .wlql-menu-label {
+        padding: 5px 10px 4px;
+        color: ${BRAND.muted};
+        font-size: .72rem;
+        font-weight: 900;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+      }
+
       .wlql-actions {
         display: flex;
         align-items: center;
@@ -621,39 +640,48 @@
 
   function buildMenu(root) {
     var menu = $('.wlql-menu', root);
-    var legacyNav = $('#ctl00_LeftSidebarContents_MainNav_NavigationMenu');
-    var links = [];
+    var btn = $('.wlql-menu-btn', root);
+    var currentPath = (window.location.pathname || '').split('/').pop().toLowerCase();
 
-    if (legacyNav) {
-      $$('.rmRootGroup .rmItem a', legacyNav).forEach(function (a) {
-        links.push({
-          href: a.getAttribute('href') || a.href || '#',
-          label: normalizeMenuLabel(txt(a))
-        });
-      });
-    }
+    var groups = [
+      {
+        label: 'Transactions',
+        links: [
+          ['AccountInfo_R.aspx', 'Account Information'],
+          ['AccountPayment_r.aspx', 'Make a Payment'],
+          ['Quicklists_R.aspx', 'Shopping Lists'],
+          ['OpenQuotes_r.aspx', 'Quotes'],
+          ['OpenOrders_r.aspx', 'Orders'],
+          ['Invoices_r.aspx', 'Invoices'],
+          ['CreditNotes_r.aspx', 'Credit Notes'],
+          ['ProductsPurchased_R.aspx', 'Products Purchased'],
+          ['Statements_R.aspx', 'Statements']
+        ]
+      },
+      {
+        label: 'Account Settings',
+        links: [
+          ['CustomerTokens.aspx', 'Payment Methods'],
+          ['AccountSettings.aspx', 'Change Password / Account Settings'],
+          ['AddressList_R.aspx', 'Addresses'],
+          ['Contacts_r.aspx', 'Contacts']
+        ]
+      }
+    ];
 
-    if (!links.length) {
-      links = [
-        { href: 'AccountInfo_R.aspx', label: 'Account Information' },
-        { href: 'Quicklists_R.aspx', label: 'Shopping Lists' },
-        { href: 'OpenQuotes_r.aspx', label: 'Quotes' },
-        { href: 'OpenOrders_r.aspx', label: 'Orders' },
-        { href: 'Invoices_r.aspx', label: 'Invoices' },
-        { href: 'CreditNotes_r.aspx', label: 'Credit Notes' },
-        { href: 'ProductsPurchased_R.aspx', label: 'Products Purchased' },
-        { href: 'Statements_R.aspx', label: 'Statements' },
-        { href: 'CustomerTokens.aspx', label: 'Payment Methods' },
-        { href: 'AddressList_R.aspx', label: 'Addresses' },
-        { href: 'Contacts_r.aspx', label: 'Contacts' }
-      ];
-    }
-
-    menu.innerHTML = links.map(function (link) {
-      return '<a role="menuitem" href="' + escapeAttr(link.href) + '">' + escapeHtml(link.label) + '</a>';
+    menu.innerHTML = groups.map(function (group) {
+      return '<div class="wlql-menu-section">' +
+        '<div class="wlql-menu-label">' + escapeHtml(group.label) + '</div>' +
+        group.links.map(function (link) {
+          var href = link[0];
+          var label = normalizeMenuLabel(link[1]);
+          var path = String(href || '').split('?')[0].split('/').pop().toLowerCase();
+          var current = path === currentPath ? ' aria-current="page"' : '';
+          return '<a role="menuitem" href="' + escapeAttr(href) + '"' + current + '>' + escapeHtml(label) + '</a>';
+        }).join('') +
+      '</div>';
     }).join('');
 
-    var btn = $('.wlql-menu-btn', root);
     function toggle(open) {
       menu.classList.toggle('open', !!open);
       btn.setAttribute('aria-expanded', open ? 'true' : 'false');
