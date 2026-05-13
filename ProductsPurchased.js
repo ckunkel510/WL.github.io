@@ -1,5 +1,5 @@
 /* =========================================================================
-   Woodson — Previous Purchases / Reorder Center (v1.3.3)
+   Woodson — Previous Purchases / Reorder Center (v1.4)
    - ProductsPurchased_R.aspx rewrite
    - Adds new grouped account menu
    - Reframes page as previous purchases + reorder helper
@@ -750,6 +750,71 @@
       }
     `;
 
+
+    style.textContent += `
+      .wlpp-product {
+        min-height: 100%;
+      }
+      .wlpp-card-body {
+        min-height: 115px;
+      }
+      .wlpp-product-title {
+        min-height: 3.15em;
+        -webkit-line-clamp: 2;
+      }
+      .wlpp-code {
+        margin-bottom: 6px;
+      }
+      .wlpp-tags {
+        display: none !important;
+      }
+      .wlpp-reorder-note {
+        margin-top: 2px;
+      }
+      .wlpp-compact-meta {
+        color: #565959;
+        font-size: .86rem;
+        line-height: 1.38;
+      }
+      .wlpp-card-actions {
+        align-items: center;
+      }
+      .wlpp-qty-wrap {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex: 0 0 auto;
+      }
+      .wlpp-qty-wrap label {
+        font-size: .78rem;
+        font-weight: 900;
+        color: #565959;
+      }
+      .wlpp-qty {
+        width: 62px;
+        min-height: 34px;
+        border: 1px solid #d5d9d9;
+        border-radius: 8px;
+        padding: 6px 7px;
+        font: inherit;
+        font-size: .9rem;
+      }
+      .wlpp-atc-status {
+        flex: 1 1 100%;
+        min-height: 16px;
+        color: #065f46;
+        font-size: .82rem;
+        font-weight: 800;
+      }
+      .wlpp-atc-status.error {
+        color: #7f1d1d;
+      }
+      .wlpp-btn[disabled] {
+        opacity: .68;
+        cursor: wait;
+      }
+    `;
+
     document.head.appendChild(style);
   }
 
@@ -1099,7 +1164,8 @@
               additionalImage: additional ? abs(additional) : '',
               title: title,
               productType: item.product_type || item['product_type'] || item.productType || item['product type'] || '',
-              brand: item.brand || ''
+              brand: item.brand || '',
+              productId: productId || ''
             };
             addFeedPayload(map, possibleCodes, payload);
           }
@@ -1145,7 +1211,8 @@
             additionalImage: additionalImageIdx >= 0 && cells[additionalImageIdx] ? abs(cells[additionalImageIdx]) : '',
             title: title,
             productType: productTypeIdx >= 0 ? (cells[productTypeIdx] || '') : '',
-            brand: brandIdx >= 0 ? (cells[brandIdx] || '') : ''
+            brand: brandIdx >= 0 ? (cells[brandIdx] || '') : '',
+            productId: productId || ''
           };
           addFeedPayload(map, possibleCodes, payload);
         }
@@ -1158,6 +1225,105 @@
     }
   }
 
+
+
+  function pidFromUrl(url) {
+    if (!url) return '';
+    try {
+      var parsed = new URL(url, window.location.origin);
+      var pid = parsed.searchParams.get('pid') || parsed.searchParams.get('ProductID') || parsed.searchParams.get('productid') || '';
+      if (pid) return pid;
+
+      var textUrl = String(url);
+      var match = textUrl.match(/[?&](?:pid|ProductID|productid)=(\d+)/i);
+      return match ? match[1] : '';
+    } catch (err) {
+      var m = String(url || '').match(/[?&](?:pid|ProductID|productid)=(\d+)/i);
+      return m ? m[1] : '';
+    }
+  }
+
+  function getProductPid(item) {
+    return item.productPid || pidFromUrl(item.productUrl) || '';
+  }
+
+  async function fetchHtmlDoc(url, options) {
+    var res = await fetch(url, Object.assign({ credentials: 'include', cache: 'no-cache' }, options || {}));
+    if (!res.ok) throw new Error('HTTP ' + res.status + ' for ' + url);
+    var responseText = await res.text();
+    return new DOMParser().parseFromString(responseText, 'text/html');
+  }
+
+  function getHiddenFieldsFromDoc(doc) {
+    var fields = {};
+    doc.querySelectorAll('input[type="hidden"]').forEach(function (input) {
+      if (input.name) fields[input.name] = input.value || '';
+    });
+    return fields;
+  }
+
+  function toFormDataFromObject(obj) {
+    var fd = new FormData();
+    Object.keys(obj).forEach(function (key) { fd.append(key, obj[key]); });
+    return fd;
+  }
+
+  function findAddToCartTarget(doc) {
+    var selectors = [
+      'a[href^="javascript:__doPostBack"][id*="AddProductButton"]',
+      'a[href^="javascript:__doPostBack"][id*="AddToCart"]',
+      'a[href^="javascript:__doPostBack"]'
+    ];
+
+    for (var i = 0; i < selectors.length; i++) {
+      var links = Array.prototype.slice.call(doc.querySelectorAll(selectors[i]));
+      for (var j = 0; j < links.length; j++) {
+        var link = links[j];
+        var label = (link.textContent || '').replace(/\s+/g, ' ').trim();
+        var href = link.getAttribute('href') || '';
+        if (!/add/i.test(label + ' ' + link.id + ' ' + href)) continue;
+
+        var match = href.match(/__doPostBack\(['"]([^'"]+)['"]/i);
+        if (match && match[1]) return match[1];
+      }
+    }
+
+    return 'ctl00$PageBody$productDetail$ctl00$AddProductButton';
+  }
+
+  async function addPidToCart(pid, qty) {
+    if (!pid) throw new Error('Product ID is required to add to cart.');
+
+    var pdpUrl = '/ProductDetail.aspx?pid=' + encodeURIComponent(pid);
+    var doc = await fetchHtmlDoc(pdpUrl);
+    var hidden = getHiddenFieldsFromDoc(doc);
+
+    var qtyValue = String(Math.max(1, parseInt(qty, 10) || 1));
+    var qtyInput =
+      doc.querySelector('input[name*="Quantity"]') ||
+      doc.querySelector('input[name*="Qty"]') ||
+      doc.querySelector('input[name*="qty"]');
+
+    if (qtyInput && qtyInput.name) {
+      hidden[qtyInput.name] = qtyValue;
+    }
+
+    var eventTarget = findAddToCartTarget(doc);
+    hidden.__EVENTTARGET = eventTarget;
+    hidden.__EVENTARGUMENT = '';
+
+    var form = doc.querySelector('form');
+    var action = form ? abs(form.getAttribute('action') || pdpUrl) : pdpUrl;
+
+    var res = await fetch(action, {
+      method: 'POST',
+      credentials: 'include',
+      body: toFormDataFromObject(hidden)
+    });
+
+    if (!res.ok) throw new Error('Add to Cart postback failed.');
+    return true;
+  }
 
   function productMediaHtml(item, compact) {
     var image = item.productImage || item.productAdditionalImage || '';
@@ -1174,7 +1340,7 @@
       <div class="${compact ? 'wlpp-modal-media' : 'wlpp-media'}">
         <div class="wlpp-media-fallback">
           <div>${html(item.code || 'Product')}</div>
-          <div style="font-size:.85rem;margin-top:6px;color:#64748b;font-weight:700;">Product image unavailable</div>
+          <div style="font-size:.85rem;margin-top:6px;color:#64748b;font-weight:700;"></div>
         </div>
       </div>
     `;
@@ -1208,6 +1374,7 @@
         item.productType = payload.productType || '';
         item.productTypeLabel = friendlyCategory(payload.productType || '');
         item.brand = payload.brand || '';
+        item.productPid = pidFromUrl(payload.url || '');
         matched++;
         if (item.productImage || item.productAdditionalImage) imageMatched++;
       } else {
@@ -1219,6 +1386,7 @@
         item.productType = '';
         item.productTypeLabel = 'Other';
         item.brand = '';
+        item.productPid = '';
       }
     });
 
@@ -1295,7 +1463,7 @@
           <button type="button" class="wlpp-btn wlpp-btn-primary" id="wlpp-server-apply">Update History</button>
           <button type="button" class="wlpp-btn" id="wlpp-12mo">Use 12 Months</button>
         </div>
-        <div class="wlpp-note" id="wlpp-note">Showing previous purchase products. Delivery and shipping lines are hidden.</div>
+        <div class="wlpp-note" id="wlpp-note">Showing previous purchase products.</div>
       </div>
 
       <div class="wlpp-buyagain-layout">
@@ -1522,7 +1690,7 @@
 
     var note = $('#wlpp-note', root);
     if (note) {
-      note.textContent = 'Showing ' + shown + ' of ' + products.length + ' previous purchase products. Delivery and shipping lines are hidden.';
+      note.textContent = 'Showing ' + shown + ' of ' + products.length + ' previous purchase products.';
     }
 
     var subtitle = $('#wlpp-results-subtitle', root);
@@ -1542,35 +1710,38 @@
 
   function productCard(item, options) {
     var last = item.lastPurchase || item.purchases[0] || {};
-    var actionLabel = item.productUrlSource === 'feed' ? 'View / Reorder' : 'Find Product';
-    var countText = item.purchaseCount === 1 ? 'Purchased 1 time' : 'Purchased ' + item.purchaseCount + ' times';
+    var pid = getProductPid(item);
+    var canAddToCart = !!pid;
+    var countText = item.purchaseCount === 1 ? 'Purchased once' : 'Purchased ' + item.purchaseCount + ' times';
     var lastText = last.orderDateDisplay ? 'Last purchased ' + last.orderDateDisplay : 'Last purchase date unavailable';
-    var lastQty = last.qty ? 'Last qty: ' + last.qty + (last.per ? ' ' + last.per : '') : '';
-    var lastPrice = last.sellPrice ? 'Last price: ' + last.sellPrice : '';
     var title = item.description || item.feedTitle || item.code || 'Product';
+    var priceText = last.sellPrice ? 'Last price ' + last.sellPrice : '';
+    var qtyGuess = Math.max(1, Math.round(parseFloat(last.qty || '1') || 1));
 
     return `
       <div class="wlpp-product" data-key="${attr(item.key)}">
         ${productMediaHtml(item, false)}
         <div class="wlpp-card-head">
-          <div class="wlpp-code">Product Code: ${html(item.code || '—')}</div>
+          <div class="wlpp-code">${html(item.code || 'Product')}</div>
           <a class="wlpp-product-title" href="${attr(item.productUrl)}">${html(title)}</a>
-          <div class="wlpp-tags">
-            ${item.suggested ? '<span class="wlpp-tag wlpp-tag-reorder">May be time to reorder</span>' : ''}
-            ${item.purchaseCount > 1 ? '<span class="wlpp-tag">Repeat purchase</span>' : ''}
-            ${item.productTypeLabel && item.productTypeLabel !== 'Other' ? '<span class="wlpp-tag">' + html(item.productTypeLabel) + '</span>' : ''}
-          </div>
         </div>
         <div class="wlpp-card-body">
-          ${lastPrice ? '<div class="wlpp-buy-price">' + html(lastPrice) + '</div>' : ''}
-          <div class="wlpp-buy-meta">${html(countText)}</div>
-          <div class="wlpp-buy-meta">${html(lastText)}</div>
-          ${lastQty ? '<div class="wlpp-buy-meta">' + html(lastQty) + '</div>' : ''}
-          ${item.suggestReason ? '<div class="wlpp-reorder-note">' + html(item.suggestReason) + '</div>' : ''}
+          <div class="wlpp-compact-meta">${html(lastText)}</div>
+          <div class="wlpp-compact-meta">${html(countText)}${priceText ? ' • ' + html(priceText) : ''}</div>
+          ${item.suggested ? '<div class="wlpp-reorder-note">May be time to reorder</div>' : ''}
         </div>
         <div class="wlpp-card-actions">
-          <a class="wlpp-btn wlpp-btn-primary" href="${attr(item.productUrl)}">${html(actionLabel)}</a>
+          ${canAddToCart ? `
+            <div class="wlpp-qty-wrap">
+              <label for="wlpp-qty-${attr(item.key)}">Qty</label>
+              <input class="wlpp-qty" id="wlpp-qty-${attr(item.key)}" type="number" min="1" value="${attr(qtyGuess)}" inputmode="numeric">
+            </div>
+            <button type="button" class="wlpp-btn wlpp-btn-primary" data-add-cart="${attr(item.key)}">Add to Cart</button>
+          ` : `
+            <a class="wlpp-btn wlpp-btn-primary" href="${attr(item.productUrl)}">View / Reorder</a>
+          `}
           <button type="button" class="wlpp-btn" data-product-history="${attr(item.key)}">History</button>
+          <div class="wlpp-atc-status" aria-live="polite"></div>
         </div>
       </div>
     `;
@@ -1683,7 +1854,7 @@
               <div class="wlpp-last" style="margin-top:4px;">
                 ${item.suggestReason ? '<strong>' + html(item.suggestReason) + '</strong><br>' : ''}
                 ${item.feedTitle && normalize(item.feedTitle) !== normalize(item.description) ? 'Feed title: ' + html(item.feedTitle) + '<br>' : ''}
-                ${item.productImage || item.productAdditionalImage ? '' : 'Product image unavailable.'}
+                ${item.productImage || item.productAdditionalImage ? '' : '.'}
               </div>
             </div>
           </div>
@@ -1791,7 +1962,57 @@
     }
 
     if (!root.__wlppClickBound) {
-      root.addEventListener('click', function (event) {
+      root.addEventListener('click', async function (event) {
+        var addBtn = event.target.closest('[data-add-cart]');
+        if (addBtn) {
+          event.preventDefault();
+
+          var addKey = addBtn.getAttribute('data-add-cart');
+          var addItem = products.find(function (p) { return p.key === addKey; });
+          if (!addItem) return;
+
+          var card = addBtn.closest('.wlpp-product');
+          var qtyInput = card ? card.querySelector('.wlpp-qty') : null;
+          var status = card ? card.querySelector('.wlpp-atc-status') : null;
+          var qty = qtyInput ? qtyInput.value : 1;
+          var pid = getProductPid(addItem);
+
+          if (!pid) {
+            window.location.href = addItem.productUrl;
+            return;
+          }
+
+          addBtn.disabled = true;
+          addBtn.textContent = 'Adding…';
+          if (status) {
+            status.classList.remove('error');
+            status.textContent = '';
+          }
+
+          try {
+            await addPidToCart(pid, qty);
+            addBtn.textContent = 'Added';
+            if (status) status.textContent = 'Added to cart.';
+            setTimeout(function () {
+              addBtn.disabled = false;
+              addBtn.textContent = 'Add to Cart';
+            }, 1800);
+          } catch (err) {
+            console.error('Previous purchase add-to-cart failed', err);
+            addBtn.disabled = false;
+            addBtn.textContent = 'Try Again';
+            if (status) {
+              status.classList.add('error');
+              status.textContent = 'Could not add here. Opening product page…';
+            }
+            setTimeout(function () {
+              window.location.href = addItem.productUrl;
+            }, 900);
+          }
+
+          return;
+        }
+
         var btn = event.target.closest('[data-product-history]');
         if (!btn) return;
         event.preventDefault();
@@ -1835,7 +2056,7 @@
   });
 
   window.WLPreviousPurchases = {
-    version: '1.3.3',
+    version: '1.4',
     rerender: render
   };
 })();
