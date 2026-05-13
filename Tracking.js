@@ -812,6 +812,23 @@
     return true;
   }
 
+
+  function removeEmptyStatusSections() {
+    document.querySelectorAll('.wloo-panel, .wlo-panel, .wl-orders-panel, section').forEach(function(section) {
+      var titleText = (section.textContent || '').replace(/\s+/g, ' ').trim();
+      var isStatusSection =
+        /Waiting for Stock|Being Prepared|Delivery Status|Ready for Pickup|Other Open Orders/i.test(titleText);
+      var hasOrderCards =
+        section.querySelector('.wloo-card, .wlo-card, .wl-order-card, [data-order-search], [data-order-card]');
+      var hasEmptyLanguage =
+        /No .*orders|No orders|0 orders/i.test(titleText);
+
+      if (isStatusSection && !hasOrderCards && hasEmptyLanguage) {
+        section.remove();
+      }
+    });
+  }
+
   function buildUI() {
     injectStyles();
 
@@ -852,7 +869,7 @@
     STATUS_BUCKETS.forEach(function (bucket) {
       var bucketOrders = orders.filter(function (order) { return order.bucketKey === bucket.key; });
       if (bucketOrders.length || orders.length <= 5) {
-        content.appendChild(buildOrderSection(bucket, bucketOrders));
+        (function(section){ if (section) content.appendChild(section); })(buildOrderSection(bucket, bucketOrders));
       }
     });
 
@@ -942,8 +959,11 @@
     if (maybeNormalizeOpenOrdersUrl()) return;
 
     buildUI();
+    removeEmptyStatusSections();
     window.setTimeout(function () {
       if (!$('#wloo-root')) buildUI();
+      removeEmptyStatusSections();
     }, 600);
+    window.setTimeout(removeEmptyStatusSections, 900);
   });
 })();
