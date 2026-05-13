@@ -212,7 +212,7 @@
             <div id="wl-ham-menu" class="wl-ham-menu" role="menu"></div>
           </div>
           <div class="wl-actions">
-            <a class="wl-btn primary" id="wl-top-pay" href="${isCashAccount ? '#reloadBalance' : 'AccountPayment_r.aspx?utm_source=AccountInfo&utm_action=MakePayment'}">${isCashAccount ? 'Reload Balance' : 'Make a Payment'}</a>
+            <a class="wl-btn primary" id="wl-top-pay" href="AccountPayment_r.aspx?utm_source=AccountInfo&utm_action=${isCashAccount ? 'ReloadBalance' : 'MakePayment'}">${isCashAccount ? 'Reload Balance' : 'Make a Payment'}</a>
           </div>
         </div>
 
@@ -463,7 +463,7 @@ if (snapshotActions) {
       const menu = $('#wl-ham-menu', container);
       const currentPath = (window.location.pathname || '').split('/').pop().toLowerCase();
 
-      const paymentHref = isCashAccount ? 'AccountInfo_R.aspx#reloadBalance' : 'AccountPayment_r.aspx';
+      const paymentHref = 'AccountPayment_r.aspx';
       const paymentLabel = isCashAccount ? 'Reload Balance' : 'Make a Payment';
 
       let accountSettingLinks = [
@@ -554,14 +554,7 @@ if (snapshotActions) {
 
       if (topPayBtn && !topPayBtn.__wlBound){
         topPayBtn.__wlBound = true;
-        topPayBtn.addEventListener('click', (e)=>{
-          if (isCashAccount) {
-            e.preventDefault();
-            const reloadBtn = document.getElementById('wl-reload-cash');
-            if (reloadBtn) reloadBtn.click();
-            return;
-          }
-
+        topPayBtn.addEventListener('click', ()=>{
           savePref({
             docs:'',
             total:'',
