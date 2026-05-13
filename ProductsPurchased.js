@@ -1,5 +1,5 @@
 /* =========================================================================
-   Woodson — Previous Purchases / Reorder Center (v1.3)
+   Woodson — Previous Purchases / Reorder Center (v1.3.1)
    - ProductsPurchased_R.aspx rewrite
    - Adds new grouped account menu
    - Reframes page as previous purchases + reorder helper
@@ -1119,6 +1119,15 @@
     return CONFIG.PRODUCT_SEARCH_URL(item.code, item.description);
   }
 
+  function friendlyCategory(value) {
+    var text = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!text) return 'Other';
+    var parts = text.split(/\s*>\s*|\s*\/\s*/).filter(Boolean);
+    if (!parts.length) return text;
+    if (parts.length === 1) return parts[0];
+    return parts.slice(Math.max(0, parts.length - 2)).join(' › ');
+  }
+
   function applyProductUrls(products, feedMap) {
     var matched = 0;
     var imageMatched = 0;
@@ -1698,7 +1707,7 @@
   });
 
   window.WLPreviousPurchases = {
-    version: '1.3',
+    version: '1.3.1',
     rerender: render
   };
 })();
