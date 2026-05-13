@@ -574,42 +574,68 @@
     const btn = $('.wl-menu-btn', root);
     const currentPath = (window.location.pathname || '').split('/').pop().toLowerCase();
 
+    function getStoredCashAccountFlag() {
+      try {
+        const raw = localStorage.getItem('wl_account_is_cash_v1');
+        if (raw === 'true') return true;
+        if (raw === 'false') return false;
+      } catch (err) {}
+      return null;
+    }
+
+    const isCashAccount = getStoredCashAccountFlag();
+    const paymentHref = isCashAccount === true ? 'AccountInfo_R.aspx#reloadBalance' : 'AccountPayment_r.aspx';
+    const paymentLabel = isCashAccount === true ? 'Reload Balance' : (isCashAccount === false ? 'Make a Payment' : 'Make a Payment / Reload Balance');
+
+    let accountSettingLinks = [
+      ['Quicklists_R.aspx', 'Shopping Lists']
+    ];
+
+    if (isCashAccount !== true) {
+      accountSettingLinks.push(['Statements_R.aspx', 'Statements']);
+    }
+
+    accountSettingLinks = accountSettingLinks.concat([
+      ['CustomerTokens.aspx', 'Payment Methods'],
+      ['AccountSettings.aspx', 'Change Password / Account Settings'],
+      ['AddressList_R.aspx', 'Addresses'],
+      ['Contacts_r.aspx', 'Contacts']
+    ]);
+
     const groups = [
+      {
+        label: '',
+        links: [
+          ['AccountInfo_R.aspx', 'Account Dashboard']
+        ]
+      },
       {
         label: 'Transactions',
         links: [
-          ['AccountInfo_R.aspx', 'Account Information'],
-          ['AccountPayment_r.aspx', 'Make a Payment'],
-          ['Quicklists_R.aspx', 'Shopping Lists'],
+          [paymentHref, paymentLabel],
           ['OpenQuotes_r.aspx', 'Quotes'],
           ['OpenOrders_r.aspx', 'Orders'],
           ['Invoices_r.aspx', 'Invoices'],
           ['CreditNotes_r.aspx', 'Credit Notes'],
-          ['ProductsPurchased_R.aspx', 'Products Purchased'],
-          ['Statements_R.aspx', 'Statements']
+          ['ProductsPurchased_R.aspx', 'Products Purchased']
         ]
       },
       {
         label: 'Account Settings',
-        links: [
-          ['CustomerTokens.aspx', 'Payment Methods'],
-          ['AccountSettings.aspx', 'Change Password / Account Settings'],
-          ['AddressList_R.aspx', 'Addresses'],
-          ['Contacts_r.aspx', 'Contacts']
-        ]
+        links: accountSettingLinks
       }
     ];
 
     menu.innerHTML = groups.map(group => {
       const links = group.links.map(([href, label]) => {
-        const path = String(href || '').split('?')[0].split('/').pop().toLowerCase();
+        const path = String(href || '').split('?')[0].split('#')[0].split('/').pop().toLowerCase();
         const current = path === currentPath ? ' aria-current="page"' : '';
         const cleanLabel = /^Quicklists$/i.test(label) ? 'Shopping Lists' : label;
         return `<a role="menuitem" href="${escapeHtml(href)}"${current}>${escapeHtml(cleanLabel)}</a>`;
       }).join('');
 
       return `<div class="wl-ham-menu-section">
-        <div class="wl-ham-menu-label">${escapeHtml(group.label)}</div>
+        ${group.label ? `<div class="wl-ham-menu-label">${escapeHtml(group.label)}</div>` : ''}
         ${links}
       </div>`;
     }).join('');
@@ -623,7 +649,6 @@
       event.preventDefault();
       event.stopPropagation();
       toggle(!menu.classList.contains('open'));
-      return false;
     });
 
     document.addEventListener('click', (event) => {
