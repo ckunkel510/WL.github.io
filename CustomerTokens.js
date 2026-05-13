@@ -584,7 +584,7 @@
     }
 
     const isCashAccount = getStoredCashAccountFlag();
-    const paymentHref = isCashAccount === true ? 'AccountInfo_R.aspx#reloadBalance' : 'AccountPayment_r.aspx';
+    const paymentHref = 'AccountPayment_r.aspx';
     const paymentLabel = isCashAccount === true ? 'Reload Balance' : (isCashAccount === false ? 'Make a Payment' : 'Make a Payment / Reload Balance');
 
     let accountSettingLinks = [
