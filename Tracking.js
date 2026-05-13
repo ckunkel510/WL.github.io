@@ -560,8 +560,7 @@
         <div class="wloo-note">${escapeHtml(order.bucket.help)}</div>
 
         <div class="wloo-card-actions">
-          <button type="button" class="wloo-btn wloo-btn-primary" data-open-order="${escapeAttr(order.oid)}">View Details</button>
-          <a class="wloo-btn" href="${escapeAttr(order.fullHref)}">Open Full Order</a>
+          <button type="button" class="wloo-btn wloo-btn-primary" data-open-order="${escapeAttr(order.oid)}">View Order Details</button>
         </div>
       </article>
     `);
@@ -607,40 +606,97 @@
       $('#ctl00_PageBody_ctl00_OrderDetailsGrid .rgMasterTable', doc);
   }
 
+  function absUrl(url) {
+    if (!url || /^javascript:/i.test(String(url))) return url || '';
+    try { return new URL(url, window.location.origin).toString(); }
+    catch (err) { return url; }
+  }
+
+  function findFirstLink(doc, selectors) {
+    for (var i = 0; i < selectors.length; i++) {
+      var link = $(selectors[i], doc);
+      if (link) return link;
+    }
+    return null;
+  }
+
+  function parseOrderActionsFromDoc(doc) {
+    var imageLink = findFirstLink(doc, [
+      '#ctl00_PageBody_ctl00_ShowOrderImageLink',
+      '#ctl00_PageBody_ctl00_ShowOrderImageDropDown',
+      'a[id*="ShowOrderImage"]'
+    ]);
+
+    var documentLink = findFirstLink(doc, [
+      '#ctl00_PageBody_ctl00_ShowOrderDocumentLink',
+      '#ctl00_PageBody_ctl00_ShowOrderDocumentDropDown',
+      'a[id*="ShowOrderDocument"]'
+    ]);
+
+    var addToCartLink = findFirstLink(doc, [
+      '#ctl00_PageBody_ctl00_AddToCart',
+      '#ctl00_PageBody_ctl00_AddToCartDropDown',
+      'a[id*="AddToCart"]'
+    ]);
+
+    return {
+      imageHref: imageLink ? absUrl(imageLink.getAttribute('href') || imageLink.href || '') : '',
+      documentHref: documentLink ? absUrl(documentLink.getAttribute('href') || documentLink.href || '') : '',
+      addToCartHref: addToCartLink ? (addToCartLink.getAttribute('href') || addToCartLink.href || '') : '',
+      hasAddToCart: !!addToCartLink
+    };
+  }
+
+  function parseOrderMetaFromDoc(doc) {
+    var header = txt($('.listPageHeader', doc));
+    var orderMatch = header.match(/Details\s+for\s+Order\s+(\S+)/i);
+    var statusMatch = header.match(/Status:\s*([^\n\r]+)$/i);
+
+    return {
+      orderNumber: orderMatch ? orderMatch[1] : '',
+      status: statusMatch ? statusMatch[1].trim() : ''
+    };
+  }
+
   function parseOrderLinesFromDoc(doc) {
     var table = findOrderDetailsTable(doc);
     var lines = [];
     var upsNumbers = [];
     var UPS_RX = /^1Z[0-9A-Z]{16}$/i;
 
-    if (!table) return { lines: lines, upsNumbers: upsNumbers };
+    if (table) {
+      $$('tbody tr, tr', table).forEach(function (row) {
+        if (row.querySelector('th')) return;
+        var cells = $$('td', row);
+        if (!cells.length) return;
 
-    $$('tbody tr, tr', table).forEach(function (row) {
-      if (row.querySelector('th')) return;
-      var cells = $$('td', row);
-      if (!cells.length) return;
+        var codeEl = $('td[data-title="Product Code"]', row) || cells[0];
+        var descEl = $('td[data-title="Description"]', row) || cells[1];
+        var qtyEl = $('td[data-title="Quantity"]', row) || $('td[data-title="Qty"]', row) || cells[3] || cells[2];
+        var priceEl = $('td[data-title="Price"]', row) || $('td[data-title="Net Price"]', row);
 
-      var codeEl = $('td[data-title="Product Code"]', row) || cells[0];
-      var descEl = $('td[data-title="Description"]', row) || cells[1];
-      var qtyEl = $('td[data-title="Quantity"]', row) || $('td[data-title="Qty"]', row) || cells[2];
-      var priceEl = $('td[data-title="Price"]', row) || $('td[data-title="Net Price"]', row);
+        var code = txt(codeEl);
+        var desc = txt(descEl);
+        var qty = txt(qtyEl);
+        var price = txt(priceEl);
+        if (!code && !desc) return;
 
-      var code = txt(codeEl);
-      var desc = txt(descEl);
-      var qty = txt(qtyEl);
-      var price = txt(priceEl);
-      if (!code && !desc) return;
+        if (code.toUpperCase() === 'UPS') {
+          var raw = desc.replace(/\s+/g, '').toUpperCase();
+          if (raw && (UPS_RX.test(raw) || raw.length >= 8)) upsNumbers.push(raw);
+          return;
+        }
 
-      if (code.toUpperCase() === 'UPS') {
-        var raw = desc.replace(/\s+/g, '').toUpperCase();
-        if (raw && (UPS_RX.test(raw) || raw.length >= 8)) upsNumbers.push(raw);
-        return;
-      }
+        lines.push({ code: code, description: desc, qty: qty, price: price });
+      });
+    }
 
-      lines.push({ code: code, description: desc, qty: qty, price: price });
-    });
-
-    return { lines: lines, upsNumbers: upsNumbers };
+    return {
+      lines: lines,
+      upsNumbers: upsNumbers,
+      actions: parseOrderActionsFromDoc(doc),
+      meta: parseOrderMetaFromDoc(doc)
+    };
   }
 
   function upsUrl(number) {
@@ -655,6 +711,65 @@
 
     var doc = new DOMParser().parseFromString(html, 'text/html');
     return parseOrderLinesFromDoc(doc);
+  }
+
+  function addOrderToCartFromDetails(order, button) {
+    if (!order || !order.fullHref) return;
+
+    var originalText = button ? button.textContent : '';
+    if (button) {
+      button.disabled = true;
+      button.textContent = 'Adding to Cart…';
+    }
+
+    var frame = document.createElement('iframe');
+    frame.className = 'wloo-iframe-action';
+    frame.setAttribute('aria-hidden', 'true');
+
+    var clicked = false;
+    var timeout = window.setTimeout(function () {
+      if (button) {
+        button.disabled = false;
+        button.textContent = originalText || 'Add Order to Cart';
+      }
+      try { frame.remove(); } catch (err) {}
+      alert('We could not add this order to the cart from the pop-up. Please try again, or contact us and we can help.');
+    }, 9000);
+
+    frame.addEventListener('load', function () {
+      if (clicked) return;
+
+      try {
+        var doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
+        var addLink = doc && (
+          doc.querySelector('#ctl00_PageBody_ctl00_AddToCart') ||
+          doc.querySelector('#ctl00_PageBody_ctl00_AddToCartDropDown') ||
+          doc.querySelector('a[id*="AddToCart"]')
+        );
+
+        if (!addLink) throw new Error('Add-to-cart control not found on order details page.');
+
+        clicked = true;
+        addLink.click();
+
+        window.setTimeout(function () {
+          window.clearTimeout(timeout);
+          window.location.href = 'ShoppingCart.aspx';
+        }, 1100);
+      } catch (err) {
+        window.clearTimeout(timeout);
+        if (button) {
+          button.disabled = false;
+          button.textContent = originalText || 'Add Order to Cart';
+        }
+        try { frame.remove(); } catch (removeErr) {}
+        console.error('Add order to cart failed', err);
+        alert('We could not add this order to the cart from the pop-up. Please try opening the order again or contact us and we can help.');
+      }
+    });
+
+    document.body.appendChild(frame);
+    frame.src = order.fullHref;
   }
 
   function openOrderModal(order) {
@@ -700,6 +815,7 @@
 
     fetchOrderDetails(order).then(function (detail) {
       var body = $('.wloo-modal-body', modal);
+      var actions = detail.actions || {};
       var trackingHtml = detail.upsNumbers.length ? `
         <div class="wloo-tracking-pills">
           ${detail.upsNumbers.map(function (n) {
@@ -708,19 +824,38 @@
         </div>
       ` : '';
 
+      var documentButton = actions.documentHref ? '<a class="wloo-btn" href="' + escapeAttr(actions.documentHref) + '" target="_blank" rel="noopener">Download Order PDF</a>' : '';
+      var imageButton = actions.imageHref ? '<a class="wloo-btn" href="' + escapeAttr(actions.imageHref) + '" target="_blank" rel="noopener">View Delivery Images</a>' : '';
+      var cartButton = actions.hasAddToCart ? '<button type="button" class="wloo-btn wloo-btn-primary" id="wloo-add-order-cart">Add Order to Cart</button>' : '';
+
       body.innerHTML = `
         <div class="wloo-summary-grid">
-          <div class="wloo-summary-card"><div class="wloo-summary-label">Status</div><div class="wloo-summary-value" style="font-size:1rem">${escapeHtml(order.status)}</div></div>
+          <div class="wloo-summary-card"><div class="wloo-summary-label">Status</div><div class="wloo-summary-value" style="font-size:1rem">${escapeHtml((detail.meta && detail.meta.status) || order.status)}</div></div>
           <div class="wloo-summary-card"><div class="wloo-summary-label">Required</div><div class="wloo-summary-value" style="font-size:1rem">${escapeHtml(order.required)}</div></div>
           <div class="wloo-summary-card"><div class="wloo-summary-label">Total</div><div class="wloo-summary-value" style="font-size:1rem">${escapeHtml(money(order.total))}</div></div>
           <div class="wloo-summary-card"><div class="wloo-summary-label">Branch</div><div class="wloo-summary-value" style="font-size:1rem">${escapeHtml(order.branch)}</div></div>
         </div>
+
+        <div class="wloo-modal-actions">
+          ${cartButton}
+          ${documentButton}
+          ${imageButton}
+        </div>
+
+        <div class="wloo-modal-note">
+          Download Order PDF opens the generated order document. Delivery images will open only when images are attached to the order.
+        </div>
+
         ${trackingHtml}
         <div class="wloo-lines"></div>
-        <div class="wloo-actions" style="margin-top:12px;justify-content:flex-start">
-          <a class="wloo-btn wloo-btn-primary" href="${escapeAttr(order.fullHref)}">Open Full Order Page</a>
-        </div>
       `;
+
+      var cartBtn = $('#wloo-add-order-cart', body);
+      if (cartBtn) {
+        cartBtn.addEventListener('click', function () {
+          addOrderToCartFromDetails(order, cartBtn);
+        });
+      }
 
       var linesWrap = $('.wloo-lines', body);
       if (!detail.lines.length) {
@@ -744,10 +879,10 @@
       console.error(err);
       $('.wloo-modal-body', modal).innerHTML = `
         <div class="wloo-error">
-          Sorry, we could not load the order details in this view. You can still open the full order page.
+          Sorry, we could not load the order details in this view. You can still open the order details page.
         </div>
         <div class="wloo-actions" style="margin-top:12px;justify-content:flex-start">
-          <a class="wloo-btn wloo-btn-primary" href="${escapeAttr(order.fullHref)}">Open Full Order Page</a>
+          <a class="wloo-btn wloo-btn-primary" href="${escapeAttr(order.fullHref)}">Open Order Details</a>
         </div>
       `;
     });
