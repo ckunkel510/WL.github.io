@@ -35,7 +35,8 @@
     // If customer lands on OpenQuotes_r.aspx with no search params, push them to an all-time date range.
     AUTO_DEFAULT_ALL_TIME: true,
     ALL_TIME_START_ISO: '1980-01-01T00:00:00',
-    ITEMS_PER_PAGE: 48
+    ITEMS_PER_PAGE: 48,
+    QUOTE_URL: 'https://woodsonwholesaleinc.formstack.com/forms/request_a_quote'
   };
 
   function ready(fn) {
@@ -404,6 +405,33 @@
       .wloq-panel-body {
         background: ${BRAND.bgSoft};
         padding: 13px;
+      }
+
+      .wloq-request-card {
+        background: #fff;
+        border: 1px solid #ead4d9;
+        border-radius: 14px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.05);
+        padding: 13px 14px;
+        margin-bottom: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        flex-wrap: wrap;
+      }
+
+      .wloq-request-title {
+        color: ${BRAND.primary};
+        font-weight: 900;
+        font-size: 1rem;
+        margin-bottom: 3px;
+      }
+
+      .wloq-request-text {
+        color: ${BRAND.muted};
+        font-size: .91rem;
+        line-height: 1.4;
       }
 
       .wloq-tools {
@@ -1103,6 +1131,23 @@
     return modal;
   }
 
+
+  function buildQuoteRequestCTA() {
+    return dom(`
+      <div class="wloq-request-card">
+        <div>
+          <div class="wloq-request-title">Need a new quote?</div>
+          <div class="wloq-request-text">
+            Pricing a larger order, special materials, or an expired quote? Send us a quick request and we’ll follow up with updated pricing.
+          </div>
+        </div>
+        <a class="wloq-btn wloq-btn-primary" href="${escapeAttr(CONFIG.QUOTE_URL)}" target="_blank" rel="noopener">
+          Request a Quote
+        </a>
+      </div>
+    `);
+  }
+
   function buildTools(root, quotes) {
     var tools = dom(`
       <div class="wloq-tools">
@@ -1211,6 +1256,7 @@
     buildMenu(root);
 
     var content = $('#wloq-content', root);
+    content.appendChild(buildQuoteRequestCTA());
     content.appendChild(buildTools(root, quotes));
 
     content.appendChild(buildQuoteSection('Open Quotes', activeQuotes, 'No open quotes were found in the current results.'));
