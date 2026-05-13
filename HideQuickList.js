@@ -4,8 +4,8 @@
    Purpose:
    - Apply Woodson account menu pattern
    - Rename customer-facing "Quicklists" language to "Shopping Lists"
-   - Modernize list tiles and selected-list product display
-   - Keep "Saved For Later" visible but protect it from list edit/delete
+   - Modernize list tiles, selected-list products, and add/edit list form
+   - Keep "Saved For Later" visible, but do not expose list-level edit/delete
    ========================================================== */
 (function () {
   'use strict';
@@ -81,6 +81,18 @@
     } catch (err) {
       if (el.href) window.location.href = el.href;
     }
+  }
+
+  function getOidFromHref(href) {
+    var raw = String(href || '');
+    var match = raw.match(/[?&]oid=(\d+)/i);
+    return match ? match[1] : '';
+  }
+
+  function normalizeQuicklistViewHref(href) {
+    var oid = getOidFromHref(href);
+    if (oid) return 'Quicklists_R.aspx?oid=' + encodeURIComponent(oid) + '#detailsAnchor';
+    return href || 'Quicklists_R.aspx';
   }
 
   function makeActionFromOriginal(original, label, className) {
@@ -293,6 +305,10 @@
         align-items: end;
       }
 
+      .wlql-field {
+        margin-bottom: 12px;
+      }
+
       .wlql-field label {
         display: block;
         margin-bottom: 6px;
@@ -301,9 +317,10 @@
         font-size: .9rem;
       }
 
-      .wlql-input {
+      .wlql-input,
+      .wlql-select {
         width: 100%;
-        min-height: 40px;
+        min-height: 42px;
         border: 1px solid #ddd;
         border-radius: 10px;
         padding: 9px 11px;
@@ -311,9 +328,40 @@
         background: #fff;
       }
 
-      .wlql-input:focus {
+      .wlql-input:focus,
+      .wlql-select:focus {
         outline: 2px solid rgba(107,0,22,.18);
         border-color: ${BRAND.primary};
+      }
+
+      .wlql-form-card {
+        max-width: 760px;
+        background: ${BRAND.bgSoft};
+        padding: 14px;
+      }
+
+      .wlql-form-inner {
+        background: #fff;
+        border: 1px solid #ead4d9;
+        border-radius: 14px;
+        padding: 14px;
+      }
+
+      .wlql-help {
+        margin: 0 0 14px;
+        color: ${BRAND.muted};
+        line-height: 1.45;
+        font-size: .92rem;
+      }
+
+      .wlql-error {
+        margin: 0 0 12px;
+        color: ${BRAND.danger};
+        background: ${BRAND.dangerBg};
+        border: 1px solid #f0caca;
+        padding: 9px 11px;
+        border-radius: 10px;
+        font-weight: 750;
       }
 
       .wlql-panel {
@@ -422,28 +470,12 @@
         white-space: nowrap;
       }
 
-      .wlql-pill-protected {
-        border-color: #d8eadc;
-        color: ${BRAND.success};
-        background: ${BRAND.successBg};
-      }
-
       .wlql-tile-actions {
         display: flex;
         align-items: center;
         gap: 7px;
         flex-wrap: wrap;
         margin-top: auto;
-      }
-
-      .wlql-note {
-        font-size: .85rem;
-        color: ${BRAND.muted};
-        line-height: 1.35;
-        background: #fff;
-        border: 1px dashed #e6ccd1;
-        border-radius: 10px;
-        padding: 9px 10px;
       }
 
       .wlql-empty {
@@ -560,6 +592,33 @@
     return $('#MainLayoutRow .col') || $('td.pageContentBody') || document.body;
   }
 
+  function buildShell(options) {
+    options = options || {};
+    var title = options.title || 'Shopping Lists';
+    var subtitle = options.subtitle || 'Save products for later, organize favorites, and quickly return to commonly purchased items.';
+    var actionHtml = options.actionHtml || '<button type="button" class="wlql-btn wlql-btn-primary" id="wlql-add-list">+ Add Shopping List</button>';
+
+    var root = dom(`
+      <div class="wlql-root" id="wlql-root">
+        <div class="wlql-top">
+          <div class="wlql-menu-wrap">
+            <button type="button" class="wlql-menu-btn" aria-expanded="false" aria-controls="wlql-menu">☰ Menu</button>
+            <div class="wlql-title-wrap">
+              <div class="wlql-title">${escapeHtml(title)}</div>
+              <div class="wlql-subtitle">${escapeHtml(subtitle)}</div>
+            </div>
+            <div class="wlql-menu" id="wlql-menu" role="menu"></div>
+          </div>
+          <div class="wlql-actions">${actionHtml}</div>
+        </div>
+        <div id="wlql-content"></div>
+      </div>
+    `);
+
+    buildMenu(root);
+    return root;
+  }
+
   function buildMenu(root) {
     var menu = $('.wlql-menu', root);
     var legacyNav = $('#ctl00_LeftSidebarContents_MainNav_NavigationMenu');
@@ -642,12 +701,13 @@
       var actionCell = $('td[data-title=""]', row) || row.lastElementChild;
       var editLink = actionCell ? $('a[id*="EditQuicklistLink"], a[title^="Edit"]', actionCell) : null;
       var deleteLink = actionCell ? $('a[id*="DeleteQuicklistLink"], a[title^="Delete"]', actionCell) : null;
+      var rawHref = preferredView ? (preferredView.getAttribute('href') || preferredView.href || '#') : '#';
 
       return {
         row: row,
         name: name,
         description: description,
-        viewHref: preferredView ? (preferredView.getAttribute('href') || preferredView.href || '#') : '#',
+        viewHref: normalizeQuicklistViewHref(rawHref),
         isDefault: isDefault,
         isSaved: isSavedForLater(name),
         editLink: editLink,
@@ -676,7 +736,7 @@
     if (noRecords) {
       return {
         products: [],
-        emptyMessage: txt(noRecords) || 'This shopping list does not have any products yet.'
+        emptyMessage: txt(noRecords).replace(/quicklist/ig, 'shopping list') || 'This shopping list does not have any products yet.'
       };
     }
 
@@ -698,10 +758,20 @@
     return { products: products, emptyMessage: '' };
   }
 
-  function hideLegacy() {
+  function isEditFormPage() {
+    return !!$('#ctl00_PageBody_EditQuicklistName');
+  }
+
+  function hideLegacyCommon() {
     var legacyNav = $('#ctl00_LeftSidebarContents_MainNav_NavigationMenu');
     if (legacyNav) legacyNav.classList.add('wlql-hide');
 
+    $$('.bodyFlexItem.listPageHeader').forEach(function (header) {
+      if (/^Quicklists$/i.test(txt(header))) header.classList.add('wlql-hide');
+    });
+  }
+
+  function hideLegacyListPage() {
     [
       '#ctl00_PageBody_SearchPanel',
       '#ctl00_PageBody_QuicklistDataGrid',
@@ -711,11 +781,15 @@
         el.classList.add('wlql-hide');
       });
     });
+  }
 
-    // Hide the legacy page header that only says "Quicklists"; leave detail/header data available for parsing.
-    $$('.bodyFlexItem.listPageHeader').forEach(function (header) {
-      if (/^Quicklists$/i.test(txt(header))) header.classList.add('wlql-hide');
-    });
+  function hideLegacyEditForm() {
+    var nameInput = $('#ctl00_PageBody_EditQuicklistName');
+    if (!nameInput) return;
+    var legacyContainer = nameInput.closest('.container');
+    if (legacyContainer) legacyContainer.classList.add('wlql-hide');
+    var detailsDiv = $('#ctl00_PageBody_QuicklistDetailsDiv');
+    if (detailsDiv) detailsDiv.classList.add('wlql-hide');
   }
 
   function buildListTile(item) {
@@ -730,21 +804,20 @@
           </div>
         </div>
         <div class="wlql-pill-row">
-          ${item.isSaved ? '<span class="wlql-pill wlql-pill-protected">Protected system list</span>' : '<span class="wlql-pill">Shopping list</span>'}
+          <span class="wlql-pill">${item.isSaved ? 'Saved items' : 'Shopping list'}</span>
           ${item.isDefault ? '<span class="wlql-pill">Default</span>' : ''}
         </div>
-        ${item.isSaved ? '<div class="wlql-note">Saved For Later is always available for cart items. Customers can view it, but the list name and list deletion controls are locked.</div>' : ''}
         <div class="wlql-tile-actions"></div>
       </article>
     `);
 
     var actions = $('.wlql-tile-actions', tile);
 
-    var viewBtn = dom('<a class="wlql-btn wlql-btn-primary" href="' + escapeAttr(item.viewHref || '#') + '">View List</a>');
+    var viewBtn = dom('<a class="wlql-btn wlql-btn-primary" href="' + escapeAttr(item.viewHref || '#') + '">View Products</a>');
     actions.appendChild(viewBtn);
 
     if (!item.isSaved) {
-      var editBtn = makeActionFromOriginal(item.editLink, 'Edit Info', 'wlql-btn wlql-btn-light');
+      var editBtn = makeActionFromOriginal(item.editLink, 'Edit Details', 'wlql-btn wlql-btn-light');
       var deleteBtn = makeActionFromOriginal(item.deleteLink, 'Remove List', 'wlql-btn wlql-btn-danger');
 
       if (editBtn) actions.appendChild(editBtn);
@@ -764,8 +837,8 @@
       <section class="wlql-panel" id="wlql-detail-panel">
         <div class="wlql-panel-head">
           <div>
-            <div class="wlql-panel-title">${safeName ? 'Selected Shopping List: ' + escapeHtml(safeName) : 'Selected Shopping List'}</div>
-            ${isSavedForLater(safeName) ? '<div class="wlql-panel-meta">Saved For Later is protected from list edit/delete.</div>' : '<div class="wlql-panel-meta">Products currently saved to this list.</div>'}
+            <div class="wlql-panel-title">${safeName ? 'Products in ' + escapeHtml(safeName) : 'Shopping List Products'}</div>
+            <div class="wlql-panel-meta">Products currently saved to this list.</div>
           </div>
           <div class="wlql-actions wlql-detail-actions"></div>
         </div>
@@ -808,67 +881,170 @@
     return panel;
   }
 
-  function buildUI() {
-    injectStyles();
-
+  function mountRoot(root) {
     var host = getHost();
     if (!host) return;
 
     var existing = $('#wlql-root');
     if (existing) existing.remove();
 
+    var firstBodyContainer = $('.bodyFlexContainer', host) || $('input[name="ctl00$PageBody$EditQuicklistId"]', host) || host.firstChild;
+    host.insertBefore(root, firstBodyContainer);
+  }
+
+  function buildEditFormUI() {
+    var nameOriginal = $('#ctl00_PageBody_EditQuicklistName');
+    var descOriginal = $('#ctl00_PageBody_EditQuicklistDescription');
+    var defaultOriginal = $('#ctl00_PageBody_EditDefaultQuicklistDropdown');
+    var saveOriginal = $('#ctl00_PageBody_SaveQuickListButton');
+    var cancelOriginal = $('#ctl00_PageBody_CancelButton');
+    var headingOriginal = $('#ctl00_PageBody_EditQuicklistHeading');
+    var duplicateValidator = $('#ctl00_PageBody_CustomValidator1');
+
+    if (!nameOriginal) return false;
+
+    var isEdit = /edit/i.test(txt(headingOriginal));
+    var title = isEdit ? 'Edit Shopping List' : 'Add Shopping List';
+    var subtitle = isEdit ? 'Update the name, description, or default setting for this shopping list.' : 'Create a reusable shopping list for products you buy often or want to remember.';
+
+    var root = buildShell({
+      title: title,
+      subtitle: subtitle,
+      actionHtml: '<a class="wlql-btn" href="Quicklists_R.aspx">Back to Shopping Lists</a>'
+    });
+
+    var content = $('#wlql-content', root);
+    var duplicateVisible = duplicateValidator && duplicateValidator.style.display !== 'none' && txt(duplicateValidator);
+
+    var panel = dom(`
+      <section class="wlql-panel">
+        <div class="wlql-panel-head">
+          <div>
+            <div class="wlql-panel-title">${escapeHtml(title)}</div>
+            <div class="wlql-panel-meta">${isEdit ? 'Edit list details' : 'New list setup'}</div>
+          </div>
+        </div>
+        <div class="wlql-panel-body wlql-form-card">
+          <div class="wlql-form-inner">
+            <p class="wlql-help">Use a clear name customers will recognize, like “Monthly Shop Supplies,” “Jobsite Favorites,” or “Weekend Project List.”</p>
+            ${duplicateVisible ? '<div class="wlql-error">' + escapeHtml(txt(duplicateValidator).replace(/quicklist/ig, 'shopping list')) + '</div>' : ''}
+            <div class="wlql-field">
+              <label for="wlql-edit-name">Shopping list name <span style="color:${BRAND.danger}">*</span></label>
+              <input id="wlql-edit-name" class="wlql-input" type="text" maxlength="100" autocomplete="off" value="${escapeAttr(nameOriginal.value || '')}">
+            </div>
+            <div class="wlql-field">
+              <label for="wlql-edit-description">Description</label>
+              <input id="wlql-edit-description" class="wlql-input" type="text" maxlength="180" autocomplete="off" value="${escapeAttr((descOriginal && descOriginal.value) || '')}" placeholder="Optional note about what this list is for">
+            </div>
+            <div class="wlql-field">
+              <label for="wlql-edit-default">Default shopping list</label>
+              <select id="wlql-edit-default" class="wlql-select">
+                <option value="no">No</option>
+                <option value="yes">Yes</option>
+              </select>
+            </div>
+            <div class="wlql-actions" style="justify-content:flex-start;margin-top:4px">
+              <button type="button" class="wlql-btn wlql-btn-primary" id="wlql-form-save">Save Shopping List</button>
+              <button type="button" class="wlql-btn" id="wlql-form-cancel">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    `);
+
+    content.appendChild(panel);
+
+    var nameCustom = $('#wlql-edit-name', panel);
+    var descCustom = $('#wlql-edit-description', panel);
+    var defaultCustom = $('#wlql-edit-default', panel);
+    var saveCustom = $('#wlql-form-save', panel);
+    var cancelCustom = $('#wlql-form-cancel', panel);
+
+    if (defaultOriginal && defaultCustom) {
+      defaultCustom.value = defaultOriginal.value || 'no';
+    }
+
+    function syncToOriginals() {
+      nameOriginal.value = nameCustom.value || '';
+      if (descOriginal) descOriginal.value = descCustom.value || '';
+      if (defaultOriginal) defaultOriginal.value = defaultCustom.value || 'no';
+    }
+
+    [nameCustom, descCustom, defaultCustom].forEach(function (input) {
+      if (!input) return;
+      input.addEventListener('input', syncToOriginals);
+      input.addEventListener('change', syncToOriginals);
+    });
+
+    saveCustom.addEventListener('click', function (e) {
+      e.preventDefault();
+      syncToOriginals();
+
+      if (!String(nameOriginal.value || '').trim()) {
+        alert('Please enter a shopping list name.');
+        nameCustom.focus();
+        return;
+      }
+
+      clickOriginal(saveOriginal);
+    });
+
+    cancelCustom.addEventListener('click', function (e) {
+      e.preventDefault();
+      clickOriginal(cancelOriginal || { href: 'Quicklists_R.aspx' });
+    });
+
+    mountRoot(root);
+    hideLegacyCommon();
+    hideLegacyEditForm();
+
+    try {
+      nameCustom.focus();
+      nameCustom.select();
+    } catch (err) {}
+
+    document.title = (document.title || '').replace(/Quicklists/ig, 'Shopping Lists');
+    return true;
+  }
+
+  function buildListPageUI() {
     var addOriginal = $('.epi-search-quicklists .epi-search-right');
     var searchOriginal = $('#ctl00_PageBody_ProductSearchTextBox');
     var applyOriginal = $('#ctl00_PageBody_ApplySearchParametersImageButton');
     var items = parseQuicklists();
     var selectedName = getSelectedListName();
 
-    var root = dom(`
-      <div class="wlql-root" id="wlql-root">
-        <div class="wlql-top">
-          <div class="wlql-menu-wrap">
-            <button type="button" class="wlql-menu-btn" aria-expanded="false" aria-controls="wlql-menu">☰ Menu</button>
-            <div class="wlql-title-wrap">
-              <div class="wlql-title">Shopping Lists</div>
-              <div class="wlql-subtitle">Save products for later, organize favorites, and quickly return to commonly purchased items.</div>
-            </div>
-            <div class="wlql-menu" id="wlql-menu" role="menu"></div>
-          </div>
-          <div class="wlql-actions">
-            <button type="button" class="wlql-btn wlql-btn-primary" id="wlql-add-list">+ Add Shopping List</button>
-          </div>
+    var root = buildShell({
+      title: 'Shopping Lists',
+      subtitle: 'Save products for later, organize favorites, and quickly return to commonly purchased items.'
+    });
+
+    var content = $('#wlql-content', root);
+    content.appendChild(dom(`
+      <div class="wlql-search-card">
+        <div class="wlql-field" style="margin-bottom:0">
+          <label for="wlql-search-input">Search shopping lists by product</label>
+          <input type="text" id="wlql-search-input" class="wlql-input" placeholder="Enter a product keyword or code">
         </div>
-
-        <div class="wlql-search-card">
-          <div class="wlql-field">
-            <label for="wlql-search-input">Search shopping lists by product</label>
-            <input type="text" id="wlql-search-input" class="wlql-input" placeholder="Enter a product keyword or code">
-          </div>
-          <button type="button" class="wlql-btn" id="wlql-search-apply">Search</button>
-        </div>
-
-        <section class="wlql-panel">
-          <div class="wlql-panel-head">
-            <div class="wlql-panel-title">Your Shopping Lists</div>
-            <div class="wlql-panel-meta">${items.length} list${items.length === 1 ? '' : 's'}</div>
-          </div>
-          <div class="wlql-panel-body">
-            <div class="wlql-grid" id="wlql-list-grid"></div>
-          </div>
-        </section>
-
-        <div id="wlql-details-mount"></div>
+        <button type="button" class="wlql-btn" id="wlql-search-apply">Search</button>
       </div>
-    `);
+    `));
 
-    var firstBodyContainer = $('.bodyFlexContainer', host);
-    if (firstBodyContainer) {
-      host.insertBefore(root, firstBodyContainer);
-    } else {
-      host.insertBefore(root, host.firstChild);
-    }
+    content.appendChild(dom(`
+      <section class="wlql-panel">
+        <div class="wlql-panel-head">
+          <div class="wlql-panel-title">Your Shopping Lists</div>
+          <div class="wlql-panel-meta">${items.length} list${items.length === 1 ? '' : 's'}</div>
+        </div>
+        <div class="wlql-panel-body">
+          <div class="wlql-grid" id="wlql-list-grid"></div>
+        </div>
+      </section>
+    `));
 
-    buildMenu(root);
+    content.appendChild(dom('<div id="wlql-details-mount"></div>'));
+
+    mountRoot(root);
 
     var addBtn = $('#wlql-add-list', root);
     if (addOriginal) {
@@ -920,18 +1096,27 @@
     var detailsPanel = buildProductsPanel(selectedName);
     if (detailsPanel) detailsMount.appendChild(detailsPanel);
 
-    hideLegacy();
+    hideLegacyCommon();
+    hideLegacyListPage();
 
-    // Customer-facing text cleanup in document title only; legacy DOM remains hidden for WebForms.
-    if (/Quicklists/i.test(document.title || '')) {
-      document.title = document.title.replace(/Quicklists/ig, 'Shopping Lists');
+    document.title = (document.title || '').replace(/Quicklists/ig, 'Shopping Lists');
+  }
+
+  function buildUI() {
+    injectStyles();
+
+    if (isEditFormPage()) {
+      buildEditFormUI();
+      return;
     }
+
+    buildListPageUI();
   }
 
   ready(function () {
     buildUI();
 
-    // If Telerik/WebForms injects rows after initial ready, rebuild once more.
+    // If Telerik/WebForms injects rows after initial ready, rebuild once more only if needed.
     window.setTimeout(function () {
       if (!$('#wlql-root')) buildUI();
     }, 600);
