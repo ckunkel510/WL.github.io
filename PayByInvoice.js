@@ -4807,7 +4807,7 @@ moveFieldGroupById('ctl00_PageBody_EmailAddressTextBox', infoInner);
             const sel2 = (typeof getCofSel === 'function') ? getCofSel() : (window.cofSel || null);
             if (sel2){
               if (String(this.__cofPendingVal) === '__CLEAR__'){
-                clearSelectToPlaceholder(sel2, true);
+                clearSelectToPlaceholder(sel2, false);
                 try{ sel2.disabled = true; sel2.setAttribute('disabled','disabled'); }catch(e){}
               } else {
                 try{
@@ -5214,7 +5214,8 @@ function renderPayCards(){
         if (st.method === 'bank' && st.bank?.mode === 'new') return 'bank_new';
 
         // Fallback inference (no saved state)
-        const hasCofSelection = !!(cofSel && cofSel.value && cofSel.value !== '-1');
+        const liveCofSelFallback = getCofSel();
+        const hasCofSelection = !!(liveCofSelFallback && liveCofSelFallback.value && liveCofSelFallback.value !== '-1');
         // If "Add new" is selected (PayByCheck), treat as NEW regardless of COF select retaining a value
         if (rbCheck?.checked) return 'bank_new';
         if (rbCof?.checked || hasCofSelection) return 'bank_saved';
@@ -5250,9 +5251,11 @@ function renderPayCards(){
 
       // Bank account cards (Add new + saved)
       const bankOpts = [];
+      let liveCofSelForOptions = null;
       try{
-        if (cofSel && cofSel.options){
-          for (const o of Array.from(cofSel.options)){
+        liveCofSelForOptions = getCofSel();
+        if (liveCofSelForOptions && liveCofSelForOptions.options){
+          for (const o of Array.from(liveCofSelForOptions.options)){
             const val = String(o.value || '').trim();
             const txt = String(o.text || '').trim();
             if (!val || val === '-1') continue;
@@ -5263,10 +5266,11 @@ function renderPayCards(){
       }catch(e){}
 
       const stBank = loadPayState() || {};
+      const explicitlyPickedAddNew = !!(stBank?.method === 'bank' && stBank?.bank?.mode === 'new' && (stBank.__userPicked || stBank.__pickedAccount || stBank.bank.__pickedAccount));
       
-      // If we're in ACH mode and saved accounts exist but aren't visible yet (common until COF mode is activated),
-      // prefer showing saved accounts by default.
-      if (!isCardMode && (!bankOpts.length) && rbCof && !rbCof.checked){
+      // If we're in ACH mode and saved accounts aren't visible yet, we may need to activate COF to populate them.
+      // Do NOT do this after the customer explicitly picked Add New, or the native form snaps back to saved ACH.
+      if (!explicitlyPickedAddNew && !isCardMode && (!bankOpts.length) && rbCof && !rbCof.checked){
         try{
           // Switch to COF behind the scenes so the select options populate.
           clickWebFormsRadio(rbCof);
@@ -5513,14 +5517,76 @@ bankMount.onclick = (e)=>{
     st.bank = { mode:'new', __pickedAccount:true };
     st.__pickedAccount = true;
     savePayState(st);
+    try{ markPickedThisRun(); }catch(e){}
 
-    // Strongly sync the real WebForms controls so Forte does not receive a stale saved-account token.
-    try{ syncNativeBankChoice('new', '', true); }catch(e){
+    // Critical: Add New must update the actual WebForms PayBy state before Forte opens.
+    // Client-only checked=true makes the UI/review look correct, but Forte can still use the
+    // previous server-side Check-on-File account. Clear saved ACH silently, then click the
+    // real PayByCheck radio so WebForms can re-render / update server state.
+    try{ sessionStorage.setItem(STEP_KEY, '3'); }catch(e){}
+    try{
+      if (window.WLPayPending){
+        window.WLPayPending.__cofPendingVal = '__CLEAR__';
+        window.WLPayPending.__cofPendingText = null;
+      }
+    }catch(e){}
+
+    try{ syncNativeBankChoice('new', '', false); }catch(e){
       setRadioSilent(rbCheck);
       try{ setSelectSilent(getCofSel(), '-1'); }catch(e2){}
     }
 
-    autoAdvanceToFinalPaymentStep();
+    const finishAddNew = ()=>{
+      try{ syncNativeBankChoice('new', '', false); }catch(e){}
+      try{ renderPayCards(); }catch(e){}
+      try{ renderSummary(); }catch(e){}
+      autoAdvanceToFinalPaymentStep();
+    };
+
+    const isAjaxBusy = ()=>{
+      try{
+        if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
+          const prm = Sys.WebForms.PageRequestManager.getInstance();
+          return !!(prm && typeof prm.get_isInAsyncPostBack === 'function' && prm.get_isInAsyncPostBack());
+        }
+      }catch(e){}
+      return false;
+    };
+
+    const waitUntilIdleThenFinish = (startedAt)=>{
+      const start = startedAt || Date.now();
+      try{
+        if (isAjaxBusy() && (Date.now() - start) < 6500){
+          setTimeout(()=>waitUntilIdleThenFinish(start), 160);
+          return;
+        }
+      }catch(e){}
+      setTimeout(finishAddNew, 140);
+    };
+
+    try{
+      if (rbCheck){
+        rbCheck.disabled = false;
+        rbCheck.removeAttribute('disabled');
+        // Click first so any WebForms onclick wiring gets the normal event.
+        rbCheck.click();
+
+        // If the click did not start an async postback, explicitly call the radio's UniqueID.
+        // This is what actually clears server-side Check-on-File state before Forte opens.
+        setTimeout(()=>{
+          try{
+            if (!isAjaxBusy() && typeof window.__doPostBack === 'function'){
+              const target = rbCheck.id ? String(rbCheck.id).replace(/_/g, '$') : 'ctl00$PageBody$RadioButton_PayByCheck';
+              window.__doPostBack(target, '');
+            }
+          }catch(e){}
+        }, 60);
+      }
+    }catch(e){}
+
+    // Do not immediately fire Forte after Add New; let the PayByCheck postback settle first.
+    // Full postback builds will reload with STEP_KEY=3; AJAX builds will finish here.
+    setTimeout(()=>waitUntilIdleThenFinish(Date.now()), 220);
     return;
   }
 
@@ -5561,7 +5627,7 @@ bankMount.onclick = (e)=>{
       if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager){
         const prm = Sys.WebForms.PageRequestManager.getInstance();
         if (!prm.__wlPayCardsBound){
-          prm.add_endRequest(()=>{ setTimeout(()=>{ reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){};
+          prm.add_endRequest(()=>{ setTimeout(()=>{ try{ if (window.WLPayPending && typeof window.WLPayPending.apply === 'function') window.WLPayPending.apply(); }catch(e){} reconcileNativeFromState(); renderPayCards(); try{ renderSummary(); }catch(e){};
             try{ /* no auto-submit on selection */ }catch(e){} }, 0); });
           prm.__wlPayCardsBound = true;
         }
