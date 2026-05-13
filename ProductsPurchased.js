@@ -1,5 +1,5 @@
 /* =========================================================================
-   Woodson — Previous Purchases / Reorder Center (v1.2)
+   Woodson — Previous Purchases / Reorder Center (v1.3)
    - ProductsPurchased_R.aspx rewrite
    - Adds new grouped account menu
    - Reframes page as previous purchases + reorder helper
@@ -471,6 +471,218 @@
         .wlpp-modal-product { grid-template-columns: 1fr; }
       }
     `;
+
+    style.textContent += `
+      .wlpp-buyagain-layout {
+        display: grid;
+        grid-template-columns: 235px minmax(0, 1fr);
+        gap: 16px;
+        align-items: start;
+      }
+      .wlpp-sidebar {
+        position: sticky;
+        top: 12px;
+        background: #fff;
+        border: 1px solid var(--wlpp-border);
+        border-radius: 14px;
+        box-shadow: 0 4px 14px rgba(15,23,42,.05);
+        padding: 14px;
+      }
+      .wlpp-sidebar h3 {
+        color: #111;
+        font-size: .98rem;
+        font-weight: 950;
+        margin: 0 0 9px;
+      }
+      .wlpp-sidebar-section + .wlpp-sidebar-section {
+        border-top: 1px solid #eef0f3;
+        margin-top: 14px;
+        padding-top: 14px;
+      }
+      .wlpp-sidebar .wlpp-select,
+      .wlpp-sidebar .wlpp-input {
+        min-height: 38px;
+        border-radius: 9px;
+      }
+      .wlpp-filter-list {
+        display: grid;
+        gap: 7px;
+      }
+      .wlpp-side-filter {
+        border: 0;
+        background: transparent;
+        color: #111;
+        text-align: left;
+        padding: 4px 0;
+        font: inherit;
+        font-size: .92rem;
+        cursor: pointer;
+      }
+      .wlpp-side-filter:hover,
+      .wlpp-side-filter[data-active="true"] {
+        color: var(--wlpp-brand);
+        font-weight: 900;
+      }
+      .wlpp-clear-link {
+        border: 0;
+        background: transparent;
+        color: #2563eb;
+        padding: 0;
+        font: inherit;
+        font-size: .9rem;
+        cursor: pointer;
+        text-align: left;
+      }
+      .wlpp-results-top {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 12px;
+        margin-bottom: 10px;
+      }
+      .wlpp-results-top h2 {
+        margin: 0;
+        color: #111;
+        font-size: 1.22rem;
+        font-weight: 950;
+      }
+      .wlpp-results-top p {
+        margin: 3px 0 0;
+        color: var(--wlpp-muted);
+        font-size: .9rem;
+      }
+      .wlpp-toolbar {
+        grid-template-columns: 1fr auto;
+        box-shadow: none;
+        border-radius: 14px;
+        margin-bottom: 14px;
+      }
+      .wlpp-summary,
+      .wlpp-suggested {
+        display: none !important;
+      }
+      .wlpp-grid {
+        grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+        gap: 14px;
+      }
+      .wlpp-product {
+        border-radius: 10px;
+        box-shadow: none;
+        border-color: #ddd;
+        transition: box-shadow .14s ease, transform .14s ease, border-color .14s ease;
+      }
+      .wlpp-product:hover {
+        border-color: #cbd5e1;
+        box-shadow: 0 8px 22px rgba(15,23,42,.12);
+        transform: translateY(-1px);
+      }
+      .wlpp-media {
+        aspect-ratio: 1 / 1;
+        height: 205px;
+        padding: 12px;
+        background: #fff;
+      }
+      .wlpp-media img {
+        object-fit: contain;
+        mix-blend-mode: multiply;
+      }
+      .wlpp-media-badge {
+        display: none;
+      }
+      .wlpp-media-fallback {
+        width: 100%;
+        height: 100%;
+        border: 1px dashed #cbd5e1;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        padding: 14px;
+        background: linear-gradient(135deg, #fff, #f8fafc);
+      }
+      .wlpp-card-head {
+        border-bottom: 0;
+        padding: 10px 12px 4px;
+      }
+      .wlpp-code {
+        font-size: .78rem;
+        color: #565959;
+        font-family: inherit;
+        font-weight: 800;
+        margin-bottom: 4px;
+      }
+      .wlpp-desc,
+      .wlpp-product-title {
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        min-height: 3.9em;
+        color: #111827;
+        text-decoration: none;
+        font-size: .95rem;
+        font-weight: 700;
+        line-height: 1.3;
+      }
+      .wlpp-product-title:hover {
+        color: var(--wlpp-brand);
+        text-decoration: underline;
+      }
+      .wlpp-card-body {
+        padding: 5px 12px 10px;
+        gap: 7px;
+      }
+      .wlpp-buy-meta {
+        color: #565959;
+        font-size: .84rem;
+        line-height: 1.35;
+      }
+      .wlpp-buy-price {
+        color: #111;
+        font-weight: 950;
+        font-size: 1.05rem;
+      }
+      .wlpp-reorder-note {
+        color: #92400e;
+        background: #fef3c7;
+        border-radius: 8px;
+        padding: 7px 8px;
+        font-size: .82rem;
+        font-weight: 800;
+        line-height: 1.28;
+      }
+      .wlpp-tags {
+        margin-top: 7px;
+      }
+      .wlpp-tag {
+        font-size: 11px;
+        padding: 4px 8px;
+      }
+      .wlpp-card-actions {
+        padding: 0 12px 12px;
+        gap: 7px;
+      }
+      .wlpp-card-actions .wlpp-btn {
+        min-height: 34px;
+        padding: 7px 10px;
+        border-radius: 8px;
+        font-size: .86rem;
+        flex: 1 1 auto;
+      }
+      .wlpp-history-shell {
+        margin-top: 18px;
+      }
+      .wlpp-history-shell > summary {
+        cursor: pointer;
+        color: var(--wlpp-brand);
+        font-weight: 950;
+        margin-bottom: 9px;
+      }
+      @media (max-width: 900px) {
+        .wlpp-buyagain-layout { grid-template-columns: 1fr; }
+        .wlpp-sidebar { position: relative; top: auto; }
+      }
+    `;
+
     document.head.appendChild(style);
   }
 
@@ -817,7 +1029,9 @@
               url: abs(url),
               image: image ? abs(image) : '',
               additionalImage: additional ? abs(additional) : '',
-              title: item.title || ''
+              title: item.title || '',
+              productType: item.product_type || item['product_type'] || item.productType || item['product type'] || '',
+              brand: item.brand || ''
             };
             possibleCodes.forEach(function (code) {
               if (code) map.set(normalize(code), payload);
@@ -840,6 +1054,8 @@
       var imageIdx = pickHeader(headers, ['image link', 'image_link', 'image']);
       var additionalImageIdx = pickHeader(headers, ['additional image link', 'additional_image_link']);
       var titleIdx = pickHeader(headers, ['title', 'name']);
+      var productTypeIdx = pickHeader(headers, ['product_type', 'product type', 'category']);
+      var brandIdx = pickHeader(headers, ['brand']);
 
       csvRows.forEach(function (cells) {
         var possibleCodes = [
@@ -860,7 +1076,9 @@
             url: abs(url),
             image: imageIdx >= 0 && cells[imageIdx] ? abs(cells[imageIdx]) : '',
             additionalImage: additionalImageIdx >= 0 && cells[additionalImageIdx] ? abs(cells[additionalImageIdx]) : '',
-            title: titleIdx >= 0 ? (cells[titleIdx] || '') : ''
+            title: titleIdx >= 0 ? (cells[titleIdx] || '') : '',
+            productType: productTypeIdx >= 0 ? (cells[productTypeIdx] || '') : '',
+            brand: brandIdx >= 0 ? (cells[brandIdx] || '') : ''
           };
           possibleCodes.forEach(function (code) {
             if (code) map.set(normalize(code), payload);
@@ -891,7 +1109,7 @@
       <div class="${compact ? 'wlpp-modal-media' : 'wlpp-media'}">
         <div class="wlpp-media-fallback">
           <div>${html(item.code || 'Product')}</div>
-          ${item.description ? '<div style="font-size:.85rem;margin-top:6px;color:#64748b;font-weight:700;">' + html(item.description) + '</div>' : ''}
+          <div style="font-size:.85rem;margin-top:6px;color:#64748b;font-weight:700;">Product image unavailable</div>
         </div>
       </div>
     `;
@@ -913,6 +1131,9 @@
         item.productImage = payload.image || '';
         item.productAdditionalImage = payload.additionalImage || '';
         item.feedTitle = payload.title || '';
+        item.productType = payload.productType || '';
+        item.productTypeLabel = friendlyCategory(payload.productType || '');
+        item.brand = payload.brand || '';
         matched++;
         if (item.productImage || item.productAdditionalImage) imageMatched++;
       } else {
@@ -921,6 +1142,9 @@
         item.productImage = '';
         item.productAdditionalImage = '';
         item.feedTitle = '';
+        item.productType = '';
+        item.productTypeLabel = 'Other';
+        item.brand = '';
       }
     });
 
@@ -977,8 +1201,8 @@
         <div class="wlpp-menu-wrap">
           <button type="button" class="wlpp-menu-btn" aria-expanded="false" aria-controls="wlpp-menu">☰ Menu</button>
           <div>
-            <div class="wlpp-title">Previous Purchases & Reorder</div>
-            <div class="wlpp-subtitle">Find products you have purchased before, spot likely reorders, and quickly get back to the right product.</div>
+            <div class="wlpp-title">Buy Again</div>
+            <div class="wlpp-subtitle">Quickly find products you have purchased before and get back to the right item.</div>
           </div>
           <div class="wlpp-menu" id="wlpp-menu" role="menu"></div>
         </div>
@@ -990,47 +1214,83 @@
 
       <div class="wlpp-toolbar">
         <div>
-          <label for="wlpp-filter">Filter loaded purchase history</label>
-          <input id="wlpp-filter" class="wlpp-input" type="search" placeholder="Search product code, description, order #, job, ref, status, or amount...">
+          <label for="wlpp-filter">Search previous purchases</label>
+          <input id="wlpp-filter" class="wlpp-input" type="search" placeholder="Search product code, description, order #, job, ref, or amount...">
         </div>
         <div class="wlpp-controls">
-          <button type="button" class="wlpp-chip" data-filter="all" data-active="true">All Products</button>
-          <button type="button" class="wlpp-chip" data-filter="suggested">Suggested Reorders</button>
-          <button type="button" class="wlpp-chip" data-filter="repeat">Bought More Than Once</button>
-          <button type="button" class="wlpp-chip" data-filter="recent">Recent</button>
-          <button type="button" class="wlpp-chip" data-filter="clear">Clear</button>
-        </div>
-        <div class="wlpp-note" id="wlpp-note">Delivery, shipping, fuel, and service-charge lines are hidden from the product list. Feed images are used when available.</div>
-      </div>
-
-      <div class="wlpp-toolbar">
-        <div>
-          <label for="wlpp-server-search">Search more account history</label>
-          <input id="wlpp-server-search" class="wlpp-input" type="search" value="${attr(legacyText ? legacyText.value : '')}" placeholder="Search product or job reference...">
-        </div>
-        <div class="wlpp-controls">
-          <select id="wlpp-server-type" class="wlpp-select" style="width:auto;min-width:145px;">
-            <option value="Product"${legacySearchType && legacySearchType.value === 'Product' ? ' selected' : ''}>Product</option>
-            <option value="Job Reference"${legacySearchType && legacySearchType.value === 'Job Reference' ? ' selected' : ''}>Job Reference</option>
-          </select>
-          <select id="wlpp-date-range" class="wlpp-select" style="width:auto;min-width:145px;">
-            <option value="1"${legacyRange && legacyRange.value === '1' ? ' selected' : ''}>Last 30 days</option>
-            <option value="2"${legacyRange && legacyRange.value === '2' ? ' selected' : ''}>Current Month</option>
-            <option value="3"${legacyRange && legacyRange.value === '3' ? ' selected' : ''}>Last 2 Months</option>
-            <option value="4"${legacyRange && legacyRange.value === '4' ? ' selected' : ''}>Last 3 Months</option>
-            <option value="5"${legacyRange && legacyRange.value === '5' ? ' selected' : ''}>Last 6 Months</option>
-            <option value="6"${legacyRange && legacyRange.value === '6' ? ' selected' : ''}>Last 12 Months</option>
-          </select>
           <button type="button" class="wlpp-btn wlpp-btn-primary" id="wlpp-server-apply">Update History</button>
           <button type="button" class="wlpp-btn" id="wlpp-12mo">Use 12 Months</button>
         </div>
-        <div class="wlpp-note">Suggested reorders work best when the history range includes several months of purchases.</div>
+        <div class="wlpp-note" id="wlpp-note">Showing previous purchase products. Delivery and shipping lines are hidden.</div>
       </div>
 
-      <div class="wlpp-summary" id="wlpp-summary"></div>
-      <div id="wlpp-suggested-wrap"></div>
-      <div id="wlpp-products-wrap"></div>
-      <div id="wlpp-history-wrap"></div>
+      <div class="wlpp-buyagain-layout">
+        <aside class="wlpp-sidebar">
+          <div class="wlpp-sidebar-section">
+            <h3>Sort by</h3>
+            <select id="wlpp-sort" class="wlpp-select">
+              <option value="recommended">Recommended</option>
+              <option value="date">Purchase date</option>
+              <option value="count">Purchase count</option>
+              <option value="name">Product name</option>
+            </select>
+          </div>
+
+          <div class="wlpp-sidebar-section">
+            <h3>Filters</h3>
+            <button type="button" class="wlpp-clear-link" id="wlpp-clear-filters">Clear filters</button>
+          </div>
+
+          <div class="wlpp-sidebar-section">
+            <h3>Purchase type</h3>
+            <div class="wlpp-filter-list">
+              <button type="button" class="wlpp-side-filter" data-filter="all" data-active="true">All products</button>
+              <button type="button" class="wlpp-side-filter" data-filter="suggested">Suggested reorders</button>
+              <button type="button" class="wlpp-side-filter" data-filter="repeat">Bought more than once</button>
+              <button type="button" class="wlpp-side-filter" data-filter="recent">Recently purchased</button>
+            </div>
+          </div>
+
+          <div class="wlpp-sidebar-section">
+            <h3>Category</h3>
+            <select id="wlpp-category" class="wlpp-select">
+              <option value="all">All categories</option>
+            </select>
+          </div>
+
+          <div class="wlpp-sidebar-section">
+            <h3>Search more history</h3>
+            <div style="display:grid;gap:8px;">
+              <select id="wlpp-server-type" class="wlpp-select">
+                <option value="Product"${legacySearchType && legacySearchType.value === 'Product' ? ' selected' : ''}>Product</option>
+                <option value="Job Reference"${legacySearchType && legacySearchType.value === 'Job Reference' ? ' selected' : ''}>Job Reference</option>
+              </select>
+              <input id="wlpp-server-search" class="wlpp-input" type="search" value="${attr(legacyText ? legacyText.value : '')}" placeholder="Search product or job...">
+              <select id="wlpp-date-range" class="wlpp-select">
+                <option value="1"${legacyRange && legacyRange.value === '1' ? ' selected' : ''}>Last 30 days</option>
+                <option value="2"${legacyRange && legacyRange.value === '2' ? ' selected' : ''}>Current Month</option>
+                <option value="3"${legacyRange && legacyRange.value === '3' ? ' selected' : ''}>Last 2 Months</option>
+                <option value="4"${legacyRange && legacyRange.value === '4' ? ' selected' : ''}>Last 3 Months</option>
+                <option value="5"${legacyRange && legacyRange.value === '5' ? ' selected' : ''}>Last 6 Months</option>
+                <option value="6"${legacyRange && legacyRange.value === '6' ? ' selected' : ''}>Last 12 Months</option>
+              </select>
+            </div>
+          </div>
+        </aside>
+
+        <main class="wlpp-results">
+          <div class="wlpp-results-top">
+            <div>
+              <h2>Recommended for reorder</h2>
+              <p id="wlpp-results-subtitle">Products are sorted from most likely to be useful first.</p>
+            </div>
+          </div>
+          <div class="wlpp-summary" id="wlpp-summary"></div>
+          <div id="wlpp-suggested-wrap"></div>
+          <div id="wlpp-products-wrap"></div>
+          <div id="wlpp-history-wrap"></div>
+        </main>
+      </div>
     `;
 
     host.insertBefore(root, host.firstChild);
@@ -1052,6 +1312,9 @@
     var parts = [
       item.code,
       item.description,
+      item.feedTitle,
+      item.productTypeLabel,
+      item.brand,
       item.purchaseCount,
       item.totalQty,
       item.totalSpend,
@@ -1067,13 +1330,19 @@
   }
 
   function activeFilter(root) {
-    var active = $('.wlpp-chip[data-active="true"]', root);
+    var active = $('.wlpp-side-filter[data-active="true"]', root);
     return active ? active.dataset.filter : 'all';
+  }
+
+  function activeCategory(root) {
+    var select = $('#wlpp-category', root);
+    return select ? (select.value || 'all') : 'all';
   }
 
   function applyFilters(root, products) {
     var needle = ($('#wlpp-filter', root)?.value || '').trim().toLowerCase();
     var filter = activeFilter(root);
+    var category = activeCategory(root);
     var now = todayMidnight();
     var shown = 0;
 
@@ -1083,6 +1352,7 @@
 
       var textMatch = !needle || productHaystack(item).indexOf(needle) >= 0;
       var filterMatch = true;
+      var categoryMatch = category === 'all' || item.productTypeLabel === category;
 
       if (filter === 'suggested') filterMatch = !!item.suggested;
       else if (filter === 'repeat') filterMatch = item.purchaseCount > 1;
@@ -1090,7 +1360,7 @@
         filterMatch = !!(item.lastPurchase && item.lastPurchase.orderDate && daysBetween(item.lastPurchase.orderDate, now) <= 45);
       }
 
-      var show = textMatch && filterMatch;
+      var show = textMatch && filterMatch && categoryMatch;
       card.classList.toggle('hidden', !show);
       if (show) shown++;
     });
@@ -1102,6 +1372,7 @@
 
       var textMatch = !needle || productHaystack(item).indexOf(needle) >= 0 || row.textContent.toLowerCase().indexOf(needle) >= 0;
       var filterMatch = true;
+      var categoryMatch = category === 'all' || item.productTypeLabel === category;
 
       if (filter === 'suggested') filterMatch = !!item.suggested;
       else if (filter === 'repeat') filterMatch = item.purchaseCount > 1;
@@ -1109,154 +1380,83 @@
         filterMatch = !!(item.lastPurchase && item.lastPurchase.orderDate && daysBetween(item.lastPurchase.orderDate, now) <= 45);
       }
 
-      row.classList.toggle('hidden', !(textMatch && filterMatch));
+      row.classList.toggle('hidden', !(textMatch && filterMatch && categoryMatch));
     });
 
     var note = $('#wlpp-note', root);
     if (note) {
-      note.textContent = 'Showing ' + shown + ' of ' + products.length + ' product groups. Delivery, shipping, fuel, and service-charge lines are hidden.';
+      note.textContent = 'Showing ' + shown + ' of ' + products.length + ' previous purchase products. Delivery and shipping lines are hidden.';
+    }
+
+    var subtitle = $('#wlpp-results-subtitle', root);
+    if (subtitle) {
+      var label = filter === 'all' ? 'Recommended products' :
+        filter === 'suggested' ? 'Suggested reorders' :
+        filter === 'repeat' ? 'Items bought more than once' :
+        'Recently purchased items';
+      subtitle.textContent = label + (category !== 'all' ? ' in ' + category : '') + '.';
     }
   }
 
   function renderSummary(root, products, rawRows) {
-    var services = rawRows.filter(function (row) { return row.serviceLine; }).length;
-    var suggested = products.filter(function (p) { return p.suggested; }).length;
-    var repeat = products.filter(function (p) { return p.purchaseCount > 1; }).length;
-    var totalSpend = products.reduce(function (sum, p) { return sum + p.totalSpend; }, 0);
-
-    $('#wlpp-summary', root).innerHTML = `
-      <div class="wlpp-summary-card">
-        <div class="wlpp-summary-label">Product Groups</div>
-        <div class="wlpp-summary-value">${products.length}</div>
-      </div>
-      <div class="wlpp-summary-card">
-        <div class="wlpp-summary-label">Suggested Reorders</div>
-        <div class="wlpp-summary-value">${suggested}</div>
-      </div>
-      <div class="wlpp-summary-card">
-        <div class="wlpp-summary-label">Repeat Purchases</div>
-        <div class="wlpp-summary-value">${repeat}</div>
-      </div>
-      <div class="wlpp-summary-card">
-        <div class="wlpp-summary-label">Product Spend Loaded</div>
-        <div class="wlpp-summary-value">${money(totalSpend)}</div>
-      </div>
-      <div class="wlpp-summary-card">
-        <div class="wlpp-summary-label">Service Lines Hidden</div>
-        <div class="wlpp-summary-value">${services}</div>
-      </div>
-      <div class="wlpp-summary-card">
-        <div class="wlpp-summary-label">Product Links Matched</div>
-        <div class="wlpp-summary-value">${(window.WLPreviousPurchasesFeedMatches && window.WLPreviousPurchasesFeedMatches.matched) || 0}</div>
-      </div>
-      <div class="wlpp-summary-card">
-        <div class="wlpp-summary-label">Images Matched</div>
-        <div class="wlpp-summary-value">${(window.WLPreviousPurchasesFeedMatches && window.WLPreviousPurchasesFeedMatches.imageMatched) || 0}</div>
-      </div>
-    `;
+    var el = $('#wlpp-summary', root);
+    if (el) el.innerHTML = '';
   }
 
   function productCard(item, options) {
-    var suggested = !!options.suggestedCard;
     var last = item.lastPurchase || item.purchases[0] || {};
-    var productActionLabel = item.productUrlSource === 'feed' ? 'View Product' : 'Find Product';
-    var intervalText = item.avgIntervalDays ? 'Avg. every ' + item.avgIntervalDays + ' days' : 'Timing unknown';
-    var sinceText = item.daysSinceLast != null ? item.daysSinceLast + ' days since last purchase' : 'Last date unavailable';
+    var actionLabel = item.productUrlSource === 'feed' ? 'View / Reorder' : 'Find Product';
+    var countText = item.purchaseCount === 1 ? 'Purchased 1 time' : 'Purchased ' + item.purchaseCount + ' times';
+    var lastText = last.orderDateDisplay ? 'Last purchased ' + last.orderDateDisplay : 'Last purchase date unavailable';
+    var lastQty = last.qty ? 'Last qty: ' + last.qty + (last.per ? ' ' + last.per : '') : '';
+    var lastPrice = last.sellPrice ? 'Last price: ' + last.sellPrice : '';
+    var title = item.description || item.feedTitle || item.code || 'Product';
 
     return `
       <div class="wlpp-product" data-key="${attr(item.key)}">
         ${productMediaHtml(item, false)}
         <div class="wlpp-card-head">
-          <div class="wlpp-code">${html(item.code || 'No product code')}</div>
-          <div class="wlpp-desc">${html(item.description || item.feedTitle || 'No description')}</div>
+          <div class="wlpp-code">Product Code: ${html(item.code || '—')}</div>
+          <a class="wlpp-product-title" href="${attr(item.productUrl)}">${html(title)}</a>
           <div class="wlpp-tags">
-            ${item.suggested ? '<span class="wlpp-tag wlpp-tag-reorder">Suggested reorder</span>' : '<span class="wlpp-tag wlpp-tag-ready">Purchased before</span>'}
-            ${item.purchaseCount > 1 ? '<span class="wlpp-tag">Repeat item</span>' : ''}
-            <span class="wlpp-tag">${html(intervalText)}</span>
+            ${item.suggested ? '<span class="wlpp-tag wlpp-tag-reorder">May be time to reorder</span>' : ''}
+            ${item.purchaseCount > 1 ? '<span class="wlpp-tag">Repeat purchase</span>' : ''}
+            ${item.productTypeLabel && item.productTypeLabel !== 'Other' ? '<span class="wlpp-tag">' + html(item.productTypeLabel) + '</span>' : ''}
           </div>
         </div>
         <div class="wlpp-card-body">
-          <div class="wlpp-metrics">
-            <div class="wlpp-metric">
-              <div class="wlpp-metric-label">Times Bought</div>
-              <div class="wlpp-metric-value">${item.purchaseCount}</div>
-            </div>
-            <div class="wlpp-metric">
-              <div class="wlpp-metric-label">Total Qty</div>
-              <div class="wlpp-metric-value">${Number(item.totalQty.toFixed(2)).toLocaleString()} ${html(last.per || '')}</div>
-            </div>
-            <div class="wlpp-metric">
-              <div class="wlpp-metric-label">Last Bought</div>
-              <div class="wlpp-metric-value">${html(last.orderDateDisplay || '—')}</div>
-            </div>
-            <div class="wlpp-metric">
-              <div class="wlpp-metric-label">Loaded Spend</div>
-              <div class="wlpp-metric-value">${money(item.totalSpend)}</div>
-            </div>
-          </div>
-          <div class="wlpp-last">
-            ${html(sinceText)}${last.orderNo ? ' • Last order #' + html(last.orderNo) : ''}${last.orderStatus ? ' • ' + html(last.orderStatus) : ''}
-            ${item.suggestReason ? '<br><strong>' + html(item.suggestReason) + '</strong>' : ''}
-          </div>
+          ${lastPrice ? '<div class="wlpp-buy-price">' + html(lastPrice) + '</div>' : ''}
+          <div class="wlpp-buy-meta">${html(countText)}</div>
+          <div class="wlpp-buy-meta">${html(lastText)}</div>
+          ${lastQty ? '<div class="wlpp-buy-meta">' + html(lastQty) + '</div>' : ''}
+          ${item.suggestReason ? '<div class="wlpp-reorder-note">' + html(item.suggestReason) + '</div>' : ''}
         </div>
         <div class="wlpp-card-actions">
-          <a class="wlpp-btn wlpp-btn-primary" href="${attr(item.productUrl)}">${html(productActionLabel)}</a>
-          <button type="button" class="wlpp-btn" data-product-history="${attr(item.key)}">Purchase History</button>
-          ${last.purchaseHref ? '<a class="wlpp-btn" href="' + attr(last.purchaseHref) + '">Purchase Record</a>' : ''}
+          <a class="wlpp-btn wlpp-btn-primary" href="${attr(item.productUrl)}">${html(actionLabel)}</a>
+          <button type="button" class="wlpp-btn" data-product-history="${attr(item.key)}">History</button>
         </div>
       </div>
     `;
   }
 
   function renderSuggested(root, products) {
-    var suggested = products.filter(function (p) { return p.suggested; }).slice(0, 6);
     var wrap = $('#wlpp-suggested-wrap', root);
-
-    if (!suggested.length) {
-      wrap.innerHTML = `
-        <div class="wlpp-suggested">
-          <div class="wlpp-section-title">
-            <div>
-              <h3>Suggested Reorders</h3>
-              <p>No strong reorder suggestions yet. Use a longer history range to improve recommendations.</p>
-            </div>
-          </div>
-        </div>
-      `;
-      return;
-    }
-
-    wrap.innerHTML = `
-      <div class="wlpp-suggested">
-        <div class="wlpp-section-title">
-          <div>
-            <h3>Suggested Reorders</h3>
-            <p>Based on repeat purchase timing and how long it has been since the last purchase.</p>
-          </div>
-        </div>
-        <div class="wlpp-grid">
-          ${suggested.map(function (item) { return productCard(item, { suggestedCard: true }); }).join('')}
-        </div>
-      </div>
-    `;
+    if (wrap) wrap.innerHTML = '';
   }
 
   function renderProducts(root, products) {
     var wrap = $('#wlpp-products-wrap', root);
-    if (!products.length) {
-      wrap.innerHTML = '<div class="wlpp-empty">No reorderable product lines were found in the current purchase history. Delivery and shipping lines were intentionally excluded.</div>';
+    if (!wrap) return;
+
+    var sorted = getSortedProducts(products, root);
+    if (!sorted.length) {
+      wrap.innerHTML = '<div class="wlpp-empty">No reorderable product lines were found in the current purchase history.</div>';
       return;
     }
 
     wrap.innerHTML = `
-      <div class="wlpp-section-title">
-        <div>
-          <h3>Previous Purchase Products</h3>
-          <p>Grouped by product code so repeat purchases are easier to spot.</p>
-        </div>
-      </div>
       <div class="wlpp-grid">
-        ${products.map(function (item) { return productCard(item, { suggestedCard: false }); }).join('')}
+        ${sorted.map(function (item) { return productCard(item, { suggestedCard: false }); }).join('')}
       </div>
     `;
   }
@@ -1274,41 +1474,44 @@
     });
 
     $('#wlpp-history-wrap', root).innerHTML = `
-      <div class="wlpp-history">
-        <div class="wlpp-history-head">Purchase History Detail</div>
-        <table class="wlpp-table">
-          <thead>
-            <tr>
-              <th>Product</th>
-              <th>Description</th>
-              <th>Order</th>
-              <th>Date</th>
-              <th>Status</th>
-              <th>Qty</th>
-              <th>Sell</th>
-              <th>Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows.map(function (row) {
-              var item = row.item;
-              var p = row.purchase;
-              return `
-                <tr class="wlpp-history-row" data-key="${attr(item.key)}">
-                  <td><a href="${attr(item.productUrl)}">${html(item.code)}</a></td>
-                  <td>${html(item.description)}</td>
-                  <td>${p.purchaseHref ? '<a href="' + attr(p.purchaseHref) + '">' + html(p.orderNo || 'Open') + '</a>' : html(p.orderNo || '—')}</td>
-                  <td>${html(p.orderDateDisplay || '—')}</td>
-                  <td>${html(p.orderStatus || '—')}</td>
-                  <td>${html(p.qty || '—')} ${html(p.per || '')}</td>
-                  <td>${html(p.sellPrice || '—')}</td>
-                  <td>${html(p.totalPrice || '—')}</td>
-                </tr>
-              `;
-            }).join('')}
-          </tbody>
-        </table>
-      </div>
+      <details class="wlpp-history-shell">
+        <summary>View purchase history table</summary>
+        <div class="wlpp-history">
+          <div class="wlpp-history-head">Purchase History Detail</div>
+          <table class="wlpp-table">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Description</th>
+                <th>Order</th>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Qty</th>
+                <th>Sell</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(function (row) {
+                var item = row.item;
+                var p = row.purchase;
+                return `
+                  <tr class="wlpp-history-row" data-key="${attr(item.key)}">
+                    <td><a href="${attr(item.productUrl)}">${html(item.code)}</a></td>
+                    <td>${html(item.description || item.feedTitle || '')}</td>
+                    <td>${p.purchaseHref ? '<a href="' + attr(p.purchaseHref) + '">' + html(p.orderNo || 'Open') + '</a>' : html(p.orderNo || '—')}</td>
+                    <td>${html(p.orderDateDisplay || '—')}</td>
+                    <td>${html(p.orderStatus || '—')}</td>
+                    <td>${html(p.qty || '—')} ${html(p.per || '')}</td>
+                    <td>${html(p.sellPrice || '—')}</td>
+                    <td>${html(p.totalPrice || '—')}</td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </details>
     `;
   }
 
@@ -1343,7 +1546,7 @@
               <div class="wlpp-last" style="margin-top:4px;">
                 ${item.suggestReason ? '<strong>' + html(item.suggestReason) + '</strong><br>' : ''}
                 ${item.feedTitle && normalize(item.feedTitle) !== normalize(item.description) ? 'Feed title: ' + html(item.feedTitle) + '<br>' : ''}
-                ${item.productImage || item.productAdditionalImage ? 'Product imagery pulled from the published merchant feed.' : 'No product image match was found in the feed for this item.'}
+                ${item.productImage || item.productAdditionalImage ? '' : 'Product image unavailable.'}
               </div>
             </div>
           </div>
@@ -1410,35 +1613,58 @@
       filterInput.__wlppBound = true;
     }
 
-    $$('.wlpp-chip', root).forEach(function (chip) {
+    var sortSelect = $('#wlpp-sort', root);
+    if (sortSelect && !sortSelect.__wlppBound) {
+      sortSelect.addEventListener('change', function () {
+        renderProducts(root, products);
+        applyFilters(root, products);
+      });
+      sortSelect.__wlppBound = true;
+    }
+
+    var categorySelect = $('#wlpp-category', root);
+    if (categorySelect && !categorySelect.__wlppBound) {
+      categorySelect.addEventListener('change', function () { applyFilters(root, products); });
+      categorySelect.__wlppBound = true;
+    }
+
+    $$('.wlpp-side-filter', root).forEach(function (chip) {
       if (chip.__wlppBound) return;
       chip.addEventListener('click', function () {
-        if (chip.dataset.filter === 'clear') {
-          if (filterInput) filterInput.value = '';
-          $$('.wlpp-chip', root).forEach(function (c) { c.dataset.active = 'false'; });
-          var all = $('.wlpp-chip[data-filter="all"]', root);
-          if (all) all.dataset.active = 'true';
-          applyFilters(root, products);
-          if (filterInput) filterInput.focus();
-          return;
-        }
-
-        $$('.wlpp-chip', root).forEach(function (c) { c.dataset.active = 'false'; });
+        $$('.wlpp-side-filter', root).forEach(function (c) { c.dataset.active = 'false'; });
         chip.dataset.active = 'true';
         applyFilters(root, products);
       });
       chip.__wlppBound = true;
     });
 
-    root.addEventListener('click', function (event) {
-      var btn = event.target.closest('[data-product-history]');
-      if (!btn) return;
-      event.preventDefault();
+    var clear = $('#wlpp-clear-filters', root);
+    if (clear && !clear.__wlppBound) {
+      clear.addEventListener('click', function () {
+        if (filterInput) filterInput.value = '';
+        if (categorySelect) categorySelect.value = 'all';
+        $$('.wlpp-side-filter', root).forEach(function (c) { c.dataset.active = 'false'; });
+        var all = $('.wlpp-side-filter[data-filter="all"]', root);
+        if (all) all.dataset.active = 'true';
+        if (sortSelect) sortSelect.value = 'recommended';
+        renderProducts(root, products);
+        applyFilters(root, products);
+      });
+      clear.__wlppBound = true;
+    }
 
-      var key = btn.getAttribute('data-product-history');
-      var item = products.find(function (p) { return p.key === key; });
-      if (item) openProductHistoryModal(item);
-    });
+    if (!root.__wlppClickBound) {
+      root.addEventListener('click', function (event) {
+        var btn = event.target.closest('[data-product-history]');
+        if (!btn) return;
+        event.preventDefault();
+
+        var key = btn.getAttribute('data-product-history');
+        var item = products.find(function (p) { return p.key === key; });
+        if (item) openProductHistoryModal(item);
+      });
+      root.__wlppClickBound = true;
+    }
   }
 
   async function render() {
@@ -1454,6 +1680,7 @@
     applyProductUrls(products, feedMap);
 
     var root = buildShell();
+    renderSidebarCategories(root, products);
     renderSummary(root, products, rawRows);
     renderSuggested(root, products);
     renderProducts(root, products);
@@ -1471,7 +1698,7 @@
   });
 
   window.WLPreviousPurchases = {
-    version: '1.2',
+    version: '1.3',
     rerender: render
   };
 })();
