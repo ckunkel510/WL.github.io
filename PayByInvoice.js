@@ -4476,6 +4476,76 @@ if (jobBtn){
     }catch(e){}
   }
 
+  function clearNativePaymentControlsForHardAchReset(){
+    try{
+      const rbCheck = document.getElementById('ctl00_PageBody_RadioButton_PayByCheck');
+      const rbCof   = document.getElementById('ctl00_PageBody_RadioButton_PayByCheckOnFile');
+      const rbCard  = document.getElementById('ctl00_PageBody_RadioButton_PayByCardOnFile');
+      const rbCred  = document.getElementById('ctl00_PageBody_RadioButton_PayByCredit');
+
+      [rbCheck, rbCof, rbCard, rbCred].forEach(r=>{
+        if (!r) return;
+        try{ r.disabled = false; r.removeAttribute('disabled'); }catch(e){}
+        try{ r.checked = (r === rbCheck); }catch(e){}
+        try{ if (r === rbCheck) r.setAttribute('checked','checked'); else r.removeAttribute('checked'); }catch(e){}
+      });
+
+      const sel = document.getElementById('ctl00_PageBody_ddlChecksOnFile')
+        || document.querySelector('#ctl00_PageBody_ChecksOnFileContainer select')
+        || document.querySelector('#ctl00_PageBody_ChecksOnFileContainer1 select')
+        || document.querySelector('select[name*="ddlChecksOnFile"],select[id*="ChecksOnFile"],select[name*="ChecksOnFile"]');
+
+      if (sel){
+        try{ sel.disabled = false; sel.removeAttribute('disabled'); }catch(e){}
+        let placeholder = Array.from(sel.options || []).find(o => String(o.value) === '-1');
+        if (!placeholder){
+          placeholder = document.createElement('option');
+          placeholder.value = '-1';
+          placeholder.text = 'Select a saved account';
+          try{ sel.insertBefore(placeholder, sel.firstChild); }catch(e){}
+        }
+        Array.from(sel.options || []).forEach(o=>{
+          try{ o.selected = false; }catch(e){}
+          try{ o.removeAttribute('selected'); }catch(e){}
+        });
+        try{ placeholder.selected = true; placeholder.setAttribute('selected','selected'); }catch(e){}
+        try{ sel.value = '-1'; sel.defaultValue = '-1'; sel.selectedIndex = Math.max(0, Array.from(sel.options || []).indexOf(placeholder)); }catch(e){}
+        // Disable after clearing so a stale selected saved-account value is not posted during any stray postback.
+        try{ sel.disabled = true; sel.setAttribute('disabled','disabled'); }catch(e){}
+      }
+
+      // Clear gateway/token/modal fields that can survive in the WebForms DOM.
+      [
+        'ctl00_PageBody_HiddenField1',
+        'ctl00_ModalPopupContainer_CreTokenHiddenField',
+        'ctl00_ModalPopupContainer_CreExpDateHiddenField',
+        'ctl00_ModalPopupContainer_CrePostalCodeHiddenField',
+        'ctl00_ModalPopupContainer_CreBillingAddressHiddenField'
+      ].forEach(id=>{
+        const el = document.getElementById(id);
+        if (el && 'value' in el) { try{ el.value = ''; el.defaultValue = ''; }catch(e){} }
+      });
+
+      const evTarget = document.getElementById('__EVENTTARGET');
+      const evArg = document.getElementById('__EVENTARGUMENT');
+      if (evTarget) evTarget.value = '';
+      if (evArg) evArg.value = '';
+    }catch(e){}
+  }
+
+  function getHardAchResetUrl(){
+    try{
+      const next = new URL(location.href);
+      // Force a brand-new GET request instead of browser reload/resubmitting a WebForms postback.
+      next.searchParams.set('__wl_ach_new_reset', String(Date.now()));
+      next.searchParams.set('__wl_hard_get', '1');
+      next.hash = '';
+      return next.toString();
+    }catch(e){
+      return location.pathname + '?__wl_ach_new_reset=' + Date.now() + '&__wl_hard_get=1';
+    }
+  }
+
   function beginAddNewAchRefresh(reason){
     try{
       sessionStorage.setItem(ACH_REFRESH_DRAFT_KEY, JSON.stringify(captureRefreshDraft()));
@@ -4483,12 +4553,24 @@ if (jobBtn){
       sessionStorage.setItem(STEP_KEY, '3');
       sessionStorage.setItem('wlPayPickedThisRun', '1');
       sessionStorage.setItem('wlPayState', JSON.stringify({ __userPicked:true, __pickedAccount:true, method:'bank', bank:{ mode:'new', __pickedAccount:true } }));
-      // Prevent stale pending saved-account postbacks from re-applying after reload.
+      // Prevent stale pending saved-account postbacks from re-applying after reset.
       sessionStorage.removeItem('__WL_COF_OPTIONS_LOAD_TS');
       sessionStorage.removeItem('__WL_COF_LOAD_TRIES');
       sessionStorage.removeItem('__WL_COF_LOAD_LAST_TS');
+      sessionStorage.removeItem('__WL_COF_OPTIONS_READY');
+      sessionStorage.removeItem('wlPayPendingSubmit');
+      try{ localStorage.removeItem('__WL_COF_PENDING'); }catch(e){}
+
+      // Clear the live WebForms DOM first, then navigate by URL so the browser performs a hard GET.
+      // location.reload() can reuse/resubmit the current WebForms state; location.replace(cache-busted URL)
+      // gives WebTrack a clean page instance while our draft survives in sessionStorage.
+      clearNativePaymentControlsForHardAchReset();
       showSwitchingToNewAchOverlay();
-      setTimeout(()=>{ try{ location.reload(); }catch(e){ location.href = location.href; } }, 80);
+      const nextUrl = getHardAchResetUrl();
+      setTimeout(()=>{
+        try{ window.location.replace(nextUrl); }
+        catch(e){ try{ window.location.href = nextUrl; }catch(e2){ location.reload(); } }
+      }, 80);
       return true;
     }catch(e){
       return false;
@@ -4717,6 +4799,7 @@ function buildReviewHTML(){
   function ensureCOFLoaded(){
   // WebTrack may not render ddlChecksOnFile until Check-on-File has been selected.
   // If the customer has not explicitly chosen Add New, let the COF radio load the saved ACH list.
+  if (isForceAddNewAchActive()) return;
   window.WLPayMode?.ensureCheckOnFileUI?.();
 
   const rb = $('ctl00_PageBody_RadioButton_PayByCheckOnFile');
@@ -5259,6 +5342,16 @@ function applyForcedNewAchAfterReload(){
     savePayState({ __userPicked:true, __pickedAccount:true, method:'bank', bank:{ mode:'new', __pickedAccount:true } });
     try{ markPickedThisRun(); }catch(e){}
     try{ syncNativeBankChoice('new', '', false); }catch(e){}
+
+    // Clean the cache-buster/reset markers from the visible URL after the fresh GET has loaded.
+    try{
+      const clean = new URL(location.href);
+      if (clean.searchParams.has('__wl_ach_new_reset') || clean.searchParams.has('__wl_hard_get')){
+        clean.searchParams.delete('__wl_ach_new_reset');
+        clean.searchParams.delete('__wl_hard_get');
+        window.history.replaceState(window.history.state, document.title, clean.pathname + clean.search + clean.hash);
+      }
+    }catch(e){}
     return true;
   }catch(e){ return false; }
 }
@@ -6046,6 +6139,7 @@ function setStep(n){
         if (success) {
           wizEl.setAttribute('aria-hidden', 'true');
           wizEl.classList.add('wl-hidden-after-success');
+          try{ clearPaymentFlowStateForNextPayment(); }catch(e){}
         } else {
           wizEl.removeAttribute('aria-hidden');
           wizEl.classList.remove('wl-hidden-after-success');
