@@ -251,6 +251,23 @@
       .wl-ham-menu a:hover,
       .wl-ham-menu a[aria-current="page"] { background: ${BRAND.bgSoft}; color: ${BRAND.primary}; }
 
+
+      .wl-ham-menu-section {
+        padding: 4px 0;
+      }
+      .wl-ham-menu-section + .wl-ham-menu-section {
+        border-top: 1px solid #eee;
+        margin-top: 4px;
+        padding-top: 8px;
+      }
+      .wl-ham-menu-label {
+        padding: 5px 10px 4px;
+        color: ${BRAND.muted};
+        font-size: .72rem;
+        font-weight: 900;
+        letter-spacing: .08em;
+        text-transform: uppercase;
+      }
       .wl-token-layout {
         display: grid;
         grid-template-columns: 1.2fr .8fr;
@@ -553,34 +570,49 @@
   }
 
   function buildMenu(root) {
-    const leftNav = $(SELECTORS.leftNav);
     const menu = $('.wl-ham-menu', root);
     const btn = $('.wl-menu-btn', root);
+    const currentPath = (window.location.pathname || '').split('/').pop().toLowerCase();
 
-    const links = leftNav
-      ? $$('.rmRootGroup .rmItem a', leftNav).map(a => [a.href, txt(a)])
-      : [
+    const groups = [
+      {
+        label: 'Transactions',
+        links: [
           ['AccountInfo_R.aspx', 'Account Information'],
-          ['Quicklists_R.aspx', 'Quicklists'],
+          ['AccountPayment_r.aspx', 'Make a Payment'],
+          ['Quicklists_R.aspx', 'Shopping Lists'],
           ['OpenQuotes_r.aspx', 'Quotes'],
           ['OpenOrders_r.aspx', 'Orders'],
           ['Invoices_r.aspx', 'Invoices'],
           ['CreditNotes_r.aspx', 'Credit Notes'],
           ['ProductsPurchased_R.aspx', 'Products Purchased'],
-          ['Statements_R.aspx', 'Statements'],
+          ['Statements_R.aspx', 'Statements']
+        ]
+      },
+      {
+        label: 'Account Settings',
+        links: [
+          ['CustomerTokens.aspx', 'Payment Methods'],
+          ['AccountSettings.aspx', 'Change Password / Account Settings'],
           ['AddressList_R.aspx', 'Addresses'],
           ['Contacts_r.aspx', 'Contacts']
-        ];
+        ]
+      }
+    ];
 
-    // Add Payment Methods if it is not present in WebTrack's legacy left nav.
-    const hasTokens = links.some(([href, label]) => /CustomerTokens\.aspx/i.test(href) || /payment methods/i.test(label));
-    if (!hasTokens) links.splice(1, 0, ['CustomerTokens.aspx', 'Payment Methods']);
+    menu.innerHTML = groups.map(group => {
+      const links = group.links.map(([href, label]) => {
+        const path = String(href || '').split('?')[0].split('/').pop().toLowerCase();
+        const current = path === currentPath ? ' aria-current="page"' : '';
+        const cleanLabel = /^Quicklists$/i.test(label) ? 'Shopping Lists' : label;
+        return `<a role="menuitem" href="${escapeHtml(href)}"${current}>${escapeHtml(cleanLabel)}</a>`;
+      }).join('');
 
-    links.forEach(([href, label]) => {
-      const a = dom(`<a role="menuitem" href="${escapeHtml(href)}">${escapeHtml(label)}</a>`);
-      if (/CustomerTokens\.aspx/i.test(href)) a.setAttribute('aria-current', 'page');
-      menu.appendChild(a);
-    });
+      return `<div class="wl-ham-menu-section">
+        <div class="wl-ham-menu-label">${escapeHtml(group.label)}</div>
+        ${links}
+      </div>`;
+    }).join('');
 
     const toggle = (open) => {
       menu.classList.toggle('open', open);
