@@ -1,5 +1,5 @@
 /* =========================================================================
-   Woodson — Previous Purchases / Reorder Center (v1.3.2)
+   Woodson — Previous Purchases / Reorder Center (v1.3.3)
    - ProductsPurchased_R.aspx rewrite
    - Adds new grouped account menu
    - Reframes page as previous purchases + reorder helper
@@ -109,6 +109,73 @@
   function normalize(value) {
     return String(value || '').replace(/\s+/g, ' ').trim().toUpperCase();
   }
+
+  function productCodeAliases(value) {
+    var raw = String(value || '').replace(/\s+/g, ' ').trim();
+    if (!raw) return [];
+
+    var aliases = [raw];
+
+    // Many feed titles use leading-zero product codes like "00013 - ...".
+    // WebTrack may sometimes show those as "13", so index both.
+    if (/^0+\d+$/.test(raw)) {
+      aliases.push(String(parseInt(raw, 10)));
+    }
+
+    // Some codes may appear with spaces/dashes typed inconsistently.
+    aliases.push(raw.replace(/\s+/g, ''));
+    aliases.push(raw.replace(/[^A-Za-z0-9]/g, ''));
+
+    return Array.from(new Set(aliases.filter(Boolean)));
+  }
+
+  function productCodesFromFeedTitle(title) {
+    var clean = String(title || '').replace(/\s+/g, ' ').trim();
+    if (!clean) return [];
+
+    var codes = [];
+
+    // Common merchant-feed pattern:
+    // "00013 - Amber Bone - Peach Seed Jig Mini Trapper (6207 SS)"
+    var dashMatch = clean.match(/^([A-Za-z0-9][A-Za-z0-9._#\/-]*)\s+-\s+.+/);
+    if (dashMatch && dashMatch[1]) codes.push(dashMatch[1]);
+
+    // Conservative fallback: first token if it looks like a product code.
+    var firstToken = clean.split(/\s+/)[0];
+    if (/^[A-Za-z0-9][A-Za-z0-9._#\/-]{1,}$/.test(firstToken) && /\d/.test(firstToken)) {
+      codes.push(firstToken);
+    }
+
+    var expanded = [];
+    codes.forEach(function (code) {
+      expanded = expanded.concat(productCodeAliases(code));
+    });
+
+    return Array.from(new Set(expanded.filter(Boolean)));
+  }
+
+  function addFeedPayload(map, codes, payload) {
+    if (!payload || !payload.url) return;
+
+    var aliases = [];
+    (codes || []).forEach(function (code) {
+      aliases = aliases.concat(productCodeAliases(code));
+    });
+
+    aliases.forEach(function (code) {
+      if (code) map.set(normalize(code), payload);
+    });
+  }
+
+  function getFeedPayloadForProduct(feedMap, productCode) {
+    var aliases = productCodeAliases(productCode);
+    for (var i = 0; i < aliases.length; i++) {
+      var payload = feedMap.get(normalize(aliases[i]));
+      if (payload) return payload;
+    }
+    return null;
+  }
+
 
   function injectCSS() {
     if ($('#wlpp-styles')) return;
@@ -1004,6 +1071,7 @@
         var json = await response.json();
         var arr = Array.isArray(json) ? json : (Array.isArray(json.items) ? json.items : []);
         arr.forEach(function (item) {
+          var title = item.title || '';
           var possibleCodes = [
             item.ProductCode,
             item.productcode,
@@ -1012,7 +1080,7 @@
             item.id,
             item.mpn,
             item.MPN
-          ].filter(Boolean);
+          ].filter(Boolean).concat(productCodesFromFeedTitle(title));
 
           var productId = item.ProductID || item.productid || item.product_id || item.id || '';
           var url = item.ProductURL || item.producturl || item.product_url || item.link || item.url || item.mobile_link || item['mobile link'] || '';
@@ -1029,13 +1097,11 @@
               url: abs(url),
               image: image ? abs(image) : '',
               additionalImage: additional ? abs(additional) : '',
-              title: item.title || '',
+              title: title,
               productType: item.product_type || item['product_type'] || item.productType || item['product type'] || '',
               brand: item.brand || ''
             };
-            possibleCodes.forEach(function (code) {
-              if (code) map.set(normalize(code), payload);
-            });
+            addFeedPayload(map, possibleCodes, payload);
           }
         });
         return map;
@@ -1058,11 +1124,12 @@
       var brandIdx = pickHeader(headers, ['brand']);
 
       csvRows.forEach(function (cells) {
+        var title = titleIdx >= 0 ? (cells[titleIdx] || '') : '';
         var possibleCodes = [
           codeIdx >= 0 ? cells[codeIdx] : '',
           idIdx >= 0 ? cells[idIdx] : '',
           mpnIdx >= 0 ? cells[mpnIdx] : ''
-        ].filter(Boolean);
+        ].filter(Boolean).concat(productCodesFromFeedTitle(title));
 
         var productId = productIdIdx >= 0 ? cells[productIdIdx] : (idIdx >= 0 ? cells[idIdx] : '');
         var url = urlIdx >= 0 ? cells[urlIdx] : '';
@@ -1076,13 +1143,11 @@
             url: abs(url),
             image: imageIdx >= 0 && cells[imageIdx] ? abs(cells[imageIdx]) : '',
             additionalImage: additionalImageIdx >= 0 && cells[additionalImageIdx] ? abs(cells[additionalImageIdx]) : '',
-            title: titleIdx >= 0 ? (cells[titleIdx] || '') : '',
+            title: title,
             productType: productTypeIdx >= 0 ? (cells[productTypeIdx] || '') : '',
             brand: brandIdx >= 0 ? (cells[brandIdx] || '') : ''
           };
-          possibleCodes.forEach(function (code) {
-            if (code) map.set(normalize(code), payload);
-          });
+          addFeedPayload(map, possibleCodes, payload);
         }
       });
 
@@ -1133,7 +1198,7 @@
     var imageMatched = 0;
 
     products.forEach(function (item) {
-      var payload = feedMap.get(normalize(item.code));
+      var payload = getFeedPayloadForProduct(feedMap, item.code);
       if (payload && payload.url) {
         item.productUrl = payload.url;
         item.productUrlSource = 'feed';
@@ -1770,7 +1835,7 @@
   });
 
   window.WLPreviousPurchases = {
-    version: '1.3.2',
+    version: '1.3.3',
     rerender: render
   };
 })();
