@@ -1,5 +1,5 @@
 /* =========================================================================
-   Woodson — Previous Purchases / Reorder Center (v1.3.1)
+   Woodson — Previous Purchases / Reorder Center (v1.3.2)
    - ProductsPurchased_R.aspx rewrite
    - Adds new grouped account menu
    - Reframes page as previous purchases + reorder helper
@@ -1317,6 +1317,69 @@
     return root;
   }
 
+  function uniqueCategories(products) {
+    var seen = new Map();
+
+    products.forEach(function (item) {
+      var label = item.productTypeLabel || 'Other';
+      if (!label) label = 'Other';
+      seen.set(label, (seen.get(label) || 0) + 1);
+    });
+
+    return Array.from(seen.entries()).sort(function (a, b) {
+      if (b[1] !== a[1]) return b[1] - a[1];
+      return a[0].localeCompare(b[0]);
+    });
+  }
+
+  function renderSidebarCategories(root, products) {
+    var select = $('#wlpp-category', root);
+    if (!select) return;
+
+    var current = select.value || 'all';
+    var categories = uniqueCategories(products);
+
+    select.innerHTML = '<option value="all">All categories</option>' + categories.map(function (pair) {
+      return '<option value="' + attr(pair[0]) + '">' + html(pair[0]) + ' (' + pair[1] + ')</option>';
+    }).join('');
+
+    if (Array.prototype.slice.call(select.options).some(function (opt) { return opt.value === current; })) {
+      select.value = current;
+    }
+  }
+
+  function getSortedProducts(products, root) {
+    var sortEl = $('#wlpp-sort', root);
+    var sort = sortEl ? (sortEl.value || 'recommended') : 'recommended';
+    var list = products.slice();
+
+    list.sort(function (a, b) {
+      if (sort === 'date') {
+        var ad = a.lastPurchase && a.lastPurchase.orderDate ? a.lastPurchase.orderDate.getTime() : 0;
+        var bd = b.lastPurchase && b.lastPurchase.orderDate ? b.lastPurchase.orderDate.getTime() : 0;
+        return bd - ad;
+      }
+
+      if (sort === 'count') {
+        if (b.purchaseCount !== a.purchaseCount) return b.purchaseCount - a.purchaseCount;
+        return (b.totalQty || 0) - (a.totalQty || 0);
+      }
+
+      if (sort === 'name') {
+        return String(a.description || a.feedTitle || a.code || '').localeCompare(String(b.description || b.feedTitle || b.code || ''));
+      }
+
+      if (a.suggested !== b.suggested) return a.suggested ? -1 : 1;
+      if (b.purchaseCount !== a.purchaseCount) return b.purchaseCount - a.purchaseCount;
+
+      var ard = a.lastPurchase && a.lastPurchase.orderDate ? a.lastPurchase.orderDate.getTime() : 0;
+      var brd = b.lastPurchase && b.lastPurchase.orderDate ? b.lastPurchase.orderDate.getTime() : 0;
+      return brd - ard;
+    });
+
+    return list;
+  }
+
   function productHaystack(item) {
     var parts = [
       item.code,
@@ -1707,7 +1770,7 @@
   });
 
   window.WLPreviousPurchases = {
-    version: '1.3.1',
+    version: '1.3.2',
     rerender: render
   };
 })();
