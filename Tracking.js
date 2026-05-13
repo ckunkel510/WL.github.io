@@ -639,10 +639,16 @@
       'a[id*="AddToCart"]'
     ]);
 
+    var addHref = addToCartLink ? (addToCartLink.getAttribute('href') || addToCartLink.href || '') : '';
+    var addTarget = '';
+    var targetMatch = addHref.match(/__doPostBack\(['"]([^'"]+)['"]\s*,\s*['"]([^'"]*)['"]\)/i);
+    if (targetMatch) addTarget = targetMatch[1];
+
     return {
       imageHref: imageLink ? absUrl(imageLink.getAttribute('href') || imageLink.href || '') : '',
       documentHref: documentLink ? absUrl(documentLink.getAttribute('href') || documentLink.href || '') : '',
-      addToCartHref: addToCartLink ? (addToCartLink.getAttribute('href') || addToCartLink.href || '') : '',
+      addToCartHref: addHref,
+      addToCartTarget: addTarget,
       hasAddToCart: !!addToCartLink
     };
   }
@@ -713,63 +719,93 @@
     return parseOrderLinesFromDoc(doc);
   }
 
-  function addOrderToCartFromDetails(order, button) {
+  function postOrderDetailsAction(order, actionTarget, button) {
+    if (!order || !order.fullHref || !actionTarget) return Promise.reject(new Error('Missing order add-to-cart target.'));
+
+    return fetch(order.fullHref, { credentials: 'same-origin', cache: 'no-cache' })
+      .then(function(response) {
+        if (!response.ok) throw new Error('Could not reload order details page: ' + response.status);
+        return response.text();
+      })
+      .then(function(html) {
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        var sourceForm = $('form', doc);
+        if (!sourceForm) throw new Error('Order details form was not found.');
+
+        var form = document.createElement('form');
+        form.method = (sourceForm.getAttribute('method') || 'post').toLowerCase();
+        form.action = absUrl(sourceForm.getAttribute('action') || order.fullHref);
+        form.style.display = 'none';
+
+        // Copy all original fields, including ViewState/EventValidation/session fields.
+        $$('input, select, textarea', sourceForm).forEach(function(field) {
+          var name = field.getAttribute('name');
+          if (!name) return;
+
+          if ((field.type === 'checkbox' || field.type === 'radio') && !field.checked) return;
+
+          var input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = name;
+          input.value = field.value || '';
+          form.appendChild(input);
+        });
+
+        function setHidden(name, value) {
+          var existing = form.querySelector('input[name="' + name.replace(/"/g, '\\"') + '"]');
+          if (!existing) {
+            existing = document.createElement('input');
+            existing.type = 'hidden';
+            existing.name = name;
+            form.appendChild(existing);
+          }
+          existing.value = value || '';
+        }
+
+        setHidden('__EVENTTARGET', actionTarget);
+        setHidden('__EVENTARGUMENT', '');
+
+        // Preserve the current return path when WebTrack sends the user onward.
+        try {
+          var actionUrl = new URL(form.action, window.location.origin);
+          if (!actionUrl.searchParams.has('returnUrl')) {
+            actionUrl.searchParams.set('returnUrl', '~/OpenOrders_r.aspx');
+            form.action = actionUrl.toString();
+          }
+        } catch (err) {}
+
+        document.body.appendChild(form);
+        form.submit();
+      });
+  }
+
+  function addOrderToCartFromDetails(order, button, detailActions) {
     if (!order || !order.fullHref) return;
 
     var originalText = button ? button.textContent : '';
+    var actionTarget = detailActions && detailActions.addToCartTarget;
+
+    if (!actionTarget && detailActions && detailActions.addToCartHref) {
+      var match = String(detailActions.addToCartHref).match(/__doPostBack\(['"]([^'"]+)['"]\s*,\s*['"]([^'"]*)['"]\)/i);
+      if (match) actionTarget = match[1];
+    }
+
     if (button) {
       button.disabled = true;
       button.textContent = 'Adding to Cart…';
     }
 
-    var frame = document.createElement('iframe');
-    frame.className = 'wloo-iframe-action';
-    frame.setAttribute('aria-hidden', 'true');
+    postOrderDetailsAction(order, actionTarget, button).catch(function(err) {
+      console.error('Add order to cart failed', err);
 
-    var clicked = false;
-    var timeout = window.setTimeout(function () {
       if (button) {
         button.disabled = false;
         button.textContent = originalText || 'Add Order to Cart';
       }
-      try { frame.remove(); } catch (err) {}
-      alert('We could not add this order to the cart from the pop-up. Please try again, or contact us and we can help.');
-    }, 9000);
 
-    frame.addEventListener('load', function () {
-      if (clicked) return;
-
-      try {
-        var doc = frame.contentDocument || (frame.contentWindow && frame.contentWindow.document);
-        var addLink = doc && (
-          doc.querySelector('#ctl00_PageBody_ctl00_AddToCart') ||
-          doc.querySelector('#ctl00_PageBody_ctl00_AddToCartDropDown') ||
-          doc.querySelector('a[id*="AddToCart"]')
-        );
-
-        if (!addLink) throw new Error('Add-to-cart control not found on order details page.');
-
-        clicked = true;
-        addLink.click();
-
-        window.setTimeout(function () {
-          window.clearTimeout(timeout);
-          window.location.href = 'ShoppingCart.aspx';
-        }, 1100);
-      } catch (err) {
-        window.clearTimeout(timeout);
-        if (button) {
-          button.disabled = false;
-          button.textContent = originalText || 'Add Order to Cart';
-        }
-        try { frame.remove(); } catch (removeErr) {}
-        console.error('Add order to cart failed', err);
-        alert('We could not add this order to the cart from the pop-up. Please try opening the order again or contact us and we can help.');
-      }
+      alert('We could not add this order to the cart from this pop-up. The order details page will open so you can add it from there.');
+      window.location.href = order.fullHref;
     });
-
-    document.body.appendChild(frame);
-    frame.src = order.fullHref;
   }
 
   function openOrderModal(order) {
@@ -853,7 +889,7 @@
       var cartBtn = $('#wloo-add-order-cart', body);
       if (cartBtn) {
         cartBtn.addEventListener('click', function () {
-          addOrderToCartFromDetails(order, cartBtn);
+          addOrderToCartFromDetails(order, cartBtn, actions);
         });
       }
 
