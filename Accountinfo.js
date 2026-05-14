@@ -647,7 +647,7 @@ if (snapshotActions) {
             details.lastName = parsed.lastName;
           }
         } catch(err) {
-          console.warn('Could not read account details from AccountSettings.aspx:', err);
+          // DEBUG ONLY: console.warn('Could not read account details from AccountSettings.aspx:', err);
         }
         return details;
       })();
@@ -709,7 +709,7 @@ if (snapshotActions) {
           const data = await jsonpRequest(COMM_PREFS_GET, { accountKey, email });
           if (data && data.ok) return data.preferences || data;
         } catch(err) {
-          console.warn('Communication preference lookup failed:', err);
+          // DEBUG ONLY: console.warn('Communication preference lookup failed:', err);
         }
       }
 
@@ -742,7 +742,7 @@ if (snapshotActions) {
           });
           return true;
         } catch(err) {
-          console.warn('Communication preference submit failed:', err);
+          // DEBUG ONLY: console.warn('Communication preference submit failed:', err);
           return false;
         }
       }
@@ -861,7 +861,7 @@ if (snapshotActions) {
           setLinkedMessage(`${options.length} email${options.length === 1 ? '' : 's'} linked to this account. Select an email to update its preferences.`, 'good');
           return options;
         } catch(err) {
-          console.warn('Linked email lookup failed:', err);
+          // DEBUG ONLY: console.warn('Linked email lookup failed:', err);
           f.linked_select.innerHTML = selected ? `<option value="${escapeAttr(selected)}">${escapeHtml(selected)}</option>` : '<option value="">Unable to load emails</option>';
           setLinkedMessage('We could not load additional linked emails right now. You can still save preferences for the email shown.', 'bad');
           return [];
@@ -901,7 +901,7 @@ if (snapshotActions) {
           applyPrefs(remote || { email, companyName: payload.companyName });
           return true;
         } catch(err) {
-          console.warn('Email link failed:', err);
+          // DEBUG ONLY: console.warn('Email link failed:', err);
           setLookupMessage('That email could not be linked right now. Please try again in a moment.','bad');
           return false;
         }
@@ -941,7 +941,7 @@ if (snapshotActions) {
           f.use_lookup_btn.style.display='';
           return data;
         } catch(err) {
-          console.warn('Additional email lookup failed:', err);
+          // DEBUG ONLY: console.warn('Additional email lookup failed:', err);
           setLookupMessage('Email lookup failed. Check Apps Script execution logs if this keeps happening.','bad');
           f.use_lookup_btn.style.display='none';
           return null;
