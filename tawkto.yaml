@@ -5,7 +5,7 @@ info:
   description: Search Woodson Lumber & Hardware product data.
 
 servers:
-  - url: https://script.google.com/macros/s/AKfycbyS4LXwHrCDEz7RZFR-X6nLjxoB8DtRURAGxl6D9rozZr9ET8gaIQzMkypqvdGNvF-x9Q/exec
+  - url: https://script.google.com/macros/s/AKfycbyS4LXwHrCDEz7RZFR-X6nLjxoB8DtRURAGxl6D9rozZr9ET8gaIQzMkypqvdGNvF-x9Q
 
 paths:
   /exec:
@@ -13,43 +13,21 @@ paths:
       operationId: searchProducts
       summary: Search Woodson products
       description: >
-        Use this tool before answering any customer product question.
-        Use it when a customer asks if Woodson sells something, asks for a price,
-        product link, product code, SKU, UPC, brand, size, lumber dimension,
-        availability, or online product match. Examples include 2x4x8,
-        2 by 4 by 8, 8 ft 2x4, treated lumber, yellow pine, plywood,
-        concrete, paint, stain, tools, hardware, garden items, fish food,
-        Case knives, gas cans, and Ready Seal.
+        Use this tool before answering any product question. Use it when a customer
+        asks whether Woodson sells a product, asks for a price, product link, SKU,
+        UPC, product code, brand, size, lumber dimension, or availability. Examples:
+        2x4x8, 24082YPL, 642921, fish food, Case knife, treated lumber, yellow pine,
+        plywood, paint, stain, tools, hardware, garden items.
       parameters:
-        - name: action
-          in: query
-          required: true
-          description: Always use searchProducts.
-          schema:
-            type: string
-            enum:
-              - searchProducts
-            default: searchProducts
-
         - name: q
           in: query
           required: true
           description: >
-            The customer's exact product search phrase. Examples: 2x4x8,
-            do you sell fish food, Case knife, 24082YPL, 642921, Ready Seal pecan.
+            The customer's exact product search phrase. Extract the product term,
+            SKU, UPC, brand, or size from the customer message. Examples: 2x4x8,
+            24082YPL, fish food, Case knife, Ready Seal pecan.
           schema:
             type: string
-
-        - name: key
-          in: query
-          required: true
-          description: Required access key for Woodson product search.
-          schema:
-            type: string
-            enum:
-              - WL_TAWK_PRODUCT_SEARCH_2026_veryLongRandomTextHere
-            default: WL_TAWK_PRODUCT_SEARCH_2026_veryLongRandomTextHere
-
       responses:
         "200":
           description: Product search results from Woodson product feed.
@@ -61,8 +39,6 @@ paths:
                   success:
                     type: boolean
                   query:
-                    type: string
-                  normalizedQuery:
                     type: string
                   message:
                     type: string
@@ -77,10 +53,6 @@ paths:
                           type: string
                         title:
                           type: string
-                        internalTitle:
-                          type: string
-                        description:
-                          type: string
                         price:
                           type: string
                         availability:
@@ -89,13 +61,5 @@ paths:
                           type: string
                         imageUrl:
                           type: string
-                        brand:
-                          type: string
-                        gtin:
-                          type: string
                         confidence:
-                          type: string
-                        matchedText:
-                          type: string
-                        source:
                           type: string
