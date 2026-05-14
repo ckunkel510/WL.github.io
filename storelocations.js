@@ -7,11 +7,11 @@
   var search = loc.search || "";
   var params = new URLSearchParams(search);
 
-  console.log(LOG, "loaded");
-  console.log(LOG, "href:", loc.href);
+  // DEBUG ONLY: console.log(LOG, "loaded");
+  // DEBUG ONLY: console.log(LOG, "href:", loc.href);
 
   if (!path.includes("products.aspx")) {
-    console.log(LOG, "Not on Products.aspx. Exiting.");
+    // DEBUG ONLY: console.log(LOG, "Not on Products.aspx. Exiting.");
     return;
   }
 
@@ -71,17 +71,17 @@
   var pg = (params.get("pg") || "").trim();
   var pl1 = (params.get("pl1") || "").trim();
 
-  console.log(LOG, "pg:", pg || "(none)");
-  console.log(LOG, "pl1:", pl1 || "(none)");
+  // DEBUG ONLY: console.log(LOG, "pg:", pg || "(none)");
+  // DEBUG ONLY: console.log(LOG, "pl1:", pl1 || "(none)");
 
   var isHub = (pg === hubPage.pg || pl1 === hubPage.pl1);
 
   if (!isHub) {
-    console.log(LOG, "Not the Store Locations hub. Exiting.");
+    // DEBUG ONLY: console.log(LOG, "Not the Store Locations hub. Exiting.");
     return;
   }
 
-  console.log(LOG, "Matched hub page:", hubPage);
+  // DEBUG ONLY: console.log(LOG, "Matched hub page:", hubPage);
 
   function injectStyles() {
     if (document.getElementById("wl-storelocations-styles")) return;
@@ -283,11 +283,11 @@
     var el = document.getElementById("MainLayoutRow");
 
     if (el) {
-      console.log(LOG, "Using #MainLayoutRow as content container:", el);
+      // DEBUG ONLY: console.log(LOG, "Using #MainLayoutRow as content container:", el);
       return el;
     }
 
-    console.warn(LOG, "Could not find #MainLayoutRow.");
+    // DEBUG ONLY: console.warn(LOG, "Could not find #MainLayoutRow.");
     return null;
   }
 
@@ -302,9 +302,9 @@
         "",
         prettyUrl
       );
-      console.log(LOG, "Browser bar updated to:", prettyUrl);
+      // DEBUG ONLY: console.log(LOG, "Browser bar updated to:", prettyUrl);
     } catch (e) {
-      console.warn(LOG, "replaceState failed:", e);
+      // DEBUG ONLY: console.warn(LOG, "replaceState failed:", e);
     }
   }
 
@@ -345,10 +345,10 @@
     var container = findContentContainer();
     if (!container) return;
 
-    console.log(LOG, "Rendering hub into #MainLayoutRow");
+    // DEBUG ONLY: console.log(LOG, "Rendering hub into #MainLayoutRow");
     container.innerHTML = createHubMarkup();
     setPrettyUrl(hubPage);
-    console.log(LOG, "Store Locations hub rendered.");
+    // DEBUG ONLY: console.log(LOG, "Store Locations hub rendered.");
   }
 
   function waitForContainerThenRender() {
@@ -367,7 +367,7 @@
 
       if (tries >= maxTries) {
         clearInterval(iv);
-        console.warn(LOG, "Timed out waiting for #MainLayoutRow.");
+        // DEBUG ONLY: console.warn(LOG, "Timed out waiting for #MainLayoutRow.");
       }
     }, 200);
   }
