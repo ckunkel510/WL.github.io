@@ -1,0 +1,84 @@
+openapi: 3.0.3
+info:
+  title: Woodson Product Search
+  version: 1.0.0
+  description: Search Woodson Lumber & Hardware product data from Google Sheets.
+
+servers:
+  - url: https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID
+
+paths:
+  /exec:
+    get:
+      operationId: searchProducts
+      summary: Search Woodson products
+      description: >
+        Use this tool whenever a customer asks whether Woodson sells a product,
+        asks for a price, asks for a product link, gives a product code, SKU,
+        UPC, brand, or asks about lumber shorthand such as 2x4x8, 2 by 4 by 8,
+        8 ft 2x4, treated lumber, yellow pine, plywood, concrete, paint,
+        stain, tools, hardware, or garden products.
+      parameters:
+        - name: action
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [searchProducts]
+          description: Always use searchProducts.
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+          description: >
+            The customer's exact product search phrase. Examples: 2x4x8,
+            2 by 4 by 8, yellow pine stud, 24082YPL, 642921, gas can,
+            Ready Seal pecan.
+        - name: key
+          in: query
+          required: true
+          schema:
+            type: string
+          description: API key required to access the Woodson product search tool.
+      responses:
+        "200":
+          description: Product search results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  query:
+                    type: string
+                  normalizedQuery:
+                    type: string
+                  message:
+                    type: string
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        productId:
+                          type: string
+                        productCode:
+                          type: string
+                        title:
+                          type: string
+                        description:
+                          type: string
+                        price:
+                          type: string
+                        availability:
+                          type: string
+                        productUrl:
+                          type: string
+                        imageUrl:
+                          type: string
+                        confidence:
+                          type: string
+                        matchedText:
+                          type: string
