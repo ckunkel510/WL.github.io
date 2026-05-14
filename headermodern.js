@@ -2,7 +2,13 @@
   "use strict";
 
   var LOG = "[WL HeaderEnhancer]";
+  var DEBUG = false; // Set to true only when actively troubleshooting.
   var LOCATIONS_URL = "/Default.aspx?view=storelocations";
+
+  function debugLog() {
+    if (!DEBUG || !window.console || typeof window.console.log !== "function") return;
+    window.console.log.apply(window.console, [LOG].concat(Array.prototype.slice.call(arguments)));
+  }
 
   function onReady(fn) {
     if (document.readyState === "loading") {
@@ -13,7 +19,7 @@
   }
 
   function injectStyles() {
-    if (document.getElementById("wl-header-enhancer-styles")) return;
+    if (document.getElementById("wl-header-enhancer-styles")) return false;
 
     var css = `
       #PageHeaderDiv {
@@ -418,6 +424,7 @@
     style.id = "wl-header-enhancer-styles";
     style.textContent = css;
     document.head.appendChild(style);
+    return true;
   }
 
   function pinIconMarkup() {
@@ -431,16 +438,22 @@
   }
 
   function removeUnusedHeaderSections() {
+    var changed = false;
     ["wlcheadersect2", "wlcheadersect3", "wlcheadersect4", "wlcheadersect5"].forEach(function (id) {
       var el = document.getElementById(id);
-      if (el) el.style.setProperty("display", "none", "important");
+      if (!el) return;
+      if (el.getAttribute("data-wl-header-hidden") === "true") return;
+      el.style.setProperty("display", "none", "important");
+      el.setAttribute("data-wl-header-hidden", "true");
+      changed = true;
     });
+    return changed;
   }
 
   function addDesktopLocationsButton() {
     var target = document.getElementById("wlcheaderquicklinks");
-    if (!target) return;
-    if (target.querySelector(".wl-header-locations-desktop")) return;
+    if (!target) return false;
+    if (target.querySelector(".wl-header-locations-desktop")) return false;
 
     var a = document.createElement("a");
     a.className = "wl-header-locations-desktop";
@@ -448,12 +461,13 @@
     a.innerHTML = pinIconMarkup() + "<span>Locations</span>";
 
     target.insertAdjacentElement("afterbegin", a);
+    return true;
   }
 
   function addMobileLocationsButton() {
     var row = document.getElementById("ctl00_PageHeader_searchBarTableRow");
-    if (!row) return;
-    if (row.querySelector(".wl-header-locations-mobile")) return;
+    if (!row) return false;
+    if (row.querySelector(".wl-header-locations-mobile")) return false;
 
     var anchor = document.createElement("a");
     anchor.className = "wl-header-locations-mobile";
@@ -462,38 +476,70 @@
     anchor.innerHTML = pinIconMarkup();
 
     row.insertBefore(anchor, row.lastElementChild);
+    return true;
   }
 
   function upgradeTopLinksAccessibility() {
+    var changed = false;
     var promo = document.getElementById("wlcheaderpromolinks");
     var quick = document.getElementById("wlcheaderquicklinks");
 
     [promo, quick].forEach(function (group) {
       if (!group) return;
       group.querySelectorAll("a").forEach(function (a) {
-        a.setAttribute("title", (a.textContent || "").trim());
+        var title = (a.textContent || "").trim();
+        if (!title || a.getAttribute("title") === title) return;
+        a.setAttribute("title", title);
+        changed = true;
       });
     });
+
+    return changed;
+  }
+
+  function isFullyEnhanced() {
+    var quick = document.getElementById("wlcheaderquicklinks");
+    var row = document.getElementById("ctl00_PageHeader_searchBarTableRow");
+
+    return !!document.getElementById("wl-header-enhancer-styles") &&
+      !!quick &&
+      !!row &&
+      !!quick.querySelector(".wl-header-locations-desktop") &&
+      !!row.querySelector(".wl-header-locations-mobile");
   }
 
   function run() {
-    console.log(LOG, "running");
-    injectStyles();
-    removeUnusedHeaderSections();
-    upgradeTopLinksAccessibility();
-    addDesktopLocationsButton();
-    addMobileLocationsButton();
-    console.log(LOG, "header enhanced");
+    var changed = false;
+
+    changed = injectStyles() || changed;
+    changed = removeUnusedHeaderSections() || changed;
+    changed = upgradeTopLinksAccessibility() || changed;
+    changed = addDesktopLocationsButton() || changed;
+    changed = addMobileLocationsButton() || changed;
+
+    debugLog(changed ? "header enhanced" : "no header changes needed");
+
+    return {
+      changed: changed,
+      complete: isFullyEnhanced()
+    };
   }
 
   onReady(function () {
-    run();
+    var firstRun = run();
+    if (firstRun.complete) return;
 
+    // Header pieces can render a little late on WebTrack. Poll briefly, then stop
+    // as soon as the desktop and mobile location buttons are in place.
     var tries = 0;
+    var maxTries = 20;
     var iv = setInterval(function () {
       tries++;
-      run();
-      if (tries >= 15) clearInterval(iv);
-    }, 500);
+
+      var result = run();
+      if (result.complete || tries >= maxTries) {
+        clearInterval(iv);
+      }
+    }, 250);
   });
 })();
