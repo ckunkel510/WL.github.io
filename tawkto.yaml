@@ -14,16 +14,22 @@ paths:
       operationId: searchProducts
       summary: Search Woodson products
       description: >
-        Use this tool before answering any product question. Use it when a customer
-        asks whether Woodson sells a product, asks for a price, product link, SKU,
-        UPC, product code, brand, size, lumber dimension, or availability.
+  Use this tool before answering any product question.
 
-        Extract the customer's product phrase and send it as q. Examples: 2x4x8,
-        2x4x8 lumber, 24082YPL, 642921, fish food, Case knife, treated lumber,
-        yellow pine, plywood, paint, stain, tools, hardware, garden items.
+  Send the customer's exact product phrase as q. Examples: paint, lumber,
+  2x4x8, 2x4x8 yellow pine, 24082YPL, 642921, caulk, fish food,
+  Case knife, treated lumber, plywood, stain, tools, hardware, garden items.
 
-        If hasResults is true, use the answer field in the customer reply. Do not
-        say no exact match was found when hasResults is true or results are returned.
+  IMPORTANT: If the response has hasResults=true, use the answer field as the
+  customer response. The answer field is already written for the customer.
+
+  Do not say you are unable to search. Do not say you are having trouble
+  retrieving information. Do not ask for more details before showing returned
+  results.
+
+  The tool may return exact, close, or loose matches. If exact, close, or loose
+  results are returned, show the answer/results and ask which item they mean
+  when multiple products are listed.
       parameters:
         - name: q
           in: query
