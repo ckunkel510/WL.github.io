@@ -5,6 +5,7 @@ info:
   description: Search Woodson Lumber & Hardware products.
 
 servers:
+servers:
   - url: https://script.google.com/macros/s/AKfycbyS4LXwHrCDEz7RZFR-X6nLjxoB8DtRURAGxl6D9rozZr9ET8gaIQzMkypqvdGNvF-x9Q
 
 paths:
