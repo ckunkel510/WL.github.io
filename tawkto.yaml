@@ -1,9 +1,8 @@
 openapi: 3.0.3
 info:
   title: Woodson Product Search
-  version: 1.0.0
+  version: 1.1.0
   description: Search Woodson Lumber & Hardware products.
-
 
 servers:
   - url: https://script.google.com/macros/s/AKfycbyS4LXwHrCDEz7RZFR-X6nLjxoB8DtRURAGxl6D9rozZr9ET8gaIQzMkypqvdGNvF-x9Q
@@ -14,29 +13,29 @@ paths:
       operationId: searchProducts
       summary: Search Woodson products
       description: >
-  Use this tool before answering any product question.
+        Use this tool before answering any product question.
 
-  Send the customer's exact product phrase as q. Examples: paint, lumber,
-  2x4x8, 2x4x8 yellow pine, 24082YPL, 642921, caulk, fish food,
-  Case knife, treated lumber, plywood, stain, tools, hardware, garden items.
+        Send the customer's exact product phrase as q. Examples: paint, lumber,
+        2x4x8, 2x4x8 yellow pine, 24082YPL, 642921, caulk, fish food,
+        Case knife, treated lumber, plywood, stain, tools, hardware, garden items.
 
-  IMPORTANT: If the response has hasResults=true, use the answer field as the
-  customer response. The answer field is already written for the customer.
+        IMPORTANT: If the response has hasResults=true, use the answer field as the
+        customer response. The answer field is already written for the customer.
 
-  Do not say you are unable to search. Do not say you are having trouble
-  retrieving information. Do not ask for more details before showing returned
-  results.
+        Do not say you are unable to search. Do not say you are having trouble
+        retrieving information. Do not ask for more details before showing returned
+        results.
 
-  The tool may return exact, close, or loose matches. If exact, close, or loose
-  results are returned, show the answer/results and ask which item they mean
-  when multiple products are listed.
+        The tool may return exact, close, or loose matches. If exact, close, or loose
+        results are returned, show the answer/results and ask which item they mean
+        when multiple products are listed.
       parameters:
         - name: q
           in: query
           required: true
           description: >
             The customer's exact product search phrase, product code, UPC, SKU,
-            brand, size, or lumber dimension. Example: looking for 2x4x8 lumber.
+            brand, size, product category, or lumber dimension. Example: looking for 2x4x8 lumber.
           schema:
             type: string
       responses:
@@ -49,6 +48,7 @@ paths:
                 required:
                   - success
                   - hasResults
+                  - matchType
                   - answer
                   - results
                 properties:
@@ -57,7 +57,17 @@ paths:
                   hasResults:
                     type: boolean
                     description: If true, matching products were found and the answer should be used.
+                  matchType:
+                    type: string
+                    enum:
+                      - exact
+                      - close
+                      - loose
+                      - none
+                    description: Quality of the best returned match.
                   query:
+                    type: string
+                  normalizedQuery:
                     type: string
                   message:
                     type: string
@@ -78,6 +88,10 @@ paths:
                           type: string
                         title:
                           type: string
+                        internalTitle:
+                          type: string
+                        description:
+                          type: string
                         price:
                           type: string
                         availability:
@@ -86,5 +100,17 @@ paths:
                           type: string
                         imageUrl:
                           type: string
+                        brand:
+                          type: string
+                        gtin:
+                          type: string
+                        condition:
+                          type: string
                         confidence:
+                          type: string
+                        matchType:
+                          type: string
+                        matchedText:
+                          type: string
+                        source:
                           type: string
