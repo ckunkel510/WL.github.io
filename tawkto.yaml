@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: Woodson Product Search
-  version: 1.1.0
-  description: Search Woodson Lumber & Hardware products.
+  version: 1.2.0
+  description: Search Woodson Lumber & Hardware products from the live product feed.
 
 servers:
   - url: https://script.google.com/macros/s/AKfycbyS4LXwHrCDEz7RZFR-X6nLjxoB8DtRURAGxl6D9rozZr9ET8gaIQzMkypqvdGNvF-x9Q
@@ -13,32 +13,41 @@ paths:
       operationId: searchProducts
       summary: Search Woodson products
       description: >
-        Use this tool before answering any product question.
+        Use this tool before answering any product question or product-like phrase.
 
-        Send the customer's exact product phrase as q. Examples: paint, lumber,
-        2x4x8, 2x4x8 yellow pine, 24082YPL, 642921, caulk, fish food,
-        Case knife, treated lumber, plywood, stain, tools, hardware, garden items.
+        IMPORTANT: Always pass the customer's exact product phrase in the query
+        parameter. Never leave query blank.
 
-        IMPORTANT: If the response has hasResults=true, use the answer field as the
-        customer response. The answer field is already written for the customer.
+        Examples:
+        - If the customer says "looking for tan caulk", send query="looking for tan caulk".
+        - If the customer says "Np1 caulk", send query="Np1 caulk".
+        - If the customer says "Scotts fertilizer", send query="Scotts fertilizer".
+        - If the customer says "2x4x8 lumber", send query="2x4x8 lumber".
+        - If the customer says "24082YPL", send query="24082YPL".
+
+        Use this tool for product names, prices, product links, SKUs, UPCs, GTINs,
+        product codes, manufacturer codes, brands, sizes, lumber dimensions,
+        broad product categories, colors, or availability.
+
+        If the response has hasResults=true, use the answer field as the customer
+        response. The answer field is already written for the customer.
 
         Do not say you are unable to search. Do not say you are having trouble
-        retrieving information. Do not ask for more details before showing returned
-        results.
+        retrieving information. Do not say no match was found when hasResults=true
+        or results are returned.
 
-        The tool may return exact, close, or loose matches. If exact, close, or loose
-        results are returned, show the answer/results and ask which item they mean
-        when multiple products are listed.
+        The tool may return exact, close, or loose matches. If exact, close, or
+        loose results are returned, show the answer/results and ask which item
+        they mean when multiple products are listed.
       parameters:
         - name: query
           in: query
           required: true
           description: >
-             REQUIRED. The exact customer product phrase or product identifier.
-            For example, if the customer says "looking for tan caulk", send
-            "looking for tan caulk". Never leave this blank.
-            Other examples: 2x4x8 lumber, NP1 caulk, Scotts fertilizer,
-            24082YPL, 642921, paint, mulch, deck screws.
+            REQUIRED. The customer's exact product search phrase, product code,
+            UPC, GTIN, SKU, manufacturer code, brand, size, category, color, or
+            lumber dimension. Do not summarize or shorten the customer message.
+            Example: looking for tan caulk
           schema:
             type: string
       responses:
@@ -57,9 +66,10 @@ paths:
                 properties:
                   success:
                     type: boolean
+                    description: Whether the search request completed successfully.
                   hasResults:
                     type: boolean
-                    description: If true, matching products were found and the answer should be used.
+                    description: If true, matching products were found and the answer field should be used.
                   matchType:
                     type: string
                     enum:
@@ -70,15 +80,54 @@ paths:
                     description: Quality of the best returned match.
                   query:
                     type: string
+                    description: The search phrase received by the API.
                   normalizedQuery:
                     type: string
+                    description: Normalized version of the search phrase.
                   message:
                     type: string
+                    description: Short status message from the API.
                   instruction:
                     type: string
+                    description: Guidance for how the assistant should use the response.
                   answer:
                     type: string
                     description: Customer-ready response. Use this in the chat when hasResults is true.
+                  openAIUsed:
+                    type: boolean
+                    description: Whether AI keyword expansion was used by the backend.
+                  openAIError:
+                    type: string
+                    description: OpenAI expansion error, if any.
+                  expansion:
+                    type: object
+                    nullable: true
+                    description: Keyword expansion data used by the backend, if any.
+                    properties:
+                      isIdentifier:
+                        type: boolean
+                      identifierCandidates:
+                        type: array
+                        items:
+                          type: string
+                      expandedKeywords:
+                        type: array
+                        items:
+                          type: string
+                      mustHaveTerms:
+                        type: array
+                        items:
+                          type: string
+                      categoryTerms:
+                        type: array
+                        items:
+                          type: string
+                      excludeTerms:
+                        type: array
+                        items:
+                          type: string
+                      customerIntent:
+                        type: string
                   results:
                     type: array
                     description: Matching Woodson products.
