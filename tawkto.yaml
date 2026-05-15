@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: Woodson Product Search
   version: 1.0.0
-  description: Search Woodson Lumber & Hardware product data.
+  description: Search Woodson Lumber & Hardware products.
 
 servers:
   - url: https://script.google.com/macros/s/AKfycbyS4LXwHrCDEz7RZFR-X6nLjxoB8DtRURAGxl6D9rozZr9ET8gaIQzMkypqvdGNvF-x9Q
@@ -15,35 +15,53 @@ paths:
       description: >
         Use this tool before answering any product question. Use it when a customer
         asks whether Woodson sells a product, asks for a price, product link, SKU,
-        UPC, product code, brand, size, lumber dimension, or availability. Examples:
-        2x4x8, 24082YPL, 642921, fish food, Case knife, treated lumber, yellow pine,
-        plywood, paint, stain, tools, hardware, garden items.
+        UPC, product code, brand, size, lumber dimension, or availability.
+
+        Extract the customer's product phrase and send it as q. Examples: 2x4x8,
+        2x4x8 lumber, 24082YPL, 642921, fish food, Case knife, treated lumber,
+        yellow pine, plywood, paint, stain, tools, hardware, garden items.
+
+        If hasResults is true, use the answer field in the customer reply. Do not
+        say no exact match was found when hasResults is true or results are returned.
       parameters:
         - name: q
           in: query
           required: true
           description: >
-            The customer's exact product search phrase. Extract the product term,
-            SKU, UPC, brand, or size from the customer message. Examples: 2x4x8,
-            24082YPL, fish food, Case knife, Ready Seal pecan.
+            The customer's exact product search phrase, product code, UPC, SKU,
+            brand, size, or lumber dimension. Example: looking for 2x4x8 lumber.
           schema:
             type: string
       responses:
         "200":
-          description: Product search results from Woodson product feed.
+          description: Product search response. Use answer when hasResults is true.
           content:
             application/json:
               schema:
                 type: object
+                required:
+                  - success
+                  - hasResults
+                  - answer
+                  - results
                 properties:
                   success:
                     type: boolean
+                  hasResults:
+                    type: boolean
+                    description: If true, matching products were found and the answer should be used.
                   query:
                     type: string
                   message:
                     type: string
+                  instruction:
+                    type: string
+                  answer:
+                    type: string
+                    description: Customer-ready response. Use this in the chat when hasResults is true.
                   results:
                     type: array
+                    description: Matching Woodson products.
                     items:
                       type: object
                       properties:
