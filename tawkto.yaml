@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: Woodson Product Search
-  version: 2.0.0
-  description: Search Woodson Lumber & Hardware products from the live product feed.
+  version: 2.1.0
+  description: Search Woodson Lumber & Hardware products from the live product feed. Uses POST JSON with a required query field.
 
 servers:
   - url: https://script.google.com/macros/s/AKfycbyS4LXwHrCDEz7RZFR-X6nLjxoB8DtRURAGxl6D9rozZr9ET8gaIQzMkypqvdGNvF-x9Q
