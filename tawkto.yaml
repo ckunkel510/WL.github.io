@@ -30,12 +30,15 @@ paths:
         results are returned, show the answer/results and ask which item they mean
         when multiple products are listed.
       parameters:
-        - name: q
+        - name: query
           in: query
           required: true
           description: >
-            The customer's exact product search phrase, product code, UPC, SKU,
-            brand, size, product category, or lumber dimension. Example: looking for 2x4x8 lumber.
+             REQUIRED. The exact customer product phrase or product identifier.
+            For example, if the customer says "looking for tan caulk", send
+            "looking for tan caulk". Never leave this blank.
+            Other examples: 2x4x8 lumber, NP1 caulk, Scotts fertilizer,
+            24082YPL, 642921, paint, mulch, deck screws.
           schema:
             type: string
       responses:
