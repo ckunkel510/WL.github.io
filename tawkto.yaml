@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: Woodson Product Search
-  version: 2.1.0
-  description: Search Woodson Lumber & Hardware products from the live product feed. Uses POST JSON with a required query field.
+  version: 5.0.0
+  description: Search Woodson Lumber & Hardware products using POST JSON, OpenAI result validation, self-healing query learning, and text-only product links.
 
 servers:
   - url: https://script.google.com/macros/s/AKfycbyS4LXwHrCDEz7RZFR-X6nLjxoB8DtRURAGxl6D9rozZr9ET8gaIQzMkypqvdGNvF-x9Q
@@ -14,24 +14,19 @@ paths:
       summary: Search Woodson products
       description: >
         Use this tool before answering any product question or product-like phrase.
-
-        IMPORTANT: Send a POST JSON body with the customer's exact product phrase
-        in the query field. Never call this tool with an empty query.
+        Send a POST JSON body with the customer's exact product phrase in the query field.
+        Never call this tool with an empty query.
 
         Examples:
         - Visitor says "miracle gro" -> body {"query":"miracle gro"}
-        - Visitor says "looking for tan caulk" -> body {"query":"looking for tan caulk"}
-        - Visitor says "Np1 caulk" -> body {"query":"Np1 caulk"}
-        - Visitor says "Scotts fertilizer" -> body {"query":"Scotts fertilizer"}
-        - Visitor says "2x4x8 lumber" -> body {"query":"2x4x8 lumber"}
+        - Visitor says "5 ft by 100 ft fence roll" -> body {"query":"5 ft by 100 ft fence roll"}
+        - Visitor says "Big boy deer feeders" -> body {"query":"Big boy deer feeders"}
+        - Visitor says "Horse panels" -> body {"query":"Horse panels"}
         - Visitor says "24082YPL" -> body {"query":"24082YPL"}
 
-        Use this tool for product names, prices, product links, SKUs, UPCs, GTINs,
-        product codes, manufacturer codes, brands, sizes, lumber dimensions,
-        categories, colors, and availability.
-
-        If hasResults=true, use the answer field as the customer reply.
-        Do not say no match was found when products are returned.
+        If hasResults=true, reply using the answer field exactly. Do not rewrite it,
+        add image markdown, add image links, or list extra products. Do not say no match was found
+        when products are returned.
       requestBody:
         required: true
         content:
@@ -43,30 +38,27 @@ paths:
               properties:
                 query:
                   type: string
-                  description: >
-                    REQUIRED. The visitor's exact product message or product identifier.
-                    Do not summarize, shorten, or leave blank.
-                    Example: looking for tan caulk
+                  description: REQUIRED. The visitor's exact product message or product identifier. Do not summarize, shorten, or leave blank.
                 action:
                   type: string
                   description: Optional. Use searchProducts if provided.
                   default: searchProducts
             examples:
-              miracleGro:
-                summary: Miracle Gro search
+              fenceRoll:
+                summary: Fence roll search
                 value:
-                  query: miracle gro
-              tanCaulk:
-                summary: Tan caulk search
+                  query: 5 ft by 100 ft fence roll
+              deerFeeders:
+                summary: Deer feeder search
                 value:
-                  query: looking for tan caulk
-              lumber:
-                summary: Lumber dimension search
+                  query: Big boy deer feeders
+              horsePanels:
+                summary: Horse panel search
                 value:
-                  query: 2x4x8 lumber
+                  query: Horse panels
       responses:
         "200":
-          description: Product search response. Use answer when hasResults is true.
+          description: Product search response. Use answer exactly when hasResults is true.
           content:
             application/json:
               schema:
@@ -82,7 +74,6 @@ paths:
                     type: boolean
                   hasResults:
                     type: boolean
-                    description: If true, matching products were found and answer should be used.
                   matchType:
                     type: string
                     enum:
@@ -100,15 +91,17 @@ paths:
                     type: string
                   answer:
                     type: string
-                    description: Customer-ready response. Use this when hasResults is true.
+                    description: Customer-ready response. Use this exactly when hasResults is true.
                   openAIUsed:
                     type: boolean
                   openAIError:
                     type: string
-                  expansion:
+                  validation:
                     type: object
                     nullable: true
                     additionalProperties: true
+                  learningUsed:
+                    type: boolean
                   results:
                     type: array
                     items:
@@ -129,8 +122,6 @@ paths:
                         availability:
                           type: string
                         productUrl:
-                          type: string
-                        imageUrl:
                           type: string
                         brand:
                           type: string
