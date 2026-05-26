@@ -23,8 +23,82 @@
     debug(...a){ if (LOG>=LVL.debug) console.log('[INV]',...a); },
   };
 
-  const VERSION = '4.1';
+  const VERSION = '4.2';
   log.info('Version', VERSION, 'booting…');
+
+
+  /* ---------- default invoice date range ---------- */
+  const WL_DEFAULT_INVOICE_LOOKBACK_MONTHS = 12;
+  const WL_DEFAULT_RANGE_SESSION_KEY = 'wl_inv_default_12mo_range_applied_v1';
+
+  function wlPad2(n){
+    return String(n).padStart(2, '0');
+  }
+
+  function wlLocalISODate(d){
+    return `${d.getFullYear()}-${wlPad2(d.getMonth() + 1)}-${wlPad2(d.getDate())}`;
+  }
+
+  function wlParseQueryDate(value){
+    const m = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!m) return null;
+
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    d.setHours(0, 0, 0, 0);
+    return isNaN(d) ? null : d;
+  }
+
+  function maybeApplyDefaultInvoiceDateRange(){
+    try {
+      // Prevent a redirect loop and avoid fighting the customer if they manually
+      // change the range after the first automatic 12-month default is applied.
+      if (sessionStorage.getItem(WL_DEFAULT_RANGE_SESSION_KEY) === '1') {
+        return false;
+      }
+
+      const url = new URL(location.href);
+      const searchType = url.searchParams.get('searchType') || 'InvoiceDate';
+
+      // Do not override Product / Job Ref / Your Ref / Invoice # searches.
+      if (!/^InvoiceDate$/i.test(searchType)) {
+        sessionStorage.setItem(WL_DEFAULT_RANGE_SESSION_KEY, '1');
+        return false;
+      }
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const defaultStart = new Date(today);
+      defaultStart.setMonth(defaultStart.getMonth() - WL_DEFAULT_INVOICE_LOOKBACK_MONTHS);
+
+      const currentStart = wlParseQueryDate(url.searchParams.get('startDate'));
+      const currentEnd = wlParseQueryDate(url.searchParams.get('endDate')) || today;
+
+      const currentDays = currentStart
+        ? Math.round((currentEnd - currentStart) / 86400000)
+        : 0;
+
+      // If it is already roughly 12 months or wider, leave it alone.
+      if (currentDays >= 335) {
+        sessionStorage.setItem(WL_DEFAULT_RANGE_SESSION_KEY, '1');
+        return false;
+      }
+
+      url.searchParams.set('searchType', 'InvoiceDate');
+      url.searchParams.set('startDate', `${wlLocalISODate(defaultStart)}T00:00:00`);
+      url.searchParams.set('endDate', `${wlLocalISODate(today)}T23:59:59`);
+      url.searchParams.delete('pageIndex');
+
+      sessionStorage.setItem(WL_DEFAULT_RANGE_SESSION_KEY, '1');
+      location.replace(url.toString());
+      return true;
+    } catch (e) {
+      log.warn('Could not apply default invoice date range', e);
+      return false;
+    }
+  }
+
+  if (maybeApplyDefaultInvoiceDateRange()) return;
 
   /* ---------- CSS ---------- */
   (function injectCSS(){
