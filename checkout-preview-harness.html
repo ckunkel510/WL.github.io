@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex,nofollow">
+  <title>Checkout Preview Harness</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; font: 16px/1.45 Arial, sans-serif; color: #20242a; background: #f4f5f6; }
+    .container { max-width: 1100px; margin: 0 auto; background: #fff; min-height: 100vh; }
+    label { display: block; margin: 0 0 6px; font-weight: 700; }
+    input, select, textarea { width: 100%; padding: 10px 12px; }
+    .epi-form-group-checkout { margin-bottom: 16px; }
+    .SaleTypeSelector { display: flex; gap: 20px; }
+    .checkout-step { display: none; }
+    .checkout-step.active { display: block; }
+    button { padding: 12px 18px; }
+  </style>
+</head>
+<body>
+  <main class="container">
+    <div class="epi-form-col-single-checkout">
+      <div class="SaleTypeSelector">
+        <input type="radio" id="ctl00_PageBody_SaleTypeSelector_rbDelivered" name="saleType" checked>
+        <label id="ctl00_PageBody_SaleTypeSelector_lblDelivered" for="ctl00_PageBody_SaleTypeSelector_rbDelivered">Delivered</label>
+        <input type="radio" id="ctl00_PageBody_SaleTypeSelector_rbCollectLater" name="saleType">
+        <label for="ctl00_PageBody_SaleTypeSelector_rbCollectLater">Pickup</label>
+      </div>
+    </div>
+
+    <select id="ctl00_PageBody_BranchSelector">
+      <option value="">Select a store</option>
+      <option value="1">Woodson Lumber - Bryan</option>
+      <option value="2">Woodson Lumber - Brenham</option>
+    </select>
+
+    <div class="epi-form-col-single-checkout">
+      <h3 class="SelectableAddressType">Delivery address</h3>
+      <div class="epi-form-group-checkout"><label>First name</label><input id="ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox" value="Test"></div>
+      <div class="epi-form-group-checkout"><label>Last name</label><input id="ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox" value="Customer"></div>
+      <div class="epi-form-group-checkout"><label>Phone</label><input id="ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox" value="9795550100"></div>
+      <div class="epi-form-group-checkout"><label>Street</label><input id="ctl00_PageBody_DeliveryAddress_AddressLine1" value="123 Main St"></div>
+      <div class="epi-form-group-checkout"><label>City</label><input id="ctl00_PageBody_DeliveryAddress_City" value="Bryan"></div>
+      <div class="epi-form-group-checkout"><label>State</label><select id="ctl00_PageBody_DeliveryAddress_CountySelector_CountyList"><option value="TX" selected>Texas</option></select></div>
+      <div class="epi-form-group-checkout"><label>ZIP</label><input id="ctl00_PageBody_DeliveryAddress_Postcode" value="77803"></div>
+      <select id="ctl00_PageBody_DeliveryAddress_CountrySelector"><option value="USA" selected>USA</option></select>
+    </div>
+
+    <div class="epi-form-col-single-checkout">
+      <div id="ctl00_PageBody_InvoiceAddress_GoogleAddressSearchWrapper"></div>
+      <div class="epi-form-group-checkout"><label>Email</label><input id="ctl00_PageBody_InvoiceAddress_EmailAddressTextBox" value="test@example.com"></div>
+      <div class="epi-form-group-checkout"><label>First name</label><input id="ctl00_PageBody_InvoiceAddress_ContactFirstNameTextBox" value="Test"></div>
+      <div class="epi-form-group-checkout"><label>Last name</label><input id="ctl00_PageBody_InvoiceAddress_ContactLastNameTextBox" value="Customer"></div>
+      <div class="epi-form-group-checkout"><label>Street</label><input id="ctl00_PageBody_InvoiceAddress_AddressLine1" value="123 Main St"></div>
+      <div class="epi-form-group-checkout"><label>City</label><input id="ctl00_PageBody_InvoiceAddress_City" value="Bryan"></div>
+      <div class="epi-form-group-checkout"><label>State</label><select id="ctl00_PageBody_InvoiceAddress_CountySelector_CountyList"><option value="TX" selected>Texas</option></select></div>
+      <div class="epi-form-group-checkout"><label>ZIP</label><input id="ctl00_PageBody_InvoiceAddress_Postcode" value="77803"></div>
+      <select id="ctl00_PageBody_InvoiceAddress_CountrySelector1"><option value="USA" selected>USA</option></select>
+    </div>
+
+    <div class="epi-form-group-checkout"><label>Purchase order</label><input id="ctl00_PageBody_PurchaseOrderNumberTextBox"></div>
+    <div class="epi-form-group-checkout"><label>Special instructions</label><textarea id="ctl00_PageBody_SpecialInstructionsTextBox"></textarea></div>
+    <input type="button" id="ctl00_PageBody_ContinueButton2" value="Continue">
+  </main>
+  <script src="Checkout2.js"></script>
+</body>
+</html>

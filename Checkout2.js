@@ -36,6 +36,93 @@
     return getPickupSelected() ? 'pickup' : (getDeliveredSelected() ? 'delivered' : '');
   }
 
+  const SINGLE_PAGE_SESSION_KEY = "wl_checkout_single_page_preview";
+
+  function isSinglePageCheckout() {
+    try {
+      const requested = new URLSearchParams(window.location.search).get("wlCheckout");
+      if (requested === "single") sessionStorage.setItem(SINGLE_PAGE_SESSION_KEY, "1");
+      if (requested === "wizard") sessionStorage.removeItem(SINGLE_PAGE_SESSION_KEY);
+      return sessionStorage.getItem(SINGLE_PAGE_SESSION_KEY) === "1";
+    } catch {
+      return false;
+    }
+  }
+
+  // Capture the preview flag on the cart before sign-in redirects back into checkout.
+  isSinglePageCheckout();
+
+  function injectSinglePageStyles() {
+    if (document.getElementById("wl-single-page-checkout-css")) return;
+
+    const style = document.createElement("style");
+    style.id = "wl-single-page-checkout-css";
+    style.textContent = `
+      .checkout-wizard.wl-single-page{
+        width:min(100%,960px);max-width:960px;margin:24px auto 48px;padding:0 20px;color:#20242a;
+      }
+      .checkout-wizard.wl-single-page .checkout-steps{display:none!important;}
+      .checkout-wizard.wl-single-page .checkout-step{
+        display:block!important;margin:0;padding:24px 0;border-bottom:1px solid #d9dde2;background:#fff;
+      }
+      .checkout-wizard.wl-single-page .checkout-step:first-of-type{border-top:1px solid #d9dde2;}
+      .checkout-wizard.wl-single-page .checkout-step.wl-step-unavailable{display:none!important;}
+      .checkout-wizard.wl-single-page .wl-section-heading{
+        display:flex;align-items:center;gap:12px;margin:0 0 20px;
+      }
+      .checkout-wizard.wl-single-page .wl-section-heading .wl-step-icon{
+        width:38px;height:38px;flex:0 0 38px;border:1px solid #d9dde2;border-radius:8px;
+        color:#6b0016;background:#f8f7f7;
+      }
+      .checkout-wizard.wl-single-page .wl-section-heading .wl-step-icon svg{width:21px;height:21px;}
+      .checkout-wizard.wl-single-page .wl-section-title{
+        margin:0;font-size:20px;line-height:1.25;font-weight:700;letter-spacing:0;color:#20242a;
+      }
+      .checkout-wizard.wl-single-page .checkout-nav{display:none!important;}
+      .checkout-wizard.wl-single-page .checkout-step[data-step="5"] .checkout-nav{
+        display:flex!important;justify-content:flex-end;margin-top:24px;padding-top:20px;border-top:1px solid #d9dde2;
+      }
+      .checkout-wizard.wl-single-page .checkout-step[data-step="5"] .wl-proxy-continue{
+        width:min(100%,360px);min-height:48px;margin-left:auto;border:1px solid #6b0016!important;
+        border-radius:6px!important;background:#6b0016!important;color:#fff!important;font-weight:700;
+      }
+      .checkout-wizard.wl-single-page .modern-shipping-selector{
+        display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;justify-content:stretch!important;
+      }
+      .checkout-wizard.wl-single-page .modern-shipping-selector button{
+        min-height:72px;width:100%;margin:0!important;padding:14px 16px!important;border-radius:8px!important;
+        font-size:16px!important;font-weight:700!important;box-shadow:none!important;
+      }
+      .checkout-wizard.wl-single-page .form-group,
+      .checkout-wizard.wl-single-page .epi-form-group-checkout{
+        max-width:none;margin:0 0 16px;align-items:stretch;
+      }
+      .checkout-wizard.wl-single-page input:not([type="radio"]):not([type="checkbox"]),
+      .checkout-wizard.wl-single-page select,
+      .checkout-wizard.wl-single-page textarea{
+        min-height:44px;border:1px solid #b9c0c8!important;border-radius:6px!important;background:#fff;
+        box-shadow:none!important;
+      }
+      .checkout-wizard.wl-single-page textarea{min-height:96px;}
+      .checkout-wizard.wl-single-page input:focus,
+      .checkout-wizard.wl-single-page select:focus,
+      .checkout-wizard.wl-single-page textarea:focus{
+        border-color:#6b0016!important;outline:3px solid rgba(196,151,45,.24)!important;outline-offset:1px;
+      }
+      .checkout-wizard.wl-single-page .wl-branch-card,
+      .checkout-wizard.wl-single-page .wl-address-summary{border-radius:8px!important;box-shadow:none!important;}
+      .checkout-wizard.wl-single-page .wl-inline-error{border-radius:6px;}
+      @media (max-width:767px){
+        .checkout-wizard.wl-single-page{margin:12px auto 32px;padding:0 14px;}
+        .checkout-wizard.wl-single-page .checkout-step{padding:20px 0;}
+        .checkout-wizard.wl-single-page .wl-section-title{font-size:18px;}
+        .checkout-wizard.wl-single-page .modern-shipping-selector{grid-template-columns:1fr;}
+        .checkout-wizard.wl-single-page .checkout-step[data-step="5"] .wl-proxy-continue{width:100%;}
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
 // ---------------------------------------------------------------------------
   // 0) Storage helpers (TTL for step; sessionStorage for returnStep)
   // ---------------------------------------------------------------------------
@@ -207,6 +294,12 @@
     const wizard = document.createElement("div");
     wizard.className = "checkout-wizard";
     container.insertBefore(wizard, container.firstChild);
+
+    const singlePageCheckout = isSinglePageCheckout();
+    if (singlePageCheckout) {
+      wizard.classList.add("wl-single-page");
+      injectSinglePageStyles();
+    }
 
     const nav = document.createElement("ul");
     nav.className = "checkout-steps";
@@ -490,7 +583,11 @@
       const li = nav.querySelector(`li[data-step="${stepNum}"]`);
       const pane = wizard.querySelector(`.checkout-step[data-step="${stepNum}"]`);
       if (li) li.style.display = isVisible ? "" : "none";
-      if (pane) pane.style.display = isVisible ? "" : "none";
+      if (pane) {
+        pane.style.display = isVisible ? "" : "none";
+        pane.classList.toggle("wl-step-unavailable", !isVisible);
+        if (singlePageCheckout) pane.classList.toggle("active", !!isVisible);
+      }
     }
 
     function setDeliverySectionVisibility(isVisible) {
@@ -547,6 +644,7 @@
     function updatePickupModeUI() {
       const pickup = getPickupSelected();
       const delivered = getDeliveredSelected();
+      const hasSaleType = pickup || delivered;
 
       // Step 2 Branch: show for Pickup, hide for Delivered.
       setStepVisibility(2, !!pickup);
@@ -557,8 +655,15 @@
       }
 
       // Step 3 Delivery Address: hide + skip in pickup mode
-      setStepVisibility(3, !pickup);
+      setStepVisibility(3, singlePageCheckout ? (!!delivered && !pickup) : !pickup);
       setDeliverySectionVisibility(!pickup);
+
+      // The single-page preview reveals the remaining sections after fulfillment
+      // is selected, keeping the first decision focused without adding pagination.
+      if (singlePageCheckout) {
+        setStepVisibility(4, hasSaleType);
+        setStepVisibility(5, hasSaleType);
+      }
 
       // Phone requirement: surface delivery phone inside billing when pickup
       mountPickupPhoneInBilling(!!pickup);
@@ -1143,6 +1248,14 @@ steps.forEach(function (step, i) {
       pane.dataset.step = String(num);
       wizard.appendChild(pane);
 
+      if (singlePageCheckout) {
+        const heading = document.createElement("div");
+        heading.className = "wl-section-heading";
+        heading.innerHTML = '<span class="wl-step-icon" aria-hidden="true">' + wlStepIconSvg(num) + '</span>' +
+          '<h2 class="wl-section-title">' + step.title + '</h2>';
+        pane.appendChild(heading);
+      }
+
       step.findEls()
         .filter(isEl)
         .forEach((el) => pane.appendChild(el));
@@ -1400,9 +1513,14 @@ const navDiv = document.createElement("div");
       if (n < 1) n = 1;
       if (n > steps.length) n = steps.length;
 
-wizard
+      wizard
         .querySelectorAll(".checkout-step")
-        .forEach((p) => p.classList.toggle("active", +p.dataset.step === n));
+        .forEach((p) => {
+          const shouldShow = singlePageCheckout
+            ? !p.classList.contains("wl-step-unavailable")
+            : +p.dataset.step === n;
+          p.classList.toggle("active", shouldShow);
+        });
 
       nav.querySelectorAll("li").forEach((li) => {
         const s = +li.dataset.step;
@@ -1417,7 +1535,12 @@ wizard
         }
       } catch {}
       try {
-        window.scrollTo({ top: wizard.offsetTop, behavior: "smooth" });
+        const scrollTarget = singlePageCheckout
+          ? wizard.querySelector(`.checkout-step[data-step="${n}"]`)
+          : wizard;
+        if (scrollTarget && !scrollTarget.classList.contains("wl-step-unavailable")) {
+          window.scrollTo({ top: Math.max(0, scrollTarget.offsetTop - 16), behavior: "smooth" });
+        }
       } catch {}
 
       // Billing step (Step 4): if "same as delivery" is checked but invoice fields are blank
@@ -1493,6 +1616,7 @@ document.addEventListener("click", function (ev) {
     // E.5) Wizard navigation intercept: validate + skip Step 5 in Pickup mode
     // -------------------------------------------------------------------------
     function getActiveStep() {
+      if (singlePageCheckout) return getStep() || 1;
       const active = wizard.querySelector(".checkout-step.active");
       return active ? parseInt(active.dataset.step, 10) : 1;
     }
@@ -3192,4 +3316,3 @@ document.addEventListener("click", function (ev) {
     }
   });
 })();
-
