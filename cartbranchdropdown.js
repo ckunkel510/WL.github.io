@@ -13,7 +13,7 @@ if (window.location.pathname === "/ShoppingCart.aspx") {
 
     const $dropdown = $(DROPDOWN_ID);
     if ($dropdown.length === 0) {
-      console.warn("[CartBranch] Branch dropdown not found.");
+      console.log("[CartBranch] Branch dropdown not present on this cart state.");
       return;
     }
 

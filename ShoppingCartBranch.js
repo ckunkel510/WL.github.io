@@ -35,7 +35,7 @@ if (window.location.pathname === "/ShoppingCart.aspx") {
       if (pid && qty != null) {
         cartItems.push({ pid, qty });
         console.log(`[CartBranch] Found item ${i + 1}: PID=${pid}, Qty=${qty}`);
-      } else {
+      } else if (productLink || qty != null) {
         console.warn(`[CartBranch] Skipped item ${i + 1}: PID=${pid}, Qty=${qty}`);
       }
     });
@@ -46,8 +46,6 @@ if (window.location.pathname === "/ShoppingCart.aspx") {
       getSignedInBranch().then(accountBranch => {
         getStockForCart(accountBranch);
       });
-    } else {
-      console.warn("[CartBranch] No valid cart items found.");
     }
   });
 
@@ -150,4 +148,3 @@ if (window.location.pathname === "/ShoppingCart.aspx") {
 }
 
 }
-

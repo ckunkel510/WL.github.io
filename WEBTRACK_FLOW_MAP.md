@@ -43,6 +43,10 @@ These are usually better starting points for visual and responsive improvements,
 
 The primary improvement area is shopping cart and checkout flow. Because those pages directly affect customer ordering, changes should be small and tested against live WebTrack using a test account when authenticated state is needed.
 
+## Confirmed Live Script Loading
+
+Observed on `ShoppingCart.aspx` on June 26, 2026: the page loads the individual GitHub Pages scripts (`ShoppingCartRow.js`, `Checkout2.js`, `Guestcheckout.js`, `ShoppingCartBranch.js`, `ShoppingCartSummary.js`, etc.) rather than `wl-shoppingcart.bundle.js`.
+
 ## Open Questions
 
 - Which runtime scripts are still injected by WebTrack today?

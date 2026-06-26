@@ -119,7 +119,7 @@
       }
 
       if (attempts >= maxAttempts) {
-        warn("Cart CTA: .cart-header not found after retries");
+        log("Cart CTA skipped: .cart-header not found after retries");
         clearInterval(timer);
       }
     }, 500);

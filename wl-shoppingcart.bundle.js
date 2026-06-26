@@ -875,9 +875,6 @@
               modal.style.display = "block";
             });
         }
-      });
-      
-      
       document.addEventListener("DOMContentLoaded", function () {
         const shouldTrigger = sessionStorage.getItem("triggerPlaceOrder");
         if (shouldTrigger === "true") {
@@ -895,6 +892,7 @@
             }
           }, 500);
         }
+      });
     } catch(e) {
       console.error('[WL.AddToCartModal] error', e);
     }
@@ -906,7 +904,7 @@
 (function(){
   var WL = window.WL || (window.WL = {});
   WL.MetaShop = WL.MetaShop || {};
-  WL.MetaShop.run = function(){
+  WL.MetaShop.run = async function(){
     try {
       if (!(true)) return;
       const params = new URLSearchParams(window.location.search);
@@ -942,7 +940,6 @@
         setTimeout(() => {
           window.location.href = "/ShoppingCart.aspx";
         }, 1000);
-      });
       
       function addToCartViaIframe(productId, quantity) {
         return new Promise((resolve) => {
@@ -5541,4 +5538,3 @@
     }
   };
 })();
-

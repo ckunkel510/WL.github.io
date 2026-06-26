@@ -3,6 +3,16 @@ $(function(){
   $('.shopping-cart-details .shopping-cart-item').each(function(){
     var $item = $(this);
 
+    var $infoCol = $item.find('.row.pl-2.w-100 .col-12.col-sm-6').first();
+    var $link = $infoCol.find('a:has(.portalGridLink)').first();
+    var code = $link.find('.portalGridLink').text().trim();
+    var href = $link.attr('href');
+    var $origQtyWrap = $item.find('span.RadInput').first();
+
+    // WebTrack can render responsive/helper cart rows that do not contain a
+    // product. Skip those so we do not create ghost cards like "ea / Delete".
+    if (!code || !href || !$origQtyWrap.length) return;
+
     // 1) Remove legacy update rows & validators
     $item.find('[style*="display: table-row"]').remove();
     $item.find('span[id$="_QuantityValidator"]').remove();
@@ -24,14 +34,10 @@ $(function(){
     $origRef.remove();
 
     // 4) Detach the entire RadInput wrapper for qty
-    var $origQtyWrap = $item.find('span.RadInput').first().detach();
+    $origQtyWrap = $origQtyWrap.detach();
 
     // 5) Grab the rest of your data
     var imgSrc = $item.find('img.ThumbnailImage').attr('src');
-    var $infoCol = $item.find('.row.pl-2.w-100 .col-12.col-sm-6').first();
-    var $link   = $infoCol.find('a:has(.portalGridLink)').first();
-    var code    = $link.find('.portalGridLink').text().trim();
-    var href    = $link.attr('href');
     var desc    = $infoCol.find('> div:nth-child(3) div').text().trim();
     var priceText = $item
       .find('.col-12.col-sm-9 .col-6')
