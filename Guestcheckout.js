@@ -192,18 +192,38 @@
   }
 
   function showModal() {
+    injectStyles();
+    if (!document.getElementById('gc_modal')) buildModal();
+
     const back = $('#gc_backdrop');
     const modal = $('#gc_modal');
-    if (back) back.style.display = 'block';
-    if (modal) modal.style.display = 'flex';
+    if (back) back.style.setProperty('display', 'block', 'important');
+    if (modal) {
+      modal.style.setProperty('display', 'flex', 'important');
+      modal.style.setProperty('visibility', 'visible', 'important');
+      modal.style.setProperty('opacity', '1', 'important');
+      modal.style.setProperty('pointer-events', 'auto', 'important');
+    }
     setTimeout(() => { try { $('#gc_email')?.focus(); } catch {} }, 50);
   }
 
   function closeModal() {
     const back = $('#gc_backdrop');
     const modal = $('#gc_modal');
-    if (back) back.style.display = 'none';
-    if (modal) modal.style.display = 'none';
+    if (back) back.style.setProperty('display', 'none', 'important');
+    if (modal) modal.style.setProperty('display', 'none', 'important');
+  }
+
+  function bindGuestEntryDelegation() {
+    if (window.__WL_GUEST_ENTRY_DELEGATED__) return;
+    window.__WL_GUEST_ENTRY_DELEGATED__ = true;
+
+    document.addEventListener('click', (ev) => {
+      const target = ev.target && ev.target.closest ? ev.target.closest('#gc_guest_btn') : null;
+      if (!target) return;
+      ev.preventDefault();
+      showModal();
+    }, true);
   }
 
   function buildModal() {
@@ -287,7 +307,6 @@
       btn.className = 'epi-button gc-guest-entry';
       btn.href = 'javascript:void(0)';
       btn.innerHTML = '<span>Checkout as Guest</span>';
-      btn.addEventListener('click', showModal);
     }
     return btn;
   }
@@ -657,6 +676,7 @@
 
   function init() {
     injectStyles();
+    bindGuestEntryDelegation();
     document.addEventListener('input', (ev) => {
       if (ev.target && ev.target.classList && ev.target.classList.contains('gc-invalid')) {
         ev.target.classList.remove('gc-invalid');
