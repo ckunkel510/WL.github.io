@@ -94,7 +94,9 @@
 
   function hardenCartQuantityInput(input) {
     if (!input) return;
-    try { input.type = 'number'; } catch {}
+    if (input.getAttribute('data-wl-qty-native') !== '1') {
+      try { input.type = 'number'; } catch {}
+    }
     input.setAttribute('min', '0.001');
     input.setAttribute('step', 'any');
     input.setAttribute('inputmode', 'decimal');

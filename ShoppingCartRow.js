@@ -1,5 +1,19 @@
 
 $(function(){
+  if (!document.getElementById('wl-cart-qty-stepper-styles')) {
+    $('<style id="wl-cart-qty-stepper-styles">\
+      .qty-section{gap:8px;min-height:40px;}\
+      .wl-native-qty-hidden{display:none!important;}\
+      .wl-qty-label,.wl-qty-unit{font-size:13px;color:#555;}\
+      .wl-qty-stepper{display:inline-grid;grid-template-columns:40px 46px 40px;height:40px;border:1px solid #b9bec5;border-radius:6px;overflow:hidden;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.06);}\
+      .wl-qty-stepper button{width:40px;height:40px;padding:0;border:0;border-radius:0;background:#f2f4f6;color:#292d32;font-size:22px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;}\
+      .wl-qty-stepper button.wl-qty-increase{background:#6b0016;color:#fff;}\
+      .wl-qty-stepper button:focus-visible{outline:3px solid rgba(107,0,22,.25);outline-offset:-3px;}\
+      .wl-qty-stepper button:disabled{opacity:.42;cursor:default;}\
+      .wl-qty-value{min-width:46px;height:40px;display:flex;align-items:center;justify-content:center;border-left:1px solid #d8dce1;border-right:1px solid #d8dce1;font-size:16px;font-weight:700;color:#222;font-variant-numeric:tabular-nums;background:#fff;}\
+    </style>').appendTo('head');
+  }
+
   $('.shopping-cart-details .shopping-cart-item').each(function(){
     var $item = $(this);
 
@@ -95,54 +109,81 @@ $(function(){
       </div>
     `);
 
-    // 8) Insert cloned qty wrapper & wire auto-postback
+    // 8) Keep WebTrack's field hidden and expose a Safari-safe quantity stepper.
     var $qtyClone = $origQtyWrap.clone();
-    $card.find('.qty-section')
-         .append($qtyClone)
-         .append(' ea');
-    if (refJs) {
-      var $input = $qtyClone.find('input.riTextBox');
-      var committedQty = $.trim($input.val()) || '1';
-      var validQty = function(value) {
-        return /^\d+(?:\.\d+)?$/.test(value) && parseFloat(value) > 0;
-      };
+    var $qtySection = $card.find('.qty-section');
+    var $input = $qtyClone.find('input.riTextBox');
+    var $qtyState = $qtyClone.find("input[type='hidden'][id$='_ClientState']");
+    $qtySection.append($qtyClone);
 
-      // Safari can mistake an unlabelled text quantity for a credential field.
-      // Keep the WebTrack field name intact, but expose the correct input semantics.
+    if ($input.length) {
+      var currentQty = parseFloat($input.val());
+      if (!isFinite(currentQty) || currentQty <= 0) currentQty = 1;
+
+      $qtyClone.addClass('wl-native-qty-hidden');
       $input.attr({
-        type: 'number',
-        min: '0.001',
-        step: 'any',
-        inputmode: 'decimal',
+        type: 'hidden',
+        tabindex: '-1',
         autocomplete: 'off',
-        enterkeyhint: 'done',
-        'aria-label': 'Quantity',
+        'aria-hidden': 'true',
+        'data-wl-qty-native': '1',
         'data-form-type': 'other',
         'data-1p-ignore': 'true',
         'data-lpignore': 'true'
-      }).prop('spellcheck', false);
+      });
 
-      $input.on('blur', function(){
-        var value = $.trim($input.val());
-        if ($input.attr('data-wl-skip-next-qty-refresh') === '1') {
-          $input.removeAttr('data-wl-skip-next-qty-refresh');
-          if (!validQty(value)) $input.val(committedQty);
-          return;
+      var $stepper = $('<div class="wl-qty-stepper" role="group" aria-label="Quantity"></div>');
+      var $decrease = $('<button type="button" class="wl-qty-decrease" aria-label="Decrease quantity"><span aria-hidden="true">&minus;</span></button>');
+      var $value = $('<span class="wl-qty-value" aria-live="polite" aria-atomic="true"></span>');
+      var $increase = $('<button type="button" class="wl-qty-increase" aria-label="Increase quantity"><span aria-hidden="true">+</span></button>');
+      var busy = false;
+
+      function renderQty() {
+        var text = String(currentQty);
+        $value.text(text).attr('aria-label', 'Quantity ' + text);
+        $decrease.prop('disabled', busy || currentQty <= 1);
+        $increase.prop('disabled', busy);
+      }
+
+      function syncWebTrackQty() {
+        var text = String(currentQty);
+        $input.val(text);
+        if ($qtyState.length && $qtyState.val()) {
+          try {
+            var state = JSON.parse($qtyState.val());
+            state.validationText = text;
+            state.valueAsString = text;
+            state.lastSetTextBoxValue = text;
+            $qtyState.val(JSON.stringify(state));
+          } catch (e) {}
         }
-        if (!validQty(value)) {
-          $input.val(committedQty);
-          return;
+      }
+
+      function changeQty(delta) {
+        if (busy) return;
+        var next = Math.max(1, currentQty + delta);
+        if (next === currentQty) return;
+        currentQty = next;
+        busy = true;
+        syncWebTrackQty();
+        renderQty();
+        if (refJs) {
+          try { eval(refJs); }
+          catch (e) { busy = false; renderQty(); throw e; }
+        } else {
+          busy = false;
+          renderQty();
         }
-        if (value === committedQty) return;
-        committedQty = value;
-        eval(refJs);
-      })
-            .on('keydown', function(e){
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                $input.blur();
-              }
-            });
+      }
+
+      $decrease.on('click', function(){ changeQty(-1); });
+      $increase.on('click', function(){ changeQty(1); });
+      $stepper.append($decrease, $value, $increase);
+      $qtySection.append('<span class="wl-qty-label">Qty</span>', $stepper, '<span class="wl-qty-unit">ea</span>');
+      syncWebTrackQty();
+      renderQty();
+    } else {
+      $qtySection.append(' ea');
     }
 
     // 9) Attach the Delete link
