@@ -84,7 +84,7 @@
   function digits(v) { return clean(v).replace(/[^\d]/g, ''); }
   function isTouchDevice() {
     try {
-      return window.matchMedia('(pointer: coarse)').matches || /iPad|iPhone|iPod/i.test(navigator.userAgent);
+      return window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 640 || /iPad|iPhone|iPod/i.test(navigator.userAgent);
     } catch { return false; }
   }
 
