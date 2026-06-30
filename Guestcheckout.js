@@ -82,6 +82,11 @@
   function byId(id, root = document) { return root.getElementById(id); }
   function clean(v) { return String(v || '').trim(); }
   function digits(v) { return clean(v).replace(/[^\d]/g, ''); }
+  function isTouchDevice() {
+    try {
+      return window.matchMedia('(pointer: coarse)').matches || /iPad|iPhone|iPod/i.test(navigator.userAgent);
+    } catch { return false; }
+  }
 
   function randTempPassword(len = 16) {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%';
@@ -204,12 +209,17 @@
       modal.style.setProperty('opacity', '1', 'important');
       modal.style.setProperty('pointer-events', 'auto', 'important');
     }
-    setTimeout(() => { try { $('#gc_email')?.focus(); } catch {} }, 50);
+    // Mobile Safari can open AutoFill over the checkout as soon as a field receives
+    // scripted focus. Let touch users choose a field; keep desktop keyboard access.
+    if (!isTouchDevice()) setTimeout(() => { try { $('#gc_email')?.focus(); } catch {} }, 50);
   }
 
   function closeModal() {
     const back = $('#gc_backdrop');
     const modal = $('#gc_modal');
+    try {
+      if (modal && modal.contains(document.activeElement)) document.activeElement.blur();
+    } catch {}
     if (back) back.style.setProperty('display', 'none', 'important');
     if (modal) modal.style.setProperty('display', 'none', 'important');
   }
@@ -243,22 +253,22 @@
         <div class="gc-error" id="gc_error"></div>
 
         <div class="gc-row">
-          <div class="gc-field"><label for="gc_email">Email</label><input id="gc_email" type="email" autocomplete="email" required></div>
-          <div class="gc-field"><label for="gc_phone">Phone</label><input id="gc_phone" type="tel" autocomplete="tel" required placeholder="(###) ###-####"></div>
+          <div class="gc-field"><label for="gc_email">Email</label><input id="gc_email" type="email" autocomplete="section-guest email" autocapitalize="none" spellcheck="false" required></div>
+          <div class="gc-field"><label for="gc_phone">Phone</label><input id="gc_phone" type="tel" autocomplete="section-guest tel" required placeholder="(###) ###-####"></div>
         </div>
         <div class="gc-row">
-          <div class="gc-field"><label for="gc_fname">First name</label><input id="gc_fname" type="text" autocomplete="given-name" required></div>
-          <div class="gc-field"><label for="gc_lname">Last name</label><input id="gc_lname" type="text" autocomplete="family-name" required></div>
+          <div class="gc-field"><label for="gc_fname">First name</label><input id="gc_fname" type="text" autocomplete="section-guest given-name" required></div>
+          <div class="gc-field"><label for="gc_lname">Last name</label><input id="gc_lname" type="text" autocomplete="section-guest family-name" required></div>
         </div>
 
         <div class="gc-section">Address</div>
         <div class="gc-row">
-          <div class="gc-field"><label for="gc_del_addr1">Street</label><input id="gc_del_addr1" type="text" autocomplete="address-line1" required></div>
-          <div class="gc-field"><label for="gc_del_city">City</label><input id="gc_del_city" type="text" autocomplete="address-level2" required></div>
+          <div class="gc-field"><label for="gc_del_addr1">Street</label><input id="gc_del_addr1" type="text" autocomplete="section-shipping shipping address-line1" required></div>
+          <div class="gc-field"><label for="gc_del_city">City</label><input id="gc_del_city" type="text" autocomplete="section-shipping shipping address-level2" required></div>
         </div>
         <div class="gc-row">
-          <div class="gc-field"><label for="gc_del_state">State</label><input id="gc_del_state" type="text" maxlength="2" placeholder="TX" autocomplete="address-level1" required></div>
-          <div class="gc-field"><label for="gc_del_zip">ZIP</label><input id="gc_del_zip" type="text" autocomplete="postal-code" required></div>
+          <div class="gc-field"><label for="gc_del_state">State</label><input id="gc_del_state" type="text" maxlength="2" placeholder="TX" autocomplete="section-shipping shipping address-level1" required></div>
+          <div class="gc-field"><label for="gc_del_zip">ZIP</label><input id="gc_del_zip" type="text" inputmode="numeric" autocomplete="section-shipping shipping postal-code" required></div>
         </div>
 
         <div class="gc-check">
@@ -269,12 +279,12 @@
         <div id="gc_bill_block" class="gc-hidden">
           <div class="gc-section">Billing Address</div>
           <div class="gc-row">
-            <div class="gc-field"><label for="gc_inv_addr1">Street</label><input id="gc_inv_addr1" type="text" autocomplete="address-line1"></div>
-            <div class="gc-field"><label for="gc_inv_city">City</label><input id="gc_inv_city" type="text" autocomplete="address-level2"></div>
+            <div class="gc-field"><label for="gc_inv_addr1">Street</label><input id="gc_inv_addr1" type="text" autocomplete="section-billing billing address-line1"></div>
+            <div class="gc-field"><label for="gc_inv_city">City</label><input id="gc_inv_city" type="text" autocomplete="section-billing billing address-level2"></div>
           </div>
           <div class="gc-row">
-            <div class="gc-field"><label for="gc_inv_state">State</label><input id="gc_inv_state" type="text" maxlength="2" placeholder="TX" autocomplete="address-level1"></div>
-            <div class="gc-field"><label for="gc_inv_zip">ZIP</label><input id="gc_inv_zip" type="text" autocomplete="postal-code"></div>
+            <div class="gc-field"><label for="gc_inv_state">State</label><input id="gc_inv_state" type="text" maxlength="2" placeholder="TX" autocomplete="section-billing billing address-level1"></div>
+            <div class="gc-field"><label for="gc_inv_zip">ZIP</label><input id="gc_inv_zip" type="text" inputmode="numeric" autocomplete="section-billing billing postal-code"></div>
           </div>
         </div>
 
@@ -498,7 +508,9 @@
       closeModal();
     } catch (e) {
       ERR('Account creation error:', e);
-      showError('We had trouble creating the guest checkout. If this email already has an account, please use Sign In or reset the password.');
+      showError(e && e.userMessage
+        ? e.userMessage
+        : 'We could not start guest checkout. Please try again, or use Sign In if this email already has an account.');
     } finally {
       if (submit) { submit.disabled = false; submit.textContent = 'Continue'; }
     }
@@ -506,37 +518,85 @@
 
   function createAccountInBackground(payload) {
     return new Promise((resolve, reject) => {
-      let frame = document.getElementById('gc_signup_iframe');
-      if (!frame) {
-        frame = document.createElement('iframe');
-        frame.id = 'gc_signup_iframe';
-        frame.style.position = 'fixed';
-        frame.style.width = '1px';
-        frame.style.height = '1px';
-        frame.style.left = '-9999px';
-        frame.style.top = '-9999px';
-        frame.setAttribute('aria-hidden', 'true');
-        document.body.appendChild(frame);
-      }
+      try { document.getElementById('gc_signup_iframe')?.remove(); } catch {}
+      const frame = document.createElement('iframe');
+      frame.id = 'gc_signup_iframe';
+      frame.style.display = 'none';
+      frame.style.pointerEvents = 'none';
+      frame.tabIndex = -1;
+      frame.title = 'Guest checkout setup';
+      frame.setAttribute('aria-hidden', 'true');
+      frame.setAttribute('inert', '');
+      document.body.appendChild(frame);
 
       let attempts = 0;
+      let submitted = false;
+      let settled = false;
       const maxAttempts = 20;
 
+      const finish = (error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        frame.onload = null;
+        try { frame.remove(); } catch {}
+        if (error) reject(error);
+        else resolve();
+      };
+
+      const fail = (message, internalMessage) => {
+        const error = new Error(internalMessage || message);
+        error.userMessage = message;
+        finish(error);
+      };
+
+      const visibleSignupError = (doc, win) => {
+        const selectors = [
+          '.validation-summary-errors',
+          '.field-validation-error',
+          '.validatorMessage',
+          '[id*="ValidationSummary"]',
+          '[id*="CustomValidator"]'
+        ];
+        const messages = [];
+        doc.querySelectorAll(selectors.join(',')).forEach((node) => {
+          const text = clean(node.textContent);
+          if (!text) return;
+          const style = win.getComputedStyle(node);
+          if (style.display === 'none' || style.visibility === 'hidden') return;
+          messages.push(text);
+        });
+        return messages.join(' ');
+      };
+
+      const timeout = setTimeout(() => {
+        fail('WebTrack took too long to start guest checkout. Please try again.', 'Signup confirmation timed out.');
+      }, 25000);
+
       frame.onload = () => {
+        if (settled) return;
         try {
           const win = frame.contentWindow;
           const doc = frame.contentDocument || win.document;
           if (!doc) throw new Error('No iframe document');
 
-          const bodyText = clean(doc.body && doc.body.innerText).toLowerCase();
-          if (bodyText.includes('reset password') || bodyText.includes('forgot password')) {
-            LOG('Existing account/reset flow detected.');
-            resolve();
+          if (!/UserSignup\.aspx/i.test(win.location.pathname)) {
+            if (submitted) {
+              LOG('Guest account creation confirmed.');
+              finish();
+            } else {
+              win.location.href = SIGNUP_PATH;
+            }
             return;
           }
 
-          if (!/UserSignup\.aspx/i.test(win.location.pathname)) {
-            win.location.href = SIGNUP_PATH;
+          if (submitted) {
+            const signupError = visibleSignupError(doc, win).toLowerCase();
+            if (/already|exist|registered|in use|duplicate/.test(signupError)) {
+              fail('An account already uses this email. Please use Sign In or reset the password.', signupError);
+            } else {
+              fail('WebTrack could not create the guest checkout. Please review your information and try again.', signupError || 'Signup remained on the signup page after submission.');
+            }
             return;
           }
 
@@ -549,12 +609,26 @@
           if (!Email1 || !Email2 || !Pass1 || !Pass2 || !Phone) {
             attempts += 1;
             if (attempts > maxAttempts) throw new Error('Signup fields did not load.');
-            setTimeout(() => frame.onload(), 250);
+            setTimeout(() => {
+              if (!settled && typeof frame.onload === 'function') frame.onload();
+            }, 250);
             return;
           }
 
+          [Email1, Email2, Pass1, Pass2].forEach(inp => {
+            try {
+              inp.autocomplete = 'off';
+              inp.tabIndex = -1;
+              inp.readOnly = true;
+              inp.setAttribute('aria-hidden', 'true');
+              inp.setAttribute('data-1p-ignore', 'true');
+              inp.setAttribute('data-lpignore', 'true');
+            } catch {}
+          });
           [Pass1, Pass2].forEach(inp => {
-            try { inp.autocomplete = 'off'; inp.setAttribute('aria-hidden', 'true'); } catch {}
+            // WebTrack only needs the posted value. A text field prevents iOS from
+            // presenting this generated password as a customer login prompt.
+            try { inp.type = 'text'; } catch {}
           });
 
           setVal(Email1, payload.email);
@@ -570,10 +644,12 @@
           setId('ctl00_PageBody_DeliveryStateCountyTextBox', payload.d_state, doc);
           setId('ctl00_PageBody_DeliveryStateTextBox', payload.d_state, doc);
           setId('ctl00_PageBody_DeliveryPostalCodeTextBox', payload.d_zip, doc);
+          setId('ctl00_PageBody_DeliveryCountryTextBox', 'USA', doc);
           setId('ctl00_PageBody_InvoiceAddressLine1TextBox', payload.i_addr1, doc);
           setId('ctl00_PageBody_InvoiceCityTextBox', payload.i_city, doc);
           setId('ctl00_PageBody_InvoiceStateCountyTextBox', payload.i_state2, doc);
           setId('ctl00_PageBody_InvoicePostalCodeTextBox', payload.i_zip, doc);
+          setId('ctl00_PageBody_InvoiceCountryTextBox', 'USA', doc);
 
           const btn = byId('ctl00_PageBody_SignupButton', doc);
           if (!btn) throw new Error('Signup button not found.');
@@ -582,11 +658,12 @@
           btn.removeAttribute('aria-disabled');
           btn.style.pointerEvents = 'auto';
           btn.style.opacity = '1';
-          runNativeButton(btn);
-
-          setTimeout(() => resolve(), 2200);
+          submitted = true;
+          if (!runNativeButton(btn)) {
+            fail('WebTrack could not submit guest checkout. Please try again.', 'Signup button could not be activated.');
+          }
         } catch (e) {
-          reject(e);
+          finish(e);
         }
       };
 

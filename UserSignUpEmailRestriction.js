@@ -1,6 +1,35 @@
 document.addEventListener('DOMContentLoaded', function () {
   console.log('[WL Script] DOM loaded.');
 
+  // Give password managers the correct field roles without forcing their UI open
+  // as soon as mobile Safari loads the sign-in page.
+  const signInUser = document.getElementById('ctl00_PageBody_SignInControl_UserNameTextBox');
+  const signInPassword = document.getElementById('ctl00_PageBody_SignInControl_PasswordTextBox');
+  if (signInUser && signInPassword) {
+    signInUser.setAttribute('autocomplete', 'username');
+    signInUser.setAttribute('inputmode', 'email');
+    signInUser.setAttribute('autocapitalize', 'none');
+    signInUser.setAttribute('spellcheck', 'false');
+    signInUser.removeAttribute('autofocus');
+    signInPassword.setAttribute('autocomplete', 'current-password');
+    signInPassword.removeAttribute('autofocus');
+
+    const isTouchDevice = (() => {
+      try {
+        return window.matchMedia('(pointer: coarse)').matches || /iPad|iPhone|iPod/i.test(navigator.userAgent);
+      } catch (e) { return false; }
+    })();
+    if (isTouchDevice) {
+      const dismissAutomaticFocus = () => {
+        if (document.activeElement === signInUser || document.activeElement === signInPassword) {
+          try { document.activeElement.blur(); } catch (e) {}
+        }
+      };
+      dismissAutomaticFocus();
+      setTimeout(dismissAutomaticFocus, 150);
+    }
+  }
+
   const input = document.getElementById('ctl00_PageBody_UserNameTextBox');
   const signupBtn = document.getElementById('ctl00_PageBody_SignupButton');
   const validator = document.getElementById('ctl00_PageBody_UserNameValidator');
