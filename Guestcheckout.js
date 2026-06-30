@@ -88,6 +88,57 @@
     } catch { return false; }
   }
 
+  function cartQuantityInputs() {
+    return Array.from(document.querySelectorAll('.cart-item-card .qty-section input.riTextBox, .shopping-cart-item input.riTextBox'));
+  }
+
+  function hardenCartQuantityInput(input) {
+    if (!input) return;
+    try { input.type = 'number'; } catch {}
+    input.setAttribute('min', '0.001');
+    input.setAttribute('step', 'any');
+    input.setAttribute('inputmode', 'decimal');
+    input.setAttribute('autocomplete', 'off');
+    input.setAttribute('enterkeyhint', 'done');
+    input.setAttribute('aria-label', 'Quantity');
+    input.setAttribute('data-form-type', 'other');
+    input.setAttribute('data-1p-ignore', 'true');
+    input.setAttribute('data-lpignore', 'true');
+    input.spellcheck = false;
+  }
+
+  function lockCartQuantityInputs() {
+    cartQuantityInputs().forEach((input) => {
+      hardenCartQuantityInput(input);
+      if (!input.hasAttribute('data-wl-guest-was-readonly')) {
+        input.dataset.wlGuestWasReadonly = input.readOnly ? '1' : '0';
+      }
+      input.readOnly = true;
+      input.tabIndex = -1;
+    });
+  }
+
+  function unlockCartQuantityInputs() {
+    cartQuantityInputs().forEach((input) => {
+      input.readOnly = input.dataset.wlGuestWasReadonly === '1';
+      input.removeAttribute('data-wl-guest-was-readonly');
+      input.removeAttribute('tabindex');
+    });
+  }
+
+  function suppressActiveQuantityRefresh() {
+    const active = document.activeElement;
+    if (active && cartQuantityInputs().includes(active)) {
+      active.setAttribute('data-wl-skip-next-qty-refresh', '1');
+      try { active.blur(); } catch {}
+    }
+  }
+
+  function prepareGuestEntry() {
+    suppressActiveQuantityRefresh();
+    lockCartQuantityInputs();
+  }
+
   function randTempPassword(len = 16) {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%';
     let s = '';
@@ -199,6 +250,7 @@
   function showModal() {
     injectStyles();
     if (!document.getElementById('gc_modal')) buildModal();
+    prepareGuestEntry();
 
     const back = $('#gc_backdrop');
     const modal = $('#gc_modal');
@@ -222,11 +274,31 @@
     } catch {}
     if (back) back.style.setProperty('display', 'none', 'important');
     if (modal) modal.style.setProperty('display', 'none', 'important');
+    unlockCartQuantityInputs();
   }
 
   function bindGuestEntryDelegation() {
     if (window.__WL_GUEST_ENTRY_DELEGATED__) return;
     window.__WL_GUEST_ENTRY_DELEGATED__ = true;
+
+    // Stop a Safari-generated quantity blur before legacy cart handlers can
+    // refresh the page and tear down the guest dialog.
+    document.addEventListener('blur', (ev) => {
+      const target = ev.target;
+      if (!target || target.getAttribute('data-wl-skip-next-qty-refresh') !== '1') return;
+      ev.stopImmediatePropagation();
+      setTimeout(() => target.removeAttribute('data-wl-skip-next-qty-refresh'), 0);
+    }, true);
+
+    const prepare = (ev) => {
+      const target = ev.target && ev.target.closest ? ev.target.closest('#gc_guest_btn, #ctl00_PageBody_PlaceOrderButton') : null;
+      if (!target) return;
+      cartQuantityInputs().forEach(hardenCartQuantityInput);
+      if (target.id === 'gc_guest_btn') prepareGuestEntry();
+      else suppressActiveQuantityRefresh();
+    };
+    document.addEventListener('pointerdown', prepare, true);
+    document.addEventListener('touchstart', prepare, { capture: true, passive: true });
 
     document.addEventListener('click', (ev) => {
       const target = ev.target && ev.target.closest ? ev.target.closest('#gc_guest_btn') : null;
@@ -351,6 +423,7 @@
   }
 
   function placeAdjacentUI() {
+    cartQuantityInputs().forEach(hardenCartQuantityInput);
     if (isSignedInCartContext()) {
       if (getCheckoutMode() !== 'guest') {
         setCheckoutMode('signed_in');

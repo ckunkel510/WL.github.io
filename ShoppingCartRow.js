@@ -102,11 +102,44 @@ $(function(){
          .append(' ea');
     if (refJs) {
       var $input = $qtyClone.find('input.riTextBox');
-      $input.on('blur', function(){ eval(refJs); })
+      var committedQty = $.trim($input.val()) || '1';
+      var validQty = function(value) {
+        return /^\d+(?:\.\d+)?$/.test(value) && parseFloat(value) > 0;
+      };
+
+      // Safari can mistake an unlabelled text quantity for a credential field.
+      // Keep the WebTrack field name intact, but expose the correct input semantics.
+      $input.attr({
+        type: 'number',
+        min: '0.001',
+        step: 'any',
+        inputmode: 'decimal',
+        autocomplete: 'off',
+        enterkeyhint: 'done',
+        'aria-label': 'Quantity',
+        'data-form-type': 'other',
+        'data-1p-ignore': 'true',
+        'data-lpignore': 'true'
+      }).prop('spellcheck', false);
+
+      $input.on('blur', function(){
+        var value = $.trim($input.val());
+        if ($input.attr('data-wl-skip-next-qty-refresh') === '1') {
+          $input.removeAttr('data-wl-skip-next-qty-refresh');
+          if (!validQty(value)) $input.val(committedQty);
+          return;
+        }
+        if (!validQty(value)) {
+          $input.val(committedQty);
+          return;
+        }
+        if (value === committedQty) return;
+        committedQty = value;
+        eval(refJs);
+      })
             .on('keydown', function(e){
               if (e.key === 'Enter') {
                 e.preventDefault();
-                eval(refJs);
                 $input.blur();
               }
             });
