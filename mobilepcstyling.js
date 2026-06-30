@@ -613,10 +613,34 @@
     row.classList.remove("wl-is-hidden");
   }
 
-  function customerIsSignedIn() {
-    return !Array.from(document.querySelectorAll("a")).some(function (link) {
-      return /SignIn\.aspx/i.test(link.getAttribute("href") || "");
+  function getCustomerAccountState(quicklistRow) {
+    try {
+      if (localStorage.getItem("wl_user_id")) return "signed-in";
+    } catch (error) {
+      // Continue with page markers when storage is unavailable.
+    }
+
+    if (quicklistRow) {
+      const hasSavedForLater = Array.from(quicklistRow.querySelectorAll(".quicklist-dropdown a")).some(function (link) {
+        return /Saved\s+For\s+Later/i.test(String(link.textContent || ""));
+      });
+      if (hasSavedForLater) return "signed-in";
+    }
+
+    const accountLinks = Array.from(document.querySelectorAll("a"));
+    const hasSignOut = accountLinks.some(function (link) {
+      const text = String(link.textContent || "").trim();
+      const href = link.getAttribute("href") || "";
+      return /^(Sign Out|Log Out|Logout)$/i.test(text) || /SignOut\.aspx|Logout\.aspx/i.test(href);
     });
+    if (hasSignOut) return "signed-in";
+
+    const hasExplicitSignIn = accountLinks.some(function (link) {
+      const text = String(link.textContent || "").trim();
+      const href = link.getAttribute("href") || "";
+      return /^Sign In$/i.test(text) && /SignIn\.aspx/i.test(href);
+    });
+    return hasExplicitSignIn ? "signed-out" : "unknown";
   }
 
   function configureSaveHeart(card, actions) {
@@ -632,8 +656,8 @@
     if (!heart) return;
 
     heart.classList.add("wl-save-heart");
-    const signedIn = customerIsSignedIn();
-    const label = signedIn ? "Save for later" : "Sign in to save for later";
+    const accountState = getCustomerAccountState(quicklistRow);
+    const label = accountState === "signed-out" ? "Sign in to save for later" : "Save for later";
     heart.setAttribute("aria-label", label);
     heart.title = label;
     const nativeLabel = heart.querySelector("span");
@@ -649,7 +673,8 @@
     if (heart.dataset.wlSaveReady === "true") return;
     heart.dataset.wlSaveReady = "true";
     heart.addEventListener("click", function (event) {
-      if (!customerIsSignedIn()) {
+      const currentAccountState = getCustomerAccountState(quicklistRow);
+      if (currentAccountState === "signed-out") {
         event.preventDefault();
         event.stopImmediatePropagation();
         try {
