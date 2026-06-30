@@ -82,27 +82,14 @@ setTimeout(() => {
       if (isNoStockText || isZero) {
         // Your requested fallback message when the chosen branch shows zero
         displayHTML = `
-          <div style="
-            text-align:center;
-            font-weight:600;
-            font-size:0.95em;
-            padding:4px 8px;
-            border-radius:8px;
-            border:1px solid #e5e7eb;
-          ">
+          <div class="wl-stock-message wl-stock-message--pickup">
             Ship to your store — <span style="white-space:nowrap;">Free pickup at checkout</span>
           </div>
         `;
       } else {
         // Positive quantity
         displayHTML = `
-          <div style="
-            text-align:center;
-            font-weight:bold;
-            color:#004080;
-            font-size:0.95em;
-            padding:4px 0;
-          ">
+          <div class="wl-stock-message wl-stock-message--available">
             ${rawQtyText} in stock at ${finalBranch}
           </div>
         `;
