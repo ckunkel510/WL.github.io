@@ -2,6 +2,11 @@
   "use strict";
 
   const STYLE_ID = "wl-modern-product-cards";
+  const REVIEW_CACHE_KEY = "wl_product_review_summary_v1";
+  const REVIEW_CACHE_MS = 15 * 60 * 1000;
+  const REVIEW_SHEET_URL =
+    "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZGjAjfdB4m_XfqFQC3i3-n09g-BlRp_oVBo0sD1eyMV9OlwMFbCaVQ3Urrw6rwWPr9VPu5vDXcMyo/pubhtml/sheet?headers=false&gid=220983932";
+  let reviewSummaryPromise;
 
   function installStyles() {
     if (document.getElementById(STYLE_ID)) return;
@@ -22,6 +27,7 @@
       }
 
       #productlistcards > .wl-product-card {
+        position: relative;
         display: flex !important;
         flex-direction: column;
         min-width: 0;
@@ -134,6 +140,45 @@
       #productlistcards .wl-product-card .productNameLink:hover {
         color: #6b0005 !important;
         text-decoration: underline;
+      }
+
+      #productlistcards .wl-product-card .wl-product-rating-row td {
+        min-height: 27px !important;
+        padding: 0 16px 8px !important;
+      }
+
+      #productlistcards .wl-product-card .wl-product-rating-link {
+        display: inline-flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 5px;
+        color: #5b6065;
+        font-size: 12px;
+        font-weight: 650;
+        line-height: 1.3;
+        text-decoration: none;
+      }
+
+      #productlistcards .wl-product-card .wl-product-rating-link:hover,
+      #productlistcards .wl-product-card .wl-product-rating-link:focus {
+        color: #6b0005;
+        text-decoration: underline;
+      }
+
+      #productlistcards .wl-product-card .wl-card-stars {
+        display: inline-flex;
+        gap: 1px;
+        color: #b5b9bc;
+        font-size: 14px;
+        line-height: 1;
+      }
+
+      #productlistcards .wl-product-card .wl-card-star.is-filled {
+        color: #b26a00;
+      }
+
+      #productlistcards .wl-product-card .wl-product-rating-row.wl-is-hidden {
+        display: none !important;
       }
 
       #productlistcards .wl-product-card #ProductCodeRow td {
@@ -252,9 +297,7 @@
       }
 
       #productlistcards .wl-product-card > .wl-product-actions {
-        display: grid !important;
-        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-        gap: 8px;
+        display: block !important;
         width: auto !important;
         margin: 0 !important;
         padding: 0 16px 16px !important;
@@ -269,7 +312,7 @@
       }
 
       #productlistcards .wl-product-actions > [id$="AddProductButton_TR"] {
-        grid-column: 1 / -1;
+        width: 100% !important;
       }
 
       #productlistcards .wl-product-actions .mb-1 > div {
@@ -321,20 +364,81 @@
         border-color: #4f0004 !important;
       }
 
-      #productlistcards .wl-product-actions a[title="Show Stock Levels for Product"] {
-        display: flex !important;
+      #productlistcards .wl-product-actions > .wl-stock-action {
+        display: none !important;
       }
 
-      #productlistcards .wl-product-actions a span {
-        display: inline !important;
+      #productlistcards .wl-product-actions > .wl-save-row {
+        position: absolute !important;
+        top: 12px;
+        right: 12px;
+        z-index: 8;
+        display: block !important;
+        width: 42px !important;
+        height: 42px;
+      }
+
+      #productlistcards .wl-save-row > div:first-child {
+        width: 42px !important;
+        height: 42px;
+      }
+
+      #productlistcards .wl-product-actions a.wl-save-heart {
+        position: relative;
+        display: flex !important;
+        width: 42px !important;
+        height: 42px;
+        min-height: 42px;
+        padding: 0 !important;
+        color: #6b0005 !important;
+        background: rgba(255, 255, 255, 0.96) !important;
+        border: 1px solid #d4d7d9 !important;
+        border-radius: 50% !important;
+        box-shadow: 0 2px 7px rgba(25, 28, 30, 0.14);
+      }
+
+      #productlistcards .wl-product-actions a.wl-save-heart::before {
+        content: "\\2661";
+        color: currentColor;
+        font-size: 28px;
+        font-weight: 500;
+        line-height: 1;
+      }
+
+      #productlistcards .wl-product-actions a.wl-save-heart:hover,
+      #productlistcards .wl-product-actions a.wl-save-heart:focus {
+        color: #fff !important;
+        background: #6b0005 !important;
+        border-color: #6b0005 !important;
+      }
+
+      #productlistcards .wl-product-actions a.wl-save-heart.is-saving::before {
+        content: "\\2026";
+        font-size: 22px;
+      }
+
+      #productlistcards .wl-product-actions a.wl-save-heart span {
+        position: absolute !important;
+        width: 1px !important;
+        height: 1px !important;
+        padding: 0 !important;
+        margin: -1px !important;
+        overflow: hidden !important;
+        clip: rect(0, 0, 0, 0) !important;
+        white-space: nowrap !important;
+        border: 0 !important;
       }
 
       #productlistcards .wl-product-actions .quicklist-wrap {
-        position: relative;
+        position: absolute;
+        top: 48px;
+        right: 0;
         z-index: 20;
       }
 
       #productlistcards .wl-product-actions .quicklist-dropdown {
+        left: auto !important;
+        right: 0 !important;
         box-sizing: border-box;
         width: max-content !important;
         min-width: 170px;
@@ -361,11 +465,223 @@
     document.head.appendChild(style);
   }
 
+  function findHeader(headers, candidates) {
+    return headers.findIndex(function (header) {
+      return candidates.some(function (candidate) {
+        return header === candidate || header.includes(candidate);
+      });
+    });
+  }
+
+  function parseReviewSummaries(html) {
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const table = doc.querySelector("table.waffle") || doc.querySelector("table");
+    if (!table) return {};
+
+    const rows = Array.from(table.querySelectorAll("tbody tr"));
+    if (rows.length < 2) return {};
+
+    const headers = Array.from(rows[0].querySelectorAll("td,th")).map(function (cell) {
+      return String(cell.textContent || "").trim().toLowerCase();
+    });
+    const starsColumn = findHeader(headers, ["stars", "rating", "score", "column 2"]);
+    const productColumn = findHeader(headers, ["productid", "product id", "pid", "product"]);
+    if (starsColumn === -1 || productColumn === -1) return {};
+
+    const summaries = {};
+    rows.slice(1).forEach(function (row) {
+      const cells = Array.from(row.querySelectorAll("td,th"));
+      const productId = String(cells[productColumn]?.textContent || "").replace(/\D+/g, "");
+      const stars = Number.parseFloat(String(cells[starsColumn]?.textContent || "").replace(/[^0-9.]/g, ""));
+      if (!productId || !Number.isFinite(stars) || stars <= 0) return;
+
+      if (!summaries[productId]) summaries[productId] = { count: 0, total: 0 };
+      summaries[productId].count += 1;
+      summaries[productId].total += Math.max(0, Math.min(5, stars));
+    });
+
+    Object.keys(summaries).forEach(function (productId) {
+      const summary = summaries[productId];
+      summary.average = summary.total / summary.count;
+      delete summary.total;
+    });
+    return summaries;
+  }
+
+  function getCachedReviewSummaries() {
+    try {
+      const cached = JSON.parse(sessionStorage.getItem(REVIEW_CACHE_KEY) || "null");
+      if (cached && Date.now() - cached.savedAt < REVIEW_CACHE_MS && cached.summaries) {
+        return cached.summaries;
+      }
+    } catch (error) {
+      return null;
+    }
+    return null;
+  }
+
+  function loadReviewSummaries() {
+    if (reviewSummaryPromise) return reviewSummaryPromise;
+
+    const cached = getCachedReviewSummaries();
+    if (cached) {
+      reviewSummaryPromise = Promise.resolve(cached);
+      return reviewSummaryPromise;
+    }
+
+    reviewSummaryPromise = fetch(REVIEW_SHEET_URL + "&cacheBust=" + Date.now())
+      .then(function (response) {
+        if (!response.ok) throw new Error("Review feed returned " + response.status);
+        return response.text();
+      })
+      .then(function (html) {
+        const summaries = parseReviewSummaries(html);
+        try {
+          sessionStorage.setItem(REVIEW_CACHE_KEY, JSON.stringify({
+            savedAt: Date.now(),
+            summaries: summaries
+          }));
+        } catch (error) {
+          // Private browsing can disable session storage; reviews still render normally.
+        }
+        return summaries;
+      });
+    return reviewSummaryPromise;
+  }
+
+  function buildCardStars(rating) {
+    const stars = document.createElement("span");
+    stars.className = "wl-card-stars";
+    stars.setAttribute("role", "img");
+    stars.setAttribute("aria-label", rating.toFixed(1) + " out of 5 stars");
+    const filled = Math.round(rating);
+
+    for (let index = 1; index <= 5; index += 1) {
+      const star = document.createElement("span");
+      star.className = "wl-card-star" + (index <= filled ? " is-filled" : "");
+      star.setAttribute("aria-hidden", "true");
+      star.innerHTML = "&#9733;";
+      stars.appendChild(star);
+    }
+    return stars;
+  }
+
+  function ensureRatingRow(card) {
+    let row = card.querySelector(".wl-product-rating-row");
+    if (row) return row;
+
+    const descriptionRow = card.querySelector("#ProductDescriptionRow");
+    if (!descriptionRow || !descriptionRow.parentNode) return null;
+
+    row = document.createElement("tr");
+    row.className = "wl-product-rating-row wl-is-hidden";
+    const cell = document.createElement("td");
+    const link = document.createElement("a");
+    link.className = "wl-product-rating-link";
+    cell.appendChild(link);
+    row.appendChild(cell);
+    descriptionRow.parentNode.insertBefore(row, descriptionRow.nextSibling);
+    return row;
+  }
+
+  function renderCardRating(card, summaries) {
+    const row = ensureRatingRow(card);
+    if (!row) return;
+
+    const productLink = card.querySelector("#ProductImageRow a[href*='ProductDetail.aspx']") ||
+      card.querySelector("#ProductDescriptionRow a[href*='ProductDetail.aspx']");
+    const href = productLink?.href || "";
+    const match = href.match(/[?&]pid=(\d+)/i);
+    if (!match) return;
+
+    const productId = match[1];
+    const summary = summaries[productId];
+    const link = row.querySelector(".wl-product-rating-link");
+    link.href = href.split("#")[0] + "#customer-reviews";
+    link.replaceChildren();
+
+    if (!summary) {
+      link.textContent = "Be the first to review";
+      link.title = "Review this product";
+    } else {
+      link.appendChild(buildCardStars(summary.average));
+      link.appendChild(document.createTextNode(
+        summary.average.toFixed(1) + " (" + summary.count + ")"
+      ));
+      link.title = "Read customer reviews";
+    }
+    row.classList.remove("wl-is-hidden");
+  }
+
+  function customerIsSignedIn() {
+    return !Array.from(document.querySelectorAll("a")).some(function (link) {
+      return /SignIn\.aspx/i.test(link.getAttribute("href") || "");
+    });
+  }
+
+  function configureSaveHeart(card, actions) {
+    if (!actions) return;
+
+    const quicklistRow = actions.querySelector("[id$='QuickListRow_TD']");
+    const stockRow = actions.querySelector("[id$='StockRow_TD']");
+    if (stockRow) stockRow.classList.add("wl-stock-action");
+    if (!quicklistRow) return;
+
+    quicklistRow.classList.add("wl-save-row");
+    const heart = quicklistRow.querySelector("a[id*='QuickList_QuickListLink']");
+    if (!heart) return;
+
+    heart.classList.add("wl-save-heart");
+    const signedIn = customerIsSignedIn();
+    const label = signedIn ? "Save for later" : "Sign in to save for later";
+    heart.setAttribute("aria-label", label);
+    heart.title = label;
+    const nativeLabel = heart.querySelector("span");
+    if (nativeLabel) nativeLabel.textContent = label;
+
+    const dropdownLinks = Array.from(quicklistRow.querySelectorAll(".quicklist-dropdown a"));
+    dropdownLinks.forEach(function (link) {
+      const text = String(link.textContent || "").trim();
+      if (/Add to New List/i.test(text)) link.textContent = "Create a shopping list";
+      if (/Edit Quicklists/i.test(text)) link.textContent = "Manage shopping lists";
+    });
+
+    if (heart.dataset.wlSaveReady === "true") return;
+    heart.dataset.wlSaveReady = "true";
+    heart.addEventListener("click", function (event) {
+      if (!customerIsSignedIn()) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        try {
+          sessionStorage.setItem("wl_save_after_signin", window.location.href);
+        } catch (error) {
+          // Navigation still works when storage is unavailable.
+        }
+        window.location.href = "/SignIn.aspx?from=save_for_later";
+        return;
+      }
+
+      const savedForLater = Array.from(quicklistRow.querySelectorAll(".quicklist-dropdown a")).find(function (link) {
+        return /Saved\s+For\s+Later/i.test(String(link.textContent || ""));
+      });
+      if (!savedForLater) return;
+
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      heart.classList.add("is-saving");
+      heart.setAttribute("aria-label", "Saving for later");
+      savedForLater.click();
+    }, true);
+  }
+
   function enhanceCard(card) {
     card.classList.add("wl-product-card");
 
     const actions = card.querySelector(":scope > .mx-2");
-    if (actions) actions.classList.add("wl-product-actions");
+    if (actions) {
+      actions.classList.add("wl-product-actions");
+      configureSaveHeart(card, actions);
+    }
 
     const quantity = card.querySelector("#QuantityRow input[type='text']");
     if (quantity) {
@@ -373,6 +689,15 @@
       quantity.setAttribute("inputmode", "decimal");
       quantity.setAttribute("autocomplete", "off");
     }
+
+    ensureRatingRow(card);
+    loadReviewSummaries()
+      .then(function (summaries) {
+        renderCardRating(card, summaries);
+      })
+      .catch(function (error) {
+        console.error("Product card reviews could not load.", error);
+      });
   }
 
   function enhanceCards(root) {
