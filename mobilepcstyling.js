@@ -958,6 +958,7 @@
         padding: 0 !important;
       }
       form > input[type="hidden"] { display: none !important; }
+      form > :not(#productlistcards):not(input[type="hidden"]) { display: none !important; }
       #productlistcards.Cards { margin-bottom: 0 !important; }
     `;
     frameDocument.head.appendChild(frameStyle);
