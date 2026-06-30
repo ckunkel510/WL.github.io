@@ -4,13 +4,22 @@ $(function(){
     $('<style id="wl-cart-qty-stepper-styles">\
       .qty-section{gap:8px;min-height:40px;}\
       .wl-native-qty-hidden{display:none!important;}\
-      .wl-qty-label,.wl-qty-unit{font-size:13px;color:#555;}\
-      .wl-qty-stepper{display:inline-grid;grid-template-columns:40px 46px 40px;height:40px;border:1px solid #b9bec5;border-radius:6px;overflow:hidden;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.06);}\
+      .wl-qty-label,.wl-qty-unit{font-size:13px;color:#555;white-space:nowrap;flex:0 0 auto;}\
+      .wl-qty-stepper{display:inline-grid;grid-template-columns:40px 46px 40px;height:40px;flex:0 0 auto;border:1px solid #b9bec5;border-radius:6px;overflow:hidden;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.06);}\
       .wl-qty-stepper button{width:40px;height:40px;padding:0;border:0;border-radius:0;background:#f2f4f6;color:#292d32;font-size:22px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;}\
       .wl-qty-stepper button.wl-qty-increase{background:#6b0016;color:#fff;}\
       .wl-qty-stepper button:focus-visible{outline:3px solid rgba(107,0,22,.25);outline-offset:-3px;}\
       .wl-qty-stepper button:disabled{opacity:.42;cursor:default;}\
       .wl-qty-value{min-width:46px;height:40px;display:flex;align-items:center;justify-content:center;border-left:1px solid #d8dce1;border-right:1px solid #d8dce1;font-size:16px;font-weight:700;color:#222;font-variant-numeric:tabular-nums;background:#fff;}\
+      @media (max-width:640px){\
+        .cart-item-card .card-body>.d-flex.justify-content-between{display:grid!important;grid-template-columns:1fr;gap:10px;align-items:stretch!important;}\
+        .cart-item-card .qty-section{width:100%;display:flex!important;flex-wrap:nowrap;justify-content:flex-start;align-items:center;}\
+        .cart-item-card .action-block{width:100%;display:grid!important;grid-template-columns:minmax(82px,1fr) auto auto;gap:10px;align-items:center;text-align:left!important;}\
+        .cart-item-card .action-block>div{margin:0!important;min-width:0;}\
+        .cart-item-card .action-block>div:nth-child(2),.cart-item-card .action-block>div:nth-child(3){text-align:right;}\
+        .cart-item-card .delete-link,.cart-item-card .sfl-placeholder button,.cart-item-card .sfl-placeholder a{white-space:nowrap!important;}\
+        .cart-item-card .sfl-placeholder button,.cart-item-card .sfl-placeholder a{min-width:0!important;padding:8px 10px!important;}\
+      }\
     </style>').appendTo('head');
   }
 
