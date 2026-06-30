@@ -108,6 +108,9 @@
       }
 
       #productlistcards .wl-product-card .productDescriptionRow {
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: none !important;
         overflow: visible !important;
         line-height: 1.35 !important;
       }
@@ -153,6 +156,9 @@
         align-items: baseline;
         flex-wrap: wrap;
         gap: 4px;
+        width: 100% !important;
+        min-width: 0 !important;
+        max-width: none !important;
         min-height: 38px !important;
         padding: 2px 16px 10px !important;
       }
