@@ -481,12 +481,17 @@
 
       #wl-infinite-products .wl-product-page-frame {
         display: block;
+        visibility: hidden;
         width: 100%;
         min-height: 420px;
         margin: 0 0 16px;
         overflow: hidden;
         background: transparent;
         border: 0;
+      }
+
+      #wl-infinite-products .wl-product-page-frame.is-ready {
+        visibility: visible;
       }
 
       #wl-infinite-status {
@@ -518,6 +523,149 @@
       #wl-infinite-sentinel {
         width: 100%;
         height: 1px;
+      }
+
+      .wl-related-categories {
+        box-sizing: border-box;
+        width: 100%;
+        margin: 0 0 14px;
+        overflow: hidden;
+        background: #fff;
+        border: 1px solid #d9dcdf;
+        border-radius: 6px;
+      }
+
+      .wl-related-categories > summary {
+        position: relative;
+        display: block;
+        padding: 11px 36px 11px 12px;
+        color: #303438;
+        font-size: 14px;
+        font-weight: 750;
+        line-height: 1.3;
+        cursor: pointer;
+        list-style: none;
+      }
+
+      .wl-related-categories > summary::-webkit-details-marker {
+        display: none;
+      }
+
+      .wl-related-categories > summary::after {
+        content: "+";
+        position: absolute;
+        top: 50%;
+        right: 12px;
+        color: #6b0005;
+        font-size: 20px;
+        font-weight: 500;
+        line-height: 1;
+        transform: translateY(-50%);
+      }
+
+      .wl-related-categories[open] > summary::after {
+        content: "\\2212";
+      }
+
+      .wl-related-categories[open] > summary {
+        border-bottom: 1px solid #e4e6e7;
+      }
+
+      .wl-related-categories #ctl00_PageBody_ProductGroupDrillDownPanel,
+      .wl-related-categories #ctl00_PageBody_ProductGroupDrillDownUpdatePanel,
+      .wl-related-categories .productGroupScrollingPanelFull {
+        display: block !important;
+        box-sizing: border-box !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+      }
+
+      .wl-related-categories .paging-control,
+      .wl-related-categories style,
+      .wl-related-categories input[type="hidden"],
+      .wl-related-categories #ProductGroupCardImageRow,
+      .wl-related-categories #ProductGroupCardFooter {
+        display: none !important;
+      }
+
+      .wl-related-categories fieldset.Cards {
+        display: grid !important;
+        grid-template-columns: minmax(0, 1fr) !important;
+        width: 100% !important;
+        height: auto !important;
+        margin: 0 !important;
+        padding: 4px 0 !important;
+        border: 0 !important;
+      }
+
+      .wl-related-categories #productGroupCard {
+        display: block !important;
+        float: none !important;
+        box-sizing: border-box !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+      }
+
+      .wl-related-categories #ProductGroupCardContainer {
+        display: block !important;
+        box-sizing: border-box !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: transparent !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+      }
+
+      .wl-related-categories #ProductGroupCardHeader {
+        position: static !important;
+        display: block !important;
+        box-sizing: border-box !important;
+        width: 100% !important;
+        height: auto !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        text-align: left !important;
+      }
+
+      .wl-related-categories #ProductGroupCardHeader a {
+        display: block !important;
+        padding: 9px 12px !important;
+        color: #303438 !important;
+        font-size: 13px !important;
+        font-weight: 650 !important;
+        line-height: 1.3 !important;
+        text-decoration: none !important;
+        border-bottom: 1px solid #eceeed;
+      }
+
+      .wl-related-categories #productGroupCard:last-of-type #ProductGroupCardHeader a {
+        border-bottom: 0;
+      }
+
+      .wl-related-categories #ProductGroupCardHeader a:hover,
+      .wl-related-categories #ProductGroupCardHeader a:focus {
+        color: #6b0005 !important;
+        background: #f6f7f5;
+        text-decoration: underline !important;
+      }
+
+      @media (max-width: 899px) {
+        .wl-related-categories {
+          margin-top: 10px;
+        }
       }
 
       @media (max-width: 520px) {
@@ -985,6 +1133,38 @@
     return { ok: true, nextUrl: nextUrl };
   }
 
+  function initializeRelatedCategories() {
+    const groupPanel = document.querySelector("#ctl00_PageBody_ProductGroupDrillDownPanel");
+    const productGrid = document.querySelector("#productlistcards");
+    const filter = document.querySelector("#ctl00_PageBody_ProductFilterDiv");
+    const filterButton = document.querySelector("button.filter-button");
+    if (!groupPanel || !productGrid || !filter || !filterButton) return;
+
+    const details = document.createElement("details");
+    details.className = "wl-related-categories";
+    const summary = document.createElement("summary");
+    summary.textContent = "Related categories";
+    details.append(summary, groupPanel);
+
+    let mobileLayout;
+    const syncLayout = function () {
+      const isMobile = window.matchMedia("(max-width: 899px)").matches;
+      if (mobileLayout === isMobile && details.isConnected) return;
+      mobileLayout = isMobile;
+
+      if (isMobile) {
+        filterButton.insertAdjacentElement("afterend", details);
+        details.open = false;
+      } else {
+        filter.insertBefore(details, filter.children[1] || null);
+        details.open = true;
+      }
+    };
+
+    syncLayout();
+    window.addEventListener("resize", syncLayout, { passive: true });
+  }
+
   function initializeInfiniteScroll() {
     if (window.top !== window.self || document.getElementById("wl-infinite-products")) return;
 
@@ -1009,16 +1189,20 @@
     const sentinel = document.createElement("div");
     sentinel.id = "wl-infinite-sentinel";
     sentinel.setAttribute("aria-hidden", "true");
-    container.append(status, retry, sentinel);
+    container.append(sentinel, status, retry);
     grid.insertAdjacentElement("afterend", container);
 
     let loading = false;
     let observer;
-    const loadNextPage = function () {
+    const supportsObserver = typeof window.IntersectionObserver === "function";
+    const loadNextPage = function (advanceSentinel) {
       if (loading || !nextUrl) return;
       loading = true;
       retry.hidden = true;
       status.textContent = "Loading more products...";
+      container.setAttribute("aria-busy", "true");
+
+      if (advanceSentinel) container.insertBefore(sentinel, status);
 
       const sourceUrl = nextUrl;
       nextUrl = "";
@@ -1035,6 +1219,7 @@
         if (initialLoadHandled) return;
         initialLoadHandled = true;
         loading = false;
+        container.removeAttribute("aria-busy");
 
         if (!result.ok) {
           frame.remove();
@@ -1044,31 +1229,34 @@
           return;
         }
 
+        frame.classList.add("is-ready");
         nextUrl = result.nextUrl;
         status.textContent = nextUrl ? "" : "All products loaded.";
         if (!nextUrl && observer) observer.disconnect();
+        if (nextUrl && !supportsObserver) retry.hidden = false;
         if (nextUrl) {
           window.requestAnimationFrame(function () {
             const sentinelBounds = sentinel.getBoundingClientRect();
-            if (sentinelBounds.top < window.innerHeight + 1400) loadNextPage();
+            if (sentinelBounds.top < window.innerHeight + 1400) loadNextPage(true);
           });
         }
       });
     };
 
-    retry.addEventListener("click", loadNextPage);
-    if (typeof window.IntersectionObserver === "function") {
+    retry.addEventListener("click", function () { loadNextPage(false); });
+    if (supportsObserver) {
       observer = new IntersectionObserver(function (entries) {
-        if (entries.some(function (entry) { return entry.isIntersecting; })) loadNextPage();
+        if (entries.some(function (entry) { return entry.isIntersecting; })) loadNextPage(true);
       }, { rootMargin: "1400px 0px" });
       observer.observe(sentinel);
-    } else {
-      retry.hidden = false;
     }
+
+    loadNextPage(false);
   }
 
   function initialize() {
     enhanceCards(document);
+    initializeRelatedCategories();
     initializeInfiniteScroll();
 
     const observer = new MutationObserver(function (mutations) {
