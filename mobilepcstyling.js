@@ -638,6 +638,8 @@
         margin: 0 !important;
         padding: 0 !important;
         text-align: left !important;
+        background: transparent !important;
+        border: 0 !important;
       }
 
       .wl-related-categories #ProductGroupCardHeader a {
