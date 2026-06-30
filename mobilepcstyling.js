@@ -7,6 +7,7 @@
   const REVIEW_SHEET_URL =
     "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZGjAjfdB4m_XfqFQC3i3-n09g-BlRp_oVBo0sD1eyMV9OlwMFbCaVQ3Urrw6rwWPr9VPu5vDXcMyo/pubhtml/sheet?headers=false&gid=220983932";
   let reviewSummaryPromise;
+  let savedForLaterStatePromise;
 
   function installStyles() {
     if (document.getElementById(STYLE_ID)) return;
@@ -292,6 +293,16 @@
         border-color: #cfe5d8 !important;
       }
 
+      #productlistcards .wl-product-card .wl-stock-message--loading {
+        color: #5b6065 !important;
+        background: #f7f7f6;
+      }
+
+      #productlistcards .wl-product-card .wl-stock-message--unavailable {
+        color: #656a6f !important;
+        background: #f7f7f6;
+      }
+
       #productlistcards .wl-product-card #QuantityValidatorAndAddButtonRow td {
         padding: 0 16px !important;
       }
@@ -412,6 +423,16 @@
         border-color: #6b0005 !important;
       }
 
+      #productlistcards .wl-product-actions a.wl-save-heart.is-saved {
+        color: #fff !important;
+        background: #6b0005 !important;
+        border-color: #6b0005 !important;
+      }
+
+      #productlistcards .wl-product-actions a.wl-save-heart.is-saved::before {
+        content: "\\2665";
+      }
+
       #productlistcards .wl-product-actions a.wl-save-heart.is-saving::before {
         content: "\\2026";
         font-size: 22px;
@@ -443,6 +464,60 @@
         width: max-content !important;
         min-width: 170px;
         max-width: calc(100vw - 32px);
+      }
+
+      body.wl-infinite-products-active ul.pagination {
+        display: none !important;
+      }
+
+      body.wl-infinite-products-active #productlistcards.Cards {
+        margin-bottom: 16px !important;
+      }
+
+      #wl-infinite-products {
+        width: 100%;
+        margin: 0 0 28px;
+      }
+
+      #wl-infinite-products .wl-product-page-frame {
+        display: block;
+        width: 100%;
+        min-height: 420px;
+        margin: 0 0 16px;
+        overflow: hidden;
+        background: transparent;
+        border: 0;
+      }
+
+      #wl-infinite-status {
+        min-height: 24px;
+        padding: 6px 0;
+        color: #5b6065;
+        font-size: 13px;
+        line-height: 1.4;
+        text-align: center;
+      }
+
+      #wl-infinite-status:empty {
+        display: none;
+      }
+
+      #wl-infinite-retry {
+        min-height: 40px;
+        margin: 6px auto;
+        padding: 8px 14px;
+        color: #6b0005;
+        font-size: 13px;
+        font-weight: 700;
+        background: #fff;
+        border: 1px solid #6b0005;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+
+      #wl-infinite-sentinel {
+        width: 100%;
+        height: 1px;
       }
 
       @media (max-width: 520px) {
@@ -613,6 +688,79 @@
     row.classList.remove("wl-is-hidden");
   }
 
+  function getCardProductId(card) {
+    const link = card.querySelector("#ProductImageRow a[href*='ProductDetail.aspx']") ||
+      card.querySelector("#ProductDescriptionRow a[href*='ProductDetail.aspx']");
+    const match = (link?.href || "").match(/[?&]pid=(\d+)/i);
+    return match ? match[1] : "";
+  }
+
+  function navigateTop(url) {
+    try {
+      window.top.location.href = url;
+    } catch (error) {
+      window.location.href = url;
+    }
+  }
+
+  function fetchDocument(url) {
+    return fetch(url, { credentials: "include" }).then(function (response) {
+      if (!response.ok) throw new Error("Request returned " + response.status);
+      return response.text();
+    }).then(function (html) {
+      return new DOMParser().parseFromString(html, "text/html");
+    });
+  }
+
+  function loadSavedForLaterState() {
+    if (savedForLaterStatePromise) return savedForLaterStatePromise;
+
+    savedForLaterStatePromise = (async function () {
+      if (getCustomerAccountState(null) === "signed-out") {
+        return { detailUrl: "", productIds: new Set() };
+      }
+
+      const listDocument = await fetchDocument("/Quicklists_R.aspx");
+      const savedLink = Array.from(listDocument.querySelectorAll("a")).find(function (link) {
+        const text = String(link.textContent || "").trim();
+        const href = link.getAttribute("href") || "";
+        return /^Saved\s+For\s+Later$/i.test(text) && /Quicklists_R\.aspx|QuicklistDetails\.aspx/i.test(href);
+      });
+      if (!savedLink) return { detailUrl: "", productIds: new Set() };
+
+      const detailUrl = new URL(savedLink.getAttribute("href"), window.location.origin).toString()
+        .replace("QuicklistDetails.aspx", "Quicklists_R.aspx");
+      const detailDocument = await fetchDocument(detailUrl);
+      const productIds = new Set();
+      detailDocument.querySelectorAll("a[href*='ProductDetail.aspx']").forEach(function (link) {
+        const match = (link.getAttribute("href") || "").match(/[?&]pid=(\d+)/i);
+        if (match) productIds.add(match[1]);
+      });
+      return { detailUrl: detailUrl, productIds: productIds };
+    })().catch(function (error) {
+      console.warn("Saved For Later state could not be loaded.", error);
+      return { detailUrl: "", productIds: new Set() };
+    });
+
+    return savedForLaterStatePromise;
+  }
+
+  function applySavedHeartState(card, state) {
+    const heart = card.querySelector(".wl-save-heart");
+    const productId = getCardProductId(card);
+    if (!heart || !productId) return;
+
+    const isSaved = state.productIds.has(productId);
+    heart.classList.toggle("is-saved", isSaved);
+    heart.dataset.wlSaved = isSaved ? "true" : "false";
+    if (state.detailUrl) heart.dataset.wlSavedListUrl = state.detailUrl;
+
+    if (isSaved) {
+      heart.setAttribute("aria-label", "Saved for later");
+      heart.title = "Saved for later - view saved items";
+    }
+  }
+
   function getCustomerAccountState(quicklistRow) {
     try {
       if (localStorage.getItem("wl_user_id")) return "signed-in";
@@ -682,7 +830,14 @@
         } catch (error) {
           // Navigation still works when storage is unavailable.
         }
-        window.location.href = "/SignIn.aspx?from=save_for_later";
+        navigateTop("/SignIn.aspx?from=save_for_later");
+        return;
+      }
+
+      if (heart.dataset.wlSaved === "true") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        navigateTop(heart.dataset.wlSavedListUrl || "/Quicklists_R.aspx");
         return;
       }
 
@@ -695,6 +850,7 @@
       event.stopImmediatePropagation();
       heart.classList.add("is-saving");
       heart.setAttribute("aria-label", "Saving for later");
+      savedForLaterStatePromise = null;
       savedForLater.click();
     }, true);
   }
@@ -713,7 +869,20 @@
       quantity.setAttribute("aria-label", "Quantity");
       quantity.setAttribute("inputmode", "decimal");
       quantity.setAttribute("autocomplete", "off");
+      if (!String(quantity.value || "").trim()) {
+        const control = typeof window.$find === "function" ? window.$find(quantity.id) : null;
+        if (control && typeof control.set_value === "function") {
+          control.set_value("1");
+        } else {
+          quantity.value = "1";
+          quantity.setAttribute("value", "1");
+        }
+      }
     }
+
+    loadSavedForLaterState().then(function (state) {
+      applySavedHeartState(card, state);
+    });
 
     ensureRatingRow(card);
     loadReviewSummaries()
@@ -732,8 +901,174 @@
     cards.forEach(enhanceCard);
   }
 
+  function getNextProductPageUrl(doc, baseUrl) {
+    const currentUrl = new URL(baseUrl, window.location.origin);
+    const currentIndex = Number.parseInt(currentUrl.searchParams.get("pageIndex") || "0", 10) || 0;
+    const candidates = Array.from(doc.querySelectorAll("ul.pagination a[href*='pageIndex=']")).map(function (link) {
+      try {
+        const url = new URL(link.getAttribute("href"), currentUrl);
+        const index = Number.parseInt(url.searchParams.get("pageIndex") || "0", 10) || 0;
+        return { index: index, url: url.toString() };
+      } catch (error) {
+        return null;
+      }
+    }).filter(function (candidate) {
+      return candidate && candidate.index > currentIndex;
+    }).sort(function (left, right) {
+      return left.index - right.index;
+    });
+    return candidates.length ? candidates[0].url : "";
+  }
+
+  function prepareProductFrame(frame) {
+    const frameDocument = frame.contentDocument;
+    const frameWindow = frame.contentWindow;
+    const grid = frameDocument?.querySelector("#productlistcards");
+    const form = frameDocument?.forms?.[0];
+    if (!frameDocument || !frameWindow || !grid || !form) return { ok: false, nextUrl: "" };
+
+    const nextUrl = getNextProductPageUrl(frameDocument, frame.src);
+    const hiddenInputs = Array.from(form.querySelectorAll("input[type='hidden']"));
+    hiddenInputs.forEach(function (input) {
+      form.appendChild(input);
+    });
+    form.appendChild(grid);
+    Array.from(form.children).forEach(function (child) {
+      const keepHiddenInput = child.tagName === "INPUT" && child.type === "hidden";
+      if (child !== grid && !keepHiddenInput) child.remove();
+    });
+    frameDocument.body.replaceChildren(form);
+    frameDocument.body.classList.add("wl-infinite-frame-body");
+
+    const frameStyle = frameDocument.createElement("style");
+    frameStyle.textContent = `
+      html, body {
+        width: 100% !important;
+        min-width: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        background: transparent !important;
+      }
+      body > :not(form) { display: none !important; }
+      form {
+        display: block !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      form > input[type="hidden"] { display: none !important; }
+      #productlistcards.Cards { margin-bottom: 0 !important; }
+    `;
+    frameDocument.head.appendChild(frameStyle);
+
+    grid.querySelectorAll("a[href*='ProductDetail.aspx'], a[href*='Quicklists_R.aspx']").forEach(function (link) {
+      link.target = "_top";
+    });
+
+    const resize = function () {
+      const height = Math.max(grid.scrollHeight, form.scrollHeight, 420);
+      frame.style.height = Math.ceil(height + 2) + "px";
+    };
+    resize();
+    frameDocument.querySelectorAll("img").forEach(function (image) {
+      if (!image.complete) image.addEventListener("load", resize, { once: true });
+    });
+    if (typeof frameWindow.ResizeObserver === "function") {
+      const observer = new frameWindow.ResizeObserver(resize);
+      observer.observe(grid);
+      frame._wlResizeObserver = observer;
+    }
+    frameWindow.setTimeout(resize, 800);
+    frameWindow.setTimeout(resize, 3000);
+    return { ok: true, nextUrl: nextUrl };
+  }
+
+  function initializeInfiniteScroll() {
+    if (window.top !== window.self || document.getElementById("wl-infinite-products")) return;
+
+    const grid = document.querySelector("#productlistcards");
+    if (!grid) return;
+
+    let nextUrl = getNextProductPageUrl(document, window.location.href);
+    if (!nextUrl) return;
+
+    document.body.classList.add("wl-infinite-products-active");
+    const container = document.createElement("div");
+    container.id = "wl-infinite-products";
+    const status = document.createElement("div");
+    status.id = "wl-infinite-status";
+    status.setAttribute("role", "status");
+    status.setAttribute("aria-live", "polite");
+    const retry = document.createElement("button");
+    retry.id = "wl-infinite-retry";
+    retry.type = "button";
+    retry.textContent = "Load more products";
+    retry.hidden = true;
+    const sentinel = document.createElement("div");
+    sentinel.id = "wl-infinite-sentinel";
+    sentinel.setAttribute("aria-hidden", "true");
+    container.append(status, retry, sentinel);
+    grid.insertAdjacentElement("afterend", container);
+
+    let loading = false;
+    let observer;
+    const loadNextPage = function () {
+      if (loading || !nextUrl) return;
+      loading = true;
+      retry.hidden = true;
+      status.textContent = "Loading more products...";
+
+      const sourceUrl = nextUrl;
+      nextUrl = "";
+      const frame = document.createElement("iframe");
+      frame.className = "wl-product-page-frame";
+      frame.title = "Additional product results";
+      frame.setAttribute("scrolling", "no");
+      frame.src = sourceUrl;
+      container.insertBefore(frame, status);
+
+      let initialLoadHandled = false;
+      frame.addEventListener("load", function () {
+        const result = prepareProductFrame(frame);
+        if (initialLoadHandled) return;
+        initialLoadHandled = true;
+        loading = false;
+
+        if (!result.ok) {
+          frame.remove();
+          nextUrl = sourceUrl;
+          status.textContent = "More products could not be loaded.";
+          retry.hidden = false;
+          return;
+        }
+
+        nextUrl = result.nextUrl;
+        status.textContent = nextUrl ? "" : "All products loaded.";
+        if (!nextUrl && observer) observer.disconnect();
+        if (nextUrl) {
+          window.requestAnimationFrame(function () {
+            const sentinelBounds = sentinel.getBoundingClientRect();
+            if (sentinelBounds.top < window.innerHeight + 1400) loadNextPage();
+          });
+        }
+      });
+    };
+
+    retry.addEventListener("click", loadNextPage);
+    if (typeof window.IntersectionObserver === "function") {
+      observer = new IntersectionObserver(function (entries) {
+        if (entries.some(function (entry) { return entry.isIntersecting; })) loadNextPage();
+      }, { rootMargin: "1400px 0px" });
+      observer.observe(sentinel);
+    } else {
+      retry.hidden = false;
+    }
+  }
+
   function initialize() {
     enhanceCards(document);
+    initializeInfiniteScroll();
 
     const observer = new MutationObserver(function (mutations) {
       mutations.forEach(function (mutation) {
