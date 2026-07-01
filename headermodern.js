@@ -533,9 +533,11 @@
         box-sizing: border-box;
         width: 160px !important;
         min-width: 160px !important;
+        height: auto !important;
+        min-height: 25px !important;
         gap: 6px;
         max-width: 170px;
-        flex: 0 0 160px !important;
+        flex: 0 0 auto !important;
         margin-top: 1px;
         color: #202327 !important;
         font-family: Arial, Helvetica, sans-serif;
