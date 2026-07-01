@@ -2017,6 +2017,27 @@
     return true;
   }
 
+  function normalizeHeaderContainers() {
+    var elements = [
+      document.getElementById("PageHeaderDiv"),
+      document.getElementById("siteHeaderContent"),
+      document.getElementById("ctl00_PageHeader_branding"),
+      document.getElementById("brandingLogo"),
+      document.querySelector("#brandingLogo > .UserContent")
+    ];
+    var changed = false;
+
+    elements.forEach(function (element) {
+      if (!element || element.getAttribute("data-wl-header-auto-height") === "true") return;
+      element.style.setProperty("height", "auto", "important");
+      element.style.setProperty("min-height", "0", "important");
+      element.setAttribute("data-wl-header-auto-height", "true");
+      changed = true;
+    });
+
+    return changed;
+  }
+
   function enhanceHeaderControls() {
     var changed = false;
     var search = document.getElementById("ctl00_PageHeader_GlobalSearchControl_RadSearchBox1_Input");
@@ -2136,6 +2157,7 @@
     var changed = false;
 
     changed = injectStyles() || changed;
+    changed = normalizeHeaderContainers() || changed;
     changed = buildDepartmentMenu() || changed;
     changed = enhanceHeaderControls() || changed;
     changed = removeUnusedHeaderSections() || changed;
