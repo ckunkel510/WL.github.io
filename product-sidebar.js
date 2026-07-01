@@ -182,11 +182,20 @@ $(document).ready(async function () {
         width: auto !important;
         max-width: none !important;
         min-width: 0 !important;
+        margin: 0 !important;
         padding: 12px !important;
         border: 1px solid #d9dde1;
         border-radius: 6px;
         background: #fff;
         overflow: hidden;
+      }
+      #WTRelatedProducts .wl-related-card > [class*="col-"] {
+        display: block !important;
+        flex: none !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        min-width: 0 !important;
+        padding: 0 !important;
       }
       #WTRelatedProducts .wl-related-card table { width: 100% !important; max-width: 100% !important; }
       #WTRelatedProducts .wl-related-card img {
@@ -674,7 +683,7 @@ $(document).ready(async function () {
     const scroller = root.querySelector(".relatedProductsScrollingDiv");
     if (!scroller) return false;
 
-    const cards = Array.from(scroller.querySelectorAll(".col-12.col-sm-6.col-lg-3"));
+    const cards = Array.from(scroller.children).filter((element) => element.classList.contains("row"));
     if (!cards.length) return false;
 
     const grid = document.createElement("div");
