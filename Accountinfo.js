@@ -48,6 +48,23 @@
   const emailOK=(v)=> /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(v||'').trim());
   const digits=(v)=> String(v||'').replace(/\D+/g,'').slice(0,15);
   const fmtMoney=(n)=> new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'}).format(Number(n||0));
+  const displayMoney=(value)=>{
+    const raw=String(value||'').trim();
+    if(!raw) return '--';
+    return /\$/.test(raw)?raw:fmtMoney(mNum(raw));
+  };
+  const displayQty=(value)=>{
+    const raw=String(value||'').trim();
+    if(!raw) return '';
+    const number=mNum(raw);
+    return Number.isInteger(number)?String(number):number.toLocaleString('en-US',{maximumFractionDigits:2});
+  };
+  const displayDate=(value)=>{
+    const raw=String(value||'').trim();
+    const match=raw.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+    if(!match) return raw;
+    return new Date(+match[3],+match[1]-1,+match[2]).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  };
   function getCashBalanceCredit(){
     const el=document.getElementById('ctl00_PageBody_lblBalanceLabel');
     if(!el) return 0;
@@ -62,6 +79,12 @@
   const styles = `
   .wl-acct-root, .wl-acct-root * { box-sizing: border-box; }
   .wl-acct-root{font-family:system-ui,Segoe UI,Roboto,Arial,sans-serif; width:100%}
+  div#MainLayoutRow{box-sizing:border-box!important;width:calc(100% - 32px)!important;max-width:1180px!important;margin:20px auto 0!important}
+  #MainLayoutRow>.container-fluid,#MainLayoutRow>.container-fluid>.row,#MainLayoutRow>.container-fluid>.row>.col,#MainLayoutRow .bodyFlexContainer,#MainLayoutRow .bodyFlexItem{box-sizing:border-box!important;width:100%!important;max-width:100%!important}
+  #MainLayoutRow>.container-fluid>.row{margin-right:0!important;margin-left:0!important}
+  #MainLayoutRow>.container-fluid>.row>.col{flex:0 0 100%!important;padding-right:0!important;padding-left:0!important}
+  #MainLayoutRow .bodyFlexContainer{display:block!important}
+  #pageContent,#pageContent>tbody,#pageContent>tbody>tr,td.pageContentBody{box-sizing:border-box!important;width:100%!important;max-width:100%!important}
   .wl-top{position:relative;display:flex;align-items:center;justify-content:space-between;margin:6px 0 12px}
   .wl-ham{display:inline-flex;align-items:center;gap:10px}
   .wl-title{font-size:1.15rem;font-weight:800;color:${BRAND.primary}}
@@ -82,7 +105,12 @@
   .wl-row-2{grid-template-columns:repeat(auto-fit, minmax(420px, 1fr));}
   .wl-row-1{grid-template-columns:1fr;}
   @media (max-width: 1024px){ .wl-row-2{grid-template-columns:repeat(auto-fit, minmax(340px, 1fr));} }
-  @media (max-width: 720px){ .wl-row-3,.wl-row-2{grid-template-columns:1fr;} .wl-top{flex-wrap:wrap; gap:10px} }
+  @media (max-width: 720px){
+    div#MainLayoutRow{width:100%!important;max-width:none!important;margin:10px 0 0!important}
+    #MainLayoutRow>.container-fluid{padding-right:10px!important;padding-left:10px!important}
+    .wl-row-3,.wl-row-2{grid-template-columns:1fr}
+    .wl-top{flex-wrap:wrap;gap:10px}
+  }
 
   /* CARDS */
   .wl-card{min-width:0;background:#fff;border:1px solid ${BRAND.border};border-radius:12px;box-shadow:0 1px 4px rgba(0,0,0,.05);overflow:hidden}
@@ -145,7 +173,13 @@
   .wl-btn{display:inline-flex;align-items:center;justify-content:center;padding:9px 14px;border-radius:9px;border:1px solid ${BRAND.border};background:#fff;text-decoration:none;color:#111;font-weight:700;line-height:1.2;white-space:nowrap;min-width:150px}
   .wl-btn.primary{background:${BRAND.primary};border-color:${BRAND.primary};color:#fff}
   .wl-btn.primary:hover{background:${BRAND.primaryHover};border-color:${BRAND.primaryHover}}
-  @media (max-width: 560px){ .wl-btn{flex:1 1 auto; min-width:unset} }
+  @media (max-width: 560px){
+    .wl-btn{flex:1 1 auto;min-width:unset}
+    .wl-ham{width:100%}
+    .wl-ham button{width:40px;min-width:40px;height:40px;padding:0;justify-content:center}
+    .wl-ham button span{display:none}
+    .wl-title{min-width:0;font-size:1rem;line-height:1.3}
+  }
   @media (max-width: 640px){
     .wl-section-summary,.wl-purchase-summary{grid-template-columns:repeat(3,minmax(0,1fr))}
     .wl-summary-stat{padding:8px 7px}
@@ -259,7 +293,7 @@
       <div class="wl-acct-root">
         <div class="wl-top">
           <div class="wl-ham">
-            <button id="wl-ham-btn" type="button" aria-expanded="false" aria-controls="wl-ham-menu">☰ Menu</button>
+            <button id="wl-ham-btn" type="button" aria-expanded="false" aria-controls="wl-ham-menu" aria-label="Account menu"><i class="fas fa-bars" aria-hidden="true"></i><span>Menu</span></button>
             <div class="wl-title">Account Overview — ${acctName}</div>
             <div id="wl-ham-menu" class="wl-ham-menu" role="menu"></div>
           </div>
@@ -1247,10 +1281,10 @@ if (snapshotActions) {
           <span class="wl-entry-icon ${it.type==='Credit'?'credit':''}" aria-hidden="true"><i class="fas ${it.type==='Credit'?'fa-receipt':'fa-file-invoice'}"></i></span>
           <div class="wl-entry-main">
             <div class="wl-entry-title"><a href="${escapeAttr(it.link)}">${escapeHtml(it.id)}</a></div>
-            <div class="wl-entry-meta">${escapeHtml(it.date||'Date unavailable')}</div>
+            <div class="wl-entry-meta">${escapeHtml(displayDate(it.date)||'Date unavailable')}</div>
           </div>
           <div class="wl-entry-side">
-            <div class="wl-entry-amount">${escapeHtml(it.amount||'--')}</div>
+            <div class="wl-entry-amount">${escapeHtml(displayMoney(it.amount))}</div>
             ${it.status?`<span class="wl-status ${statusClass(it.status)}">${escapeHtml(it.status)}</span>`:''}
           </div>
         </li>`)));
@@ -1277,10 +1311,10 @@ if (snapshotActions) {
         <span class="wl-entry-icon" aria-hidden="true"><i class="fas fa-box"></i></span>
         <div class="wl-entry-main">
           <div class="wl-entry-title"><a href="${escapeAttr(it.link||'OpenOrders_r.aspx')}">${escapeHtml(it['Order #']||'Order')}</a></div>
-          <div class="wl-entry-meta">${escapeHtml(it.Created||'Created date unavailable')}</div>
+          <div class="wl-entry-meta">${escapeHtml(displayDate(it.Created)||'Created date unavailable')}</div>
         </div>
         <div class="wl-entry-side">
-          <div class="wl-entry-amount">${escapeHtml(it['Total Amount']||it['Goods Total']||'--')}</div>
+          <div class="wl-entry-amount">${escapeHtml(displayMoney(it['Total Amount']||it['Goods Total']))}</div>
           ${it.Status?`<span class="wl-status ${statusClass(it.Status)}">${escapeHtml(it.Status)}</span>`:''}
         </div>
       </li>`)));
@@ -1332,12 +1366,12 @@ if (snapshotActions) {
             <div class="wl-product-code">${escapeHtml(item.sku||'Product')}</div>
             <div class="wl-product-name">${escapeHtml(item.title)}</div>
             <div class="wl-product-meta">
-              ${item.when?`<span>${escapeHtml(item.when)}</span>`:''}
-              ${item.qty?`<span>Qty ${escapeHtml(item.qty)}</span>`:''}
-              ${item.unit?`<span>${escapeHtml(item.unit)} each</span>`:''}
+              ${item.when?`<span>${escapeHtml(displayDate(item.when))}</span>`:''}
+              ${item.qty?`<span>Qty ${escapeHtml(displayQty(item.qty))}</span>`:''}
+              ${item.unit?`<span>${escapeHtml(displayMoney(item.unit))} each</span>`:''}
             </div>
             <div class="wl-product-bottom">
-              <span class="wl-product-total">${escapeHtml(item.total||'')}</span>
+              <span class="wl-product-total">${escapeHtml(item.total?displayMoney(item.total):'')}</span>
               <a class="wl-product-link" href="${escapeAttr(item.productLink||item.view)}">View product <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
             </div>
           </div>
