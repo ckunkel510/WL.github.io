@@ -906,7 +906,7 @@
         border-radius: 0 5px 5px 0 !important;
       }
 
-      #barcode-scanner-container {
+      body #aspnetForm #barcode-scanner-container {
         display: none !important;
         flex: 0 0 auto;
       }
@@ -1131,7 +1131,7 @@
           width: 100% !important;
         }
 
-        #barcode-scanner-container {
+        body #aspnetForm #barcode-scanner-container {
           display: inline-flex !important;
         }
 
