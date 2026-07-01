@@ -6,6 +6,8 @@
   var LOCATIONS_URL = "/Default.aspx?view=storelocations";
   var ANALYTICS_URL = "https://ckunkel510.github.io/WL.github.io/wl-events.js?v=20260701-1";
   var QUAGGA_URL = "https://unpkg.com/quagga@0.12.1/dist/quagga.min.js";
+  var STORE_NAMES = ["Brenham", "Bryan", "Caldwell", "Lexington", "Groesbeck", "Mexia", "Buffalo"];
+  var CENTRAL_TIME_ZONE = "America/Chicago";
 
   function debugLog() {
     if (!DEBUG || !window.console || typeof window.console.log !== "function") return;
@@ -510,6 +512,77 @@
         background: transparent !important;
         border-radius: 0 !important;
         box-shadow: none !important;
+      }
+
+      #wlcheader.wl-has-store-hours {
+        min-height: 82px !important;
+        height: 82px !important;
+        flex-direction: column;
+        justify-content: center !important;
+      }
+
+      #wlcheader.wl-has-store-hours > a:first-child img {
+        width: 136px !important;
+        max-height: 45px;
+      }
+
+      #wl-store-hours {
+        display: none;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        max-width: 170px;
+        margin-top: 1px;
+        color: #202327 !important;
+        font-family: Arial, Helvetica, sans-serif;
+        line-height: 1.15;
+        text-align: left;
+        text-decoration: none !important;
+      }
+
+      #wl-store-hours[data-ready="true"] {
+        display: inline-flex;
+      }
+
+      .wl-store-hours-dot {
+        width: 7px;
+        height: 7px;
+        flex: 0 0 7px;
+        background: #6f767c;
+        border-radius: 50%;
+      }
+
+      #wl-store-hours[data-state="open"] .wl-store-hours-dot {
+        background: #218739;
+      }
+
+      #wl-store-hours[data-state="opening"] .wl-store-hours-dot,
+      #wl-store-hours[data-state="closing"] .wl-store-hours-dot {
+        background: #b16a00;
+      }
+
+      .wl-store-hours-copy {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+      }
+
+      .wl-store-hours-name {
+        overflow: hidden;
+        color: #6b0016;
+        font-size: 11px;
+        font-weight: 800;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .wl-store-hours-status {
+        overflow: hidden;
+        color: #202327;
+        font-size: 11px;
+        font-weight: 400;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
 
       #wlcheaderpromolinks,
@@ -1072,6 +1145,16 @@
           max-height: 52px;
         }
 
+        #wlcheader.wl-has-store-hours {
+          min-height: 76px !important;
+          height: 76px !important;
+        }
+
+        #wlcheader.wl-has-store-hours > a:first-child img {
+          width: 118px !important;
+          max-height: 40px;
+        }
+
         #wlcheaderpromolinks,
         #wlcheaderquicklinks {
           display: none !important;
@@ -1186,6 +1269,10 @@
           box-shadow: none !important;
         }
 
+        #wlcheader.wl-has-store-hours > a:first-child img {
+          width: 112px !important;
+        }
+
         #ctl00_PageHeader_searchBarTableRow {
           min-height: 116px;
           padding-top: 9px !important;
@@ -1239,6 +1326,241 @@
 
   function cleanLabel(value) {
     return String(value || "").replace(/\s+/g, " ").trim();
+  }
+
+  function matchStoreName(value) {
+    var text = cleanLabel(value).toLowerCase();
+    var match = "";
+
+    STORE_NAMES.some(function (storeName) {
+      if (text.indexOf(storeName.toLowerCase()) === -1) return false;
+      match = storeName;
+      return true;
+    });
+
+    return match;
+  }
+
+  function getCentralClock(date) {
+    try {
+      var parts = new Intl.DateTimeFormat("en-US", {
+        timeZone: CENTRAL_TIME_ZONE,
+        weekday: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23"
+      }).formatToParts(date);
+      var values = {};
+
+      parts.forEach(function (part) {
+        if (part.type !== "literal") values[part.type] = part.value;
+      });
+
+      var dayMap = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+      return {
+        day: dayMap[values.weekday],
+        minutes: (Number(values.hour) % 24) * 60 + Number(values.minute)
+      };
+    } catch (error) {
+      return { day: date.getDay(), minutes: date.getHours() * 60 + date.getMinutes() };
+    }
+  }
+
+  function getStoreSchedule(storeName, day) {
+    if (day === 0) return null;
+
+    var open = 7 * 60 + 30;
+    var close;
+
+    if (day === 6) {
+      close = /^(Brenham|Bryan)$/.test(storeName) ? 12 * 60 : 16 * 60;
+    } else if (/^(Groesbeck|Mexia)$/.test(storeName) && (day === 2 || day === 4)) {
+      close = 19 * 60;
+    } else {
+      close = 17 * 60 + 30;
+    }
+
+    return { open: open, close: close };
+  }
+
+  function formatStoreTime(minutes) {
+    var hour = Math.floor(minutes / 60);
+    var minute = minutes % 60;
+    var suffix = hour >= 12 ? "PM" : "AM";
+    var displayHour = hour % 12 || 12;
+    return displayHour + ":" + String(minute).padStart(2, "0") + " " + suffix;
+  }
+
+  function getNextOpening(storeName, day) {
+    var weekdayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+    for (var offset = 1; offset <= 7; offset++) {
+      var nextDay = (day + offset) % 7;
+      var schedule = getStoreSchedule(storeName, nextDay);
+      if (!schedule) continue;
+
+      return {
+        label: offset === 1 ? "tomorrow" : weekdayNames[nextDay],
+        time: formatStoreTime(schedule.open)
+      };
+    }
+
+    return null;
+  }
+
+  function getStoreHoursStatus(storeName, date) {
+    var clock = getCentralClock(date || new Date());
+    var schedule = getStoreSchedule(storeName, clock.day);
+
+    if (schedule && clock.minutes < schedule.open) {
+      var opensIn = schedule.open - clock.minutes;
+      return {
+        state: opensIn <= 60 ? "opening" : "closed",
+        text: (opensIn <= 60 ? "Opens soon · " : "Opens at ") + formatStoreTime(schedule.open)
+      };
+    }
+
+    if (schedule && clock.minutes < schedule.close) {
+      var closesIn = schedule.close - clock.minutes;
+      return {
+        state: closesIn <= 60 ? "closing" : "open",
+        text: (closesIn <= 60 ? "Closing soon · " : "Open until ") + formatStoreTime(schedule.close)
+      };
+    }
+
+    var nextOpening = getNextOpening(storeName, clock.day);
+    return {
+      state: "closed",
+      text: nextOpening ? "Opens " + nextOpening.label + " at " + nextOpening.time : "Closed"
+    };
+  }
+
+  function detectStoreName() {
+    var storeName = "";
+
+    try {
+      ["wlDetectedStore", "storeBranchKey", "storeName"].some(function (key) {
+        storeName = matchStoreName(window.sessionStorage.getItem(key));
+        return Boolean(storeName);
+      });
+    } catch (error) {
+      storeName = "";
+    }
+
+    if (storeName) return storeName;
+
+    var selectedBranch = document.querySelector("[id$='ddBranch'] option:checked, [id$='ddBranch'] option[selected='selected']");
+    storeName = matchStoreName(selectedBranch ? selectedBranch.textContent : "");
+    if (storeName) return storeName;
+
+    var stockMessages = document.querySelectorAll(".wl-stock-message, #LocalStockRow");
+    Array.prototype.some.call(stockMessages, function (message) {
+      storeName = matchStoreName(message.textContent);
+      return Boolean(storeName);
+    });
+
+    return storeName;
+  }
+
+  function rememberStoreName(storeName) {
+    try {
+      window.sessionStorage.setItem("wlDetectedStore", storeName);
+    } catch (error) {
+      debugLog("store context could not be cached", error);
+    }
+  }
+
+  function addStoreHours() {
+    if (document.getElementById("wl-store-hours")) return false;
+
+    var target = document.getElementById("wlcheader");
+    if (!target) return false;
+
+    var link = document.createElement("a");
+    link.id = "wl-store-hours";
+    link.href = LOCATIONS_URL;
+    link.title = "Store hours and locations";
+
+    var dot = document.createElement("span");
+    dot.className = "wl-store-hours-dot";
+    dot.setAttribute("aria-hidden", "true");
+
+    var copy = document.createElement("span");
+    copy.className = "wl-store-hours-copy";
+
+    var name = document.createElement("strong");
+    name.className = "wl-store-hours-name";
+
+    var status = document.createElement("span");
+    status.className = "wl-store-hours-status";
+
+    copy.appendChild(name);
+    copy.appendChild(status);
+    link.appendChild(dot);
+    link.appendChild(copy);
+    target.appendChild(link);
+    return true;
+  }
+
+  function renderStoreHours(storeName) {
+    var link = document.getElementById("wl-store-hours");
+    var target = document.getElementById("wlcheader");
+    if (!link || !target || !storeName) return false;
+
+    var hoursStatus = getStoreHoursStatus(storeName, new Date());
+    var name = link.querySelector(".wl-store-hours-name");
+    var status = link.querySelector(".wl-store-hours-status");
+
+    name.textContent = storeName;
+    status.textContent = hoursStatus.text;
+    link.setAttribute("data-ready", "true");
+    link.setAttribute("data-state", hoursStatus.state);
+    link.setAttribute("data-store", storeName);
+    link.setAttribute("aria-label", storeName + ". " + hoursStatus.text);
+    target.classList.add("wl-has-store-hours");
+    rememberStoreName(storeName);
+    return true;
+  }
+
+  function fetchSelectedStore(callback) {
+    if (typeof window.fetch !== "function") return;
+
+    window.fetch("/AccountSettings.aspx?cms=1", { credentials: "include" })
+      .then(function (response) {
+        return response.ok ? response.text() : "";
+      })
+      .then(function (html) {
+        if (!html) return;
+        var doc = new DOMParser().parseFromString(html, "text/html");
+        var selected = doc.querySelector("#ctl00_PageBody_ChangeUserDetailsControl_ddBranch option:checked, #ctl00_PageBody_ChangeUserDetailsControl_ddBranch option[selected='selected']");
+        var storeName = matchStoreName(selected ? selected.textContent : "");
+        if (storeName) callback(storeName);
+      })
+      .catch(function () {});
+  }
+
+  function startStoreHoursTracking() {
+    var link = document.getElementById("wl-store-hours");
+    if (!link || link.getAttribute("data-wl-watching") === "true") return false;
+
+    link.setAttribute("data-wl-watching", "true");
+    var discoveryTries = 0;
+
+    function updateDetectedStore() {
+      var storeName = detectStoreName() || link.getAttribute("data-store") || "";
+      return storeName ? renderStoreHours(storeName) : false;
+    }
+
+    updateDetectedStore();
+    fetchSelectedStore(renderStoreHours);
+
+    var discoveryTimer = window.setInterval(function () {
+      discoveryTries++;
+      if (updateDetectedStore() || discoveryTries >= 20) window.clearInterval(discoveryTimer);
+    }, 750);
+
+    window.setInterval(updateDetectedStore, 60 * 1000);
+    return true;
   }
 
   function collectDepartmentData() {
@@ -1805,6 +2127,7 @@
       !!row &&
       !!document.getElementById("wl-department-nav") &&
       !!document.getElementById("barcode-scanner-container") &&
+      !!document.getElementById("wl-store-hours") &&
       !!quick.querySelector(".wl-header-locations-desktop") &&
       !!row.querySelector(".wl-header-locations-mobile");
   }
@@ -1817,6 +2140,8 @@
     changed = enhanceHeaderControls() || changed;
     changed = removeUnusedHeaderSections() || changed;
     changed = upgradeTopLinksAccessibility() || changed;
+    changed = addStoreHours() || changed;
+    changed = startStoreHoursTracking() || changed;
     changed = addDesktopLocationsButton() || changed;
     changed = addMobileLocationsButton() || changed;
     changed = addBarcodeScanner() || changed;
