@@ -142,7 +142,9 @@
     const selectors = [
       '.wl-product-price-row',
       '.productPriceSegment',
-      '[class*="productPrice"]'
+      '[class*="productPrice"]',
+      '[id$="_lblPrice"]',
+      '#PriceRow'
     ];
     for (const selector of selectors) {
       const element = root.querySelector(selector);
