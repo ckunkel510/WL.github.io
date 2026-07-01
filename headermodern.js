@@ -5,6 +5,7 @@
   var DEBUG = false; // Set to true only when actively troubleshooting.
   var LOCATIONS_URL = "/Default.aspx?view=storelocations";
   var ANALYTICS_URL = "https://ckunkel510.github.io/WL.github.io/wl-events.js?v=20260701-1";
+  var QUAGGA_URL = "https://unpkg.com/quagga@0.12.1/dist/quagga.min.js";
 
   function debugLog() {
     if (!DEBUG || !window.console || typeof window.console.log !== "function") return;
@@ -434,7 +435,7 @@
       .sticky-header {
         min-height: 38px !important;
         background: #6b0016 !important;
-        border-bottom: 3px solid #f5c400;
+        border-bottom: 1px solid #d6d9dc;
         box-shadow: none !important;
       }
 
@@ -743,6 +744,19 @@
         overscroll-behavior: contain;
       }
 
+      .wl-department-featured-row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+
+      .wl-department-featured-row .wl-department-link {
+        justify-content: center;
+        min-height: 44px;
+        border: 1px solid #d5aa00;
+      }
+
       .wl-department-link {
         display: flex;
         align-items: center;
@@ -770,6 +784,56 @@
         border-bottom-color: #d5aa00;
       }
 
+      .wl-department-results {
+        max-height: min(58vh, 520px);
+        overflow: auto;
+        overscroll-behavior: contain;
+      }
+
+      .wl-department-result-status {
+        margin: 0 0 9px;
+        color: #5a6066;
+        font-size: 13px;
+        font-weight: 700;
+      }
+
+      .wl-department-result-list {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px 12px;
+      }
+
+      .wl-department-result {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        min-height: 48px;
+        padding: 8px 10px;
+        color: #292d31 !important;
+        font-size: 14px;
+        font-weight: 750;
+        line-height: 1.25;
+        text-decoration: none !important;
+        background: #fff;
+        border: 1px solid #e0e3e5;
+        border-radius: 6px;
+      }
+
+      .wl-department-result:hover,
+      .wl-department-result:focus {
+        color: #6b0016 !important;
+        background: #f6f7f8;
+        border-color: #b8bdc1;
+        outline: none;
+      }
+
+      .wl-department-result-context {
+        margin-top: 3px;
+        color: #6a7075;
+        font-size: 12px;
+        font-weight: 600;
+      }
+
       .wl-department-empty {
         grid-column: 1 / -1;
         padding: 22px 8px;
@@ -778,22 +842,22 @@
       }
 
       .wl-department-link[hidden],
-      .wl-department-empty[hidden] {
+      .wl-department-empty[hidden],
+      .wl-department-featured-row[hidden],
+      .wl-department-grid[hidden],
+      .wl-department-results[hidden] {
         display: none !important;
       }
 
       #Div_SearchControls {
         display: grid !important;
-        grid-template-columns: 160px minmax(0, 1fr);
+        grid-template-columns: minmax(0, 1fr);
         align-items: center;
-        gap: 10px;
         width: 100%;
       }
 
       #c50_1 {
-        width: 160px !important;
-        min-width: 0;
-        flex: none !important;
+        display: none !important;
       }
 
       #c50_2,
@@ -832,6 +896,108 @@
         color: #fff !important;
         background: #6b0016 !important;
         border-radius: 0 5px 5px 0 !important;
+      }
+
+      #barcode-scanner-container {
+        display: none !important;
+        flex: 0 0 auto;
+      }
+
+      #start-scanner {
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+        width: 48px !important;
+        height: 48px !important;
+        min-width: 48px !important;
+        min-height: 48px !important;
+        padding: 0;
+        color: #6b0016;
+        font-size: 20px;
+        background: #fff !important;
+        border: 1px solid #aeb4b9 !important;
+        border-radius: 6px !important;
+        box-shadow: 0 2px 8px rgba(20, 24, 28, 0.06);
+        cursor: pointer;
+      }
+
+      #start-scanner:hover,
+      #start-scanner:focus {
+        color: #fff;
+        background: #6b0016 !important;
+        outline: none;
+      }
+
+      #wl-barcode-overlay[hidden] {
+        display: none !important;
+      }
+
+      #wl-barcode-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 100000;
+        color: #fff;
+        background: #111;
+      }
+
+      #wl-barcode-reader,
+      #wl-barcode-reader video,
+      #wl-barcode-reader canvas {
+        width: 100% !important;
+        height: 100% !important;
+      }
+
+      #wl-barcode-reader video,
+      #wl-barcode-reader canvas {
+        position: absolute;
+        inset: 0;
+        object-fit: cover;
+      }
+
+      .wl-barcode-guide {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: min(72vw, 520px);
+        height: min(24vh, 190px);
+        border: 3px solid #f5c400;
+        border-radius: 8px;
+        box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.28);
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+      }
+
+      .wl-barcode-status {
+        position: absolute;
+        right: 20px;
+        bottom: 28px;
+        left: 20px;
+        margin: 0;
+        font-size: 16px;
+        font-weight: 750;
+        text-align: center;
+        text-shadow: 0 1px 4px #000;
+      }
+
+      .wl-barcode-close {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 46px;
+        height: 46px;
+        padding: 0;
+        color: #292d31;
+        background: #fff;
+        border: 1px solid #d8dbde;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+
+      body.wl-barcode-open {
+        overflow: hidden !important;
       }
 
       .RadComboBox_MetroTouch,
@@ -953,7 +1119,12 @@
 
         #c50_2 {
           display: flex !important;
+          gap: 8px;
           width: 100% !important;
+        }
+
+        #barcode-scanner-container {
+          display: inline-flex !important;
         }
 
         #wl-department-trigger {
@@ -1031,6 +1202,10 @@
           gap: 2px;
         }
 
+        .wl-department-result-list {
+          grid-template-columns: 1fr;
+        }
+
         .wl-department-link {
           min-height: 44px;
         }
@@ -1058,7 +1233,7 @@
     return String(value || "").replace(/\s+/g, " ").trim();
   }
 
-  function collectDepartmentLinks() {
+  function collectDepartmentData() {
     var root = document.querySelector("#ctl00_PageHeader_RadMenuDesktop .rmLevel1");
     if (!root) return [];
 
@@ -1080,10 +1255,25 @@
       var name = cleanLabel(labelNode ? labelNode.textContent : link.textContent);
       var href = link.href || link.getAttribute("href");
       var key = name + "|" + href;
+      var subcategorySeen = Object.create(null);
+      var subcategories = [];
+
+      Array.prototype.forEach.call(item.querySelectorAll("a.rsmLink[href]"), function (subcategoryLink) {
+        var subcategoryName = cleanLabel(subcategoryLink.textContent);
+        var subcategoryHref = subcategoryLink.href || subcategoryLink.getAttribute("href");
+        var subcategoryKey = subcategoryName + "|" + subcategoryHref;
+
+        if (!subcategoryName || !subcategoryHref || subcategorySeen[subcategoryKey]) return;
+        subcategorySeen[subcategoryKey] = true;
+        subcategories.push({ name: subcategoryName, href: subcategoryHref });
+      });
 
       if (!name || !href || seen[key]) return;
+      if (/^store locations$/i.test(name)) return;
+      if (!subcategories.length && !/^clearance$/i.test(name)) return;
+
       seen[key] = true;
-      departments.push({ name: name, href: href });
+      departments.push({ name: name, href: href, subcategories: subcategories });
     });
 
     return departments;
@@ -1111,7 +1301,7 @@
     if (document.getElementById("wl-department-nav")) return false;
 
     var row = document.getElementById("ctl00_PageHeader_searchBarTableRow");
-    var departments = collectDepartmentLinks();
+    var departments = collectDepartmentData();
     if (!row || !departments.length) return false;
 
     markNativeDepartmentMenus(row);
@@ -1159,40 +1349,140 @@
 
     var search = document.createElement("input");
     search.type = "search";
-    search.placeholder = "Find a department";
-    search.setAttribute("aria-label", "Find a department");
+    search.placeholder = "Search departments and subcategories";
+    search.setAttribute("aria-label", "Search departments and subcategories");
     search.autocomplete = "off";
     searchWrap.appendChild(search);
+
+    var featuredRow = document.createElement("div");
+    featuredRow.className = "wl-department-featured-row";
 
     var grid = document.createElement("div");
     grid.className = "wl-department-grid";
 
-    departments.forEach(function (department) {
+    var searchEntries = [];
+    var searchEntrySeen = Object.create(null);
+
+    function addSearchEntry(name, href, context, isDepartment) {
+      var key = name + "|" + href;
+      if (searchEntrySeen[key]) return;
+      searchEntrySeen[key] = true;
+      searchEntries.push({
+        name: name,
+        href: href,
+        context: context,
+        isDepartment: isDepartment,
+        searchText: (name + " " + context).toLowerCase()
+      });
+    }
+
+    function createDepartmentLink(department, featured) {
       var link = document.createElement("a");
       link.className = "wl-department-link";
       link.href = department.href;
       link.textContent = department.name;
-      link.setAttribute("data-wl-department-name", department.name.toLowerCase());
 
-      if (/^(deals|clearance)$/i.test(department.name)) {
-        link.classList.add("wl-department-link--featured");
-      }
+      if (featured) link.classList.add("wl-department-link--featured");
+      return link;
+    }
 
-      grid.appendChild(link);
+    departments.forEach(function (department) {
+      var featured = /^(deals|clearance)$/i.test(department.name);
+      var link = createDepartmentLink(department, featured);
+
+      addSearchEntry(department.name, department.href, "Department", true);
+      department.subcategories.forEach(function (subcategory) {
+        addSearchEntry(subcategory.name, subcategory.href, department.name, false);
+      });
+
+      (featured ? featuredRow : grid).appendChild(link);
     });
+
+    var results = document.createElement("div");
+    results.className = "wl-department-results";
+    results.hidden = true;
+
+    var resultStatus = document.createElement("p");
+    resultStatus.className = "wl-department-result-status";
+    resultStatus.setAttribute("aria-live", "polite");
+
+    var resultList = document.createElement("div");
+    resultList.className = "wl-department-result-list";
 
     var empty = document.createElement("div");
     empty.className = "wl-department-empty";
     empty.hidden = true;
-    empty.textContent = "No departments match your search.";
-    grid.appendChild(empty);
+    empty.textContent = "No departments or subcategories match your search.";
+
+    results.appendChild(resultStatus);
+    results.appendChild(resultList);
+    results.appendChild(empty);
 
     panel.appendChild(panelHeader);
     panel.appendChild(searchWrap);
+    panel.appendChild(featuredRow);
     panel.appendChild(grid);
+    panel.appendChild(results);
     nav.appendChild(trigger);
     nav.appendChild(panel);
     row.insertBefore(nav, row.firstChild);
+
+    function renderSearch(value) {
+      var query = cleanLabel(value).toLowerCase();
+
+      if (!query) {
+        featuredRow.hidden = false;
+        grid.hidden = false;
+        results.hidden = true;
+        resultList.textContent = "";
+        resultStatus.textContent = "";
+        empty.hidden = true;
+        return;
+      }
+
+      var tokens = query.split(/\s+/);
+      var matches = searchEntries.filter(function (entry) {
+        return tokens.every(function (token) {
+          return entry.searchText.indexOf(token) !== -1;
+        });
+      });
+
+      matches.sort(function (a, b) {
+        var aStarts = a.name.toLowerCase().indexOf(query) === 0 ? 0 : 1;
+        var bStarts = b.name.toLowerCase().indexOf(query) === 0 ? 0 : 1;
+        if (aStarts !== bStarts) return aStarts - bStarts;
+        if (a.isDepartment !== b.isDepartment) return a.isDepartment ? -1 : 1;
+        return a.name.localeCompare(b.name);
+      });
+
+      featuredRow.hidden = true;
+      grid.hidden = true;
+      results.hidden = false;
+      resultList.textContent = "";
+      empty.hidden = matches.length !== 0;
+
+      var visibleMatches = matches.slice(0, 80);
+      resultStatus.textContent = matches.length > visibleMatches.length
+        ? "Showing " + visibleMatches.length + " of " + matches.length + " results"
+        : matches.length + (matches.length === 1 ? " result" : " results");
+
+      visibleMatches.forEach(function (entry) {
+        var resultLink = document.createElement("a");
+        resultLink.className = "wl-department-result";
+        resultLink.href = entry.href;
+
+        var resultName = document.createElement("span");
+        resultName.textContent = entry.name;
+
+        var resultContext = document.createElement("span");
+        resultContext.className = "wl-department-result-context";
+        resultContext.textContent = entry.context;
+
+        resultLink.appendChild(resultName);
+        resultLink.appendChild(resultContext);
+        resultList.appendChild(resultLink);
+      });
+    }
 
     function setOpen(open) {
       panel.hidden = !open;
@@ -1201,10 +1491,7 @@
 
       if (!open) {
         search.value = "";
-        Array.prototype.forEach.call(grid.querySelectorAll(".wl-department-link"), function (link) {
-          link.hidden = false;
-        });
-        empty.hidden = true;
+        renderSearch("");
       }
     }
 
@@ -1218,16 +1505,7 @@
     });
 
     search.addEventListener("input", function () {
-      var query = cleanLabel(search.value).toLowerCase();
-      var visibleCount = 0;
-
-      Array.prototype.forEach.call(grid.querySelectorAll(".wl-department-link"), function (link) {
-        var isVisible = !query || link.getAttribute("data-wl-department-name").indexOf(query) !== -1;
-        link.hidden = !isVisible;
-        if (isVisible) visibleCount++;
-      });
-
-      empty.hidden = visibleCount !== 0;
+      renderSearch(search.value);
     });
 
     document.addEventListener("keydown", function (event) {
@@ -1239,6 +1517,171 @@
     document.addEventListener("click", function (event) {
       if (panel.hidden || nav.contains(event.target)) return;
       setOpen(false);
+    });
+
+    return true;
+  }
+
+  function loadQuagga(callback) {
+    if (window.Quagga) {
+      callback(null);
+      return;
+    }
+
+    var existing = document.querySelector("script[data-wl-quagga]");
+    if (existing) {
+      existing.addEventListener("load", function () { callback(null); }, { once: true });
+      existing.addEventListener("error", function () { callback(new Error("Scanner library failed to load")); }, { once: true });
+      return;
+    }
+
+    var script = document.createElement("script");
+    script.src = QUAGGA_URL;
+    script.async = true;
+    script.setAttribute("data-wl-quagga", "true");
+    script.addEventListener("load", function () { callback(null); }, { once: true });
+    script.addEventListener("error", function () { callback(new Error("Scanner library failed to load")); }, { once: true });
+    document.head.appendChild(script);
+  }
+
+  function addBarcodeScanner() {
+    if (document.getElementById("barcode-scanner-container")) return false;
+
+    var target = document.getElementById("c50_2");
+    if (!target) return false;
+
+    var container = document.createElement("div");
+    container.id = "barcode-scanner-container";
+
+    var startButton = document.createElement("button");
+    startButton.id = "start-scanner";
+    startButton.type = "button";
+    startButton.setAttribute("aria-label", "Scan a product barcode");
+    startButton.title = "Scan a product barcode";
+    startButton.innerHTML = '<i class="fas fa-barcode" aria-hidden="true"></i>';
+    container.appendChild(startButton);
+    target.appendChild(container);
+
+    var overlay = document.createElement("div");
+    overlay.id = "wl-barcode-overlay";
+    overlay.hidden = true;
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-label", "Barcode scanner");
+
+    var reader = document.createElement("div");
+    reader.id = "wl-barcode-reader";
+
+    var guide = document.createElement("div");
+    guide.className = "wl-barcode-guide";
+    guide.setAttribute("aria-hidden", "true");
+
+    var status = document.createElement("p");
+    status.className = "wl-barcode-status";
+    status.setAttribute("aria-live", "polite");
+    status.textContent = "Point the camera at a product barcode";
+
+    var closeButton = document.createElement("button");
+    closeButton.className = "wl-barcode-close";
+    closeButton.type = "button";
+    closeButton.setAttribute("aria-label", "Close barcode scanner");
+    closeButton.title = "Close barcode scanner";
+    closeButton.innerHTML = '<i class="fas fa-times" aria-hidden="true"></i>';
+
+    overlay.appendChild(reader);
+    overlay.appendChild(guide);
+    overlay.appendChild(status);
+    overlay.appendChild(closeButton);
+    document.body.appendChild(overlay);
+
+    var scannerSession = 0;
+    var activeHandler = null;
+
+    function stopScanner() {
+      scannerSession++;
+
+      if (window.Quagga) {
+        try {
+          if (activeHandler && typeof window.Quagga.offDetected === "function") {
+            window.Quagga.offDetected(activeHandler);
+          }
+          window.Quagga.stop();
+        } catch (error) {
+          debugLog("scanner stop failed", error);
+        }
+      }
+
+      activeHandler = null;
+      reader.textContent = "";
+      overlay.hidden = true;
+      startButton.disabled = false;
+      document.body.classList.remove("wl-barcode-open");
+    }
+
+    function showScannerError(message) {
+      status.textContent = message;
+      startButton.disabled = false;
+    }
+
+    function startScanner() {
+      var session = ++scannerSession;
+      var detections = Object.create(null);
+
+      overlay.hidden = false;
+      startButton.disabled = true;
+      status.textContent = "Starting camera...";
+      document.body.classList.add("wl-barcode-open");
+
+      loadQuagga(function (loadError) {
+        if (session !== scannerSession) return;
+        if (loadError || !window.Quagga) {
+          showScannerError("The scanner could not load. Close it and try again.");
+          return;
+        }
+
+        window.Quagga.init({
+          inputStream: {
+            name: "Live",
+            type: "LiveStream",
+            target: reader,
+            constraints: {
+              facingMode: "environment"
+            }
+          },
+          decoder: {
+            readers: ["upc_reader", "ean_reader", "code_128_reader"]
+          },
+          locate: true,
+          frequency: 8
+        }, function (initError) {
+          if (session !== scannerSession) return;
+          if (initError) {
+            showScannerError("Camera access is unavailable. Check permission and try again.");
+            return;
+          }
+
+          status.textContent = "Point the camera at a product barcode";
+          activeHandler = function (result) {
+            var code = result && result.codeResult && result.codeResult.code;
+            if (!code) return;
+
+            detections[code] = (detections[code] || 0) + 1;
+            if (detections[code] < 3) return;
+
+            status.textContent = "Barcode found";
+            stopScanner();
+            window.location.href = "/Products.aspx?pg=0&searchText=" + encodeURIComponent(code);
+          };
+
+          window.Quagga.onDetected(activeHandler);
+          window.Quagga.start();
+        });
+      });
+    }
+
+    startButton.addEventListener("click", startScanner);
+    closeButton.addEventListener("click", stopScanner);
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && !overlay.hidden) stopScanner();
     });
 
     return true;
@@ -1353,6 +1796,7 @@
       !!quick &&
       !!row &&
       !!document.getElementById("wl-department-nav") &&
+      !!document.getElementById("barcode-scanner-container") &&
       !!quick.querySelector(".wl-header-locations-desktop") &&
       !!row.querySelector(".wl-header-locations-mobile");
   }
@@ -1367,6 +1811,7 @@
     changed = upgradeTopLinksAccessibility() || changed;
     changed = addDesktopLocationsButton() || changed;
     changed = addMobileLocationsButton() || changed;
+    changed = addBarcodeScanner() || changed;
 
     debugLog(changed ? "header enhanced" : "no header changes needed");
 
