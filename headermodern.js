@@ -429,6 +429,599 @@
           min-width: 0;
         }
       }
+
+      /* Header v2: compact hierarchy, persistent search, and responsive departments. */
+      .sticky-header {
+        min-height: 38px !important;
+        background: #6b0016 !important;
+        border-bottom: 3px solid #f5c400;
+        box-shadow: none !important;
+      }
+
+      .sticky-header .main-nav {
+        box-sizing: border-box;
+        width: min(1180px, calc(100% - 32px));
+        min-height: 38px;
+        margin: 0 auto;
+        justify-content: flex-end;
+      }
+
+      .sticky-header .nav-link,
+      .sticky-header .header-link,
+      .sticky-header .hamburger {
+        color: #fff !important;
+      }
+
+      #PageHeaderDiv {
+        width: 100vw !important;
+        max-width: none !important;
+        margin-left: calc(50% - 50vw) !important;
+        background: #fff;
+        border-bottom: 1px solid #dfe2e5;
+        box-shadow: 0 5px 18px rgba(23, 27, 31, 0.08);
+      }
+
+      #siteHeaderContent {
+        box-sizing: border-box;
+        width: min(1180px, calc(100% - 32px)) !important;
+        margin: 0 auto;
+      }
+
+      #ctl00_PageHeader_branding,
+      #brandingLogo {
+        width: 100% !important;
+      }
+
+      #brandingLogo > .UserContent {
+        display: grid !important;
+        grid-template-columns: 170px auto minmax(0, 1fr);
+        align-items: center;
+        gap: 18px;
+        min-height: 72px;
+      }
+
+      #brandingLogo > .UserContent > span:last-child {
+        display: none !important;
+      }
+
+      #wlcheader {
+        width: auto !important;
+        min-height: 72px !important;
+        height: 72px !important;
+        gap: 0 !important;
+        padding: 0 !important;
+        overflow: visible !important;
+      }
+
+      #wlcheader > a img {
+        display: block;
+        width: 158px !important;
+        max-height: 60px;
+        padding: 0 !important;
+        object-fit: contain;
+        background: transparent !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+      }
+
+      #wlcheaderpromolinks,
+      #wlcheaderquicklinks {
+        width: auto !important;
+        min-height: 40px !important;
+        padding: 0 !important;
+        background: transparent !important;
+        flex-wrap: nowrap !important;
+      }
+
+      #wlcheaderpromolinks {
+        gap: 7px;
+      }
+
+      #wlcheaderquicklinks {
+        justify-content: flex-end !important;
+        gap: 2px;
+        overflow: hidden;
+      }
+
+      #wlcheaderpromolinks a {
+        min-height: 34px;
+        padding: 7px 10px !important;
+        color: #181818 !important;
+        background: #f5c400 !important;
+        border: 1px solid #d5aa00;
+        border-radius: 6px !important;
+        white-space: nowrap;
+      }
+
+      #wlcheaderpromolinks a:hover {
+        color: #181818 !important;
+        background: #ffd529 !important;
+      }
+
+      #wlcheaderquicklinks a {
+        min-height: 34px;
+        padding: 7px 8px !important;
+        color: #30343a !important;
+        background: transparent !important;
+        border-radius: 4px !important;
+        white-space: nowrap;
+      }
+
+      #wlcheaderquicklinks a:hover {
+        color: #6b0016 !important;
+        background: #f2f3f4 !important;
+      }
+
+      #wlcheaderquicklinks .wl-header-locations-desktop {
+        min-height: 38px;
+        margin-right: 5px;
+        padding: 8px 12px !important;
+        color: #fff !important;
+        background: #6b0016 !important;
+        border-radius: 6px !important;
+        box-shadow: none;
+      }
+
+      #wlcheaderquicklinks .wl-header-locations-desktop:hover {
+        color: #fff !important;
+        background: #510010 !important;
+        transform: none;
+      }
+
+      #pageTitleHeader {
+        display: none !important;
+      }
+
+      #ctl00_PageHeader_searchBarTableRow {
+        position: relative;
+        z-index: 110;
+        display: grid !important;
+        grid-template-columns: 218px minmax(0, 1fr);
+        align-items: center !important;
+        gap: 14px;
+        min-height: 72px;
+        padding: 11px 0 13px !important;
+        background: #f6f7f8 !important;
+        border-top: 1px solid #e4e6e8;
+      }
+
+      #ctl00_PageHeader_searchBarTableRow::before {
+        position: absolute;
+        inset: 0 calc(50% - 50vw);
+        z-index: -1;
+        content: "";
+        background: #f6f7f8;
+        border-top: 1px solid #e4e6e8;
+      }
+
+      #ctl00_PageHeader_searchBarTableRow > .flex-grow-1 {
+        grid-column: 2;
+        min-width: 0;
+      }
+
+      .wl-native-department-menu {
+        display: none !important;
+      }
+
+      #wl-department-nav {
+        position: relative;
+        z-index: 130;
+        grid-column: 1;
+        min-width: 0;
+      }
+
+      #wl-department-trigger {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 10px;
+        width: 100%;
+        min-height: 48px;
+        padding: 10px 14px;
+        color: #fff;
+        font-size: 14px;
+        font-weight: 800;
+        text-align: left;
+        background: #6b0016;
+        border: 1px solid #6b0016;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+
+      #wl-department-trigger:hover,
+      #wl-department-trigger[aria-expanded="true"] {
+        background: #510010;
+      }
+
+      #wl-department-trigger .wl-department-chevron {
+        margin-left: auto;
+        transition: transform 0.18s ease;
+      }
+
+      #wl-department-trigger[aria-expanded="true"] .wl-department-chevron {
+        transform: rotate(180deg);
+      }
+
+      #wl-department-panel[hidden] {
+        display: none !important;
+      }
+
+      #wl-department-panel {
+        position: absolute;
+        top: calc(100% + 9px);
+        left: 0;
+        box-sizing: border-box;
+        width: min(980px, calc(100vw - 32px));
+        padding: 18px;
+        color: #24272b;
+        background: #fff;
+        border: 1px solid #d8dbde;
+        border-top: 4px solid #6b0016;
+        border-radius: 0 0 8px 8px;
+        box-shadow: 0 18px 46px rgba(20, 24, 28, 0.22);
+      }
+
+      .wl-department-panel-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 14px;
+      }
+
+      .wl-department-panel-title {
+        margin: 0;
+        color: #24272b;
+        font-size: 20px;
+        font-weight: 800;
+      }
+
+      .wl-department-close {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 38px;
+        height: 38px;
+        padding: 0;
+        color: #4b5055;
+        background: #f2f3f4;
+        border: 1px solid #d8dbde;
+        border-radius: 6px;
+        cursor: pointer;
+      }
+
+      .wl-department-search {
+        position: relative;
+        margin-bottom: 14px;
+      }
+
+      .wl-department-search > i {
+        position: absolute;
+        top: 50%;
+        left: 14px;
+        color: #6b0016;
+        transform: translateY(-50%);
+        pointer-events: none;
+      }
+
+      .wl-department-search input {
+        box-sizing: border-box;
+        width: 100%;
+        min-height: 44px;
+        padding: 10px 14px 10px 40px;
+        color: #202327;
+        font-size: 16px;
+        background: #fff;
+        border: 1px solid #bfc4c8;
+        border-radius: 6px;
+      }
+
+      .wl-department-search input:focus {
+        border-color: #6b0016;
+        outline: 3px solid rgba(107, 0, 22, 0.15);
+      }
+
+      .wl-department-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 4px 14px;
+        max-height: min(58vh, 520px);
+        overflow: auto;
+        overscroll-behavior: contain;
+      }
+
+      .wl-department-link {
+        display: flex;
+        align-items: center;
+        min-height: 42px;
+        padding: 8px 10px;
+        color: #292d31 !important;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.25;
+        text-decoration: none !important;
+        border-bottom: 1px solid #eceeef;
+        border-radius: 4px;
+      }
+
+      .wl-department-link:hover,
+      .wl-department-link:focus {
+        color: #6b0016 !important;
+        background: #f2f3f4;
+        outline: none;
+      }
+
+      .wl-department-link--featured {
+        color: #181818 !important;
+        background: #f5c400;
+        border-bottom-color: #d5aa00;
+      }
+
+      .wl-department-empty {
+        grid-column: 1 / -1;
+        padding: 22px 8px;
+        color: #5a6066;
+        text-align: center;
+      }
+
+      .wl-department-link[hidden],
+      .wl-department-empty[hidden] {
+        display: none !important;
+      }
+
+      #Div_SearchControls {
+        display: grid !important;
+        grid-template-columns: 160px minmax(0, 1fr);
+        align-items: center;
+        gap: 10px;
+        width: 100%;
+      }
+
+      #c50_1 {
+        width: 160px !important;
+        min-width: 0;
+        flex: none !important;
+      }
+
+      #c50_2,
+      #ctl00_PageHeader_GlobalSearchControl_SearchPanel,
+      #ctl00_PageHeader_GlobalSearchControl_RadSearchBox1 {
+        position: relative !important;
+        top: auto !important;
+        right: auto !important;
+        bottom: auto !important;
+        left: auto !important;
+        width: 100% !important;
+        min-width: 0 !important;
+        height: auto !important;
+        transform: none !important;
+      }
+
+      #ctl00_PageHeader_GlobalSearchControl_RadSearchBox1 .rsbInner {
+        box-sizing: border-box;
+        min-height: 48px;
+        background: #fff;
+        border: 1px solid #aeb4b9;
+        border-radius: 6px !important;
+        box-shadow: 0 2px 8px rgba(20, 24, 28, 0.06);
+      }
+
+      #ctl00_PageHeader_GlobalSearchControl_RadSearchBox1_Input {
+        box-sizing: border-box;
+        min-height: 44px;
+        padding-left: 14px !important;
+        color: #1f2327;
+        font-size: 16px !important;
+      }
+
+      #ctl00_PageHeader_GlobalSearchControl_RadSearchBox1 .rsbButton {
+        min-width: 48px;
+        color: #fff !important;
+        background: #6b0016 !important;
+        border-radius: 0 5px 5px 0 !important;
+      }
+
+      .RadComboBox_MetroTouch,
+      .RadComboBox_MetroTouch .rcbInner,
+      .RadSearchBox_MetroTouch,
+      .RadSearchBox_MetroTouch .rsbInner {
+        border-radius: 6px !important;
+      }
+
+      @media (max-width: 1100px) {
+        #brandingLogo > .UserContent {
+          grid-template-columns: 155px auto minmax(0, 1fr);
+          gap: 10px;
+        }
+
+        #wlcheader > a img {
+          width: 145px !important;
+        }
+
+        #wlcheaderquicklinks a {
+          padding: 7px 6px !important;
+          font-size: 12px !important;
+        }
+
+        .wl-department-grid {
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 991px) {
+        .sticky-header,
+        .sticky-header .main-nav {
+          min-height: 42px !important;
+        }
+
+        .sticky-header .main-nav {
+          width: 100%;
+          padding-left: 10px;
+          padding-right: 4px;
+        }
+
+        #PageHeaderDiv {
+          margin-top: 8px;
+        }
+
+        #siteHeaderContent {
+          width: min(760px, calc(100% - 24px)) !important;
+        }
+
+        #brandingLogo > .UserContent {
+          display: block !important;
+          min-height: 64px;
+        }
+
+        #wlcheader {
+          width: 100% !important;
+          min-height: 64px !important;
+          height: 64px !important;
+          justify-content: center !important;
+        }
+
+        #wlcheader > a img {
+          width: 138px !important;
+          max-height: 52px;
+        }
+
+        #wlcheaderpromolinks,
+        #wlcheaderquicklinks {
+          display: none !important;
+        }
+
+        #ctl00_PageHeader_searchBarTableRow {
+          grid-template-columns: minmax(0, 1fr) 48px;
+          grid-template-areas:
+            "departments location"
+            "search search";
+          gap: 9px;
+          min-height: 118px;
+          padding: 10px 0 12px !important;
+        }
+
+        #wl-department-nav {
+          grid-area: departments;
+          grid-column: auto;
+        }
+
+        .wl-header-locations-mobile {
+          grid-area: location;
+          display: inline-flex !important;
+          width: 48px;
+          height: 48px;
+          min-width: 48px;
+          min-height: 48px;
+          color: #6b0016 !important;
+          background: #fff;
+          border: 1px solid #bfc4c8;
+          border-radius: 6px;
+          box-shadow: none;
+        }
+
+        .wl-header-locations-mobile:hover {
+          color: #fff !important;
+          background: #6b0016;
+        }
+
+        #ctl00_PageHeader_searchBarTableRow > .flex-grow-1 {
+          grid-area: search;
+          grid-column: auto;
+          width: 100%;
+        }
+
+        #Div_SearchControls {
+          display: block !important;
+        }
+
+        #c50_1 {
+          display: none !important;
+        }
+
+        #c50_2 {
+          display: flex !important;
+          width: 100% !important;
+        }
+
+        #wl-department-trigger {
+          min-height: 48px;
+        }
+
+        #wl-department-panel {
+          position: fixed;
+          top: 42px;
+          right: 0;
+          bottom: 0;
+          left: 0;
+          width: 100%;
+          max-height: none;
+          padding: 18px 20px 28px;
+          overflow: auto;
+          border: 0;
+          border-top: 4px solid #f5c400;
+          border-radius: 0;
+          box-shadow: none;
+        }
+
+        .wl-department-panel-header {
+          position: sticky;
+          top: -18px;
+          z-index: 2;
+          padding: 14px 0 10px;
+          background: #fff;
+        }
+
+        .wl-department-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          max-height: none;
+          overflow: visible;
+        }
+
+        body.wl-department-open {
+          overflow: hidden !important;
+        }
+      }
+
+      @media (max-width: 575px) {
+        #siteHeaderContent {
+          width: calc(100% - 20px) !important;
+        }
+
+        #wlcheader > a img {
+          width: 126px !important;
+          padding: 0 !important;
+          border-radius: 0 !important;
+          box-shadow: none !important;
+        }
+
+        #ctl00_PageHeader_searchBarTableRow {
+          min-height: 116px;
+          padding-top: 9px !important;
+        }
+
+        #wl-department-trigger {
+          padding: 9px 12px;
+          font-size: 13px;
+        }
+
+        #wl-department-panel {
+          padding-right: 14px;
+          padding-left: 14px;
+        }
+
+        .wl-department-panel-title {
+          font-size: 18px;
+        }
+
+        .wl-department-grid {
+          grid-template-columns: 1fr;
+          gap: 2px;
+        }
+
+        .wl-department-link {
+          min-height: 44px;
+        }
+      }
     `;
 
     var style = document.createElement("style");
@@ -446,6 +1039,237 @@
         '</svg>' +
       '</span>'
     );
+  }
+
+  function cleanLabel(value) {
+    return String(value || "").replace(/\s+/g, " ").trim();
+  }
+
+  function collectDepartmentLinks() {
+    var root = document.querySelector("#ctl00_PageHeader_RadMenuDesktop .rmLevel1");
+    if (!root) return [];
+
+    var seen = Object.create(null);
+    var departments = [];
+
+    Array.prototype.slice.call(root.children).forEach(function (item) {
+      var link = null;
+
+      Array.prototype.slice.call(item.children).some(function (child) {
+        if (!child.matches || !child.matches("a.rmLink[href]")) return false;
+        link = child;
+        return true;
+      });
+
+      if (!link) return;
+
+      var labelNode = link.querySelector(".rmText");
+      var name = cleanLabel(labelNode ? labelNode.textContent : link.textContent);
+      var href = link.href || link.getAttribute("href");
+      var key = name + "|" + href;
+
+      if (!name || !href || seen[key]) return;
+      seen[key] = true;
+      departments.push({ name: name, href: href });
+    });
+
+    return departments;
+  }
+
+  function markNativeDepartmentMenus(row) {
+    [
+      document.getElementById("ctl00_PageHeader_RadMenuMobile"),
+      document.getElementById("RealMonsterMegaDropDown")
+    ].forEach(function (menu) {
+      if (!menu) return;
+
+      var wrapper = menu;
+      while (wrapper.parentElement && wrapper.parentElement !== row) {
+        wrapper = wrapper.parentElement;
+      }
+
+      if (wrapper.parentElement === row) {
+        wrapper.classList.add("wl-native-department-menu");
+      }
+    });
+  }
+
+  function buildDepartmentMenu() {
+    if (document.getElementById("wl-department-nav")) return false;
+
+    var row = document.getElementById("ctl00_PageHeader_searchBarTableRow");
+    var departments = collectDepartmentLinks();
+    if (!row || !departments.length) return false;
+
+    markNativeDepartmentMenus(row);
+
+    var nav = document.createElement("div");
+    nav.id = "wl-department-nav";
+    nav.setAttribute("data-wl-header-departments", "true");
+
+    var trigger = document.createElement("button");
+    trigger.id = "wl-department-trigger";
+    trigger.type = "button";
+    trigger.setAttribute("aria-expanded", "false");
+    trigger.setAttribute("aria-controls", "wl-department-panel");
+    trigger.innerHTML =
+      '<i class="fas fa-th-large" aria-hidden="true"></i>' +
+      "<span>Departments</span>" +
+      '<i class="fas fa-chevron-down wl-department-chevron" aria-hidden="true"></i>';
+
+    var panel = document.createElement("div");
+    panel.id = "wl-department-panel";
+    panel.hidden = true;
+    panel.setAttribute("role", "dialog");
+    panel.setAttribute("aria-label", "Shop departments");
+
+    var panelHeader = document.createElement("div");
+    panelHeader.className = "wl-department-panel-header";
+
+    var title = document.createElement("h2");
+    title.className = "wl-department-panel-title";
+    title.textContent = "Shop departments";
+
+    var closeButton = document.createElement("button");
+    closeButton.className = "wl-department-close";
+    closeButton.type = "button";
+    closeButton.setAttribute("aria-label", "Close departments");
+    closeButton.title = "Close departments";
+    closeButton.innerHTML = '<i class="fas fa-times" aria-hidden="true"></i>';
+
+    panelHeader.appendChild(title);
+    panelHeader.appendChild(closeButton);
+
+    var searchWrap = document.createElement("div");
+    searchWrap.className = "wl-department-search";
+    searchWrap.innerHTML = '<i class="fas fa-search" aria-hidden="true"></i>';
+
+    var search = document.createElement("input");
+    search.type = "search";
+    search.placeholder = "Find a department";
+    search.setAttribute("aria-label", "Find a department");
+    search.autocomplete = "off";
+    searchWrap.appendChild(search);
+
+    var grid = document.createElement("div");
+    grid.className = "wl-department-grid";
+
+    departments.forEach(function (department) {
+      var link = document.createElement("a");
+      link.className = "wl-department-link";
+      link.href = department.href;
+      link.textContent = department.name;
+      link.setAttribute("data-wl-department-name", department.name.toLowerCase());
+
+      if (/^(deals|clearance)$/i.test(department.name)) {
+        link.classList.add("wl-department-link--featured");
+      }
+
+      grid.appendChild(link);
+    });
+
+    var empty = document.createElement("div");
+    empty.className = "wl-department-empty";
+    empty.hidden = true;
+    empty.textContent = "No departments match your search.";
+    grid.appendChild(empty);
+
+    panel.appendChild(panelHeader);
+    panel.appendChild(searchWrap);
+    panel.appendChild(grid);
+    nav.appendChild(trigger);
+    nav.appendChild(panel);
+    row.insertBefore(nav, row.firstChild);
+
+    function setOpen(open) {
+      panel.hidden = !open;
+      trigger.setAttribute("aria-expanded", open ? "true" : "false");
+      document.body.classList.toggle("wl-department-open", open);
+
+      if (!open) {
+        search.value = "";
+        Array.prototype.forEach.call(grid.querySelectorAll(".wl-department-link"), function (link) {
+          link.hidden = false;
+        });
+        empty.hidden = true;
+      }
+    }
+
+    trigger.addEventListener("click", function () {
+      setOpen(trigger.getAttribute("aria-expanded") !== "true");
+    });
+
+    closeButton.addEventListener("click", function () {
+      setOpen(false);
+      trigger.focus();
+    });
+
+    search.addEventListener("input", function () {
+      var query = cleanLabel(search.value).toLowerCase();
+      var visibleCount = 0;
+
+      Array.prototype.forEach.call(grid.querySelectorAll(".wl-department-link"), function (link) {
+        var isVisible = !query || link.getAttribute("data-wl-department-name").indexOf(query) !== -1;
+        link.hidden = !isVisible;
+        if (isVisible) visibleCount++;
+      });
+
+      empty.hidden = visibleCount !== 0;
+    });
+
+    document.addEventListener("keydown", function (event) {
+      if (event.key !== "Escape" || panel.hidden) return;
+      setOpen(false);
+      trigger.focus();
+    });
+
+    document.addEventListener("click", function (event) {
+      if (panel.hidden || nav.contains(event.target)) return;
+      setOpen(false);
+    });
+
+    return true;
+  }
+
+  function enhanceHeaderControls() {
+    var changed = false;
+    var search = document.getElementById("ctl00_PageHeader_GlobalSearchControl_RadSearchBox1_Input");
+    var logo = document.querySelector("#wlcheader img");
+    var accountNav = document.querySelector(".sticky-header .main-nav");
+    var cart = document.querySelector(".sticky-header a[href*='ShoppingCart.aspx']");
+    var saved = document.getElementById("ctl00_MainMenu_QuickList_QuickListsButton");
+    var accountMenu = document.querySelector(".sticky-header .hamburger");
+
+    if (search && search.getAttribute("data-wl-header-search") !== "true") {
+      search.placeholder = "Search products, brands, or item numbers";
+      search.setAttribute("aria-label", "Search products");
+      search.setAttribute("data-wl-header-search", "true");
+      changed = true;
+    }
+
+    if (logo && !cleanLabel(logo.alt)) {
+      logo.alt = "Woodson Lumber";
+      changed = true;
+    }
+
+    if (accountNav && !accountNav.getAttribute("aria-label")) {
+      accountNav.setAttribute("aria-label", "Account and cart");
+      changed = true;
+    }
+
+    [
+      { element: cart, label: "Shopping cart" },
+      { element: saved, label: "Saved items" },
+      { element: accountMenu, label: "Account menu" }
+    ].forEach(function (control) {
+      if (!control.element || control.element.getAttribute("data-wl-header-label") === "true") return;
+      control.element.setAttribute("aria-label", control.label);
+      control.element.setAttribute("title", control.label);
+      control.element.setAttribute("data-wl-header-label", "true");
+      changed = true;
+    });
+
+    return changed;
   }
 
   function removeUnusedHeaderSections() {
@@ -515,6 +1339,7 @@
     return !!document.getElementById("wl-header-enhancer-styles") &&
       !!quick &&
       !!row &&
+      !!document.getElementById("wl-department-nav") &&
       !!quick.querySelector(".wl-header-locations-desktop") &&
       !!row.querySelector(".wl-header-locations-mobile");
   }
@@ -523,6 +1348,8 @@
     var changed = false;
 
     changed = injectStyles() || changed;
+    changed = buildDepartmentMenu() || changed;
+    changed = enhanceHeaderControls() || changed;
     changed = removeUnusedHeaderSections() || changed;
     changed = upgradeTopLinksAccessibility() || changed;
     changed = addDesktopLocationsButton() || changed;
