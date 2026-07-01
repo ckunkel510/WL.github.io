@@ -601,6 +601,7 @@ wireFieldPersistence();
         padding: 14px 16px;
       }
       #wlApWizard3 #wlRightCard.wl-ap-empty-card,
+      #wlApWizard3 .wl-ap-empty-field,
       body.wl-ap-cash #wlApWizard3 #wlQuickWidget {
         display: none !important;
       }
@@ -845,6 +846,16 @@ wireFieldPersistence();
     card.classList.toggle('wl-ap-empty-card', !hasControl && !(body.textContent || '').trim());
   }
 
+  function hideEmptyFormItems() {
+    const grid = document.getElementById('wlFormGrid');
+    if (!grid) return;
+    Array.from(grid.children).forEach(function (item) {
+      if (item.id === 'wlQuickWidget' || item.id === 'wlApOptionalDetails') return;
+      const hasControl = !!item.querySelector('input, select, textarea, button, a[href]');
+      item.classList.toggle('wl-ap-empty-field', !hasControl && !(item.textContent || '').trim());
+    });
+  }
+
   function applyPolish() {
     const wizard = document.getElementById('wlApWizard3');
     if (!wizard) return false;
@@ -906,6 +917,7 @@ wireFieldPersistence();
     groupOptionalFields(cashAccount);
     simplifySinglePaymentMethod();
     hideEmptySummaryCard();
+    hideEmptyFormItems();
     return true;
   }
 
