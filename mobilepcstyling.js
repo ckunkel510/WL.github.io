@@ -482,6 +482,7 @@
       #wl-infinite-products {
         width: 100%;
         margin: 0 0 28px;
+        overflow-anchor: none;
       }
 
       #wl-infinite-products .wl-product-page-frame {
@@ -491,6 +492,7 @@
         min-height: 420px;
         margin: 0 0 16px;
         overflow: hidden;
+        overflow-anchor: none;
         background: transparent;
         border: 0;
       }
@@ -1214,27 +1216,27 @@
     const sentinel = document.createElement("div");
     sentinel.id = "wl-infinite-sentinel";
     sentinel.setAttribute("aria-hidden", "true");
-    container.append(sentinel, status, retry);
+    container.append(status, retry, sentinel);
     grid.insertAdjacentElement("afterend", container);
 
     let loading = false;
     let observer;
     const supportsObserver = typeof window.IntersectionObserver === "function";
-    const loadNextPage = function (advanceSentinel) {
+    const loadNextPage = function () {
       if (loading || !nextUrl) return;
       loading = true;
       retry.hidden = true;
       status.textContent = "Loading more products...";
       container.setAttribute("aria-busy", "true");
 
-      if (advanceSentinel) container.insertBefore(sentinel, status);
-
       const sourceUrl = nextUrl;
       nextUrl = "";
+      const scrollTopBeforeLoad = window.scrollY;
       const frame = document.createElement("iframe");
       frame.className = "wl-product-page-frame";
       frame.title = "Additional product results";
       frame.setAttribute("scrolling", "no");
+      frame.setAttribute("tabindex", "-1");
       frame.src = sourceUrl;
       container.insertBefore(frame, status);
 
@@ -1269,17 +1271,15 @@
           return;
         }
 
+        if (document.activeElement === frame) {
+          frame.blur();
+          window.scrollTo(0, scrollTopBeforeLoad);
+        }
         frame.classList.add("is-ready");
         nextUrl = result.nextUrl;
         status.textContent = nextUrl ? "" : "All products loaded.";
         if (!nextUrl && observer) observer.disconnect();
         if (nextUrl && !supportsObserver) retry.hidden = false;
-        if (nextUrl) {
-          window.requestAnimationFrame(function () {
-            const sentinelBounds = sentinel.getBoundingClientRect();
-            if (sentinelBounds.top < window.innerHeight + 1400) loadNextPage(true);
-          });
-        }
       });
       frame.addEventListener("error", function () {
         window.clearTimeout(loadTimeout);
@@ -1287,15 +1287,15 @@
       }, { once: true });
     };
 
-    retry.addEventListener("click", function () { loadNextPage(false); });
+    retry.addEventListener("click", loadNextPage);
     if (supportsObserver) {
       observer = new IntersectionObserver(function (entries) {
-        if (entries.some(function (entry) { return entry.isIntersecting; })) loadNextPage(true);
+        if (entries.some(function (entry) { return entry.isIntersecting; })) loadNextPage();
       }, { rootMargin: "1400px 0px" });
       observer.observe(sentinel);
     }
 
-    loadNextPage(false);
+    loadNextPage();
   }
 
   function initialize() {
