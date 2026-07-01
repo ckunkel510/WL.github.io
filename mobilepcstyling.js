@@ -1168,7 +1168,7 @@
     const details = document.createElement("details");
     details.className = "wl-related-categories";
     const summary = document.createElement("summary");
-    summary.textContent = "Related categories";
+    summary.textContent = "Shop by subcategory";
     details.append(summary, groupPanel);
 
     let mobileLayout;
