@@ -455,6 +455,8 @@
       #PageHeaderDiv {
         width: 100vw !important;
         max-width: none !important;
+        height: auto !important;
+        min-height: 0 !important;
         margin-left: calc(50% - 50vw) !important;
         background: #fff;
         border-bottom: 1px solid #dfe2e5;
@@ -465,12 +467,16 @@
         display: block !important;
         box-sizing: border-box;
         width: min(1180px, calc(100% - 32px)) !important;
+        height: auto !important;
+        min-height: 0 !important;
         margin: 0 auto;
       }
 
       #ctl00_PageHeader_branding,
       #brandingLogo {
         width: 100% !important;
+        height: auto !important;
+        min-height: 0 !important;
       }
 
       #brandingLogo > .UserContent {
