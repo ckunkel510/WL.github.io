@@ -47,6 +47,7 @@ window.addEventListener("load", function () {
 
                 // Create a container for image thumbnails
                 const thumbnailContainer = document.createElement('div');
+                thumbnailContainer.className = 'wl-product-thumbnails';
                 thumbnailContainer.style.display = 'flex';
                 thumbnailContainer.style.gap = '10px';
                 thumbnailContainer.style.marginTop = '10px';
@@ -54,6 +55,7 @@ window.addEventListener("load", function () {
                 // Function to style a thumbnail wrapper
                 function createThumbnailWrapper(imageElement) {
                     const wrapper = document.createElement('div');
+                    wrapper.className = 'wl-product-thumbnail';
                     wrapper.style.border = '2px solid #ccc';
                     wrapper.style.padding = '5px';
                     wrapper.style.borderRadius = '8px';
@@ -73,6 +75,8 @@ window.addEventListener("load", function () {
                 // Add the current main image as the first thumbnail
                 const mainThumbnail = document.createElement('img');
                 mainThumbnail.src = mainImageElement.src;
+                mainThumbnail.alt = 'Current product image';
+                mainThumbnail.loading = 'lazy';
                 mainThumbnail.style.width = '50px';
                 mainThumbnail.style.height = '50px';
                 mainThumbnail.addEventListener('click', function () {
@@ -81,12 +85,16 @@ window.addEventListener("load", function () {
                 thumbnailContainer.appendChild(createThumbnailWrapper(mainThumbnail));
 
                 // Add thumbnails from the filtered rows
+                const seenImageUrls = new Set([mainImageElement.src]);
                 filteredRows.forEach((row, index) => {
                     const imageUrl = row[1].trim();
 
-                    if (imageUrl) {
+                    if (imageUrl && !seenImageUrls.has(imageUrl)) {
+                        seenImageUrls.add(imageUrl);
                         const thumbnail = document.createElement('img');
                         thumbnail.src = imageUrl;
+                        thumbnail.alt = `Product image ${index + 2}`;
+                        thumbnail.loading = 'lazy';
                         thumbnail.style.width = '50px';
                         thumbnail.style.height = '50px';
                         thumbnail.addEventListener('click', function () {
