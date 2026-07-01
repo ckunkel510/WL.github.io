@@ -462,6 +462,7 @@
       }
 
       #siteHeaderContent {
+        display: block !important;
         box-sizing: border-box;
         width: min(1180px, calc(100% - 32px)) !important;
         margin: 0 auto;
@@ -573,9 +574,15 @@
       }
 
       #ctl00_PageHeader_searchBarTableRow {
-        position: relative;
+        position: relative !important;
+        top: auto !important;
+        right: auto !important;
+        bottom: auto !important;
+        left: auto !important;
         z-index: 110;
         display: grid !important;
+        box-sizing: border-box;
+        width: 100% !important;
         grid-template-columns: 218px minmax(0, 1fr);
         align-items: center !important;
         gap: 14px;
