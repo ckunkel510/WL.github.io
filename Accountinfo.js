@@ -173,6 +173,27 @@
   .wl-btn{display:inline-flex;align-items:center;justify-content:center;padding:9px 14px;border-radius:9px;border:1px solid ${BRAND.border};background:#fff;text-decoration:none;color:#111;font-weight:700;line-height:1.2;white-space:nowrap;min-width:150px}
   .wl-btn.primary{background:${BRAND.primary};border-color:${BRAND.primary};color:#fff}
   .wl-btn.primary:hover{background:${BRAND.primaryHover};border-color:${BRAND.primaryHover}}
+  @media (min-width: 721px){
+    .wl-acct-root{font-size:15px;line-height:1.5}
+    .wl-title{font-size:18px}
+    .wl-ham button,.wl-ham-menu a,.wl-btn{font-size:14px}
+    .wl-head{font-size:15px}
+    .wl-kpi .lbl,.wl-meta{font-size:13px}
+    .wl-kpi .val{font-size:16px}
+    .wl-detail-section>.wl-head{font-size:16px}
+    .wl-head-note{font-size:12px}
+    .wl-summary-label{font-size:11px}
+    .wl-summary-value{font-size:14px}
+    .wl-entry-title a{font-size:14px}
+    .wl-entry-meta{font-size:12px}
+    .wl-entry-amount{font-size:14px}
+    .wl-status{font-size:11px}
+    .wl-product-code{font-size:11px}
+    .wl-product-name{font-size:14px;line-height:1.35}
+    .wl-product-meta{font-size:12px}
+    .wl-product-total{font-size:14px}
+    .wl-product-link{font-size:12px}
+  }
   @media (max-width: 560px){
     .wl-btn{flex:1 1 auto;min-width:unset}
     .wl-ham{width:100%}
