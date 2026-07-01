@@ -1150,7 +1150,7 @@
           padding: 18px 20px 28px;
           overflow: auto;
           border: 0;
-          border-top: 4px solid #f5c400;
+          border-top: 1px solid #d6d9dc;
           border-radius: 0;
           box-shadow: none;
         }
