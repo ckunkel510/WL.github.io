@@ -97,15 +97,67 @@
 
   /* Lists & buttons */
   .wl-list{margin:0;padding:0;list-style:none}
-  .wl-list li{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px;border-bottom:1px dashed #e7d6d9;background:#fff;border-radius:9px;min-width:0}
+  .wl-list:empty::before{content:attr(data-empty);display:block;padding:18px;color:#70696a;text-align:center;background:#fff;border:1px solid #ece7e8;border-radius:8px}
+  .wl-list li{min-width:0}
   .wl-meta{font-size:.9rem;color:#5f5f5f}
   .wl-pill{display:inline-block;padding:2px 10px;border-radius:999px;background:#fff;border:1px solid #e0c7cc;font-size:.8rem;color:${BRAND.primary};font-weight:700;white-space:nowrap}
+
+  /* Account activity, orders, and purchases */
+  .wl-detail-section{border:0;border-radius:0;box-shadow:none;overflow:visible;background:transparent}
+  .wl-detail-section>.wl-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:8px 2px;background:transparent;color:#211d1e;border-bottom:2px solid ${BRAND.primary};font-size:1.05rem;white-space:normal}
+  .wl-head-note{color:#71686a;font-size:.76rem;font-weight:700}
+  .wl-detail-section>.wl-body{padding:12px 0 0;background:transparent}
+  .wl-section-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;margin-bottom:10px;overflow:hidden;border:1px solid #e8e2e3;border-radius:8px;background:#e8e2e3}
+  .wl-summary-stat{min-width:0;padding:9px 10px;background:#fff}
+  .wl-summary-label{display:block;color:#70696a;font-size:.72rem;font-weight:700;text-transform:uppercase}
+  .wl-summary-value{display:block;margin-top:2px;color:#211d1e;font-size:.98rem;font-weight:800;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .wl-entry-list{display:grid;gap:7px}
+  .wl-entry{display:grid;grid-template-columns:38px minmax(0,1fr) auto;align-items:center;gap:10px;padding:10px 11px;border:1px solid #e8e2e3;border-radius:8px;background:#fff;box-shadow:0 1px 2px rgba(32,24,26,.04)}
+  .wl-entry-icon{display:inline-flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:8px;background:${BRAND.bgSoft};color:${BRAND.primary};font-size:1rem}
+  .wl-entry-icon.credit{background:#edf7ef;color:#28713a}
+  .wl-entry-main{min-width:0}
+  .wl-entry-title{display:flex;align-items:center;gap:7px;min-width:0}
+  .wl-entry-title a{min-width:0;overflow:hidden;color:#241f20;font-weight:800;text-decoration:none;text-overflow:ellipsis;white-space:nowrap}
+  .wl-entry-title a:hover{text-decoration:underline;text-decoration-color:${BRAND.primary}}
+  .wl-entry-meta{margin-top:3px;color:#6b6465;font-size:.82rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .wl-entry-side{text-align:right}
+  .wl-entry-amount{color:${BRAND.primary};font-size:.94rem;font-weight:850;white-space:nowrap}
+  .wl-status{display:inline-flex;align-items:center;gap:5px;margin-top:3px;color:#625c5d;font-size:.72rem;font-weight:750;white-space:nowrap}
+  .wl-status::before{content:"";width:6px;height:6px;border-radius:50%;background:#8c8485}
+  .wl-status.open::before,.wl-status.processing::before{background:#b16a00}
+  .wl-status.complete::before,.wl-status.closed::before{background:#27813c}
+  .wl-purchase-summary{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .wl-purchase-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(310px,1fr));gap:9px}
+  .wl-purchase-item{display:grid;grid-template-columns:86px minmax(0,1fr);gap:12px;min-width:0;padding:11px;border:1px solid #e8e2e3;border-radius:8px;background:#fff;box-shadow:0 1px 3px rgba(32,24,26,.05)}
+  .wl-purchase-media{position:relative;display:flex;align-items:center;justify-content:center;width:86px;height:86px;overflow:hidden;border:1px solid #ece7e8;border-radius:7px;background:#fff}
+  .wl-purchase-media img{display:block;width:100%;height:100%;object-fit:contain;padding:4px}
+  .wl-product-fallback{display:flex;align-items:center;justify-content:center;width:100%;height:100%;padding:8px;background:#f6f3f4;color:${BRAND.primary};font-size:.7rem;font-weight:850;text-align:center;word-break:break-word}
+  .wl-purchase-content{display:flex;min-width:0;flex-direction:column}
+  .wl-product-code{color:${BRAND.primary};font-size:.73rem;font-weight:850;text-transform:uppercase;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .wl-product-name{display:-webkit-box;margin-top:3px;overflow:hidden;color:#211d1e;font-size:.92rem;font-weight:800;line-height:1.3;-webkit-box-orient:vertical;-webkit-line-clamp:2}
+  .wl-product-meta{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:5px;color:#6b6465;font-size:.78rem}
+  .wl-product-bottom{display:flex;align-items:flex-end;justify-content:space-between;gap:8px;margin-top:auto;padding-top:7px}
+  .wl-product-total{color:#211d1e;font-size:.88rem;font-weight:850;white-space:nowrap}
+  .wl-product-link{display:inline-flex;align-items:center;gap:5px;color:${BRAND.primary};font-size:.78rem;font-weight:850;text-decoration:none;white-space:nowrap}
+  .wl-product-link:hover{text-decoration:underline}
 
   .wl-actions{display:flex;gap:8px;flex-wrap:wrap}
   .wl-btn{display:inline-flex;align-items:center;justify-content:center;padding:9px 14px;border-radius:9px;border:1px solid ${BRAND.border};background:#fff;text-decoration:none;color:#111;font-weight:700;line-height:1.2;white-space:nowrap;min-width:150px}
   .wl-btn.primary{background:${BRAND.primary};border-color:${BRAND.primary};color:#fff}
   .wl-btn.primary:hover{background:${BRAND.primaryHover};border-color:${BRAND.primaryHover}}
   @media (max-width: 560px){ .wl-btn{flex:1 1 auto; min-width:unset} }
+  @media (max-width: 640px){
+    .wl-section-summary,.wl-purchase-summary{grid-template-columns:repeat(3,minmax(0,1fr))}
+    .wl-summary-stat{padding:8px 7px}
+    .wl-summary-label{font-size:.64rem}
+    .wl-summary-value{font-size:.86rem}
+    .wl-entry{grid-template-columns:34px minmax(0,1fr);padding:9px}
+    .wl-entry-icon{width:34px;height:34px}
+    .wl-entry-side{grid-column:2;display:flex;align-items:center;justify-content:space-between;gap:8px;text-align:left}
+    .wl-purchase-grid{grid-template-columns:1fr}
+    .wl-purchase-item{grid-template-columns:76px minmax(0,1fr);padding:9px;gap:10px}
+    .wl-purchase-media{width:76px;height:76px}
+  }
 
   /* Cart Snapshot visuals */
   .wl-cart-list li{gap:12px}
@@ -268,10 +320,10 @@
 
         <!-- Row 2 -->
         <div class="wl-row wl-row-2" id="wl-row2">
-          <div class="wl-card" id="wl-activity">
-            <div class="wl-head">Recent Activity</div>
+          <div class="wl-card wl-detail-section" id="wl-activity">
+            <div class="wl-head"><span>Recent Activity</span><span class="wl-head-note">Invoices and credits</span></div>
             <div class="wl-body">
-              <ul class="wl-list" data-empty="Loading…"></ul>
+              <ul class="wl-list wl-entry-list" data-empty="Loading recent activity..."></ul>
               <div class="wl-actions" style="margin-top:8px">
                 <a class="wl-btn" id="wl-invoices-btn" href="Invoices_r.aspx">View Invoices</a>
                 <a class="wl-btn" id="wl-credits-btn" href="CreditNotes_r.aspx">View Credits</a>
@@ -279,10 +331,10 @@
             </div>
           </div>
 
-          <div class="wl-card" id="wl-orders">
-            <div class="wl-head">Open Orders</div>
+          <div class="wl-card wl-detail-section" id="wl-orders">
+            <div class="wl-head"><span>Open Orders</span><span class="wl-head-note">Orders still in progress</span></div>
             <div class="wl-body">
-              <ul class="wl-list" data-empty="Loading…"></ul>
+              <ul class="wl-list wl-entry-list" data-empty="Loading open orders..."></ul>
               <div class="wl-actions" style="margin-top:8px">
                 <a class="wl-btn" href="OpenOrders_r.aspx">View All Orders</a>
               </div>
@@ -295,10 +347,10 @@
 
         <!-- Row 3 -->
         <div class="wl-row wl-row-1" id="wl-row3">
-          <div class="wl-card" id="wl-purchases">
-            <div class="wl-head">Recent Purchases</div>
+          <div class="wl-card wl-detail-section" id="wl-purchases">
+            <div class="wl-head"><span>Recent Purchases</span><span class="wl-head-note">Products you may need again</span></div>
             <div class="wl-body">
-              <ul class="wl-list" data-empty="Loading…"></ul>
+              <ul class="wl-list wl-purchase-grid" data-empty="Loading recent purchases..."></ul>
               <div class="wl-actions" style="margin-top:8px">
                 <a class="wl-btn" href="ProductsPurchased_R.aspx">View More Purchased Products</a>
               </div>
@@ -1082,60 +1134,233 @@ if (snapshotActions) {
     const parser=new DOMParser();
     async function fetchDoc(url){ try{ const r=await fetch(url,{credentials:'same-origin'}); if(!r.ok) throw 0; const text=await r.text(); return parser.parseFromString(text,'text/html'); }catch{ return null; } }
     const get=(el)=> (el?.textContent||'').trim();
-    function mapRows(doc, cols){ if(!doc) return []; const t=doc.querySelector('.rgMasterTable'); if(!t) return []; return Array.from(t.querySelectorAll('tbody tr')).map(r=>{ const o={}; cols.forEach(c=> o[c]=get(r.querySelector(`td[data-title="${c}"]`))); const a=r.querySelector('a[href]'); o.link=a? new URL(a.getAttribute('href'), location.origin).toString():null; return o; }); }
+    function absoluteUrl(value){
+      if(!value || /^javascript:/i.test(value)) return '';
+      try { return new URL(value, location.origin).toString(); } catch { return ''; }
+    }
+    function mapRows(doc, cols){
+      if(!doc) return [];
+      const t=doc.querySelector('.rgMasterTable');
+      if(!t) return [];
+      return Array.from(t.querySelectorAll('tbody tr')).map(r=>{
+        const o={};
+        cols.forEach(c=> o[c]=get(r.querySelector(`td[data-title="${c}"]`)));
+        const firstLink=r.querySelector('a[href]');
+        const productCell=r.querySelector('td[data-title="Product Code"], td[data-title="Product"], td[data-title="Product #"]');
+        const productLink=productCell?.querySelector('a[href]');
+        const image=r.querySelector('img[src]');
+        o.link=absoluteUrl(firstLink?.getAttribute('href'))||null;
+        o.productLink=absoluteUrl(productLink?.getAttribute('href'))||'';
+        o.image=absoluteUrl(image?.getAttribute('src'))||'';
+        return o;
+      });
+    }
+
+    function summaryHtml(stats, extraClass=''){
+      return `<div class="wl-section-summary ${extraClass}">${stats.map(stat=>`
+        <div class="wl-summary-stat">
+          <span class="wl-summary-label">${escapeHtml(stat.label)}</span>
+          <span class="wl-summary-value">${escapeHtml(stat.value)}</span>
+        </div>`).join('')}</div>`;
+    }
+
+    function statusClass(value){
+      const state=String(value||'').toLowerCase();
+      if(/complete|closed|shipped|invoiced|paid|applied|ready/.test(state)) return 'complete';
+      if(/open|pending|process|progress|backorder/.test(state)) return 'open';
+      return '';
+    }
+
+    async function mapWithConcurrency(items, limit, worker){
+      const results=new Array(items.length);
+      let next=0;
+      async function run(){
+        while(next<items.length){
+          const index=next++;
+          results[index]=await worker(items[index], index);
+        }
+      }
+      await Promise.all(Array.from({length:Math.min(limit,items.length)}, run));
+      return results;
+    }
+
+    async function resolveProductMedia(item){
+      if(item.image) return {image:item.image, link:item.productLink||item.view};
+
+      let productDoc=null;
+      let productLink=item.productLink||'';
+      if(productLink && /ProductDetail\.aspx/i.test(productLink)) productDoc=await fetchDoc(productLink);
+
+      if(!productDoc){
+        productDoc=await fetchDoc(`/Products.aspx?pg=0&searchText=${encodeURIComponent(item.sku||item.title||'')}`);
+        const cardLink=productDoc?.querySelector("tr[id*='ProductImageRow'] a[href*='ProductDetail.aspx'], a[href*='ProductDetail.aspx'][id*='ProductImageRow']");
+        productLink=absoluteUrl(cardLink?.getAttribute('href'))||productLink;
+      }
+
+      const image=productDoc?.querySelector("tr[id*='ProductImageRow'] img[src], img#ctl00_PageBody_productDetail_ProductImage[src], #ctl00_PageBody_productDetail_ProductImage img[src], #ProductImageRow img[src], img.productImage[src], img#MainProductImage[src]");
+      return {image:absoluteUrl(image?.getAttribute('src')),link:productLink||item.view};
+    }
+
+    function productFallback(sku){
+      return `<span class="wl-product-fallback">${escapeHtml(sku||'Product')}</span>`;
+    }
 
     const parseUS=(s)=>{ const m=String(s||'').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/); return m? new Date(+m[3],+m[1]-1,+m[2]) : null; };
 
     // Recent Activity
     (async ()=>{
       const invDoc=await fetchDoc('Invoices_r.aspx');
-      let invs=mapRows(invDoc,['Invoice #','Date','Outstanding','Amount','Status']); if(!invs.length) invs=mapRows(invDoc,['Invoice Number','Date','Outstanding','Amount','Status']);
-      invs=invs.map(x=>({type:'Invoice',id:x['Invoice #']||x['Invoice Number']||'Invoice',date:x['Date']||'',amount:x['Outstanding']||x['Amount']||'',status:x['Status']||'',link:x.link||'Invoices_r.aspx'}));
+      let invs=mapRows(invDoc,['Invoice #','Invoice Date','Due Date','Goods Total','Tax','Total Amount','Amount Outstanding','Status']);
+      if(!invs.some(x=>x['Invoice #'])) invs=mapRows(invDoc,['Invoice Number','Date','Outstanding','Amount','Status']);
+      invs=invs.filter(x=>x['Invoice #']||x['Invoice Number']).map(x=>{
+        const outstanding=x['Amount Outstanding']||x.Outstanding||'';
+        return {
+          type:'Invoice',
+          id:x['Invoice #']||x['Invoice Number']||'Invoice',
+          date:x['Invoice Date']||x.Date||'',
+          amount:outstanding||x['Total Amount']||x.Amount||'',
+          status:x.Status||(outstanding?(mNum(outstanding)>0?'Open':'Paid'):''),
+          link:x.link||'Invoices_r.aspx'
+        };
+      });
       const crDoc=await fetchDoc('CreditNotes_r.aspx');
-      let crs=mapRows(crDoc,['Credit #','Date','Amount','Status']); if(!crs.length) crs=mapRows(crDoc,['Credit Note #','Date','Amount','Status']);
-      crs=crs.map(x=>({type:'Credit',id:x['Credit #']||x['Credit Note #']||'Credit',date:x['Date']||'',amount:x['Amount']||'',status:x['Status']||'',link:x.link||'CreditNotes_r.aspx'}));
+      let crs=mapRows(crDoc,['Credit Note #','Credit Date','Goods Total','Tax','Total Amount','Status']);
+      if(!crs.some(x=>x['Credit Note #'])) crs=mapRows(crDoc,['Credit #','Date','Amount','Status']);
+      crs=crs.filter(x=>x['Credit #']||x['Credit Note #']).map(x=>({
+        type:'Credit',
+        id:x['Credit Note #']||x['Credit #']||'Credit',
+        date:x['Credit Date']||x.Date||'',
+        amount:x['Total Amount']||x.Amount||'',
+        status:x.Status||'',
+        link:x.link||'CreditNotes_r.aspx'
+      }));
       const all=invs.concat(crs).map(x=>({ ...x, _ts:(parseUS(x.date)||new Date(0)).getTime() })).sort((a,b)=> b._ts-a._ts).slice(0,6);
       const card=$('#wl-activity'); const ul=card?.querySelector('.wl-list'); if(!card) return;
-      if (!all.length){ card.remove(); } else { ul.innerHTML=''; all.forEach(it=> ul.appendChild(dom(`<li>
-        <div><div><a href="${it.link}"><strong>${it.id}</strong></a> <span class="wl-pill">${it.type}</span></div><div class="wl-meta">${it.date}${it.status?` • ${it.status}`:''}</div></div>
-        <div><span class="wl-pill">${it.amount||''}</span></div>
-      </li>`))); if (!crs.length) $('#wl-credits-btn')?.remove(); }
+      if (!all.length){ card.remove(); } else {
+        ul.insertAdjacentElement('beforebegin',dom(summaryHtml([
+          {label:'Latest entries',value:String(all.length)},
+          {label:'Invoices',value:String(all.filter(it=>it.type==='Invoice').length)},
+          {label:'Credits',value:String(all.filter(it=>it.type==='Credit').length)}
+        ])));
+        ul.innerHTML='';
+        all.forEach(it=>ul.appendChild(dom(`<li class="wl-entry">
+          <span class="wl-entry-icon ${it.type==='Credit'?'credit':''}" aria-hidden="true"><i class="fas ${it.type==='Credit'?'fa-receipt':'fa-file-invoice'}"></i></span>
+          <div class="wl-entry-main">
+            <div class="wl-entry-title"><a href="${escapeAttr(it.link)}">${escapeHtml(it.id)}</a></div>
+            <div class="wl-entry-meta">${escapeHtml(it.date||'Date unavailable')}</div>
+          </div>
+          <div class="wl-entry-side">
+            <div class="wl-entry-amount">${escapeHtml(it.amount||'--')}</div>
+            ${it.status?`<span class="wl-status ${statusClass(it.status)}">${escapeHtml(it.status)}</span>`:''}
+          </div>
+        </li>`)));
+        if (!crs.length) $('#wl-credits-btn')?.remove();
+      }
     })();
 
     // Open Orders
     (async ()=>{
       const doc=await fetchDoc('OpenOrders_r.aspx');
-      const rows=mapRows(doc,['Order #','Created','Status','Total Amount','Goods Total']).slice(0,5);
+      const rows=mapRows(doc,['Order #','Created','Status','Total Amount','Goods Total']).filter(it=>it['Order #']).slice(0,5);
       const card=$('#wl-orders'); if (!card) return;
       if (!rows.length){ card.remove(); return; }
-      const ul=card.querySelector('.wl-list'); ul.innerHTML='';
-      rows.forEach(it=> ul.appendChild(dom(`<li>
-        <div><div><a href="${it.link||'OpenOrders_r.aspx'}"><strong>${it['Order #']||'Order'}</strong></a></div><div class="wl-meta">${it.Created||''}${it.Status?` • ${it.Status}`:''}</div></div>
-        <div><span class="wl-pill">${it['Total Amount']||it['Goods Total']||''}</span></div>
+      const total=rows.reduce((sum,it)=>sum+mNum(it['Total Amount']||it['Goods Total']),0);
+      const statuses=new Set(rows.map(it=>it.Status).filter(Boolean));
+      const ul=card.querySelector('.wl-list');
+      ul.insertAdjacentElement('beforebegin',dom(summaryHtml([
+        {label:'Open orders',value:String(rows.length)},
+        {label:'Order value',value:fmtMoney(total)},
+        {label:'Statuses',value:String(statuses.size||1)}
+      ])));
+      ul.innerHTML='';
+      rows.forEach(it=>ul.appendChild(dom(`<li class="wl-entry">
+        <span class="wl-entry-icon" aria-hidden="true"><i class="fas fa-box"></i></span>
+        <div class="wl-entry-main">
+          <div class="wl-entry-title"><a href="${escapeAttr(it.link||'OpenOrders_r.aspx')}">${escapeHtml(it['Order #']||'Order')}</a></div>
+          <div class="wl-entry-meta">${escapeHtml(it.Created||'Created date unavailable')}</div>
+        </div>
+        <div class="wl-entry-side">
+          <div class="wl-entry-amount">${escapeHtml(it['Total Amount']||it['Goods Total']||'--')}</div>
+          ${it.Status?`<span class="wl-status ${statusClass(it.Status)}">${escapeHtml(it.Status)}</span>`:''}
+        </div>
       </li>`)));
     })();
 
     // Recent Purchases
     (async ()=>{
       const doc=await fetchDoc('ProductsPurchased_R.aspx');
-      let rows=mapRows(doc,['Product','Description','Last Purchased','Qty','Price','Total','Product Code','Product #']);
-      if(!rows.length) rows=mapRows(doc,['Product','Description','Date','Qty','Price','Product Code','Product #']);
-      rows=rows.slice(0,10);
+      let rows=mapRows(doc,['Product Code','Description','Order No.','Job Reference','OrderDate','Order Status','Customer Ref','Qty','Per','Sell Price','Total Price']);
+      if(!rows.some(it=>it['Product Code']||it.Description)) rows=mapRows(doc,['Product','Description','Last Purchased','Qty','Price','Total','Product Code','Product #']);
+      rows=rows.filter(it=>{
+        const code=it['Product Code']||it['Product #']||it.Product||'';
+        const description=it.Description||it.Product||'';
+        return Boolean(code||description) && !/^(delivery|shipping|freight|fuel surcharge|web deliver)/i.test(`${code} ${description}`.trim());
+      }).sort((a,b)=>{
+        const newer=parseUS(b.OrderDate||b['Last Purchased']);
+        const older=parseUS(a.OrderDate||a['Last Purchased']);
+        return (newer?newer.getTime():0)-(older?older.getTime():0);
+      }).slice(0,8);
       const card=$('#wl-purchases'); if(!card) return;
       if (!rows.length){ card.remove(); return; }
-      const ul=card.querySelector('.wl-list'); ul.innerHTML='';
-      rows.forEach(it=>{
-        const sku=it['Product Code']||it['Product #']||it['Product']||'';
-        const title=it['Product']||it['Product #']||sku||'Product';
-        const when=it['Last Purchased']||it['Date']||'';
-        const total=it.Total||(it.Price?`@ ${it.Price}`:'');
-        const view=`Products.aspx?&searchText=${encodeURIComponent(sku)}`;
-        ul.appendChild(dom(`<li>
-          <div class="wl-cart-left"></div>
-          <div><div><strong>${title}</strong></div><div class="wl-meta">${when}${it.Qty?` • Qty ${it.Qty}`:''}</div></div>
-          <div>${total?`<span class="wl-pill">${total}</span>`:''}<a class="wl-btn" href="${view}">View Product</a></div>
+      const items=rows.map(it=>{
+        const sku=it['Product Code']||it['Product #']||it.Product||'';
+        const title=it.Description||it.Product||it['Product #']||sku||'Product';
+        return {
+          raw:it,sku,title,
+          when:it.OrderDate||it['Last Purchased']||it.Date||'',
+          qty:it.Qty||'',
+          unit:it['Sell Price']||it.Price||'',
+          total:it['Total Price']||it.Total||'',
+          image:it.image||'',
+          productLink:it.productLink||'',
+          view:`Products.aspx?pg=0&searchText=${encodeURIComponent(sku)}`
+        };
+      });
+      const spend=items.reduce((sum,item)=>sum+mNum(item.total),0);
+      const units=items.reduce((sum,item)=>sum+mNum(item.qty),0);
+      const ul=card.querySelector('.wl-list');
+      ul.insertAdjacentElement('beforebegin',dom(summaryHtml([
+        {label:'Recent products',value:String(items.length)},
+        {label:'Units purchased',value:String(units)},
+        {label:'Recent spend',value:fmtMoney(spend)}
+      ],'wl-purchase-summary')));
+      ul.innerHTML='';
+      items.forEach((item,index)=>{
+        ul.appendChild(dom(`<li class="wl-purchase-item" data-purchase-index="${index}">
+          <a class="wl-purchase-media" href="${escapeAttr(item.productLink||item.view)}" aria-label="View ${escapeAttr(item.title)}">${item.image?`<img src="${escapeAttr(item.image)}" alt="${escapeAttr(item.title)}" loading="lazy">`:productFallback(item.sku)}</a>
+          <div class="wl-purchase-content">
+            <div class="wl-product-code">${escapeHtml(item.sku||'Product')}</div>
+            <div class="wl-product-name">${escapeHtml(item.title)}</div>
+            <div class="wl-product-meta">
+              ${item.when?`<span>${escapeHtml(item.when)}</span>`:''}
+              ${item.qty?`<span>Qty ${escapeHtml(item.qty)}</span>`:''}
+              ${item.unit?`<span>${escapeHtml(item.unit)} each</span>`:''}
+            </div>
+            <div class="wl-product-bottom">
+              <span class="wl-product-total">${escapeHtml(item.total||'')}</span>
+              <a class="wl-product-link" href="${escapeAttr(item.productLink||item.view)}">View product <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
+            </div>
+          </div>
         </li>`));
       });
+
+      mapWithConcurrency(items,3,resolveProductMedia).then(results=>{
+        results.forEach((media,index)=>{
+          if(!media) return;
+          const item=items[index];
+          const row=ul.querySelector(`[data-purchase-index="${index}"]`);
+          const mediaLink=row?.querySelector('.wl-purchase-media');
+          const productLink=row?.querySelector('.wl-product-link');
+          if(!row||!mediaLink) return;
+          const destination=media.link||item.view;
+          mediaLink.href=destination;
+          if(productLink) productLink.href=destination;
+          if(!media.image) return;
+          mediaLink.innerHTML=`<img src="${escapeAttr(media.image)}" alt="${escapeAttr(item.title)}" loading="lazy">`;
+          const image=mediaLink.querySelector('img');
+          image?.addEventListener('error',()=>{ mediaLink.innerHTML=productFallback(item.sku); },{once:true});
+        });
+      }).catch(()=>{});
     })();
 
     // Cart Snapshot — ShoppingCart.aspx ONLY
@@ -1216,5 +1441,3 @@ function mountCashAccountReload(container){
     }, 150);
   }
 }
-
-
