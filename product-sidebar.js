@@ -625,10 +625,9 @@ $(document).ready(async function () {
 
   // Product description and reviews into main
   const $description = $("#ctl00_PageBody_productDetail_productDescription").first().detach();
-  const $reviews = $("#review-widget").first().detach();
-  const $reviewButton = $("#review-product-button").first().detach();
+  const $reviews = $("#customer-reviews, #review-widget").first().detach();
 
-  $main.append($description, $reviews, $reviewButton);
+  $main.append($description, $reviews);
 
   // Watch for and pull in widgets
   function tryMoveWidget(selector) {

@@ -292,7 +292,7 @@
       list.replaceChildren();
       empty.hidden = false;
       empty.textContent = "Have experience with this product? Help the next customer by sharing it.";
-      button.textContent = "Be the first to review";
+      if (button) button.textContent = "Be the first to review";
       return;
     }
 
@@ -354,7 +354,7 @@
     .catch(function (error) {
       console.error("Review widget could not load reviews.", error);
       const summary = section.querySelector(".wl-review-summary");
-      summary.textContent = "Reviews are temporarily unavailable";
+      if (summary) summary.textContent = "Reviews are temporarily unavailable";
     });
 
   if (window.location.hash === "#customer-reviews") {
