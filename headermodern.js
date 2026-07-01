@@ -4,7 +4,7 @@
   var LOG = "[WL HeaderEnhancer]";
   var DEBUG = false; // Set to true only when actively troubleshooting.
   var LOCATIONS_URL = "/Default.aspx?view=storelocations";
-  var ANALYTICS_URL = "https://ckunkel510.github.io/WL.github.io/Analytics.js?v=20260701-4";
+  var ANALYTICS_URL = "https://ckunkel510.github.io/WL.github.io/wl-events.js?v=20260701-1";
 
   function debugLog() {
     if (!DEBUG || !window.console || typeof window.console.log !== "function") return;
