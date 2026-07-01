@@ -538,11 +538,13 @@ wireFieldPersistence();
     const style = document.createElement('style');
     style.id = STYLE_ID;
     style.textContent = `
-      #MainLayoutRow {
+      div#MainLayoutRow {
         box-sizing: border-box !important;
         width: calc(100% - 32px) !important;
         max-width: 1040px !important;
         margin: 20px auto 0 !important;
+        margin-right: auto !important;
+        margin-left: auto !important;
       }
       #MainLayoutRow > .container-fluid,
       #MainLayoutRow > .container-fluid > .row,
@@ -675,10 +677,12 @@ wireFieldPersistence();
       }
 
       @media (max-width: 720px) {
-        #MainLayoutRow {
+        div#MainLayoutRow {
           width: 100% !important;
           max-width: none !important;
           margin: 10px 0 0 !important;
+          margin-right: 0 !important;
+          margin-left: 0 !important;
         }
         #MainLayoutRow > .container-fluid {
           padding-right: 10px !important;
