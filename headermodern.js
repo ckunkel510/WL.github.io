@@ -453,12 +453,12 @@
         color: #fff !important;
       }
 
-      #PageHeaderDiv {
+      body #aspnetForm .site-content > #PageHeaderDiv {
         width: 100vw !important;
         max-width: none !important;
         height: auto !important;
         min-height: 0 !important;
-        margin-left: calc(50% - 50vw) !important;
+        margin: 0 !important;
         background: #fff;
         border-bottom: 1px solid #dfe2e5;
         box-shadow: 0 5px 18px rgba(23, 27, 31, 0.08);
@@ -853,7 +853,11 @@
         display: grid !important;
         grid-template-columns: minmax(0, 1fr);
         align-items: center;
-        width: 100%;
+        width: 100% !important;
+      }
+
+      .prod-search-wrapper {
+        width: 100% !important;
       }
 
       #c50_1 {
@@ -872,6 +876,10 @@
         min-width: 0 !important;
         height: auto !important;
         transform: none !important;
+      }
+
+      #ctl00_PageHeader_GlobalSearchControl_RadSearchBox1 {
+        flex: 1 1 100% !important;
       }
 
       #ctl00_PageHeader_GlobalSearchControl_RadSearchBox1 .rsbInner {
