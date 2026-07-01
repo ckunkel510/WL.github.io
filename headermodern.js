@@ -530,8 +530,12 @@
         display: none;
         align-items: center;
         justify-content: center;
+        box-sizing: border-box;
+        width: 160px !important;
+        min-width: 160px !important;
         gap: 6px;
         max-width: 170px;
+        flex: 0 0 160px !important;
         margin-top: 1px;
         color: #202327 !important;
         font-family: Arial, Helvetica, sans-serif;
@@ -562,26 +566,41 @@
       }
 
       .wl-store-hours-copy {
-        display: flex;
+        display: flex !important;
         flex-direction: column;
-        min-width: 0;
+        width: 147px !important;
+        min-width: 147px !important;
+        max-width: 147px !important;
+        flex: 0 0 147px !important;
+        visibility: visible !important;
+        opacity: 1 !important;
       }
 
       .wl-store-hours-name {
+        display: block !important;
+        width: 147px !important;
         overflow: hidden;
-        color: #6b0016;
+        color: #6b0016 !important;
         font-size: 11px;
         font-weight: 800;
+        line-height: 1.15 !important;
         text-overflow: ellipsis;
+        visibility: visible !important;
+        opacity: 1 !important;
         white-space: nowrap;
       }
 
       .wl-store-hours-status {
+        display: block !important;
+        width: 147px !important;
         overflow: hidden;
-        color: #202327;
+        color: #202327 !important;
         font-size: 11px;
         font-weight: 400;
+        line-height: 1.15 !important;
         text-overflow: ellipsis;
+        visibility: visible !important;
+        opacity: 1 !important;
         white-space: nowrap;
       }
 
