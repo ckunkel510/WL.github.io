@@ -514,6 +514,426 @@ wireFieldPersistence();
   }
 })();
 
+/* ============================================================================
+   Account Payment UX polish
+   Presentation-only adjustments around the existing WebForms payment flow.
+   ============================================================================ */
+(function () {
+  'use strict';
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+
+  const STYLE_ID = 'wl-ap-ux-polish-v1';
+
+  function isCashAccount() {
+    const header = document.querySelector('.bodyFlexItem.listPageHeader');
+    const headerText = (header?.textContent || '').replace(/\s+/g, ' ').trim();
+    if (/Load Cash Account Balance/i.test(headerText)) return true;
+    if (/Make a Payment/i.test(headerText)) return false;
+    try { return localStorage.getItem('wl_account_is_cash_v1') === 'true'; }
+    catch (error) { return false; }
+  }
+
+  function installStyles() {
+    if (document.getElementById(STYLE_ID)) return;
+    const style = document.createElement('style');
+    style.id = STYLE_ID;
+    style.textContent = `
+      #MainLayoutRow {
+        box-sizing: border-box !important;
+        width: calc(100% - 32px) !important;
+        max-width: 1040px !important;
+        margin: 20px auto 0 !important;
+      }
+      #MainLayoutRow > .container-fluid,
+      #MainLayoutRow > .container-fluid > .row,
+      #MainLayoutRow > .container-fluid > .row > .col,
+      #MainLayoutRow .bodyFlexContainer,
+      #MainLayoutRow .bodyFlexItem {
+        box-sizing: border-box !important;
+        width: 100% !important;
+        max-width: 100% !important;
+      }
+      #MainLayoutRow .bodyFlexContainer { display: block !important; }
+
+      #wlApWizard3 {
+        box-sizing: border-box;
+        width: 100%;
+        border-radius: 8px;
+      }
+      #wlApWizard3 .w3-head {
+        align-items: center;
+        flex-wrap: wrap;
+      }
+      #wlApWizard3 .w3-head-left {
+        min-width: 180px;
+      }
+      #wlApWizard3 .w3-steps {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        width: min(100%, 470px);
+        margin-left: auto;
+      }
+      #wlApWizard3 .w3-pill {
+        min-width: 0;
+        padding: 7px 6px;
+        overflow: hidden;
+        font-size: 11px;
+        letter-spacing: 0;
+        text-align: center;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        border-radius: 6px;
+      }
+      #wlApWizard3 .w3-title {
+        font-size: 15px;
+        letter-spacing: 0;
+      }
+      #wlApWizard3 .wl-card {
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(15, 23, 42, .06);
+      }
+      #wlApWizard3 .wl-card-head {
+        padding: 12px 16px;
+      }
+      #wlApWizard3 .wl-card-body {
+        padding: 14px 16px;
+      }
+      #wlApWizard3 #wlRightCard.wl-ap-empty-card,
+      body.wl-ap-cash #wlApWizard3 #wlQuickWidget {
+        display: none !important;
+      }
+      #wlApWizard3[data-step="2"] .w3-nav {
+        display: none !important;
+      }
+      #wlApWizard3 .wl-ap-single-bank #wlPayMethodCards {
+        display: none !important;
+      }
+      #wlApWizard3 .wl-ap-single-bank #wlPayBankCards {
+        margin-top: 0 !important;
+      }
+      #wlApWizard3 .wl-ap-bank-heading {
+        margin: 0 0 8px;
+        color: #303438;
+        font-size: 14px;
+        font-weight: 800;
+      }
+      #wlApWizard3 .wl-quick-title {
+        margin-bottom: 10px;
+        font-size: 14px;
+      }
+      #wlApWizard3 .wl-quick-row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 8px;
+      }
+      #wlApWizard3 .wl-chipbtn {
+        width: 100%;
+        max-height: none;
+        min-height: 40px;
+        padding: 9px 12px;
+        font-size: 13px;
+        font-weight: 700;
+        line-height: 1.25;
+        text-align: center;
+        border-radius: 6px;
+      }
+      #wlApWizard3 .wl-ap-clear {
+        position: static !important;
+        width: auto !important;
+        min-height: 36px;
+        margin: 8px 0 0 !important;
+        padding: 7px 12px !important;
+      }
+      #wlApWizard3 .wl-ap-optional {
+        grid-column: 1 / -1;
+        margin: 2px 0 0;
+        border: 1px solid #d9dcdf;
+        border-radius: 6px;
+        background: #fff;
+      }
+      #wlApWizard3 .wl-ap-optional > summary {
+        padding: 11px 38px 11px 13px;
+        color: #303438;
+        font-size: 13px;
+        font-weight: 750;
+        line-height: 1.3;
+        cursor: pointer;
+      }
+      #wlApWizard3 .wl-ap-optional-body {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 14px;
+        padding: 2px 13px 13px;
+      }
+      #wlApWizard3 .wl-ap-optional textarea {
+        box-sizing: border-box;
+        width: 100% !important;
+        min-height: 84px !important;
+      }
+      #wlApWizard3 .wl-ap-field-untouched .wl-ap-validation-message {
+        display: none !important;
+      }
+
+      @media (max-width: 720px) {
+        #MainLayoutRow {
+          width: 100% !important;
+          max-width: none !important;
+          margin: 10px 0 0 !important;
+        }
+        #MainLayoutRow > .container-fluid {
+          padding-right: 10px !important;
+          padding-left: 10px !important;
+        }
+        #MainLayoutRow > .container-fluid > .row {
+          margin-right: 0 !important;
+          margin-left: 0 !important;
+        }
+        #MainLayoutRow > .container-fluid > .row > .col,
+        #MainLayoutRow .bodyFlexItem {
+          flex: 0 0 100% !important;
+          padding-right: 0 !important;
+          padding-left: 0 !important;
+        }
+        #wlApWizard3 .w3-head {
+          gap: 10px;
+          padding: 10px;
+        }
+        #wlApWizard3 .w3-head-left,
+        #wlApWizard3 .w3-steps {
+          width: 100%;
+          margin: 0;
+        }
+        #wlApWizard3 .w3-head-left {
+          justify-content: space-between;
+        }
+        #wlApWizard3 .w3-pill {
+          padding: 7px 2px;
+          font-size: 10px;
+        }
+        #wlApWizard3 .w3-body {
+          padding: 10px;
+        }
+        #wlApWizard3 .w3-nav {
+          bottom: 8px;
+          padding: 8px;
+          border-radius: 8px;
+        }
+        #wlApWizard3 .wl-card-head,
+        #wlApWizard3 .wl-card-body {
+          padding: 12px;
+        }
+        #wlApWizard3 .wl-quick-row,
+        #wlApWizard3 .wl-ap-optional-body {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  function setText(element, text) {
+    if (element && element.textContent !== text) element.textContent = text;
+  }
+
+  function findLeafMessages(root) {
+    if (!root) return [];
+    return Array.from(root.querySelectorAll('*')).filter(function (element) {
+      return element.children.length === 0 && /please enter a valid/i.test((element.textContent || '').trim());
+    });
+  }
+
+  function prepareValidationField(id) {
+    const input = document.getElementById(id);
+    if (!input) return;
+    const wrap = input.closest('.epi-form-group-acctPayment, .wl-item, .wl-field') || input.parentElement;
+    if (!wrap) return;
+
+    findLeafMessages(wrap).forEach(function (message) {
+      message.classList.add('wl-ap-validation-message');
+    });
+
+    if (input.dataset.wlApValidationBound === 'true') return;
+    input.dataset.wlApValidationBound = 'true';
+    wrap.classList.add('wl-ap-field-untouched');
+    const markTouched = function () {
+      input.dataset.wlApTouched = 'true';
+      wrap.classList.remove('wl-ap-field-untouched');
+    };
+    input.addEventListener('input', markTouched, { passive: true });
+    input.addEventListener('blur', markTouched, { passive: true });
+  }
+
+  function markCurrentStepFieldsTouched() {
+    const wizard = document.getElementById('wlApWizard3');
+    const step = Number(wizard?.getAttribute('data-step') || '0');
+    const ids = step === 0
+      ? ['ctl00_PageBody_BillingAddressTextBox', 'ctl00_PageBody_PostalCodeTextBox', 'ctl00_PageBody_BillingPostalCodeTextBox', 'ctl00_PageBody_EmailAddressTextBox']
+      : step === 1 ? ['ctl00_PageBody_PaymentAmountTextBox'] : [];
+    ids.forEach(function (id) {
+      const input = document.getElementById(id);
+      const wrap = input?.closest('.epi-form-group-acctPayment, .wl-item, .wl-field') || input?.parentElement;
+      if (input) input.dataset.wlApTouched = 'true';
+      if (wrap) wrap.classList.remove('wl-ap-field-untouched');
+    });
+  }
+
+  function groupOptionalFields(cashAccount) {
+    const grid = document.getElementById('wlFormGrid');
+    const notes = document.getElementById('ctl00_PageBody_NotesTextBox');
+    const remit = cashAccount ? null : document.getElementById('ctl00_PageBody_RemittanceAdviceTextBox');
+    if (!grid || (!notes && !remit)) return;
+
+    let details = document.getElementById('wlApOptionalDetails');
+    if (!details) {
+      details = document.createElement('details');
+      details.id = 'wlApOptionalDetails';
+      details.className = 'wl-ap-optional';
+      const summary = document.createElement('summary');
+      const body = document.createElement('div');
+      body.className = 'wl-ap-optional-body';
+      details.append(summary, body);
+      grid.appendChild(details);
+    }
+
+    const summary = details.querySelector('summary');
+    setText(summary, cashAccount ? 'Add a note (optional)' : 'Add notes or remittance details (optional)');
+    const body = details.querySelector('.wl-ap-optional-body');
+
+    [notes, remit].forEach(function (field) {
+      if (!field) return;
+      const wrap = field.closest('.wl-item, .epi-form-group-acctPayment, .wl-field') || field.parentElement;
+      if (wrap && wrap.parentElement !== body) body.appendChild(wrap);
+      if (String(field.value || '').trim()) details.open = true;
+      if (field.dataset.wlApOptionalBound !== 'true') {
+        field.dataset.wlApOptionalBound = 'true';
+        field.addEventListener('input', function () {
+          if (String(field.value || '').trim()) details.open = true;
+        }, { passive: true });
+      }
+    });
+  }
+
+  function simplifySinglePaymentMethod() {
+    const host = document.getElementById('wlPayCardsHost');
+    const methods = Array.from(document.querySelectorAll('#wlPayMethodCards .wl-pay-card[data-method]')).filter(function (card) {
+      return getComputedStyle(card).display !== 'none';
+    });
+    if (!host) return;
+
+    const singleBank = methods.length === 1 && methods[0].getAttribute('data-method') === 'bank';
+    host.classList.toggle('wl-ap-single-bank', singleBank);
+    let heading = host.querySelector('.wl-ap-bank-heading');
+    if (singleBank && !heading) {
+      heading = document.createElement('div');
+      heading.className = 'wl-ap-bank-heading';
+      heading.textContent = 'Bank account (ACH)';
+      const bankCards = document.getElementById('wlPayBankCards');
+      if (bankCards) host.insertBefore(heading, bankCards);
+    }
+    if (heading) heading.hidden = !singleBank;
+  }
+
+  function hideEmptySummaryCard() {
+    const card = document.getElementById('wlRightCard');
+    const body = card?.querySelector('.wl-card-body');
+    if (!card || !body) return;
+    const hasControl = !!body.querySelector('button, input, select, textarea, a[href]');
+    card.classList.toggle('wl-ap-empty-card', !hasControl && !(body.textContent || '').trim());
+  }
+
+  function applyPolish() {
+    const wizard = document.getElementById('wlApWizard3');
+    if (!wizard) return false;
+
+    const style = document.getElementById(STYLE_ID);
+    if (style && style !== document.head.lastElementChild) document.head.appendChild(style);
+
+    const cashAccount = isCashAccount();
+    document.body.classList.toggle('wl-ap-cash', cashAccount);
+    document.body.classList.toggle('wl-ap-charge', !cashAccount);
+
+    const step = Number(wizard.getAttribute('data-step') || '0');
+    const titles = cashAccount
+      ? ['Reload details', 'Enter reload amount', 'Choose payment method', 'Review reload']
+      : ['Payment details', 'Choose what to pay', 'Choose payment method', 'Review payment'];
+    setText(wizard.querySelector('.w3-title'), titles[step] || titles[0]);
+
+    const pillLabels = ['1 Details', '2 Amount', '3 Method', '4 Review'];
+    wizard.querySelectorAll('[data-pill]').forEach(function (pill) {
+      const index = Number(pill.getAttribute('data-pill') || '0');
+      setText(pill, pillLabels[index] || '');
+    });
+
+    setText(document.querySelector('#w3Step0 .wl-card-head'), cashAccount ? 'Reload account details' : 'Payment details');
+    setText(document.querySelector('#wlLeftCard > .wl-card-head'), cashAccount ? 'Reload amount' : 'Choose what to pay');
+    setText(document.querySelector('#w3Step2 > .wl-card > .wl-card-head'), 'Payment method');
+    setText(document.querySelector('#wlQuickWidget .wl-quick-title'), 'Choose what to pay');
+
+    setText(document.getElementById('wlLastStmtBtn'), 'Pay last statement');
+    setText(document.getElementById('wlFillOwingBtn'), 'Pay full balance');
+    setText(document.getElementById('wlOpenTxModalBtn'), 'Choose invoices');
+    setText(document.getElementById('wlOpenJobsModalBtn'), 'Choose jobs');
+
+    const amountLabel = document.querySelector('label[for="ctl00_PageBody_PaymentAmountTextBox"]');
+    if (cashAccount) setText(amountLabel, 'Reload amount:');
+
+    const help0 = wizard.querySelector('.w3-panel[data-step="0"] .w3-help');
+    const help1 = wizard.querySelector('.w3-panel[data-step="1"] .w3-help');
+    const help2 = wizard.querySelector('.w3-panel[data-step="2"] .w3-help');
+    const help3 = wizard.querySelector('.w3-panel[data-step="3"] .w3-help');
+    setText(help0, cashAccount ? 'Confirm the billing details for this reload.' : 'Confirm your billing and receipt details.');
+    setText(help1, cashAccount ? 'Enter the amount you want to add to this cash account.' : 'Pay the full balance, choose invoices or jobs, or enter another amount.');
+    setText(help2, 'Choose a specific saved account or add a new payment method.');
+    setText(help3, cashAccount ? 'Review the reload before continuing to secure payment.' : 'Review the payment before continuing to secure payment.');
+
+    const clearButton = Array.from(document.querySelectorAll('#wlLeftCard button')).find(function (button) {
+      return (button.textContent || '').trim() === 'Clear';
+    });
+    if (clearButton) clearButton.classList.add('wl-ap-clear');
+
+    ['ctl00_PageBody_BillingAddressTextBox', 'ctl00_PageBody_PostalCodeTextBox', 'ctl00_PageBody_BillingPostalCodeTextBox', 'ctl00_PageBody_EmailAddressTextBox', 'ctl00_PageBody_PaymentAmountTextBox'].forEach(prepareValidationField);
+
+    const next = document.getElementById('w3Next');
+    if (next && next.dataset.wlApTouchBound !== 'true') {
+      next.dataset.wlApTouchBound = 'true';
+      next.addEventListener('click', markCurrentStepFieldsTouched, true);
+    }
+
+    groupOptionalFields(cashAccount);
+    simplifySinglePaymentMethod();
+    hideEmptySummaryCard();
+    return true;
+  }
+
+  function boot() {
+    installStyles();
+    let attempts = 0;
+    const timer = window.setInterval(function () {
+      attempts += 1;
+      if (applyPolish() || attempts >= 100) window.clearInterval(timer);
+    }, 60);
+
+    const observer = new MutationObserver(function () {
+      window.requestAnimationFrame(applyPolish);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    try {
+      if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
+        Sys.WebForms.PageRequestManager.getInstance().add_endRequest(function () {
+          window.setTimeout(applyPolish, 0);
+        });
+      }
+    } catch (error) {}
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', boot, { once: true });
+  } else {
+    boot();
+  }
+})();
+
 
 
 
