@@ -527,7 +527,7 @@
       }
 
       #wl-store-hours {
-        display: none;
+        display: none !important;
         align-items: center;
         justify-content: center;
         box-sizing: border-box;
@@ -545,7 +545,7 @@
       }
 
       #wl-store-hours[data-ready="true"] {
-        display: inline-flex;
+        display: inline-flex !important;
       }
 
       .wl-store-hours-dot {
@@ -1541,6 +1541,22 @@
     return true;
   }
 
+  function renderStoreHoursPrompt() {
+    var link = document.getElementById("wl-store-hours");
+    var target = document.getElementById("wlcheader");
+    if (!link || !target || link.getAttribute("data-store")) return false;
+
+    var name = link.querySelector(".wl-store-hours-name");
+    var status = link.querySelector(".wl-store-hours-status");
+    name.textContent = "Store hours";
+    status.textContent = "Choose a location";
+    link.setAttribute("data-ready", "true");
+    link.setAttribute("data-state", "unknown");
+    link.setAttribute("aria-label", "Choose a location to view store hours");
+    target.classList.add("wl-has-store-hours");
+    return true;
+  }
+
   function fetchSelectedStore(callback) {
     if (typeof window.fetch !== "function") return;
 
@@ -1570,7 +1586,7 @@
       return storeName ? renderStoreHours(storeName) : false;
     }
 
-    updateDetectedStore();
+    if (!updateDetectedStore()) renderStoreHoursPrompt();
     fetchSelectedStore(renderStoreHours);
 
     var discoveryTimer = window.setInterval(function () {
