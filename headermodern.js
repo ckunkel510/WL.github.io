@@ -4,6 +4,7 @@
   var LOG = "[WL HeaderEnhancer]";
   var DEBUG = false; // Set to true only when actively troubleshooting.
   var LOCATIONS_URL = "/Default.aspx?view=storelocations";
+  var ANALYTICS_URL = "https://ckunkel510.github.io/WL.github.io/Analytics.js?v=20260701-3";
 
   function debugLog() {
     if (!DEBUG || !window.console || typeof window.console.log !== "function") return;
@@ -16,6 +17,16 @@
     } else {
       fn();
     }
+  }
+
+  function loadAnalytics() {
+    if (window.WLAnalytics || document.querySelector("script[data-wl-analytics]")) return;
+
+    var script = document.createElement("script");
+    script.src = ANALYTICS_URL;
+    script.async = true;
+    script.setAttribute("data-wl-analytics", "true");
+    document.head.appendChild(script);
   }
 
   function injectStyles() {
@@ -524,6 +535,8 @@
       complete: isFullyEnhanced()
     };
   }
+
+  loadAnalytics();
 
   onReady(function () {
     var firstRun = run();

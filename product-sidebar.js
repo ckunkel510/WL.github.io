@@ -411,8 +411,15 @@ $(document).ready(async function () {
 
       function logShareEvent(method) {
         console.log("[ShareButton] Logging GA4 event:", method);
-        if (window.dataLayer) {
-          dataLayer.push({
+        if (window.WLAnalytics) {
+          window.WLAnalytics.track("share_product", {
+            method,
+            product_id: productID,
+            share_url: redirectURL,
+          });
+        } else {
+          window.dataLayer = window.dataLayer || [];
+          window.dataLayer.push({
             event: "share_product",
             method,
             product_id: productID,
