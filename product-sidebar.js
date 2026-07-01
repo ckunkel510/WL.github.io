@@ -173,6 +173,8 @@ $(document).ready(async function () {
         grid-template-columns: repeat(4, minmax(0, 1fr));
         gap: 14px;
         width: 100% !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
         padding: 2px 0 14px;
       }
       #WTRelatedProducts .wl-related-card {
@@ -228,12 +230,20 @@ $(document).ready(async function () {
         #ctl00_PageBody_productDetail_ProductImage { max-height: 420px !important; }
         .wl-product-price-row { font-size: 28px !important; }
         #WTRelatedProducts { overflow: visible; }
-        #WTRelatedProducts .relatedProductsScrollingDiv { overflow: visible !important; }
+        #WTRelatedProducts .relatedProductsScrollingDiv {
+          width: calc(100vw - 36px) !important;
+          min-width: 0 !important;
+          max-width: calc(100vw - 36px) !important;
+          overflow: hidden !important;
+        }
         #WTRelatedProducts .wl-related-grid {
           display: flex !important;
           gap: 12px;
-          width: 100% !important;
+          width: calc(100vw - 36px) !important;
+          min-width: 0 !important;
+          max-width: calc(100vw - 36px) !important;
           overflow-x: auto;
+          overflow-y: hidden;
           overscroll-behavior-inline: contain;
           scroll-snap-type: x mandatory;
           -webkit-overflow-scrolling: touch;
@@ -429,15 +439,17 @@ $(document).ready(async function () {
     color: "#333",
   });
 
-  if ($price.length && $unit.length) {
-    $priceRow.append(
-      $("<span>").text($price.text().trim()),
-      $("<span>").addClass("wl-product-unit").text(" / " + $unit.text().trim()).css({
-        marginLeft: "5px",
-        fontSize: "16px",
-        color: "#777",
-      })
-    );
+  if ($price.length) {
+    $priceRow.append($("<span>").text($price.text().trim()));
+    if ($unit.length) {
+      $priceRow.append(
+        $("<span>").addClass("wl-product-unit").text(" / " + $unit.text().trim()).css({
+          marginLeft: "5px",
+          fontSize: "16px",
+          color: "#777",
+        })
+      );
+    }
   }
 
   // === Quantity + Add to Cart in one row ===
