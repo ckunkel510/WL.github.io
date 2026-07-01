@@ -464,7 +464,7 @@
         box-shadow: 0 5px 18px rgba(23, 27, 31, 0.08);
       }
 
-      #siteHeaderContent {
+      body #aspnetForm .site-content > #PageHeaderDiv > #siteHeaderContent {
         display: block !important;
         box-sizing: border-box;
         width: min(1180px, calc(100% - 32px)) !important;
@@ -473,8 +473,8 @@
         margin: 0 auto;
       }
 
-      #ctl00_PageHeader_branding,
-      #brandingLogo {
+      body #aspnetForm #ctl00_PageHeader_branding,
+      body #aspnetForm #brandingLogo {
         width: 100% !important;
         height: auto !important;
         min-height: 0 !important;
@@ -1051,7 +1051,7 @@
           margin-top: 8px;
         }
 
-        #siteHeaderContent {
+        body #aspnetForm .site-content > #PageHeaderDiv > #siteHeaderContent {
           width: min(760px, calc(100% - 24px)) !important;
         }
 
@@ -1175,7 +1175,7 @@
       }
 
       @media (max-width: 575px) {
-        #siteHeaderContent {
+        body #aspnetForm .site-content > #PageHeaderDiv > #siteHeaderContent {
           width: calc(100% - 20px) !important;
         }
 
