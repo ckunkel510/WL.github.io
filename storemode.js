@@ -9,6 +9,9 @@
 (function () {
   'use strict';
 
+  const LOCATION_ATTEMPT_KEY = 'wlLocationAttemptedAtV1';
+  const LOCATION_CACHE_MS = 24 * 60 * 60 * 1000;
+
   console.log('[StoreMode] Script injected ✅');
 
   document.addEventListener('DOMContentLoaded', () => {
@@ -23,6 +26,16 @@
 
     const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
     const alreadyRedirected = sessionStorage.getItem('storeModeRedirected') === 'true';
+    const alreadyChecked = sessionStorage.getItem('storeModeLocationChecked') === 'true';
+    let recentlyAttempted = false;
+    try {
+      const attemptedAt = Number(
+        sessionStorage.getItem(LOCATION_ATTEMPT_KEY) ||
+        localStorage.getItem(LOCATION_ATTEMPT_KEY) ||
+        0
+      );
+      recentlyAttempted = attemptedAt > 0 && Date.now() - attemptedAt < LOCATION_CACHE_MS;
+    } catch (error) {}
 
     // cart_origin bypass for Meta Shops handoffs
     const urlParams = new URLSearchParams(window.location.search);
@@ -46,6 +59,15 @@
       console.log('[StoreMode] Already redirected once this session — no action.');
       return;
     }
+
+    if (alreadyChecked || recentlyAttempted) {
+      console.log('[StoreMode] Location was already checked recently — no new request.');
+      return;
+    }
+
+    sessionStorage.setItem('storeModeLocationChecked', 'true');
+    try { sessionStorage.setItem(LOCATION_ATTEMPT_KEY, String(Date.now())); } catch (error) {}
+    try { localStorage.setItem(LOCATION_ATTEMPT_KEY, String(Date.now())); } catch (error) {}
 
     // Your stores (name should match/contain the label used in ShowStock.aspx)
     const stores = [
@@ -94,7 +116,7 @@
       (err) => {
         console.warn('[StoreMode] Geolocation error:', err && err.message);
       },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      { enableHighAccuracy: false, timeout: 10000, maximumAge: 30 * 60 * 1000 }
     );
   }
 
@@ -110,4 +132,3 @@
     return R * 2 * Math.asin(Math.sqrt(a));
   }
 })();
-

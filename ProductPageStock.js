@@ -11,6 +11,57 @@ $(document).ready(function () {
 
     const DEFAULT_STORE = 'Groesbeck';
     const SIGN_IN_URL = 'https://webtrack.woodsonlumber.com/SignIn.aspx';
+    const LOCATION_STORE_KEY = 'wlNearestStoreV1';
+    const LOCATION_ATTEMPT_KEY = 'wlLocationAttemptedAtV1';
+    const LOCATION_CACHE_MS = 24 * 60 * 60 * 1000;
+
+    function normalizeStoreName(value) {
+        const text = String(value || '').trim().toLowerCase();
+        const match = stores.find(store => text.includes(store.name.toLowerCase()));
+        return match ? match.name : '';
+    }
+
+    function getRememberedStore() {
+        try {
+            const sessionStore = normalizeStoreName(
+                sessionStorage.getItem('wlDetectedStore') ||
+                sessionStorage.getItem('storeName') ||
+                sessionStorage.getItem('storeBranchKey')
+            );
+            if (sessionStore) return sessionStore;
+
+            const cached = JSON.parse(localStorage.getItem(LOCATION_STORE_KEY) || 'null');
+            if (cached && Date.now() - Number(cached.savedAt || 0) < LOCATION_CACHE_MS) {
+                return normalizeStoreName(cached.store);
+            }
+        } catch (error) {}
+        return '';
+    }
+
+    function rememberStore(storeName) {
+        const normalized = normalizeStoreName(storeName);
+        if (!normalized) return;
+        try { sessionStorage.setItem('wlDetectedStore', normalized); } catch (error) {}
+        try { localStorage.setItem(LOCATION_STORE_KEY, JSON.stringify({ store: normalized, savedAt: Date.now() })); } catch (error) {}
+    }
+
+    function locationWasRecentlyAttempted() {
+        try {
+            const attemptedAt = Number(
+                sessionStorage.getItem(LOCATION_ATTEMPT_KEY) ||
+                localStorage.getItem(LOCATION_ATTEMPT_KEY) ||
+                0
+            );
+            return attemptedAt > 0 && Date.now() - attemptedAt < LOCATION_CACHE_MS;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    function markLocationAttempt() {
+        try { sessionStorage.setItem(LOCATION_ATTEMPT_KEY, String(Date.now())); } catch (error) {}
+        try { localStorage.setItem(LOCATION_ATTEMPT_KEY, String(Date.now())); } catch (error) {}
+    }
 
     if (window.location.href.includes('ProductDetail.aspx')) {
         const productId = extractProductId(window.location.href);
@@ -21,16 +72,22 @@ $(document).ready(function () {
                     console.log(`Signed-in user. Selected branch: ${selectedBranch}`);
                     loadStockData(productId, selectedBranch, true); // Signed-in, use column 4
                 } else {
-                    console.warn('Branch could not be determined. Attempting to find nearest store...');
-                    determineUserLocation().then(userZip => {
-                        const nearestStore = findNearestStore(userZip, stores);
-                        console.log(`Nearest store determined: ${nearestStore.name}`);
-                        loadStockData(productId, nearestStore.name, false); // Not signed-in, use column 3
-                    }).catch(() => {
-                        console.warn('User location could not be determined. Defaulting to Groesbeck.');
-                        loadStockData(productId, DEFAULT_STORE, false); // Not signed-in, use column 3
-                        displayWidget(DEFAULT_STORE, 'No stock available', true);
-                    });
+                    const rememberedStore = getRememberedStore();
+                    if (rememberedStore) {
+                        loadStockData(productId, rememberedStore, false);
+                    } else {
+                        console.warn('Branch could not be determined. Attempting to find nearest store...');
+                        determineUserLocation().then(userZip => {
+                            const nearestStore = findNearestStore(userZip, stores);
+                            rememberStore(nearestStore.name);
+                            console.log(`Nearest store determined: ${nearestStore.name}`);
+                            loadStockData(productId, nearestStore.name, false); // Not signed-in, use column 3
+                        }).catch(() => {
+                            console.warn('User location could not be determined. Defaulting to Groesbeck.');
+                            loadStockData(productId, DEFAULT_STORE, false); // Not signed-in, use column 3
+                            displayWidget(DEFAULT_STORE, 'No stock available', true);
+                        });
+                    }
                 }
             }).catch(() => {
                 console.error('Failed to fetch account settings. Adding fallback button.');
@@ -113,6 +170,13 @@ $(document).ready(function () {
                 return;
             }
 
+            if (locationWasRecentlyAttempted()) {
+                reject('Location was already requested recently.');
+                return;
+            }
+
+            markLocationAttempt();
+
             console.log('Attempting to fetch user location...');
             navigator.geolocation.getCurrentPosition(
                 position => {
@@ -138,9 +202,9 @@ $(document).ready(function () {
                     reject(error.message);
                 },
                 {
-                    enableHighAccuracy: true,
+                    enableHighAccuracy: false,
                     timeout: 10000,
-                    maximumAge: 0
+                    maximumAge: 30 * 60 * 1000
                 }
             );
         });

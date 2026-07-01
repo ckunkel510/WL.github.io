@@ -12,6 +12,9 @@
   ];
   const DEFAULT_STORE = "Groesbeck";
   const MAX_CONCURRENT_STOCK_REQUESTS = 6;
+  const LOCATION_STORE_KEY = "wlNearestStoreV1";
+  const LOCATION_ATTEMPT_KEY = "wlLocationAttemptedAtV1";
+  const LOCATION_CACHE_MS = 24 * 60 * 60 * 1000;
   let storeContextPromise;
   let activeStockRequests = 0;
   const stockRequestQueue = [];
@@ -71,8 +74,63 @@
     }
   }
 
+  function normalizeStoreName(value) {
+    const text = String(value || "").trim().toLowerCase();
+    const match = stores.find(function (store) {
+      return text.indexOf(store.name.toLowerCase()) !== -1;
+    });
+    return match ? match.name : "";
+  }
+
+  function getRememberedStore() {
+    try {
+      const sessionStore = normalizeStoreName(
+        sessionStorage.getItem("wlDetectedStore") ||
+        sessionStorage.getItem("storeName") ||
+        sessionStorage.getItem("storeBranchKey")
+      );
+      if (sessionStore) return sessionStore;
+
+      const cached = JSON.parse(localStorage.getItem(LOCATION_STORE_KEY) || "null");
+      if (cached && Date.now() - Number(cached.savedAt || 0) < LOCATION_CACHE_MS) {
+        return normalizeStoreName(cached.store);
+      }
+    } catch (error) {}
+    return "";
+  }
+
+  function rememberStore(storeName) {
+    const normalized = normalizeStoreName(storeName);
+    if (!normalized) return;
+    try { sessionStorage.setItem("wlDetectedStore", normalized); } catch (error) {}
+    try { localStorage.setItem(LOCATION_STORE_KEY, JSON.stringify({ store: normalized, savedAt: Date.now() })); } catch (error) {}
+  }
+
+  function locationWasRecentlyAttempted() {
+    try {
+      const attemptedAt = Number(
+        sessionStorage.getItem(LOCATION_ATTEMPT_KEY) ||
+        localStorage.getItem(LOCATION_ATTEMPT_KEY) ||
+        0
+      );
+      return attemptedAt > 0 && Date.now() - attemptedAt < LOCATION_CACHE_MS;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function markLocationAttempt() {
+    try { sessionStorage.setItem(LOCATION_ATTEMPT_KEY, String(Date.now())); } catch (error) {}
+    try { localStorage.setItem(LOCATION_ATTEMPT_KEY, String(Date.now())); } catch (error) {}
+  }
+
   async function getNearestStoreBranch() {
     if (!navigator.geolocation) return "";
+    const rememberedStore = getRememberedStore();
+    if (rememberedStore) return rememberedStore;
+    if (locationWasRecentlyAttempted()) return "";
+    markLocationAttempt();
+
     try {
       const position = await new Promise(function (resolve, reject) {
         navigator.geolocation.getCurrentPosition(resolve, reject, {
@@ -93,6 +151,7 @@
           nearestDistance = distance;
         }
       });
+      rememberStore(nearest.name);
       return nearest.name;
     } catch (error) {
       return "";
