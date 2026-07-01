@@ -11,7 +11,10 @@
     { name: "Buffalo", lat: 31.4632, lon: -96.0580 }
   ];
   const DEFAULT_STORE = "Groesbeck";
+  const MAX_CONCURRENT_STOCK_REQUESTS = 6;
   let storeContextPromise;
+  let activeStockRequests = 0;
+  const stockRequestQueue = [];
 
   function getProductId(card) {
     const href = card.querySelector("#ProductImageRow a")?.href || "";
@@ -162,6 +165,22 @@
     }
   }
 
+  function drainStockRequestQueue() {
+    while (activeStockRequests < MAX_CONCURRENT_STOCK_REQUESTS && stockRequestQueue.length) {
+      const card = stockRequestQueue.shift();
+      activeStockRequests += 1;
+      loadStockForCard(card).finally(function () {
+        activeStockRequests -= 1;
+        drainStockRequestQueue();
+      });
+    }
+  }
+
+  function queueStockForCard(card) {
+    stockRequestQueue.push(card);
+    drainStockRequestQueue();
+  }
+
   function registerCards(root) {
     const cards = root.querySelectorAll
       ? root.querySelectorAll("#productlistcards table.ProductCard")
@@ -170,7 +189,7 @@
       if (card.dataset.wlStockRegistered === "true") return;
       card.dataset.wlStockRegistered = "true";
       ensureStockRow(card);
-      loadStockForCard(card);
+      queueStockForCard(card);
     });
   }
 

@@ -4,6 +4,8 @@
   const STYLE_ID = "wl-modern-product-cards";
   const REVIEW_CACHE_KEY = "wl_product_review_summary_v1";
   const REVIEW_CACHE_MS = 15 * 60 * 1000;
+  const PRODUCT_PAGE_SIZE = 48;
+  const PRODUCT_PAGE_LOAD_TIMEOUT_MS = 60 * 1000;
   const REVIEW_SHEET_URL =
     "https://docs.google.com/spreadsheets/d/e/2PACX-1vTZGjAjfdB4m_XfqFQC3i3-n09g-BlRp_oVBo0sD1eyMV9OlwMFbCaVQ3Urrw6rwWPr9VPu5vDXcMyo/pubhtml/sheet?headers=false&gid=220983932";
   let reviewSummaryPromise;
@@ -466,6 +468,9 @@
         max-width: calc(100vw - 32px);
       }
 
+      body.wl-products-48 ul.pagination,
+      body.wl-products-48 .items-per-page,
+      body.wl-infinite-products-active .items-per-page,
       body.wl-infinite-products-active ul.pagination {
         display: none !important;
       }
@@ -1051,6 +1056,24 @@
     cards.forEach(enhanceCard);
   }
 
+  function redirectToPreferredProductPageSize() {
+    if (window.top !== window.self || !/\/products\.aspx$/i.test(window.location.pathname)) return false;
+
+    const url = new URL(window.location.href);
+    if (url.searchParams.get("itemsPerPage") === String(PRODUCT_PAGE_SIZE)) return false;
+
+    url.searchParams.set("itemsPerPage", String(PRODUCT_PAGE_SIZE));
+    url.searchParams.set("pageIndex", "0");
+    window.location.replace(url.toString());
+    return true;
+  }
+
+  function enforceProductPageSize(url) {
+    const productUrl = new URL(url, window.location.origin);
+    productUrl.searchParams.set("itemsPerPage", String(PRODUCT_PAGE_SIZE));
+    return productUrl.toString();
+  }
+
   function getNextProductPageUrl(doc, baseUrl) {
     const currentUrl = new URL(baseUrl, window.location.origin);
     const currentIndex = Number.parseInt(currentUrl.searchParams.get("pageIndex") || "0", 10) || 0;
@@ -1058,7 +1081,7 @@
       try {
         const url = new URL(link.getAttribute("href"), currentUrl);
         const index = Number.parseInt(url.searchParams.get("pageIndex") || "0", 10) || 0;
-        return { index: index, url: url.toString() };
+        return { index: index, url: enforceProductPageSize(url) };
       } catch (error) {
         return null;
       }
@@ -1216,10 +1239,25 @@
       container.insertBefore(frame, status);
 
       let initialLoadHandled = false;
-      frame.addEventListener("load", function () {
-        const result = prepareProductFrame(frame);
+      const finishFailedLoad = function (message) {
         if (initialLoadHandled) return;
         initialLoadHandled = true;
+        loading = false;
+        frame.remove();
+        nextUrl = sourceUrl;
+        container.removeAttribute("aria-busy");
+        status.textContent = message;
+        retry.hidden = false;
+      };
+      const loadTimeout = window.setTimeout(function () {
+        finishFailedLoad("More products are taking longer than expected. Try again when ready.");
+      }, PRODUCT_PAGE_LOAD_TIMEOUT_MS);
+
+      frame.addEventListener("load", function () {
+        if (initialLoadHandled) return;
+        const result = prepareProductFrame(frame);
+        initialLoadHandled = true;
+        window.clearTimeout(loadTimeout);
         loading = false;
         container.removeAttribute("aria-busy");
 
@@ -1243,6 +1281,10 @@
           });
         }
       });
+      frame.addEventListener("error", function () {
+        window.clearTimeout(loadTimeout);
+        finishFailedLoad("More products could not be loaded. Try again when ready.");
+      }, { once: true });
     };
 
     retry.addEventListener("click", function () { loadNextPage(false); });
@@ -1257,6 +1299,9 @@
   }
 
   function initialize() {
+    if (/\/products\.aspx$/i.test(window.location.pathname)) {
+      document.body.classList.add("wl-products-48");
+    }
     enhanceCards(document);
     initializeRelatedCategories();
     initializeInfiniteScroll();
@@ -1277,6 +1322,8 @@
   }
 
   installStyles();
+
+  if (redirectToPreferredProductPageSize()) return;
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", initialize, { once: true });
