@@ -733,8 +733,9 @@ wireFieldPersistence();
       #wlApWizard3 .wl-account-balance-help { grid-column: 1 / -1; margin: 2px 0 0; color: #5f656b; font-size: 12px; }
       #wlApWizard3 .wl-account-balance-source { display: none !important; }
       #wlApWizard3 .wl-payment-amount-wide { grid-column: 1 / -1; }
-      #wlApWizard3 .wl-payment-amount-wide .wl-field { grid-template-columns: minmax(0, 1fr); align-items: start; gap: 6px; }
+      #wlApWizard3 .wl-payment-amount-wide > .wl-field { grid-template-columns: minmax(0, 1fr); align-items: start; gap: 6px; }
       #wlApWizard3 .wl-payment-amount-wide .wl-lab { padding-right: 0; text-align: left; }
+      #wlApWizard3 .wl-payment-amount-wide .wl-chips { justify-content: flex-start; margin-top: 8px; }
       #ctl00_PageBody_RadAjaxLoadingPanel1,
       #ctl00_PageBody_LoadingImage,
       #ctl00_PageBody_RadAjaxLoadingPanel1 .loading { display: none !important; visibility: hidden !important; }
@@ -927,10 +928,10 @@ wireFieldPersistence();
     const grid = document.getElementById('wlFormGrid');
     if (!grid || !amount) return;
 
-    const amountWrap = amount.closest('.epi-form-group-acctPayment, .wl-item, .wl-field') || amount.parentElement;
+    const amountWrap = amount.closest('.epi-form-group-acctPayment') || amount.closest('.wl-item') || amount.closest('.wl-field') || amount.parentElement;
     if (amountWrap) amountWrap.classList.add('wl-payment-amount-wide', 'wl-span-2');
 
-    const owingWrap = owing?.closest('.epi-form-group-acctPayment, .wl-item, .wl-field') || owing?.parentElement;
+    const owingWrap = owing?.closest('.epi-form-group-acctPayment') || owing?.closest('.wl-item') || owing?.closest('.wl-field') || owing?.parentElement;
     if (owingWrap) owingWrap.classList.add('wl-account-balance-source');
     if (cashAccount || !owing) return;
 
