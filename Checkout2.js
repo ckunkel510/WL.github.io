@@ -2777,7 +2777,7 @@ document.addEventListener("click", function (ev) {
           let valid = true;
           const errors = [];
 
-          if ($("#deliveryDate").closest(".form-group").is(":visible")) {
+          if (getDeliveredSelected() && !getPickupSelected()) {
             if (!$("#deliveryDate").val()) {
               valid = false;
               errors.push("• Please select a Requested Delivery Date.");
@@ -2788,7 +2788,7 @@ document.addEventListener("click", function (ev) {
             }
           }
 
-          if ($("#pickupDate").closest(".form-group").is(":visible")) {
+          if (getPickupSelected()) {
             if (!$("#pickupDate").val()) {
               valid = false;
               errors.push("• Please select a Requested Pickup Date.");
