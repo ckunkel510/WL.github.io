@@ -42,10 +42,18 @@
     try {
       const requested = new URLSearchParams(window.location.search).get("wlCheckout");
       if (requested === "single") sessionStorage.setItem(SINGLE_PAGE_SESSION_KEY, "1");
-      if (requested === "wizard") sessionStorage.removeItem(SINGLE_PAGE_SESSION_KEY);
-      return sessionStorage.getItem(SINGLE_PAGE_SESSION_KEY) === "1";
+      if (requested === "wizard") sessionStorage.setItem(SINGLE_PAGE_SESSION_KEY, "0");
+
+      const stored = sessionStorage.getItem(SINGLE_PAGE_SESSION_KEY);
+      if (stored === "0") return false;
+      if (stored === "1") return true;
+
+      // The consolidated flow is now the customer default. Keep ?wlCheckout=wizard
+      // as a session-scoped fallback while the new layout is monitored in production.
+      sessionStorage.setItem(SINGLE_PAGE_SESSION_KEY, "1");
+      return true;
     } catch {
-      return false;
+      return true;
     }
   }
 
@@ -244,7 +252,7 @@
   // ---------------------------------------------------------------------------
   // 1) DOM Ready
   // ---------------------------------------------------------------------------
-  document.addEventListener("DOMContentLoaded", function () {
+  function initCheckout() {
     const $ = window.jQuery;
 
     // -------------------------------------------------------------------------
@@ -3314,5 +3322,13 @@ document.addEventListener("click", function (ev) {
         }, 1600);
       }
     }
-  });
+  }
+
+  // GTM can inject this file after DOMContentLoaded. Initialize immediately in that
+  // case so checkout never falls through to the unenhanced WebTrack form.
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initCheckout, { once: true });
+  } else {
+    initCheckout();
+  }
 })();
