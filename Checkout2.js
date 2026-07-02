@@ -3105,6 +3105,7 @@ document.addEventListener("click", function (ev) {
             $("#ctl00_PageBody_SaleTypeSelector_rbUPSDelivery").prop("checked", false);
           }
 
+          const hasNativeUps = UPS_SHIPPING_ENABLED && $("#ctl00_PageBody_SaleTypeSelector_rbUPSDelivery").length > 0;
           const shipHTML = `
             <div class="modern-shipping-selector d-flex justify-content-around">
               <button type="button" id="btnPickup" class="btn btn-secondary" data-mode="pickup" data-value="rbCollectLater">
@@ -3117,6 +3118,12 @@ document.addEventListener("click", function (ev) {
                 <span class="wl-option-meta">Woodson delivery in Texas</span>
                 <span class="wl-option-tag" data-wl-delivery-tag>Texas address</span>
               </button>
+              ${hasNativeUps ? `
+              <button type="button" id="btnShip" class="btn btn-secondary" data-mode="ship" data-value="rbUPSDelivery">
+                <span class="wl-option-label"><i class="fas fa-shipping-fast"></i> Ship via UPS</span>
+                <span class="wl-option-meta">UPS service nationwide</span>
+                <span class="wl-option-tag" data-wl-ship-tag>Rates at checkout</span>
+              </button>` : ""}
             </div>`;
           $(".epi-form-col-single-checkout:has(.SaleTypeSelector)").append(shipHTML);
 
@@ -3649,7 +3656,7 @@ document.addEventListener("click", function (ev) {
           if (intent === "pickup") return "Pickup from a Woodson store";
           if (intent === "delivery") return "Local Woodson delivery";
           if (intent === "ship" && UPS_SHIPPING_ENABLED) return "Ship via UPS";
-          return "Choose Pickup or Local Delivery";
+          return UPS_SHIPPING_ENABLED ? "Choose Pickup, Local Delivery, or UPS Shipping" : "Choose Pickup or Local Delivery";
         }
         if (stepNum === 2) {
           const branch = getBranchField();
@@ -3810,7 +3817,9 @@ document.addEventListener("click", function (ev) {
         try { window.WLCheckout?.refreshDateUI?.(); } catch {}
         if (!canAutoAdvance()) {
           if (!getFulfillmentIntent()) {
-            copy.innerHTML = "<strong>How would you like to receive this order?</strong><span>Choose Pickup or Local Delivery below.</span>";
+            copy.innerHTML = UPS_SHIPPING_ENABLED
+              ? "<strong>How would you like to receive this order?</strong><span>Choose Pickup, Local Delivery, or UPS Shipping below.</span>"
+              : "<strong>How would you like to receive this order?</strong><span>Choose Pickup or Local Delivery below.</span>";
             return;
           }
           if (attempts < 3) {
