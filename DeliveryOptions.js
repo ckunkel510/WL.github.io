@@ -72,7 +72,7 @@ $(function(){
       method = sessionStorage.getItem("wl_fulfillment_method") || "";
       signature = sessionStorage.getItem(CART_SIGNATURE_KEY) || "";
     } catch {}
-    if (method !== "delivery" || !signature) return;
+    if ((method !== "delivery" && method !== "ship") || !signature) return;
 
     const deliveryRow = document.querySelector("#ctl00_PageBody_CartSummary2_DeliveryCostsRow td.numeric");
     const selectedOption = document.querySelector("#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList option:checked");
@@ -179,9 +179,12 @@ document.addEventListener('DOMContentLoaded', function () {
         mstd = standardText.match(/\(([^)]+)\)/),
         standardCost = mstd ? parseFloat(mstd[1].replace(/[^0-9\.-]/g, '')) : 0;
 
+    var fulfillmentMethod = '';
+    try { fulfillmentMethod = sessionStorage.getItem('wl_fulfillment_method') || ''; } catch (e) {}
+
     var $ship = $(
       '<div class="card shipping-card shadow-sm mb-4">' +
-        '<div class="card-header bg-light"><strong>Shipping Method</strong></div>' +
+        '<div class="card-header bg-light"><strong>' + (fulfillmentMethod === 'ship' ? 'UPS Shipping Speed' : 'Delivery Method') + '</strong></div>' +
         '<div class="card-body">' +
           '<div class="delivery-summary text-muted small mb-2"></div>' +
           '<div class="delivery-pills d-flex flex-wrap mb-2"></div>' +
@@ -202,11 +205,26 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function computeExpected(days) {
-      const now = new Date();
-      const total = new Date(now.getTime() + (days + 2) * 86400000);
+      const total = new Date();
+      let remaining = Math.max(1, Number(days) || 1) + 1;
+      while (remaining > 0) {
+        total.setDate(total.getDate() + 1);
+        if (total.getDay() !== 0 && total.getDay() !== 6) remaining -= 1;
+      }
       return total.toLocaleDateString(undefined, {
         month: 'long', day: 'numeric', year: 'numeric'
       });
+    }
+
+    function rememberShippingChoice(label, cost, days) {
+      try {
+        sessionStorage.setItem('wl_shipping_selection_v1', JSON.stringify({
+          label: label,
+          cost: cost,
+          arrival: computeExpected(days),
+          ts: Date.now()
+        }));
+      } catch (e) {}
     }
 
     function getArrowGraphic(speedLevel) {
@@ -259,7 +277,8 @@ document.addEventListener('DOMContentLoaded', function () {
       if ($o.is(':selected')) {
         $btn.removeClass('btn-outline-primary').addClass('btn-primary');
         $expectedWidget.find('.shipping-speed-graphic').html(getArrowGraphic(speedLevel));
-        $expectedWidget.find('.expected-by-text').html(getSpeedLabel(speedLevel) + ' – Expected by ' + computeExpected(days));
+        $expectedWidget.find('.expected-by-text').text('Estimated arrival: ' + computeExpected(days));
+        rememberShippingChoice(label, costLbl, days);
       }
 
       $btn.on('click', function () {
@@ -269,7 +288,8 @@ document.addEventListener('DOMContentLoaded', function () {
           .addClass('btn-outline-primary');
         $btn.removeClass('btn-outline-primary').addClass('btn-primary');
         $expectedWidget.find('.shipping-speed-graphic').html(getArrowGraphic(speedLevel));
-        $expectedWidget.find('.expected-by-text').html(getSpeedLabel(speedLevel) + ' – Expected by ' + computeExpected(days));
+        $expectedWidget.find('.expected-by-text').text('Estimated arrival: ' + computeExpected(days));
+        rememberShippingChoice(label, costLbl, days);
       });
 
       $ship.find('.delivery-pills').append($btn);
@@ -329,7 +349,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     let method = "";
     try { method = sessionStorage.getItem(METHOD_KEY) || ""; } catch {}
-    if (method !== "pickup" && method !== "delivery") return;
+    if (method !== "pickup" && method !== "delivery" && method !== "ship") return;
 
     const continueButton = document.getElementById(CONTINUE_ID);
     if (!continueButton || hasShippingChoice()) return;
@@ -419,7 +439,6 @@ document.addEventListener('DOMContentLoaded', function () {
       .add_endRequest(hideDeliveryPanelIfOnlyAreaDropdownShown);
   }
 })(jQuery);
-
 
 
 

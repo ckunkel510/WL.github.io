@@ -42,6 +42,14 @@
       .find(el => /Shipping Method/i.test(el.textContent));
     const methodValue = methodLabelEl?.parentElement?.querySelector('.col')?.textContent.trim() || '';
     const isPickup = /^pickup/i.test(methodValue);
+    let fulfillmentIntent = '';
+    let shippingSelection = null;
+    try {
+      fulfillmentIntent = sessionStorage.getItem('wl_fulfillment_intent') || sessionStorage.getItem('wl_fulfillment_method') || '';
+      shippingSelection = JSON.parse(sessionStorage.getItem('wl_shipping_selection_v1') || 'null');
+    } catch(e){}
+    const isShip = !isPickup && fulfillmentIntent === 'ship';
+    const methodTitle = isPickup ? 'Pickup' : (isShip ? 'Ship via UPS' : 'Local Delivery');
 
     const branchRow = document.getElementById("ctl00_PageBody_ShoppingCartSummaryTableControl_BranchRow");
     const branchFull = branchRow?.querySelector('.col:last-child')?.textContent.trim() || '';
@@ -152,12 +160,12 @@
           <img class="wl-store-img" src="${storeImg}" alt="${city} store">
         </a>
         <div>
-          <p class="wl-method">${isPickup ? 'Pickup' : 'Delivery'} <span class="wl-pill">${methodValue}</span></p>
+          <p class="wl-method">${methodTitle} <span class="wl-pill">${isShip && shippingSelection?.label ? shippingSelection.label : methodValue}</span></p>
           <h3 class="wl-store-name">${city}</h3>
           <p class="wl-store-street">${street || ''}</p>
         </div>
         <div class="wl-date">
-          <div><strong>${isPickup ? 'Pickup Date' : 'Expected Delivery'}:</strong> ${requiredDate || '-'}</div>
+          <div><strong>${isPickup ? 'Pickup Date' : (isShip ? 'Estimated Arrival' : 'Expected Delivery')}:</strong> ${(isShip && shippingSelection?.arrival) ? shippingSelection.arrival : (requiredDate || '-')}</div>
         </div>
       </div>
 
@@ -182,7 +190,7 @@
             <h4>Addresses</h4>
             <div class="wl-address-wrap">
               <div>
-                <div class="section-label">Sales Address</div>
+                <div class="section-label">${isShip ? 'Shipping Address' : 'Sales Address'}</div>
                 <p class="wl-address">${delivery.addrLines.filter(Boolean).join('\n')}</p>
               </div>
               <div>
@@ -504,12 +512,14 @@
   function getShipping() {
     const deliveryRow = document.getElementById('ctl00_PageBody_ShoppingCartSummaryTableControl_DeliverySummaryRow');
     const deliveryAmt = deliveryRow?.querySelector('td.numeric')?.textContent?.trim();
-    if (deliveryAmt) return { label: 'Delivery', amount: deliveryAmt };
+    let intent = '';
+    try { intent = sessionStorage.getItem('wl_fulfillment_intent') || ''; } catch(e){}
+    if (deliveryAmt) return { label: intent === 'ship' ? 'Shipping' : 'Delivery', amount: deliveryAmt };
     return { label: 'Pickup', amount: 'Free' };
   }
 
   function cacheShippingQuote(shipping) {
-    if (!shipping || !/^delivery/i.test(shipping.label || '') || !/\$/.test(shipping.amount || '')) return;
+    if (!shipping || !/^(delivery|shipping)/i.test(shipping.label || '') || !/\$/.test(shipping.amount || '')) return;
     try {
       const signature = sessionStorage.getItem('wl_cart_signature_v1') || '';
       if (!signature) return;

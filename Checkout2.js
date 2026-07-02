@@ -33,11 +33,29 @@
     return false;
   }
   function getSaleType() {
-    return getPickupSelected() ? 'pickup' : (getDeliveredSelected() ? 'delivered' : '');
+    if (getPickupSelected()) return 'pickup';
+    if (!getDeliveredSelected()) return '';
+    return getFulfillmentIntent() === 'ship' ? 'ship' : 'delivery';
   }
 
   const SINGLE_PAGE_SESSION_KEY = "wl_checkout_single_page_preview";
   const AUTO_ADVANCE_KEY = "wl_checkout_auto_advance";
+  const FULFILLMENT_INTENT_KEY = "wl_fulfillment_intent";
+
+  function getFulfillmentIntent() {
+    try { return sessionStorage.getItem(FULFILLMENT_INTENT_KEY) || ""; } catch { return ""; }
+  }
+
+  function setFulfillmentIntent(value) {
+    try {
+      if (value) sessionStorage.setItem(FULFILLMENT_INTENT_KEY, value);
+      else sessionStorage.removeItem(FULFILLMENT_INTENT_KEY);
+    } catch {}
+  }
+
+  function isShippingIntent() {
+    return getFulfillmentIntent() === "ship";
+  }
 
   function isSinglePageCheckout() {
     try {
@@ -98,12 +116,31 @@
         border-radius:6px!important;background:#6b0016!important;color:#fff!important;font-weight:700;
       }
       .checkout-wizard.wl-single-page .modern-shipping-selector{
-        display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;justify-content:stretch!important;
+        display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;justify-content:stretch!important;
       }
       .checkout-wizard.wl-single-page .modern-shipping-selector button{
         min-height:72px;width:100%;margin:0!important;padding:14px 16px!important;border-radius:8px!important;
         font-size:16px!important;font-weight:700!important;box-shadow:none!important;
       }
+      .checkout-wizard.wl-single-page .modern-shipping-selector .wl-option-label{display:block;font-weight:800;}
+      .checkout-wizard.wl-single-page .modern-shipping-selector .wl-option-meta{display:block;margin-top:4px;font-size:12px;font-weight:500;line-height:1.25;opacity:.82;}
+      .checkout-wizard.wl-single-page .modern-shipping-selector .wl-option-tag{
+        display:inline-block;margin-top:7px;padding:3px 7px;border-radius:999px;background:#eceff1;color:#34383c;
+        font-size:11px;font-weight:800;line-height:1.2;
+      }
+      .checkout-wizard.wl-single-page .modern-shipping-selector button.wl-selected .wl-option-tag{background:rgba(255,255,255,.2);color:#fff;}
+      .checkout-wizard.wl-single-page .wl-section-heading{flex-wrap:wrap;}
+      .checkout-wizard.wl-single-page .wl-section-summary{flex:1 1 260px;min-width:0;margin-left:4px;color:#555;font-size:14px;line-height:1.35;}
+      .checkout-wizard.wl-single-page .wl-section-edit{
+        display:none;flex:0 0 auto;min-height:38px;padding:7px 12px;border:1px solid #aeb4ba;border-radius:6px;background:#fff;color:#6b0016;font-weight:700;
+      }
+      .checkout-wizard.wl-single-page .checkout-step.wl-section-collapsed .wl-section-edit{display:block;}
+      .checkout-wizard.wl-single-page .checkout-step.wl-section-collapsed{padding:16px 0;}
+      .checkout-wizard.wl-single-page .checkout-step.wl-section-collapsed>.wl-section-heading{margin:0;}
+      .checkout-wizard.wl-single-page .checkout-step.wl-section-collapsed>:not(.wl-section-heading):not(.wl-section-summary):not(.checkout-nav){display:none!important;}
+      .checkout-wizard.wl-single-page .checkout-step.wl-section-collapsed .wl-section-heading .wl-step-icon{background:#f1f6f2;color:#246b35;border-color:#c8ddce;}
+      .checkout-wizard.wl-single-page .checkout-step.wl-section-deferred .wl-section-heading .wl-step-icon{background:#f5f5f5;color:#747a80;border-color:#d9dde2;}
+      .checkout-wizard.wl-single-page .checkout-step.wl-section-deferred .wl-section-edit{display:none!important;}
       .checkout-wizard.wl-single-page .form-group,
       .checkout-wizard.wl-single-page .epi-form-group-checkout{
         max-width:none;margin:0 0 16px;align-items:stretch;
@@ -152,6 +189,9 @@
         .checkout-wizard.wl-single-page .checkout-step{padding:20px 0;}
         .checkout-wizard.wl-single-page .wl-section-title{font-size:18px;}
         .checkout-wizard.wl-single-page .modern-shipping-selector{grid-template-columns:1fr;}
+        .checkout-wizard.wl-single-page .wl-section-heading{align-items:flex-start;}
+        .checkout-wizard.wl-single-page .wl-section-summary{flex-basis:calc(100% - 54px);margin-left:50px;margin-top:-8px;}
+        .checkout-wizard.wl-single-page .wl-section-edit{margin-left:auto;}
         .checkout-wizard.wl-single-page .epi-form-group-checkout{display:block!important;width:100%!important;max-width:100%!important;}
         .checkout-wizard.wl-single-page .form-group{width:100%!important;max-width:100%!important;}
         .checkout-wizard.wl-single-page label{max-width:100%;}
@@ -359,7 +399,7 @@
     // -------------------------------------------------------------------------
     const steps = [
       {
-        title: "Ship/Pickup",
+        title: "Fulfillment",
         findEls: () => {
           const ship = document.getElementById(
             "ctl00_PageBody_SaleTypeSelector_lblDelivered"
@@ -375,7 +415,7 @@
         },
       },
       {
-        title: "Delivery Address",
+        title: "Delivery / Shipping Address",
         findEls: () => {
           const hdr = document.querySelector(".SelectableAddressType");
           return hdr ? [hdr.closest(".epi-form-col-single-checkout")] : [];
@@ -391,7 +431,7 @@
         },
       },
       {
-        title: "Date & Instructions",
+        title: "Timing & Instructions",
         findEls: () => {
           const arr = [];
 
@@ -1204,6 +1244,17 @@ function validateZip(zip) {
       if (!delHas) return;
 
       try {
+        const contactPairs = [
+          ["ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox", "ctl00_PageBody_InvoiceAddress_ContactFirstNameTextBox"],
+          ["ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox", "ctl00_PageBody_InvoiceAddress_ContactLastNameTextBox"],
+          ["ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox", "ctl00_PageBody_InvoiceAddress_ContactTelephoneTextBox"]
+        ];
+        contactPairs.forEach(([fromId, toId]) => {
+          const from = document.getElementById(fromId);
+          const to = document.getElementById(toId);
+          if (from && to && !norm(to.value)) to.value = from.value;
+        });
+
         if (delLine1 && invLine1) invLine1.value = delLine1.value;
         if (delCity && invCity) invCity.value = delCity.value;
         if (delZip && invZip) invZip.value = delZip.value;
@@ -1297,7 +1348,9 @@ steps.forEach(function (step, i) {
         const heading = document.createElement("div");
         heading.className = "wl-section-heading";
         heading.innerHTML = '<span class="wl-step-icon" aria-hidden="true">' + wlStepIconSvg(num) + '</span>' +
-          '<h2 class="wl-section-title">' + step.title + '</h2>';
+          '<h2 class="wl-section-title">' + step.title + '</h2>' +
+          '<div class="wl-section-summary" aria-live="polite"></div>' +
+          '<button type="button" class="wl-section-edit" data-wl-edit-step="' + num + '">Edit</button>';
         pane.appendChild(heading);
       }
 
@@ -1439,6 +1492,8 @@ const navDiv = document.createElement("div");
           try { enhanceBranchPicker(); } catch {}
 
           try { updatePickupModeUI(); } catch {}
+          try { window.WLCheckout?.refreshSectionSummaries?.(); } catch {}
+          try { window.WLCheckout?.trySmartAdvance?.(); } catch {}
     // If a full postback happened (not UpdatePanel), consume pending step here as well.
     try {
       const ps = sessionStorage.getItem("wl_pendingStep");
@@ -1971,6 +2026,9 @@ document.addEventListener("click", function (ev) {
       function copyDeliveryToInvoice(force) {
         try {
           const pairs = [
+            ["ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox","ctl00_PageBody_InvoiceAddress_ContactFirstNameTextBox"],
+            ["ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox","ctl00_PageBody_InvoiceAddress_ContactLastNameTextBox"],
+            ["ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox","ctl00_PageBody_InvoiceAddress_ContactTelephoneTextBox"],
             ["ctl00_PageBody_DeliveryAddress_AddressLine1","ctl00_PageBody_InvoiceAddress_AddressLine1"],
             ["ctl00_PageBody_DeliveryAddress_AddressLine2","ctl00_PageBody_InvoiceAddress_AddressLine2"],
             ["ctl00_PageBody_DeliveryAddress_AddressLine3","ctl00_PageBody_InvoiceAddress_AddressLine3"],
@@ -1998,6 +2056,9 @@ document.addEventListener("click", function (ev) {
 
 
       function refreshInv() {
+        const first = (q("#ctl00_PageBody_InvoiceAddress_ContactFirstNameTextBox")?.value || "").trim();
+        const last = (q("#ctl00_PageBody_InvoiceAddress_ContactLastNameTextBox")?.value || "").trim();
+        const phone = (q("#ctl00_PageBody_InvoiceAddress_ContactTelephoneTextBox")?.value || "").trim();
         const a1 = (q("#ctl00_PageBody_InvoiceAddress_AddressLine1")?.value || "").trim();
         const a2 = (q("#ctl00_PageBody_InvoiceAddress_AddressLine2")?.value || "").trim();
         const c = (q("#ctl00_PageBody_InvoiceAddress_City")?.value || "").trim();
@@ -2008,9 +2069,10 @@ document.addEventListener("click", function (ev) {
         const e = (q("#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox")?.value || "").trim();
 
         sumInv.innerHTML = `<strong>Billing Address</strong><br>
+          ${[first, last].filter(Boolean).join(" ")}${phone ? " - " + phone : ""}<br>
           ${a1}${a2 ? "<br>" + a2 : ""}<br>
           ${c}${c && (st || z) ? ", " : ""}${st} ${z}<br>
-          Email: ${e}<br>
+          ${e ? "Email: " + e + "<br>" : ""}
           <button type="button" id="editInvoice" class="btn btn-link">Edit billing address</button>`;
       }
 
@@ -2197,6 +2259,25 @@ document.addEventListener("click", function (ev) {
         wrapInv.style.display = "";
         // If the user edits billing, consider it unconfirmed until they hit Next.
         try { clearBillingConfirmed(); } catch {}
+        if (!wrapInv.querySelector("#saveInvoice")) {
+          const save = document.createElement("button");
+          save.type = "button";
+          save.id = "saveInvoice";
+          save.className = "btn btn-primary mt-2";
+          save.textContent = "Use this billing address";
+          wrapInv.appendChild(save);
+          save.addEventListener("click", function () {
+            if (!validateAddressBlock("InvoiceAddress", 4, true)) return;
+            refreshInv();
+            wrapInv.style.display = "none";
+            sumInv.style.display = "";
+            try {
+              pane4.dataset.wlEditing = "0";
+              window.WLCheckout?.refreshSectionSummaries?.();
+              window.WLCheckout?.trySmartAdvance?.();
+            } catch {}
+          });
+        }
         try { wrapInv.scrollIntoView({ behavior: "smooth" }); } catch {}
       });
 
@@ -2325,11 +2406,23 @@ document.addEventListener("click", function (ev) {
         setIfExists("#ctl00_PageBody_InvoiceAddress_ContactLastNameTextBox", ln);
 
         setIfExists("#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox", em);
+        try {
+          window.WLCheckout?.applyInvoiceDefaultView?.();
+          window.WLCheckout?.refreshSectionSummaries?.();
+        } catch {}
       });
 
       $.get("https://webtrack.woodsonlumber.com/AccountInfo_R.aspx", (data) => {
         const tel = $(data).find("#ctl00_PageBody_TelephoneLink_TelephoneLink").text().trim();
-        if (tel) $("#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox").val(tel);
+        if (tel) {
+          $("#ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox").val(tel);
+          const $invoicePhone = $("#ctl00_PageBody_InvoiceAddress_ContactTelephoneTextBox");
+          if ($invoicePhone.length && !$invoicePhone.val()) $invoicePhone.val(tel);
+        }
+        try {
+          window.WLCheckout?.applyInvoiceDefaultView?.();
+          window.WLCheckout?.refreshSectionSummaries?.();
+        } catch {}
       });
     }
 
@@ -2387,7 +2480,7 @@ document.addEventListener("click", function (ev) {
       shippingAutoNote.className = "alert alert-info wl-auto-ship-note";
       shippingAutoNote.style.display = "none";
       shippingAutoNote.style.marginTop = "10px";
-      shippingAutoNote.innerHTML = "<strong>Shipping order:</strong> For addresses outside Texas, we’ll handle the shipping date/time automatically and continue the order as an afternoon shipping request.";
+      shippingAutoNote.innerHTML = "<strong>Ship via UPS:</strong> Choose the shipping speed on the next screen. We will show the estimated arrival date before payment.";
 
       siWrap.insertAdjacentElement("afterend", pickupDiv);
       pickupDiv.insertAdjacentElement("afterend", deliveryDiv);
@@ -2612,6 +2705,10 @@ document.addEventListener("click", function (ev) {
         return !isTexasDeliveryAddress();
       }
 
+      function isShippingOrder() {
+        return isShippingIntent() || isOutOfTexasDelivery();
+      }
+
       function nextValidDeliveryDate() {
         const d = new Date(minDelD.getFullYear(), minDelD.getMonth(), minDelD.getDate());
         if (d.getDay() === 0) d.setDate(d.getDate() + 1);
@@ -2623,8 +2720,8 @@ document.addEventListener("click", function (ev) {
         if (r) r.checked = true;
       }
 
-      function applyOutOfTexasDeliveryDefaults() {
-        if (!isOutOfTexasDelivery()) return false;
+      function applyShippingDefaults() {
+        if (!isShippingOrder()) return false;
         if (!deliveryInput.value) deliveryInput.value = nextValidDeliveryDate();
         selectDeliveryTime("Afternoon");
         return true;
@@ -2642,15 +2739,13 @@ document.addEventListener("click", function (ev) {
           baseText = "Pickup on " + d + (t ? " at " + t : "") + (p ? " for " + p : "");
         } else if (rbDel && rbDel.checked) {
           specialIns.readOnly = true;
-          const outOfTexas = applyOutOfTexasDeliveryDefaults();
-          if (!outOfTexas && inZone(zipInput ? zipInput.value : "")) {
+          const shippingOrder = applyShippingDefaults();
+          if (!shippingOrder && inZone(zipInput ? zipInput.value : "")) {
             const d2 = deliveryInput.value;
             const t2 = deliveryDiv.querySelector('input[name="deliveryTime"]:checked');
             baseText = "Delivery on " + d2 + (t2 ? " (" + t2.value + ")" : "");
           } else {
-            const t3 = deliveryDiv.querySelector('input[name="deliveryTime"]:checked');
-            const d3 = deliveryInput.value;
-            baseText = "Ship via 3rd party delivery" + (d3 ? " requested " + d3 : "") + (t3 ? " (" + t3.value + ")" : "") + " on next screen.";
+            baseText = "Ship via UPS; shipping speed and estimated arrival selected on the next screen.";
           }
         }
 
@@ -2668,9 +2763,9 @@ document.addEventListener("click", function (ev) {
           if (pickupInput.value) populatePickupTimes(parseLocalDate(pickupInput.value));
         } else if (rbDel && rbDel.checked) {
           pickupDiv.style.display = "none";
-          const outOfTexas = applyOutOfTexasDeliveryDefaults();
-          deliveryDiv.style.display = outOfTexas ? "none" : "block";
-          shippingAutoNote.style.display = outOfTexas ? "block" : "none";
+          const shippingOrder = applyShippingDefaults();
+          deliveryDiv.style.display = shippingOrder ? "none" : "block";
+          shippingAutoNote.style.display = shippingOrder ? "block" : "none";
         } else {
           pickupDiv.style.display = "none";
           deliveryDiv.style.display = "none";
@@ -2704,10 +2799,10 @@ document.addEventListener("click", function (ev) {
         const add = (el, msg) => { errors.push(msg); if (mark) markDateInvalid(el, msg); };
 
         if (getDeliveredSelected() && !getPickupSelected()) {
-          const outOfTexas = applyOutOfTexasDeliveryDefaults();
-          if (!deliveryInput.value) add(deliveryInput, outOfTexas ? "Shipping date could not be defaulted. Please review the delivery address." : "Please select a requested delivery date.");
+          const shippingOrder = applyShippingDefaults();
+          if (!deliveryInput.value) add(deliveryInput, shippingOrder ? "Shipping date could not be defaulted. Please review the delivery address." : "Please select a requested delivery date.");
           const t = deliveryDiv.querySelector('input[name="deliveryTime"]:checked');
-          if (!t) add(deliveryDiv.querySelector('input[name="deliveryTime"]'), outOfTexas ? "Shipping time could not be defaulted." : "Please choose Morning or Afternoon.");
+          if (!t) add(deliveryDiv.querySelector('input[name="deliveryTime"]'), shippingOrder ? "Shipping time could not be defaulted." : "Please choose Morning or Afternoon.");
         }
 
         if (getPickupSelected()) {
@@ -2926,11 +3021,20 @@ document.addEventListener("click", function (ev) {
 
           const shipHTML = `
             <div class="modern-shipping-selector d-flex justify-content-around">
-              <button type="button" id="btnDelivered" class="btn btn-primary" data-value="rbDelivered">
-                <i class="fas fa-truck"></i> Delivered
+              <button type="button" id="btnPickup" class="btn btn-secondary" data-mode="pickup" data-value="rbCollectLater">
+                <span class="wl-option-label"><i class="fas fa-store"></i> Pickup</span>
+                <span class="wl-option-meta">Choose a Woodson store</span>
+                <span class="wl-option-tag">Free</span>
               </button>
-              <button type="button" id="btnPickup" class="btn btn-secondary" data-value="rbCollectLater">
-                <i class="fas fa-store"></i> Pickup (Free)
+              <button type="button" id="btnDelivered" class="btn btn-primary" data-mode="delivery" data-value="rbDelivered">
+                <span class="wl-option-label"><i class="fas fa-truck"></i> Local Delivery</span>
+                <span class="wl-option-meta">Woodson delivery in Texas</span>
+                <span class="wl-option-tag" data-wl-delivery-tag>Texas address</span>
+              </button>
+              <button type="button" id="btnShip" class="btn btn-secondary" data-mode="ship" data-value="rbDelivered">
+                <span class="wl-option-label"><i class="fas fa-box"></i> Ship</span>
+                <span class="wl-option-meta">UPS shipping</span>
+                <span class="wl-option-tag" data-wl-ship-tag>Shipping speed next</span>
               </button>
             </div>`;
           $(".epi-form-col-single-checkout:has(.SaleTypeSelector)").append(shipHTML);
@@ -2997,22 +3101,59 @@ document.addEventListener("click", function (ev) {
             } catch {}
           })();
 
-          function updateShippingStyles(val, opts) {
+          function selectedStateText(selector) {
+            const el = document.querySelector(selector);
+            if (!el) return "";
+            const option = el.selectedOptions && el.selectedOptions[0] ? el.selectedOptions[0] : null;
+            return String((option && (option.text || option.textContent)) || el.value || "").trim().toLowerCase();
+          }
+
+          function addressRegion() {
+            const state = selectedStateText("#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList") ||
+              selectedStateText("#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList");
+            if (!state || /^\[?select/.test(state) || state === "0" || state === "00") return "unknown";
+            return state === "tx" || state === "texas" ? "texas" : "outside";
+          }
+
+          function updateAddressAwareOptions() {
+            const region = addressRegion();
+            const $delivery = $("#btnDelivered");
+            const $ship = $("#btnShip");
+            const $deliveryTag = $delivery.find("[data-wl-delivery-tag]");
+            const $shipTag = $ship.find("[data-wl-ship-tag]");
+
+            if (region === "outside") {
+              $delivery.hide();
+              $shipTag.text("Recommended for your address");
+              if (getFulfillmentIntent() === "delivery") {
+                setFulfillmentIntent("ship");
+                try { sessionStorage.setItem("wl_fulfillment_method", "ship"); } catch {}
+                window.setTimeout(function () { updateShippingStyles("ship", { silent: true }); }, 0);
+              }
+            } else if (region === "texas") {
+              $delivery.show();
+              $deliveryTag.text("Texas option");
+              $shipTag.text("UPS option");
+            } else {
+              $delivery.show();
+              $deliveryTag.text("Texas addresses");
+              $shipTag.text("UPS option");
+            }
+          }
+
+          function updateShippingStyles(mode, opts) {
             opts = opts || {};
             const silent = !!opts.silent;
 
             const delRad = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
             const pickRad = $("#ctl00_PageBody_SaleTypeSelector_rbCollectLater");
-            const $btnDelivered = $("#btnDelivered");
-            const $btnPickup = $("#btnPickup");
+            const $buttons = $(".modern-shipping-selector button[data-mode]");
 
-            // Ensure buttons are clickable
-            $btnDelivered.css({ opacity: 1, pointerEvents: "auto" });
-            $btnPickup.css({ opacity: 1, pointerEvents: "auto" });
+            $buttons.css({ opacity: 1, pointerEvents: "auto" });
 
-            const hasSelection = val === "rbDelivered" || val === "rbCollectLater";
-            const isDelivered = val === "rbDelivered";
-            const isPickup = val === "rbCollectLater";
+            const hasSelection = mode === "pickup" || mode === "delivery" || mode === "ship";
+            const isPickup = mode === "pickup";
+            const isDelivered = hasSelection && !isPickup;
 
             // Visual styling (use classes + !important CSS to defeat theme overrides)
             try {
@@ -3035,17 +3176,21 @@ document.addEventListener("click", function (ev) {
                 } catch (e) {}
               };
 
-              setSelected($btnDelivered, isDelivered);
-              setSelected($btnPickup, isPickup);
+              $buttons.each(function () {
+                const $button = $(this);
+                setSelected($button, hasSelection && $button.data("mode") === mode);
+              });
             } catch (e) {}
 
             // Persist selection for other modules only after the customer/system has actually selected a sale type.
             if (hasSelection) {
               document.cookie = "pickupSelected=" + (isDelivered ? "false" : "true") + ";path=/";
               try {
-                sessionStorage.setItem("wl_fulfillment_method", isPickup ? "pickup" : "delivery");
+                setFulfillmentIntent(mode);
+                sessionStorage.setItem("wl_fulfillment_method", mode);
               } catch {}
             }
+            updateAddressAwareOptions();
             // Keep underlying panels sane (does not trigger postback)
             if (hasSelection) {
               try { ensureShippingPanelVisibility(isDelivered); } catch (e) {}
@@ -3077,7 +3222,7 @@ document.addEventListener("click", function (ev) {
               try {
                 showStep(nextStep);
                 setStep(nextStep);
-      clearBillingConfirmed();
+                clearBillingConfirmed();
               } catch (e) {}
             }
 
@@ -3086,18 +3231,27 @@ document.addEventListener("click", function (ev) {
               if (window.WLCheckout && typeof window.WLCheckout.updatePickupModeUI === "function") {
                 window.WLCheckout.updatePickupModeUI();
               }
+              window.WLCheckout?.refreshDateUI?.();
+              window.WLCheckout?.refreshSectionSummaries?.();
             } catch (e) {}
+
+            if (!silent && hasSelection) {
+              try {
+                document.dispatchEvent(new CustomEvent("wl:fulfillment-change", { detail: { mode: mode } }));
+              } catch {}
+            }
           }
 
-
-          const initialSaleType = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered").is(":checked")
-            ? "rbDelivered"
-            : ($("#ctl00_PageBody_SaleTypeSelector_rbCollectLater").is(":checked") ? "rbCollectLater" : "");
-          updateShippingStyles(initialSaleType, { silent: true });
+          updateAddressAwareOptions();
+          updateShippingStyles(getFulfillmentIntent(), { silent: true });
 
           $(document).on("click", ".modern-shipping-selector button", function () {
-            updateShippingStyles($(this).data("value"));
+            updateShippingStyles($(this).data("mode"));
           });
+
+          $(document).on("change", "#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList, #ctl00_PageBody_InvoiceAddress_CountySelector_CountyList", updateAddressAwareOptions);
+          window.setTimeout(updateAddressAwareOptions, 300);
+          window.setTimeout(updateAddressAwareOptions, 900);
         }
       });
     }
@@ -3329,6 +3483,8 @@ document.addEventListener("click", function (ev) {
           sessionStorage.removeItem(WL_GUEST_AUTOFILL_KEY);
           sessionStorage.removeItem(WL_CHECKOUT_MODE_KEY);
           sessionStorage.removeItem("wl_fulfillment_method");
+          sessionStorage.removeItem(FULFILLMENT_INTENT_KEY);
+          sessionStorage.removeItem("wl_shipping_selection_v1");
         } catch {}
       }
 
@@ -3355,6 +3511,155 @@ document.addEventListener("click", function (ev) {
     showStep(initial, { scroll: false });
     try { updatePickupModeUI(); } catch {}
 
+    // Amazon-style checkout rows: keep completed sections compact, retain an Edit
+    // action, and open only the first section that still needs customer input.
+    (function installSectionSummaries() {
+      if (!singlePageCheckout) return;
+
+      const panes = Array.from(wizard.querySelectorAll(".checkout-step[data-step]"));
+      let refreshTimer = null;
+
+      function value(id) {
+        return String(document.getElementById(id)?.value || "").trim();
+      }
+
+      function selectedText(el) {
+        if (!el) return "";
+        if (el.tagName === "SELECT") {
+          const option = el.selectedOptions && el.selectedOptions[0] ? el.selectedOptions[0] : null;
+          return String((option && (option.text || option.textContent)) || el.value || "").replace(/\s+/g, " ").trim();
+        }
+        return String(el.value || "").trim();
+      }
+
+      function compactAddress(prefix) {
+        const line1 = value(`ctl00_PageBody_${prefix}_AddressLine1`);
+        const city = value(`ctl00_PageBody_${prefix}_City`);
+        const state = selectedText(document.getElementById(`ctl00_PageBody_${prefix}_CountySelector_CountyList`));
+        const zip = value(`ctl00_PageBody_${prefix}_Postcode`);
+        return [line1, [city, state, zip].filter(Boolean).join(" ")].filter(Boolean).join(" - ");
+      }
+
+      function sectionValid(stepNum) {
+        if (stepNum === 1) {
+          const intent = getFulfillmentIntent();
+          if (intent === "pickup") return getPickupSelected();
+          if (intent === "delivery" || intent === "ship") return getDeliveredSelected() && !getPickupSelected();
+          return false;
+        }
+        if (stepNum === 2) return !getPickupSelected() || isBranchChosen(getBranchField());
+        if (stepNum === 3) return getPickupSelected() || !!window.WLCheckout?.addressBlockIsValid?.("DeliveryAddress", false);
+        if (stepNum === 4) return !!window.WLCheckout?.addressBlockIsValid?.("InvoiceAddress", true);
+        if (stepNum === 5) return !!window.WLCheckout?.validateDateInstructions?.(false);
+        return true;
+      }
+
+      function sectionSummary(stepNum) {
+        const intent = getFulfillmentIntent();
+        if (stepNum === 1) {
+          if (intent === "pickup") return "Pickup from a Woodson store";
+          if (intent === "delivery") return "Local Woodson delivery";
+          if (intent === "ship") return "Ship via UPS";
+          return "Choose Pickup, Local Delivery, or Ship via UPS";
+        }
+        if (stepNum === 2) {
+          const branch = getBranchField();
+          return selectedText(branch) || "Choose a pickup store";
+        }
+        if (stepNum === 3) return compactAddress("DeliveryAddress") || "Add a delivery or shipping address";
+        if (stepNum === 4) return compactAddress("InvoiceAddress") || "Add a billing address";
+        if (stepNum === 5) {
+          if (intent === "ship") return "UPS speed and estimated arrival are selected next";
+          if (getPickupSelected()) {
+            return [value("pickupDate"), selectedText(document.getElementById("pickupTime")), value("pickupPerson")].filter(Boolean).join(" - ") || "Choose pickup timing";
+          }
+          const deliveryTime = document.querySelector('input[name="deliveryTime"]:checked');
+          return [value("deliveryDate"), deliveryTime ? deliveryTime.value : ""].filter(Boolean).join(" - ") || "Choose delivery timing";
+        }
+        return "";
+      }
+
+      function refreshSectionSummaries() {
+        let firstIncomplete = null;
+        panes.forEach(function (pane) {
+          const stepNum = Number(pane.dataset.step || 0);
+          const unavailable = pane.classList.contains("wl-step-unavailable");
+          const valid = unavailable || sectionValid(stepNum);
+          const summary = pane.querySelector(".wl-section-summary");
+          if (summary) summary.textContent = unavailable ? "Not needed for this order" : sectionSummary(stepNum);
+          pane.classList.remove("wl-section-deferred");
+          if (!unavailable && !valid && firstIncomplete == null) firstIncomplete = stepNum;
+        });
+
+        panes.forEach(function (pane) {
+          const stepNum = Number(pane.dataset.step || 0);
+          const unavailable = pane.classList.contains("wl-step-unavailable");
+          const valid = unavailable || sectionValid(stepNum);
+          const editing = pane.dataset.wlEditing === "1";
+
+          if (unavailable) {
+            pane.classList.remove("wl-section-collapsed", "wl-section-deferred");
+          } else if (editing || stepNum === firstIncomplete) {
+            pane.classList.remove("wl-section-collapsed", "wl-section-deferred");
+          } else if (valid) {
+            pane.classList.add("wl-section-collapsed");
+            pane.classList.remove("wl-section-deferred");
+          } else {
+            pane.classList.add("wl-section-collapsed", "wl-section-deferred");
+          }
+        });
+
+        return firstIncomplete;
+      }
+
+      function openSection(stepNum) {
+        const pane = wizard.querySelector(`.checkout-step[data-step="${stepNum}"]`);
+        if (!pane || pane.classList.contains("wl-step-unavailable")) return;
+        panes.forEach(function (item) { item.dataset.wlEditing = "0"; });
+        pane.dataset.wlEditing = "1";
+        pane.classList.remove("wl-section-collapsed", "wl-section-deferred");
+        if (stepNum === 3) window.WLCheckout?.showDeliveryEditor?.();
+        if (stepNum === 4) window.WLCheckout?.showInvoiceEditor?.();
+        try { pane.scrollIntoView({ behavior: "smooth", block: "start" }); } catch {}
+      }
+
+      function openFirstIncompleteSection() {
+        const stepNum = refreshSectionSummaries();
+        if (stepNum) openSection(stepNum);
+        return stepNum;
+      }
+
+      function scheduleRefresh() {
+        if (refreshTimer) window.clearTimeout(refreshTimer);
+        refreshTimer = window.setTimeout(refreshSectionSummaries, 80);
+      }
+
+      wizard.addEventListener("click", function (event) {
+        const edit = event.target && event.target.closest ? event.target.closest("[data-wl-edit-step]") : null;
+        if (!edit) return;
+        event.preventDefault();
+        openSection(Number(edit.getAttribute("data-wl-edit-step")));
+      });
+      wizard.addEventListener("input", scheduleRefresh, true);
+      wizard.addEventListener("change", scheduleRefresh, true);
+      document.addEventListener("wl:fulfillment-change", function () {
+        panes.forEach(function (pane) { pane.dataset.wlEditing = "0"; });
+        window.setTimeout(function () {
+          refreshSectionSummaries();
+          openFirstIncompleteSection();
+        }, 120);
+      });
+
+      window.WLCheckout = window.WLCheckout || {};
+      window.WLCheckout.refreshSectionSummaries = refreshSectionSummaries;
+      window.WLCheckout.openFirstIncompleteSection = openFirstIncompleteSection;
+
+      window.setTimeout(function () {
+        refreshSectionSummaries();
+        openFirstIncompleteSection();
+      }, 180);
+    })();
+
     // Signed-in customers arriving from the cart can move directly to payment when
     // every saved checkout detail is already complete. The short handoff keeps an
     // obvious Review Details escape hatch and falls back to the full form when needed.
@@ -3364,7 +3669,9 @@ document.addEventListener("click", function (ev) {
       if (!singlePageCheckout || !requested) return;
 
       let cancelled = false;
+      let advancing = false;
       let submitTimer = null;
+      let retryTimer = null;
       let attempts = 0;
 
       const banner = document.createElement("div");
@@ -3385,6 +3692,7 @@ document.addEventListener("click", function (ev) {
       function stopAutoAdvance() {
         cancelled = true;
         if (submitTimer) window.clearTimeout(submitTimer);
+        if (retryTimer) window.clearTimeout(retryTimer);
         try { sessionStorage.removeItem(AUTO_ADVANCE_KEY); } catch {}
         banner.remove();
       }
@@ -3392,6 +3700,7 @@ document.addEventListener("click", function (ev) {
       reviewButton.addEventListener("click", stopAutoAdvance);
 
       function canAutoAdvance() {
+        if (!getFulfillmentIntent()) return false;
         if (!getPickupSelected() && !getDeliveredSelected()) return false;
         if (getPickupSelected()) {
           const branch = getBranchField();
@@ -3406,25 +3715,26 @@ document.addEventListener("click", function (ev) {
       }
 
       function attemptAutoAdvance() {
-        if (cancelled) return;
+        if (cancelled || advancing) return;
         attempts += 1;
 
         try { window.WLCheckout?.refreshDateUI?.(); } catch {}
         if (!canAutoAdvance()) {
-          if (attempts < 4) {
-            window.setTimeout(attemptAutoAdvance, 350);
+          if (!getFulfillmentIntent()) {
+            copy.innerHTML = "<strong>How would you like to receive this order?</strong><span>Choose Pickup, Local Delivery, or Ship via UPS below.</span>";
             return;
           }
-          try { sessionStorage.removeItem(AUTO_ADVANCE_KEY); } catch {}
+          if (attempts < 3) {
+            retryTimer = window.setTimeout(attemptAutoAdvance, 350);
+            return;
+          }
           copy.innerHTML = "<strong>Please review your checkout details</strong><span>One or more choices still need your attention before payment.</span>";
           reviewButton.textContent = "Review below";
-          reviewButton.addEventListener("click", function () {
-            banner.remove();
-            try { wizard.querySelector('.checkout-step:not(.wl-step-unavailable)')?.scrollIntoView({ behavior: "smooth", block: "start" }); } catch {}
-          }, { once: true });
+          try { window.WLCheckout?.openFirstIncompleteSection?.(); } catch {}
           return;
         }
 
+        advancing = true;
         try {
           if (getPickupSelected()) {
             setBillingConfirmed(true);
@@ -3445,6 +3755,21 @@ document.addEventListener("click", function (ev) {
           else stopAutoAdvance();
         }, 1200);
       }
+
+      function scheduleAutoAdvance() {
+        if (cancelled || advancing) return;
+        attempts = 0;
+        if (retryTimer) window.clearTimeout(retryTimer);
+        retryTimer = window.setTimeout(attemptAutoAdvance, 250);
+      }
+
+      document.addEventListener("wl:fulfillment-change", scheduleAutoAdvance);
+      wizard.addEventListener("change", scheduleAutoAdvance, true);
+      wizard.addEventListener("input", scheduleAutoAdvance, true);
+      try {
+        window.WLCheckout = window.WLCheckout || {};
+        window.WLCheckout.trySmartAdvance = scheduleAutoAdvance;
+      } catch {}
 
       window.setTimeout(attemptAutoAdvance, 250);
     })();

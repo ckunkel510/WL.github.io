@@ -39,10 +39,14 @@
 
   function startSignedInCheckoutFlow() {
     try { sessionStorage.setItem(CHECKOUT_MODE_KEY, 'signed_in'); } catch {}
+    try { sessionStorage.setItem('wl_checkout_auto_advance', '1'); } catch {}
     clearGuestCheckoutState();
     // Important for employee checkout: do not let a prior customer's checkout snapshot hydrate this order.
     try { sessionStorage.removeItem(CHECKOUT_SNAPSHOT_KEY); } catch {}
     try { sessionStorage.removeItem(DATE_STATE_KEY); } catch {}
+    try { sessionStorage.removeItem('wl_fulfillment_intent'); } catch {}
+    try { sessionStorage.removeItem('wl_fulfillment_method'); } catch {}
+    try { sessionStorage.removeItem('wl_shipping_selection_v1'); } catch {}
     try { sessionStorage.removeItem('wl_billing_confirmed'); } catch {}
     try { sessionStorage.removeItem('wl_billing_seen'); } catch {}
     try { sessionStorage.removeItem('wl_billing_confirmed_delivered'); } catch {}

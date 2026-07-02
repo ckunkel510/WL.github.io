@@ -271,7 +271,12 @@
 
       saveCartSignature(signature || getCartSignature());
       if (isSignedIn()) {
-        try { sessionStorage.setItem(AUTO_ADVANCE_KEY, '1'); } catch {}
+        try {
+          sessionStorage.removeItem('wl_fulfillment_intent');
+          sessionStorage.removeItem('wl_fulfillment_method');
+          sessionStorage.removeItem('wl_shipping_selection_v1');
+          sessionStorage.setItem(AUTO_ADVANCE_KEY, '1');
+        } catch {}
       }
       showCheckoutTransition();
     }, true);
