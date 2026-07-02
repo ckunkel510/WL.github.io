@@ -56,6 +56,66 @@ $(function(){
 });
 
 
+(function () {
+  const CART_SIGNATURE_KEY = "wl_cart_signature_v1";
+  const SHIPPING_QUOTE_KEY = "wl_shipping_quote_v1";
+
+  function normalizeAmount(raw) {
+    const match = String(raw || "").match(/\$\s*([\d,]+(?:\.\d{2})?)/);
+    return match ? "$" + match[1] : "";
+  }
+
+  function captureShippingQuote() {
+    let method = "";
+    let signature = "";
+    try {
+      method = sessionStorage.getItem("wl_fulfillment_method") || "";
+      signature = sessionStorage.getItem(CART_SIGNATURE_KEY) || "";
+    } catch {}
+    if (method !== "delivery" || !signature) return;
+
+    const deliveryRow = document.querySelector("#ctl00_PageBody_CartSummary2_DeliveryCostsRow td.numeric");
+    const selectedOption = document.querySelector("#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList option:checked");
+    const amount = normalizeAmount(deliveryRow?.textContent) || normalizeAmount(selectedOption?.textContent);
+    if (!amount) return;
+
+    try {
+      localStorage.setItem(SHIPPING_QUOTE_KEY, JSON.stringify({
+        signature: signature,
+        label: "Estimated delivery",
+        amount: amount,
+        ts: Date.now()
+      }));
+    } catch {}
+  }
+
+  function bootShippingQuoteCapture() {
+    captureShippingQuote();
+    window.setTimeout(captureShippingQuote, 250);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bootShippingQuoteCapture, { once: true });
+  } else {
+    bootShippingQuoteCapture();
+  }
+
+  document.addEventListener("change", function (event) {
+    if (event.target && /DeliveryOptionsDropDownList/.test(event.target.id || "")) captureShippingQuote();
+  }, true);
+
+  try {
+    const manager = window.Sys && window.Sys.WebForms && window.Sys.WebForms.PageRequestManager
+      ? window.Sys.WebForms.PageRequestManager.getInstance()
+      : null;
+    if (manager && !manager.__wlShippingQuoteCaptureHooked) {
+      manager.__wlShippingQuoteCaptureHooked = true;
+      manager.add_endRequest(bootShippingQuoteCapture);
+    }
+  } catch {}
+})();
+
+
 
 
 
@@ -359,7 +419,6 @@ document.addEventListener('DOMContentLoaded', function () {
       .add_endRequest(hideDeliveryPanelIfOnlyAreaDropdownShown);
   }
 })(jQuery);
-
 
 
 

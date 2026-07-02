@@ -37,6 +37,7 @@
   }
 
   const SINGLE_PAGE_SESSION_KEY = "wl_checkout_single_page_preview";
+  const AUTO_ADVANCE_KEY = "wl_checkout_auto_advance";
 
   function isSinglePageCheckout() {
     try {
@@ -122,6 +123,15 @@
       .checkout-wizard.wl-single-page .wl-branch-card,
       .checkout-wizard.wl-single-page .wl-address-summary{border-radius:8px!important;box-shadow:none!important;}
       .checkout-wizard.wl-single-page .wl-inline-error{border-radius:6px;}
+      .checkout-wizard.wl-single-page .wl-smart-handoff{
+        display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 0 18px;padding:14px 16px;
+        border:1px solid #d9dde2;border-left:4px solid #6b0016;border-radius:6px;background:#f7f7f8;
+      }
+      .checkout-wizard.wl-single-page .wl-smart-handoff-copy{min-width:0;color:#30353a;line-height:1.4;}
+      .checkout-wizard.wl-single-page .wl-smart-handoff-copy strong{display:block;margin-bottom:2px;color:#20242a;}
+      .checkout-wizard.wl-single-page .wl-smart-handoff button{
+        flex:0 0 auto;min-height:40px;padding:8px 13px;border:1px solid #aab0b6;border-radius:6px;background:#fff;color:#20242a;font-weight:700;
+      }
       @media (max-width:991px){
         body.wl-checkout-active #MainLayoutRow{width:100%!important;max-width:none!important;margin:0!important;}
         body.wl-checkout-active #MainLayoutRow>.container-fluid{
@@ -149,6 +159,8 @@
         .checkout-wizard.wl-single-page select,
         .checkout-wizard.wl-single-page textarea{width:100%!important;max-width:100%!important;min-width:0!important;}
         .checkout-wizard.wl-single-page .checkout-step[data-step="5"] .wl-proxy-continue{width:100%;}
+        .checkout-wizard.wl-single-page .wl-smart-handoff{align-items:stretch;flex-direction:column;}
+        .checkout-wizard.wl-single-page .wl-smart-handoff button{width:100%;}
       }
     `;
     document.head.appendChild(style);
@@ -1366,7 +1378,9 @@ const navDiv = document.createElement("div");
           const proxy = document.createElement("button");
           proxy.type = "button";
           proxy.className = (native.className || "btn btn-primary") + " wl-proxy-continue";
-          proxy.textContent = (native.value || native.innerText || "Continue").trim() || "Continue";
+          proxy.textContent = singlePageCheckout
+            ? "Review Payment & Order"
+            : ((native.value || native.innerText || "Continue").trim() || "Continue");
 
           proxy.addEventListener("click", function () {
             // Clear any sticky inline errors on Step 5 before submitting
@@ -3340,6 +3354,100 @@ document.addEventListener("click", function (ev) {
     setStep(initial);
     showStep(initial, { scroll: false });
     try { updatePickupModeUI(); } catch {}
+
+    // Signed-in customers arriving from the cart can move directly to payment when
+    // every saved checkout detail is already complete. The short handoff keeps an
+    // obvious Review Details escape hatch and falls back to the full form when needed.
+    (function startSmartCheckoutHandoff() {
+      let requested = false;
+      try { requested = sessionStorage.getItem(AUTO_ADVANCE_KEY) === "1"; } catch {}
+      if (!singlePageCheckout || !requested) return;
+
+      let cancelled = false;
+      let submitTimer = null;
+      let attempts = 0;
+
+      const banner = document.createElement("div");
+      banner.className = "wl-smart-handoff";
+      banner.setAttribute("role", "status");
+      banner.setAttribute("aria-live", "polite");
+      banner.innerHTML = `
+        <div class="wl-smart-handoff-copy">
+          <strong>Checking your saved checkout details</strong>
+          <span>We will continue to payment automatically when everything is ready.</span>
+        </div>
+        <button type="button">Review details</button>`;
+      wizard.insertBefore(banner, wizard.firstChild);
+
+      const copy = banner.querySelector(".wl-smart-handoff-copy");
+      const reviewButton = banner.querySelector("button");
+
+      function stopAutoAdvance() {
+        cancelled = true;
+        if (submitTimer) window.clearTimeout(submitTimer);
+        try { sessionStorage.removeItem(AUTO_ADVANCE_KEY); } catch {}
+        banner.remove();
+      }
+
+      reviewButton.addEventListener("click", stopAutoAdvance);
+
+      function canAutoAdvance() {
+        if (!getPickupSelected() && !getDeliveredSelected()) return false;
+        if (getPickupSelected()) {
+          const branch = getBranchField();
+          if (!isBranchChosen(branch)) return false;
+        }
+        if (getDeliveredSelected() && !getPickupSelected()) {
+          if (!window.WLCheckout?.addressBlockIsValid?.("DeliveryAddress", false)) return false;
+        }
+        if (!window.WLCheckout?.addressBlockIsValid?.("InvoiceAddress", true)) return false;
+        if (!window.WLCheckout?.validateDateInstructions?.(false)) return false;
+        return true;
+      }
+
+      function attemptAutoAdvance() {
+        if (cancelled) return;
+        attempts += 1;
+
+        try { window.WLCheckout?.refreshDateUI?.(); } catch {}
+        if (!canAutoAdvance()) {
+          if (attempts < 4) {
+            window.setTimeout(attemptAutoAdvance, 350);
+            return;
+          }
+          try { sessionStorage.removeItem(AUTO_ADVANCE_KEY); } catch {}
+          copy.innerHTML = "<strong>Please review your checkout details</strong><span>One or more choices still need your attention before payment.</span>";
+          reviewButton.textContent = "Review below";
+          reviewButton.addEventListener("click", function () {
+            banner.remove();
+            try { wizard.querySelector('.checkout-step:not(.wl-step-unavailable)')?.scrollIntoView({ behavior: "smooth", block: "start" }); } catch {}
+          }, { once: true });
+          return;
+        }
+
+        try {
+          if (getPickupSelected()) {
+            setBillingConfirmed(true);
+            ensureDeliveryRequiredForPickup();
+          } else {
+            sessionStorage.setItem("wl_billing_confirmed_delivered", "1");
+          }
+          setBillingSeen(true);
+          window.WLCheckout?.saveCheckoutSnapshot?.();
+        } catch {}
+
+        copy.innerHTML = "<strong>Saved details are ready</strong><span>Continuing to payment and order review...</span>";
+        submitTimer = window.setTimeout(function () {
+          if (cancelled) return;
+          try { sessionStorage.removeItem(AUTO_ADVANCE_KEY); } catch {}
+          const continueButton = wizard.querySelector(".wl-proxy-continue");
+          if (continueButton) continueButton.click();
+          else stopAutoAdvance();
+        }, 1200);
+      }
+
+      window.setTimeout(attemptAutoAdvance, 250);
+    })();
 
     if (expectedNav) {
       const tryJump = () => window.WLCheckout?.detectAndJumpToValidation?.() === true;
