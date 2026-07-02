@@ -63,10 +63,10 @@ function parseLegacyXml(raw) {
     throw new RequestError(400, "UPS XML request could not be parsed.");
   }
 
-  const access = findNode(parsed, ["AccessRequest"]) || {};
+  const access = findNode(parsed, ["AccessRequest", "UPSSecurity"]) || {};
   const rating = findNode(parsed, ["RatingServiceSelectionRequest", "RateRequest"]) || {};
   if (!Object.keys(rating).length) throw new RequestError(400, "UPS rating request is missing.");
-  return { access, rating };
+  return { access, rating, isSoap: /<\s*(?:[\w.-]+:)?Envelope\b/i.test(withoutDeclarations) };
 }
 
 function authenticate(access) {
@@ -77,9 +77,12 @@ function authenticate(access) {
     throw new RequestError(503, "WebTrack UPS proxy credentials are not configured.");
   }
 
-  const valid = safeEqual(text(access.UserId), expectedUser) &&
-    safeEqual(text(access.Password), expectedPassword) &&
-    safeEqual(text(access.AccessLicenseNumber), expectedLicense);
+  const requestUser = text(access.UserId || findNode(access, ["Username"]));
+  const requestPassword = text(access.Password || findNode(access, ["Password"]));
+  const requestLicense = text(access.AccessLicenseNumber || findNode(access, ["AccessLicenseNumber"]));
+  const valid = safeEqual(requestUser, expectedUser) &&
+    safeEqual(requestPassword, expectedPassword) &&
+    safeEqual(requestLicense, expectedLicense);
   if (!valid) throw new RequestError(401, "WebTrack UPS proxy credentials are invalid.");
 }
 
@@ -203,6 +206,66 @@ function errorXml(error) {
 </RatingServiceSelectionResponse>`;
 }
 
+function soapSuccessXml(result, context) {
+  const shipments = result.rates.map((rate) => `
+      <rate:RatedShipment>
+        <rate:Service>
+          <rate:Code>${escapeXml(rate.serviceCode)}</rate:Code>
+          <rate:Description>${escapeXml(rate.serviceName)}</rate:Description>
+        </rate:Service>
+        <rate:BillingWeight>
+          <rate:UnitOfMeasurement>
+            <rate:Code>LBS</rate:Code>
+            <rate:Description>Pounds</rate:Description>
+          </rate:UnitOfMeasurement>
+          <rate:Weight>${Number(rate.billingWeight || 0).toFixed(1)}</rate:Weight>
+        </rate:BillingWeight>
+        <rate:TransportationCharges>
+          <rate:CurrencyCode>${escapeXml(rate.currency)}</rate:CurrencyCode>
+          <rate:MonetaryValue>${Number(rate.amount).toFixed(2)}</rate:MonetaryValue>
+        </rate:TransportationCharges>
+        <rate:ServiceOptionsCharges>
+          <rate:CurrencyCode>${escapeXml(rate.currency)}</rate:CurrencyCode>
+          <rate:MonetaryValue>0.00</rate:MonetaryValue>
+        </rate:ServiceOptionsCharges>
+        <rate:TotalCharges>
+          <rate:CurrencyCode>${escapeXml(rate.currency)}</rate:CurrencyCode>
+          <rate:MonetaryValue>${Number(rate.amount).toFixed(2)}</rate:MonetaryValue>
+        </rate:TotalCharges>
+      </rate:RatedShipment>`).join("");
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+  <soapenv:Header/>
+  <soapenv:Body>
+    <rate:RateResponse xmlns:rate="http://www.ups.com/XMLSchema/XOLTWS/Rate/v1.1">
+      <common:Response xmlns:common="http://www.ups.com/XMLSchema/XOLTWS/Common/v1.0">
+        <common:ResponseStatus>
+          <common:Code>1</common:Code>
+          <common:Description>Success</common:Description>
+        </common:ResponseStatus>
+        <common:TransactionReference>
+          <common:CustomerContext>${escapeXml(context)}</common:CustomerContext>
+        </common:TransactionReference>
+      </common:Response>${shipments}
+    </rate:RateResponse>
+  </soapenv:Body>
+</soapenv:Envelope>`;
+}
+
+function soapErrorXml(error) {
+  const message = error instanceof Error ? error.message : "UPS rating is temporarily unavailable.";
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+  <soapenv:Body>
+    <soapenv:Fault>
+      <faultcode>soapenv:Server</faultcode>
+      <faultstring>${escapeXml(message)}</faultstring>
+    </soapenv:Fault>
+  </soapenv:Body>
+</soapenv:Envelope>`;
+}
+
 function sendXml(res, status, xml) {
   res.statusCode = status;
   res.setHeader("Content-Type", "text/xml; charset=utf-8");
@@ -240,18 +303,20 @@ function logRequestShape(req, raw) {
 async function handler(req, res) {
   if (req.method !== "POST") return sendXml(res, 405, errorXml(new RequestError(405, "POST is required.")));
 
+  let isSoap = false;
   try {
     const raw = await readBody(req);
+    isSoap = /<\s*(?:[\w.-]+:)?Envelope\b/i.test(raw) || Boolean(req.headers.soapaction);
     logRequestShape(req, raw);
     const { access, rating } = parseLegacyXml(raw);
     authenticate(access);
     const translated = toOAuthRequest(rating);
     const result = await requestRates(translated.body);
-    return sendXml(res, 200, successXml(result, translated.context));
+    return sendXml(res, 200, isSoap ? soapSuccessXml(result, translated.context) : successXml(result, translated.context));
   } catch (error) {
-    return sendXml(res, 200, errorXml(error));
+    return sendXml(res, 200, isSoap ? soapErrorXml(error) : errorXml(error));
   }
 }
 
 module.exports = handler;
-module.exports._test = { authenticate, errorXml, logRequestShape, parseLegacyXml, successXml, toOAuthRequest };
+module.exports._test = { authenticate, errorXml, logRequestShape, parseLegacyXml, soapSuccessXml, successXml, toOAuthRequest };

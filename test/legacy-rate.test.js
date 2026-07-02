@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { parseLegacyXml, successXml, toOAuthRequest } = require("../api/rate")._test;
+const { parseLegacyXml, soapSuccessXml, successXml, toOAuthRequest } = require("../api/rate")._test;
 
 const requestXml = `<?xml version="1.0"?>
 <AccessRequest>
@@ -36,12 +36,16 @@ test("parses concatenated legacy UPS XML documents", () => {
 test("parses a namespaced SOAP-wrapped legacy request", () => {
   const soapXml = `<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
     <soap:Header>
-      <AccessRequest><AccessLicenseNumber>proxy</AccessLicenseNumber><UserId>woodson</UserId><Password>secret</Password></AccessRequest>
+      <UPSSecurity>
+        <UsernameToken><Username>woodson</Username><Password>secret</Password></UsernameToken>
+        <ServiceAccessToken><AccessLicenseNumber>proxy</AccessLicenseNumber></ServiceAccessToken>
+      </UPSSecurity>
     </soap:Header>
     <soap:Body>${requestXml.match(/<RatingServiceSelectionRequest>[\s\S]*<\/RatingServiceSelectionRequest>/)[0]}</soap:Body>
   </soap:Envelope>`;
   const parsed = parseLegacyXml(soapXml);
-  assert.equal(parsed.access.UserId, "woodson");
+  assert.equal(parsed.isSoap, true);
+  assert.equal(parsed.access.UsernameToken.Username, "woodson");
   assert.equal(parsed.rating.Request.RequestOption, "Shop");
 });
 
@@ -61,4 +65,15 @@ test("returns legacy rated-shipment XML", () => {
   assert.match(xml, /<ResponseStatusCode>1<\/ResponseStatusCode>/);
   assert.match(xml, /<Code>03<\/Code>/);
   assert.match(xml, /<MonetaryValue>12\.34<\/MonetaryValue>/);
+});
+
+test("returns a UPS Rate v1.1 SOAP response", () => {
+  const xml = soapSuccessXml({
+    rates: [{ serviceCode: "03", serviceName: "UPS Ground", currency: "USD", amount: 12.34, billingWeight: 8 }]
+  }, "WebTrack cart 123");
+  assert.match(xml, /<soapenv:Envelope/);
+  assert.match(xml, /<rate:RateResponse xmlns:rate="http:\/\/www\.ups\.com\/XMLSchema\/XOLTWS\/Rate\/v1\.1">/);
+  assert.match(xml, /<common:ResponseStatus>/);
+  assert.match(xml, /<rate:Code>03<\/rate:Code>/);
+  assert.match(xml, /<rate:MonetaryValue>12\.34<\/rate:MonetaryValue>/);
 });
