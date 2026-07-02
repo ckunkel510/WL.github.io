@@ -3620,8 +3620,8 @@ if (jobBtn){
         .wl-modal-card { width:96vw; max-height:92vh; }
         .wl-modal-head { align-items:flex-start; flex-direction:column; }
         .wl-modal-head .right { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:6px; width:100%; }
-        .wl-modal-head .right .wl-input { width:100%; min-width:0; }
-        .wl-modal-head .right .wl-pill { grid-column:1 / -1; }
+        .wl-modal-head .right .wl-input { grid-column:1 / -1; width:100%; min-width:0; }
+        .wl-modal-head .right .wl-pill { grid-column:1; min-width:0; }
         .wl-modal-foot { align-items:center; }
         .wl-grid thead { display:none; }
         .wl-grid tbody tr { display:block; padding:6px 0; border-bottom:1px solid #e5e7eb; }
