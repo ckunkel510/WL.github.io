@@ -1489,7 +1489,8 @@ const navDiv = document.createElement("div");
     // -------------------------------------------------------------------------
     // E) Step switching + persistence
     // -------------------------------------------------------------------------
-    function showStep(n) {
+    function showStep(n, options) {
+      options = options || {};
       // Clamp step number (old sessions sometimes stored 6+ which breaks Step 5 rendering)
       n = parseInt(n, 10);
       if (!Number.isFinite(n)) n = 1;
@@ -1546,7 +1547,7 @@ const navDiv = document.createElement("div");
         const scrollTarget = singlePageCheckout
           ? wizard.querySelector(`.checkout-step[data-step="${n}"]`)
           : wizard;
-        if (scrollTarget && !scrollTarget.classList.contains("wl-step-unavailable")) {
+        if (options.scroll !== false && scrollTarget && !scrollTarget.classList.contains("wl-step-unavailable")) {
           window.scrollTo({ top: Math.max(0, scrollTarget.offsetTop - 16), behavior: "smooth" });
         }
       } catch {}
@@ -3002,6 +3003,9 @@ document.addEventListener("click", function (ev) {
             // Persist selection for other modules only after the customer/system has actually selected a sale type.
             if (hasSelection) {
               document.cookie = "pickupSelected=" + (isDelivered ? "false" : "true") + ";path=/";
+              try {
+                sessionStorage.setItem("wl_fulfillment_method", isPickup ? "pickup" : "delivery");
+              } catch {}
             }
             // Keep underlying panels sane (does not trigger postback)
             if (hasSelection) {
@@ -3285,6 +3289,7 @@ document.addEventListener("click", function (ev) {
           sessionStorage.removeItem(WL_GUEST_KEY);
           sessionStorage.removeItem(WL_GUEST_AUTOFILL_KEY);
           sessionStorage.removeItem(WL_CHECKOUT_MODE_KEY);
+          sessionStorage.removeItem("wl_fulfillment_method");
         } catch {}
       }
 
@@ -3308,7 +3313,7 @@ document.addEventListener("click", function (ev) {
     if (initial >= 5 && !isBillingSeen()) initial = 4;
 
     setStep(initial);
-    showStep(initial);
+    showStep(initial, { scroll: false });
     try { updatePickupModeUI(); } catch {}
 
     if (expectedNav) {

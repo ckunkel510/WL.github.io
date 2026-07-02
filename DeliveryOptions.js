@@ -227,6 +227,81 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 })(jQuery);
 
+(function () {
+  const METHOD_KEY = "wl_fulfillment_method";
+  const CONTINUE_ID = "ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView";
+
+  function isVisible(el) {
+    if (!el) return false;
+    const style = window.getComputedStyle(el);
+    const rect = el.getBoundingClientRect();
+    return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+  }
+
+  function hasShippingChoice() {
+    const selectors = [
+      "#ctl00_PageBody_CartSummary2_DeliveryOptionsPanel select",
+      "#ctl00_PageBody_CartSummary2_DeliveryOptionsPanel input:not([type='hidden'])",
+      "[id*='PromotionCode'] input:not([type='hidden'])",
+      "[id*='PromoCode'] input:not([type='hidden'])"
+    ];
+    return selectors.some(function (selector) {
+      return Array.from(document.querySelectorAll(selector)).some(isVisible);
+    });
+  }
+
+  function addPickupProgress() {
+    if (document.getElementById("wl-pickup-payment-progress")) return;
+    const main = document.querySelector(".mainContents");
+    if (!main) return;
+    const status = document.createElement("div");
+    status.id = "wl-pickup-payment-progress";
+    status.setAttribute("role", "status");
+    status.setAttribute("aria-live", "polite");
+    status.textContent = "Preparing your payment options...";
+    status.style.cssText = "max-width:720px;margin:24px auto;padding:18px;text-align:center;font-weight:700;color:#3d4248;background:#f4f5f6;border:1px solid #d9dde2;border-radius:6px;";
+    main.insertBefore(status, main.firstChild);
+  }
+
+  function autoAdvancePickupShipping() {
+    if (window.__wlPickupShippingAutoAdvance) return;
+
+    let method = "";
+    try { method = sessionStorage.getItem(METHOD_KEY) || ""; } catch {}
+    if (method !== "pickup") return;
+
+    const continueButton = document.getElementById(CONTINUE_ID);
+    if (!continueButton || hasShippingChoice()) return;
+
+    window.__wlPickupShippingAutoAdvance = true;
+    addPickupProgress();
+    window.setTimeout(function () {
+      if (document.documentElement.contains(continueButton)) continueButton.click();
+    }, 180);
+  }
+
+  function bootPickupAdvance() {
+    autoAdvancePickupShipping();
+    window.setTimeout(autoAdvancePickupShipping, 350);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bootPickupAdvance, { once: true });
+  } else {
+    bootPickupAdvance();
+  }
+
+  try {
+    const manager = window.Sys && window.Sys.WebForms && window.Sys.WebForms.PageRequestManager
+      ? window.Sys.WebForms.PageRequestManager.getInstance()
+      : null;
+    if (manager && !manager.__wlPickupShippingAdvanceHooked) {
+      manager.__wlPickupShippingAdvanceHooked = true;
+      manager.add_endRequest(bootPickupAdvance);
+    }
+  } catch {}
+})();
+
 
 
 
@@ -283,7 +358,6 @@ document.addEventListener('DOMContentLoaded', function () {
       .add_endRequest(hideDeliveryPanelIfOnlyAreaDropdownShown);
   }
 })(jQuery);
-
 
 
 
