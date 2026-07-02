@@ -349,7 +349,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
     let method = "";
     try { method = sessionStorage.getItem(METHOD_KEY) || ""; } catch {}
-    if (method !== "pickup" && method !== "delivery" && method !== "ship") return;
+    // UPS shipping must remain on this screen so the customer can choose a speed
+    // and see the estimated arrival. Only pickup/local-delivery no-choice screens skip.
+    if (method !== "pickup" && method !== "delivery") return;
 
     const continueButton = document.getElementById(CONTINUE_ID);
     if (!continueButton || hasShippingChoice()) return;
@@ -439,7 +441,6 @@ document.addEventListener('DOMContentLoaded', function () {
       .add_endRequest(hideDeliveryPanelIfOnlyAreaDropdownShown);
   }
 })(jQuery);
-
 
 
 
