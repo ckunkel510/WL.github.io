@@ -150,6 +150,7 @@ function toOAuthRequest(rating) {
     addressFromLegacy(shipment.ShipFrom),
     addressFromLegacy(shipment.Shipper)
   );
+  if (!shipFrom.state && shipFrom.country.toUpperCase() === "US") shipFrom.state = "TX";
   const packages = asArray(shipment.Package).map(packageFromLegacy);
   if (!packages.length && shipment.ShipmentTotalWeight?.Weight) {
     packages.push({

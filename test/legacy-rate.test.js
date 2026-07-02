@@ -74,6 +74,15 @@ test("falls back to Shipper when WebTrack sends an empty ShipFrom", () => {
   assert.equal(translated.body.shipFrom.postalCode, "77833");
 });
 
+test("defaults a state-less Woodson origin to Texas", () => {
+  const xmlWithoutOriginState = requestXml
+    .replace("<StateProvinceCode>TX</StateProvinceCode><PostalCode>77833</PostalCode>", "<PostalCode>00000</PostalCode>")
+    .replace("</ShipTo>", "</ShipTo><ShipFrom/>");
+  const { rating } = parseLegacyXml(xmlWithoutOriginState);
+  const translated = toOAuthRequest(rating);
+  assert.equal(translated.body.shipFrom.state, "TX");
+});
+
 test("returns legacy rated-shipment XML", () => {
   const xml = successXml({
     rates: [{ serviceCode: "03", serviceName: "UPS Ground", currency: "USD", amount: 12.34, billingWeight: 8 }]
