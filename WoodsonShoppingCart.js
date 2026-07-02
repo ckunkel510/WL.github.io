@@ -63,7 +63,7 @@
   function readQuotedShipping(signature) {
     try {
       const quote = JSON.parse(localStorage.getItem(SHIPPING_QUOTE_KEY) || 'null');
-      if (!quote || quote.signature !== signature || !quote.amount) return null;
+      if (!quote || quote.kind !== 'local-delivery' || quote.signature !== signature || !quote.amount) return null;
       if ((Date.now() - Number(quote.ts || 0)) > QUOTE_TTL_MS) return null;
       return quote;
     } catch {

@@ -519,12 +519,13 @@
   }
 
   function cacheShippingQuote(shipping) {
-    if (!shipping || !/^(delivery|shipping)/i.test(shipping.label || '') || !/\$/.test(shipping.amount || '')) return;
+    if (!shipping || !/^delivery/i.test(shipping.label || '') || !/\$/.test(shipping.amount || '')) return;
     try {
       const signature = sessionStorage.getItem('wl_cart_signature_v1') || '';
       if (!signature) return;
       localStorage.setItem('wl_shipping_quote_v1', JSON.stringify({
         signature: signature,
+        kind: 'local-delivery',
         label: 'Estimated delivery',
         amount: shipping.amount,
         ts: Date.now()

@@ -72,7 +72,7 @@ $(function(){
       method = sessionStorage.getItem("wl_fulfillment_method") || "";
       signature = sessionStorage.getItem(CART_SIGNATURE_KEY) || "";
     } catch {}
-    if ((method !== "delivery" && method !== "ship") || !signature) return;
+    if (method !== "delivery" || !signature) return;
 
     const deliveryRow = document.querySelector("#ctl00_PageBody_CartSummary2_DeliveryCostsRow td.numeric");
     const selectedOption = document.querySelector("#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList option:checked");
@@ -82,6 +82,7 @@ $(function(){
     try {
       localStorage.setItem(SHIPPING_QUOTE_KEY, JSON.stringify({
         signature: signature,
+        kind: "local-delivery",
         label: "Estimated delivery",
         amount: amount,
         ts: Date.now()
@@ -441,7 +442,6 @@ document.addEventListener('DOMContentLoaded', function () {
       .add_endRequest(hideDeliveryPanelIfOnlyAreaDropdownShown);
   }
 })(jQuery);
-
 
 
 
