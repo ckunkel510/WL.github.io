@@ -1182,22 +1182,11 @@
           padding: max(18px, env(safe-area-inset-top)) 18px 20px;
           color: #fff;
           background: #6b0016;
-          border-bottom: 5px solid #f5c400;
         }
 
         .wl-mobile-menu-welcome {
           min-width: 0;
           padding-top: 2px;
-        }
-
-        .wl-mobile-menu-eyebrow {
-          display: block;
-          margin-bottom: 5px;
-          color: #f5c400;
-          font-size: 12px;
-          font-weight: 800;
-          letter-spacing: 0;
-          text-transform: uppercase;
         }
 
         #wl-mobile-menu-title {
@@ -1229,12 +1218,16 @@
           color: #6b0016;
           font-size: 21px;
           background: #fff;
-          border: 0;
+          border: 2px solid #b8bdc2;
           border-radius: 6px;
           cursor: pointer;
         }
 
-        .wl-mobile-menu-close:focus-visible,
+        .wl-mobile-menu-close:focus-visible {
+          outline: 3px solid #b8bdc2;
+          outline-offset: 2px;
+        }
+
         .wl-mobile-menu-link:focus-visible,
         .wl-mobile-menu-action:focus-visible {
           outline: 3px solid #f5c400;
@@ -1296,7 +1289,7 @@
           padding: 0 6px;
           color: #181818;
           font-size: 12px;
-          background: #f5c400;
+          background: #e2e4e6;
           border-radius: 999px;
         }
 
@@ -2488,7 +2481,6 @@
     menu.innerHTML =
       '<header class="wl-mobile-menu-head">' +
         '<div class="wl-mobile-menu-welcome">' +
-          '<span class="wl-mobile-menu-eyebrow">Woodson menu</span>' +
           '<h2 id="wl-mobile-menu-title">Howdy, welcome to Woodson</h2>' +
           '<p class="wl-mobile-menu-subtitle">Your account and shopping shortcuts.</p>' +
         '</div>' +
