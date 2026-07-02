@@ -2313,6 +2313,14 @@ document.addEventListener("click", function (ev) {
         } catch {}
       }
 
+      function hydrateBlankInvoiceFromDelivery() {
+        try {
+          if (invoiceLooksBlank() && deliveryHasData()) copyDeliveryToInvoice(false);
+          applyInvoiceDefaultView();
+          window.WLCheckout?.refreshSectionSummaries?.();
+        } catch {}
+      }
+
       try {
         window.WLCheckout = window.WLCheckout || {};
         window.WLCheckout.refreshInvoiceSummary = function(forceCopy){
@@ -2325,6 +2333,7 @@ document.addEventListener("click", function (ev) {
         };
 
         window.WLCheckout.applyInvoiceDefaultView = applyInvoiceDefaultView;
+        window.WLCheckout.hydrateBlankInvoiceFromDelivery = hydrateBlankInvoiceFromDelivery;
 
         // Expose the step-entry refresh hook.
         window.WLCheckout.forceInvoiceSameAsDeliveryRefresh = forceInvoiceSameAsDeliveryRefresh;
@@ -2398,6 +2407,13 @@ document.addEventListener("click", function (ev) {
       }
     } catch {}
 
+    window.setTimeout(function () {
+      try { window.WLCheckout?.hydrateBlankInvoiceFromDelivery?.(); } catch {}
+    }, 0);
+    window.setTimeout(function () {
+      try { window.WLCheckout?.hydrateBlankInvoiceFromDelivery?.(); } catch {}
+    }, 350);
+
     // -------------------------------------------------------------------------
     // J) AJAX fetch user info (DON’T trigger WebForms change)
     // -------------------------------------------------------------------------
@@ -2424,7 +2440,7 @@ document.addEventListener("click", function (ev) {
 
         setIfExists("#ctl00_PageBody_InvoiceAddress_EmailAddressTextBox", em);
         try {
-          window.WLCheckout?.applyInvoiceDefaultView?.();
+          window.WLCheckout?.hydrateBlankInvoiceFromDelivery?.();
           window.WLCheckout?.refreshSectionSummaries?.();
         } catch {}
       });
@@ -2437,7 +2453,7 @@ document.addEventListener("click", function (ev) {
           if ($invoicePhone.length && !$invoicePhone.val()) $invoicePhone.val(tel);
         }
         try {
-          window.WLCheckout?.applyInvoiceDefaultView?.();
+          window.WLCheckout?.hydrateBlankInvoiceFromDelivery?.();
           window.WLCheckout?.refreshSectionSummaries?.();
         } catch {}
       });
