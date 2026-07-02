@@ -4,6 +4,7 @@
   },
   "dependencies": {
     "@upstash/redis": "^1.38.0",
-    "fast-xml-parser": "^5.9.3"
+    "fast-xml-parser": "^5.9.3",
+    "zipcodes": "^8.0.0"
   }
 }

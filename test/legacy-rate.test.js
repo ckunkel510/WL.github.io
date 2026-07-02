@@ -58,6 +58,14 @@ test("translates legacy UPS shipment fields", () => {
   assert.deepEqual(translated.body.packages[0], { weight: 8, length: 12, width: 8, height: 6 });
 });
 
+test("recovers omitted US states from postal codes", () => {
+  const xmlWithoutStates = requestXml.replace(/<StateProvinceCode>[^<]+<\/StateProvinceCode>/g, "");
+  const { rating } = parseLegacyXml(xmlWithoutStates);
+  const translated = toOAuthRequest(rating);
+  assert.equal(translated.body.shipFrom.state, "TX");
+  assert.equal(translated.body.shipTo.state, "TX");
+});
+
 test("returns legacy rated-shipment XML", () => {
   const xml = successXml({
     rates: [{ serviceCode: "03", serviceName: "UPS Ground", currency: "USD", amount: 12.34, billingWeight: 8 }]

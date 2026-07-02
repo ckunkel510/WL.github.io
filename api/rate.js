@@ -2,6 +2,7 @@
 
 const crypto = require("node:crypto");
 const { XMLParser } = require("fast-xml-parser");
+const zipcodes = require("zipcodes");
 const { RequestError, requestRates } = require("./ups-rates")._internal;
 
 const parser = new XMLParser({
@@ -104,12 +105,15 @@ function inches(value, unit) {
 
 function addressFromLegacy(node) {
   const address = node?.Address || node || {};
+  const postalCode = text(address.PostalCode);
+  const country = text(address.CountryCode || "US");
+  const postalMatch = country.toUpperCase() === "US" ? zipcodes.lookup(postalCode.slice(0, 5)) : null;
   return {
     addressLine: asArray(address.AddressLine).map(text).filter(Boolean),
-    city: text(address.City),
-    state: text(address.StateProvinceCode),
-    postalCode: text(address.PostalCode),
-    country: text(address.CountryCode || "US"),
+    city: text(address.City) || postalMatch?.city || "",
+    state: text(address.StateProvinceCode) || postalMatch?.state || "",
+    postalCode,
+    country,
     residential: address.ResidentialAddressIndicator !== undefined
   };
 }
