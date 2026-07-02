@@ -8,6 +8,7 @@
   var QUAGGA_URL = "https://unpkg.com/quagga@0.12.1/dist/quagga.min.js";
   var STORE_NAMES = ["Brenham", "Bryan", "Caldwell", "Lexington", "Groesbeck", "Mexia", "Buffalo"];
   var CENTRAL_TIME_ZONE = "America/Chicago";
+  var mobileMenuNameRequest = null;
 
   function debugLog() {
     if (!DEBUG || !window.console || typeof window.console.log !== "function") return;
@@ -1102,6 +1103,14 @@
         overflow: hidden !important;
       }
 
+      #wl-mobile-account-menu {
+        display: none;
+      }
+
+      #wl-mobile-account-menu[hidden] {
+        display: none !important;
+      }
+
       .RadComboBox_MetroTouch,
       .RadComboBox_MetroTouch .rcbInner,
       .RadSearchBox_MetroTouch,
@@ -1139,6 +1148,213 @@
           width: 100%;
           padding-left: 10px;
           padding-right: 4px;
+        }
+
+        .sticky-header .menu-t1 {
+          display: none !important;
+        }
+
+        body.wl-mobile-menu-open {
+          overflow: hidden !important;
+          touch-action: none;
+        }
+
+        #wl-mobile-account-menu {
+          position: fixed;
+          inset: 0;
+          z-index: 100500;
+          display: flex;
+          box-sizing: border-box;
+          width: 100%;
+          height: 100vh;
+          height: 100dvh;
+          flex-direction: column;
+          color: #202327;
+          background: #f4f5f6;
+          font-family: Arial, Helvetica, sans-serif;
+        }
+
+        .wl-mobile-menu-head {
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 18px;
+          padding: max(18px, env(safe-area-inset-top)) 18px 20px;
+          color: #fff;
+          background: #6b0016;
+          border-bottom: 5px solid #f5c400;
+        }
+
+        .wl-mobile-menu-welcome {
+          min-width: 0;
+          padding-top: 2px;
+        }
+
+        .wl-mobile-menu-eyebrow {
+          display: block;
+          margin-bottom: 5px;
+          color: #f5c400;
+          font-size: 12px;
+          font-weight: 800;
+          letter-spacing: 0;
+          text-transform: uppercase;
+        }
+
+        #wl-mobile-menu-title {
+          margin: 0;
+          color: #fff;
+          font-size: 24px;
+          font-weight: 800;
+          line-height: 1.18;
+          letter-spacing: 0;
+          overflow-wrap: anywhere;
+        }
+
+        .wl-mobile-menu-subtitle {
+          margin: 6px 0 0;
+          color: #f1e8ea;
+          font-size: 14px;
+          line-height: 1.35;
+        }
+
+        .wl-mobile-menu-close {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 50px;
+          height: 50px;
+          min-width: 50px;
+          min-height: 50px;
+          padding: 0;
+          color: #6b0016;
+          font-size: 21px;
+          background: #fff;
+          border: 0;
+          border-radius: 6px;
+          cursor: pointer;
+        }
+
+        .wl-mobile-menu-close:focus-visible,
+        .wl-mobile-menu-link:focus-visible,
+        .wl-mobile-menu-action:focus-visible {
+          outline: 3px solid #f5c400;
+          outline-offset: 2px;
+        }
+
+        .wl-mobile-menu-scroll {
+          flex: 1 1 auto;
+          min-height: 0;
+          padding: 18px 16px max(28px, env(safe-area-inset-bottom));
+          overflow-x: hidden;
+          overflow-y: auto;
+          overscroll-behavior: contain;
+          -webkit-overflow-scrolling: touch;
+        }
+
+        .wl-mobile-menu-actions {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+          margin-bottom: 20px;
+        }
+
+        .wl-mobile-menu-action {
+          display: flex;
+          align-items: center;
+          gap: 11px;
+          box-sizing: border-box;
+          min-width: 0;
+          min-height: 64px;
+          padding: 12px 13px;
+          color: #292d31 !important;
+          font-size: 15px;
+          font-weight: 800;
+          line-height: 1.2;
+          text-decoration: none !important;
+          background: #fff;
+          border: 1px solid #d8dbde;
+          border-radius: 6px;
+        }
+
+        .wl-mobile-menu-action > i {
+          color: #6b0016;
+          font-size: 20px;
+        }
+
+        .wl-mobile-menu-action-label {
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+
+        .wl-mobile-menu-count {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 24px;
+          height: 24px;
+          margin-left: auto;
+          padding: 0 6px;
+          color: #181818;
+          font-size: 12px;
+          background: #f5c400;
+          border-radius: 999px;
+        }
+
+        .wl-mobile-menu-section-title {
+          margin: 0 0 9px;
+          color: #565d63;
+          font-size: 12px;
+          font-weight: 800;
+          letter-spacing: 0;
+          text-transform: uppercase;
+        }
+
+        .wl-mobile-menu-list {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 7px;
+        }
+
+        .wl-mobile-menu-link {
+          display: flex;
+          align-items: center;
+          gap: 13px;
+          box-sizing: border-box;
+          width: 100%;
+          min-height: 56px;
+          padding: 11px 14px;
+          color: #292d31 !important;
+          font-size: 16px;
+          font-weight: 750;
+          line-height: 1.25;
+          text-decoration: none !important;
+          background: #fff;
+          border: 1px solid #dde0e2;
+          border-radius: 6px;
+        }
+
+        .wl-mobile-menu-link > i {
+          width: 23px;
+          flex: 0 0 23px;
+          color: #6b0016;
+          font-size: 18px;
+          text-align: center;
+        }
+
+        .wl-mobile-menu-link-label {
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+
+        .wl-mobile-menu-chevron {
+          margin-left: auto;
+          color: #80868b;
+          font-size: 13px;
+        }
+
+        .wl-mobile-menu-link--signout {
+          color: #6b0016 !important;
+          border-color: #c9aeb4;
         }
 
         #PageHeaderDiv {
@@ -1275,6 +1491,17 @@
 
         body.wl-department-open {
           overflow: hidden !important;
+        }
+      }
+
+      @media (min-width: 600px) and (max-width: 991px) {
+        .wl-mobile-menu-scroll {
+          padding-right: 24px;
+          padding-left: 24px;
+        }
+
+        .wl-mobile-menu-list {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
         }
       }
 
@@ -2116,6 +2343,267 @@
     return changed;
   }
 
+  function getMobileMenuIcon(label) {
+    var normalized = cleanLabel(label).toLowerCase();
+    var icons = {
+      "home": "fa-home",
+      "account information": "fa-user-circle",
+      "quicklists": "fa-heart",
+      "quotes": "fa-file-alt",
+      "orders": "fa-box",
+      "invoices": "fa-file-invoice-dollar",
+      "credit notes": "fa-receipt",
+      "products purchased": "fa-shopping-bag",
+      "statements": "fa-list-alt",
+      "addresses": "fa-map-marker-alt",
+      "contacts": "fa-address-book",
+      "dashboards": "fa-chart-line",
+      "settings": "fa-cog",
+      "help": "fa-question-circle",
+      "about us": "fa-info-circle",
+      "change my store": "fa-store",
+      "sign in": "fa-sign-in-alt",
+      "sign out": "fa-sign-out-alt"
+    };
+
+    return icons[normalized] || "fa-chevron-circle-right";
+  }
+
+  function getAccountDisplayName(doc) {
+    var heading = doc && doc.querySelector(".panel.panelAccountInfo .listPageHeader");
+    var value = cleanLabel(heading && heading.textContent);
+
+    if (!value) return "";
+
+    return value
+      .replace(/^Account Information for\s*/i, "")
+      .replace(/\s*\([^)]*\)\s*$/, "")
+      .trim();
+  }
+
+  function updateMobileMenuGreeting(menu, signedIn, accountName) {
+    if (!menu) return;
+
+    var title = menu.querySelector("#wl-mobile-menu-title");
+    var subtitle = menu.querySelector(".wl-mobile-menu-subtitle");
+    if (!title || !subtitle) return;
+
+    if (!signedIn) {
+      title.textContent = "Howdy, welcome to Woodson";
+      subtitle.textContent = "Sign in for account tools and saved items.";
+      return;
+    }
+
+    title.textContent = accountName ? "Howdy, " + accountName : "Howdy, welcome back";
+    subtitle.textContent = "Your Woodson account and shopping shortcuts.";
+  }
+
+  function hydrateMobileMenuGreeting(menu, signedIn) {
+    var storageKey = "wlAccountDisplayName";
+    var currentName = getAccountDisplayName(document);
+
+    if (!signedIn) {
+      try {
+        window.sessionStorage.removeItem(storageKey);
+      } catch (error) {
+        debugLog("account name cache unavailable", error);
+      }
+      updateMobileMenuGreeting(menu, false, "");
+      return;
+    }
+
+    if (currentName) {
+      try {
+        window.sessionStorage.setItem(storageKey, currentName);
+      } catch (error) {
+        debugLog("account name cache unavailable", error);
+      }
+      updateMobileMenuGreeting(menu, true, currentName);
+      return;
+    }
+
+    try {
+      currentName = cleanLabel(window.sessionStorage.getItem(storageKey));
+    } catch (error) {
+      debugLog("account name cache unavailable", error);
+    }
+
+    updateMobileMenuGreeting(menu, true, currentName);
+    if (currentName || mobileMenuNameRequest || typeof window.fetch !== "function") return;
+
+    mobileMenuNameRequest = window.fetch("/AccountInfo_R.aspx", { credentials: "same-origin" })
+      .then(function (response) {
+        if (!response.ok) throw new Error("Account information request failed");
+        return response.text();
+      })
+      .then(function (html) {
+        var parsed = new DOMParser().parseFromString(html, "text/html");
+        var name = getAccountDisplayName(parsed);
+        if (!name) return;
+
+        try {
+          window.sessionStorage.setItem(storageKey, name);
+        } catch (error) {
+          debugLog("account name cache unavailable", error);
+        }
+        updateMobileMenuGreeting(menu, true, name);
+      })
+      .catch(function (error) {
+        debugLog("account name unavailable", error);
+      });
+  }
+
+  function buildMobileMenuAction(source, label, iconClass) {
+    if (!source) return null;
+
+    var link = document.createElement("a");
+    var badge = source.querySelector(".link-badge");
+    var count = cleanLabel(badge && badge.textContent) || "0";
+
+    link.className = "wl-mobile-menu-action";
+    link.href = source.getAttribute("href") || "#";
+    link.innerHTML =
+      '<i class="fas ' + iconClass + '" aria-hidden="true"></i>' +
+      '<span class="wl-mobile-menu-action-label"></span>' +
+      '<span class="wl-mobile-menu-count" aria-label="' + count + ' items">' + count + "</span>";
+    link.querySelector(".wl-mobile-menu-action-label").textContent = label;
+
+    return link;
+  }
+
+  function buildMobileAccountMenu() {
+    if (document.getElementById("wl-mobile-account-menu")) return false;
+
+    var accountNav = document.querySelector(".sticky-header .main-nav");
+    var accountMenu = accountNav && accountNav.querySelector(".hamburger");
+    var nativeList = accountNav && accountNav.querySelector(".menu-t1");
+    if (!accountNav || !accountMenu || !nativeList) return false;
+
+    var menu = document.createElement("section");
+    menu.id = "wl-mobile-account-menu";
+    menu.hidden = true;
+    menu.setAttribute("role", "dialog");
+    menu.setAttribute("aria-modal", "true");
+    menu.setAttribute("aria-labelledby", "wl-mobile-menu-title");
+    menu.innerHTML =
+      '<header class="wl-mobile-menu-head">' +
+        '<div class="wl-mobile-menu-welcome">' +
+          '<span class="wl-mobile-menu-eyebrow">Woodson menu</span>' +
+          '<h2 id="wl-mobile-menu-title">Howdy, welcome to Woodson</h2>' +
+          '<p class="wl-mobile-menu-subtitle">Your account and shopping shortcuts.</p>' +
+        '</div>' +
+        '<button type="button" class="wl-mobile-menu-close" aria-label="Close menu" title="Close menu">' +
+          '<i class="fas fa-times" aria-hidden="true"></i>' +
+        '</button>' +
+      '</header>' +
+      '<div class="wl-mobile-menu-scroll">' +
+        '<div class="wl-mobile-menu-actions" aria-label="Shopping shortcuts"></div>' +
+        '<nav aria-label="Account menu">' +
+          '<h3 class="wl-mobile-menu-section-title">Menu</h3>' +
+          '<div class="wl-mobile-menu-list"></div>' +
+        '</nav>' +
+      '</div>';
+
+    var actions = menu.querySelector(".wl-mobile-menu-actions");
+    var list = menu.querySelector(".wl-mobile-menu-list");
+    var cart = accountNav.querySelector("a[href*='ShoppingCart.aspx']");
+    var saved = accountNav.querySelector("#ctl00_MainMenu_QuickList_QuickListsButton");
+    var cartAction = buildMobileMenuAction(cart, "Cart", "fa-shopping-cart");
+    var savedAction = buildMobileMenuAction(saved, "Saved items", "fa-heart");
+
+    [cartAction, savedAction].forEach(function (action) {
+      if (action) actions.appendChild(action);
+    });
+
+    nativeList.querySelectorAll("a").forEach(function (source) {
+      var label = cleanLabel(source.textContent);
+      var href = source.getAttribute("href");
+      if (!label || !href) return;
+
+      var link = document.createElement("a");
+      link.className = "wl-mobile-menu-link";
+      if (/^sign out$/i.test(label)) link.classList.add("wl-mobile-menu-link--signout");
+      link.href = href;
+      link.innerHTML =
+        '<i class="fas ' + getMobileMenuIcon(label) + '" aria-hidden="true"></i>' +
+        '<span class="wl-mobile-menu-link-label"></span>' +
+        '<i class="fas fa-chevron-right wl-mobile-menu-chevron" aria-hidden="true"></i>';
+      link.querySelector(".wl-mobile-menu-link-label").textContent = label;
+      list.appendChild(link);
+    });
+
+    var signedIn = !!nativeList.querySelector("a[href*='SignOut=1']");
+    var closeButton = menu.querySelector(".wl-mobile-menu-close");
+
+    function closeMenu(restoreFocus) {
+      menu.hidden = true;
+      document.body.classList.remove("wl-mobile-menu-open");
+      accountMenu.classList.remove("is-active");
+      accountMenu.setAttribute("aria-expanded", "false");
+      if (restoreFocus !== false) accountMenu.focus();
+    }
+
+    function openMenu() {
+      menu.hidden = false;
+      document.body.classList.add("wl-mobile-menu-open");
+      accountMenu.classList.add("is-active");
+      accountMenu.setAttribute("aria-expanded", "true");
+      hydrateMobileMenuGreeting(menu, signedIn);
+      closeButton.focus();
+    }
+
+    accountMenu.removeAttribute("onclick");
+    accountMenu.setAttribute("aria-controls", menu.id);
+    accountMenu.setAttribute("aria-expanded", "false");
+    accountMenu.addEventListener("click", function (event) {
+      if (!window.matchMedia("(max-width: 991px)").matches) {
+        if (typeof window.toggleMenu === "function") window.toggleMenu();
+        return;
+      }
+
+      event.preventDefault();
+      menu.hidden ? openMenu() : closeMenu();
+    });
+
+    closeButton.addEventListener("click", function () {
+      closeMenu();
+    });
+
+    menu.addEventListener("click", function (event) {
+      if (event.target.closest("a")) closeMenu(false);
+    });
+
+    menu.addEventListener("keydown", function (event) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeMenu();
+        return;
+      }
+
+      if (event.key !== "Tab") return;
+      var focusable = menu.querySelectorAll("a[href], button:not([disabled])");
+      if (!focusable.length) return;
+      var first = focusable[0];
+      var last = focusable[focusable.length - 1];
+
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    });
+
+    window.addEventListener("resize", function () {
+      if (!menu.hidden && !window.matchMedia("(max-width: 991px)").matches) closeMenu(false);
+    });
+
+    document.body.appendChild(menu);
+    hydrateMobileMenuGreeting(menu, signedIn);
+    return true;
+  }
+
   function removeUnusedHeaderSections() {
     var changed = false;
     ["wlcheadersect2", "wlcheadersect3", "wlcheadersect4", "wlcheadersect5"].forEach(function (id) {
@@ -2186,6 +2674,7 @@
       !!document.getElementById("wl-department-nav") &&
       !!document.getElementById("barcode-scanner-container") &&
       !!document.getElementById("wl-store-hours") &&
+      !!document.getElementById("wl-mobile-account-menu") &&
       !!quick.querySelector(".wl-header-locations-desktop") &&
       !!row.querySelector(".wl-header-locations-mobile");
   }
@@ -2197,6 +2686,7 @@
     changed = normalizeHeaderContainers() || changed;
     changed = buildDepartmentMenu() || changed;
     changed = enhanceHeaderControls() || changed;
+    changed = buildMobileAccountMenu() || changed;
     changed = removeUnusedHeaderSections() || changed;
     changed = upgradeTopLinksAccessibility() || changed;
     changed = addStoreHours() || changed;
