@@ -1,7 +1,37 @@
+(function clearStaleAccountPaymentState() {
+  'use strict';
+  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+
+  const hasSelectionParams = [
+    'utm_invoices', 'utm_docs', 'utm_total', 'utm_jobs', 'utm_remit', 'utm_notes', 'utm_note'
+  ].some(function (key) { return new URL(location.href).searchParams.has(key); });
+  const samePageReferrer = /AccountPayment_r\.aspx/i.test(document.referrer || '');
+  const isReload = (function () {
+    try { return performance.getEntriesByType('navigation')[0]?.type === 'reload'; }
+    catch (error) { return false; }
+  })();
+  const isSuccess = !!document.querySelector('table.paymentDataTable') && /payment was successful/i.test(document.body?.textContent || '');
+  const isAchReset = (function () {
+    try { return !!sessionStorage.getItem('__WL_AP_FORCE_NEW_ACH_RELOAD_V1'); }
+    catch (error) { return false; }
+  })();
+
+  if (hasSelectionParams || samePageReferrer || isReload || isSuccess || isAchReset) return;
+
+  [
+    'wl_ap_prefill_v3', '__WL_AP_WIZ3_STEP', 'wlPayState', 'wlPayPickedThisRun',
+    'wlPayPendingSubmit', 'wl_pay_step3_initialized_v1', '__WL_JobsSelection',
+    '__WL_PendingRemitV2', '__WL_COF_OPTIONS_LOAD_TS', '__WL_COF_LOAD_TRIES',
+    '__WL_COF_LOAD_LAST_TS', '__WL_PROXY_WAIT_STARTED', 'wl_shadowPayBy'
+  ].forEach(function (key) {
+    try { sessionStorage.removeItem(key); } catch (error) {}
+  });
+  try { localStorage.removeItem('WL_AP_SelectedDocs'); } catch (error) {}
+})();
 
 (function () {
   'use strict';
-  console.log('[AP] PayByInvoice version v36 submit-safe bank sync loaded');
+  console.log('[AP] PayByInvoice version v37 account-payment cleanup loaded');
 
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
@@ -664,15 +694,50 @@ wireFieldPersistence();
       }
       #wlApWizard3 .wl-ap-optional-body {
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: minmax(0, 1fr);
         gap: 14px;
         padding: 2px 13px 13px;
+      }
+      #wlApWizard3 .wl-ap-optional-body .wl-field {
+        grid-template-columns: minmax(0, 1fr);
+        align-items: start;
+        gap: 6px;
+      }
+      #wlApWizard3 .wl-ap-optional-body .wl-lab {
+        padding-right: 0;
+        text-align: left;
+      }
+      #wlApWizard3 .wl-ap-optional-body .wl-ctl,
+      #wlApWizard3 .wl-ap-optional-body .epi-form-group-acctPayment {
+        width: 100%;
+        min-width: 0;
       }
       #wlApWizard3 .wl-ap-optional textarea {
         box-sizing: border-box;
         width: 100% !important;
         min-height: 84px !important;
       }
+      #wlApWizard3 .wl-account-balance {
+        grid-column: 1 / -1;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 4px 20px;
+        padding: 14px 16px;
+        border: 1px solid #d9dcdf;
+        border-left: 4px solid #6b0016;
+        border-radius: 6px;
+        background: #f8f9fa;
+      }
+      #wlApWizard3 .wl-account-balance-label { color: #303438; font-size: 14px; font-weight: 800; }
+      #wlApWizard3 .wl-account-balance-value { color: #111; font-size: 20px; font-weight: 900; }
+      #wlApWizard3 .wl-account-balance-help { grid-column: 1 / -1; margin: 2px 0 0; color: #5f656b; font-size: 12px; }
+      #wlApWizard3 .wl-account-balance-source { display: none !important; }
+      #wlApWizard3 .wl-payment-amount-wide { grid-column: 1 / -1; }
+      #wlApWizard3 .wl-payment-amount-wide .wl-field { grid-template-columns: minmax(0, 1fr); align-items: start; gap: 6px; }
+      #wlApWizard3 .wl-payment-amount-wide .wl-lab { padding-right: 0; text-align: left; }
+      #ctl00_PageBody_RadAjaxLoadingPanel1,
+      #ctl00_PageBody_LoadingImage,
+      #ctl00_PageBody_RadAjaxLoadingPanel1 .loading { display: none !important; visibility: hidden !important; }
       #wlApWizard3 .wl-ap-field-untouched .wl-ap-validation-message {
         display: none !important;
       }
@@ -856,6 +921,34 @@ wireFieldPersistence();
     });
   }
 
+  function clarifyAccountBalance(cashAccount) {
+    const owing = document.getElementById('ctl00_PageBody_AmountOwingLiteral');
+    const amount = document.getElementById('ctl00_PageBody_PaymentAmountTextBox');
+    const grid = document.getElementById('wlFormGrid');
+    if (!grid || !amount) return;
+
+    const amountWrap = amount.closest('.epi-form-group-acctPayment, .wl-item, .wl-field') || amount.parentElement;
+    if (amountWrap) amountWrap.classList.add('wl-payment-amount-wide', 'wl-span-2');
+
+    const owingWrap = owing?.closest('.epi-form-group-acctPayment, .wl-item, .wl-field') || owing?.parentElement;
+    if (owingWrap) owingWrap.classList.add('wl-account-balance-source');
+    if (cashAccount || !owing) return;
+
+    let summary = document.getElementById('wlAccountBalanceSummary');
+    if (!summary) {
+      summary = document.createElement('div');
+      summary.id = 'wlAccountBalanceSummary';
+      summary.className = 'wl-account-balance';
+      const quick = document.getElementById('wlQuickWidget');
+      grid.insertBefore(summary, quick || grid.firstChild);
+    }
+    summary.innerHTML = `
+      <div class="wl-account-balance-label">Current account amount due</div>
+      <div class="wl-account-balance-value"></div>
+      <p class="wl-account-balance-help">Total currently outstanding after unapplied credits and available settlement discounts. Pay this amount, choose specific invoices, or enter another payment amount below.</p>`;
+    summary.querySelector('.wl-account-balance-value').textContent = owing.value || owing.textContent || '$0.00';
+  }
+
   function applyPolish() {
     const wizard = document.getElementById('wlApWizard3');
     if (!wizard) return false;
@@ -869,7 +962,7 @@ wireFieldPersistence();
 
     const step = Number(wizard.getAttribute('data-step') || '0');
     const titles = cashAccount
-      ? ['Reload details', 'Enter reload amount', 'Choose payment method', 'Review reload']
+      ? ['Add funds details', 'Choose amount', 'Choose payment method', 'Review']
       : ['Payment details', 'Choose what to pay', 'Choose payment method', 'Review payment'];
     setText(wizard.querySelector('.w3-title'), titles[step] || titles[0]);
 
@@ -879,8 +972,8 @@ wireFieldPersistence();
       setText(pill, pillLabels[index] || '');
     });
 
-    setText(document.querySelector('#w3Step0 .wl-card-head'), cashAccount ? 'Reload account details' : 'Payment details');
-    setText(document.querySelector('#wlLeftCard > .wl-card-head'), cashAccount ? 'Reload amount' : 'Choose what to pay');
+    setText(document.querySelector('#w3Step0 .wl-card-head'), cashAccount ? 'Add funds details' : 'Payment details');
+    setText(document.querySelector('#wlLeftCard > .wl-card-head'), cashAccount ? 'Amount to add' : 'Choose what to pay');
     setText(document.querySelector('#w3Step2 > .wl-card > .wl-card-head'), 'Payment method');
     setText(document.querySelector('#wlQuickWidget .wl-quick-title'), 'Choose what to pay');
 
@@ -890,7 +983,7 @@ wireFieldPersistence();
     setText(document.getElementById('wlOpenJobsModalBtn'), 'Choose jobs');
 
     const amountLabel = document.querySelector('label[for="ctl00_PageBody_PaymentAmountTextBox"]');
-    if (cashAccount) setText(amountLabel, 'Reload amount:');
+    if (cashAccount) setText(amountLabel, 'Amount to add:');
 
     const help0 = wizard.querySelector('.w3-panel[data-step="0"] .w3-help');
     const help1 = wizard.querySelector('.w3-panel[data-step="1"] .w3-help');
@@ -915,6 +1008,7 @@ wireFieldPersistence();
     }
 
     groupOptionalFields(cashAccount);
+    clarifyAccountBalance(cashAccount);
     simplifySinglePaymentMethod();
     hideEmptySummaryCard();
     hideEmptyFormItems();
@@ -2253,6 +2347,7 @@ const IDS = {
   }
 
   function proxyFire(){
+    window.__WL_AP_PAYMENT_SUBMITTING = true;
     const mode = currentPayMode();
     // If a prior WebForms AJAX postback is still running from selecting a saved ACH account,
     // wait for it instead of clicking Forte during the async request. That click can be swallowed.
@@ -3499,12 +3594,18 @@ if (jobBtn){
       .wl-type-inv       { background:#eef6ff; color:#1e40af; border:1px solid #c7ddff; }
       .wl-type-cr        { background:#fff7ed; color:#9a3412; border:1px solid #fde1c7; }
       .wl-foot-left      { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+      .wl-foot-right     { display:flex; align-items:center; justify-content:flex-end; gap:8px; }
       .wl-btn.wl-btn-ghost{color:#6b0016;}
+      .wl-modal-head .wl-btn-ghost{ color:#fff; background:transparent; border-color:rgba(255,255,255,.45); min-width:38px; font-size:20px; line-height:1; }
 
       /* ---------- Mobile stacked layout ---------- */
       @media (max-width: 680px){
         .wl-modal-card { width:96vw; max-height:92vh; }
-        .wl-modal-head .right { gap:6px; }
+        .wl-modal-head { align-items:flex-start; flex-direction:column; }
+        .wl-modal-head .right { display:grid; grid-template-columns:minmax(0,1fr) auto auto; gap:6px; width:100%; }
+        .wl-modal-head .right .wl-input { width:100%; min-width:0; }
+        .wl-modal-head .right .wl-pill { grid-column:1 / -1; }
+        .wl-modal-foot { align-items:center; }
         .wl-grid thead { display:none; }
         .wl-grid tbody tr { display:block; padding:6px 0; border-bottom:1px solid #e5e7eb; }
         .wl-grid td { display:grid; grid-template-columns: 40% 60%; gap:6px; border-bottom:0; padding:8px 12px; }
@@ -3526,14 +3627,12 @@ if (jobBtn){
     shell.innerHTML = `
       <div class="wl-modal-card" role="dialog" aria-modal="true" aria-labelledby="wlInvTitle">
         <div class="wl-modal-head">
-          <div id="wlInvTitle">Select Invoices (Recent Transactions)</div>
+          <div id="wlInvTitle">Choose invoices</div>
           <div class="right">
             <input id="wlInvFilter" class="wl-input" type="text" placeholder="Search doc #, job, PO, notes">
             <span class="wl-pill" id="wlInvStats">0 selected · $0.00</span>
-            <button type="button" class="wl-btn" id="wlTxReloadBtn" title="Reload from page">Reload</button>
-            <button type="button" class="wl-btn" id="wlTxLoadAllBtn" title="Fetch all pages">Load all</button>
-            <button type="button" class="wl-btn wl-btn-primary" id="wlInvDoneBtn">Done</button>
-            <button type="button" class="wl-btn" id="wlInvCloseX" aria-label="Close">Close</button>
+            <button type="button" class="wl-btn wl-btn-ghost" id="wlTxReloadBtn" title="Refresh invoices" aria-label="Refresh invoices">&#8635;</button>
+            <button type="button" class="wl-btn wl-btn-ghost" id="wlInvCloseX" title="Close" aria-label="Close">&times;</button>
           </div>
         </div>
         <div class="wl-modal-body">
@@ -3562,7 +3661,7 @@ if (jobBtn){
           <div class="wl-foot-left">
             <span id="wlInvLoadedBadge" class="muted"></span>
           </div>
-          <div class="wl-foot-right"></div>
+          <div class="wl-foot-right"><button type="button" class="wl-btn wl-btn-primary" id="wlInvDoneBtn">Save invoice selection</button></div>
         </div>
       </div>`;
     document.body.appendChild(back);
@@ -3577,10 +3676,9 @@ if (jobBtn){
       document.querySelectorAll('#wlInvTbody input[type="checkbox"]').forEach(cb=>{
         cb.checked = c; toggleSel(cb.dataset.key, MONEY(cb.dataset.outstanding), c);
       });
-      persistSelection(); renderStats();
+      renderStats();
     });
-    document.getElementById('wlTxReloadBtn').addEventListener('click', ()=> { loadFromCurrentDOM(); });
-    document.getElementById('wlTxLoadAllBtn').addEventListener('click', loadAllPages);
+    document.getElementById('wlTxReloadBtn').addEventListener('click', ()=> { loadFromCurrentDOM(); loadAllPages(); });
     document.getElementById('wlInvDoneBtn').addEventListener('click', commitSelection);
     document.addEventListener('keydown', (e)=>{ if (e.key==='Escape' && state.open) closeModal(); });
   }
@@ -3596,7 +3694,8 @@ if (jobBtn){
     // Refresh TTL on active use
     lsTouch(LS_KEY);
 
-    seedSelectionKeys();     // from LS + Remittance
+    state.selected.clear();
+    seedSelectionKeys();     // from last saved selection + Remittance
     loadFromCurrentDOM();    // immediate
     loadAllPages().catch(e=> log.error('auto loadAll error', e)); // async fill
   }
@@ -3888,7 +3987,6 @@ if (jobBtn){
       const cb = tr.querySelector('input[type="checkbox"]');
       cb.addEventListener('change', (e)=>{
         toggleSel(r.key, MONEY(r.outstanding), e.currentTarget.checked);
-        persistSelection();
         renderStats();
       });
       frag.appendChild(tr);
@@ -4276,8 +4374,11 @@ if (jobBtn){
       '__WL_COF_LOAD_TRIES',
       '__WL_COF_LOAD_LAST_TS',
       '__WL_PROXY_WAIT_STARTED',
-      'wl_shadowPayBy'
+      'wl_shadowPayBy',
+      '__WL_JobsSelection',
+      '__WL_PendingRemitV2'
     ].forEach(k=>{ try{ sessionStorage.removeItem(k); }catch(e){} });
+    try { localStorage.removeItem('WL_AP_SelectedDocs'); } catch(e) {}
   }
 
   // Detect confirmation view by presence of the success payment table
@@ -4523,11 +4624,12 @@ if (jobBtn){
 
   // --- Buttons section: rename token + replace Print button with Receipt print ---
   function patchButtons(selectionSummaryText) {
-    // Rename Save Token
+    // Rename the gateway's technical token action in customer language.
     const saveBtn = document.getElementById('ctl00_PageBody_btnSaveToken');
-    if (saveBtn && saveBtn.tagName === 'INPUT') {
-      saveBtn.value = 'Save payment for future';
-      saveBtn.title = 'Save this payment method for future use';
+    if (saveBtn) {
+      if (saveBtn.tagName === 'INPUT') saveBtn.value = 'Save Payment Method';
+      else saveBtn.textContent = 'Save Payment Method';
+      saveBtn.title = 'Save this payment method for future payments';
     }
 
     // Hide default "Print This"
@@ -4725,7 +4827,7 @@ if (jobBtn){
     // 2) Inject "Selected items" row on-screen
     injectSelectedRow(table, sel.text);
 
-    // 3) Patch buttons (Print Receipt + Save payment for future)
+    // 3) Patch buttons (Print Receipt + Save Payment Method)
     patchButtons(sel.text);
 
     return sel.text || '';
@@ -4838,6 +4940,45 @@ if (jobBtn){
   // force the real PayByCheck path before Forte is opened.
   const ACH_FORCE_NEW_KEY = '__WL_AP_FORCE_NEW_ACH_RELOAD_V1';
   const ACH_REFRESH_DRAFT_KEY = '__WL_AP_REFRESH_DRAFT_V1';
+  const BILLING_DRAFT_KEY = 'wl_billDraft_v3';
+
+  function captureBillingValue(){
+    try{
+      const input = $('ctl00_PageBody_BillingAddressTextBox');
+      const value = String(input?.value || '').trim();
+      if (value) sessionStorage.setItem(BILLING_DRAFT_KEY, value);
+      return value;
+    }catch(e){ return ''; }
+  }
+
+  function stabilizeBillingField(){
+    try{
+      const input = $('ctl00_PageBody_BillingAddressTextBox');
+      const host = $('w3InfoInner');
+      if (!input || !host) return false;
+      const saved = sessionStorage.getItem(BILLING_DRAFT_KEY) || '';
+      if (!String(input.value || '').trim() && saved) {
+        input.value = saved;
+        try{ input.defaultValue = saved; }catch(e){}
+      }
+      const wrap = input.closest('.epi-form-group-acctPayment') || input.parentElement;
+      const zipWrap = $('ctl00_PageBody_PostalCodeTextBox')?.closest('.epi-form-group-acctPayment') || null;
+      if (wrap && wrap.parentElement !== host) host.insertBefore(wrap, zipWrap && zipWrap.parentElement === host ? zipWrap : host.firstChild);
+      if (wrap){
+        wrap.style.removeProperty('display');
+        wrap.style.removeProperty('visibility');
+        wrap.removeAttribute('aria-hidden');
+        wrap.classList.add('wl-force-show');
+      }
+      if (input.dataset.wlBillingStable !== 'true') {
+        input.dataset.wlBillingStable = 'true';
+        input.addEventListener('input', captureBillingValue, { passive:true });
+        input.addEventListener('change', captureBillingValue, { passive:true });
+        input.addEventListener('blur', captureBillingValue, { passive:true });
+      }
+      return true;
+    }catch(e){ return false; }
+  }
 
   function safeJsonParse(raw, fallback){
     try{ return raw ? JSON.parse(raw) : fallback; }catch(e){ return fallback; }
@@ -5288,6 +5429,7 @@ moveFieldGroupById('ctl00_PageBody_AddressDropdownList', infoInner);
 
 // Billing address FIRST (so ZIP tab-trigger postback doesn't hide it before entry)
 if (billWrap) infoInner.appendChild(billWrap);
+try{ stabilizeBillingField(); }catch(e){}
 
 // ZIP code AFTER billing address
 moveFieldGroupById('ctl00_PageBody_PostalCodeTextBox', infoInner);
@@ -6351,7 +6493,7 @@ let __wlSubmitted = false;
 // Warn only on real navigation (not WebForms postbacks)
 document.addEventListener('click', function (ev) {
   try {
-    if (__wlSubmitted) return;
+    if (__wlSubmitted || window.__WL_AP_PAYMENT_SUBMITTING || paymentSuccessVisible()) return;
     const a = ev.target?.closest?.('a[href]');
     if (!a) return;
 
@@ -6434,24 +6576,12 @@ function setStep(n){
     $('w3Next').addEventListener('click', ()=>{
       if (!validateStep()) return;
 
-      // Step 0 -> Step 1: persist Billing; if present, lock + force a server round-trip so the WebForms state is stable.
+      // Step 0 -> Step 1: preserve billing locally without a WebForms round-trip.
       if (step === 0){
-        let v = '';
-        try{
-          const real = $('ctl00_PageBody_BillingAddressTextBox');
-          const proxy = document.getElementById('wlProxyBillingInput');
-          v = (proxy?.value || real?.value || '').trim();
-          saveBillDraft(v);
-          if (v) lockBilling(v);
-        }catch(e){}
+        captureBillingValue();
 
-        // Keep them on Step 1 after any round-trip.
+        // Keep them on Step 1 if another WebForms control posts back later.
         try{ sessionStorage.setItem(STEP_KEY, '1'); }catch(e){}
-
-        // If they already typed billing, trigger the same postback path as "Make Payment" (throttled).
-        if (v){
-          try{ forceWizardRoundTrip('step0-next'); }catch(e){}
-        }
 
         setStep(1);
         return;
@@ -6525,9 +6655,10 @@ function setStep(n){
   try {
     if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
       const prm = Sys.WebForms.PageRequestManager.getInstance();
+      prm.add_initializeRequest(function(){ try{ captureBillingValue(); }catch(e){} });
       prm.add_endRequest(function(){
         try { mount(); } catch {}
-        try { pinBillingToStep1({ attempt: 0 }); } catch {}
+        setTimeout(function(){ try { stabilizeBillingField(); } catch(e){} }, 0);
       });
     }
   } catch {}
