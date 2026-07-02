@@ -73,6 +73,7 @@ test("recovers a state when WebTrack sends a nonstandard US country value", () =
   const { rating } = parseLegacyXml(xmlWithLongCountry);
   const translated = toOAuthRequest(rating);
   assert.equal(translated.body.shipTo.state, "TX");
+  assert.equal(translated.body.shipTo.country, "US");
 });
 
 test("falls back to Shipper when WebTrack sends an empty ShipFrom", () => {

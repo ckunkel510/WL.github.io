@@ -114,7 +114,7 @@ function addressFromLegacy(node) {
     city: text(address.City) || postalMatch?.city || "",
     state: text(address.StateProvinceCode) || postalMatch?.state || "",
     postalCode,
-    country,
+    country: postalMatch ? "US" : country,
     residential: address.ResidentialAddressIndicator !== undefined
   };
 }
