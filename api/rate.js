@@ -301,25 +301,6 @@ async function readBody(req) {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-function logRequestShape(req, raw) {
-  const tags = [];
-  const seen = new Set();
-  const matcher = /<\s*(?!\/|\?|!)([A-Za-z_][\w.-]*(?::[\w.-]+)?)/g;
-  let match;
-  while ((match = matcher.exec(raw)) && tags.length < 30) {
-    const tag = match[1];
-    if (seen.has(tag)) continue;
-    seen.add(tag);
-    tags.push(tag);
-  }
-  console.info("ups-legacy-request-shape", JSON.stringify({
-    contentType: String(req.headers["content-type"] || "").slice(0, 100),
-    soapAction: String(req.headers.soapaction || "").slice(0, 160),
-    bodyLength: raw.length,
-    tags
-  }));
-}
-
 async function handler(req, res) {
   if (req.method !== "POST") return sendXml(res, 405, errorXml(new RequestError(405, "POST is required.")));
 
@@ -327,26 +308,15 @@ async function handler(req, res) {
   try {
     const raw = await readBody(req);
     isSoap = /<\s*(?:[\w.-]+:)?Envelope\b/i.test(raw) || Boolean(req.headers.soapaction);
-    logRequestShape(req, raw);
     const { access, rating } = parseLegacyXml(raw);
     authenticate(access);
     const translated = toOAuthRequest(rating);
     const result = await requestRates(translated.body);
-    console.info("ups-legacy-response-shape", JSON.stringify({
-      isSoap,
-      rateCount: result.rates.length,
-      serviceCodes: result.rates.map((rate) => rate.serviceCode)
-    }));
     return sendXml(res, 200, isSoap ? soapSuccessXml(result, translated.context) : successXml(result, translated.context));
   } catch (error) {
-    console.warn("ups-legacy-response-error", JSON.stringify({
-      isSoap,
-      status: error instanceof RequestError ? error.status : 500,
-      message: error instanceof Error ? error.message : "Unknown error"
-    }));
     return sendXml(res, 200, isSoap ? soapErrorXml(error) : errorXml(error));
   }
 }
 
 module.exports = handler;
-module.exports._test = { authenticate, errorXml, logRequestShape, parseLegacyXml, soapSuccessXml, successXml, toOAuthRequest };
+module.exports._test = { authenticate, errorXml, parseLegacyXml, soapSuccessXml, successXml, toOAuthRequest };
