@@ -1,6 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
+    "api/rate.js": {
+      "maxDuration": 10
+    },
     "api/ups-rates.js": {
       "maxDuration": 10
     }

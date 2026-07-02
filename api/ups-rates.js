@@ -117,15 +117,26 @@ function normalizePackages(input) {
   input.forEach((item, index) => {
     const quantity = Math.floor(boundedNumber(item.quantity || 1, `Package ${index + 1} quantity`, 1, 20));
     const weight = boundedNumber(item.weight, `Package ${index + 1} weight`, 0.1, 150);
-    const length = boundedNumber(item.length, `Package ${index + 1} length`, 0.1, 108);
-    const width = boundedNumber(item.width, `Package ${index + 1} width`, 0.1, 108);
-    const height = boundedNumber(item.height, `Package ${index + 1} height`, 0.1, 108);
-    if (length + (2 * width) + (2 * height) > 165) {
-      throw new RequestError(400, `Package ${index + 1} exceeds UPS small-package dimensions.`);
+    const rawDimensions = [item.length, item.width, item.height];
+    const hasAnyDimension = rawDimensions.some((value) => value !== undefined && value !== null && value !== "");
+    const hasAllDimensions = rawDimensions.every((value) => value !== undefined && value !== null && value !== "");
+    if (hasAnyDimension && !hasAllDimensions) {
+      throw new RequestError(400, `Package ${index + 1} requires length, width, and height together.`);
+    }
+
+    let dimensions = null;
+    if (hasAllDimensions) {
+      const length = boundedNumber(item.length, `Package ${index + 1} length`, 0.1, 108);
+      const width = boundedNumber(item.width, `Package ${index + 1} width`, 0.1, 108);
+      const height = boundedNumber(item.height, `Package ${index + 1} height`, 0.1, 108);
+      if (length + (2 * width) + (2 * height) > 165) {
+        throw new RequestError(400, `Package ${index + 1} exceeds UPS small-package dimensions.`);
+      }
+      dimensions = { length, width, height };
     }
 
     for (let copy = 0; copy < quantity; copy += 1) {
-      expanded.push({ weight, length, width, height });
+      expanded.push({ weight, ...(dimensions || {}) });
     }
   });
 
@@ -183,19 +194,22 @@ async function getAccessToken() {
 }
 
 function packagePayload(item) {
-  return {
+  const payload = {
     PackagingType: { Code: "02", Description: "Package" },
-    Dimensions: {
-      UnitOfMeasurement: { Code: "IN", Description: "Inches" },
-      Length: String(item.length),
-      Width: String(item.width),
-      Height: String(item.height)
-    },
     PackageWeight: {
       UnitOfMeasurement: { Code: "LBS", Description: "Pounds" },
       Weight: String(item.weight)
     }
   };
+  if (item.length && item.width && item.height) {
+    payload.Dimensions = {
+      UnitOfMeasurement: { Code: "IN", Description: "Inches" },
+      Length: String(item.length),
+      Width: String(item.width),
+      Height: String(item.height)
+    };
+  }
+  return payload;
 }
 
 function buildRateRequest(body) {
@@ -305,3 +319,4 @@ async function handler(req, res) {
 
 module.exports = handler;
 module.exports._test = { buildRateRequest, normalizeAddress, normalizePackages, normalizedRates };
+module.exports._internal = { RequestError, requestRates };
