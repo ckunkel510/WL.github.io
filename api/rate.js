@@ -118,6 +118,17 @@ function addressFromLegacy(node) {
   };
 }
 
+function mergeAddresses(primary, fallback) {
+  return {
+    addressLine: primary.addressLine.length ? primary.addressLine : fallback.addressLine,
+    city: primary.city || fallback.city,
+    state: primary.state || fallback.state,
+    postalCode: primary.postalCode || fallback.postalCode,
+    country: primary.country || fallback.country,
+    residential: primary.residential || fallback.residential
+  };
+}
+
 function packageFromLegacy(node, index) {
   const packageWeight = node?.PackageWeight || {};
   const weight = pounds(packageWeight.Weight, unitCode(packageWeight, "LBS"));
@@ -135,7 +146,10 @@ function packageFromLegacy(node, index) {
 
 function toOAuthRequest(rating) {
   const shipment = rating.Shipment || {};
-  const shipFromNode = shipment.ShipFrom || shipment.Shipper;
+  const shipFrom = mergeAddresses(
+    addressFromLegacy(shipment.ShipFrom),
+    addressFromLegacy(shipment.Shipper)
+  );
   const packages = asArray(shipment.Package).map(packageFromLegacy);
   if (!packages.length && shipment.ShipmentTotalWeight?.Weight) {
     packages.push({
@@ -150,7 +164,7 @@ function toOAuthRequest(rating) {
   return {
     context: text(rating.Request?.TransactionReference?.CustomerContext) || "Woodson WebTrack UPS request",
     body: {
-      shipFrom: addressFromLegacy(shipFromNode),
+      shipFrom,
       shipTo: addressFromLegacy(shipment.ShipTo),
       packages
     }

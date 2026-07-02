@@ -66,6 +66,14 @@ test("recovers omitted US states from postal codes", () => {
   assert.equal(translated.body.shipTo.state, "TX");
 });
 
+test("falls back to Shipper when WebTrack sends an empty ShipFrom", () => {
+  const xmlWithEmptyShipFrom = requestXml.replace("</ShipTo>", "</ShipTo><ShipFrom/>");
+  const { rating } = parseLegacyXml(xmlWithEmptyShipFrom);
+  const translated = toOAuthRequest(rating);
+  assert.equal(translated.body.shipFrom.city, "Brenham");
+  assert.equal(translated.body.shipFrom.postalCode, "77833");
+});
+
 test("returns legacy rated-shipment XML", () => {
   const xml = successXml({
     rates: [{ serviceCode: "03", serviceName: "UPS Ground", currency: "USD", amount: 12.34, billingWeight: 8 }]
