@@ -235,7 +235,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!el) return false;
     const style = window.getComputedStyle(el);
     const rect = el.getBoundingClientRect();
-    return style.display !== "none" && style.visibility !== "hidden" && rect.width > 0 && rect.height > 0;
+    return style.display !== "none" && style.visibility !== "hidden" && rect.width > 8 && rect.height > 8;
   }
 
   function hasShippingChoice() {
@@ -243,7 +243,8 @@ document.addEventListener('DOMContentLoaded', function () {
       "#ctl00_PageBody_CartSummary2_DeliveryOptionsPanel select",
       "#ctl00_PageBody_CartSummary2_DeliveryOptionsPanel input:not([type='hidden'])",
       "[id*='PromotionCode'] input:not([type='hidden'])",
-      "[id*='PromoCode'] input:not([type='hidden'])"
+      "[id*='PromoCode'] input:not([type='hidden'])",
+      ".delivery-pills button"
     ];
     return selectors.some(function (selector) {
       return Array.from(document.querySelectorAll(selector)).some(isVisible);
@@ -268,7 +269,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     let method = "";
     try { method = sessionStorage.getItem(METHOD_KEY) || ""; } catch {}
-    if (method !== "pickup") return;
+    if (method !== "pickup" && method !== "delivery") return;
 
     const continueButton = document.getElementById(CONTINUE_ID);
     if (!continueButton || hasShippingChoice()) return;
@@ -358,7 +359,6 @@ document.addEventListener('DOMContentLoaded', function () {
       .add_endRequest(hideDeliveryPanelIfOnlyAreaDropdownShown);
   }
 })(jQuery);
-
 
 
 

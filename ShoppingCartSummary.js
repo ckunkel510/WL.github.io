@@ -110,11 +110,11 @@
         const total = tds[7]?.textContent?.trim() || "";
         return `<tr>
           <td data-title="Product Code">${escapeHTML(code)}</td>
-          <td>${escapeHTML(desc)}</td>
-          <td style="text-align:right;">${escapeHTML(qty)}</td>
-          <td>${escapeHTML(uom)}</td>
-          <td style="text-align:right;">${escapeHTML(price)}</td>
-          <td style="text-align:right;">${escapeHTML(total)}</td>
+          <td data-title="Description">${escapeHTML(desc)}</td>
+          <td data-title="Qty" style="text-align:right;">${escapeHTML(qty)}</td>
+          <td data-title="UOM">${escapeHTML(uom)}</td>
+          <td data-title="Price" style="text-align:right;">${escapeHTML(price)}</td>
+          <td data-title="Total" style="text-align:right;">${escapeHTML(total)}</td>
         </tr>`;
       }).join("");
     }
@@ -419,8 +419,55 @@
         .wl-modern-summary .wl-kv,
         .wl-modern-summary .wl-kv.wl-kv-wide { grid-template-columns: 90px minmax(0, 1fr) !important; }
         .wl-modern-summary .wl-address-wrap { display: grid !important; grid-template-columns: minmax(0, 1fr) !important; }
-        .wl-modern-summary .wl-lines { padding: 12px !important; }
-        .wl-modern-summary .wl-lines .wl-table { width: 640px !important; min-width: 640px !important; }
+        .wl-modern-summary .wl-lines { padding: 12px !important; overflow: visible !important; }
+        .wl-modern-summary .wl-table-wrap { overflow: visible !important; }
+        .wl-modern-summary .wl-lines .wl-table { width: 100% !important; min-width: 0 !important; table-layout: auto !important; }
+        .wl-modern-summary .wl-lines .wl-table thead { display: none !important; }
+        .wl-modern-summary .wl-lines .wl-table tbody { display: grid !important; gap: 10px !important; }
+        .wl-modern-summary .wl-lines .wl-table tbody tr {
+          display: grid !important;
+          grid-template-columns: minmax(0, 1fr) !important;
+          gap: 5px !important;
+          padding: 10px !important;
+          border: 1px solid #d9dde2 !important;
+          border-radius: 6px !important;
+        }
+        .wl-modern-summary .wl-lines .wl-table tbody td {
+          display: grid !important;
+          grid-template-columns: 82px minmax(0, 1fr) !important;
+          gap: 8px !important;
+          width: auto !important;
+          padding: 2px 0 !important;
+          text-align: left !important;
+          border: 0 !important;
+          white-space: normal !important;
+          overflow-wrap: anywhere !important;
+        }
+        .wl-modern-summary .wl-lines .wl-table tbody td::before {
+          content: attr(data-title);
+          color: #565d63;
+          font-size: 12px;
+          font-weight: 700;
+        }
+        .wl-modern-summary .wl-lines .wl-table.wl-has-thumbnails tbody tr {
+          grid-template-columns: 56px minmax(0, 1fr) !important;
+          column-gap: 10px !important;
+        }
+        .wl-modern-summary .wl-lines .wl-table.wl-has-thumbnails tbody td:first-child {
+          display: block !important;
+          grid-column: 1 !important;
+          grid-row: 1 / span 6 !important;
+        }
+        .wl-modern-summary .wl-lines .wl-table.wl-has-thumbnails tbody td:first-child::before { content: none !important; }
+        .wl-modern-summary .wl-lines .wl-table.wl-has-thumbnails tbody td:not(:first-child) { grid-column: 2 !important; }
+        .wl-modern-summary .wl-lines .wl-table tfoot { display: grid !important; gap: 2px !important; margin-top: 12px !important; }
+        .wl-modern-summary .wl-lines .wl-table tfoot tr {
+          display: grid !important;
+          grid-template-columns: minmax(0, 1fr) auto !important;
+          gap: 12px !important;
+        }
+        .wl-modern-summary .wl-lines .wl-table tfoot td { display: block !important; width: auto !important; padding: 7px 0 !important; }
+        .wl-modern-summary .wl-lines .wl-table tfoot td:first-child { display: none !important; }
         .wl-modern-summary .wl-actions .desktop { display: none !important; }
         .wl-modern-summary .wl-sticky-bar {
           display: block !important;
@@ -516,12 +563,15 @@
       const imgUrl = imgMap[code];
 
       const td = document.createElement('td');
+      td.dataset.title = 'Item';
       td.innerHTML = imgUrl
         ? `<img src="${imgUrl}" alt="${code}" loading="lazy" style="width:48px;height:48px;object-fit:cover;border-radius:6px;">`
         : `<div style="width:48px;height:48px;border-radius:6px;background:#f0f0f3;"></div>`;
       tr.insertBefore(td, tr.firstChild);
       tr._wlThumbAdded = true;
     });
+
+    table.classList.add('wl-has-thumbnails');
 
     // Fix tfoot colspans
     const tfoot = table.querySelector('tfoot');
