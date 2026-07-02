@@ -3,7 +3,6 @@
 
   if (!/ShoppingCart\.aspx/i.test(location.pathname)) return;
 
-  const QUOTE_URL = 'https://woodsonwholesaleinc.formstack.com/forms/request_a_quote';
   const SHOP_MORE_URL = '/Products.aspx';
 
   const CHECKOUT_MODE_KEY = 'wl_checkout_mode';
@@ -78,8 +77,6 @@
       .wl-cart-header{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;justify-content:space-between;margin-bottom:14px;}
       .wl-cart-title{font-size:1.35rem;font-weight:800;color:#222;margin:0;}
       .wl-cart-sub{font-size:.95rem;color:#555;margin-top:4px;line-height:1.35;}
-      .wl-quote-cta{border:1px solid rgba(0,0,0,.125);background:#fff;border-radius:14px;margin:0 0 14px;padding:14px;}
-      .wl-quote-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;}
       .wl-cart-list{display:grid;gap:10px;}
       .wl-cart-item{display:grid;grid-template-columns:86px 1fr auto;gap:14px;align-items:center;background:#fff;border:1px solid #e1e1e1;border-radius:14px;padding:12px;}
       .wl-cart-img{width:76px;height:76px;object-fit:contain;border-radius:8px;background:#fff;border:1px solid #eee;}
@@ -134,41 +131,6 @@
       if (found) return found;
     }
     return null;
-  }
-
-  function injectQuoteUnderHeader(cartPanel) {
-    const header = cartPanel.querySelector('.cart-header');
-    if (!header || cartPanel.querySelector('.wl-quote-cta')) return;
-
-    const wrap = document.createElement('div');
-    wrap.className = 'wl-quote-cta';
-
-    const row = document.createElement('div');
-    row.className = 'wl-quote-row';
-
-    const copy = document.createElement('div');
-    copy.style.minWidth = '240px';
-    copy.style.flex = '1';
-    const title = document.createElement('div');
-    title.style.fontWeight = '800';
-    title.style.fontSize = '1.05rem';
-    title.textContent = 'Need a Quote?';
-    const sub = document.createElement('div');
-    sub.style.color = '#666';
-    sub.style.lineHeight = '1.35';
-    sub.textContent = 'Pricing a bigger order or not seeing exactly what you need? Submit a quick request and we’ll get back to you.';
-    copy.append(title, sub);
-
-    const link = document.createElement('a');
-    link.className = 'wl-btn';
-    link.href = QUOTE_URL;
-    link.target = '_blank';
-    link.rel = 'noopener';
-    link.textContent = 'Request a Quote';
-
-    row.append(copy, link);
-    wrap.appendChild(row);
-    header.insertAdjacentElement('afterend', wrap);
   }
 
   function parseItem(row) {
@@ -370,7 +332,6 @@
     if (!cartPanel) return;
 
     injectCss();
-    injectQuoteUnderHeader(cartPanel);
     buildCustomCart(cartPanel);
   });
 })();

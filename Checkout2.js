@@ -6,6 +6,41 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
+  function suppressQuoteCheckoutPath() {
+    if (!/ShoppingCart\.aspx/i.test(window.location.pathname || "")) return;
+
+    const order = document.getElementById("ctl00_PageBody_TransactionTypeSelector_rdbOrder");
+    const quote = document.getElementById("ctl00_PageBody_TransactionTypeSelector_rdbQuote");
+    if (order) order.checked = true;
+    if (quote) quote.checked = false;
+
+    document.querySelectorAll(
+      "#ctl00_PageBody_TransactionTypeDiv, .TransactionTypeSelector, " +
+      ".wl-quote-cart, .wl-quote-cta, [data-wl='quote-cta']"
+    ).forEach(function (node) {
+      const transactionRow = node.matches("#ctl00_PageBody_TransactionTypeDiv, .TransactionTypeSelector")
+        ? (node.closest(".row") || node.parentElement)
+        : null;
+      if (transactionRow) transactionRow.style.setProperty("display", "none", "important");
+      node.style.setProperty("display", "none", "important");
+      if (node.matches(".wl-quote-cart, .wl-quote-cta, [data-wl='quote-cta']")) node.remove();
+    });
+  }
+
+  suppressQuoteCheckoutPath();
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", suppressQuoteCheckoutPath, { once: true });
+  }
+
+  try {
+    if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
+      Sys.WebForms.PageRequestManager.getInstance().add_endRequest(suppressQuoteCheckoutPath);
+    }
+  } catch {}
+
+  const quoteObserver = new MutationObserver(suppressQuoteCheckoutPath);
+  if (document.documentElement) quoteObserver.observe(document.documentElement, { childList: true, subtree: true });
+  window.setTimeout(function () { quoteObserver.disconnect(); }, 15000);
   
   // ---------------------------------------------------------------------------
   // HOTFIX: Some builds referenced getDeliveredSelected()/getPickupSelected()

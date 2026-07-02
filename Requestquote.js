@@ -94,35 +94,9 @@
   function injectCartCTA() {
     if (!onCartPage()) return;
 
-    if (document.querySelector(".wl-quote-cart")) {
-      log("Cart CTA already present");
-      return;
-    }
-
-    let attempts = 0;
-    const maxAttempts = 20;
-
-    const timer = setInterval(() => {
-      attempts++;
-
-      const header = document.querySelector(".cart-header");
-      if (header && !document.querySelector(".wl-quote-cart")) {
-        const cta = createCTA(
-          "wl-quote-cart",
-          "Pricing a bigger order or special materials? Submit a quick request and we’ll get back to you fast."
-        );
-
-        header.insertAdjacentElement("afterend", cta);
-        log("Cart CTA injected");
-        clearInterval(timer);
-        return;
-      }
-
-      if (attempts >= maxAttempts) {
-        log("Cart CTA skipped: .cart-header not found after retries");
-        clearInterval(timer);
-      }
-    }, 500);
+    // Quote requests live in a separate workflow and should never compete with checkout.
+    document.querySelectorAll(".wl-quote-cart, .wl-quote-cta, [data-wl='quote-cta']")
+      .forEach((node) => node.remove());
   }
 
   /* =====================================================
