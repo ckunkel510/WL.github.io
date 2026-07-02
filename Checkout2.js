@@ -6,6 +6,10 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
+  // WebTrack's native UPS postback currently fails server-side. Keep this path
+  // unavailable until UPS OAuth rates can be accepted into the server order total.
+  const UPS_SHIPPING_ENABLED = false;
+
   function suppressQuoteCheckoutPath() {
     if (!/ShoppingCart\.aspx/i.test(window.location.pathname || "")) return;
 
@@ -80,7 +84,15 @@
   const FULFILLMENT_INTENT_KEY = "wl_fulfillment_intent";
 
   function getFulfillmentIntent() {
-    try { return sessionStorage.getItem(FULFILLMENT_INTENT_KEY) || ""; } catch { return ""; }
+    try {
+      const intent = sessionStorage.getItem(FULFILLMENT_INTENT_KEY) || "";
+      if (!UPS_SHIPPING_ENABLED && intent === "ship") {
+        sessionStorage.removeItem(FULFILLMENT_INTENT_KEY);
+        sessionStorage.removeItem("wl_fulfillment_method");
+        return "";
+      }
+      return intent;
+    } catch { return ""; }
   }
 
   function setFulfillmentIntent(value) {
@@ -91,6 +103,7 @@
   }
 
   function isShippingIntent() {
+    if (!UPS_SHIPPING_ENABLED) return false;
     const ups = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbUPSDelivery");
     return getFulfillmentIntent() === "ship" || !!(ups && ups.checked);
   }
@@ -3089,6 +3102,10 @@ document.addEventListener("click", function (ev) {
         if ($(".SaleTypeSelector").length) {
           $(".SaleTypeSelector").hide();
 
+          if (!UPS_SHIPPING_ENABLED) {
+            $("#ctl00_PageBody_SaleTypeSelector_rbUPSDelivery").prop("checked", false);
+          }
+
           const shipHTML = `
             <div class="modern-shipping-selector d-flex justify-content-around">
               <button type="button" id="btnPickup" class="btn btn-secondary" data-mode="pickup" data-value="rbCollectLater">
@@ -3100,11 +3117,6 @@ document.addEventListener("click", function (ev) {
                 <span class="wl-option-label"><i class="fas fa-truck"></i> Local Delivery</span>
                 <span class="wl-option-meta">Woodson delivery in Texas</span>
                 <span class="wl-option-tag" data-wl-delivery-tag>Texas address</span>
-              </button>
-              <button type="button" id="btnShip" class="btn btn-secondary" data-mode="ship" data-value="rbUPSDelivery">
-                <span class="wl-option-label"><i class="fas fa-box"></i> Ship</span>
-                <span class="wl-option-meta">UPS shipping</span>
-                <span class="wl-option-tag" data-wl-ship-tag>Shipping speed next</span>
               </button>
             </div>`;
           $(".epi-form-col-single-checkout:has(.SaleTypeSelector)").append(shipHTML);
@@ -3637,8 +3649,8 @@ document.addEventListener("click", function (ev) {
         if (stepNum === 1) {
           if (intent === "pickup") return "Pickup from a Woodson store";
           if (intent === "delivery") return "Local Woodson delivery";
-          if (intent === "ship") return "Ship via UPS";
-          return "Choose Pickup, Local Delivery, or Ship via UPS";
+          if (intent === "ship" && UPS_SHIPPING_ENABLED) return "Ship via UPS";
+          return "Choose Pickup or Local Delivery";
         }
         if (stepNum === 2) {
           const branch = getBranchField();
@@ -3799,7 +3811,7 @@ document.addEventListener("click", function (ev) {
         try { window.WLCheckout?.refreshDateUI?.(); } catch {}
         if (!canAutoAdvance()) {
           if (!getFulfillmentIntent()) {
-            copy.innerHTML = "<strong>How would you like to receive this order?</strong><span>Choose Pickup, Local Delivery, or Ship via UPS below.</span>";
+            copy.innerHTML = "<strong>How would you like to receive this order?</strong><span>Choose Pickup or Local Delivery below.</span>";
             return;
           }
           if (attempts < 3) {
