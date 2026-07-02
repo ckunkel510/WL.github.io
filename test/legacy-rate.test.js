@@ -66,6 +66,15 @@ test("recovers omitted US states from postal codes", () => {
   assert.equal(translated.body.shipTo.state, "TX");
 });
 
+test("recovers a state when WebTrack sends a nonstandard US country value", () => {
+  const xmlWithLongCountry = requestXml
+    .replace(/<StateProvinceCode>[^<]+<\/StateProvinceCode>/g, "")
+    .replace(/<CountryCode>US<\/CountryCode>/g, "<CountryCode>USA</CountryCode>");
+  const { rating } = parseLegacyXml(xmlWithLongCountry);
+  const translated = toOAuthRequest(rating);
+  assert.equal(translated.body.shipTo.state, "TX");
+});
+
 test("falls back to Shipper when WebTrack sends an empty ShipFrom", () => {
   const xmlWithEmptyShipFrom = requestXml.replace("</ShipTo>", "</ShipTo><ShipFrom/>");
   const { rating } = parseLegacyXml(xmlWithEmptyShipFrom);

@@ -107,7 +107,8 @@ function addressFromLegacy(node) {
   const address = node?.Address || node || {};
   const postalCode = text(address.PostalCode);
   const country = text(address.CountryCode || "US");
-  const postalMatch = country.toUpperCase() === "US" ? zipcodes.lookup(postalCode.slice(0, 5)) : null;
+  const postalPrefix = postalCode.match(/\d{5}/)?.[0] || "";
+  const postalMatch = postalPrefix ? zipcodes.lookup(postalPrefix) : null;
   return {
     addressLine: asArray(address.AddressLine).map(text).filter(Boolean),
     city: text(address.City) || postalMatch?.city || "",
