@@ -142,8 +142,8 @@
         .checkout-wizard.wl-single-page .checkout-step{padding:20px 0;}
         .checkout-wizard.wl-single-page .wl-section-title{font-size:18px;}
         .checkout-wizard.wl-single-page .modern-shipping-selector{grid-template-columns:1fr;}
-        .checkout-wizard.wl-single-page .epi-form-group-checkout,
-        .checkout-wizard.wl-single-page .form-group{display:block!important;width:100%!important;max-width:100%!important;}
+        .checkout-wizard.wl-single-page .epi-form-group-checkout{display:block!important;width:100%!important;max-width:100%!important;}
+        .checkout-wizard.wl-single-page .form-group{width:100%!important;max-width:100%!important;}
         .checkout-wizard.wl-single-page label{max-width:100%;}
         .checkout-wizard.wl-single-page input:not([type="radio"]):not([type="checkbox"]),
         .checkout-wizard.wl-single-page select,
