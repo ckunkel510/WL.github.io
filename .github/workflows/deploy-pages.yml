@@ -22,6 +22,8 @@ jobs:
         uses: actions/checkout@v4
       - name: Configure Pages
         uses: actions/configure-pages@v5
+      - name: Add deployment marker
+        run: printf '%s\n' "$GITHUB_SHA" > deployment-version.txt
       - name: Upload site
         uses: actions/upload-pages-artifact@v3
         with:
@@ -36,6 +38,24 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
+        continue-on-error: true
         uses: actions/deploy-pages@v4
         with:
-          timeout: 1200000
+          timeout: 600000
+      - name: Verify public release
+        env:
+          EXPECTED_SHA: ${{ github.sha }}
+        run: |
+          for attempt in $(seq 1 40); do
+            published="$(curl --fail --silent --show-error --max-time 20 \
+              "https://ckunkel510.github.io/WL.github.io/deployment-version.txt?run=${GITHUB_RUN_ID}&attempt=${attempt}" \
+              || true)"
+            if [ "$published" = "$EXPECTED_SHA" ]; then
+              echo "Verified public release $EXPECTED_SHA"
+              exit 0
+            fi
+            sleep 30
+          done
+
+          echo "The public Pages site did not reach $EXPECTED_SHA in time."
+          exit 1
