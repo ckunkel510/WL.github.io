@@ -321,7 +321,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function hasShippingChoice() {
     const selectors = [
-      "#ctl00_PageBody_CartSummary2_DeliveryOptionsPanel select",
+      "#ctl00_PageBody_CartSummary2_DeliveryOptionsPanel select:not([id*='lstDeliveryAreas'])",
       "#ctl00_PageBody_CartSummary2_DeliveryOptionsPanel input:not([type='hidden'])",
       "[id*='PromotionCode'] input:not([type='hidden'])",
       "[id*='PromoCode'] input:not([type='hidden'])",
@@ -442,6 +442,5 @@ document.addEventListener('DOMContentLoaded', function () {
       .add_endRequest(hideDeliveryPanelIfOnlyAreaDropdownShown);
   }
 })(jQuery);
-
 
 
