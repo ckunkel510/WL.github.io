@@ -742,6 +742,9 @@ wireFieldPersistence();
       #wlApWizard3 .wl-ap-field-untouched .wl-ap-validation-message {
         display: none !important;
       }
+      #wlApWizard3 .wl-ap-field-valid .wl-ap-validation-message {
+        display: none !important;
+      }
 
       @media (max-width: 720px) {
         div#MainLayoutRow {
@@ -813,6 +816,17 @@ wireFieldPersistence();
     });
   }
 
+  function syncFieldValidity(input, wrap) {
+    if (!input || !wrap) return;
+    const value = String(input.value || '').trim();
+    let valid = value.length > 0;
+    if (/PostalCode|Postcode/i.test(input.id || '')) valid = /^\d{5}(?:-\d{4})?$/.test(value);
+    else if (/Email/i.test(input.id || '')) valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+    else if (/BillingAddress/i.test(input.id || '')) valid = value.length >= 3;
+    else if (/PaymentAmount/i.test(input.id || '')) valid = Number(value.replace(/[^0-9.-]/g, '')) > 0;
+    wrap.classList.toggle('wl-ap-field-valid', valid);
+  }
+
   function prepareValidationField(id) {
     const input = document.getElementById(id);
     if (!input) return;
@@ -829,9 +843,11 @@ wireFieldPersistence();
     const markTouched = function () {
       input.dataset.wlApTouched = 'true';
       wrap.classList.remove('wl-ap-field-untouched');
+      syncFieldValidity(input, wrap);
     };
     input.addEventListener('input', markTouched, { passive: true });
     input.addEventListener('blur', markTouched, { passive: true });
+    syncFieldValidity(input, wrap);
   }
 
   function markCurrentStepFieldsTouched() {
