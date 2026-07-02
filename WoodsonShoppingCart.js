@@ -7,6 +7,16 @@
   const SHIPPING_QUOTE_KEY = 'wl_shipping_quote_v1';
   const AUTO_ADVANCE_KEY = 'wl_checkout_auto_advance';
   const QUOTE_TTL_MS = 4 * 60 * 60 * 1000;
+  const UPS_RATE_URL = 'https://wl-upsrates.vercel.app/api/ups-rates';
+  const STORE_ORIGINS = {
+    brenham: { name: 'Brenham', city: 'Brenham', state: 'TX', postalCode: '77833' },
+    bryan: { name: 'Bryan', city: 'Bryan', state: 'TX', postalCode: '77803' },
+    caldwell: { name: 'Caldwell', city: 'Caldwell', state: 'TX', postalCode: '77836' },
+    lexington: { name: 'Lexington', city: 'Lexington', state: 'TX', postalCode: '78947' },
+    buffalo: { name: 'Buffalo', city: 'Buffalo', state: 'TX', postalCode: '75831' },
+    mexia: { name: 'Mexia', city: 'Mexia', state: 'TX', postalCode: '76667' },
+    groesbeck: { name: 'Groesbeck', city: 'Groesbeck', state: 'TX', postalCode: '76642' }
+  };
 
   function ready(fn) {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn, { once: true });
@@ -39,6 +49,16 @@
     }).filter(Boolean);
   }
 
+  function getCartItems() {
+    return getCartRows().map(function (row) {
+      const quantityInput = row.querySelector('input[id*="_qty_"]:not([id$="_ClientState"])');
+      return {
+        code: getCartProductCodesForRow(row),
+        quantity: Math.max(1, Number(quantityInput?.value) || 1)
+      };
+    }).filter(function (item) { return item.code; });
+  }
+
   function getCartSignature() {
     return getCartRows().map(function (row) {
       const code = getCartProductCodesForRow(row);
@@ -63,7 +83,7 @@
   function readQuotedShipping(signature) {
     try {
       const quote = JSON.parse(localStorage.getItem(SHIPPING_QUOTE_KEY) || 'null');
-      if (!quote || quote.kind !== 'local-delivery' || quote.signature !== signature || !quote.amount) return null;
+      if (!quote || !['local-delivery', 'ups'].includes(quote.kind) || quote.signature !== signature || !quote.amount) return null;
       if ((Date.now() - Number(quote.ts || 0)) > QUOTE_TTL_MS) return null;
       return quote;
     } catch {
@@ -142,7 +162,10 @@
         return el.textContent;
       }).join(' '));
       const zip = addressText.match(/\b\d{5}(?:-\d{4})?\b/);
-      return zip ? { zip: zip[0].slice(0, 5) } : null;
+      return zip ? {
+        zip: zip[0].slice(0, 5),
+        isTexas: /\b(?:Texas|TX)\b/i.test(addressText)
+      } : null;
     } catch (error) {
       console.warn('[WLCart] Could not read the saved delivery ZIP.', error);
       return null;
@@ -168,6 +191,66 @@
     return ['77833', '77836', '78947', '77803', '76667', '76642', '75831'].includes(zip);
   }
 
+  function getSelectedStoreOrigin() {
+    const locationText = text(Array.from(document.querySelectorAll('a[href]')).filter(function (link) {
+      return String(link.getAttribute('href') || '').toLowerCase().includes('storelocations');
+    }).map(function (link) { return link.textContent; }).join(' ')).toLowerCase();
+    const key = Object.keys(STORE_ORIGINS).find(function (storeName) {
+      return locationText.includes(storeName);
+    });
+    return key ? STORE_ORIGINS[key] : null;
+  }
+
+  function buildUpsPackage(items, productData) {
+    const byCode = new Map(productData.map(function (product) {
+      return [text(product.ProductCode).toUpperCase(), product];
+    }));
+    let totalWeight = 0;
+    let containsLargeItems = false;
+
+    for (const item of items) {
+      const product = byCode.get(item.code);
+      const weight = Number(product?.Weight);
+      if (!product || !Number.isFinite(weight) || weight <= 0) {
+        return { unavailable: true, containsLargeItems: false };
+      }
+      containsLargeItems = containsLargeItems || weight > 35 || Number(product.Width) > 36 ||
+        Number(product.Thickness) > 36 || Number(product.Length) > 36;
+      totalWeight += weight * item.quantity;
+    }
+
+    return {
+      unavailable: !items.length || totalWeight <= 0 || totalWeight > 150,
+      containsLargeItems: containsLargeItems,
+      packages: [{ weight: Number(totalWeight.toFixed(2)) }]
+    };
+  }
+
+  async function getUpsEstimate(userAddress, packageInfo) {
+    const origin = getSelectedStoreOrigin();
+    if (!origin) throw new Error('The selected store could not be determined.');
+    const response = await fetch(UPS_RATE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        shipFrom: origin,
+        shipTo: { postalCode: userAddress.zip, country: 'US', residential: true },
+        packages: packageInfo.packages
+      })
+    });
+    const result = await response.json().catch(function () { return {}; });
+    if (!response.ok) throw new Error(result.error || 'UPS could not calculate a rate.');
+    const rate = (result.rates || []).find(function (candidate) {
+      return candidate.serviceCode === '03';
+    }) || (result.rates || [])[0];
+    if (!rate || !Number.isFinite(Number(rate.amount))) throw new Error('UPS returned no eligible services.');
+    return {
+      label: rate.serviceName || 'UPS shipping',
+      amount: '$' + Number(rate.amount).toFixed(2),
+      note: 'Estimated from ' + origin.name + ' to ZIP ' + userAddress.zip + '. Final rate is confirmed before payment.'
+    };
+  }
+
   function cartSubtotal() {
     const visible = Array.from(document.querySelectorAll('.SubtotalWrapper')).find(function (wrapper) {
       const rect = wrapper.getBoundingClientRect();
@@ -178,19 +261,11 @@
   }
 
   async function calculateEstimate(signature) {
-    const quoted = readQuotedShipping(signature);
-    if (quoted) {
-      return {
-        label: quoted.label || 'Estimated delivery',
-        amount: quoted.amount,
-        note: 'Based on WebTrack\'s latest quote for these cart items. Final charge is confirmed before payment.'
-      };
-    }
-
     const results = await Promise.all([getUserAddress(), getProductData()]);
     const userAddress = results[0];
     const productData = results[1];
-    const codes = getCartProductCodes();
+    const items = getCartItems();
+    const codes = items.map(function (item) { return item.code; });
     const products = productData.filter(function (product) {
       return codes.includes(text(product.ProductCode).toUpperCase());
     });
@@ -205,6 +280,48 @@
         amount: 'Address needed',
         note: 'Sign in or confirm a delivery address to calculate shipping.'
       };
+    }
+
+    const quoted = readQuotedShipping(signature);
+    const quoteMatchesAddress = quoted && (
+      (userAddress.isTexas && quoted.kind === 'local-delivery') ||
+      (!userAddress.isTexas && quoted.kind === 'ups' && quoted.postalCode === userAddress.zip)
+    );
+    if (quoteMatchesAddress) {
+      return {
+        label: quoted.label || (quoted.kind === 'ups' ? 'UPS shipping' : 'Estimated delivery'),
+        amount: quoted.amount,
+        note: 'Based on WebTrack\'s latest quote for these cart items. Final charge is confirmed before payment.'
+      };
+    }
+
+    const packageInfo = buildUpsPackage(items, productData);
+
+    if (!userAddress.isTexas) {
+      if (packageInfo.containsLargeItems) {
+        return {
+          label: 'UPS shipping',
+          amount: 'Freight review needed',
+          note: 'One or more oversized items require a custom shipping review.'
+        };
+      }
+      if (packageInfo.unavailable) {
+        return {
+          label: 'UPS shipping',
+          amount: 'Calculated at checkout',
+          note: 'The final UPS service and rate will be shown before payment.'
+        };
+      }
+      try {
+        return await getUpsEstimate(userAddress, packageInfo);
+      } catch (error) {
+        console.warn('[WLCart] Could not calculate the UPS cart estimate.', error);
+        return {
+          label: 'UPS shipping',
+          amount: 'Calculated at checkout',
+          note: 'The final UPS service and rate will be shown before payment.'
+        };
+      }
     }
 
     if (!isWithinCentralDeliveryZone(userAddress.zip)) {

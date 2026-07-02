@@ -2,7 +2,15 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { buildRateRequest, normalizePackages, normalizedRates } = require("../api/ups-rates")._test;
+const { buildRateRequest, normalizeAddress, normalizePackages, normalizedRates } = require("../api/ups-rates")._test;
+
+test("fills in a US city and state from the postal code", () => {
+  const address = normalizeAddress({ postalCode: "73102" }, "Ship-to");
+
+  assert.equal(address.City, "Oklahoma City");
+  assert.equal(address.StateProvinceCode, "OK");
+  assert.equal(address.CountryCode, "US");
+});
 
 test("builds a UPS multi-package shop request", () => {
   process.env.UPS_ACCOUNT_NUMBER = "ABC123";

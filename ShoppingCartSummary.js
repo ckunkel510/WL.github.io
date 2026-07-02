@@ -519,15 +519,21 @@
   }
 
   function cacheShippingQuote(shipping) {
-    if (!shipping || !/^delivery/i.test(shipping.label || '') || !/\$/.test(shipping.amount || '')) return;
+    if (!shipping || !/\$/.test(shipping.amount || '')) return;
     try {
       const signature = sessionStorage.getItem('wl_cart_signature_v1') || '';
       if (!signature) return;
+      const intent = sessionStorage.getItem('wl_fulfillment_intent') || '';
+      if (intent !== 'ship' && !/^delivery/i.test(shipping.label || '')) return;
+      let selection = null;
+      try { selection = JSON.parse(sessionStorage.getItem('wl_shipping_selection_v1') || 'null'); } catch(e){}
+      const postalCode = document.getElementById('ctl00_PageBody_ShoppingCartSummaryTableControl_DeliveryPostalCode')?.textContent?.trim() || '';
       localStorage.setItem('wl_shipping_quote_v1', JSON.stringify({
         signature: signature,
-        kind: 'local-delivery',
-        label: 'Estimated delivery',
+        kind: intent === 'ship' ? 'ups' : 'local-delivery',
+        label: intent === 'ship' ? (selection?.label || 'UPS shipping') : 'Estimated delivery',
         amount: shipping.amount,
+        postalCode: intent === 'ship' ? postalCode.slice(0, 5) : '',
         ts: Date.now()
       }));
     } catch(e){}

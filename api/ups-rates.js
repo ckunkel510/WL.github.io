@@ -1,6 +1,7 @@
 "use strict";
 
 const crypto = require("node:crypto");
+const zipcodes = require("zipcodes");
 
 const DEFAULT_ORIGINS = [
   "https://webtrack.woodsonlumber.com",
@@ -79,12 +80,13 @@ function cleanText(value, maxLength) {
 function normalizeAddress(input, label) {
   const address = input && typeof input === "object" ? input : {};
   const postalCode = cleanText(address.postalCode, 10);
-  const state = cleanText(address.state, 2).toUpperCase();
-  const city = cleanText(address.city, 30);
-  const country = cleanText(address.country || "US", 2).toUpperCase();
   if (!/^\d{5}(?:-\d{4})?$/.test(postalCode)) {
     throw new RequestError(400, `${label} postal code is required.`);
   }
+  const postalMatch = zipcodes.lookup(postalCode.slice(0, 5));
+  const state = cleanText(address.state || postalMatch?.state, 2).toUpperCase();
+  const city = cleanText(address.city || postalMatch?.city, 30);
+  const country = cleanText(address.country || "US", 2).toUpperCase();
   if (!/^[A-Z]{2}$/.test(state)) throw new RequestError(400, `${label} state is required.`);
   if (!city) throw new RequestError(400, `${label} city is required.`);
   if (country !== "US") throw new RequestError(400, "This UPS checkout currently supports US addresses only.");
