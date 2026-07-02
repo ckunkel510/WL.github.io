@@ -15,6 +15,8 @@
   function getDeliveredSelected() {
     const el = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbDelivered");
     if (el && el.checked) return true;
+    const ups = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbUPSDelivery");
+    if (ups && ups.checked) return true;
     // Fallback: modern selector buttons (no radio checked yet)
     try {
       const btn = document.querySelector(`.modern-shipping-selector button[data-value="rbDelivered"].is-selected, .modern-shipping-selector button[data-value="rbDelivered"].selected, .modern-shipping-selector button[data-value="rbDelivered"].active, .modern-shipping-selector button[data-value="rbDelivered"].wl-selected`);
@@ -54,7 +56,8 @@
   }
 
   function isShippingIntent() {
-    return getFulfillmentIntent() === "ship";
+    const ups = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbUPSDelivery");
+    return getFulfillmentIntent() === "ship" || !!(ups && ups.checked);
   }
 
   function isSinglePageCheckout() {
@@ -1740,16 +1743,19 @@ document.addEventListener("click", function (ev) {
         // Ship/Pickup selected?
         const rbPick = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbCollectLater");
         const rbDel = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbDelivered");
-        if (!(rbPick && rbPick.checked) && !(rbDel && rbDel.checked)) {
+        const rbUPS = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbUPSDelivery");
+        if (!(rbPick && rbPick.checked) && !(rbDel && rbDel.checked) && !(rbUPS && rbUPS.checked)) {
           // If using the modern button selector, infer selection from the active button
           try {
             const btnDel = document.querySelector('.modern-shipping-selector button[data-value="rbDelivered"].is-selected, .modern-shipping-selector button[data-value="rbDelivered"].selected, .modern-shipping-selector button[data-value="rbDelivered"].active');
             const btnPick = document.querySelector('.modern-shipping-selector button[data-value="rbCollectLater"].is-selected, .modern-shipping-selector button[data-value="rbCollectLater"].selected, .modern-shipping-selector button[data-value="rbCollectLater"].active');
+            const btnUPS = document.querySelector('.modern-shipping-selector button[data-value="rbUPSDelivery"].is-selected, .modern-shipping-selector button[data-value="rbUPSDelivery"].selected, .modern-shipping-selector button[data-value="rbUPSDelivery"].active');
             if (btnDel && rbDel) { rbDel.checked = true; }
             if (btnPick && rbPick) { rbPick.checked = true; }
+            if (btnUPS && rbUPS) { rbUPS.checked = true; }
           } catch {}
 
-          if (!(rbPick && rbPick.checked) && !(rbDel && rbDel.checked)) {
+          if (!(rbPick && rbPick.checked) && !(rbDel && rbDel.checked) && !(rbUPS && rbUPS.checked)) {
             showInlineError(1, "<strong>Please choose:</strong> Delivered or Pickup.");
             return false;
           }
@@ -2088,6 +2094,13 @@ document.addEventListener("click", function (ev) {
         const delCity  = (document.getElementById("ctl00_PageBody_DeliveryAddress_City")?.value || "").trim();
         const delZip   = (document.getElementById("ctl00_PageBody_DeliveryAddress_Postcode")?.value || "").trim();
         return !!(delLine1 || delCity || delZip);
+      }
+
+      // Signed-in accounts occasionally arrive with a complete delivery address but
+      // an empty invoice block. Fill only that fully blank block and keep it editable;
+      // never overwrite a distinct billing address already supplied by WebTrack.
+      if (invoiceLooksBlank() && deliveryHasData()) {
+        copyDeliveryToInvoice(false);
       }
 
       wrapInv.style.display = "none";
@@ -2680,6 +2693,7 @@ document.addEventListener("click", function (ev) {
 
       const rbPick = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbCollectLater");
       const rbDel = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbDelivered");
+      const rbUPS = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbUPSDelivery");
       const zipInput = document.getElementById("ctl00_PageBody_DeliveryAddress_Postcode");
 
       function inZone(z) {
@@ -2699,7 +2713,7 @@ document.addEventListener("click", function (ev) {
       }
 
       function isOutOfTexasDelivery() {
-        if (!(rbDel && rbDel.checked) || (rbPick && rbPick.checked)) return false;
+        if (!getDeliveredSelected() || getPickupSelected()) return false;
         const s = deliveryStateText().toLowerCase();
         if (!s || /^\[?select/i.test(s) || s === "0" || s === "00") return false;
         return !isTexasDeliveryAddress();
@@ -2737,7 +2751,7 @@ document.addEventListener("click", function (ev) {
 
           specialIns.readOnly = false;
           baseText = "Pickup on " + d + (t ? " at " + t : "") + (p ? " for " + p : "");
-        } else if (rbDel && rbDel.checked) {
+        } else if (getDeliveredSelected() && !getPickupSelected()) {
           specialIns.readOnly = true;
           const shippingOrder = applyShippingDefaults();
           if (!shippingOrder && inZone(zipInput ? zipInput.value : "")) {
@@ -2761,7 +2775,7 @@ document.addEventListener("click", function (ev) {
 
           // If date already chosen, enforce same-day rule immediately
           if (pickupInput.value) populatePickupTimes(parseLocalDate(pickupInput.value));
-        } else if (rbDel && rbDel.checked) {
+        } else if (getDeliveredSelected() && !getPickupSelected()) {
           pickupDiv.style.display = "none";
           const shippingOrder = applyShippingDefaults();
           deliveryDiv.style.display = shippingOrder ? "none" : "block";
@@ -2776,6 +2790,7 @@ document.addEventListener("click", function (ev) {
 
       if (rbPick) rbPick.addEventListener("change", onShip);
       if (rbDel) rbDel.addEventListener("change", onShip);
+      if (rbUPS) rbUPS.addEventListener("change", onShip);
       ["ctl00_PageBody_DeliveryAddress_CountySelector_CountyList", "ctl00_PageBody_DeliveryAddress_Postcode"].forEach(function(id) {
         const node = document.getElementById(id);
         if (node) {
@@ -3031,7 +3046,7 @@ document.addEventListener("click", function (ev) {
                 <span class="wl-option-meta">Woodson delivery in Texas</span>
                 <span class="wl-option-tag" data-wl-delivery-tag>Texas address</span>
               </button>
-              <button type="button" id="btnShip" class="btn btn-secondary" data-mode="ship" data-value="rbDelivered">
+              <button type="button" id="btnShip" class="btn btn-secondary" data-mode="ship" data-value="rbUPSDelivery">
                 <span class="wl-option-label"><i class="fas fa-box"></i> Ship</span>
                 <span class="wl-option-meta">UPS shipping</span>
                 <span class="wl-option-tag" data-wl-ship-tag>Shipping speed next</span>
@@ -3147,13 +3162,16 @@ document.addEventListener("click", function (ev) {
 
             const delRad = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
             const pickRad = $("#ctl00_PageBody_SaleTypeSelector_rbCollectLater");
+            const upsRad = $("#ctl00_PageBody_SaleTypeSelector_rbUPSDelivery");
             const $buttons = $(".modern-shipping-selector button[data-mode]");
 
             $buttons.css({ opacity: 1, pointerEvents: "auto" });
 
             const hasSelection = mode === "pickup" || mode === "delivery" || mode === "ship";
             const isPickup = mode === "pickup";
-            const isDelivered = hasSelection && !isPickup;
+            const isShip = mode === "ship";
+            const isDelivered = mode === "delivery";
+            const isDeliveryLike = isDelivered || isShip;
 
             // Visual styling (use classes + !important CSS to defeat theme overrides)
             try {
@@ -3184,7 +3202,7 @@ document.addEventListener("click", function (ev) {
 
             // Persist selection for other modules only after the customer/system has actually selected a sale type.
             if (hasSelection) {
-              document.cookie = "pickupSelected=" + (isDelivered ? "false" : "true") + ";path=/";
+              document.cookie = "pickupSelected=" + (isDeliveryLike ? "false" : "true") + ";path=/";
               try {
                 setFulfillmentIntent(mode);
                 sessionStorage.setItem("wl_fulfillment_method", mode);
@@ -3193,7 +3211,7 @@ document.addEventListener("click", function (ev) {
             updateAddressAwareOptions();
             // Keep underlying panels sane (does not trigger postback)
             if (hasSelection) {
-              try { ensureShippingPanelVisibility(isDelivered); } catch (e) {}
+              try { ensureShippingPanelVisibility(isDeliveryLike); } catch (e) {}
             }
 
             // IMPORTANT: on initial load we only want Step 1 (selection) visible.
@@ -3201,7 +3219,7 @@ document.addEventListener("click", function (ev) {
             if (!silent && hasSelection) {
               // Changing ship/pickup selection resets Billing confirmation gates
               try { sessionStorage.removeItem("wl_billing_confirmed_delivered"); } catch {}
-              const nextStep = isDelivered ? 3 : 2;
+              const nextStep = isDeliveryLike ? 3 : 2;
 
               // Let the postback-return logic know where to land if the page refreshes.
               try {
@@ -3213,7 +3231,11 @@ document.addEventListener("click", function (ev) {
               try {
                 if (isDelivered && delRad.length && !delRad.is(":checked")) {
                   delRad.prop("checked", true).trigger("click").trigger("change");
-                } else if (!isDelivered && pickRad.length && !pickRad.is(":checked")) {
+                } else if (isShip && upsRad.length && !upsRad.is(":checked")) {
+                  upsRad.prop("checked", true).trigger("click").trigger("change");
+                } else if (isShip && !upsRad.length && delRad.length && !delRad.is(":checked")) {
+                  delRad.prop("checked", true).trigger("click").trigger("change");
+                } else if (isPickup && pickRad.length && !pickRad.is(":checked")) {
                   pickRad.prop("checked", true).trigger("click").trigger("change");
                 }
               } catch (e) {}
@@ -3527,7 +3549,8 @@ document.addEventListener("click", function (ev) {
         if (!el) return "";
         if (el.tagName === "SELECT") {
           const option = el.selectedOptions && el.selectedOptions[0] ? el.selectedOptions[0] : null;
-          return String((option && (option.text || option.textContent)) || el.value || "").replace(/\s+/g, " ").trim();
+          const selected = String((option && (option.text || option.textContent)) || el.value || "").replace(/\s+/g, " ").trim();
+          return wlIsPlaceholderText(selected) ? "" : selected;
         }
         return String(el.value || "").trim();
       }
