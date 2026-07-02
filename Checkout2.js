@@ -6,9 +6,8 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  // WebTrack's native UPS postback currently fails server-side. Keep this path
-  // unavailable until UPS OAuth rates can be accepted into the server order total.
-  const UPS_SHIPPING_ENABLED = false;
+  // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
+  const UPS_SHIPPING_ENABLED = true;
 
   function suppressQuoteCheckoutPath() {
     if (!/ShoppingCart\.aspx/i.test(window.location.pathname || "")) return;
