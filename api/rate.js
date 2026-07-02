@@ -312,8 +312,18 @@ async function handler(req, res) {
     authenticate(access);
     const translated = toOAuthRequest(rating);
     const result = await requestRates(translated.body);
+    console.info("ups-legacy-response-shape", JSON.stringify({
+      isSoap,
+      rateCount: result.rates.length,
+      serviceCodes: result.rates.map((rate) => rate.serviceCode)
+    }));
     return sendXml(res, 200, isSoap ? soapSuccessXml(result, translated.context) : successXml(result, translated.context));
   } catch (error) {
+    console.warn("ups-legacy-response-error", JSON.stringify({
+      isSoap,
+      status: error instanceof RequestError ? error.status : 500,
+      message: error instanceof Error ? error.message : "Unknown error"
+    }));
     return sendXml(res, 200, isSoap ? soapErrorXml(error) : errorXml(error));
   }
 }
