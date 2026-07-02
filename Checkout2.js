@@ -192,9 +192,13 @@
         .checkout-wizard.wl-single-page .checkout-step{padding:20px 0;}
         .checkout-wizard.wl-single-page .wl-section-title{font-size:18px;}
         .checkout-wizard.wl-single-page .modern-shipping-selector{grid-template-columns:1fr;}
-        .checkout-wizard.wl-single-page .wl-section-heading{align-items:flex-start;}
-        .checkout-wizard.wl-single-page .wl-section-summary{flex-basis:calc(100% - 54px);margin-left:50px;margin-top:-8px;}
-        .checkout-wizard.wl-single-page .wl-section-edit{margin-left:auto;}
+        .checkout-wizard.wl-single-page .wl-section-heading{
+          display:grid!important;grid-template-columns:38px minmax(0,1fr) auto;align-items:center;column-gap:12px;row-gap:6px;
+        }
+        .checkout-wizard.wl-single-page .wl-section-heading .wl-step-icon{grid-column:1;grid-row:1;}
+        .checkout-wizard.wl-single-page .wl-section-title{grid-column:2;grid-row:1;min-width:0;}
+        .checkout-wizard.wl-single-page .wl-section-summary{grid-column:2 / 4;grid-row:2;width:auto;min-width:0;margin:0;}
+        .checkout-wizard.wl-single-page .wl-section-edit{grid-column:3;grid-row:1;margin:0;}
         .checkout-wizard.wl-single-page .epi-form-group-checkout{display:block!important;width:100%!important;max-width:100%!important;}
         .checkout-wizard.wl-single-page .form-group{width:100%!important;max-width:100%!important;}
         .checkout-wizard.wl-single-page label{max-width:100%;}
@@ -202,8 +206,8 @@
         .checkout-wizard.wl-single-page select,
         .checkout-wizard.wl-single-page textarea{width:100%!important;max-width:100%!important;min-width:0!important;}
         .checkout-wizard.wl-single-page .checkout-step[data-step="5"] .wl-proxy-continue{width:100%;}
-        .checkout-wizard.wl-single-page .wl-smart-handoff{align-items:stretch;flex-direction:column;}
-        .checkout-wizard.wl-single-page .wl-smart-handoff button{width:100%;}
+        .checkout-wizard.wl-single-page .wl-smart-handoff{display:grid;grid-template-columns:minmax(0,1fr);align-items:stretch;width:100%;}
+        .checkout-wizard.wl-single-page .wl-smart-handoff-copy,.checkout-wizard.wl-single-page .wl-smart-handoff button{width:100%;min-width:0;}
       }
     `;
     document.head.appendChild(style);
