@@ -33,6 +33,18 @@ test("parses concatenated legacy UPS XML documents", () => {
   assert.equal(parsed.rating.Request.RequestOption, "Shop");
 });
 
+test("parses a namespaced SOAP-wrapped legacy request", () => {
+  const soapXml = `<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+    <soap:Header>
+      <AccessRequest><AccessLicenseNumber>proxy</AccessLicenseNumber><UserId>woodson</UserId><Password>secret</Password></AccessRequest>
+    </soap:Header>
+    <soap:Body>${requestXml.match(/<RatingServiceSelectionRequest>[\s\S]*<\/RatingServiceSelectionRequest>/)[0]}</soap:Body>
+  </soap:Envelope>`;
+  const parsed = parseLegacyXml(soapXml);
+  assert.equal(parsed.access.UserId, "woodson");
+  assert.equal(parsed.rating.Request.RequestOption, "Shop");
+});
+
 test("translates legacy UPS shipment fields", () => {
   const { rating } = parseLegacyXml(requestXml);
   const translated = toOAuthRequest(rating);

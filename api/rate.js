@@ -6,6 +6,7 @@ const { RequestError, requestRates } = require("./ups-rates")._internal;
 
 const parser = new XMLParser({
   ignoreAttributes: false,
+  removeNSPrefix: true,
   parseTagValue: false,
   trimValues: true
 });
@@ -36,6 +37,21 @@ function safeEqual(left, right) {
   return a.length === b.length && a.length > 0 && crypto.timingSafeEqual(a, b);
 }
 
+function findNode(root, names, depth = 0) {
+  if (!root || typeof root !== "object" || depth > 12) return undefined;
+  const wanted = new Set(names);
+  for (const [key, value] of Object.entries(root)) {
+    const localName = key.includes(":") ? key.split(":").pop() : key;
+    if (wanted.has(localName)) return value;
+  }
+  for (const value of Object.values(root)) {
+    if (!value || typeof value !== "object") continue;
+    const found = findNode(value, names, depth + 1);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+}
+
 function parseLegacyXml(raw) {
   const source = String(raw || "").trim();
   if (!source || source.length > 256000) throw new RequestError(400, "UPS XML request is empty or too large.");
@@ -47,8 +63,8 @@ function parseLegacyXml(raw) {
     throw new RequestError(400, "UPS XML request could not be parsed.");
   }
 
-  const access = parsed.AccessRequest || {};
-  const rating = parsed.RatingServiceSelectionRequest || parsed.RateRequest || {};
+  const access = findNode(parsed, ["AccessRequest"]) || {};
+  const rating = findNode(parsed, ["RatingServiceSelectionRequest", "RateRequest"]) || {};
   if (!Object.keys(rating).length) throw new RequestError(400, "UPS rating request is missing.");
   return { access, rating };
 }
@@ -189,7 +205,7 @@ function errorXml(error) {
 
 function sendXml(res, status, xml) {
   res.statusCode = status;
-  res.setHeader("Content-Type", "application/xml; charset=utf-8");
+  res.setHeader("Content-Type", "text/xml; charset=utf-8");
   res.setHeader("Cache-Control", "no-store");
   res.end(xml);
 }
