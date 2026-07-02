@@ -30,6 +30,7 @@ jobs:
           path: .
 
   deploy:
+    continue-on-error: true
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -38,15 +39,21 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        continue-on-error: true
         uses: actions/deploy-pages@v4
         with:
           timeout: 600000
+
+  verify:
+    if: ${{ always() }}
+    needs: [build, deploy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
       - name: Verify public release
         env:
           EXPECTED_SHA: ${{ github.sha }}
         run: |
-          for attempt in $(seq 1 40); do
+          for attempt in $(seq 1 60); do
             published="$(curl --fail --silent --show-error --max-time 20 \
               "https://ckunkel510.github.io/WL.github.io/deployment-version.txt?run=${GITHUB_RUN_ID}&attempt=${attempt}" \
               || true)"
