@@ -218,11 +218,32 @@ async function readBody(req) {
   return Buffer.concat(chunks).toString("utf8");
 }
 
+function logRequestShape(req, raw) {
+  const tags = [];
+  const seen = new Set();
+  const matcher = /<\s*(?!\/|\?|!)([A-Za-z_][\w.-]*(?::[\w.-]+)?)/g;
+  let match;
+  while ((match = matcher.exec(raw)) && tags.length < 30) {
+    const tag = match[1];
+    if (seen.has(tag)) continue;
+    seen.add(tag);
+    tags.push(tag);
+  }
+  console.info("ups-legacy-request-shape", JSON.stringify({
+    contentType: String(req.headers["content-type"] || "").slice(0, 100),
+    soapAction: String(req.headers.soapaction || "").slice(0, 160),
+    bodyLength: raw.length,
+    tags
+  }));
+}
+
 async function handler(req, res) {
   if (req.method !== "POST") return sendXml(res, 405, errorXml(new RequestError(405, "POST is required.")));
 
   try {
-    const { access, rating } = parseLegacyXml(await readBody(req));
+    const raw = await readBody(req);
+    logRequestShape(req, raw);
+    const { access, rating } = parseLegacyXml(raw);
     authenticate(access);
     const translated = toOAuthRequest(rating);
     const result = await requestRates(translated.body);
@@ -233,4 +254,4 @@ async function handler(req, res) {
 }
 
 module.exports = handler;
-module.exports._test = { authenticate, errorXml, parseLegacyXml, successXml, toOAuthRequest };
+module.exports._test = { authenticate, errorXml, logRequestShape, parseLegacyXml, successXml, toOAuthRequest };
