@@ -11,12 +11,13 @@
     { name: "Buffalo", lat: 31.4632, lon: -96.0580 }
   ];
   const DEFAULT_STORE = "Groesbeck";
-  const MAX_CONCURRENT_STOCK_REQUESTS = 6;
+  const MAX_CONCURRENT_STOCK_REQUESTS = 3;
   const LOCATION_STORE_KEY = "wlNearestStoreV1";
   const LOCATION_ATTEMPT_KEY = "wlLocationAttemptedAtV1";
   const LOCATION_CACHE_MS = 24 * 60 * 60 * 1000;
   let storeContextPromise;
   let activeStockRequests = 0;
+  let stockVisibilityObserver;
   const stockRequestQueue = [];
 
   function getProductId(card) {
@@ -236,8 +237,30 @@
   }
 
   function queueStockForCard(card) {
+    if (card.dataset.wlStockQueued === "true" || card.dataset.wlStockLoaded === "true") return;
+    card.dataset.wlStockQueued = "true";
     stockRequestQueue.push(card);
     drainStockRequestQueue();
+  }
+
+  function observeStockForCard(card) {
+    ensureStockRow(card);
+    if (typeof window.IntersectionObserver !== "function") {
+      queueStockForCard(card);
+      return;
+    }
+
+    if (!stockVisibilityObserver) {
+      stockVisibilityObserver = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          stockVisibilityObserver.unobserve(entry.target);
+          queueStockForCard(entry.target);
+        });
+      }, { rootMargin: "600px 0px" });
+    }
+
+    stockVisibilityObserver.observe(card);
   }
 
   function registerCards(root) {
@@ -247,8 +270,7 @@
     cards.forEach(function (card) {
       if (card.dataset.wlStockRegistered === "true") return;
       card.dataset.wlStockRegistered = "true";
-      ensureStockRow(card);
-      queueStockForCard(card);
+      observeStockForCard(card);
     });
   }
 

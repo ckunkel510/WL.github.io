@@ -468,11 +468,66 @@
         max-width: calc(100vw - 32px);
       }
 
-      body.wl-products-48 ul.pagination,
       body.wl-products-48 .items-per-page,
-      body.wl-infinite-products-active .items-per-page,
-      body.wl-infinite-products-active ul.pagination {
+      body.wl-infinite-products-active .items-per-page {
         display: none !important;
+      }
+
+      body.wl-products-48 ul.pagination {
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 6px;
+        width: 100%;
+        margin: 24px auto 30px !important;
+        padding: 0 !important;
+        list-style: none;
+      }
+
+      body.wl-products-48 ul.pagination .page-item {
+        margin: 0 !important;
+      }
+
+      body.wl-products-48 ul.pagination .page-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        min-width: 40px;
+        min-height: 40px;
+        padding: 8px 11px;
+        color: #34383d;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1;
+        text-decoration: none;
+        background: #fff;
+        border: 1px solid #d4d8dc;
+        border-radius: 6px;
+        box-shadow: 0 1px 2px rgba(28, 31, 35, 0.05);
+      }
+
+      body.wl-products-48 ul.pagination .page-link:hover,
+      body.wl-products-48 ul.pagination .page-link:focus {
+        color: #6b0005;
+        border-color: #6b0005;
+        outline: 2px solid rgba(107, 0, 5, 0.12);
+        outline-offset: 1px;
+      }
+
+      body.wl-products-48 ul.pagination .page-item.active .page-link {
+        color: #fff;
+        background: #6b0005;
+        border-color: #6b0005;
+      }
+
+      body.wl-products-48 ul.pagination .page-item.disabled .page-link {
+        color: #8a9096;
+        background: #f4f5f6;
+        border-color: #e1e3e5;
+        box-shadow: none;
+        pointer-events: none;
       }
 
       body.wl-infinite-products-active #productlistcards.Cards {
@@ -1304,7 +1359,6 @@
     }
     enhanceCards(document);
     initializeRelatedCategories();
-    initializeInfiniteScroll();
 
     const observer = new MutationObserver(function (mutations) {
       mutations.forEach(function (mutation) {
