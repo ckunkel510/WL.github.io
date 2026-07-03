@@ -227,6 +227,18 @@
         :host([data-wix]) .wl-mobile-section h3 { display: none; }
         :host([data-wix]) .wl-mobile-list a, :host([data-wix]) .wl-mobile-list button { min-height: 28px; padding: 3px 2px; border: 1px solid var(--wl-line); border-radius: 4px; justify-content: center; font-size: 10px; line-height: 1.05; text-align: center; }
         :host([data-wix]) .wl-mobile-list svg { display: none; }
+        :host([data-wix]) .wl-department-panel { height: 100%; max-height: 100%; padding: 6px; overflow: hidden; }
+        :host([data-wix]) .wl-department-panel .wl-panel-head { min-height: 34px; margin: 0 0 3px; padding-left: 46px; }
+        :host([data-wix]) .wl-department-panel .wl-panel-head h2 { font-size: 16px; }
+        :host([data-wix]) .wl-department-panel .wl-icon-button { width: 32px; height: 32px; flex-basis: 32px; }
+        :host([data-wix]) .wl-department-search { margin-bottom: 3px; }
+        :host([data-wix]) .wl-department-search input { min-height: 32px; padding: 4px 6px 4px 31px; font-size: 12px; }
+        :host([data-wix]) .wl-department-search svg { left: 8px; width: 16px; height: 16px; }
+        :host([data-wix]) .wl-department-status { margin: 0 0 3px; font-size: 9px; }
+        :host([data-wix]) .wl-department-grid, :host([data-wix]) .wl-department-results { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 3px; }
+        :host([data-wix]) .wl-department-link, :host([data-wix]) .wl-department-result { min-height: 24px; height: 24px; padding: 2px 3px; font-size: 9px; line-height: 1; overflow: hidden; }
+        :host([data-wix]) .wl-department-link span:first-child, :host([data-wix]) .wl-department-result span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        :host([data-wix]) .wl-department-link svg, :host([data-wix]) .wl-department-result span:last-child { display: none; }
       }
 
       @media (max-width: 520px) {
