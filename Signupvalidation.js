@@ -283,15 +283,21 @@
     el.setAttribute("autocomplete", el.id.includes("Invoice") ? "billing address-level1" : "shipping address-level1");
 
     el.addEventListener("focus", () => {
-      openPicker(el);
-      // Start a short sweep when focused (often when autofill applies)
+      // Autofill and responsive layout changes can focus this field. Normalize
+      // quietly and wait for a deliberate click or keystroke before opening.
       scheduleAutofillSweep(el);
     });
 
     el.addEventListener("click", () => { if (!isOpen) openPicker(el); });
 
+    el.addEventListener("keydown", (e) => {
+      if (!isOpen && (e.key.length === 1 || e.key === "ArrowDown" || e.key === "ArrowUp")) {
+        openPicker(el);
+      }
+    });
+
     el.addEventListener("input", () => {
-      if (!isOpen) openPicker(el);
+      if (!isOpen) return;
       currentItems = filterStates(el.value);
       if (isModal) {
         renderList(list, currentItems);
@@ -328,6 +334,10 @@
 
   // Keep sizes/position correct
   window.addEventListener("resize", () => {
+    if (isOpen && isModal !== isSmall()) {
+      closePicker();
+      return;
+    }
     if (isOpen && isModal) setListMaxHeight();
     if (isOpen && !isModal && activeInput) positionDropdown(activeInput);
   });
