@@ -87,25 +87,17 @@ function requestTrace(req, context) {
 
 function renderPage(context) {
   const safeContext = JSON.stringify(context).replace(/</g, "\\u003c");
-  const rows = [
-    ["Product ID", context.productId],
-    ["Product code", context.productCode],
-    ["Quantity", context.quantity],
-    ["Request method", context.method],
-    ["Recognized fields", context.receivedKeys.join(", ") || "None"],
-    ["Other field names", context.unknownKeys.join(", ") || "None"]
-  ].map(([label, value]) => `
-          <div class="probe-row">
-            <dt>${escapeHtml(label)}</dt>
-            <dd>${escapeHtml(value)}</dd>
-          </div>`).join("");
+  const initialQuantity = Math.max(1, Math.min(99, parseInt(context.quantity, 10) || 1));
+  const productId = context.productId === "Not forwarded yet" ? "" : context.productId;
+  const productCode = context.productCode === "Not forwarded yet" ? "" : context.productCode;
+  const defaultDescription = productCode === "WDoor" ? "Custom Woodson Door" : productCode;
 
   return `<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Woodson Special Order Connection Test</title>
+  <title>Configure Special Order</title>
   <style>
     :root { color-scheme: light; font-family: Arial, sans-serif; color: #171717; background: #f4f5f6; }
     * { box-sizing: border-box; }
@@ -113,64 +105,98 @@ function renderPage(context) {
     main { width: min(680px, 100%); margin: 0 auto; background: #fff; border: 1px solid #d7d9dc; border-radius: 8px; overflow: hidden; }
     header { padding: 20px 22px; border-bottom: 4px solid #6b0016; }
     h1 { margin: 0; font-size: 22px; line-height: 1.25; }
-    .status { display: flex; align-items: center; gap: 9px; margin-top: 10px; font-size: 15px; }
-    .status-dot { width: 11px; height: 11px; border-radius: 50%; background: #27833b; flex: 0 0 auto; }
+    .eyebrow { margin: 0 0 7px; color: #6b0016; font-size: 13px; font-weight: 700; text-transform: uppercase; }
     section { padding: 18px 22px 22px; }
-    p { margin: 0 0 16px; line-height: 1.5; }
-    dl { margin: 0; border-top: 1px solid #e3e5e7; }
-    .probe-row { display: grid; grid-template-columns: minmax(130px, 0.8fr) minmax(0, 1.6fr); gap: 16px; padding: 11px 0; border-bottom: 1px solid #e3e5e7; }
-    dt { font-weight: 700; }
-    dd { margin: 0; overflow-wrap: anywhere; }
+    p { margin: 0 0 18px; line-height: 1.5; }
+    .product { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 18px; padding: 12px 14px; background: #f4f5f6; border-radius: 6px; }
+    .product strong, .product span { overflow-wrap: anywhere; }
+    label { display: block; margin-bottom: 7px; font-weight: 700; }
+    textarea, input { width: 100%; border: 1px solid #aeb3b8; border-radius: 5px; padding: 11px 12px; font: inherit; color: inherit; background: #fff; }
+    textarea { min-height: 96px; resize: vertical; }
+    input:focus, textarea:focus { outline: 3px solid rgba(107, 0, 22, .16); border-color: #6b0016; }
+    .field { margin-bottom: 17px; }
+    .quantity { width: 110px; }
+    button { width: 100%; min-height: 46px; border: 0; border-radius: 5px; padding: 11px 18px; background: #6b0016; color: #fff; font: 700 16px Arial, sans-serif; cursor: pointer; }
+    button:hover { background: #510011; }
+    button:disabled { cursor: wait; opacity: .65; }
     .notice { margin-top: 18px; padding: 12px 14px; border-left: 4px solid #f3c400; background: #fff9da; line-height: 1.45; }
+    .status { min-height: 20px; margin: 12px 0 0; color: #555; font-size: 14px; }
     @media (max-width: 520px) {
       body { padding: 12px; }
       header, section { padding-left: 16px; padding-right: 16px; }
-      .probe-row { grid-template-columns: 1fr; gap: 4px; }
+      .product { display: block; }
+      .product span { display: block; margin-top: 4px; }
     }
   </style>
 </head>
 <body>
   <main>
     <header>
-      <h1>Special Order connection test</h1>
-      <div class="status"><span class="status-dot" aria-hidden="true"></span><span id="frame-status">Endpoint loaded</span></div>
+      <p class="eyebrow">Special order</p>
+      <h1>Configure your item</h1>
     </header>
     <section>
-      <p>This diagnostic page confirms how WebTrack connects a product to an external designer.</p>
-      <dl>${rows}
-          <div class="probe-row">
-            <dt>Embedded by WebTrack</dt>
-            <dd id="embedded-value">Checking...</dd>
-          </div>
-          <div class="probe-row">
-            <dt>Referring page</dt>
-            <dd id="referrer-value">Checking...</dd>
-          </div>
-      </dl>
-      <div class="notice"><strong>Diagnostic only.</strong> This page does not return a configured product or trigger an add-to-cart action.</div>
+      <div class="product"><strong>${escapeHtml(productCode || "Special product")}</strong><span>Product ${escapeHtml(productId || "not supplied")}</span></div>
+      <p>This temporary configurator tests the handoff into WebTrack. Add enough detail to identify the requested item.</p>
+      <form id="special-order-form">
+        <div class="field">
+          <label for="configuration-description">Configuration notes</label>
+          <textarea id="configuration-description" maxlength="500" required>${escapeHtml(defaultDescription)}</textarea>
+        </div>
+        <div class="field quantity">
+          <label for="configuration-quantity">Quantity</label>
+          <input id="configuration-quantity" type="number" min="1" max="99" step="1" inputmode="numeric" value="${initialQuantity}" required>
+        </div>
+        <button id="add-configured-item" type="submit">Add configured item to cart</button>
+        <p id="form-status" class="status" role="status" aria-live="polite"></p>
+      </form>
+      <div class="notice"><strong>Temporary test.</strong> Pricing and production details still need to be confirmed before an order is completed.</div>
     </section>
   </main>
   <script>
     (() => {
       const serverContext = ${safeContext};
-      const embedded = window.self !== window.top;
-      document.getElementById("embedded-value").textContent = embedded ? "Yes" : "No";
-      document.getElementById("referrer-value").textContent = document.referrer || "Not provided";
-      document.getElementById("frame-status").textContent = embedded
-        ? "Endpoint loaded inside WebTrack"
-        : "Endpoint loaded directly";
+      const allowedParentOrigin = "https://webtrack.woodsonlumber.com";
+      const form = document.getElementById("special-order-form");
+      const button = document.getElementById("add-configured-item");
+      const status = document.getElementById("form-status");
 
       try {
         window.parent.postMessage({
-          type: "woodson-special-order-probe-ready",
+          type: "woodson-special-order-ready",
           version: 1,
           productId: serverContext.productId,
           productCode: serverContext.productCode,
           quantity: serverContext.quantity
-        }, "https://webtrack.woodsonlumber.com");
+        }, allowedParentOrigin);
       } catch (_) {
-        // The page remains useful even when the parent does not listen for messages.
+        // Direct viewing remains available for diagnostics.
       }
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const description = document.getElementById("configuration-description").value.trim();
+        const quantity = Math.max(1, Math.min(99, parseInt(document.getElementById("configuration-quantity").value, 10) || 1));
+        if (!description) {
+          status.textContent = "Add configuration notes before continuing.";
+          return;
+        }
+        if (window.self === window.top) {
+          status.textContent = "Open this configurator from the WebTrack product page to add the item.";
+          return;
+        }
+        button.disabled = true;
+        status.textContent = "Sending this configuration to your cart...";
+        window.parent.postMessage({
+          type: "woodson-special-order-complete",
+          version: 1,
+          productId: serverContext.productId,
+          productCode: serverContext.productCode,
+          sID: serverContext.productId,
+          sDescription: description,
+          iQty: quantity
+        }, allowedParentOrigin);
+      });
     })();
   </script>
 </body>
@@ -204,7 +230,7 @@ function handler(req, res) {
 
   const context = requestContext(req);
   if (context.productId !== "Not forwarded yet" || context.productCode !== "Not forwarded yet") {
-    console.info("[special-order-probe]", JSON.stringify(requestTrace(req, context)));
+    console.info("[special-order-configurator]", JSON.stringify(requestTrace(req, context)));
   }
   const html = renderPage(context);
   res.statusCode = 200;

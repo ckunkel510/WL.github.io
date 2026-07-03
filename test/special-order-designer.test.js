@@ -35,7 +35,7 @@ test("keeps only safe WebTrack product context", () => {
   assert.doesNotMatch(JSON.stringify(context), /customer@example\.com/);
 });
 
-test("escapes product values in the diagnostic page", () => {
+test("escapes product values in the configurator page", () => {
   const html = renderPage({
     method: "GET",
     productId: "<script>alert(1)</script>",
@@ -68,7 +68,7 @@ test("records only safe request transport metadata", () => {
   assert.doesNotMatch(JSON.stringify(trace), /private|secret-session/);
 });
 
-test("serves a non-cached frame-compatible probe", () => {
+test("serves a non-cached frame-compatible configurator", () => {
   const req = {
     method: "GET",
     query: { productid: "245809", productcode: "WDoor", qty: "1" },
@@ -82,7 +82,9 @@ test("serves a non-cached frame-compatible probe", () => {
   assert.equal(res.headers["Cache-Control"], "no-store");
   assert.equal(res.headers["Access-Control-Allow-Origin"], "https://webtrack.woodsonlumber.com");
   assert.match(res.headers["Content-Security-Policy"], /frame-ancestors https:\/\/webtrack\.woodsonlumber\.com/);
-  assert.match(res.body, /Special Order connection test/);
+  assert.match(res.body, /Configure your item/);
+  assert.match(res.body, /woodson-special-order-complete/);
+  assert.match(res.body, /sID: serverContext\.productId/);
   assert.match(res.body, /WDoor/);
 });
 

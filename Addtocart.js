@@ -136,6 +136,173 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 });
 
+/* Temporary WDoor bridge: bypasses WebTrack's broken SpecialOrder.aspx wrapper. */
+(function setupWoodsonSpecialOrderBridge() {
+  "use strict";
+
+  var PRODUCT_ID = "245809";
+  var PRODUCT_CODE = "WDoor";
+  var CONFIGURATOR_ORIGIN = "https://wl-upsrates.vercel.app";
+  var CONFIGURATOR_URL = CONFIGURATOR_ORIGIN + "/api/special-order-designer";
+  var SPECIAL_ORDER_BUTTON_ID = "ctl00_PageBody_productDetail_ctl00_btnSpecialOrder";
+  var DESCRIPTION_FIELD_ID = "ctl00_PageBody_productDetail_ctl00_txtSpecialProductDescription";
+  var CODE_FIELD_ID = "ctl00_PageBody_productDetail_ctl00_txtSpecialProductCode";
+  var QUANTITY_FIELD_ID = "ctl00_PageBody_productDetail_ctl00_qty_" + PRODUCT_ID;
+  var ADD_BUTTON_TARGET = "ctl00$PageBody$productDetail$ctl00$AddProductButton";
+  var overlay = null;
+  var frame = null;
+  var previousBodyOverflow = "";
+
+  function onReady(callback) {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", callback, { once: true });
+    } else {
+      callback();
+    }
+  }
+
+  function isTargetProduct() {
+    var params = new URLSearchParams(window.location.search);
+    return /\/ProductDetail\.aspx$/i.test(window.location.pathname) && params.get("pid") === PRODUCT_ID;
+  }
+
+  function closeConfigurator() {
+    if (!overlay) return;
+    overlay.remove();
+    overlay = null;
+    frame = null;
+    document.body.style.overflow = previousBodyOverflow;
+  }
+
+  function showBridgeError(message) {
+    if (!overlay) return;
+    var status = overlay.querySelector(".wl-special-order-status");
+    if (status) {
+      status.textContent = message;
+      status.hidden = false;
+    }
+  }
+
+  function openConfigurator(event) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (overlay) return false;
+
+    previousBodyOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    overlay = document.createElement("div");
+    overlay.className = "wl-special-order-overlay";
+    overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
+    overlay.setAttribute("aria-label", "Configure special order");
+    overlay.innerHTML = [
+      '<div class="wl-special-order-shell">',
+      '  <div class="wl-special-order-toolbar">',
+      '    <strong>Configure special order</strong>',
+      '    <button class="wl-special-order-close" type="button" aria-label="Close configurator" title="Close">&times;</button>',
+      "  </div>",
+      '  <p class="wl-special-order-status" role="alert" hidden></p>',
+      '  <iframe class="wl-special-order-frame" title="Woodson special order configurator"></iframe>',
+      "</div>"
+    ].join("");
+    document.body.appendChild(overlay);
+
+    overlay.querySelector(".wl-special-order-close").addEventListener("click", closeConfigurator);
+    overlay.addEventListener("click", function (overlayEvent) {
+      if (overlayEvent.target === overlay) closeConfigurator();
+    });
+
+    frame = overlay.querySelector(".wl-special-order-frame");
+    frame.src = CONFIGURATOR_URL + "?productid=" + encodeURIComponent(PRODUCT_ID) +
+      "&productcode=" + encodeURIComponent(PRODUCT_CODE) + "&qty=1&bridge=1";
+    return false;
+  }
+
+  function ensureQuantityField(quantity) {
+    var field = document.getElementById(QUANTITY_FIELD_ID);
+    if (!field) {
+      field = document.createElement("input");
+      field.type = "hidden";
+      field.id = QUANTITY_FIELD_ID;
+      field.name = "ctl00$PageBody$productDetail$ctl00$qty_" + PRODUCT_ID;
+      var form = document.forms[0];
+      if (!form) throw new Error("The WebTrack order form is unavailable.");
+      form.appendChild(field);
+    }
+    field.value = String(quantity);
+    return field;
+  }
+
+  function handleConfiguratorMessage(event) {
+    if (event.origin !== CONFIGURATOR_ORIGIN || !frame || event.source !== frame.contentWindow) return;
+    var data = event.data || {};
+    if (data.type !== "woodson-special-order-complete" || data.version !== 1) return;
+    if (String(data.productId) !== PRODUCT_ID || String(data.productCode) !== PRODUCT_CODE) {
+      showBridgeError("This configuration does not match the product page. Please close it and try again.");
+      return;
+    }
+
+    var configurationId = String(data.sID || "").trim().slice(0, 120);
+    var description = String(data.sDescription || "").trim().slice(0, 500);
+    var quantity = Math.max(1, Math.min(99, parseInt(data.iQty, 10) || 1));
+    var descriptionField = document.getElementById(DESCRIPTION_FIELD_ID);
+    var codeField = document.getElementById(CODE_FIELD_ID);
+
+    if (!configurationId || !description || !descriptionField || !codeField) {
+      showBridgeError("WebTrack could not receive this configuration. Please close it and try again.");
+      return;
+    }
+
+    try {
+      ensureQuantityField(quantity);
+      descriptionField.value = description;
+      codeField.value = configurationId;
+      sessionStorage.setItem("showAddToCartModal", "true");
+
+      if (typeof window.__doPostBack !== "function") {
+        throw new Error("WebTrack's cart action is unavailable.");
+      }
+      var status = overlay && overlay.querySelector(".wl-special-order-status");
+      if (status) {
+        status.textContent = "Adding this configured item to your cart...";
+        status.hidden = false;
+      }
+      window.__doPostBack(ADD_BUTTON_TARGET, "");
+    } catch (error) {
+      console.error("[SpecialOrderBridge] Add to cart failed", error);
+      showBridgeError(error && error.message ? error.message : "The item could not be added to the cart.");
+    }
+  }
+
+  function injectStyles() {
+    if (document.getElementById("wl-special-order-bridge-styles")) return;
+    var style = document.createElement("style");
+    style.id = "wl-special-order-bridge-styles";
+    style.textContent = [
+      ".wl-special-order-overlay{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:18px;background:rgba(0,0,0,.58);font-family:Arial,sans-serif}",
+      ".wl-special-order-shell{display:flex;flex-direction:column;width:min(760px,100%);height:min(720px,calc(100vh - 36px));overflow:hidden;border:1px solid #bbb;border-radius:8px;background:#fff;box-shadow:0 18px 60px rgba(0,0,0,.35)}",
+      ".wl-special-order-toolbar{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:54px;padding:8px 10px 8px 18px;border-bottom:1px solid #d7d9dc;color:#171717;font-size:17px}",
+      ".wl-special-order-close{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;padding:0;border:1px solid #aaa;border-radius:4px;background:#fff;color:#222;font:30px/1 Arial,sans-serif;cursor:pointer}",
+      ".wl-special-order-close:hover{background:#f0f1f2}",
+      ".wl-special-order-status{margin:0;padding:10px 16px;border-bottom:1px solid #e3b2bc;background:#fff1f4;color:#6b0016;font-weight:700}",
+      ".wl-special-order-frame{width:100%;height:100%;border:0;background:#f4f5f6}",
+      "@media(max-width:600px){.wl-special-order-overlay{padding:0}.wl-special-order-shell{width:100%;height:100%;border:0;border-radius:0}.wl-special-order-toolbar{min-height:58px}}"
+    ].join("");
+    document.head.appendChild(style);
+  }
+
+  onReady(function () {
+    if (!isTargetProduct()) return;
+    var button = document.getElementById(SPECIAL_ORDER_BUTTON_ID);
+    if (!button || button.dataset.wlConfiguratorBridge === "1") return;
+    injectStyles();
+    button.dataset.wlConfiguratorBridge = "1";
+    button.addEventListener("click", openConfigurator, true);
+    window.addEventListener("message", handleConfiguratorMessage);
+  });
+})();
+
 
 document.addEventListener("DOMContentLoaded", function () {
   const shouldTrigger = sessionStorage.getItem("triggerPlaceOrder");
@@ -155,4 +322,3 @@ document.addEventListener("DOMContentLoaded", function () {
     }, 500);
   }
 });
-
