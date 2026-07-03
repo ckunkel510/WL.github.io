@@ -118,8 +118,8 @@
       .wl-utility a { padding: 9px 8px; font-size: 12px; font-weight: 700; text-decoration: none; white-space: nowrap; }
       .wl-utility a:hover, .wl-utility a:focus-visible { text-decoration: underline; }
 
-      .wl-main { max-width: 1180px; min-height: 78px; margin: 0 auto; padding: 9px 16px; display: grid; grid-template-columns: 170px minmax(0, 1fr) auto; align-items: center; gap: 18px; }
-      .wl-brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+      .wl-main { max-width: 1180px; min-height: 78px; margin: 0 auto; padding: 9px 16px; display: grid; grid-template-columns: 250px minmax(0, 1fr) auto; align-items: center; gap: 12px; }
+      .wl-brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
       .wl-logo { display: block; width: 152px; height: auto; }
       .wl-location { display: inline-flex; align-items: center; gap: 7px; padding: 7px 9px; border: 0; background: transparent; color: var(--wl-maroon); font-size: 12px; font-weight: 800; text-decoration: none; white-space: nowrap; }
       .wl-location svg { width: 18px; height: 18px; }
