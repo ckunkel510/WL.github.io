@@ -9,6 +9,9 @@
     },
     "api/special-order-designer.js": {
       "maxDuration": 10
+    },
+    "api/special-order-probe-v2.js": {
+      "maxDuration": 10
     }
   }
 }

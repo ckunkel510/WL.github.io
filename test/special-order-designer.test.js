@@ -3,6 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const handler = require("../api/special-order-designer");
+const probeV2Handler = require("../api/special-order-probe-v2");
 const { renderPage, requestContext, requestTrace } = handler._test;
 
 function mockResponse() {
@@ -83,4 +84,8 @@ test("serves a non-cached frame-compatible probe", () => {
   assert.match(res.headers["Content-Security-Policy"], /frame-ancestors https:\/\/webtrack\.woodsonlumber\.com/);
   assert.match(res.body, /Special Order connection test/);
   assert.match(res.body, /WDoor/);
+});
+
+test("serves the same probe from the cache-busting route", () => {
+  assert.equal(probeV2Handler, handler);
 });
