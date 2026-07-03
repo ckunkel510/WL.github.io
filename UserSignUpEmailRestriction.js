@@ -162,7 +162,7 @@
       .wl-request-intro{padding:14px 16px;border:1px solid var(--wl-auth-border);border-left:4px solid var(--wl-auth-brand);border-radius:6px;background:var(--wl-auth-soft);}
       .wl-request-intro strong{display:block;margin-bottom:4px;color:var(--wl-auth-text);font-size:16px;}
       .wl-request-intro p{margin:0;color:var(--wl-auth-muted);font-size:14px;line-height:1.45;}
-      .wl-request-field{min-width:0;margin:0!important;padding:0!important;}
+      .wl-request-field{display:block!important;min-width:0;margin:0!important;padding:0!important;}
       .wl-request-field>div{width:100%!important;max-width:none!important;margin:0!important;}
       .wl-request-field label{display:block;margin:0 0 6px;color:#343a40;font-weight:800;}
       .wl-request-field .RadInput,.wl-request-field .form-control{display:block!important;width:100%!important;max-width:none!important;}
