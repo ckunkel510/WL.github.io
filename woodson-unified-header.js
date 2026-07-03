@@ -101,6 +101,7 @@
         letter-spacing: 0;
         position: relative;
         z-index: 1000;
+        pointer-events: none;
       }
 
       *, *::before, *::after { box-sizing: border-box; }
@@ -110,6 +111,7 @@
       svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
       [hidden] { display: none !important; }
 
+      .wl-shell, .wl-department-panel, .wl-mobile-drawer, .wl-scanner-dialog { pointer-events: auto; }
       .wl-shell { background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.08); }
       .wl-utility { min-height: 34px; padding: 0 max(18px, calc((100vw - 1180px) / 2)); background: var(--wl-maroon); color: #fff; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
       .wl-utility-links, .wl-utility-actions { display: flex; align-items: center; gap: 4px; }
