@@ -10,9 +10,9 @@ const SAFE_QUERY_KEYS = [
 ];
 
 const WDOOR_CONFIGURATIONS = [
-  { id: "291022", label: "Interior configuration", unitPrice: 3478.90 },
-  { id: "291023", label: "Exterior configuration", unitPrice: 5085.20 },
-  { id: "291438", label: "Door parts configuration", unitPrice: 5895.60 }
+  { id: "WDK", kitProductId: "237967", optionReference: "291022", label: "Interior configuration", unitPrice: 3478.90 },
+  { id: "WDK", kitProductId: "237967", optionReference: "291023", label: "Exterior configuration", unitPrice: 5085.20 },
+  { id: "WDK", kitProductId: "237967", optionReference: "291438", label: "Door parts configuration", unitPrice: 5895.60 }
 ];
 
 function first(value) {
@@ -102,7 +102,7 @@ function renderPage(context) {
     : [{ id: productId, label: productCode || "Special configuration", unitPrice: 0 }];
   const safeConfigurations = JSON.stringify(configurations).replace(/</g, "\\u003c");
   const configurationOptions = configurations.map((configuration) =>
-    `<option value="${escapeHtml(configuration.id)}">${escapeHtml(configuration.label)} - $${configuration.unitPrice.toFixed(2)}</option>`
+    `<option value="${escapeHtml(configuration.optionReference || configuration.id)}">${escapeHtml(configuration.label)} - $${configuration.unitPrice.toFixed(2)}</option>`
   ).join("");
 
   return `<!doctype html>
@@ -189,7 +189,7 @@ function renderPage(context) {
       const quantityInput = document.getElementById("configuration-quantity");
       const currency = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
-      const selectedConfiguration = () => configurations.find((configuration) => configuration.id === configurationSelect.value) || configurations[0];
+      const selectedConfiguration = () => configurations.find((configuration) => (configuration.optionReference || configuration.id) === configurationSelect.value) || configurations[0];
 
       const updateEstimate = () => {
         const configuration = selectedConfiguration();
@@ -219,7 +219,8 @@ function renderPage(context) {
         const notes = document.getElementById("configuration-description").value.trim();
         const configuration = selectedConfiguration();
         const quantity = Math.max(1, Math.min(99, parseInt(quantityInput.value, 10) || 1));
-        const description = (configuration.label + " - " + notes + " - Estimated unit price " + currency.format(configuration.unitPrice)).slice(0, 500);
+        const kitReference = configuration.kitProductId ? " - WDK kit " + configuration.kitProductId + " / option " + configuration.optionReference : "";
+        const description = (configuration.label + kitReference + " - " + notes + " - Estimated unit price " + currency.format(configuration.unitPrice)).slice(0, 500);
         if (!notes) {
           status.textContent = "Add configuration notes before continuing.";
           return;
@@ -238,6 +239,8 @@ function renderPage(context) {
           sID: configuration.id,
           sDescription: description,
           iQty: quantity,
+          kitProductId: configuration.kitProductId || "",
+          optionReference: configuration.optionReference || "",
           expectedUnitPrice: configuration.unitPrice,
           expectedTotal: configuration.unitPrice * quantity
         }, allowedParentOrigin);

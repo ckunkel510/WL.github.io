@@ -86,15 +86,17 @@ test("serves a non-cached frame-compatible configurator", () => {
   assert.match(res.body, /woodson-special-order-complete/);
   assert.match(res.body, /sID: configuration\.id/);
   assert.match(res.body, /Estimated unit price/);
+  assert.match(res.body, /WDK kit/);
+  assert.match(res.body, /237967/);
   assert.match(res.body, /291022/);
   assert.match(res.body, /WDoor/);
 });
 
 test("offers linked WDoor kit configurations with their minimum sell prices", () => {
   assert.deepEqual(WDOOR_CONFIGURATIONS, [
-    { id: "291022", label: "Interior configuration", unitPrice: 3478.90 },
-    { id: "291023", label: "Exterior configuration", unitPrice: 5085.20 },
-    { id: "291438", label: "Door parts configuration", unitPrice: 5895.60 }
+    { id: "WDK", kitProductId: "237967", optionReference: "291022", label: "Interior configuration", unitPrice: 3478.90 },
+    { id: "WDK", kitProductId: "237967", optionReference: "291023", label: "Exterior configuration", unitPrice: 5085.20 },
+    { id: "WDK", kitProductId: "237967", optionReference: "291438", label: "Door parts configuration", unitPrice: 5895.60 }
   ]);
 });
 
