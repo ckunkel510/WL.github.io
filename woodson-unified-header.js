@@ -96,6 +96,7 @@
         --wl-soft: #f4f4f4;
         display: block;
         width: 100%;
+        background: #fff;
         color: var(--wl-ink);
         font-family: Arial, Helvetica, sans-serif;
         letter-spacing: 0;
