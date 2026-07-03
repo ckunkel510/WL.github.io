@@ -132,9 +132,8 @@
 
       /* Sign in */
       .wl-auth-signin{width:min(960px,calc(100% - 32px))!important;max-width:960px!important;margin:24px auto 40px!important;padding:0!important;}
-      .wl-auth-signin-intro{margin:0 0 14px;}
-      .wl-auth-signin-intro h1{margin:0;color:var(--wl-auth-text);font-size:27px;line-height:1.2;letter-spacing:0;}
-      .wl-auth-signin-intro p{margin:6px 0 0;color:var(--wl-auth-muted);font-size:15px;}
+      .wl-auth-signin-intro{display:flex;justify-content:center;margin:0 0 18px;}
+      .wl-auth-signin-intro img{display:block;width:min(480px,100%);height:auto;aspect-ratio:1200 / 643;object-fit:contain;}
       .wl-auth-signin-grid{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(320px,.92fr);gap:16px;align-items:start;}
       .wl-auth-login-card fieldset{min-width:0;margin:0;padding:0;border:0;}
       .wl-auth-login-card .epi-form-group-signIn{display:block!important;margin:0 0 14px!important;}
@@ -207,7 +206,7 @@
       @media(max-width:640px){
         .wl-auth-signin,.wl-signup-intro,.wl-signup-grid,.wl-signup-submit{width:calc(100% - 20px)!important;}
         .wl-auth-signin{margin-top:14px!important;}
-        .wl-auth-signin-intro h1,.wl-request-heading h3,.wl-signup-intro h1{font-size:22px;}
+        .wl-request-heading h3,.wl-signup-intro h1{font-size:22px;}
         .wl-auth-card-body,.wl-auth-choice-section{padding:15px;}
         .wl-request-root{grid-template-columns:minmax(0,1fr);gap:13px;width:100%;}
         .wl-request-field,.wl-request-heading,.wl-request-intro,.wl-request-actions,.wl-request-nav{grid-column:1;}
@@ -257,7 +256,7 @@
 
     const intro = document.createElement('div');
     intro.className = 'wl-auth-signin-intro';
-    intro.innerHTML = '<h1>Sign in to Woodson</h1><p>Access orders, invoices, saved items, account payments, and faster checkout.</p>';
+    intro.innerHTML = '<img src="https://ckunkel510.github.io/WL.github.io/assets/woodson-built-on-quality-logo.png" alt="Woodson - Built on Quality, established 1913" width="1200" height="643" decoding="async">';
 
     const grid = document.createElement('div');
     grid.className = 'wl-auth-signin-grid';
