@@ -96,7 +96,6 @@
         --wl-soft: #f4f4f4;
         display: block;
         width: 100%;
-        background: #fff;
         color: var(--wl-ink);
         font-family: Arial, Helvetica, sans-serif;
         letter-spacing: 0;
@@ -198,6 +197,7 @@
       .wl-scanner-message { margin: 10px 0 0; color: var(--wl-muted); font-size: 14px; }
 
       @media (max-width: 980px) {
+        :host { background: #fff; }
         .wl-utility, .wl-feature-links { display: none; }
         .wl-main { min-height: 70px; grid-template-columns: auto minmax(125px, 1fr) auto; gap: 8px; padding: 7px 12px; }
         .wl-brand { justify-content: center; }
