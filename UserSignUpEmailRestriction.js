@@ -246,8 +246,10 @@
     const newEmail = document.getElementById('ctl00_PageBody_SignUpControl_EmailAddressTextBox');
     setEmailAttributes(newEmail);
     if (newEmail) newEmail.placeholder = 'you@example.com';
+    signInButton.setAttribute('formnovalidate', 'formnovalidate');
+    requestButton.setAttribute('formnovalidate', 'formnovalidate');
     setButtonText(requestButton, 'Connect My Existing Account');
-    setButtonText(document.getElementById('ctl00_PageBody_SignUpControl_SubmitButton'), 'Create New Cash Account');
+    setButtonText(document.getElementById('ctl00_PageBody_SignUpControl_SubmitButton'), 'Create Account');
 
     const signInBlock = user.closest('fieldset')?.parentElement || user.closest('fieldset');
     const requestButtonGroup = requestButton.closest('.form-group') || requestButton.parentElement;
