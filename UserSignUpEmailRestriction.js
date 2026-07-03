@@ -174,10 +174,10 @@
       .wl-request-nav{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-top:4px;}
 
       /* New customer signup */
-      .wl-signup-intro{width:min(960px,calc(100% - 32px));margin:24px auto 14px;padding:15px 17px;border:1px solid var(--wl-auth-border);border-left:4px solid var(--wl-auth-brand);border-radius:6px;background:var(--wl-auth-soft);}
+      .wl-signup-intro{position:relative;left:50%;transform:translateX(-50%);width:min(960px,calc(100vw - 32px));margin:24px 0 14px;padding:15px 17px;border:1px solid var(--wl-auth-border);border-left:4px solid var(--wl-auth-brand);border-radius:6px;background:var(--wl-auth-soft);}
       .wl-signup-intro h1{margin:0;color:var(--wl-auth-text);font-size:26px;line-height:1.25;letter-spacing:0;}
       .wl-signup-intro p{margin:5px 0 0;color:var(--wl-auth-muted);font-size:14px;line-height:1.45;}
-      .wl-signup-grid{display:grid!important;grid-template-columns:minmax(0,1fr);grid-template-areas:"account" "delivery" "invoice" "prefs";gap:16px;width:min(960px,calc(100% - 32px))!important;max-width:960px!important;margin:0 auto!important;padding:0!important;align-items:start;}
+      .wl-signup-grid{position:relative;left:50%;transform:translateX(-50%);display:grid!important;grid-template-columns:minmax(0,1fr);grid-template-areas:"account" "delivery" "invoice" "prefs";gap:16px;width:min(960px,calc(100vw - 32px))!important;max-width:960px!important;margin:0!important;padding:0!important;align-items:start;}
       .wl-signup-grid>.col-lg-4{width:auto!important;max-width:none!important;flex:none!important;margin:0!important;padding:18px!important;border:1px solid var(--wl-auth-border);border-radius:8px;background:#fff;box-shadow:0 3px 12px rgba(0,0,0,.05);}
       .wl-signup-account{grid-area:account;}
       .wl-signup-delivery{grid-area:delivery;}
@@ -200,7 +200,7 @@
       .wl-signup-invoice.wl-billing-fields-hidden .epi-form-group-signup2,.wl-signup-invoice.wl-billing-fields-hidden .wl-address-more{display:none!important;}
       #wl-signup-comm-prefs{grid-area:prefs!important;width:100%!important;max-width:none!important;margin:0!important;border-radius:8px!important;}
       #wl-signup-comm-prefs .wl-signup-pref-row{display:inline-flex!important;width:calc(50% - 8px);padding-right:14px;vertical-align:top;}
-      .wl-signup-submit{width:min(960px,calc(100% - 32px))!important;max-width:960px!important;margin:14px auto 38px!important;display:flex!important;justify-content:flex-end!important;}
+      .wl-signup-submit{position:relative;left:50%;transform:translateX(-50%);width:min(960px,calc(100vw - 32px))!important;max-width:960px!important;margin:14px 0 38px!important;display:flex!important;justify-content:flex-end!important;}
       .wl-signup-submit .submit-button-panel{width:min(100%,320px)!important;margin:0!important;padding:0!important;}
       .wl-signup-submit .epi-button{display:flex!important;align-items:center;justify-content:center;width:100%!important;min-height:48px;border-radius:6px;font-weight:800;}
 
@@ -209,7 +209,8 @@
         .wl-signup-grid{grid-template-columns:minmax(0,1fr);grid-template-areas:"account" "delivery" "invoice" "prefs";}
       }
       @media(max-width:640px){
-        .wl-auth-signin,.wl-signup-intro,.wl-signup-grid,.wl-signup-submit{width:calc(100% - 20px)!important;}
+        .wl-auth-signin{width:calc(100% - 20px)!important;}
+        .wl-signup-intro,.wl-signup-grid,.wl-signup-submit{width:calc(100vw - 20px)!important;}
         .wl-auth-signin{margin-top:14px!important;}
         .wl-request-heading h3,.wl-signup-intro h1{font-size:22px;}
         .wl-auth-card-body,.wl-auth-choice-section{padding:15px;}
