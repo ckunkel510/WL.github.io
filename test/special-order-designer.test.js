@@ -4,7 +4,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const handler = require("../api/special-order-designer");
 const probeV2Handler = require("../api/special-order-probe-v2");
-const { renderPage, requestContext, requestTrace } = handler._test;
+const { renderPage, requestContext, requestTrace, WDOOR_CONFIGURATIONS } = handler._test;
 
 function mockResponse() {
   const headers = {};
@@ -84,8 +84,18 @@ test("serves a non-cached frame-compatible configurator", () => {
   assert.match(res.headers["Content-Security-Policy"], /frame-ancestors https:\/\/webtrack\.woodsonlumber\.com/);
   assert.match(res.body, /Configure your item/);
   assert.match(res.body, /woodson-special-order-complete/);
-  assert.match(res.body, /sID: serverContext\.productId/);
+  assert.match(res.body, /sID: configuration\.id/);
+  assert.match(res.body, /Estimated unit price/);
+  assert.match(res.body, /291022/);
   assert.match(res.body, /WDoor/);
+});
+
+test("offers linked WDoor kit configurations with their minimum sell prices", () => {
+  assert.deepEqual(WDOOR_CONFIGURATIONS, [
+    { id: "291022", label: "Interior configuration", unitPrice: 3478.90 },
+    { id: "291023", label: "Exterior configuration", unitPrice: 5085.20 },
+    { id: "291438", label: "Door parts configuration", unitPrice: 5895.60 }
+  ]);
 });
 
 test("serves the same probe from the cache-busting route", () => {

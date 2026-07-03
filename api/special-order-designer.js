@@ -9,6 +9,12 @@ const SAFE_QUERY_KEYS = [
   "quantity"
 ];
 
+const WDOOR_CONFIGURATIONS = [
+  { id: "291022", label: "Interior configuration", unitPrice: 3478.90 },
+  { id: "291023", label: "Exterior configuration", unitPrice: 5085.20 },
+  { id: "291438", label: "Door parts configuration", unitPrice: 5895.60 }
+];
+
 function first(value) {
   return Array.isArray(value) ? value[0] : value;
 }
@@ -91,6 +97,13 @@ function renderPage(context) {
   const productId = context.productId === "Not forwarded yet" ? "" : context.productId;
   const productCode = context.productCode === "Not forwarded yet" ? "" : context.productCode;
   const defaultDescription = productCode === "WDoor" ? "Custom Woodson Door" : productCode;
+  const configurations = productCode === "WDoor"
+    ? WDOOR_CONFIGURATIONS
+    : [{ id: productId, label: productCode || "Special configuration", unitPrice: 0 }];
+  const safeConfigurations = JSON.stringify(configurations).replace(/</g, "\\u003c");
+  const configurationOptions = configurations.map((configuration) =>
+    `<option value="${escapeHtml(configuration.id)}">${escapeHtml(configuration.label)} - $${configuration.unitPrice.toFixed(2)}</option>`
+  ).join("");
 
   return `<!doctype html>
 <html lang="en">
@@ -111,11 +124,14 @@ function renderPage(context) {
     .product { display: flex; justify-content: space-between; gap: 16px; margin-bottom: 18px; padding: 12px 14px; background: #f4f5f6; border-radius: 6px; }
     .product strong, .product span { overflow-wrap: anywhere; }
     label { display: block; margin-bottom: 7px; font-weight: 700; }
-    textarea, input { width: 100%; border: 1px solid #aeb3b8; border-radius: 5px; padding: 11px 12px; font: inherit; color: inherit; background: #fff; }
+    textarea, input, select { width: 100%; border: 1px solid #aeb3b8; border-radius: 5px; padding: 11px 12px; font: inherit; color: inherit; background: #fff; }
     textarea { min-height: 96px; resize: vertical; }
-    input:focus, textarea:focus { outline: 3px solid rgba(107, 0, 22, .16); border-color: #6b0016; }
+    input:focus, textarea:focus, select:focus { outline: 3px solid rgba(107, 0, 22, .16); border-color: #6b0016; }
     .field { margin-bottom: 17px; }
     .quantity { width: 110px; }
+    .estimate { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin: 4px 0 18px; padding: 14px; border: 1px solid #d7d9dc; border-radius: 6px; background: #f8f8f8; }
+    .estimate span { display: block; color: #555; font-size: 13px; }
+    .estimate strong { font-size: 22px; }
     button { width: 100%; min-height: 46px; border: 0; border-radius: 5px; padding: 11px 18px; background: #6b0016; color: #fff; font: 700 16px Arial, sans-serif; cursor: pointer; }
     button:hover { background: #510011; }
     button:disabled { cursor: wait; opacity: .65; }
@@ -140,12 +156,20 @@ function renderPage(context) {
       <p>This temporary configurator tests the handoff into WebTrack. Add enough detail to identify the requested item.</p>
       <form id="special-order-form">
         <div class="field">
+          <label for="configuration-type">Configuration</label>
+          <select id="configuration-type">${configurationOptions}</select>
+        </div>
+        <div class="field">
           <label for="configuration-description">Configuration notes</label>
           <textarea id="configuration-description" maxlength="500" required>${escapeHtml(defaultDescription)}</textarea>
         </div>
         <div class="field quantity">
           <label for="configuration-quantity">Quantity</label>
           <input id="configuration-quantity" type="number" min="1" max="99" step="1" inputmode="numeric" value="${initialQuantity}" required>
+        </div>
+        <div class="estimate">
+          <div><span>Estimated unit price</span><strong id="unit-price">$0.00</strong></div>
+          <div><span>Estimated total</span><strong id="estimated-total">$0.00</strong></div>
         </div>
         <button id="add-configured-item" type="submit">Add configured item to cart</button>
         <p id="form-status" class="status" role="status" aria-live="polite"></p>
@@ -156,10 +180,27 @@ function renderPage(context) {
   <script>
     (() => {
       const serverContext = ${safeContext};
+      const configurations = ${safeConfigurations};
       const allowedParentOrigin = "https://webtrack.woodsonlumber.com";
       const form = document.getElementById("special-order-form");
       const button = document.getElementById("add-configured-item");
       const status = document.getElementById("form-status");
+      const configurationSelect = document.getElementById("configuration-type");
+      const quantityInput = document.getElementById("configuration-quantity");
+      const currency = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+
+      const selectedConfiguration = () => configurations.find((configuration) => configuration.id === configurationSelect.value) || configurations[0];
+
+      const updateEstimate = () => {
+        const configuration = selectedConfiguration();
+        const quantity = Math.max(1, Math.min(99, parseInt(quantityInput.value, 10) || 1));
+        document.getElementById("unit-price").textContent = currency.format(configuration.unitPrice);
+        document.getElementById("estimated-total").textContent = currency.format(configuration.unitPrice * quantity);
+      };
+
+      configurationSelect.addEventListener("change", updateEstimate);
+      quantityInput.addEventListener("input", updateEstimate);
+      updateEstimate();
 
       try {
         window.parent.postMessage({
@@ -175,9 +216,11 @@ function renderPage(context) {
 
       form.addEventListener("submit", (event) => {
         event.preventDefault();
-        const description = document.getElementById("configuration-description").value.trim();
-        const quantity = Math.max(1, Math.min(99, parseInt(document.getElementById("configuration-quantity").value, 10) || 1));
-        if (!description) {
+        const notes = document.getElementById("configuration-description").value.trim();
+        const configuration = selectedConfiguration();
+        const quantity = Math.max(1, Math.min(99, parseInt(quantityInput.value, 10) || 1));
+        const description = (configuration.label + " - " + notes + " - Estimated unit price " + currency.format(configuration.unitPrice)).slice(0, 500);
+        if (!notes) {
           status.textContent = "Add configuration notes before continuing.";
           return;
         }
@@ -192,9 +235,11 @@ function renderPage(context) {
           version: 1,
           productId: serverContext.productId,
           productCode: serverContext.productCode,
-          sID: serverContext.productId,
+          sID: configuration.id,
           sDescription: description,
-          iQty: quantity
+          iQty: quantity,
+          expectedUnitPrice: configuration.unitPrice,
+          expectedTotal: configuration.unitPrice * quantity
         }, allowedParentOrigin);
       });
     })();
@@ -240,4 +285,4 @@ function handler(req, res) {
 }
 
 module.exports = handler;
-module.exports._test = { cleanText, escapeHtml, renderPage, requestContext, requestTrace };
+module.exports._test = { cleanText, escapeHtml, renderPage, requestContext, requestTrace, WDOOR_CONFIGURATIONS };

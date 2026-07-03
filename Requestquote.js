@@ -105,6 +105,16 @@
   function injectProductCTA() {
     if (!onProductPage()) return;
 
+    const productId = new URLSearchParams(window.location.search).get("pid");
+    const isWDoor = productId === "245809" || Array.from(document.querySelectorAll(".formPageHeader"))
+      .some((header) => /Product Code:\s*WDoor/i.test(String(header.textContent || "")));
+
+    if (isWDoor) {
+      document.querySelectorAll(".wl-quote-product").forEach((node) => node.remove());
+      log("Product CTA skipped for WDoor");
+      return;
+    }
+
     if (document.querySelector(".wl-quote-product")) {
       log("Product CTA already present");
       return;
