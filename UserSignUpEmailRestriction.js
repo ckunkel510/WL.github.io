@@ -133,7 +133,7 @@
       /* Sign in */
       .wl-auth-signin{width:min(960px,calc(100% - 32px))!important;max-width:960px!important;margin:24px auto 40px!important;padding:0!important;}
       .wl-auth-signin-intro{display:flex;justify-content:center;margin:0 0 18px;}
-      .wl-auth-signin-intro img{display:block;width:min(400px,100%);height:auto;aspect-ratio:1200 / 643;object-fit:contain;}
+      .wl-auth-signin-intro img{display:block;width:min(340px,100%);height:auto;aspect-ratio:1200 / 643;object-fit:contain;}
       .wl-auth-signin-grid{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(320px,.92fr);gap:16px;align-items:start;}
       .wl-auth-login-card fieldset{min-width:0;margin:0;padding:0;border:0;}
       .wl-auth-login-card .epi-form-group-signIn{display:block!important;margin:0 0 14px!important;}
