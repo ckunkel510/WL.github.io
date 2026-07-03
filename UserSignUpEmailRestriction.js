@@ -50,7 +50,9 @@
 
   function setEmailAttributes(input) {
     if (!input) return;
-    input.setAttribute('type', 'email');
+    // Telerik's RadTextBox focus handler uses selectionStart, which throws on
+    // type="email". Input mode and our validation still provide email behavior.
+    input.setAttribute('type', input.closest('.RadInput') ? 'text' : 'email');
     input.setAttribute('inputmode', 'email');
     input.setAttribute('autocomplete', 'email');
     input.setAttribute('autocapitalize', 'none');
