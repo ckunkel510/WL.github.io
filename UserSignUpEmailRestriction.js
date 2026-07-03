@@ -400,7 +400,7 @@
 
     const intro = document.createElement('div');
     intro.className = 'wl-signup-intro';
-    intro.innerHTML = '<h1>Create a New Woodson Cash Account</h1><p>This form is for customers who do not already have a Woodson account. <a class="wl-auth-route-link" href="UserSignup.aspx?existing=1">Already receive invoices or statements? Request access to your existing account instead.</a></p>';
+    intro.innerHTML = '<h1>Welcome to Woodson</h1><p>Create your new Woodson account below. This form is for customers who do not already have a Woodson account. <a class="wl-auth-route-link" href="UserSignup.aspx?existing=1">Already receive invoices or statements? Request access to your existing account instead.</a></p>';
     row.parentElement.insertBefore(intro, row);
 
     const loginGroup = fieldGroup(login, '.epi-form-group-signup2');
