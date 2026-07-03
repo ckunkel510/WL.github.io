@@ -186,7 +186,7 @@
       .wl-signup-grid .epi-form-group-signup2>div{width:100%!important;max-width:none!important;margin:0!important;}
       .wl-signup-grid .epi-form-group-signup2 label{display:block;margin:0 0 5px;color:#343a40;font-weight:800;}
       .wl-signup-grid .RadInput,.wl-signup-grid .form-control{display:block!important;width:100%!important;max-width:none!important;}
-      .wl-signup-grid input[type="text"],.wl-signup-grid input[type="email"],.wl-signup-grid input[type="password"]{width:100%!important;min-height:46px!important;padding:9px 11px!important;border:1px solid var(--wl-auth-border)!important;border-radius:6px!important;font-size:16px!important;}
+      .wl-signup-grid input[type="text"],.wl-signup-grid input[type="email"],.wl-signup-grid input[type="password"],.wl-signup-grid input[type="tel"]{width:100%!important;min-height:46px!important;padding:9px 11px!important;border:1px solid var(--wl-auth-border)!important;border-radius:6px!important;font-size:16px!important;}
       .wl-signup-grid .pw-reqs{margin:0 0 7px!important;padding:8px 10px;border:1px solid #e1e3e5;border-radius:6px;background:#f8f9fa;line-height:1.4;}
       .wl-signup-grid .pw-msg{margin:5px 0 0;line-height:1.35;}
       .wl-billing-toggle{display:flex;align-items:flex-start;gap:9px;margin:-2px 0 14px;padding:10px 11px;border:1px solid var(--wl-auth-border);border-radius:6px;background:#f8f9fa;color:#343a40;font-weight:750;line-height:1.35;cursor:pointer;}
