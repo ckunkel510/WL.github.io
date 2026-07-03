@@ -213,6 +213,20 @@
         .wl-departments-trigger { display: none; }
         .wl-department-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .wl-department-panel { top: 0 !important; left: 0; right: 0; bottom: 0; max-height: 100dvh; border: 0; border-radius: 0; }
+
+        :host([data-wix]) .wl-mobile-drawer { height: 100%; max-height: 100%; overflow: hidden; }
+        :host([data-wix]) .wl-mobile-head { min-height: 56px; padding: 7px 8px 7px 52px; }
+        :host([data-wix]) .wl-mobile-head h2 { font-size: 16px; line-height: 1.05; }
+        :host([data-wix]) .wl-mobile-head p { display: none; }
+        :host([data-wix]) .wl-mobile-head .wl-icon-button { width: 36px; height: 36px; flex-basis: 36px; }
+        :host([data-wix]) .wl-mobile-body { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 6px; align-content: start; }
+        :host([data-wix]) .wl-mobile-sale { grid-column: 1 / -1; min-height: 32px; gap: 4px; margin: 0; }
+        :host([data-wix]) .wl-mobile-sale a { min-height: 32px; padding: 4px; font-size: 11px; }
+        :host([data-wix]) .wl-mobile-shortcuts { display: none; }
+        :host([data-wix]) .wl-mobile-section, :host([data-wix]) .wl-mobile-list { display: contents; }
+        :host([data-wix]) .wl-mobile-section h3 { display: none; }
+        :host([data-wix]) .wl-mobile-list a, :host([data-wix]) .wl-mobile-list button { min-height: 28px; padding: 3px 2px; border: 1px solid var(--wl-line); border-radius: 4px; justify-content: center; font-size: 10px; line-height: 1.05; text-align: center; }
+        :host([data-wix]) .wl-mobile-list svg { display: none; }
       }
 
       @media (max-width: 520px) {
@@ -243,6 +257,9 @@
   WoodsonUnifiedHeader.prototype.connectedCallback = function () {
     if (this.dataset.ready === "true") return;
     this.dataset.ready = "true";
+    if (window.top !== window || (/woodsonlumber\.com$/i.test(window.location.hostname) && window.location.hostname !== "webtrack.woodsonlumber.com")) {
+      this.setAttribute("data-wix", "");
+    }
     this.render();
     this.bindEvents();
     this.setDepartments(this.departments);
