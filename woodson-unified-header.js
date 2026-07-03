@@ -206,6 +206,7 @@
         .wl-location svg { width: 23px; height: 23px; }
         .wl-user-actions .wl-account-wrap, .wl-user-actions .wl-saved-action { display: none; }
         .wl-menu-button { display: grid; width: 46px; height: 46px; padding: 0; border: 0; border-radius: 5px; background: #fff; place-items: center; }
+        .wl-menu-button[aria-expanded="true"] { visibility: hidden; }
         .wl-menu-button:hover, .wl-menu-button:focus-visible { background: var(--wl-soft); }
         .wl-action { min-width: 46px; padding: 4px; }
         .wl-action > span:not(.wl-badge) { display: none; }
