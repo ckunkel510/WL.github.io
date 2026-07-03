@@ -3,7 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const handler = require("../api/special-order-designer");
-const { renderPage, requestContext } = handler._test;
+const { renderPage, requestContext, requestTrace } = handler._test;
 
 function mockResponse() {
   const headers = {};
@@ -46,6 +46,25 @@ test("escapes product values in the diagnostic page", () => {
 
   assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
   assert.match(html, /&lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+});
+
+test("records only safe request transport metadata", () => {
+  const context = requestContext({
+    method: "GET",
+    query: { productid: "245809", productcode: "WDoor", qty: "1" }
+  });
+  const trace = requestTrace({
+    headers: {
+      accept: "text/html",
+      referer: "https://webtrack.woodsonlumber.com/Catalog/SpecialOrder.aspx?customer=private",
+      "sec-fetch-dest": "iframe",
+      cookie: "secret-session"
+    }
+  }, context);
+
+  assert.equal(trace.referrerOrigin, "https://webtrack.woodsonlumber.com");
+  assert.equal(trace.fetchDestination, "iframe");
+  assert.doesNotMatch(JSON.stringify(trace), /private|secret-session/);
 });
 
 test("serves a non-cached frame-compatible probe", () => {

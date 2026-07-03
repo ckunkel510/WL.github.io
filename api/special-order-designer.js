@@ -62,6 +62,29 @@ function requestContext(req) {
   };
 }
 
+function originOnly(value) {
+  try {
+    return new URL(cleanText(value, 500)).origin;
+  } catch {
+    return "";
+  }
+}
+
+function requestTrace(req, context) {
+  return {
+    event: "special-order-probe-request",
+    method: context.method,
+    productId: context.productId,
+    productCode: context.productCode,
+    accept: cleanText(req.headers?.accept, 160),
+    contentType: cleanText(req.headers?.["content-type"], 100),
+    referrerOrigin: originOnly(req.headers?.referer || req.headers?.referrer),
+    fetchDestination: cleanText(req.headers?.["sec-fetch-dest"], 40),
+    fetchMode: cleanText(req.headers?.["sec-fetch-mode"], 40),
+    fetchSite: cleanText(req.headers?.["sec-fetch-site"], 40)
+  };
+}
+
 function renderPage(context) {
   const safeContext = JSON.stringify(context).replace(/</g, "\\u003c");
   const rows = [
@@ -179,7 +202,11 @@ function handler(req, res) {
     return res.end("Method not allowed");
   }
 
-  const html = renderPage(requestContext(req));
+  const context = requestContext(req);
+  if (context.productId !== "Not forwarded yet" || context.productCode !== "Not forwarded yet") {
+    console.info("[special-order-probe]", JSON.stringify(requestTrace(req, context)));
+  }
+  const html = renderPage(context);
   res.statusCode = 200;
   res.setHeader("Content-Type", "text/html; charset=utf-8");
   if (req.method === "HEAD") return res.end();
@@ -187,4 +214,4 @@ function handler(req, res) {
 }
 
 module.exports = handler;
-module.exports._test = { cleanText, escapeHtml, renderPage, requestContext };
+module.exports._test = { cleanText, escapeHtml, renderPage, requestContext, requestTrace };
