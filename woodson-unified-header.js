@@ -152,7 +152,7 @@
       .wl-scanner:hover, .wl-scanner:focus-visible { background: #fff7d2; }
 
       dialog:not([open]) { display: none; }
-      .wl-department-panel { position: fixed; top: var(--wl-panel-top, 170px); left: 16px; right: 16px; width: auto; max-width: 1160px; max-height: calc(100dvh - var(--wl-panel-top, 170px) - 16px); margin: 0 auto; padding: 16px; overflow: auto; border: 1px solid var(--wl-line); border-radius: 6px; background: #fff; box-shadow: 0 22px 50px rgba(0,0,0,.22); color: var(--wl-ink); z-index: 100; }
+      .wl-department-panel { position: fixed; top: 16px; left: 16px; right: 16px; width: auto; max-width: 1160px; max-height: calc(100dvh - 32px); margin: 0 auto; padding: 16px; overflow: auto; border: 1px solid var(--wl-line); border-radius: 6px; background: #fff; box-shadow: 0 22px 50px rgba(0,0,0,.22); color: var(--wl-ink); z-index: 100; }
       .wl-department-panel::backdrop, .wl-mobile-drawer::backdrop, .wl-scanner-dialog::backdrop { background: rgba(0,0,0,.28); }
       .wl-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
       .wl-panel-head h2 { margin: 0; font-size: 22px; }
@@ -478,8 +478,6 @@
     var search = this.shadowRoot.querySelector(".wl-department-search input");
     if (open) {
       this.lastFocus = source || document.activeElement;
-      var bottom = Math.max(0, Math.round(this.getBoundingClientRect().bottom));
-      panel.style.setProperty("--wl-panel-top", bottom + "px");
       this.openDialog(panel);
       trigger.setAttribute("aria-expanded", "true");
       document.documentElement.style.overflow = "hidden";
