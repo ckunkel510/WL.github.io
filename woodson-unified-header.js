@@ -8,7 +8,7 @@
     : "https://ckunkel510.github.io/WL.github.io/woodson-unified-header.js";
   var assetBase = scriptUrl.slice(0, scriptUrl.lastIndexOf("/") + 1);
   var DATA_URL = assetBase + "webtrack-departments.json";
-  var LOGO_URL = assetBase + "assets/woodson-built-on-quality-logo.png";
+  var LOGO_URL = assetBase + "assets/woodson-built-on-quality-logo.png?v=rooftop-20260703";
   var WEBTRACK = "https://webtrack.woodsonlumber.com";
   var MAIN_SITE = "https://www.woodsonlumber.com";
 
