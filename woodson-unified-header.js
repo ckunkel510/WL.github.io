@@ -151,7 +151,9 @@
       .wl-scanner { width: 46px; height: 46px; border: 1px solid #aaa; border-radius: 6px; background: #fff; color: var(--wl-maroon); display: grid; place-items: center; }
       .wl-scanner:hover, .wl-scanner:focus-visible { background: #fff7d2; }
 
-      .wl-department-panel { position: fixed; top: var(--wl-panel-top, 170px); left: 16px; right: 16px; max-width: 1160px; max-height: calc(100dvh - var(--wl-panel-top, 170px) - 16px); margin: 0 auto; padding: 16px; overflow: auto; border: 1px solid var(--wl-line); border-radius: 6px; background: #fff; box-shadow: 0 22px 50px rgba(0,0,0,.22); z-index: 100; }
+      dialog:not([open]) { display: none; }
+      .wl-department-panel { position: fixed; top: var(--wl-panel-top, 170px); left: 16px; right: 16px; width: auto; max-width: 1160px; max-height: calc(100dvh - var(--wl-panel-top, 170px) - 16px); margin: 0 auto; padding: 16px; overflow: auto; border: 1px solid var(--wl-line); border-radius: 6px; background: #fff; box-shadow: 0 22px 50px rgba(0,0,0,.22); color: var(--wl-ink); z-index: 100; }
+      .wl-department-panel::backdrop, .wl-mobile-drawer::backdrop, .wl-scanner-dialog::backdrop { background: rgba(0,0,0,.28); }
       .wl-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
       .wl-panel-head h2 { margin: 0; font-size: 22px; }
       .wl-icon-button { width: 42px; height: 42px; flex: 0 0 42px; border: 1px solid var(--wl-line); border-radius: 6px; background: #fff; display: grid; place-items: center; }
@@ -169,7 +171,7 @@
       .wl-department-result span:last-child { color: var(--wl-muted); font-size: 12px; font-weight: 700; text-align: right; }
       .wl-loading { padding: 24px; text-align: center; color: var(--wl-muted); }
 
-      .wl-mobile-drawer { position: fixed; inset: 0; height: 100dvh; overflow: auto; background: #fff; z-index: 200; }
+      .wl-mobile-drawer { position: fixed; inset: 0; width: 100vw; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: 0; overflow: auto; border: 0; background: #fff; color: var(--wl-ink); z-index: 200; }
       .wl-mobile-head { min-height: 76px; padding: 12px 16px; background: var(--wl-maroon); color: #fff; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
       .wl-mobile-head h2 { margin: 0; font-size: 21px; }
       .wl-mobile-head p { margin: 3px 0 0; color: #eee; font-size: 13px; }
@@ -186,7 +188,8 @@
       .wl-mobile-sale { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
       .wl-mobile-sale a { min-height: 44px; padding: 10px; border-radius: 5px; background: var(--wl-yellow); color: #111; display: grid; place-items: center; font-size: 14px; font-weight: 800; text-decoration: none; }
 
-      .wl-scanner-dialog { position: fixed; inset: 0; padding: 20px; background: rgba(0,0,0,.72); z-index: 300; display: grid; place-items: center; }
+      .wl-scanner-dialog { position: fixed; inset: 0; width: 100vw; max-width: none; height: 100dvh; max-height: none; margin: 0; padding: 20px; border: 0; background: rgba(0,0,0,.72); z-index: 300; place-items: center; }
+      .wl-scanner-dialog[open] { display: grid; }
       .wl-scanner-card { width: min(520px, 100%); padding: 14px; border-radius: 6px; background: #fff; }
       .wl-scanner-card video { width: 100%; min-height: 260px; max-height: 65dvh; margin-top: 10px; border-radius: 5px; background: #111; object-fit: cover; }
       .wl-scanner-message { margin: 10px 0 0; color: var(--wl-muted); font-size: 14px; }
@@ -302,14 +305,14 @@
           '<button class="wl-scanner" type="button" aria-label="Scan barcode" title="Scan barcode">' + icon("scan") + "</button>" +
         "</div></div>" +
       "</header>" +
-      '<section class="wl-department-panel" role="dialog" aria-modal="true" aria-label="Shop departments" hidden>' +
+      '<dialog class="wl-department-panel" aria-label="Shop departments">' +
         '<div class="wl-panel-head"><h2>Shop departments</h2><button class="wl-icon-button wl-department-close" type="button" aria-label="Close departments">' + icon("close") + "</button></div>" +
         '<label class="wl-department-search">' + icon("search") + '<input type="search" placeholder="Search departments and subcategories" aria-label="Search departments and subcategories" autocomplete="off"></label>' +
         '<p class="wl-department-status" aria-live="polite"></p>' +
         '<div class="wl-department-grid"></div>' +
         '<div class="wl-department-results" hidden></div>' +
-      "</section>" +
-      '<section class="wl-mobile-drawer" role="dialog" aria-modal="true" aria-label="Woodson menu" hidden>' +
+      "</dialog>" +
+      '<dialog class="wl-mobile-drawer" aria-label="Woodson menu">' +
         '<div class="wl-mobile-head"><div><h2 data-mobile-greeting>Howdy, welcome to Woodson</h2><p>Shop, manage your account, or plan your next project.</p></div><button class="wl-icon-button wl-mobile-close" type="button" aria-label="Close menu">' + icon("close") + "</button></div>" +
         '<div class="wl-mobile-body">' +
           '<div class="wl-mobile-sale"><a href="' + WEBTRACK + '/Products.aspx?pl1=4518&pg=4518&sort=StockClassSort&direction=asc">On Sale</a><a href="' + WEBTRACK + '/Products.aspx?pl1=4312&pg=4312&sort=StockClassSort&direction=asc">Clearance</a></div>' +
@@ -323,10 +326,10 @@
           '<section class="wl-mobile-section"><h3>Woodson</h3><div class="wl-mobile-list">' + mobileSiteLinks + "</div></section>" +
           '<section class="wl-mobile-section"><h3>Account & help</h3><div class="wl-mobile-list">' + mobileAccountLinks + "</div></section>" +
         "</div>" +
-      "</section>" +
-      '<section class="wl-scanner-dialog" role="dialog" aria-modal="true" aria-label="Barcode scanner" hidden>' +
+      "</dialog>" +
+      '<dialog class="wl-scanner-dialog" aria-label="Barcode scanner">' +
         '<div class="wl-scanner-card"><div class="wl-panel-head"><h2>Scan a barcode</h2><button class="wl-icon-button wl-scanner-close" type="button" aria-label="Close scanner">' + icon("close") + '</button></div><video playsinline muted></video><p class="wl-scanner-message" aria-live="polite">Center the product barcode in the camera view.</p></div>' +
-      "</section>";
+      "</dialog>";
   };
 
   WoodsonUnifiedHeader.prototype.bindEvents = function () {
@@ -363,11 +366,24 @@
     scannerButton.addEventListener("click", function () { self.openScanner(); });
     scannerClose.addEventListener("click", function () { self.closeScanner(); });
 
+    root.querySelector(".wl-department-panel").addEventListener("cancel", function (event) {
+      event.preventDefault();
+      self.setDepartmentsOpen(false);
+    });
+    root.querySelector(".wl-mobile-drawer").addEventListener("cancel", function (event) {
+      event.preventDefault();
+      self.setMobileMenuOpen(false);
+    });
+    root.querySelector(".wl-scanner-dialog").addEventListener("cancel", function (event) {
+      event.preventDefault();
+      self.closeScanner();
+    });
+
     document.addEventListener("keydown", function (event) {
       if (event.key !== "Escape") return;
-      if (!root.querySelector(".wl-scanner-dialog").hidden) self.closeScanner();
-      else if (!root.querySelector(".wl-department-panel").hidden) self.setDepartmentsOpen(false);
-      else if (!root.querySelector(".wl-mobile-drawer").hidden) self.setMobileMenuOpen(false);
+      if (root.querySelector(".wl-scanner-dialog").open) self.closeScanner();
+      else if (root.querySelector(".wl-department-panel").open) self.setDepartmentsOpen(false);
+      else if (root.querySelector(".wl-mobile-drawer").open) self.setMobileMenuOpen(false);
       else if (!accountPopover.hidden) {
         accountPopover.hidden = true;
         accountTrigger.setAttribute("aria-expanded", "false");
@@ -464,12 +480,12 @@
       this.lastFocus = source || document.activeElement;
       var bottom = Math.max(0, Math.round(this.getBoundingClientRect().bottom));
       panel.style.setProperty("--wl-panel-top", bottom + "px");
-      panel.hidden = false;
+      this.openDialog(panel);
       trigger.setAttribute("aria-expanded", "true");
       document.documentElement.style.overflow = "hidden";
       window.setTimeout(function () { search.focus(); }, 0);
     } else {
-      panel.hidden = true;
+      this.closeDialog(panel);
       trigger.setAttribute("aria-expanded", "false");
       search.value = "";
       this.renderDepartmentGrid();
@@ -481,7 +497,8 @@
   WoodsonUnifiedHeader.prototype.setMobileMenuOpen = function (open, restoreFocus) {
     var drawer = this.shadowRoot.querySelector(".wl-mobile-drawer");
     var trigger = this.shadowRoot.querySelector(".wl-menu-button");
-    drawer.hidden = !open;
+    if (open) this.openDialog(drawer);
+    else this.closeDialog(drawer);
     trigger.setAttribute("aria-expanded", open ? "true" : "false");
     document.documentElement.style.overflow = open ? "hidden" : "";
     if (open) this.shadowRoot.querySelector(".wl-mobile-close").focus();
@@ -493,7 +510,7 @@
     var dialog = this.shadowRoot.querySelector(".wl-scanner-dialog");
     var video = dialog.querySelector("video");
     var message = dialog.querySelector(".wl-scanner-message");
-    dialog.hidden = false;
+    this.openDialog(dialog);
     document.documentElement.style.overflow = "hidden";
 
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !("BarcodeDetector" in window)) {
@@ -536,7 +553,7 @@
   WoodsonUnifiedHeader.prototype.closeScanner = function () {
     var dialog = this.shadowRoot.querySelector(".wl-scanner-dialog");
     var video = dialog.querySelector("video");
-    dialog.hidden = true;
+    this.closeDialog(dialog);
     document.documentElement.style.overflow = "";
     if (this.scanTimer) window.clearTimeout(this.scanTimer);
     this.scanTimer = null;
@@ -546,6 +563,21 @@
     }
     video.srcObject = null;
     this.shadowRoot.querySelector(".wl-scanner").focus();
+  };
+
+  WoodsonUnifiedHeader.prototype.openDialog = function (dialog) {
+    if (dialog.open) return;
+    if (typeof dialog.showModal === "function") {
+      dialog.showModal();
+      return;
+    }
+    dialog.setAttribute("open", "");
+  };
+
+  WoodsonUnifiedHeader.prototype.closeDialog = function (dialog) {
+    if (!dialog.open) return;
+    if (typeof dialog.close === "function") dialog.close();
+    else dialog.removeAttribute("open");
   };
 
   WoodsonUnifiedHeader.prototype.listenForWebTrackState = function () {
