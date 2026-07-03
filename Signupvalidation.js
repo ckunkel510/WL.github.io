@@ -5,10 +5,7 @@
   const phoneInput = document.getElementById("ctl00_PageBody_ContactTelephoneTextBox");
   if (!phoneInput) return;
 
-  // Pre-fill with "1 " if empty
-  if (!phoneInput.value.trim()) {
-    phoneInput.value = "1 ";
-  }
+  phoneInput.setAttribute("placeholder", "(###) ###-####");
 
   // Put cursor after the "1 "
   function placeCursor() {
@@ -20,6 +17,7 @@
   function formatPhone(value) {
     // Remove all non-digits except starting 1
     let digits = value.replace(/\D/g, "");
+    if (!digits) return "";
 
     // Ensure starts with 1
     if (!digits.startsWith("1")) {
@@ -48,7 +46,7 @@
 
   // Prevent deleting the "1 "
   phoneInput.addEventListener("keydown", function(e) {
-    if (phoneInput.selectionStart <= 2 && (e.key === "Backspace" || e.key === "Delete")) {
+    if (phoneInput.value.startsWith("1 ") && phoneInput.selectionStart <= 2 && (e.key === "Backspace" || e.key === "Delete")) {
       e.preventDefault();
     }
   });
@@ -65,7 +63,7 @@
 
   // Re-format on page load (handles autofill)
   setTimeout(() => {
-    phoneInput.value = formatPhone(phoneInput.value);
+    if (phoneInput.value.trim()) phoneInput.value = formatPhone(phoneInput.value);
   }, 200);
 
 })();
@@ -282,7 +280,7 @@
   // Wire up each input
   inputs.forEach(el => {
     el.classList.add("state-autofill");
-    el.setAttribute("autocomplete","address-level1");
+    el.setAttribute("autocomplete", el.id.includes("Invoice") ? "billing address-level1" : "shipping address-level1");
 
     el.addEventListener("focus", () => {
       openPicker(el);
@@ -428,7 +426,7 @@
   inputs.forEach(el => {
     // Hint to browsers that this is a country name field
     el.classList.add("country-autofill");
-    el.setAttribute("autocomplete", "country-name");
+    el.setAttribute("autocomplete", el.id.includes("Invoice") ? "billing country-name" : "shipping country-name");
 
     // Set to United States on load if empty (or if anything else was pre-filled)
     setTimeout(() => normalizeCountry(el), 50);
@@ -523,20 +521,32 @@
     }
   }
 
-  function validatePassword() {
+  let passwordTouched = false;
+
+  function validatePassword(showMessage) {
     const val = pwd.value || "";
     const issues = getIssues(val);
-    renderMessage(issues);
+    if (showMessage || val) renderMessage(issues);
+    else {
+      msg.textContent = "";
+      msg.className = "pw-msg";
+    }
     pwd.setCustomValidity(issues.length ? "Password does not meet requirements." : "");
-    pwd.classList.toggle("is-invalid", !!issues.length);
+    pwd.classList.toggle("is-invalid", !!issues.length && Boolean(showMessage || val));
     pwd.classList.toggle("is-valid", !issues.length && val.length > 0);
     updateButtonState(issues.length === 0);
   }
 
   // Events
-  pwd.addEventListener("input", validatePassword);
-  pwd.addEventListener("blur", validatePassword);
-  setTimeout(validatePassword, 200); // initial/autofill check
+  pwd.addEventListener("input", () => {
+    passwordTouched = true;
+    validatePassword(true);
+  });
+  pwd.addEventListener("blur", () => {
+    passwordTouched = true;
+    validatePassword(true);
+  });
+  setTimeout(() => validatePassword(passwordTouched), 200); // initial/autofill check
 
   // Initial lock
   updateButtonState(false);

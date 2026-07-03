@@ -174,28 +174,33 @@
       .wl-request-nav{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;padding-top:4px;}
 
       /* New customer signup */
-      .wl-signup-intro{width:min(1120px,calc(100% - 32px));margin:24px auto 14px;padding:15px 17px;border:1px solid var(--wl-auth-border);border-left:4px solid var(--wl-auth-brand);border-radius:6px;background:var(--wl-auth-soft);}
+      .wl-signup-intro{width:min(960px,calc(100% - 32px));margin:24px auto 14px;padding:15px 17px;border:1px solid var(--wl-auth-border);border-left:4px solid var(--wl-auth-brand);border-radius:6px;background:var(--wl-auth-soft);}
       .wl-signup-intro h1{margin:0;color:var(--wl-auth-text);font-size:26px;line-height:1.25;letter-spacing:0;}
       .wl-signup-intro p{margin:5px 0 0;color:var(--wl-auth-muted);font-size:14px;line-height:1.45;}
-      .wl-signup-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"account delivery" "account invoice" "prefs prefs";gap:16px;width:min(1120px,calc(100% - 32px))!important;max-width:1120px!important;margin:0 auto!important;padding:0!important;align-items:start;}
+      .wl-signup-grid{display:grid!important;grid-template-columns:minmax(0,1fr);grid-template-areas:"account" "delivery" "invoice" "prefs";gap:16px;width:min(960px,calc(100% - 32px))!important;max-width:960px!important;margin:0 auto!important;padding:0!important;align-items:start;}
       .wl-signup-grid>.col-lg-4{width:auto!important;max-width:none!important;flex:none!important;margin:0!important;padding:18px!important;border:1px solid var(--wl-auth-border);border-radius:8px;background:#fff;box-shadow:0 3px 12px rgba(0,0,0,.05);}
       .wl-signup-account{grid-area:account;}
       .wl-signup-delivery{grid-area:delivery;}
       .wl-signup-invoice{grid-area:invoice;}
-      .wl-signup-grid h3{margin:0 0 14px;padding-bottom:10px;border-bottom:1px solid var(--wl-auth-border);color:var(--wl-auth-text);font-size:20px;letter-spacing:0;}
+      .wl-signup-account,.wl-signup-delivery,.wl-signup-invoice{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:16px;align-items:start;}
+      .wl-signup-grid h3{grid-column:1 / -1;margin:0 0 14px;padding-bottom:10px;border-bottom:1px solid var(--wl-auth-border);color:var(--wl-auth-text);font-size:20px;letter-spacing:0;}
       .wl-signup-grid .epi-form-group-signup2{display:block!important;margin:0 0 13px!important;padding:0!important;}
+      .wl-signup-grid .wl-signup-field-wide{grid-column:1 / -1;}
       .wl-signup-grid .epi-form-group-signup2>div{width:100%!important;max-width:none!important;margin:0!important;}
       .wl-signup-grid .epi-form-group-signup2 label{display:block;margin:0 0 5px;color:#343a40;font-weight:800;}
       .wl-signup-grid .RadInput,.wl-signup-grid .form-control{display:block!important;width:100%!important;max-width:none!important;}
       .wl-signup-grid input[type="text"],.wl-signup-grid input[type="email"],.wl-signup-grid input[type="password"],.wl-signup-grid input[type="tel"]{width:100%!important;min-height:46px!important;padding:9px 11px!important;border:1px solid var(--wl-auth-border)!important;border-radius:6px!important;font-size:16px!important;}
       .wl-signup-grid .pw-reqs{margin:0 0 7px!important;padding:8px 10px;border:1px solid #e1e3e5;border-radius:6px;background:#f8f9fa;line-height:1.4;}
       .wl-signup-grid .pw-msg{margin:5px 0 0;line-height:1.35;}
-      .wl-billing-toggle{display:flex;align-items:flex-start;gap:9px;margin:-2px 0 14px;padding:10px 11px;border:1px solid var(--wl-auth-border);border-radius:6px;background:#f8f9fa;color:#343a40;font-weight:750;line-height:1.35;cursor:pointer;}
+      .wl-billing-toggle{grid-column:1 / -1;display:flex;align-items:flex-start;gap:9px;margin:-2px 0 14px;padding:10px 11px;border:1px solid var(--wl-auth-border);border-radius:6px;background:#f8f9fa;color:#343a40;font-weight:750;line-height:1.35;cursor:pointer;}
       .wl-billing-toggle input{width:18px!important;height:18px!important;margin:1px 0 0;flex:0 0 auto;}
-      .wl-signup-invoice.wl-billing-fields-hidden .epi-form-group-signup2{display:none!important;}
+      .wl-signup-grid .wl-address-line-extra{display:none!important;}
+      .wl-signup-grid .wl-address-line-extra.wl-address-line-extra-visible{display:block!important;}
+      .wl-address-more{grid-column:1 / -1;justify-self:start;margin:-4px 0 13px;padding:4px 0;border:0;background:transparent;color:var(--wl-auth-brand);font:inherit;font-weight:800;text-decoration:underline;text-underline-offset:2px;cursor:pointer;}
+      .wl-signup-invoice.wl-billing-fields-hidden .epi-form-group-signup2,.wl-signup-invoice.wl-billing-fields-hidden .wl-address-more{display:none!important;}
       #wl-signup-comm-prefs{grid-area:prefs!important;width:100%!important;max-width:none!important;margin:0!important;border-radius:8px!important;}
       #wl-signup-comm-prefs .wl-signup-pref-row{display:inline-flex!important;width:calc(50% - 8px);padding-right:14px;vertical-align:top;}
-      .wl-signup-submit{width:min(1120px,calc(100% - 32px))!important;max-width:1120px!important;margin:14px auto 38px!important;display:flex!important;justify-content:flex-end!important;}
+      .wl-signup-submit{width:min(960px,calc(100% - 32px))!important;max-width:960px!important;margin:14px auto 38px!important;display:flex!important;justify-content:flex-end!important;}
       .wl-signup-submit .submit-button-panel{width:min(100%,320px)!important;margin:0!important;padding:0!important;}
       .wl-signup-submit .epi-button{display:flex!important;align-items:center;justify-content:center;width:100%!important;min-height:48px;border-radius:6px;font-weight:800;}
 
@@ -212,6 +217,8 @@
         .wl-request-field,.wl-request-heading,.wl-request-intro,.wl-request-actions,.wl-request-nav{grid-column:1;}
         .wl-request-actions .submit-button-panel{width:100%;}
         .wl-signup-grid>.col-lg-4{padding:15px!important;}
+        .wl-signup-account,.wl-signup-delivery,.wl-signup-invoice{grid-template-columns:minmax(0,1fr);}
+        .wl-signup-grid .wl-signup-field-wide,.wl-billing-toggle,.wl-address-more{grid-column:1;}
         #wl-signup-comm-prefs .wl-signup-pref-row{width:100%;padding-right:0;}
         .wl-signup-submit .submit-button-panel{width:100%!important;}
       }
@@ -385,9 +392,10 @@
     accountCol.classList.add('wl-signup-account');
     deliveryCol.classList.add('wl-signup-delivery');
     invoiceCol.classList.add('wl-signup-invoice');
-    userHeading.textContent = 'Account and Sign-In';
-    deliveryHeading.textContent = 'Contact and Delivery';
-    invoiceHeading.textContent = 'Billing Address';
+    userHeading.textContent = '1. Account Details';
+    deliveryHeading.textContent = '2. Contact and Delivery Address';
+    invoiceHeading.textContent = '3. Billing Address';
+    setButtonText(button, 'Create Account');
 
     const intro = document.createElement('div');
     intro.className = 'wl-signup-intro';
@@ -400,15 +408,108 @@
     addFieldHelp(emailGroup, 'Your email address will be your login name.', 'wl-signup-email-help');
     bindEmailAsLogin(email, login, button, 'wl-signup-email-error');
 
-    document.getElementById('ctl00_PageBody_FirstNameTextBox')?.setAttribute('autocomplete', 'given-name');
-    document.getElementById('ctl00_PageBody_LastNameTextBox')?.setAttribute('autocomplete', 'family-name');
-    document.getElementById('ctl00_PageBody_ContactNameTextBox')?.setAttribute('autocomplete', 'name');
+    const firstName = document.getElementById('ctl00_PageBody_FirstNameTextBox');
+    const lastName = document.getElementById('ctl00_PageBody_LastNameTextBox');
+    const contactName = document.getElementById('ctl00_PageBody_ContactNameTextBox');
+    const confirmPassword = document.getElementById('ctl00_PageBody_Password2TextBox');
+    firstName?.setAttribute('autocomplete', 'given-name');
+    lastName?.setAttribute('autocomplete', 'family-name');
+    contactName?.setAttribute('autocomplete', 'name');
+    fieldGroup(contactName, '.epi-form-group-signup2')?.classList.add('wl-signup-field-wide');
+    confirmPassword?.setAttribute('autocomplete', 'new-password');
+
+    const confirmLabel = confirmPassword && document.querySelector('label[for="' + confirmPassword.id + '"]');
+    if (confirmLabel) confirmLabel.textContent = 'Confirm password';
+
+    let syncingContactName = false;
+    let contactNameManaged = !String(contactName?.value || '').trim();
+    function syncContactFromName() {
+      if (!contactName || !contactNameManaged) return;
+      const fullName = [firstName?.value, lastName?.value].map(function (value) {
+        return String(value || '').trim();
+      }).filter(Boolean).join(' ');
+      syncingContactName = true;
+      setWebTrackValue(contactName, fullName, true);
+      syncingContactName = false;
+    }
+    contactName?.addEventListener('input', function () {
+      if (!syncingContactName) contactNameManaged = !String(contactName.value || '').trim();
+    });
+    [firstName, lastName].forEach(function (input) {
+      input?.addEventListener('input', syncContactFromName, { passive: true });
+      input?.addEventListener('change', syncContactFromName, { passive: true });
+    });
+    setTimeout(syncContactFromName, 300);
+
     const phone = document.getElementById('ctl00_PageBody_ContactTelephoneTextBox');
     if (phone) {
       phone.setAttribute('type', 'tel');
       phone.setAttribute('autocomplete', 'tel');
       phone.setAttribute('inputmode', 'tel');
+      phone.setAttribute('placeholder', '(###) ###-####');
+      const phoneLabel = document.querySelector('label[for="' + phone.id + '"]');
+      if (phoneLabel) phoneLabel.textContent = 'Phone number';
     }
+
+    const addressConfigs = [
+      ['DeliveryAddressLine1TextBox', 'shipping address-line1', 'Street address', 'Street address', true],
+      ['DeliveryAddressLine2TextBox', 'shipping address-line2', 'Apt, suite, or unit (optional)', '', true],
+      ['DeliveryAddressLine3TextBox', 'shipping address-line3', 'Additional address details (optional)', '', true],
+      ['DeliveryCityTextBox', 'shipping address-level2', 'City', '', false],
+      ['DeliveryStateCountyTextBox', 'shipping address-level1', 'State', '', false],
+      ['DeliveryPostalCodeTextBox', 'shipping postal-code', 'ZIP code', '', false],
+      ['DeliveryCountryTextBox', 'shipping country-name', 'Country', '', false],
+      ['InvoiceAddressLine1TextBox', 'billing address-line1', 'Street address', 'Street address', true],
+      ['InvoiceAddressLine2TextBox', 'billing address-line2', 'Apt, suite, or unit (optional)', '', true],
+      ['InvoiceAddressLine3TextBox', 'billing address-line3', 'Additional address details (optional)', '', true],
+      ['InvoiceCityTextBox', 'billing address-level2', 'City', '', false],
+      ['InvoiceStateCountyTextBox', 'billing address-level1', 'State', '', false],
+      ['InvoicePostalCodeTextBox', 'billing postal-code', 'ZIP code', '', false],
+      ['InvoiceCountryTextBox', 'billing country-name', 'Country', '', false]
+    ];
+
+    addressConfigs.forEach(function (config) {
+      const input = document.getElementById('ctl00_PageBody_' + config[0]);
+      if (!input) return;
+      input.setAttribute('autocomplete', config[1]);
+      if (/PostalCode/.test(config[0])) input.setAttribute('inputmode', 'numeric');
+      if (config[3]) input.setAttribute('placeholder', config[3]);
+      const label = document.querySelector('label[for="' + input.id + '"]');
+      if (label) label.textContent = config[2];
+      const group = fieldGroup(input, '.epi-form-group-signup2');
+      if (group && config[4]) group.classList.add('wl-signup-field-wide');
+    });
+
+    function makeAddressLineOptional(input) {
+      const group = fieldGroup(input, '.epi-form-group-signup2');
+      if (!input || !group) return;
+      group.classList.add('wl-address-line-extra', 'wl-signup-field-wide');
+      const reveal = document.createElement('button');
+      reveal.type = 'button';
+      reveal.className = 'wl-address-more';
+      reveal.textContent = '+ Add another address line';
+      group.insertAdjacentElement('beforebegin', reveal);
+
+      function setExpanded(expanded) {
+        group.classList.toggle('wl-address-line-extra-visible', expanded);
+        reveal.hidden = expanded;
+        reveal.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        if (expanded) input.removeAttribute('tabindex');
+        else input.setAttribute('tabindex', '-1');
+      }
+
+      reveal.addEventListener('click', function () {
+        setExpanded(true);
+        input.focus();
+      });
+      input.addEventListener('input', function () {
+        if (String(input.value || '').trim()) setExpanded(true);
+      }, { passive: true });
+      setExpanded(Boolean(String(input.value || '').trim()));
+    }
+
+    makeAddressLineOptional(document.getElementById('ctl00_PageBody_DeliveryAddressLine3TextBox'));
+    makeAddressLineOptional(document.getElementById('ctl00_PageBody_InvoiceAddressLine3TextBox'));
 
     const addressPairs = [
       ['DeliveryAddressLine1TextBox', 'InvoiceAddressLine1TextBox'],
@@ -462,6 +563,8 @@
       const preferences = document.getElementById('wl-signup-comm-prefs');
       if (preferences) {
         if (preferences.parentElement !== row) row.appendChild(preferences);
+        const heading = preferences.querySelector('h3');
+        if (heading) heading.textContent = '4. Communication Preferences';
         return;
       }
       if (attempt < 40) setTimeout(function () { moveCommunicationPreferences(attempt + 1); }, 100);
