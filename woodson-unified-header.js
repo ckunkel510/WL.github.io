@@ -216,11 +216,11 @@
         .wl-department-panel { top: 0 !important; left: 0; right: 0; bottom: 0; max-height: 100dvh; border: 0; border-radius: 0; }
 
         :host([data-wix]) .wl-mobile-drawer { height: 100%; max-height: 100%; overflow: hidden; }
-        :host([data-wix]) .wl-mobile-head { min-height: 56px; padding: 7px 8px 7px 52px; }
+        :host([data-wix]) .wl-mobile-head { min-height: 52px; height: 52px; padding: 6px 8px; }
         :host([data-wix]) .wl-mobile-head h2 { font-size: 16px; line-height: 1.05; }
         :host([data-wix]) .wl-mobile-head p { display: none; }
         :host([data-wix]) .wl-mobile-head .wl-icon-button { width: 36px; height: 36px; flex-basis: 36px; }
-        :host([data-wix]) .wl-mobile-body { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; padding: 6px; align-content: start; }
+        :host([data-wix]) .wl-mobile-body { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; height: calc(100% - 52px); padding: 6px; overflow-y: auto; overscroll-behavior: contain; align-content: start; }
         :host([data-wix]) .wl-mobile-sale { grid-column: 1 / -1; min-height: 32px; gap: 4px; margin: 0; }
         :host([data-wix]) .wl-mobile-sale a { min-height: 32px; padding: 4px; font-size: 11px; }
         :host([data-wix]) .wl-mobile-shortcuts { display: none; }
@@ -228,7 +228,7 @@
         :host([data-wix]) .wl-mobile-section h3 { display: none; }
         :host([data-wix]) .wl-mobile-list a, :host([data-wix]) .wl-mobile-list button { min-height: 28px; padding: 3px 2px; border: 1px solid var(--wl-line); border-radius: 4px; justify-content: center; font-size: 10px; line-height: 1.05; text-align: center; }
         :host([data-wix]) .wl-mobile-list svg { display: none; }
-        :host([data-wix]) .wl-department-panel { height: 100%; max-height: 100%; padding: 6px; overflow: hidden; }
+        :host([data-wix]) .wl-department-panel { height: 100%; max-height: 100%; padding: 6px; overflow: auto; overscroll-behavior: contain; }
         :host([data-wix]) .wl-department-panel .wl-panel-head { min-height: 34px; margin: 0 0 3px; padding-left: 46px; }
         :host([data-wix]) .wl-department-panel .wl-panel-head h2 { font-size: 16px; }
         :host([data-wix]) .wl-department-panel .wl-icon-button { width: 32px; height: 32px; flex-basis: 32px; }
