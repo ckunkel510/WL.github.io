@@ -509,62 +509,11 @@
     if (headerEl) headerEl.textContent = newText;
   }
 
-  function readCheckoutTotals() {
-    try {
-      const totals = JSON.parse(sessionStorage.getItem('wl_checkout_totals_v1') || 'null');
-      const signature = sessionStorage.getItem('wl_cart_signature_v1') || '';
-      if (!totals || !signature || totals.signature !== signature || !totals.total) return null;
-      if ((Date.now() - Number(totals.ts || 0)) > 30 * 60 * 1000) return null;
-      return totals;
-    } catch(e) { return null; }
-  }
-
-  function captureCheckoutTotals() {
-    const summary = document.getElementById('SummaryEntry2');
-    if (!summary) return null;
-
-    const amountFromRow = function(row) {
-      const value = row?.querySelector('td.numeric')?.textContent || '';
-      const match = String(value).match(/\$\s*([\d,]+(?:\.\d{2})?)/);
-      return match ? '$' + match[1] : '';
-    };
-    const amountByLabel = function(pattern) {
-      const row = Array.from(summary.querySelectorAll('tr')).find(function(candidate) {
-        const label = candidate.children?.[0]?.textContent?.replace(/\s+/g, ' ').trim() || '';
-        return pattern.test(label);
-      });
-      return amountFromRow(row);
-    };
-
-    let signature = '';
-    let method = '';
-    try {
-      signature = sessionStorage.getItem('wl_cart_signature_v1') || '';
-      method = sessionStorage.getItem('wl_fulfillment_method') || sessionStorage.getItem('wl_fulfillment_intent') || '';
-    } catch(e) {}
-    if (!signature) return null;
-
-    const totals = {
-      signature: signature,
-      method: method,
-      subtotal: amountByLabel(/^Subtotal/i),
-      discount: amountByLabel(/^Total discount/i),
-      delivery: amountFromRow(document.getElementById('ctl00_PageBody_CartSummary2_DeliveryCostsRow')),
-      tax: amountFromRow(document.getElementById('ctl00_PageBody_CartSummary2_TaxTotals')),
-      total: amountFromRow(document.getElementById('ctl00_PageBody_CartSummary2_GrandTotalRow')),
-      ts: Date.now()
-    };
-    if (!totals.total) return null;
-    try { sessionStorage.setItem('wl_checkout_totals_v1', JSON.stringify(totals)); } catch(e) {}
-    return totals;
-  }
-
   function buildPaymentChoiceContext() {
     const title = document.getElementById('ctl00_PageBody_CardOnFileViewTitle_HeaderText');
     if (!title || !title.offsetParent || document.getElementById('wl-payment-choice-context')) return;
 
     let subtotal = '';
-    const totals = readCheckoutTotals();
     try {
       const storedValue = sessionStorage.getItem('wl_cart_subtotal_v1');
       const storedSubtotal = Number(storedValue);
@@ -576,21 +525,13 @@
     const panel = document.createElement('section');
     panel.id = 'wl-payment-choice-context';
     panel.setAttribute('aria-label', 'Order review information');
-    const amountRows = totals ? `
-      <div class="wl-payment-choice-amount"><span>Merchandise subtotal</span><strong>${escapeHTML(totals.subtotal || subtotal)}</strong></div>
-      ${totals.discount && totals.discount !== '$0.00' ? `<div class="wl-payment-choice-amount"><span>Discount</span><strong>-${escapeHTML(totals.discount)}</strong></div>` : ''}
-      <div class="wl-payment-choice-amount"><span>${totals.method === 'ship' ? 'UPS shipping' : (totals.method === 'pickup' ? 'Pickup' : 'Local delivery')}</span><strong>${escapeHTML(totals.delivery || 'Free')}</strong></div>
-      ${totals.tax ? `<div class="wl-payment-choice-amount"><span>Tax</span><strong>${escapeHTML(totals.tax)}</strong></div>` : ''}
-      <div class="wl-payment-choice-amount wl-payment-choice-total"><span>Total</span><strong>${escapeHTML(totals.total)}</strong></div>` : `
-      ${subtotal ? `<div class="wl-payment-choice-amount"><span>Merchandise subtotal</span><strong>${escapeHTML(subtotal)}</strong></div>` : ''}
-      <div class="wl-payment-choice-amount"><span>Delivery and tax</span><strong>Confirming</strong></div>`;
-
     panel.innerHTML = `
       <div class="wl-payment-choice-copy">
-        <strong>Order total and payment</strong>
-        <span>Select a payment method below. Nothing is placed until you review and click Complete Order.</span>
+        <strong>Choose payment, then review your order</strong>
+        <span>Selecting a payment method does not place the order. Delivery, tax, and the final total appear on the next review screen before Complete Order.</span>
       </div>
-      ${amountRows}`;
+      ${subtotal ? `<div class="wl-payment-choice-amount"><span>Merchandise subtotal</span><strong>${escapeHTML(subtotal)}</strong></div>` : ''}
+      <div class="wl-payment-choice-amount"><span>Delivery</span><strong>Calculated before completion</strong></div>`;
 
     const style = document.createElement('style');
     style.id = 'wl-payment-choice-context-css';
@@ -602,71 +543,12 @@
       .wl-payment-choice-amount{display:flex;justify-content:space-between;gap:18px;padding-top:9px;border-top:1px solid #eceff1;font-size:14px;}
       .wl-payment-choice-amount+.wl-payment-choice-amount{margin-top:8px;}
       .wl-payment-choice-amount strong{text-align:right;color:#111;}
-      .wl-payment-choice-total{font-size:17px;font-weight:800;border-top:2px solid #bfc4c8;}
       @media(max-width:600px){#wl-payment-choice-context{padding:14px;margin-bottom:14px}.wl-payment-choice-amount{align-items:flex-start}.wl-payment-choice-amount strong{max-width:55%;}}
     `;
     if (!document.getElementById(style.id)) document.head.appendChild(style);
 
     const anchor = title.closest('.row') || title.parentElement;
     if (anchor && anchor.parentElement) anchor.parentElement.insertBefore(panel, anchor.nextSibling);
-  }
-
-  function buildChargeReview() {
-    const summary = document.getElementById('SummaryEntry2');
-    const continueButton = document.getElementById('ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView');
-    if (!summary || !continueButton) return;
-
-    captureCheckoutTotals();
-
-    const header = document.getElementById('ctl00_PageBody_PromotionCodesAndDeliveryHeader_HeaderText');
-    if (header) header.textContent = 'Review Delivery & Total';
-    continueButton.textContent = 'Choose Payment';
-
-    if (!document.getElementById('wl-charge-review-intro')) {
-      const intro = document.createElement('div');
-      intro.id = 'wl-charge-review-intro';
-      intro.innerHTML = '<strong>Confirm the order charges</strong><span>Review delivery, tax, and the final total before choosing a payment method.</span>';
-      summary.parentElement?.insertBefore(intro, summary);
-    }
-
-    if (!document.getElementById('wl-charge-review-css')) {
-      const style = document.createElement('style');
-      style.id = 'wl-charge-review-css';
-      style.textContent = `
-        #wl-charge-review-intro,#SummaryEntry2{width:min(100%,760px);margin-inline:auto;font-family:Arial,sans-serif;box-sizing:border-box;}
-        #wl-charge-review-intro{display:grid;gap:4px;margin-bottom:12px;padding:14px 16px;border-left:4px solid #6b0016;background:#f6f7f8;color:#20242a;}
-        #wl-charge-review-intro strong{font-size:17px;}#wl-charge-review-intro span{font-size:14px;color:#555;line-height:1.4;}
-        #SummaryEntry2>table{width:100%!important;border:1px solid #d9dde2;border-collapse:separate;border-spacing:0;border-radius:6px;overflow:hidden;background:#fff;}
-        #SummaryEntry2>table>tbody>tr>td{padding:12px 14px!important;border-bottom:1px solid #e8ebed;vertical-align:top;}
-        #SummaryEntry2>table>tbody>tr:last-child>td{border-bottom:0;}
-        #SummaryEntry2 td.numeric{text-align:right;font-weight:700;white-space:nowrap;}
-        #SummaryEntry2 select{width:100%;min-height:42px;margin-top:6px;padding:7px 34px 7px 10px;border:1px solid #aeb4ba;border-radius:4px;background:#fff;}
-        #ctl00_PageBody_BackToCartButton3,#ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView{min-height:44px;padding:11px 18px!important;border-radius:4px!important;}
-        #ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView{background:#6b0016!important;color:#fff!important;}
-        @media(max-width:600px){#wl-charge-review-intro{padding:12px}#SummaryEntry2>table>tbody>tr>td{padding:10px!important}#SummaryEntry2>table>tbody>tr>td:first-child{width:68%;}}
-      `;
-      document.head.appendChild(style);
-    }
-
-    const deliveryRow = document.getElementById('ctl00_PageBody_CartSummary2_DeliveryCostsRow');
-    const amount = deliveryRow?.querySelector('td.numeric')?.textContent?.trim() || '';
-    if (!/^\$[\d,]+(?:\.\d{2})?$/.test(amount)) return;
-
-    try {
-      const signature = sessionStorage.getItem('wl_cart_signature_v1') || '';
-      if (!signature) return;
-      const intent = sessionStorage.getItem('wl_fulfillment_intent') || '';
-      let selection = null;
-      try { selection = JSON.parse(sessionStorage.getItem('wl_shipping_selection_v1') || 'null'); } catch(e) {}
-      localStorage.setItem('wl_shipping_quote_v1', JSON.stringify({
-        signature: signature,
-        kind: intent === 'ship' ? 'ups' : 'local-delivery',
-        label: intent === 'ship' ? (selection?.label || 'UPS shipping') : 'Local delivery',
-        amount: amount,
-        postalCode: intent === 'ship' ? String(selection?.postalCode || '').slice(0, 5) : '',
-        ts: Date.now()
-      }));
-    } catch(e) {}
   }
 
   function getShipping() {
@@ -818,7 +700,6 @@
   function safeInit() {
     // First, cache images if we’re on a cart step that has them
     ensureCartImageCache();
-    buildChargeReview();
     buildPaymentChoiceContext();
 
     // If summary exists and not built, build it

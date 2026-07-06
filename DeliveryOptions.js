@@ -323,52 +323,6 @@ document.addEventListener('DOMContentLoaded', function () {
 (function () {
   const METHOD_KEY = "wl_fulfillment_method";
   const CONTINUE_ID = "ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView";
-  const TOTALS_KEY = "wl_checkout_totals_v1";
-
-  function amountFromRow(row) {
-    const value = row && row.querySelector("td.numeric")
-      ? row.querySelector("td.numeric").textContent
-      : "";
-    const match = String(value || "").match(/\$\s*([\d,]+(?:\.\d{2})?)/);
-    return match ? "$" + match[1] : "";
-  }
-
-  function amountByLabel(labelPattern) {
-    const rows = Array.from(document.querySelectorAll("#SummaryEntry2 tr"));
-    const row = rows.find(function (candidate) {
-      const first = candidate.children && candidate.children[0];
-      return first && labelPattern.test(String(first.textContent || "").replace(/\s+/g, " ").trim());
-    });
-    return amountFromRow(row);
-  }
-
-  function captureCheckoutTotals() {
-    const summary = document.getElementById("SummaryEntry2");
-    if (!summary) return null;
-
-    let signature = "";
-    let method = "";
-    try {
-      signature = sessionStorage.getItem("wl_cart_signature_v1") || "";
-      method = sessionStorage.getItem(METHOD_KEY) || "";
-    } catch {}
-    if (!signature) return null;
-
-    const totals = {
-      signature: signature,
-      method: method,
-      subtotal: amountByLabel(/^Subtotal/i),
-      discount: amountByLabel(/^Total discount/i),
-      delivery: amountFromRow(document.getElementById("ctl00_PageBody_CartSummary2_DeliveryCostsRow")),
-      tax: amountFromRow(document.getElementById("ctl00_PageBody_CartSummary2_TaxTotals")),
-      total: amountFromRow(document.getElementById("ctl00_PageBody_CartSummary2_GrandTotalRow")),
-      ts: Date.now()
-    };
-    if (!totals.total) return null;
-
-    try { sessionStorage.setItem(TOTALS_KEY, JSON.stringify(totals)); } catch {}
-    return totals;
-  }
 
   function isVisible(el) {
     if (!el) return false;
@@ -391,8 +345,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function addPickupProgress() {
-    const existing = document.getElementById("wl-pickup-payment-progress");
-    if (existing) return existing;
+    if (document.getElementById("wl-pickup-payment-progress")) return;
     const main = document.querySelector(".mainContents");
     if (!main) return;
     const status = document.createElement("div");
@@ -417,7 +370,6 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!continueButton || hasShippingChoice()) return;
 
     window.__wlPickupShippingAutoAdvance = true;
-    captureCheckoutTotals();
     addPickupProgress();
     window.setTimeout(function () {
       if (document.documentElement.contains(continueButton)) continueButton.click();
@@ -425,15 +377,9 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function bootPickupAdvance() {
-    captureCheckoutTotals();
     autoAdvancePickupShipping();
     window.setTimeout(autoAdvancePickupShipping, 350);
   }
-
-  document.addEventListener("click", function (event) {
-    const target = event.target && event.target.closest ? event.target.closest("#" + CONTINUE_ID) : null;
-    if (target) captureCheckoutTotals();
-  }, true);
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", bootPickupAdvance, { once: true });

@@ -7,7 +7,6 @@
   const SHIPPING_QUOTE_KEY = 'wl_shipping_quote_v1';
   const AUTO_ADVANCE_KEY = 'wl_checkout_auto_advance';
   const CART_SUBTOTAL_KEY = 'wl_cart_subtotal_v1';
-  const CHECKOUT_TOTALS_KEY = 'wl_checkout_totals_v1';
   const QUOTE_TTL_MS = 4 * 60 * 60 * 1000;
   const UPS_RATE_URL = 'https://wl-upsrates.vercel.app/api/ups-rates';
   const STORE_ORIGINS = {
@@ -393,10 +392,6 @@
 
     injectStyles();
     const signature = getCartSignature();
-    try {
-      const previousSignature = sessionStorage.getItem(CART_SIGNATURE_KEY) || '';
-      if (previousSignature && previousSignature !== signature) sessionStorage.removeItem(CHECKOUT_TOTALS_KEY);
-    } catch {}
     saveCartSignature(signature);
     try { sessionStorage.setItem(CART_SUBTOTAL_KEY, cartSubtotal().toFixed(2)); } catch {}
     bindCheckoutHandoff(signature);

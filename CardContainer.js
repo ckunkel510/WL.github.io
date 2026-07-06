@@ -32,10 +32,11 @@ function hideContinueButton() {
   if (btn) btn.style.setProperty('display', 'none', 'important');
 }
 
-// Telerik/WebForms relies on the native event sequence before its postback.
+// a more “real” click for Telerik RadButton
 function clickContinue() {
   const btn = getContinueButton();
   if (!btn) return;
+  // fire a genuine click sequence
   ['pointerdown','mousedown','mouseup','click'].forEach(type => {
     btn.dispatchEvent(new MouseEvent(type, {bubbles:true, cancelable:true, view:window}));
   });
