@@ -78,6 +78,37 @@
     return getFulfillmentIntent() === 'ship' ? 'ship' : 'delivery';
   }
 
+  function syncNativeRequiredDate() {
+    const saleType = getSaleType();
+    const source = saleType === "pickup"
+      ? document.getElementById("pickupDate")
+      : (saleType === "delivery" ? document.getElementById("deliveryDate") : null);
+    const match = source && String(source.value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!match) return;
+
+    const year = match[1];
+    const month = match[2];
+    const day = match[3];
+    const isoDate = year + "-" + month + "-" + day;
+    const displayDate = Number(month) + "/" + Number(day) + "/" + year;
+    const validationDate = isoDate + "-00-00-00";
+    const picker = document.getElementById("ctl00_PageBody_dtRequired_DatePicker");
+    const dateInput = document.getElementById("ctl00_PageBody_dtRequired_DatePicker_dateInput");
+    const clientState = document.getElementById("ctl00_PageBody_dtRequired_DatePicker_dateInput_ClientState");
+
+    if (picker) picker.value = isoDate;
+    if (dateInput) dateInput.value = displayDate;
+    if (clientState) {
+      try {
+        const state = JSON.parse(clientState.value || "{}");
+        state.validationText = validationDate;
+        state.valueAsString = validationDate;
+        state.lastSetTextBoxValue = displayDate;
+        clientState.value = JSON.stringify(state);
+      } catch {}
+    }
+  }
+
   const SINGLE_PAGE_SESSION_KEY = "wl_checkout_single_page_preview";
   const AUTO_ADVANCE_KEY = "wl_checkout_auto_advance";
   const FULFILLMENT_INTENT_KEY = "wl_fulfillment_intent";
@@ -1496,6 +1527,8 @@ const navDiv = document.createElement("div");
               ? window.WLCheckout.validateBeforeFinalSubmit()
               : ((typeof validateStep === "function") ? validateStep(5) : true);
             if (!ok) return;
+
+            syncNativeRequiredDate();
 
             // Trigger native submit/postback
             const worked = clickNativeContinue();
