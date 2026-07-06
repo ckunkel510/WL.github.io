@@ -1415,8 +1415,8 @@ steps.forEach(function (step, i) {
       
       function clickNativeContinue() {
         const btn =
-          document.querySelector("#ctl00_PageBody_ContinueButton2") ||
-          document.querySelector("#ctl00_PageBody_ContinueButton1");
+          document.querySelector("#ctl00_PageBody_ContinueButton1") ||
+          document.querySelector("#ctl00_PageBody_ContinueButton2");
         if (!btn) return false;
 
         try {
@@ -1475,8 +1475,8 @@ const navDiv = document.createElement("div");
         // Final step: keep the native Continue button in-place (don’t move it),
         // and use a proxy button that triggers the native postback reliably.
         const native =
-          document.querySelector("#ctl00_PageBody_ContinueButton2") ||
-          document.querySelector("#ctl00_PageBody_ContinueButton1");
+          document.querySelector("#ctl00_PageBody_ContinueButton1") ||
+          document.querySelector("#ctl00_PageBody_ContinueButton2");
 
         if (native) {
           // Hide native button (but keep it in DOM so WebForms/Telerik wiring stays intact)
