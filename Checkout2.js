@@ -3793,9 +3793,9 @@ document.addEventListener("click", function (ev) {
       }, 180);
     })();
 
-    // Signed-in customers arriving from the cart can move directly to payment when
-    // every saved checkout detail is already complete. The short handoff keeps an
-    // obvious Review Details escape hatch and falls back to the full form when needed.
+    // Signed-in customers arriving from the cart get a quick completeness check.
+    // Keep the final submit deliberate so changing a date or time cannot race the
+    // customer into a validation alert or server-side business-rule response.
     (function startSmartCheckoutHandoff() {
       let requested = false;
       try { requested = sessionStorage.getItem(AUTO_ADVANCE_KEY) === "1"; } catch {}
@@ -3803,7 +3803,6 @@ document.addEventListener("click", function (ev) {
 
       let cancelled = false;
       let advancing = false;
-      let submitTimer = null;
       let retryTimer = null;
       let attempts = 0;
 
@@ -3814,7 +3813,7 @@ document.addEventListener("click", function (ev) {
       banner.innerHTML = `
         <div class="wl-smart-handoff-copy">
           <strong>Checking your saved checkout details</strong>
-          <span>We will continue to payment automatically when everything is ready.</span>
+          <span>Complete any missing details below, then continue to payment.</span>
         </div>
         <button type="button">Review details</button>`;
       wizard.insertBefore(banner, wizard.firstChild);
@@ -3824,7 +3823,6 @@ document.addEventListener("click", function (ev) {
 
       function stopAutoAdvance() {
         cancelled = true;
-        if (submitTimer) window.clearTimeout(submitTimer);
         if (retryTimer) window.clearTimeout(retryTimer);
         try { sessionStorage.removeItem(AUTO_ADVANCE_KEY); } catch {}
         banner.remove();
@@ -3881,14 +3879,9 @@ document.addEventListener("click", function (ev) {
           window.WLCheckout?.saveCheckoutSnapshot?.();
         } catch {}
 
-        copy.innerHTML = "<strong>Saved details are ready</strong><span>Continuing to payment and order review...</span>";
-        submitTimer = window.setTimeout(function () {
-          if (cancelled) return;
-          try { sessionStorage.removeItem(AUTO_ADVANCE_KEY); } catch {}
-          const continueButton = wizard.querySelector(".wl-proxy-continue");
-          if (continueButton) continueButton.click();
-          else stopAutoAdvance();
-        }, 1200);
+        copy.innerHTML = "<strong>Checkout details are ready</strong><span>Review the details below, then continue to payment.</span>";
+        reviewButton.textContent = "Review details";
+        try { sessionStorage.removeItem(AUTO_ADVANCE_KEY); } catch {}
       }
 
       function scheduleAutoAdvance() {
