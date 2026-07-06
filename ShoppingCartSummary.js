@@ -520,6 +520,46 @@
     } catch(e) { return null; }
   }
 
+  function captureCheckoutTotals() {
+    const summary = document.getElementById('SummaryEntry2');
+    if (!summary) return null;
+
+    const amountFromRow = function(row) {
+      const value = row?.querySelector('td.numeric')?.textContent || '';
+      const match = String(value).match(/\$\s*([\d,]+(?:\.\d{2})?)/);
+      return match ? '$' + match[1] : '';
+    };
+    const amountByLabel = function(pattern) {
+      const row = Array.from(summary.querySelectorAll('tr')).find(function(candidate) {
+        const label = candidate.children?.[0]?.textContent?.replace(/\s+/g, ' ').trim() || '';
+        return pattern.test(label);
+      });
+      return amountFromRow(row);
+    };
+
+    let signature = '';
+    let method = '';
+    try {
+      signature = sessionStorage.getItem('wl_cart_signature_v1') || '';
+      method = sessionStorage.getItem('wl_fulfillment_method') || sessionStorage.getItem('wl_fulfillment_intent') || '';
+    } catch(e) {}
+    if (!signature) return null;
+
+    const totals = {
+      signature: signature,
+      method: method,
+      subtotal: amountByLabel(/^Subtotal/i),
+      discount: amountByLabel(/^Total discount/i),
+      delivery: amountFromRow(document.getElementById('ctl00_PageBody_CartSummary2_DeliveryCostsRow')),
+      tax: amountFromRow(document.getElementById('ctl00_PageBody_CartSummary2_TaxTotals')),
+      total: amountFromRow(document.getElementById('ctl00_PageBody_CartSummary2_GrandTotalRow')),
+      ts: Date.now()
+    };
+    if (!totals.total) return null;
+    try { sessionStorage.setItem('wl_checkout_totals_v1', JSON.stringify(totals)); } catch(e) {}
+    return totals;
+  }
+
   function ensureCheckoutCanvas() {
     const main = document.querySelector('.mainContents');
     if (!main) return;
@@ -629,6 +669,8 @@
     const summary = document.getElementById('SummaryEntry2');
     const continueButton = document.getElementById('ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView');
     if (!summary || !continueButton) return;
+
+    captureCheckoutTotals();
 
     const header = document.getElementById('ctl00_PageBody_PromotionCodesAndDeliveryHeader_HeaderText');
     if (header) header.textContent = 'Review Delivery & Total';

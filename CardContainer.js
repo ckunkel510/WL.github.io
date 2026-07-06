@@ -32,14 +32,61 @@ function hideContinueButton() {
   if (btn) btn.style.setProperty('display', 'none', 'important');
 }
 
-// a more “real” click for Telerik RadButton
 function clickContinue() {
   const btn = getContinueButton();
-  if (!btn) return;
-  // fire a genuine click sequence
-  ['pointerdown','mousedown','mouseup','click'].forEach(type => {
-    btn.dispatchEvent(new MouseEvent(type, {bubbles:true, cancelable:true, view:window}));
+  if (!btn || btn.dataset.wlSubmitting === '1') return false;
+  btn.dataset.wlSubmitting = '1';
+
+  const href = btn.getAttribute('href') || '';
+  if (/^javascript:/i.test(href)) {
+    try {
+      window.eval(href.replace(/^javascript:\s*/i, ''));
+      return true;
+    } catch(e) {
+      btn.dataset.wlSubmitting = '';
+    }
+  }
+
+  try {
+    btn.click();
+    return true;
+  } catch(e) {}
+
+  const eventTarget = btn.getAttribute('name');
+  if (eventTarget && typeof window.__doPostBack === 'function') {
+    window.__doPostBack(eventTarget, '');
+    return true;
+  }
+  btn.dataset.wlSubmitting = '';
+  return false;
+}
+
+function showPaymentProgress(picker, selectedTile) {
+  $$('.wl-card-tile', picker).forEach(tile => {
+    tile.setAttribute('aria-disabled', 'true');
+    tile.style.pointerEvents = 'none';
   });
+  let status = picker.querySelector('.wl-card-progress');
+  if (!status) {
+    status = document.createElement('div');
+    status.className = 'wl-card-progress';
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
+    picker.appendChild(status);
+  }
+  status.textContent = 'Opening your secure order review...';
+
+  window.setTimeout(() => {
+    if (!document.documentElement.contains(picker)) return;
+    $$('.wl-card-tile', picker).forEach(tile => {
+      tile.removeAttribute('aria-disabled');
+      tile.style.pointerEvents = '';
+    });
+    const btn = getContinueButton();
+    if (btn) btn.dataset.wlSubmitting = '';
+    status.textContent = 'This is taking longer than expected. Tap the selected payment method to try again.';
+    selectedTile?.focus();
+  }, 15000);
 }
 
 
@@ -128,7 +175,8 @@ function clickContinue() {
         rStored.checked = true;
         ddl.value = opt.value;
         ddl.dispatchEvent(new Event('change', {bubbles:true}));
-        clickContinue();
+        showPaymentProgress(picker, tile);
+        if (!clickContinue()) showPaymentProgress(picker, tile);
       });
       tile.addEventListener('keydown', (e)=>{ if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); tile.click(); }});
       list.appendChild(tile);
@@ -139,7 +187,8 @@ function clickContinue() {
       clearSelected(list); selectTile(newTile);
       rNew.checked = true;
       rNew.dispatchEvent(new Event('change', {bubbles:true}));
-      clickContinue();
+      showPaymentProgress(picker, newTile);
+      if (!clickContinue()) showPaymentProgress(picker, newTile);
     });
     newTile.addEventListener('keydown', (e)=>{ if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); newTile.click(); }});
 
@@ -185,6 +234,7 @@ function clickContinue() {
       .wl-card-face { display: grid; gap: 6px; }
       .wl-card-brand { font-weight: 700; }
       .wl-card-pan { font-variant-numeric: tabular-nums; letter-spacing: 1px; }
+      .wl-card-progress { margin-top: 12px; padding: 12px 14px; border: 1px solid #d9dde2; border-radius: 6px; background: #f4f5f6; color: #3d4248; font-weight: 700; text-align: center; }
     `;
     document.head.appendChild(css);
   }

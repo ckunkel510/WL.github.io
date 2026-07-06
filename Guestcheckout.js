@@ -34,6 +34,13 @@
     try { sessionStorage.removeItem('wl_billing_confirmed_delivered'); } catch {}
   }
 
+  function enterSignedInMode() {
+    const wasGuest = getCheckoutMode() === 'guest';
+    clearGuestState();
+    if (wasGuest) resetCheckoutDraftStateForGuest();
+    setCheckoutMode('signed_in');
+  }
+
   function cartHasNativeSigninOption() {
     const cell = document.getElementById('ctl00_PageBody_OptionalSigninButton');
     if (!cell) return false;
@@ -427,10 +434,7 @@
   function placeAdjacentUI() {
     cartQuantityInputs().forEach(hardenCartQuantityInput);
     if (isSignedInCartContext()) {
-      if (getCheckoutMode() !== 'guest') {
-        setCheckoutMode('signed_in');
-        clearGuestState();
-      }
+      enterSignedInMode();
       removeGuestActionsFromCart();
       return false;
     }
@@ -838,10 +842,7 @@
 
     if (IS_CART_PAGE) {
       if (isSignedInCartContext()) {
-        if (getCheckoutMode() !== 'guest') {
-          setCheckoutMode('signed_in');
-          clearGuestState();
-        }
+        enterSignedInMode();
         removeGuestActionsFromCart();
       } else {
         buildModal();

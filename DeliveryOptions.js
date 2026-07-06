@@ -389,9 +389,10 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function addPickupProgress() {
-    if (document.getElementById("wl-pickup-payment-progress")) return;
+    const existing = document.getElementById("wl-pickup-payment-progress");
+    if (existing) return existing;
     const main = document.querySelector(".mainContents");
-    if (!main) return;
+    if (!main) return null;
     const status = document.createElement("div");
     status.id = "wl-pickup-payment-progress";
     status.setAttribute("role", "status");
@@ -399,6 +400,33 @@ document.addEventListener('DOMContentLoaded', function () {
     status.textContent = "Preparing your payment options...";
     status.style.cssText = "max-width:720px;margin:24px auto;padding:18px;text-align:center;font-weight:700;color:#3d4248;background:#f4f5f6;border:1px solid #d9dde2;border-radius:6px;";
     main.insertBefore(status, main.firstChild);
+    return status;
+  }
+
+  function runNativeButton(button) {
+    if (!button || button.dataset.wlSubmitting === "1") return false;
+    button.dataset.wlSubmitting = "1";
+
+    const href = button.getAttribute("href") || "";
+    if (/^javascript:/i.test(href)) {
+      try {
+        window.eval(href.replace(/^javascript:\s*/i, ""));
+        return true;
+      } catch {}
+    }
+
+    try {
+      button.click();
+      return true;
+    } catch {}
+
+    const eventTarget = button.getAttribute("name");
+    if (eventTarget && typeof window.__doPostBack === "function") {
+      window.__doPostBack(eventTarget, "");
+      return true;
+    }
+    button.dataset.wlSubmitting = "";
+    return false;
   }
 
   function autoAdvancePickupShipping() {
@@ -415,10 +443,20 @@ document.addEventListener('DOMContentLoaded', function () {
 
     window.__wlPickupShippingAutoAdvance = true;
     captureCheckoutTotals();
-    addPickupProgress();
+    const status = addPickupProgress();
     window.setTimeout(function () {
-      if (document.documentElement.contains(continueButton)) continueButton.click();
+      if (!document.documentElement.contains(continueButton)) return;
+      if (!runNativeButton(continueButton) && status) {
+        status.textContent = "We could not open payment automatically. Choose Payment below to continue.";
+        continueButton.style.removeProperty("display");
+      }
     }, 180);
+    window.setTimeout(function () {
+      if (!document.documentElement.contains(continueButton)) return;
+      continueButton.dataset.wlSubmitting = "";
+      if (status) status.textContent = "This is taking longer than expected. Choose Payment below to try again.";
+      continueButton.style.removeProperty("display");
+    }, 15000);
   }
 
   function bootPickupAdvance() {
