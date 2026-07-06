@@ -1486,7 +1486,7 @@ const navDiv = document.createElement("div");
           proxy.type = "button";
           proxy.className = (native.className || "btn btn-primary") + " wl-proxy-continue";
           proxy.textContent = singlePageCheckout
-            ? "Review Payment & Order"
+            ? "Continue to Payment"
             : ((native.value || native.innerText || "Continue").trim() || "Continue");
 
           proxy.addEventListener("click", function () {
@@ -3213,10 +3213,14 @@ document.addEventListener("click", function (ev) {
             if (region === "outside") {
               $delivery.hide();
               $shipTag.text("Recommended for your address");
-              if (getFulfillmentIntent() === "delivery") {
+              const intent = getFulfillmentIntent();
+              if (!intent || intent === "delivery") {
                 setFulfillmentIntent("ship");
                 try { sessionStorage.setItem("wl_fulfillment_method", "ship"); } catch {}
-                window.setTimeout(function () { updateShippingStyles("ship", { silent: true }); }, 0);
+                window.setTimeout(function () {
+                  const ups = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbUPSDelivery");
+                  updateShippingStyles("ship", { silent: !!(ups && ups.checked) });
+                }, 0);
               }
             } else if (region === "texas") {
               $delivery.show();

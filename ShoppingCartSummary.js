@@ -509,6 +509,48 @@
     if (headerEl) headerEl.textContent = newText;
   }
 
+  function buildPaymentChoiceContext() {
+    const title = document.getElementById('ctl00_PageBody_CardOnFileViewTitle_HeaderText');
+    if (!title || !title.offsetParent || document.getElementById('wl-payment-choice-context')) return;
+
+    let subtotal = '';
+    try {
+      const storedValue = sessionStorage.getItem('wl_cart_subtotal_v1');
+      const storedSubtotal = Number(storedValue);
+      if (storedValue && Number.isFinite(storedSubtotal) && storedSubtotal >= 0) {
+        subtotal = '$' + storedSubtotal.toFixed(2);
+      }
+    } catch(e) {}
+
+    const panel = document.createElement('section');
+    panel.id = 'wl-payment-choice-context';
+    panel.setAttribute('aria-label', 'Order review information');
+    panel.innerHTML = `
+      <div class="wl-payment-choice-copy">
+        <strong>Choose payment, then review your order</strong>
+        <span>Selecting a payment method does not place the order. Delivery, tax, and the final total appear on the next review screen before Complete Order.</span>
+      </div>
+      ${subtotal ? `<div class="wl-payment-choice-amount"><span>Merchandise subtotal</span><strong>${escapeHTML(subtotal)}</strong></div>` : ''}
+      <div class="wl-payment-choice-amount"><span>Delivery</span><strong>Calculated before completion</strong></div>`;
+
+    const style = document.createElement('style');
+    style.id = 'wl-payment-choice-context-css';
+    style.textContent = `
+      #wl-payment-choice-context{width:min(100%,760px);margin:0 auto 18px;padding:16px 18px;border:1px solid #d9dde2;border-left:4px solid #6b0016;border-radius:6px;background:#fff;font-family:Arial,sans-serif;color:#20242a;}
+      .wl-payment-choice-copy{display:grid;gap:5px;margin-bottom:13px;line-height:1.4;}
+      .wl-payment-choice-copy strong{font-size:17px;}
+      .wl-payment-choice-copy span{color:#555;font-size:14px;}
+      .wl-payment-choice-amount{display:flex;justify-content:space-between;gap:18px;padding-top:9px;border-top:1px solid #eceff1;font-size:14px;}
+      .wl-payment-choice-amount+.wl-payment-choice-amount{margin-top:8px;}
+      .wl-payment-choice-amount strong{text-align:right;color:#111;}
+      @media(max-width:600px){#wl-payment-choice-context{padding:14px;margin-bottom:14px}.wl-payment-choice-amount{align-items:flex-start}.wl-payment-choice-amount strong{max-width:55%;}}
+    `;
+    if (!document.getElementById(style.id)) document.head.appendChild(style);
+
+    const anchor = title.closest('.row') || title.parentElement;
+    if (anchor && anchor.parentElement) anchor.parentElement.insertBefore(panel, anchor.nextSibling);
+  }
+
   function getShipping() {
     const deliveryRow = document.getElementById('ctl00_PageBody_ShoppingCartSummaryTableControl_DeliverySummaryRow');
     const deliveryAmt = deliveryRow?.querySelector('td.numeric')?.textContent?.trim();
@@ -658,6 +700,7 @@
   function safeInit() {
     // First, cache images if we’re on a cart step that has them
     ensureCartImageCache();
+    buildPaymentChoiceContext();
 
     // If summary exists and not built, build it
     const hasSummary = !!document.querySelector('#summary');

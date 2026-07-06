@@ -6,6 +6,7 @@
   const CART_SIGNATURE_KEY = 'wl_cart_signature_v1';
   const SHIPPING_QUOTE_KEY = 'wl_shipping_quote_v1';
   const AUTO_ADVANCE_KEY = 'wl_checkout_auto_advance';
+  const CART_SUBTOTAL_KEY = 'wl_cart_subtotal_v1';
   const QUOTE_TTL_MS = 4 * 60 * 60 * 1000;
   const UPS_RATE_URL = 'https://wl-upsrates.vercel.app/api/ups-rates';
   const STORE_ORIGINS = {
@@ -334,26 +335,12 @@
       };
     }
 
-    if (containsLargeItems) {
-      return {
-        label: 'Estimated delivery',
-        amount: 'Calculated at checkout',
-        note: 'Oversized items may change the base delivery charge.'
-      };
-    }
-
-    if (cartSubtotal() >= 50) {
-      return {
-        label: 'Estimated delivery',
-        amount: 'Free',
-        note: 'This cart currently qualifies for free delivery in the central delivery zone.'
-      };
-    }
-
     return {
-      label: 'Estimated delivery',
-      amount: '$9.95',
-      note: 'Based on your saved address and current cart. Final charge is confirmed before payment.'
+      label: 'Local delivery',
+      amount: 'Calculated at checkout',
+      note: containsLargeItems
+        ? 'WebTrack will calculate the exact charge after confirming the delivery address and oversized items.'
+        : 'WebTrack will calculate the exact Woodson delivery charge after confirming the delivery address.'
     };
   }
 
@@ -392,7 +379,7 @@
           sessionStorage.removeItem('wl_fulfillment_intent');
           sessionStorage.removeItem('wl_fulfillment_method');
           sessionStorage.removeItem('wl_shipping_selection_v1');
-          sessionStorage.setItem(AUTO_ADVANCE_KEY, '1');
+          sessionStorage.removeItem(AUTO_ADVANCE_KEY);
         } catch {}
       }
       showCheckoutTransition();
@@ -406,6 +393,7 @@
     injectStyles();
     const signature = getCartSignature();
     saveCartSignature(signature);
+    try { sessionStorage.setItem(CART_SUBTOTAL_KEY, cartSubtotal().toFixed(2)); } catch {}
     bindCheckoutHandoff(signature);
     renderChecking();
     renderEstimate(await calculateEstimate(signature));

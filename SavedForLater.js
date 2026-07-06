@@ -2,6 +2,17 @@
 setTimeout(() =>{
 (function() {
 
+  const cartHeading = Array.from(document.querySelectorAll("h1, h2, h3")).find((heading) =>
+    /^shopping cart$/i.test((heading.textContent || "").replace(/\s+/g, " ").trim())
+  );
+  const hasCartControls = !!document.querySelector(
+    ".shopping-cart-item, #ctl00_PageBody_PlaceOrderButton, #ctl00_PageBody_EmptyCartButton"
+  );
+  if (!cartHeading && !hasCartControls) {
+    console.log("[SFL] Skipping Saved For Later outside the cart view.");
+    return;
+  }
+
   const SFL_NAME = "Saved For Later";
   const SFL_DESC = "Saved For Later";
   const BASE = location.origin + "/";
@@ -965,7 +976,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
 
 }, 1000);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
-
 
 
 
