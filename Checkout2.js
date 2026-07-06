@@ -250,6 +250,15 @@
       .checkout-wizard.wl-single-page .wl-smart-handoff button{
         flex:0 0 auto;min-height:40px;padding:8px 13px;border:1px solid #aab0b6;border-radius:6px;background:#fff;color:#20242a;font-weight:700;
       }
+      .checkout-wizard.wl-single-page .wl-checkout-address-tools{
+        display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px;
+      }
+      .checkout-wizard.wl-single-page .wl-checkout-address-action{
+        display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:8px 12px;
+        border:1px solid #aeb4ba;border-radius:6px;background:#fff;color:#6b0016!important;font-size:13px;font-weight:700;text-decoration:none!important;cursor:pointer;
+      }
+      .checkout-wizard.wl-single-page .wl-checkout-address-action:hover,
+      .checkout-wizard.wl-single-page .wl-checkout-address-action:focus{background:#f7f1f2;border-color:#6b0016;outline:none;}
       @media (max-width:991px){
         body.wl-checkout-active #MainLayoutRow{width:100%!important;max-width:none!important;margin:0!important;}
         body.wl-checkout-active #MainLayoutRow>.container-fluid{
@@ -286,6 +295,8 @@
         .checkout-wizard.wl-single-page .checkout-step[data-step="5"] .wl-proxy-continue{width:100%;}
         .checkout-wizard.wl-single-page .wl-smart-handoff{display:grid;grid-template-columns:minmax(0,1fr);align-items:stretch;width:100%;}
         .checkout-wizard.wl-single-page .wl-smart-handoff-copy,.checkout-wizard.wl-single-page .wl-smart-handoff button{width:100%;min-width:0;}
+        .checkout-wizard.wl-single-page .wl-checkout-address-tools{display:grid;grid-template-columns:1fr;}
+        .checkout-wizard.wl-single-page .wl-checkout-address-action{width:100%;}
       }
     `;
     document.head.appendChild(style);
@@ -3901,6 +3912,41 @@ document.addEventListener("click", function (ev) {
       } catch {}
 
       window.setTimeout(attemptAutoAdvance, 250);
+    })();
+
+    (function addSavedAddressActions() {
+      if (!singlePageCheckout || document.getElementById("wl-checkout-address-tools")) return;
+      const pane = wizard.querySelector('.checkout-step[data-step="3"]');
+      if (!pane) return;
+
+      const tools = document.createElement("div");
+      tools.id = "wl-checkout-address-tools";
+      tools.className = "wl-checkout-address-tools";
+      tools.setAttribute("aria-label", "Saved address actions");
+
+      const selector = document.getElementById("ctl00_PageBody_CustomerAddressSelector_PopupTrigger");
+      if (selector) {
+        const choose = document.createElement("button");
+        choose.type = "button";
+        choose.className = "wl-checkout-address-action";
+        choose.innerHTML = '<i class="fas fa-address-book" aria-hidden="true"></i><span>Choose saved address</span>';
+        choose.addEventListener("click", function () { selector.click(); });
+        tools.appendChild(choose);
+      }
+
+      const add = document.createElement("a");
+      add.className = "wl-checkout-address-action";
+      add.href = "/AddressDetails.aspx?oid=0&action=1&from=checkout";
+      add.innerHTML = '<i class="fas fa-plus" aria-hidden="true"></i><span>Add saved address</span>';
+      add.addEventListener("click", function () {
+        try { sessionStorage.setItem("wl_address_return_path", "/ShoppingCart.aspx"); } catch {}
+      });
+      tools.appendChild(add);
+
+      const heading = pane.querySelector(".wl-section-heading");
+      if (heading && heading.nextSibling) pane.insertBefore(tools, heading.nextSibling);
+      else if (heading) pane.appendChild(tools);
+      else pane.insertBefore(tools, pane.firstChild);
     })();
 
     if (expectedNav) {

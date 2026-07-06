@@ -5,11 +5,12 @@
   var DEBUG = false; // Set to true only when actively troubleshooting.
   var LOCATIONS_URL = "/Default.aspx?view=storelocations";
   var ANALYTICS_URL = "https://ckunkel510.github.io/WL.github.io/wl-events.js?v=20260701-1";
-  var ADDRESS_MANAGER_URL = "https://ckunkel510.github.io/WL.github.io/AddressManagement.js?v=20260706-1";
   var QUAGGA_URL = "https://unpkg.com/quagga@0.12.1/dist/quagga.min.js";
+  var DEPARTMENT_CACHE_KEY = "wl_header_departments_v1";
   var STORE_NAMES = ["Brenham", "Bryan", "Caldwell", "Lexington", "Groesbeck", "Mexia", "Buffalo"];
   var CENTRAL_TIME_ZONE = "America/Chicago";
   var mobileMenuNameRequest = null;
+  var shoppingCartDepartmentRequest = null;
 
   function debugLog() {
     if (!DEBUG || !window.console || typeof window.console.log !== "function") return;
@@ -31,18 +32,6 @@
     script.src = ANALYTICS_URL;
     script.async = true;
     script.setAttribute("data-wl-analytics", "true");
-    document.head.appendChild(script);
-  }
-
-  function loadAddressManager() {
-    var path = (window.location.pathname || "").toLowerCase();
-    if (!/(?:addresslist_r|addressdetails|shoppingcart)\.aspx$/.test(path)) return;
-    if (window.WLAddressManager || document.querySelector("script[data-wl-address-manager]")) return;
-
-    var script = document.createElement("script");
-    script.src = ADDRESS_MANAGER_URL;
-    script.async = true;
-    script.setAttribute("data-wl-address-manager", "true");
     document.head.appendChild(script);
   }
 
@@ -1014,6 +1003,20 @@
         border-radius: 0 5px 5px 0 !important;
       }
 
+      #ctl00_PageHeader_GlobalSearchControl_RadSearchBox1 .wl-cart-search-submit {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 46px;
+        border: 0;
+        cursor: pointer;
+      }
+
+      #ctl00_PageHeader_GlobalSearchControl_RadSearchBox1 .wl-cart-search-submit i {
+        color: #fff;
+        font-size: 17px;
+      }
+
       body #aspnetForm #barcode-scanner-container {
         display: none !important;
         flex: 0 0 auto;
@@ -1833,8 +1836,15 @@
     return true;
   }
 
-  function collectDepartmentData() {
-    var root = document.querySelector("#ctl00_PageHeader_RadMenuDesktop .rmLevel1");
+  function normalizeHeaderHref(link) {
+    var href = link && link.getAttribute ? link.getAttribute("href") : "";
+    if (!href) return "";
+    try { return new URL(href, window.location.origin + "/").href; } catch (error) { return href; }
+  }
+
+  function collectDepartmentData(sourceDocument) {
+    var source = sourceDocument || document;
+    var root = source.querySelector("#ctl00_PageHeader_RadMenuDesktop .rmLevel1");
     if (!root) return [];
 
     var seen = Object.create(null);
@@ -1853,14 +1863,14 @@
 
       var labelNode = link.querySelector(".rmText");
       var name = cleanLabel(labelNode ? labelNode.textContent : link.textContent);
-      var href = link.href || link.getAttribute("href");
+      var href = normalizeHeaderHref(link);
       var key = name + "|" + href;
       var subcategorySeen = Object.create(null);
       var subcategories = [];
 
       Array.prototype.forEach.call(item.querySelectorAll("a.rsmLink[href]"), function (subcategoryLink) {
         var subcategoryName = cleanLabel(subcategoryLink.textContent);
-        var subcategoryHref = subcategoryLink.href || subcategoryLink.getAttribute("href");
+        var subcategoryHref = normalizeHeaderHref(subcategoryLink);
         var subcategoryKey = subcategoryName + "|" + subcategoryHref;
 
         if (!subcategoryName || !subcategoryHref || subcategorySeen[subcategoryKey]) return;
@@ -1877,6 +1887,121 @@
     });
 
     return departments;
+  }
+
+  function readCachedDepartments() {
+    try {
+      var parsed = JSON.parse(window.sessionStorage.getItem(DEPARTMENT_CACHE_KEY) || "[]");
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function cacheDepartments(departments) {
+    try { window.sessionStorage.setItem(DEPARTMENT_CACHE_KEY, JSON.stringify(departments)); } catch (error) {}
+  }
+
+  function productSearchUrl(value) {
+    return "/Products.aspx?pg=0&sort=Relevance&direction=desc&itemsPerPage=48&searchText=" + encodeURIComponent(value);
+  }
+
+  function createShoppingCartSearchRow() {
+    var path = (window.location.pathname || "").toLowerCase();
+    if (!/\/shoppingcart\.aspx$/.test(path)) return false;
+    if (document.getElementById("ctl00_PageHeader_searchBarTableRow")) return false;
+
+    var header = document.getElementById("siteHeaderContent");
+    if (!header) return false;
+
+    var row = document.createElement("div");
+    row.id = "ctl00_PageHeader_searchBarTableRow";
+    row.className = "d-flex align-items-center wl-cart-commerce-header";
+
+    var searchColumn = document.createElement("div");
+    searchColumn.className = "flex-grow-1";
+
+    var panel = document.createElement("div");
+    panel.id = "ctl00_PageHeader_GlobalSearchControl_SearchPanel";
+
+    var controls = document.createElement("div");
+    controls.id = "Div_SearchControls";
+
+    var searchControl = document.createElement("div");
+    searchControl.id = "c50_2";
+    searchControl.className = "prod-search-control";
+
+    var searchBox = document.createElement("div");
+    searchBox.id = "ctl00_PageHeader_GlobalSearchControl_RadSearchBox1";
+    searchBox.className = "RadSearchBox RadSearchBox_MetroTouch wl-cart-search-box";
+
+    var inner = document.createElement("span");
+    inner.className = "rsbInner";
+
+    var input = document.createElement("input");
+    input.id = "ctl00_PageHeader_GlobalSearchControl_RadSearchBox1_Input";
+    input.className = "rsbInput radPreventDecorate";
+    input.type = "search";
+    input.placeholder = "Search products, brands, or item numbers";
+    input.setAttribute("aria-label", "Search products");
+    input.autocomplete = "off";
+
+    var button = document.createElement("button");
+    button.className = "rsbButton rsbButtonSearch wl-cart-search-submit";
+    button.type = "button";
+    button.setAttribute("aria-label", "Search button");
+    button.innerHTML = '<i class="fas fa-search" aria-hidden="true"></i>';
+
+    function submitSearch() {
+      var query = cleanLabel(input.value);
+      if (!query) {
+        input.focus();
+        return;
+      }
+      window.location.href = productSearchUrl(query);
+    }
+
+    button.addEventListener("click", submitSearch);
+    input.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      submitSearch();
+    });
+
+    inner.appendChild(input);
+    inner.appendChild(button);
+    searchBox.appendChild(inner);
+    searchControl.appendChild(searchBox);
+    controls.appendChild(searchControl);
+    panel.appendChild(controls);
+    searchColumn.appendChild(panel);
+    row.appendChild(searchColumn);
+    header.appendChild(row);
+
+    var cached = readCachedDepartments();
+    if (cached.length) {
+      buildDepartmentMenu(cached);
+      return true;
+    }
+
+    if (!shoppingCartDepartmentRequest) {
+      shoppingCartDepartmentRequest = window.fetch("/Products.aspx?itemsPerPage=12&pageIndex=0", { credentials: "same-origin" })
+        .then(function (response) { return response.ok ? response.text() : ""; })
+        .then(function (html) {
+          if (!html) return [];
+          var parsed = new DOMParser().parseFromString(html, "text/html");
+          return collectDepartmentData(parsed);
+        })
+        .then(function (departments) {
+          if (!departments.length) return;
+          cacheDepartments(departments);
+          buildDepartmentMenu(departments);
+          addMobileLocationsButton();
+        })
+        .catch(function () {});
+    }
+
+    return true;
   }
 
   function markNativeDepartmentMenus(row) {
@@ -1897,11 +2022,11 @@
     });
   }
 
-  function buildDepartmentMenu() {
+  function buildDepartmentMenu(departmentOverride) {
     if (document.getElementById("wl-department-nav")) return false;
 
     var row = document.getElementById("ctl00_PageHeader_searchBarTableRow");
-    var departments = collectDepartmentData();
+    var departments = departmentOverride && departmentOverride.length ? departmentOverride : collectDepartmentData();
     if (!row || !departments.length) return false;
 
     markNativeDepartmentMenus(row);
@@ -2689,6 +2814,7 @@
 
     changed = injectStyles() || changed;
     changed = normalizeHeaderContainers() || changed;
+    changed = createShoppingCartSearchRow() || changed;
     changed = buildDepartmentMenu() || changed;
     changed = enhanceHeaderControls() || changed;
     changed = buildMobileAccountMenu() || changed;
@@ -2709,7 +2835,6 @@
   }
 
   loadAnalytics();
-  loadAddressManager();
 
   onReady(function () {
     var firstRun = run();

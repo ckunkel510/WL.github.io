@@ -110,12 +110,14 @@
       ".wl-address-protected-note{margin:0;color:var(--wl-muted);font-size:12px;line-height:1.35;}",
       ".wl-address-empty{display:none;padding:28px;border:1px dashed #b7bbc0;text-align:center;color:var(--wl-muted);background:#fafafa;}",
       "body.wl-address-list-page #ctl00_PageBody_AddressRadGrid,body.wl-address-list-page #ctl00_PageBody_AddButtonLink{display:none!important;}",
+      "body.wl-address-list-page .wl-address-legacy-control{display:none!important;}",
       ".wl-address-detail-shell{max-width:1040px;margin:18px auto 34px;padding:0 18px;box-sizing:border-box;}",
       ".wl-address-lock-banner{display:flex;align-items:flex-start;gap:12px;margin:0 0 18px;padding:15px 16px;border-left:5px solid var(--wl-maroon);background:#f7f1f2;color:#242527;}",
       ".wl-address-lock-banner .fa{margin-top:2px;color:var(--wl-maroon);font-size:18px;}",
       ".wl-address-lock-banner strong{display:block;margin-bottom:3px;font-size:15px;}",
       ".wl-address-lock-banner p{margin:0;color:#55595e;font-size:14px;line-height:1.45;}",
-      "body.wl-address-detail-page .epi-form-col-single-address{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px 18px;max-width:1040px!important;margin:0 auto!important;padding:20px!important;border:1px solid var(--wl-border);border-radius:8px;background:#fff;box-sizing:border-box;}",
+      "body.wl-address-detail-page .wl-address-form-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px 18px;max-width:1040px!important;margin:0 auto!important;padding:20px!important;border:1px solid var(--wl-border);border-radius:8px;background:#fff;box-sizing:border-box;}",
+      "body.wl-address-detail-page .wl-address-native-empty{display:none!important;}",
       "body.wl-address-detail-page .epi-form-group-address{min-width:0;margin:0!important;}",
       "body.wl-address-detail-page .epi-form-group-address>label{display:block;margin:0 0 6px!important;color:#303236;font-size:13px!important;font-weight:700!important;}",
       "body.wl-address-detail-page .epi-form-group-address .form-control{width:100%!important;min-height:42px!important;padding:9px 10px!important;border:1px solid #afb3b8!important;border-radius:5px!important;background:#fff!important;color:#202124!important;font-size:15px!important;box-sizing:border-box!important;}",
@@ -129,9 +131,7 @@
       "body.wl-address-detail-page.wl-default-address-locked .form-control:disabled{opacity:1!important;background:#f2f3f4!important;color:#45484c!important;-webkit-text-fill-color:#45484c!important;cursor:not-allowed;}",
       "body.wl-address-detail-page.wl-default-address-locked #ctl00_PageBody_cmdSave{display:none!important;}",
       ".wl-address-detail-actions{display:flex;justify-content:flex-end;margin-top:14px;}",
-      ".wl-checkout-address-tools{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0 2px;}",
-      ".wl-checkout-address-tools .wl-address-link-button{min-height:38px;padding:7px 11px;font-size:13px;}",
-      "@media(max-width:760px){.wl-address-shell,.wl-address-detail-shell{padding:0 12px;}.wl-address-page-header{display:block;}.wl-address-page-header .wl-address-primary{margin-top:14px;width:100%;}.wl-address-toolbar{align-items:stretch;flex-direction:column;}.wl-address-search-wrap{flex-basis:auto;max-width:none;}.wl-address-count{white-space:normal;}.wl-address-grid{grid-template-columns:1fr;}.wl-address-return{align-items:stretch;flex-direction:column;}.wl-address-return .wl-address-secondary{width:100%;}body.wl-address-detail-page .epi-form-col-single-address{grid-template-columns:1fr!important;padding:15px!important;}body.wl-address-detail-page .wl-address-field-full{grid-column:1;}.wl-address-card-actions{align-items:stretch;flex-direction:column;}.wl-address-card-actions .wl-address-secondary{width:100%;}.wl-address-detail-actions .wl-address-secondary{width:100%;}}"
+      "@media(max-width:760px){.wl-address-shell,.wl-address-detail-shell{padding:0 12px;}.wl-address-page-header{display:block;}.wl-address-page-header .wl-address-primary{margin-top:14px;width:100%;}.wl-address-toolbar{align-items:stretch;flex-direction:column;}.wl-address-search-wrap{flex-basis:auto;max-width:none;}.wl-address-count{white-space:normal;}.wl-address-grid{grid-template-columns:1fr;}.wl-address-return{align-items:stretch;flex-direction:column;}.wl-address-return .wl-address-secondary{width:100%;}body.wl-address-detail-page .wl-address-form-grid{grid-template-columns:1fr!important;padding:15px!important;}body.wl-address-detail-page .wl-address-field-full{grid-column:1;}.wl-address-card-actions{align-items:stretch;flex-direction:column;}.wl-address-card-actions .wl-address-secondary{width:100%;}.wl-address-detail-actions .wl-address-secondary{width:100%;}}"
     ].join("");
     doc.head.appendChild(style);
   }
@@ -307,6 +307,13 @@
 
     var nativeRoot = doc.getElementById("ctl00_PageBody_AddressRadGrid") || table;
     nativeRoot.parentNode.insertBefore(shell, nativeRoot);
+    var gridItem = nativeRoot.parentElement;
+    var pageContainer = gridItem && gridItem.parentElement;
+    if (pageContainer) {
+      Array.prototype.forEach.call(pageContainer.children, function (child) {
+        if (child !== gridItem) child.classList.add("wl-address-legacy-control");
+      });
+    }
     return true;
   }
 
@@ -373,8 +380,10 @@
     var codeField = doc.getElementById("ctl00_PageBody_addressCode");
     if (!codeField || doc.querySelector(".wl-address-detail-shell")) return false;
 
-    var formGrid = codeField.closest(".epi-form-col-single-address");
-    if (!formGrid) return false;
+    var addressGroups = Array.prototype.slice.call(doc.querySelectorAll(".epi-form-group-address"));
+    if (!addressGroups.length) return false;
+    var firstWrapper = addressGroups[0].closest(".epi-form-col-single-address") || addressGroups[0].parentElement;
+    if (!firstWrapper || !firstWrapper.parentNode) return false;
 
     var query = "";
     try { query = new URL(win.location.href).searchParams.get("action") || ""; } catch (_) {}
@@ -418,7 +427,24 @@
       shell.appendChild(banner);
     }
 
-    formGrid.parentNode.insertBefore(shell, formGrid);
+    firstWrapper.parentNode.insertBefore(shell, firstWrapper);
+    var formGrid = create("div", "wl-address-form-grid");
+    addressGroups.forEach(function (group) {
+      var sourceWrapper = group.closest(".epi-form-col-single-address");
+      formGrid.appendChild(group);
+      if (sourceWrapper && !sourceWrapper.querySelector(".epi-form-group-address,.submit-button-panel")) {
+        sourceWrapper.classList.add("wl-address-native-empty");
+      }
+    });
+
+    var submitPanel = doc.querySelector(".submit-button-panel");
+    if (submitPanel) {
+      var submitWrapper = submitPanel.closest(".epi-form-col-single-address");
+      formGrid.appendChild(submitPanel);
+      if (submitWrapper && !submitWrapper.querySelector(".epi-form-group-address,.submit-button-panel")) {
+        submitWrapper.classList.add("wl-address-native-empty");
+      }
+    }
     shell.appendChild(formGrid);
 
     var nativeCancel = doc.getElementById("ctl00_PageBody_cmdCancel");
@@ -442,75 +468,12 @@
     return true;
   }
 
-  function beginAddAddress() {
-    safeSessionSet(RETURN_KEY, "/ShoppingCart.aspx");
-  }
-
-  function addCheckoutAddressTools() {
-    var line1 = doc.getElementById("ctl00_PageBody_DeliveryAddress_AddressLine1");
-    if (!line1 || doc.querySelector(".wl-checkout-address-tools")) return false;
-
-    var target = null;
-    var headings = doc.querySelectorAll(".wl-section-heading");
-    Array.prototype.some.call(headings, function (heading) {
-      var title = heading.querySelector(".wl-section-title");
-      if (title && /delivery|shipping address/i.test(title.textContent || "")) {
-        target = heading.parentElement;
-        return true;
-      }
-      return false;
-    });
-    if (!target) target = line1.closest(".checkout-step") || line1.parentElement;
-    if (!target) return false;
-
-    var tools = create("div", "wl-checkout-address-tools");
-    tools.setAttribute("aria-label", "Saved address actions");
-    var selector = doc.getElementById("ctl00_PageBody_CustomerAddressSelector_PopupTrigger");
-    if (selector) {
-      var choose = create("button", "wl-address-link-button");
-      choose.type = "button";
-      choose.appendChild(icon("address-book"));
-      choose.appendChild(doc.createTextNode("Choose saved address"));
-      choose.addEventListener("click", function () { selector.click(); });
-      tools.appendChild(choose);
-    }
-
-    var add = create("a", "wl-address-link-button");
-    add.href = "/AddressDetails.aspx?oid=0&action=1&from=checkout";
-    add.appendChild(icon("plus"));
-    add.appendChild(doc.createTextNode("Add saved address"));
-    add.addEventListener("click", beginAddAddress);
-    tools.appendChild(add);
-
-    var headingNode = target.querySelector(".wl-section-heading");
-    if (headingNode && headingNode.nextSibling) target.insertBefore(tools, headingNode.nextSibling);
-    else if (headingNode) target.appendChild(tools);
-    else target.insertBefore(tools, target.firstChild);
-    return true;
-  }
-
-  function observeCheckout() {
-    if (addCheckoutAddressTools()) return;
-    if (!win.MutationObserver) return;
-
-    var observer = new win.MutationObserver(function () {
-      if (addCheckoutAddressTools()) observer.disconnect();
-    });
-    observer.observe(doc.body, { childList: true, subtree: true });
-    win.setTimeout(function () { observer.disconnect(); }, 15000);
-  }
-
   function run() {
     if (!doc) return false;
     injectStyles();
     var path = pathName();
     if (/\/addresslist_r\.aspx$/.test(path)) return enhanceAddressList();
     if (/\/addressdetails\.aspx$/.test(path)) return enhanceAddressDetail();
-    if (/\/shoppingcart\.aspx$/.test(path)) {
-      doc.body.classList.add("wl-address-page");
-      observeCheckout();
-      return true;
-    }
     return false;
   }
 
