@@ -140,12 +140,6 @@
         box-sizing:border-box;min-width:0;
       }
       .checkout-wizard.wl-single-page *{box-sizing:border-box;}
-      .checkout-wizard.wl-single-page .wl-checkout-canvas-head{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;padding:0 0 16px;border-bottom:1px solid #d9dde2;font-family:Arial,sans-serif;}
-      .checkout-wizard.wl-single-page .wl-checkout-canvas-head .wl-canvas-kicker{margin:0 0 3px;color:#6b0016;font-size:12px;font-weight:800;text-transform:uppercase;}
-      .checkout-wizard.wl-single-page .wl-checkout-canvas-head h1{margin:0;color:#20242a;font-size:28px;line-height:1.15;letter-spacing:0;}
-      .checkout-wizard.wl-single-page .wl-checkout-canvas-head p{margin:5px 0 0;color:#5a6066;font-size:14px;line-height:1.4;}
-      .checkout-wizard.wl-single-page .wl-checkout-canvas-total{flex:0 0 auto;text-align:right;color:#4d5359;font-size:12px;}
-      .checkout-wizard.wl-single-page .wl-checkout-canvas-total strong{display:block;margin-top:2px;color:#111;font-size:20px;}
       .checkout-wizard.wl-single-page .checkout-steps{display:none!important;}
       .checkout-wizard.wl-single-page .checkout-step{
         display:block!important;margin:0;padding:24px 0;border-bottom:1px solid #d9dde2;background:#fff;
@@ -261,9 +255,6 @@
         .checkout-wizard.wl-single-page .checkout-step[data-step="5"] .wl-proxy-continue{width:100%;}
         .checkout-wizard.wl-single-page .wl-smart-handoff{display:grid;grid-template-columns:minmax(0,1fr);align-items:stretch;width:100%;}
         .checkout-wizard.wl-single-page .wl-smart-handoff-copy,.checkout-wizard.wl-single-page .wl-smart-handoff button{width:100%;min-width:0;}
-        .checkout-wizard.wl-single-page .wl-checkout-canvas-head{display:block;}
-        .checkout-wizard.wl-single-page .wl-checkout-canvas-head h1{font-size:24px;}
-        .checkout-wizard.wl-single-page .wl-checkout-canvas-total{margin-top:10px;text-align:left;}
       }
     `;
     document.head.appendChild(style);
@@ -393,19 +384,6 @@
   function initCheckout() {
     const $ = window.jQuery;
 
-    function closeProactiveCheckoutChat() {
-      document.querySelectorAll('iframe').forEach(function (frame) {
-        try {
-          const src = frame.getAttribute('src') || '';
-          const style = window.getComputedStyle(frame);
-          const rect = frame.getBoundingClientRect();
-          const isPrompt = (!src || src === 'about:blank') && style.position === 'fixed' &&
-            rect.width >= 340 && rect.width <= 380 && rect.height >= 300 && rect.height <= 420;
-          if (isPrompt) frame.style.setProperty('display', 'none', 'important');
-        } catch {}
-      });
-    }
-
     // -------------------------------------------------------------------------
     // A) Hide legacy UI bits
     // -------------------------------------------------------------------------
@@ -449,8 +427,6 @@
     if (!hasCheckoutControls) return;
 
     try { document.body.classList.add("wl-checkout-active"); } catch {}
-    window.setTimeout(closeProactiveCheckoutChat, 350);
-    window.setTimeout(closeProactiveCheckoutChat, 1200);
 
     if (document.querySelector(".checkout-wizard")) return;
 
@@ -462,28 +438,6 @@
     if (singlePageCheckout) {
       wizard.classList.add("wl-single-page");
       injectSinglePageStyles();
-
-      const legacyTitle = document.getElementById("ctl00_PageBody_CheckoutTitle_HeaderText");
-      const legacyHeading = legacyTitle && (legacyTitle.closest("h1,h2,h3") || legacyTitle.parentElement);
-      if (legacyHeading) legacyHeading.style.setProperty("display", "none", "important");
-
-      let subtotal = "";
-      try {
-        const rawSubtotal = sessionStorage.getItem("wl_cart_subtotal_v1");
-        const numericSubtotal = Number(rawSubtotal);
-        if (rawSubtotal && Number.isFinite(numericSubtotal)) subtotal = "$" + numericSubtotal.toFixed(2);
-      } catch {}
-
-      const canvasHead = document.createElement("header");
-      canvasHead.className = "wl-checkout-canvas-head";
-      canvasHead.innerHTML = `
-        <div>
-          <div class="wl-canvas-kicker">Secure checkout</div>
-          <h1>Checkout</h1>
-          <p>Delivery, payment, and final review stay together as this page updates.</p>
-        </div>
-        ${subtotal ? `<div class="wl-checkout-canvas-total"><span>Merchandise subtotal</span><strong>${subtotal}</strong></div>` : ""}`;
-      wizard.appendChild(canvasHead);
     }
 
     const nav = document.createElement("ul");
@@ -2622,11 +2576,10 @@ document.addEventListener("click", function (ev) {
       const specialExtra = document.getElementById("specialInsExtra");
 
       const today = new Date();
-      today.setHours(0, 0, 0, 0);
       const isoToday = formatLocal(today);
-      const maxPickupD = new Date(today);
+      const maxPickupD = new Date();
       maxPickupD.setDate(maxPickupD.getDate() + 14);
-      const minDelD = new Date(today);
+      const minDelD = new Date();
       minDelD.setDate(minDelD.getDate() + 2);
 
       const pickupInput = pickupDiv.querySelector("#pickupDate");

@@ -381,6 +381,8 @@ document.addEventListener('DOMContentLoaded', function () {
     const selectors = [
       "#ctl00_PageBody_CartSummary2_DeliveryOptionsPanel select:not([id*='lstDeliveryAreas'])",
       "#ctl00_PageBody_CartSummary2_DeliveryOptionsPanel input:not([type='hidden'])",
+      "[id*='PromotionCode'] input:not([type='hidden'])",
+      "[id*='PromoCode'] input:not([type='hidden'])",
       ".delivery-pills button"
     ];
     return selectors.some(function (selector) {
@@ -392,7 +394,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const existing = document.getElementById("wl-pickup-payment-progress");
     if (existing) return existing;
     const main = document.querySelector(".mainContents");
-    if (!main) return null;
+    if (!main) return;
     const status = document.createElement("div");
     status.id = "wl-pickup-payment-progress";
     status.setAttribute("role", "status");
@@ -400,33 +402,6 @@ document.addEventListener('DOMContentLoaded', function () {
     status.textContent = "Preparing your payment options...";
     status.style.cssText = "max-width:720px;margin:24px auto;padding:18px;text-align:center;font-weight:700;color:#3d4248;background:#f4f5f6;border:1px solid #d9dde2;border-radius:6px;";
     main.insertBefore(status, main.firstChild);
-    return status;
-  }
-
-  function runNativeButton(button) {
-    if (!button || button.dataset.wlSubmitting === "1") return false;
-    button.dataset.wlSubmitting = "1";
-
-    const href = button.getAttribute("href") || "";
-    if (/^javascript:/i.test(href)) {
-      try {
-        window.eval(href.replace(/^javascript:\s*/i, ""));
-        return true;
-      } catch {}
-    }
-
-    try {
-      button.click();
-      return true;
-    } catch {}
-
-    const eventTarget = button.getAttribute("name");
-    if (eventTarget && typeof window.__doPostBack === "function") {
-      window.__doPostBack(eventTarget, "");
-      return true;
-    }
-    button.dataset.wlSubmitting = "";
-    return false;
   }
 
   function autoAdvancePickupShipping() {
@@ -443,20 +418,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
     window.__wlPickupShippingAutoAdvance = true;
     captureCheckoutTotals();
-    const status = addPickupProgress();
+    addPickupProgress();
     window.setTimeout(function () {
-      if (!document.documentElement.contains(continueButton)) return;
-      if (!runNativeButton(continueButton) && status) {
-        status.textContent = "We could not open payment automatically. Choose Payment below to continue.";
-        continueButton.style.removeProperty("display");
-      }
+      if (document.documentElement.contains(continueButton)) continueButton.click();
     }, 180);
-    window.setTimeout(function () {
-      if (!document.documentElement.contains(continueButton)) return;
-      continueButton.dataset.wlSubmitting = "";
-      if (status) status.textContent = "This is taking longer than expected. Choose Payment below to try again.";
-      continueButton.style.removeProperty("display");
-    }, 15000);
   }
 
   function bootPickupAdvance() {

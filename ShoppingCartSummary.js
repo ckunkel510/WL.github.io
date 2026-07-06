@@ -240,8 +240,7 @@
         <button class="wl-btn desktop" type="button" id="wl-complete">Complete Order</button>
       </div>
     `;
-    const canvasHeader = document.getElementById('wl-checkout-canvas-header');
-    main.insertBefore(shell, canvasHeader ? canvasHeader.nextSibling : main.firstChild);
+    main.insertBefore(shell, main.firstChild);
 
     // Header text
     updateSummaryHeader();
@@ -560,59 +559,6 @@
     return totals;
   }
 
-  function ensureCheckoutCanvas() {
-    const main = document.querySelector('.mainContents');
-    if (!main) return;
-
-    const isCharge = !!document.getElementById('SummaryEntry2');
-    const isPayment = !!document.getElementById('ctl00_PageBody_CardOnFileViewTitle_HeaderText');
-    const isReview = !!document.getElementById('ctl00_PageBody_CompleteCheckoutButton');
-    if (!isCharge && !isPayment && !isReview) return;
-
-    document.body.classList.add('wl-one-page-checkout-shell');
-    [350, 1200].forEach(function (delay) {
-      window.setTimeout(function () {
-        document.querySelectorAll('iframe').forEach(function (frame) {
-          try {
-            const src = frame.getAttribute('src') || '';
-            const style = window.getComputedStyle(frame);
-            const rect = frame.getBoundingClientRect();
-            const isPrompt = (!src || src === 'about:blank') && style.position === 'fixed' &&
-              rect.width >= 340 && rect.width <= 380 && rect.height >= 300 && rect.height <= 420;
-            if (isPrompt) frame.style.setProperty('display', 'none', 'important');
-          } catch {}
-        });
-      }, delay);
-    });
-    if (!document.getElementById('wl-checkout-canvas-css')) {
-      const style = document.createElement('style');
-      style.id = 'wl-checkout-canvas-css';
-      style.textContent = `
-        body.wl-one-page-checkout-shell .mainContents{width:min(100%,1040px);margin-inline:auto;box-sizing:border-box;}
-        #wl-checkout-canvas-header{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;width:min(100%,1040px);margin:20px auto 18px;padding:0 4px 14px;border-bottom:1px solid #d9dde2;font-family:Arial,sans-serif;box-sizing:border-box;}
-        #wl-checkout-canvas-header .wl-canvas-kicker{margin:0 0 3px;color:#6b0016;font-size:12px;font-weight:800;text-transform:uppercase;}
-        #wl-checkout-canvas-header h1{margin:0;color:#20242a;font-size:28px;line-height:1.15;letter-spacing:0;}
-        #wl-checkout-canvas-header p{margin:5px 0 0;color:#5a6066;font-size:14px;line-height:1.4;}
-        #wl-checkout-canvas-header .wl-canvas-lock{flex:0 0 auto;color:#3f474d;font-size:13px;font-weight:700;white-space:nowrap;}
-        @media(max-width:600px){#wl-checkout-canvas-header{display:block;margin-top:12px;padding-inline:0}#wl-checkout-canvas-header h1{font-size:24px}#wl-checkout-canvas-header .wl-canvas-lock{display:block;margin-top:10px;white-space:normal}}
-      `;
-      document.head.appendChild(style);
-    }
-
-    const stageCopy = isReview
-      ? 'Review every detail, then place the order.'
-      : isPayment
-        ? 'Your confirmed charges and payment choices are together below.'
-        : 'Confirming delivery and preparing secure payment.';
-    let header = document.getElementById('wl-checkout-canvas-header');
-    if (!header) {
-      header = document.createElement('header');
-      header.id = 'wl-checkout-canvas-header';
-      main.insertBefore(header, main.firstChild);
-    }
-    header.innerHTML = `<div><div class="wl-canvas-kicker">Secure checkout</div><h1>Checkout</h1><p>${stageCopy}</p></div><span class="wl-canvas-lock">Secure payment</span>`;
-  }
-
   function buildPaymentChoiceContext() {
     const title = document.getElementById('ctl00_PageBody_CardOnFileViewTitle_HeaderText');
     if (!title || !title.offsetParent || document.getElementById('wl-payment-choice-context')) return;
@@ -872,7 +818,6 @@
   function safeInit() {
     // First, cache images if we’re on a cart step that has them
     ensureCartImageCache();
-    ensureCheckoutCanvas();
     buildChargeReview();
     buildPaymentChoiceContext();
 
