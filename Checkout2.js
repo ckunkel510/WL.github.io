@@ -1517,7 +1517,7 @@ const navDiv = document.createElement("div");
           proxy.type = "button";
           proxy.className = (native.className || "btn btn-primary") + " wl-proxy-continue";
           proxy.textContent = singlePageCheckout
-            ? "Continue to Payment"
+            ? "Continue Checkout"
             : ((native.value || native.innerText || "Continue").trim() || "Continue");
 
           proxy.addEventListener("click", function () {
@@ -2570,22 +2570,23 @@ document.addEventListener("click", function (ev) {
       const pickupDiv = document.createElement("div");
       pickupDiv.className = "form-group";
       pickupDiv.innerHTML = `
-        <label for="pickupDate">Requested Pickup Date:</label>
-        <input type="date" id="pickupDate" class="form-control">
-        <label for="pickupTime">Requested Pickup Time:</label>
-        <select id="pickupTime" class="form-control" disabled></select>
-        <label for="pickupPerson">Pickup Person:</label>
-        <input type="text" id="pickupPerson" class="form-control">`;
+        <label for="pickupDate">Requested Pickup Date: <span class="text-danger">required</span></label>
+        <input type="date" id="pickupDate" class="form-control" required aria-required="true">
+        <label for="pickupTime">Requested Pickup Time: <span class="text-danger">required</span></label>
+        <select id="pickupTime" class="form-control" required aria-required="true" disabled></select>
+        <label for="pickupPerson">Pickup Person: <span class="text-danger">required</span></label>
+        <input type="text" id="pickupPerson" class="form-control" required aria-required="true">`;
       pickupDiv.style.display = "none";
 
       const deliveryDiv = document.createElement("div");
       deliveryDiv.className = "form-group";
       deliveryDiv.innerHTML = `
-        <label for="deliveryDate">Requested Delivery Date:</label>
-        <input type="date" id="deliveryDate" class="form-control">
+        <label for="deliveryDate">Requested Delivery Date: <span class="text-danger">required</span></label>
+        <input type="date" id="deliveryDate" class="form-control" required aria-required="true">
         <div>
-          <label><input type="radio" name="deliveryTime" value="Morning"> Morning</label>
-          <label><input type="radio" name="deliveryTime" value="Afternoon"> Afternoon</label>
+          <span>Delivery window: <span class="text-danger">required</span></span>
+          <label><input type="radio" name="deliveryTime" value="Morning" required aria-required="true"> Morning</label>
+          <label><input type="radio" name="deliveryTime" value="Afternoon" required aria-required="true"> Afternoon</label>
         </div>`;
       deliveryDiv.style.display = "none";
 
@@ -2593,7 +2594,7 @@ document.addEventListener("click", function (ev) {
       shippingAutoNote.className = "alert alert-info wl-auto-ship-note";
       shippingAutoNote.style.display = "none";
       shippingAutoNote.style.marginTop = "10px";
-      shippingAutoNote.innerHTML = "<strong>Ship via UPS:</strong> Choose the shipping speed on the next screen. We will show the estimated arrival date before payment.";
+      shippingAutoNote.innerHTML = "<strong>Ship via UPS:</strong> Choose the shipping speed on the next step. We will show the estimated arrival date before final review.";
 
       siWrap.insertAdjacentElement("afterend", pickupDiv);
       pickupDiv.insertAdjacentElement("afterend", deliveryDiv);
@@ -3813,7 +3814,7 @@ document.addEventListener("click", function (ev) {
       banner.innerHTML = `
         <div class="wl-smart-handoff-copy">
           <strong>Checking your saved checkout details</strong>
-          <span>Complete any missing details below, then continue to payment.</span>
+          <span>Complete any missing details below, then continue checkout.</span>
         </div>
         <button type="button">Review details</button>`;
       wizard.insertBefore(banner, wizard.firstChild);
@@ -3879,7 +3880,7 @@ document.addEventListener("click", function (ev) {
           window.WLCheckout?.saveCheckoutSnapshot?.();
         } catch {}
 
-        copy.innerHTML = "<strong>Checkout details are ready</strong><span>Review the details below, then continue to payment.</span>";
+        copy.innerHTML = "<strong>Checkout details are ready</strong><span>Review the details below, then continue checkout.</span>";
         reviewButton.textContent = "Review details";
         try { sessionStorage.removeItem(AUTO_ADVANCE_KEY); } catch {}
       }
