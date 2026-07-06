@@ -393,6 +393,19 @@
   function initCheckout() {
     const $ = window.jQuery;
 
+    function closeProactiveCheckoutChat() {
+      document.querySelectorAll('iframe').forEach(function (frame) {
+        try {
+          const src = frame.getAttribute('src') || '';
+          const style = window.getComputedStyle(frame);
+          const rect = frame.getBoundingClientRect();
+          const isPrompt = (!src || src === 'about:blank') && style.position === 'fixed' &&
+            rect.width >= 340 && rect.width <= 380 && rect.height >= 300 && rect.height <= 420;
+          if (isPrompt) frame.style.setProperty('display', 'none', 'important');
+        } catch {}
+      });
+    }
+
     // -------------------------------------------------------------------------
     // A) Hide legacy UI bits
     // -------------------------------------------------------------------------
@@ -436,6 +449,8 @@
     if (!hasCheckoutControls) return;
 
     try { document.body.classList.add("wl-checkout-active"); } catch {}
+    window.setTimeout(closeProactiveCheckoutChat, 350);
+    window.setTimeout(closeProactiveCheckoutChat, 1200);
 
     if (document.querySelector(".checkout-wizard")) return;
 

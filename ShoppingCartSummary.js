@@ -530,6 +530,20 @@
     if (!isCharge && !isPayment && !isReview) return;
 
     document.body.classList.add('wl-one-page-checkout-shell');
+    [350, 1200].forEach(function (delay) {
+      window.setTimeout(function () {
+        document.querySelectorAll('iframe').forEach(function (frame) {
+          try {
+            const src = frame.getAttribute('src') || '';
+            const style = window.getComputedStyle(frame);
+            const rect = frame.getBoundingClientRect();
+            const isPrompt = (!src || src === 'about:blank') && style.position === 'fixed' &&
+              rect.width >= 340 && rect.width <= 380 && rect.height >= 300 && rect.height <= 420;
+            if (isPrompt) frame.style.setProperty('display', 'none', 'important');
+          } catch {}
+        });
+      }, delay);
+    });
     if (!document.getElementById('wl-checkout-canvas-css')) {
       const style = document.createElement('style');
       style.id = 'wl-checkout-canvas-css';
