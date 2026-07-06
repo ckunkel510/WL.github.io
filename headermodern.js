@@ -5,6 +5,7 @@
   var DEBUG = false; // Set to true only when actively troubleshooting.
   var LOCATIONS_URL = "/Default.aspx?view=storelocations";
   var ANALYTICS_URL = "https://ckunkel510.github.io/WL.github.io/wl-events.js?v=20260701-1";
+  var ADDRESS_MANAGER_URL = "https://ckunkel510.github.io/WL.github.io/AddressManagement.js?v=20260706-1";
   var QUAGGA_URL = "https://unpkg.com/quagga@0.12.1/dist/quagga.min.js";
   var STORE_NAMES = ["Brenham", "Bryan", "Caldwell", "Lexington", "Groesbeck", "Mexia", "Buffalo"];
   var CENTRAL_TIME_ZONE = "America/Chicago";
@@ -30,6 +31,18 @@
     script.src = ANALYTICS_URL;
     script.async = true;
     script.setAttribute("data-wl-analytics", "true");
+    document.head.appendChild(script);
+  }
+
+  function loadAddressManager() {
+    var path = (window.location.pathname || "").toLowerCase();
+    if (!/(?:addresslist_r|addressdetails|shoppingcart)\.aspx$/.test(path)) return;
+    if (window.WLAddressManager || document.querySelector("script[data-wl-address-manager]")) return;
+
+    var script = document.createElement("script");
+    script.src = ADDRESS_MANAGER_URL;
+    script.async = true;
+    script.setAttribute("data-wl-address-manager", "true");
     document.head.appendChild(script);
   }
 
@@ -2696,6 +2709,7 @@
   }
 
   loadAnalytics();
+  loadAddressManager();
 
   onReady(function () {
     var firstRun = run();
