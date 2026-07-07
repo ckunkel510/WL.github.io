@@ -3204,6 +3204,36 @@ document.addEventListener("click", function (ev) {
         if (r) r.checked = true;
       }
 
+      function setControlRequired(control, enabled, required) {
+        if (!control) return;
+        control.disabled = !enabled;
+        if (required) {
+          control.setAttribute("required", "required");
+          control.setAttribute("aria-required", "true");
+        } else {
+          control.removeAttribute("required");
+          control.removeAttribute("aria-required");
+        }
+      }
+
+      function syncVisibleDateControlValidation(mode) {
+        const pickupControls = [
+          pickupInput,
+          pickupTimeSel,
+          pickupDiv.querySelector("#pickupPerson")
+        ].filter(Boolean);
+        const deliveryControls = [
+          deliveryInput
+        ].concat(Array.prototype.slice.call(deliveryDiv.querySelectorAll('input[name="deliveryTime"]')));
+
+        pickupControls.forEach(function (control) {
+          setControlRequired(control, mode === "pickup", mode === "pickup");
+        });
+        deliveryControls.forEach(function (control) {
+          setControlRequired(control, mode === "delivery", mode === "delivery");
+        });
+      }
+
       function applyShippingDefaults() {
         if (!isShippingOrder()) return false;
         if (!deliveryInput.value) deliveryInput.value = nextValidDeliveryDate();
@@ -3242,6 +3272,7 @@ document.addEventListener("click", function (ev) {
           pickupDiv.style.display = "block";
           deliveryDiv.style.display = "none";
           shippingAutoNote.style.display = "none";
+          syncVisibleDateControlValidation("pickup");
 
           // If date already chosen, enforce same-day rule immediately
           if (pickupInput.value) populatePickupTimes(parseLocalDate(pickupInput.value));
@@ -3250,10 +3281,12 @@ document.addEventListener("click", function (ev) {
           const shippingOrder = applyShippingDefaults();
           deliveryDiv.style.display = shippingOrder ? "none" : "block";
           shippingAutoNote.style.display = shippingOrder ? "block" : "none";
+          syncVisibleDateControlValidation(shippingOrder ? "ship" : "delivery");
         } else {
           pickupDiv.style.display = "none";
           deliveryDiv.style.display = "none";
           shippingAutoNote.style.display = "none";
+          syncVisibleDateControlValidation("");
         }
         updateSpecial();
       }

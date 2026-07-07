@@ -3,6 +3,7 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  claimMatchesRequest,
   findPromoClaim,
   normalizePromoClaimInput,
   promoFingerprint,
@@ -59,4 +60,24 @@ test("stores and finds a short-lived promo claim by shipping fingerprint", async
   assert.equal(found.code, "SummerChill26");
   assert.equal(found.eligible, true);
   assert.equal(found.cartSignature, "282948:TB-ORIG-G3-TAN:1");
+});
+
+test("matches a stored promo claim when WebTrack sends a slightly different UPS package weight", () => {
+  const claim = {
+    eligible: true,
+    normalized: {
+      shipToPostalCode: "78701",
+      totalWeight: 10
+    }
+  };
+
+  assert.equal(claimMatchesRequest(claim, {
+    shipTo: { postalCode: "78701" },
+    packages: [{ weight: 12 }]
+  }), true);
+
+  assert.equal(claimMatchesRequest(claim, {
+    shipTo: { postalCode: "78701" },
+    packages: [{ weight: 25 }]
+  }), false);
 });

@@ -31,7 +31,9 @@
   }
 
   function loadShippingPromoScript() {
-    if (window.WLShippingPromo || document.querySelector('script[data-wl-ups-shipping-promo]')) return;
+    if (window.WLShippingPromo ||
+        document.querySelector('#wl-ups-promo') ||
+        document.querySelector('script[data-wl-ups-shipping-promo], script[src*="UpsShippingPromo.js"]')) return;
     const script = document.createElement('script');
     script.src = SHIPPING_PROMO_SCRIPT_URL;
     script.async = true;

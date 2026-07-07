@@ -172,6 +172,17 @@ document.addEventListener('DOMContentLoaded', function () {
     return /\b(?:ups\s*)?ground\b/i.test(String(value || ''));
   }
 
+  function ensurePromoSavingsStyles() {
+    if (document.getElementById('wl-shipping-promo-savings-css')) return;
+    var style = document.createElement('style');
+    style.id = 'wl-shipping-promo-savings-css';
+    style.textContent = [
+      '.delivery-pills .wl-shipping-free{font-weight:800;color:#226b35;}',
+      '.delivery-pills .wl-shipping-savings{display:inline-block;margin-top:3px;padding:2px 6px;border-radius:999px;background:#ffe45c;color:#111;font-weight:800;}'
+    ].join('');
+    document.head.appendChild(style);
+  }
+
   function initDeliveryWidget() {
     var $area = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas'),
         $opts = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList'),
@@ -290,6 +301,7 @@ document.addEventListener('DOMContentLoaded', function () {
     );
 
     var activeShippingPromo = readShippingPromo();
+    ensurePromoSavingsStyles();
 
     $opts.find('option').each(function () {
       const $o = $(this),
@@ -299,8 +311,13 @@ document.addEventListener('DOMContentLoaded', function () {
             extraRaw = extraMatch ? extraMatch[1] : '',
             extra = parseFloat(extraRaw.replace(/[^0-9\.-]/g, '')) || 0,
             promoApplied = fulfillmentMethod === 'ship' && activeShippingPromo && isGroundLabel(label || txt),
-            cost = promoApplied ? 0 : ($o.val() === '-1' ? standardCost : standardCost + extra),
+            rawCost = $o.val() === '-1' ? standardCost : standardCost + extra,
+            cost = promoApplied ? 0 : rawCost,
             costLbl = '$' + cost.toFixed(2),
+            rawCostLbl = '$' + rawCost.toFixed(2),
+            costHtml = promoApplied
+              ? '<span class="wl-shipping-free">Free</span><br><span class="wl-shipping-savings">Save ' + rawCostLbl + '</span>'
+              : costLbl,
             days = /Next\s*Day/i.test(txt) ? 1 :
                    /2nd\s*Day/i.test(txt)  ? 2 :
                    /3\s*Day/i.test(txt)    ? 3 : 5,
@@ -308,7 +325,7 @@ document.addEventListener('DOMContentLoaded', function () {
                          /2nd\s*Day/i.test(txt)  ? 6 :
                          /3\s*Day/i.test(txt)    ? 3 : 1,
             $btn = $('<button type="button" class="btn btn-outline-primary m-1">' +
-                    label + '<br><small>' + costLbl + '</small></button>');
+                    label + '<br><small>' + costHtml + '</small></button>');
 
       if ($o.is(':selected')) {
         $btn.removeClass('btn-outline-primary').addClass('btn-primary');

@@ -1,8 +1,10 @@
 (function () {
   "use strict";
 
+  var BUILD_VERSION = "20260707-bridge-3";
+
   if (!/ShoppingCart\.aspx/i.test(window.location.pathname || "")) return;
-  if (window.WLShippingPromo && window.WLShippingPromo.version === "20260707-bridge-2") return;
+  if (window.WLShippingPromo && window.WLShippingPromo.version === BUILD_VERSION) return;
 
   var STORAGE_KEY = "wl_shipping_promo_v1";
   var EVENT_NAME = "wl:shipping-promo-change";
@@ -197,13 +199,16 @@
 
   function buildPackages(items, products) {
     var byCode = {};
+    var byId = {};
     (products || []).forEach(function (product) {
       byCode[normalizeProductCode(product.ProductCode)] = product;
+      var id = text(product.ProductID || product.ProductId || product.productId || product.id);
+      if (id) byId[id] = product;
     });
     var totalWeight = 0;
     for (var i = 0; i < items.length; i += 1) {
       var item = items[i];
-      var product = byCode[normalizeProductCode(item.productCode)];
+      var product = byId[text(item.productId)] || byCode[normalizeProductCode(item.productCode)];
       var weight = moneyNumber(product && product.Weight);
       if (!weight) return [];
       totalWeight += weight * (Number(item.quantity) || 1);
@@ -417,8 +422,12 @@
 
   function renderPromoField() {
     var host = promoHost();
-    var existing = document.getElementById("wl-ups-promo");
     if (!host) return;
+    var current = document.querySelector('#wl-ups-promo[data-wl-promo-version="' + BUILD_VERSION + '"]');
+    Array.prototype.slice.call(document.querySelectorAll("#wl-ups-promo")).forEach(function (node) {
+      if (node !== current) node.remove();
+    });
+    var existing = current || document.getElementById("wl-ups-promo");
     if (existing) {
       if (!host.contains(existing)) host.appendChild(existing);
       return;
@@ -428,6 +437,7 @@
     var wrap = document.createElement("div");
     wrap.id = "wl-ups-promo";
     wrap.className = "wl-ups-promo";
+    wrap.setAttribute("data-wl-promo-version", BUILD_VERSION);
     wrap.innerHTML = '' +
       '<label for="wl-ups-promo-input">Shipping promo code</label>' +
       '<div class="wl-ups-promo-row">' +
@@ -500,7 +510,7 @@
     registerSession: registerPromoSession,
     storageKey: STORAGE_KEY,
     toRatePayload: promoPayload,
-    version: "20260707-bridge-2"
+    version: BUILD_VERSION
   };
 
   document.addEventListener("wl:fulfillment-change", schedulePromoSessionRegistration);

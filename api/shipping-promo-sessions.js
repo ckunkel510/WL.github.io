@@ -55,6 +55,21 @@ function promoFingerprint(input) {
   return crypto.createHash("sha256").update(stable).digest("hex").slice(0, 32);
 }
 
+function promoPostalKey(input) {
+  const normalized = normalizePromoClaimInput(input);
+  return normalized.shipToPostalCode ? "wl:shipping-promo-postal:" + normalized.shipToPostalCode : "";
+}
+
+function claimMatchesRequest(candidate, requestInput) {
+  if (!candidate || candidate.eligible !== true) return false;
+  const request = normalizePromoClaimInput(requestInput);
+  const claim = candidate.normalized || normalizePromoClaimInput(candidate);
+  if (!request.shipToPostalCode || request.shipToPostalCode !== claim.shipToPostalCode) return false;
+  if (!request.totalWeight || !claim.totalWeight) return true;
+  const tolerance = Math.max(2, Number(claim.totalWeight) * 0.35);
+  return Math.abs(Number(request.totalWeight) - Number(claim.totalWeight)) <= tolerance;
+}
+
 function getRedis() {
   if (!Redis) return null;
   if (redisClient) return redisClient;
@@ -89,33 +104,45 @@ async function storePromoClaim(input) {
   const redis = getRedis();
   if (redis) {
     await redis.set(key, claim, { ex: CLAIM_TTL_SECONDS });
+    const postalKey = promoPostalKey(input);
+    if (postalKey) await redis.set(postalKey, claim, { ex: CLAIM_TTL_SECONDS });
     return { ok: true, storage: "redis", fingerprint, expiresAt: new Date(claim.expiresAt).toISOString() };
   }
 
   memorySweep();
   memoryClaims.set(key, claim);
+  const postalKey = promoPostalKey(input);
+  if (postalKey) memoryClaims.set(postalKey, claim);
   return { ok: true, storage: "memory", fingerprint, expiresAt: new Date(claim.expiresAt).toISOString() };
 }
 
 async function findPromoClaim(input) {
   const fingerprint = promoFingerprint(input);
-  if (!fingerprint) return null;
-  const key = "wl:shipping-promo:" + fingerprint;
+  const key = fingerprint ? "wl:shipping-promo:" + fingerprint : "";
+  const postalKey = promoPostalKey(input);
 
   const redis = getRedis();
   if (redis) {
-    return await redis.get(key);
+    const exact = key ? await redis.get(key) : null;
+    if (exact) return exact;
+    const fallback = postalKey ? await redis.get(postalKey) : null;
+    return claimMatchesRequest(fallback, input) ? fallback : null;
   }
 
   memorySweep();
-  return memoryClaims.get(key) || null;
+  const exact = key ? memoryClaims.get(key) : null;
+  if (exact) return exact;
+  const fallback = postalKey ? memoryClaims.get(postalKey) : null;
+  return claimMatchesRequest(fallback, input) ? fallback : null;
 }
 
 module.exports = {
   CLAIM_TTL_SECONDS,
   findPromoClaim,
+  claimMatchesRequest,
   normalizePromoClaimInput,
   packagesSummary,
+  promoPostalKey,
   promoFingerprint,
   storePromoClaim
 };
