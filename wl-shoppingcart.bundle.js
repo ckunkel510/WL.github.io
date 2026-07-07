@@ -1226,24 +1226,40 @@
       
       
         // --------- Step 3: Load items
+       function findQuicklistProductTable(detailDoc) {
+        const tables = $all("table.rgMasterTable", detailDoc);
+
+        return tables.find((table) => {
+          const headerText = $all("th", table)
+            .map((th) => th.textContent.trim())
+            .join(" ")
+            .replace(/\s+/g, " ");
+          const hasProductHeaders =
+            /Product Code/i.test(headerText) &&
+            /Description/i.test(headerText) &&
+            /Price/i.test(headerText) &&
+            /Per/i.test(headerText);
+          const hasProductLinks = !!table.querySelector("a[href*='ProductDetail.aspx']");
+          const hasQuicklistDeleteButtons = !!table.querySelector("a[id*='DeleteQuicklistLineButtonX'], a[href*='DeleteQuicklistLineButtonX']");
+
+          return hasProductHeaders || (hasProductLinks && hasQuicklistDeleteButtons);
+        }) || null;
+      }
+
+       function hasQuicklistProductTable(detailDoc) {
+        return !!findQuicklistProductTable(detailDoc);
+      }
+
        function parseSflItems(detailDoc) {
         console.log("[SFL] Parsing Quicklist detail page...");
       
-        // Find the outer grid div (fallback to .RadGrid or .rgMasterTable)
-        let grid = detailDoc.querySelector(".RadGrid") || detailDoc.querySelector("table.rgMasterTable");
-        if (!grid) {
-          console.error("[SFL] Grid container not found");
-          return [];
-        }
-      
-        // Ensure we have the actual table
-        let table = grid.tagName === "TABLE" ? grid : grid.querySelector("table.rgMasterTable");
+        let table = findQuicklistProductTable(detailDoc);
         if (!table) {
-          console.error("[SFL] .rgMasterTable not found inside grid container");
+          console.error("[SFL] Quicklist product table not found");
           return [];
         }
       
-        const rows = table.querySelectorAll("tr.rgRow, tr.rgAltRow");
+        const rows = $all("tr.rgRow, tr.rgAltRow", table).filter((tr) => tr.querySelector("a[href*='ProductDetail.aspx']"));
         console.log(`[SFL] Found ${rows.length} row(s) in Quicklist table`);
       
         const items = [];
@@ -1302,6 +1318,9 @@
         async function loadSflItems() {
         const detailUrl = await ensureSflDetailUrl();
         const { doc } = await fetchHtml(detailUrl);
+        if (!hasQuicklistProductTable(doc)) {
+          throw new Error("Saved For Later URL did not contain the product detail table.");
+        }
         const items = parseSflItems(doc);
         return { detailUrl, items, doc };
       }
@@ -1714,12 +1733,26 @@
           }
           const { text, doc } = await fetchHtml(detailUrl);
           const parse = (root) => {
-            const grid = root.querySelector("#ctl00_PageBody_ctl01_QuicklistDetailGrid");
-            if (!grid) return [];
-            const table = grid.querySelector("table.rgMasterTable");
+            const tables = Array.from(root.querySelectorAll("table.rgMasterTable"));
+            const table = tables.find((candidate) => {
+              const headerText = Array.from(candidate.querySelectorAll("th"))
+                .map((th) => th.textContent.trim())
+                .join(" ")
+                .replace(/\s+/g, " ");
+              const hasProductHeaders =
+                /Product Code/i.test(headerText) &&
+                /Description/i.test(headerText) &&
+                /Price/i.test(headerText) &&
+                /Per/i.test(headerText);
+              const hasProductLinks = !!candidate.querySelector("a[href*='ProductDetail.aspx']");
+              const hasQuicklistDeleteButtons = !!candidate.querySelector("a[id*='DeleteQuicklistLineButtonX'], a[href*='DeleteQuicklistLineButtonX']");
+
+              return hasProductHeaders || (hasProductLinks && hasQuicklistDeleteButtons);
+            });
             if (!table) return [];
             const items = [];
-            table.querySelectorAll("tbody > tr").forEach(tr => {
+            table.querySelectorAll("tbody > tr.rgRow, tbody > tr.rgAltRow").forEach(tr => {
+              if (!tr.querySelector("a[href*='ProductDetail.aspx']")) return;
               const tds = tr.querySelectorAll("td");
               if (tds.length < 5) return;
               const a = tds[0].querySelector("a[href*='ProductDetail.aspx']");
