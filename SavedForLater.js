@@ -1,21 +1,49 @@
 
-setTimeout(() =>{
+(function runSavedForLaterWhenReady() {
+function startSavedForLater() {
 (function() {
 
-  const cartHeading = Array.from(document.querySelectorAll("h1, h2, h3")).find((heading) =>
-    /^shopping cart$/i.test((heading.textContent || "").replace(/\s+/g, " ").trim())
-  );
-  const hasCartControls = !!document.querySelector(
-    ".shopping-cart-item, #ctl00_PageBody_PlaceOrderButton, #ctl00_PageBody_EmptyCartButton"
-  );
-  if (!cartHeading && !hasCartControls) {
-    console.log("[SFL] Skipping Saved For Later outside the cart view.");
+  if (!/ShoppingCart\.aspx/i.test(location.pathname)) {
+    console.log("[SFL] Skipping Saved For Later outside the cart page.");
     return;
   }
+
+  if (window.__wlSavedForLaterLoaded) {
+    console.log("[SFL] Saved For Later already initialized.");
+    return;
+  }
+  window.__wlSavedForLaterLoaded = true;
 
   const SFL_NAME = "Saved For Later";
   const SFL_DESC = "Saved For Later";
   const BASE = location.origin + "/";
+  const SFL_DETAIL_URL_KEY = "sfl_detail_url";
+  const SFL_IMAGE_CACHE_KEY = "sfl_image_cache_v1";
+
+  function readStorage(key, storage) {
+    try { return storage.getItem(key); } catch (e) { return null; }
+  }
+
+  function writeStorage(key, value, storage) {
+    try { storage.setItem(key, value); } catch (e) {}
+  }
+
+  function removeStorage(key, storage) {
+    try { storage.removeItem(key); } catch (e) {}
+  }
+
+  let sflImageCache = {};
+  try { sflImageCache = JSON.parse(localStorage.getItem(SFL_IMAGE_CACHE_KEY) || "{}") || {}; } catch (e) {}
+
+  function cacheProductImage(pid, imageUrl) {
+    if (!pid || !imageUrl) return;
+    sflImageCache[pid] = { imageUrl, ts: Date.now() };
+    const entries = Object.entries(sflImageCache)
+      .sort((a, b) => Number(b[1]?.ts || 0) - Number(a[1]?.ts || 0))
+      .slice(0, 80);
+    sflImageCache = Object.fromEntries(entries);
+    writeStorage(SFL_IMAGE_CACHE_KEY, JSON.stringify(sflImageCache), localStorage);
+  }
 
 
 
@@ -35,10 +63,14 @@ setTimeout(() =>{
       <div id="sflEmpty" style="display:none;">No items saved for later.</div>
     </div>
   `;
-  const mainContents = document.querySelector('.mainContents');
-if (mainContents && mainContents.parentNode) {
-  mainContents.parentNode.insertBefore(container, mainContents.nextSibling);
-  console.log("[SFL] Injected after .mainContents");
+  const insertAnchor =
+    document.querySelector("#ctl00_PageBody_ShoppingCartDetailPanel") ||
+    document.querySelector(".ShoppingCartDetailPanel") ||
+    document.querySelector(".shopping-cart-details") ||
+    document.querySelector(".mainContents");
+if (insertAnchor && insertAnchor.parentNode) {
+  insertAnchor.parentNode.insertBefore(container, insertAnchor.nextSibling);
+  console.log("[SFL] Injected after cart content anchor");
 } else {
   console.warn("[SFL] .mainContents not found, appending to body");
   document.body.appendChild(container);
@@ -179,21 +211,28 @@ if (mainContents && mainContents.parentNode) {
   // --------- Step 2: Resolve detail URL for SFL
   async function ensureSflDetailUrl() {
   console.log("[SFL] Locating Saved For Later Quicklist via Quicklists_R.aspx...");
-  sessionStorage.removeItem("sfl_detail_url"); // always re-check
+  const cachedUrl = readStorage(SFL_DETAIL_URL_KEY, sessionStorage) || readStorage(SFL_DETAIL_URL_KEY, localStorage);
+  if (cachedUrl) {
+    console.log("[SFL] Using cached Saved For Later detail URL:", cachedUrl);
+    writeStorage(SFL_DETAIL_URL_KEY, cachedUrl, sessionStorage);
+    return cachedUrl;
+  }
 
   const found = await findSavedForLaterList(); // loads Quicklists_R.aspx
   if (found.exists && found.detailUrl) {
     console.log("[SFL] Found valid Quicklist detail URL:", found.detailUrl);
     const fixedUrl = found.detailUrl.replace("QuicklistDetails.aspx", "Quicklists_R.aspx");
-sessionStorage.setItem("sfl_detail_url", fixedUrl);
+writeStorage(SFL_DETAIL_URL_KEY, fixedUrl, sessionStorage);
+writeStorage(SFL_DETAIL_URL_KEY, fixedUrl, localStorage);
 console.log("[SFL] Saved corrected detail URL:", fixedUrl);
 
-    return found.detailUrl;
+    return fixedUrl;
   }
 
   console.log("[SFL] Not found, creating new Saved For Later list...");
   const createdUrl = await createSavedForLaterList();
-  sessionStorage.setItem("sfl_detail_url", createdUrl);
+  writeStorage(SFL_DETAIL_URL_KEY, createdUrl, sessionStorage);
+  writeStorage(SFL_DETAIL_URL_KEY, createdUrl, localStorage);
   return createdUrl;
 }
 
@@ -274,9 +313,19 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
 
   async function loadSflItems() {
   const detailUrl = await ensureSflDetailUrl();
-  const { doc } = await fetchHtml(detailUrl);
-  const items = parseSflItems(doc);
-  return { detailUrl, items, doc };
+  try {
+    const { doc } = await fetchHtml(detailUrl);
+    const items = parseSflItems(doc);
+    return { detailUrl, items, doc };
+  } catch (error) {
+    console.warn("[SFL] Cached Saved For Later URL failed; refreshing quicklist lookup.", error);
+    removeStorage(SFL_DETAIL_URL_KEY, sessionStorage);
+    removeStorage(SFL_DETAIL_URL_KEY, localStorage);
+    const refreshedUrl = await ensureSflDetailUrl();
+    const { doc } = await fetchHtml(refreshedUrl);
+    const items = parseSflItems(doc);
+    return { detailUrl: refreshedUrl, items, doc };
+  }
 }
 
   // --------- Step 4: Render
@@ -293,6 +342,33 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
     return "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/placeholder.png";
   }
 
+ async function loadSflProductImage(pid, productUrl, imgElement) {
+  if (!pid || !productUrl || !imgElement) return;
+  const cached = sflImageCache[pid]?.imageUrl;
+  if (cached) {
+    imgElement.src = cached;
+    return;
+  }
+
+  try {
+    const response = await fetch("https://wlmarketingdashboard.vercel.app/api/get-product-image", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ productUrl })
+    });
+
+    const result = await response.json();
+    if (result.imageUrl) {
+      imgElement.src = result.imageUrl;
+      cacheProductImage(pid, result.imageUrl);
+    } else {
+      console.warn(`[SFL] No image found for PID ${pid}`);
+    }
+  } catch (err) {
+    console.error(`[SFL] Error fetching image for PID ${pid}:`, err.message);
+  }
+}
+
  async function renderSflList(items) {
   const list = document.getElementById("sflList");
   list.innerHTML = "";
@@ -303,6 +379,7 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
   }
 
   const placeholder = "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/placeholder.png";
+  const imageJobs = [];
 
   for (const item of items) {
     const pid = item.productHref ? pidFromHref(item.productHref) : null;
@@ -346,31 +423,14 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
     // Append to the list
     list.appendChild(row);
 
-    // === Update image if available ===
-    if (pid) {
-      try {
-        const response = await fetch("https://wlmarketingdashboard.vercel.app/api/get-product-image", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ productUrl })
-        });
-
-        const result = await response.json();
-        if (result.imageUrl) {
-          imgElement.src = result.imageUrl;
-        } else {
-          console.warn(`[SFL] No image found for PID ${pid}`);
-        }
-      } catch (err) {
-        console.error(`[SFL] Error fetching image for PID ${pid}:`, err.message);
-      }
-    }
+    if (pid) imageJobs.push(loadSflProductImage(pid, productUrl, imgElement));
   }
 
   setListCount(items.length);
   document.getElementById("sflLoading").style.display = "none";
   document.getElementById("sflEmpty").style.display = "none";
   list.style.display = "block";
+  Promise.allSettled(imageJobs).catch(function () {});
 }
 
 
@@ -680,7 +740,7 @@ for (const tr of rows) {
     if (sflLoading) sflLoading.style.display = "block";
 
     // Reload the detail list the same way Phase 1 did
-    const detailUrl = sessionStorage.getItem("sfl_detail_url");
+    const detailUrl = sessionStorage.getItem("sfl_detail_url") || localStorage.getItem("sfl_detail_url");
     if (!detailUrl) {
       location.reload();
       return;
@@ -741,16 +801,17 @@ for (const tr of rows) {
       return;
     }
 
+    const placeholder = "https://images-woodsonlumber.sirv.com/Other%20Website%20Images/placeholder.png";
+
     items.forEach(item => {
       const pid = item.productHref ? pidFromHref(item.productHref) : null;
-      const img = productImageUrlFromPid(pid);
       const row = document.createElement("div");
       row.className = "sflRow";
       row.dataset.eventTarget = item.eventTarget || "";
       row.dataset.pid = pid || "";
       row.dataset.code = item.productCode || "";
       row.innerHTML = `
-        <img class="sflImg" src="${img}" alt="">
+        <div class="sflImgWrapper"><a href="${pid ? `/ProductDetail.aspx?pid=${pid}` : "#"}"><img class="sflImg" src="${placeholder}" alt=""></a></div>
         <div>
           <div class="sflTitle">${item.productCode || ""}</div>
           <div class="sflDesc">${item.description || ""}</div>
@@ -854,6 +915,10 @@ async function injectSaveForLaterButtons() {
     // 5) Inject into the placeholder
     const placeholder = item.querySelector(".sfl-placeholder");
     if (placeholder) {
+      if (placeholder.querySelector(".sfl-button")) {
+        console.log("[SFL] Save for Later button already exists.");
+        return;
+      }
       placeholder.appendChild(btn);
       console.log("[SFL] Injected Save for Later button.");
     } else {
@@ -956,29 +1021,56 @@ function addToQuicklist(productId) {
 
 
 
-console.log("[SFL] Script loaded – injecting Save for Later buttons...");
-injectSaveForLaterButtons();
+function scheduleSaveForLaterButtonInjection() {
+  let injectTimer = 0;
+  const run = () => {
+    clearTimeout(injectTimer);
+    injectTimer = setTimeout(() => {
+      try {
+        injectSaveForLaterButtons();
+      } catch (e) {
+        console.error("[SFL] Error injecting Save for Later buttons:", e);
+      }
+    }, 80);
+  };
+
+  console.log("[SFL] Script loaded – injecting Save for Later buttons...");
+  run();
+  setTimeout(run, 400);
+  setTimeout(run, 1200);
+
+  const observerTarget =
+    document.querySelector("#ctl00_PageBody_ShoppingCartDetailPanel") ||
+    document.querySelector(".shopping-cart-details") ||
+    document.querySelector(".mainContents") ||
+    document.body;
+
+  if (observerTarget && !window.__wlSflButtonObserver) {
+    window.__wlSflButtonObserver = new MutationObserver((mutations) => {
+      if (mutations.some((mutation) => Array.from(mutation.addedNodes || []).some((node) => {
+        return node.nodeType === 1 && (
+          node.matches?.(".shopping-cart-item, .sfl-placeholder") ||
+          node.querySelector?.(".shopping-cart-item, .sfl-placeholder")
+        );
+      }))) run();
+    });
+    window.__wlSflButtonObserver.observe(observerTarget, { childList: true, subtree: true });
+  }
+}
+
+scheduleSaveForLaterButtonInjection();
 
 
 
-// Ensure it runs on page load
-document.addEventListener("DOMContentLoaded", () => {
-  setTimeout(() => {
-    try {
-      injectSaveForLaterButtons();
-    } catch (e) {
-      console.error("[SFL] Error injecting Save for Later buttons:", e);
-    }
-  }, 1000); // slight delay for table rendering
-});
 
+}
 
-
-
-}, 1000);                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
-
-
-
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", startSavedForLater, { once: true });
+} else {
+  startSavedForLater();
+}
+})();                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
 
 
 
