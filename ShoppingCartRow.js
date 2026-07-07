@@ -1,5 +1,274 @@
 
-$(function(){
+$(async function(){
+  var WL_EPALLET_PID = "23297";
+  var WL_EPALLET_ADD_URL = "/ProductDetail.aspx?pid=" + WL_EPALLET_PID;
+  var WL_EPALLET_ACTION_KEY = "wl_epallet_last_action_v1";
+  var WL_EPALLET_RULES = {
+    22444: { code: "ASC", pickupMin: 10, palletQty: 42 },
+    23379: { code: "4BSC", pickupMin: 10, palletQty: 30 },
+    24896: { code: "PCC", pickupMin: 10, palletQty: 35 },
+    25273: { code: "RMMC", pickupMin: 10, palletQty: 42 },
+    25274: { code: "RMSC", pickupMin: 10, palletQty: 42 },
+    26446: { code: "WMCC", pickupMin: 10, palletQty: 40 },
+    26481: { code: "5BSC", pickupMin: 10, palletQty: 30 },
+    94106: { code: "FSC", pickupMin: 10, palletQty: 64 },
+    12383: { code: "50BLC", pickupMin: 10, palletQty: 50 },
+    24315: { code: "3BSC", pickupMin: 10, palletQty: 30 },
+    24319: { code: "MCC", pickupMin: 10, palletQty: 45 },
+    122893: { code: "MCSC", pickupMin: 10, palletQty: 45 },
+    25102: { code: "QC", pickupMin: 10, palletQty: 42 },
+    4741: { code: "16164BAC", pickupMin: 10, palletQty: 54 },
+    12101: { code: "4816FSC", pickupMin: 20, palletQty: 144 },
+    21194: { code: "8816HHBC", pickupMin: 10, palletQty: 72 },
+    23008: { code: "CSC", pickupMin: 3, palletQty: 15 },
+    23049: { code: "DBC", pickupMin: 10, palletQty: 80 },
+    20366: { code: "816158FSC", pickupMin: 25, palletQty: 168 },
+    20368: { code: "816214PC", pickupMin: 25, palletQty: 180 },
+    21126: { code: "8812BLC", pickupMin: 10, palletQty: 64 },
+    12100: { code: "4816BLC", pickupMin: 15, palletQty: 144 },
+    2996: { code: "12122BAC", pickupMin: 25, palletQty: 168 },
+    3003: { code: "12124BAC", pickupMin: 15, palletQty: 96 },
+    21193: { code: "8816BLC", pickupMin: 10, palletQty: 60 },
+    26060: { code: "UBC", pickupMin: 100, palletQty: 576 },
+    133832: { code: "16162BAC", pickupMin: 15, palletQty: 84 },
+    25415: { code: "SB", pickupMin: 3, palletQty: null },
+    2999: { code: "12122RBAC", pickupMin: 20, palletQty: 168 },
+    4743: { code: "16162RBBAC", pickupMin: 15, palletQty: 84 },
+    21475: { code: "888LHBLC", pickupMin: 20, palletQty: 144 },
+    4742: { code: "16162BBAC", pickupMin: 15, palletQty: 84 },
+    25076: { code: "PR", pickupMin: 75, palletQty: 480 },
+    25094: { code: "PT", pickupMin: 75, palletQty: 480 },
+    23825: { code: "GWR", pickupMin: 20, palletQty: 144 },
+    23826: { code: "GWRB", pickupMin: 20, palletQty: 144 },
+    23827: { code: "GWT", pickupMin: 20, palletQty: 144 },
+    113992: { code: "612CSC", pickupMin: 15, palletQty: 96 },
+    113994: { code: "6CPCC", pickupMin: 10, palletQty: 52 },
+    23828: { code: "GWTB", pickupMin: 20, palletQty: 144 }
+  };
+
+  function wlEpalletText(value) {
+    return String(value == null ? "" : value).replace(/\s+/g, " ").trim();
+  }
+
+  function wlEpalletNumber(value) {
+    var num = Number(String(value == null ? "" : value).replace(/,/g, ""));
+    return Number.isFinite(num) ? num : 0;
+  }
+
+  function wlEpalletCartMode() {
+    var values = [];
+    try { values.push(localStorage.getItem("woodson_cart_method")); } catch (e) {}
+    try { values.push(sessionStorage.getItem("wl_fulfillment_method")); } catch (e) {}
+    try { values.push(sessionStorage.getItem("wl_fulfillment_intent")); } catch (e) {}
+    try {
+      var pickupCookie = document.cookie.match(/(?:^|;\s*)pickupSelected=([^;]+)/);
+      if (pickupCookie && pickupCookie[1] === "false") return "delivery";
+      if (pickupCookie && pickupCookie[1] === "true") values.push("pickup");
+    } catch (e) {}
+
+    var joined = values.filter(Boolean).join(" ").toLowerCase();
+    if (/ship|ups|deliver/.test(joined)) return "delivery";
+    return "pickup";
+  }
+
+  function wlEpalletPidFromRow($row) {
+    var href = "";
+    $row.find("a[href*='ProductDetail.aspx']").each(function () {
+      href = href || ($(this).attr("href") || "");
+    });
+    var match = href.match(/[?&]pid=(\d+)/i);
+    return match ? match[1] : "";
+  }
+
+  function wlEpalletQtyInput($row) {
+    return $row.find("input[id*='_qty_']:not([id$='_ClientState']), input.riTextBox").filter(function () {
+      return !/_ClientState$/i.test(this.id || "");
+    }).first();
+  }
+
+  function wlEpalletLineQty($row) {
+    var $input = wlEpalletQtyInput($row);
+    if ($input.length) return Math.max(1, wlEpalletNumber($input.val()));
+    var visibleQty = wlEpalletText($row.find(".wl-qty-value").first().text());
+    return Math.max(1, wlEpalletNumber(visibleQty) || 1);
+  }
+
+  function wlEpalletLineCode($row) {
+    return wlEpalletText($row.find(".portalGridLink").first().text() || $row.find("h6 a").first().text()).toUpperCase();
+  }
+
+  function wlEpalletRows() {
+    return $(".shopping-cart-details .shopping-cart-item").filter(function () {
+      var $row = $(this);
+      return !!(wlEpalletPidFromRow($row) || wlEpalletLineCode($row));
+    });
+  }
+
+  function wlEpalletCalculateRequired(rows, mode) {
+    var quantitiesByPid = {};
+    rows.each(function () {
+      var $row = $(this);
+      var pid = wlEpalletPidFromRow($row);
+      if (!pid || pid === WL_EPALLET_PID || !WL_EPALLET_RULES[pid]) return;
+      quantitiesByPid[pid] = (quantitiesByPid[pid] || 0) + wlEpalletLineQty($row);
+    });
+
+    return Object.keys(quantitiesByPid).reduce(function (total, pid) {
+      var rule = WL_EPALLET_RULES[pid];
+      var qty = quantitiesByPid[pid];
+      var required = mode === "delivery" ? qty > 0 : qty >= rule.pickupMin;
+      if (!required) return total;
+      return total + (rule.palletQty ? Math.ceil(qty / rule.palletQty) : 1);
+    }, 0);
+  }
+
+  function wlEpalletActionRecentlyTried(signature) {
+    try {
+      var parsed = JSON.parse(sessionStorage.getItem(WL_EPALLET_ACTION_KEY) || "null");
+      if (parsed && parsed.signature === signature && Date.now() - parsed.ts < 15000) return true;
+      sessionStorage.setItem(WL_EPALLET_ACTION_KEY, JSON.stringify({ signature: signature, ts: Date.now() }));
+    } catch (e) {}
+    return false;
+  }
+
+  function wlEpalletShowStatus(message, isError) {
+    var $target = $(".ShoppingCartDetailPanel, .shopping-cart-details").first();
+    if (!$target.length || $("#wl-epallet-cart-status").length) return;
+    $("<div>", {
+      id: "wl-epallet-cart-status",
+      class: "alert " + (isError ? "alert-warning" : "alert-info"),
+      text: message
+    }).css({
+      margin: "12px 0",
+      borderLeft: "4px solid #6b0016",
+      fontWeight: 700
+    }).prependTo($target);
+  }
+
+  function wlEpalletRunNativeLink($link) {
+    if (!$link || !$link.length) return false;
+    var href = $link.attr("href") || "";
+    try {
+      if (/^javascript:/i.test(href)) {
+        window.eval(href.replace(/^javascript:/i, ""));
+        return true;
+      }
+    } catch (e) {
+      console.warn("[WLEpallet] Native link eval failed.", e);
+    }
+    try {
+      $link.get(0).click();
+      return true;
+    } catch (e2) {
+      console.warn("[WLEpallet] Native link click failed.", e2);
+    }
+    return false;
+  }
+
+  function wlEpalletSetCartLineQty($row, qty) {
+    var text = String(Math.max(1, qty));
+    var $input = wlEpalletQtyInput($row);
+    var $state = $row.find("input[type='hidden'][id$='_ClientState']").first();
+    var $refresh = $row.find("a.refresh-cart-line-total").first();
+    if (!$input.length || !$refresh.length) return false;
+
+    $input.val(text);
+    if ($state.length && $state.val()) {
+      try {
+        var state = JSON.parse($state.val());
+        state.validationText = text;
+        state.valueAsString = text;
+        state.lastSetTextBoxValue = text;
+        $state.val(JSON.stringify(state));
+      } catch (e) {}
+    }
+    return wlEpalletRunNativeLink($refresh);
+  }
+
+  function wlEpalletDeleteCartLine($row) {
+    return wlEpalletRunNativeLink($row.find("a[id*='_del_'], a[id*='Delete'], a[href*='Delete']").first());
+  }
+
+  async function wlEpalletAddToCart(qty) {
+    var response = await fetch(WL_EPALLET_ADD_URL, { credentials: "same-origin", cache: "no-store" });
+    if (!response.ok) throw new Error("Could not open E-Pallet product page.");
+
+    var html = await response.text();
+    var doc = new DOMParser().parseFromString(html, "text/html");
+    var form = doc.querySelector("form");
+    if (!form) throw new Error("Could not read E-Pallet add-to-cart form.");
+
+    var data = new URLSearchParams();
+    Array.prototype.forEach.call(form.elements, function (element) {
+      if (!element.name || element.disabled) return;
+      var type = String(element.type || "").toLowerCase();
+      if (["button", "submit", "image", "reset", "file"].indexOf(type) !== -1) return;
+      if ((type === "checkbox" || type === "radio") && !element.checked) return;
+      data.append(element.name, element.value || "");
+    });
+
+    data.set("__EVENTTARGET", "ctl00$PageBody$productDetail$ctl00$AddProductButton");
+    data.set("__EVENTARGUMENT", "");
+    data.set("ctl00$PageBody$productDetail$ctl00$qty_" + WL_EPALLET_PID, String(Math.max(1, qty)));
+
+    var post = await fetch(WL_EPALLET_ADD_URL, {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
+      body: data.toString()
+    });
+    if (!post.ok) throw new Error("Could not add the required E-Pallet line.");
+  }
+
+  async function wlEpalletEnsureCartSynced() {
+    var rows = wlEpalletRows();
+    if (!rows.length) return false;
+
+    var mode = wlEpalletCartMode();
+    var required = wlEpalletCalculateRequired(rows, mode);
+    var epalletRows = rows.filter(function () {
+      var $row = $(this);
+      var normalizedCode = wlEpalletLineCode($row).replace(/[^A-Z0-9]/g, "");
+      return wlEpalletPidFromRow($row) === WL_EPALLET_PID || normalizedCode === "EPALLET" || normalizedCode === "EPALLETS";
+    });
+    var existingQty = 0;
+    epalletRows.each(function () { existingQty += wlEpalletLineQty($(this)); });
+
+    var signature = [mode, required, existingQty, rows.length].join(":");
+    if (required === existingQty) {
+      try { sessionStorage.removeItem(WL_EPALLET_ACTION_KEY); } catch (e) {}
+      return false;
+    }
+    if (wlEpalletActionRecentlyTried(signature)) {
+      wlEpalletShowStatus("We could not automatically finish the E-Pallet adjustment. Please refresh the cart or ask Woodson to review this cart before checkout.", true);
+      return false;
+    }
+
+    try {
+      if (required <= 0 && epalletRows.length) {
+        wlEpalletShowStatus("Removing the E-Pallet line because the cart no longer requires it.", false);
+        if (wlEpalletDeleteCartLine(epalletRows.first())) return true;
+      } else if (required > 0 && epalletRows.length) {
+        wlEpalletShowStatus("Updating the E-Pallet quantity to match this cart.", false);
+        if (wlEpalletSetCartLineQty(epalletRows.first(), required)) return true;
+      } else if (required > 0) {
+        wlEpalletShowStatus("Adding the required E-Pallet line to this cart.", false);
+        await wlEpalletAddToCart(required);
+        window.location.href = "/ShoppingCart.aspx?epallet=added";
+        return true;
+      }
+    } catch (error) {
+      console.warn("[WLEpallet] Cart sync failed.", error);
+      wlEpalletShowStatus("We could not automatically adjust the E-Pallet line. Please refresh the cart or ask Woodson to review this cart before checkout.", true);
+      return false;
+    }
+
+    return false;
+  }
+
+  if (await wlEpalletEnsureCartSynced()) return;
+
   if (!document.getElementById('wl-cart-qty-stepper-styles')) {
     $('<style id="wl-cart-qty-stepper-styles">\
       .qty-section{gap:8px;min-height:40px;}\

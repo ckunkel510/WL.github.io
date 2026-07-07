@@ -115,6 +115,27 @@ $(document).ready(async function () {
         border-radius: 6px !important;
         box-shadow: 0 4px 12px rgba(25, 31, 38, .06);
       }
+      .wl-epallet-product-note {
+        padding: 12px 13px;
+        border: 1px solid #d9dde1;
+        border-left: 5px solid #6b0016;
+        border-radius: 6px;
+        background: #fff;
+        color: #25282c;
+        font-size: 13px;
+        line-height: 1.4;
+      }
+      .wl-epallet-product-note strong {
+        display: block;
+        margin-bottom: 4px;
+        color: #20242a;
+        font-size: 14px;
+      }
+      .wl-epallet-product-note ul {
+        margin: 7px 0 0 18px;
+        padding: 0;
+      }
+      .wl-epallet-product-note li { margin: 3px 0; }
       .wl-pdp-method-row { gap: 8px !important; }
       .wl-pdp-method-row .method-box {
         min-width: 0;
@@ -316,6 +337,67 @@ $(document).ready(async function () {
   // Current product id (first pid= in the URL)
   const currentPID = new URLSearchParams(window.location.search).get("pid");
   const isBlockedProduct = currentPID && BLOCKED_PIDS.includes(String(currentPID));
+  const WL_EPALLET_RULES = {
+    22444: { code: "ASC", pickupMin: 10, palletQty: 42 },
+    23379: { code: "4BSC", pickupMin: 10, palletQty: 30 },
+    24896: { code: "PCC", pickupMin: 10, palletQty: 35 },
+    25273: { code: "RMMC", pickupMin: 10, palletQty: 42 },
+    25274: { code: "RMSC", pickupMin: 10, palletQty: 42 },
+    26446: { code: "WMCC", pickupMin: 10, palletQty: 40 },
+    26481: { code: "5BSC", pickupMin: 10, palletQty: 30 },
+    94106: { code: "FSC", pickupMin: 10, palletQty: 64 },
+    12383: { code: "50BLC", pickupMin: 10, palletQty: 50 },
+    24315: { code: "3BSC", pickupMin: 10, palletQty: 30 },
+    24319: { code: "MCC", pickupMin: 10, palletQty: 45 },
+    122893: { code: "MCSC", pickupMin: 10, palletQty: 45 },
+    25102: { code: "QC", pickupMin: 10, palletQty: 42 },
+    4741: { code: "16164BAC", pickupMin: 10, palletQty: 54 },
+    12101: { code: "4816FSC", pickupMin: 20, palletQty: 144 },
+    21194: { code: "8816HHBC", pickupMin: 10, palletQty: 72 },
+    23008: { code: "CSC", pickupMin: 3, palletQty: 15 },
+    23049: { code: "DBC", pickupMin: 10, palletQty: 80 },
+    20366: { code: "816158FSC", pickupMin: 25, palletQty: 168 },
+    20368: { code: "816214PC", pickupMin: 25, palletQty: 180 },
+    21126: { code: "8812BLC", pickupMin: 10, palletQty: 64 },
+    12100: { code: "4816BLC", pickupMin: 15, palletQty: 144 },
+    2996: { code: "12122BAC", pickupMin: 25, palletQty: 168 },
+    3003: { code: "12124BAC", pickupMin: 15, palletQty: 96 },
+    21193: { code: "8816BLC", pickupMin: 10, palletQty: 60 },
+    26060: { code: "UBC", pickupMin: 100, palletQty: 576 },
+    133832: { code: "16162BAC", pickupMin: 15, palletQty: 84 },
+    25415: { code: "SB", pickupMin: 3, palletQty: null },
+    2999: { code: "12122RBAC", pickupMin: 20, palletQty: 168 },
+    4743: { code: "16162RBBAC", pickupMin: 15, palletQty: 84 },
+    21475: { code: "888LHBLC", pickupMin: 20, palletQty: 144 },
+    4742: { code: "16162BBAC", pickupMin: 15, palletQty: 84 },
+    25076: { code: "PR", pickupMin: 75, palletQty: 480 },
+    25094: { code: "PT", pickupMin: 75, palletQty: 480 },
+    23825: { code: "GWR", pickupMin: 20, palletQty: 144 },
+    23826: { code: "GWRB", pickupMin: 20, palletQty: 144 },
+    23827: { code: "GWT", pickupMin: 20, palletQty: 144 },
+    113992: { code: "612CSC", pickupMin: 15, palletQty: 96 },
+    113994: { code: "6CPCC", pickupMin: 10, palletQty: 52 },
+    23828: { code: "GWTB", pickupMin: 20, palletQty: 144 }
+  };
+  const epalletRule = currentPID ? WL_EPALLET_RULES[String(currentPID)] : null;
+
+  function epalletNotice(rule) {
+    if (!rule) return $();
+    const palletLine = rule.palletQty
+      ? `One E-Pallet is added for every ${rule.palletQty} units that require pallet handling.`
+      : "This item uses a pallet handling line when the order requires one.";
+    return $(`
+      <div class="wl-epallet-product-note" role="note">
+        <strong>Pallet handling may apply</strong>
+        <div>Woodson will add the E-Pallet line automatically when this cart meets the pallet handling rules.</div>
+        <ul>
+          <li>Pickup: added at ${rule.pickupMin}+ units.</li>
+          <li>Delivery: added for any quantity.</li>
+          <li>${palletLine}</li>
+        </ul>
+      </div>
+    `);
+  }
 
   // Layout wrappers
   const $pageWrapper = $("<div>", { id: "product-page" }).css({
@@ -584,6 +666,9 @@ $(document).ready(async function () {
   $addBtn.on("click", () => {
     const selected = $(".method-box.selected").text().includes("Pickup") ? "pickup" : "delivery";
     localStorage.setItem(selectedMethodKey, selected);
+    if (epalletRule) {
+      try { sessionStorage.setItem("wl_epallet_sync_pending", "1"); } catch (e) {}
+    }
   });
 
   // =========================
@@ -615,7 +700,7 @@ $(document).ready(async function () {
     // Don't show qty/add controls at all
     // (We already detached them from the page; we simply don't add them back.)
     // But keep quicklist + stock if you want the “in-store tools” still available.
-    $buyBox.empty().append($methodRow, $priceRow, $notEligible, $quicklistBtn.css("marginTop", "10px"), $stockBtn);
+    $buyBox.empty().append($methodRow, epalletNotice(epalletRule), $priceRow, $notEligible, $quicklistBtn.css("marginTop", "10px"), $stockBtn);
 
   } else {
     // Normal purchase flow
@@ -625,7 +710,7 @@ $(document).ready(async function () {
     $actionRow.append($qtyInput, $addBtn);
 
     // Final assembly
-    $buyBox.empty().append($methodRow, $banner, $priceRow, $actionRow, $quicklistBtn.css("marginTop", "10px"), $stockBtn);
+    $buyBox.empty().append($methodRow, $banner, epalletNotice(epalletRule), $priceRow, $actionRow, $quicklistBtn.css("marginTop", "10px"), $stockBtn);
   }
 
   $sidebar.append($buyBox);
