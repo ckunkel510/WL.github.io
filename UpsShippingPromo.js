@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var BUILD_VERSION = "20260707-bridge-4";
+  var BUILD_VERSION = "20260707-bridge-5";
 
   if (!/ShoppingCart\.aspx/i.test(window.location.pathname || "")) return;
   if (window.WLShippingPromo && window.WLShippingPromo.version === BUILD_VERSION) return;
@@ -416,6 +416,7 @@
       ".wl-ups-promo-code{display:inline-flex;align-items:center;min-height:24px;margin-left:5px;padding:2px 7px;border-radius:999px;background:#fff;color:#1f5130;font-weight:800;white-space:nowrap;box-shadow:inset 0 0 0 1px rgba(34,107,53,.22);}",
       ".wl-ups-promo-remove{display:inline-flex;align-items:center;justify-content:center;width:28px!important;min-width:28px!important;height:28px!important;min-height:28px!important;padding:0!important;border:1px solid #9bc5a8!important;border-radius:999px!important;background:#fff!important;color:#1f5130!important;font-size:18px!important;font-weight:800!important;line-height:1!important;cursor:pointer;}",
       ".wl-ups-promo-remove:hover,.wl-ups-promo-remove:focus{background:#226b35!important;color:#fff!important;outline:none;}",
+      ".wl-ups-promo[data-applied='true'] .wl-ups-promo-entry{display:none;}",
       ".wl-ups-promo label{display:block;margin-bottom:6px;color:#25282c;font-size:13px;font-weight:700;}",
       ".wl-ups-promo-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;}",
       ".wl-ups-promo input{width:100%;min-height:38px;padding:8px 10px;border:1px solid #b8bec5;border-radius:6px;font-size:14px;}",
@@ -458,13 +459,15 @@
     wrap.setAttribute("data-wl-promo-version", BUILD_VERSION);
     wrap.innerHTML = '' +
       '<div class="wl-ups-promo-applied" data-active="false">' +
-      '  <div class="wl-ups-promo-applied-copy"><span class="wl-ups-promo-applied-label">Promo code applied:</span><span class="wl-ups-promo-code"></span></div>' +
+      '  <div class="wl-ups-promo-applied-copy"><span class="wl-ups-promo-applied-label">Promo code applied:</span> <span class="wl-ups-promo-code"></span></div>' +
       '  <button type="button" class="wl-ups-promo-remove" data-action="remove" aria-label="Remove promo code" title="Remove promo code">&times;</button>' +
       '</div>' +
+      '<div class="wl-ups-promo-entry">' +
       '<label for="wl-ups-promo-input">Shipping promo code</label>' +
       '<div class="wl-ups-promo-row">' +
       '  <input id="wl-ups-promo-input" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false">' +
       '  <button type="button" data-action="apply">Apply</button>' +
+      '</div>' +
       '</div>' +
       '<div class="wl-ups-promo-msg" aria-live="polite"></div>';
     var checkout = host.querySelector("#ctl00_PageBody_PlaceOrderButton, [name='ctl00$PageBody$PlaceOrderButton'], .gc-guest-entry");
@@ -489,10 +492,11 @@
 
     function showApplied(payload) {
       var isApplied = !!payload;
+      wrap.setAttribute("data-applied", isApplied ? "true" : "false");
       appliedRow.setAttribute("data-active", isApplied ? "true" : "false");
       appliedCode.textContent = isApplied ? payload.code : "";
       input.value = isApplied ? "" : "";
-      input.placeholder = isApplied ? "Remove current code to apply another" : "";
+      input.placeholder = "";
       input.disabled = isApplied;
       button.textContent = "Apply";
       button.dataset.action = "apply";
