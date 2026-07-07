@@ -169,6 +169,13 @@
     }
   }
 
+  function setCheckoutValueIfPresent(input, value, fireChange) {
+    const normalized = cleanText(value);
+    if (!normalized) return false;
+    setCheckoutValue(input, normalized, fireChange);
+    return true;
+  }
+
   function setCheckoutSelect(select, value, textValue) {
     if (!select) return;
     const normalizedValue = cleanText(value);
@@ -514,53 +521,72 @@
     try { sessionStorage.removeItem(key); } catch {}
   }
 
-  function applyCheckoutContactPayload(payload) {
+  function applyCheckoutContactPayload(payload, options) {
     if (!payload) return false;
+    options = options || {};
     const displayName = cleanText(payload.displayName || [payload.firstName, payload.lastName].filter(Boolean).join(" "));
     const parts = splitDisplayName(displayName);
     const first = cleanText(payload.firstName || parts.first);
     const last = cleanText(payload.lastName || parts.last);
     const phone = cleanText(payload.telephone || payload.mobile || payload.phone);
+    let applied = false;
 
-    setCheckoutValue(document.getElementById("pickupPerson"), displayName, true);
-    setCheckoutValue(document.getElementById("ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox"), first, true);
-    setCheckoutValue(document.getElementById("ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox"), last, true);
-    setCheckoutValue(document.getElementById("ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox"), phone, true);
-    setCheckoutValue(document.getElementById("ctl00_PageBody_InvoiceAddress_ContactFirstNameTextBox"), first, true);
-    setCheckoutValue(document.getElementById("ctl00_PageBody_InvoiceAddress_ContactLastNameTextBox"), last, true);
-    setCheckoutValue(document.getElementById("ctl00_PageBody_InvoiceAddress_ContactTelephoneTextBox"), phone, true);
-    if (payload.email) setCheckoutValue(document.getElementById("ctl00_PageBody_InvoiceAddress_EmailAddressTextBox"), payload.email, true);
-    return !!(displayName || first || last || phone || payload.email);
+    applied = setCheckoutValueIfPresent(document.getElementById("pickupPerson"), displayName, true) || applied;
+
+    if (options.nativeFields) {
+      applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox"), first, true) || applied;
+      applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox"), last, true) || applied;
+      applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox"), phone, true) || applied;
+      applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_InvoiceAddress_ContactFirstNameTextBox"), first, true) || applied;
+      applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_InvoiceAddress_ContactLastNameTextBox"), last, true) || applied;
+      applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_InvoiceAddress_ContactTelephoneTextBox"), phone, true) || applied;
+      applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_InvoiceAddress_EmailAddressTextBox"), payload.email, true) || applied;
+    }
+
+    return applied;
   }
 
   function applyCheckoutAddressPayload(payload) {
     if (!payload) return false;
-    setCheckoutValue(document.getElementById("ctl00_PageBody_DeliveryAddress_AddressLine1"), payload.line1, true);
-    setCheckoutValue(document.getElementById("ctl00_PageBody_DeliveryAddress_AddressLine2"), payload.line2, true);
-    setCheckoutValue(document.getElementById("ctl00_PageBody_DeliveryAddress_AddressLine3"), payload.line3, true);
-    setCheckoutValue(document.getElementById("ctl00_PageBody_DeliveryAddress_City"), payload.city, true);
-    setCheckoutValue(document.getElementById("ctl00_PageBody_DeliveryAddress_Postcode"), payload.zip, true);
-    setCheckoutValue(document.getElementById("ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox"), payload.phone, true);
+    let applied = false;
+    applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_DeliveryAddress_AddressLine1"), payload.line1, true) || applied;
+    applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_DeliveryAddress_AddressLine2"), payload.line2, true) || applied;
+    applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_DeliveryAddress_AddressLine3"), payload.line3, true) || applied;
+    applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_DeliveryAddress_City"), payload.city, true) || applied;
+    applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_DeliveryAddress_Postcode"), payload.zip, true) || applied;
+    applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox"), payload.phone, true) || applied;
 
     const nameParts = splitDisplayName(payload.contactName || "");
-    setCheckoutValue(document.getElementById("ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox"), nameParts.first, true);
-    setCheckoutValue(document.getElementById("ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox"), nameParts.last, true);
-    if (payload.email) setCheckoutValue(document.getElementById("ctl00_PageBody_InvoiceAddress_EmailAddressTextBox"), payload.email, true);
-    setCheckoutSelect(document.getElementById("ctl00_PageBody_DeliveryAddress_CountySelector_CountyList"), payload.stateValue, payload.stateText);
-    setCheckoutSelect(document.getElementById("ctl00_PageBody_DeliveryAddress_CountrySelector"), payload.countryValue || "USA", payload.countryText || "United States");
+    applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox"), nameParts.first, true) || applied;
+    applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox"), nameParts.last, true) || applied;
+    applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_InvoiceAddress_EmailAddressTextBox"), payload.email, true) || applied;
+    if (cleanText(payload.stateValue || payload.stateText)) {
+      setCheckoutSelect(document.getElementById("ctl00_PageBody_DeliveryAddress_CountySelector_CountyList"), payload.stateValue, payload.stateText);
+      applied = true;
+    }
+    if (cleanText(payload.countryValue || payload.countryText)) {
+      setCheckoutSelect(document.getElementById("ctl00_PageBody_DeliveryAddress_CountrySelector"), payload.countryValue || "USA", payload.countryText || "United States");
+      applied = true;
+    }
 
     try { sessionStorage.setItem("wl_returnStep", "3"); } catch {}
     try { window.WLCheckout?.refreshSectionSummaries?.(); } catch {}
     try { window.WLCheckout?.trySmartAdvance?.(); } catch {}
-    return !!(payload.line1 || payload.city || payload.zip || payload.phone || payload.contactName);
+    return applied;
   }
 
   function consumeCheckoutReturnPayloads() {
     const addressPayload = readSessionJson(CHECKOUT_ADDRESS_PAYLOAD_KEY);
-    if (applyCheckoutAddressPayload(addressPayload)) removeSessionKey(CHECKOUT_ADDRESS_PAYLOAD_KEY);
+    if (addressPayload) {
+      applyCheckoutAddressPayload(addressPayload);
+      removeSessionKey(CHECKOUT_ADDRESS_PAYLOAD_KEY);
+    }
 
     const contactPayload = readSessionJson(CHECKOUT_CONTACT_PAYLOAD_KEY);
-    if (applyCheckoutContactPayload(contactPayload)) removeSessionKey(CHECKOUT_CONTACT_PAYLOAD_KEY);
+    if (contactPayload) {
+      applyCheckoutContactPayload(contactPayload);
+      removeSessionKey(CHECKOUT_CONTACT_PAYLOAD_KEY);
+    }
   }
 
   function parseCheckoutContacts(html) {
@@ -2898,16 +2924,39 @@ document.addEventListener("click", function (ev) {
         pickupPerson.closest(".form-group")?.insertBefore(tools, pickupPerson.previousElementSibling || pickupPerson);
 
         const select = tools.querySelector("#wl-checkout-contact-select");
-        fetchCheckoutContacts().then(function (contacts) {
-          if (!contacts.length || !select.isConnected) return;
-          contacts.forEach(function (contact, index) {
-            const option = document.createElement("option");
-            option.value = String(index);
-            option.textContent = [contact.displayName, contact.email || contact.telephone].filter(Boolean).join(" - ");
-            option.dataset.contact = JSON.stringify(contact);
-            select.appendChild(option);
+        let contactsLoaded = false;
+        function loadCheckoutContactOptions() {
+          if (contactsLoaded) return;
+          contactsLoaded = true;
+          const loadingOption = document.createElement("option");
+          loadingOption.value = "";
+          loadingOption.textContent = "Loading contacts...";
+          loadingOption.disabled = true;
+          select.appendChild(loadingOption);
+
+          fetchCheckoutContacts().then(function (contacts) {
+            if (!select.isConnected) return;
+            if (loadingOption.parentNode) loadingOption.parentNode.removeChild(loadingOption);
+            contacts.forEach(function (contact, index) {
+              const option = document.createElement("option");
+              option.value = String(index);
+              option.textContent = [contact.displayName, contact.email || contact.telephone].filter(Boolean).join(" - ");
+              option.dataset.contact = JSON.stringify(contact);
+              select.appendChild(option);
+            });
+            if (!contacts.length) {
+              const option = document.createElement("option");
+              option.value = "";
+              option.textContent = "No saved contacts found";
+              option.disabled = true;
+              select.appendChild(option);
+            }
           });
-        });
+        }
+
+        select.addEventListener("focus", loadCheckoutContactOptions);
+        select.addEventListener("pointerdown", loadCheckoutContactOptions);
+        select.addEventListener("touchstart", loadCheckoutContactOptions, { passive: true });
 
         select.addEventListener("change", function () {
           const option = select.options[select.selectedIndex];

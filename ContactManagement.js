@@ -622,7 +622,7 @@
     contactGroups.forEach(function (group) {
       var sourceWrapper = group.closest(".epi-form-col-single-contact");
       formGrid.appendChild(group);
-      if (sourceWrapper && !sourceWrapper.querySelector(".epi-form-group-contact,.submit-button-panel")) {
+      if (sourceWrapper && sourceWrapper !== group && !sourceWrapper.querySelector(".epi-form-group-contact,.submit-button-panel")) {
         sourceWrapper.classList.add("wl-contact-native-empty");
       }
     });
@@ -648,7 +648,7 @@
       if (cancel) cancel.value = "Cancel";
       var submitWrapper = submitPanel.closest(".epi-form-col-single-contact");
       formGrid.appendChild(submitPanel);
-      if (submitWrapper && !submitWrapper.querySelector(".epi-form-group-contact,.submit-button-panel")) {
+      if (submitWrapper && submitWrapper !== submitPanel && !submitWrapper.querySelector(".epi-form-group-contact,.submit-button-panel")) {
         submitWrapper.classList.add("wl-contact-native-empty");
       }
     }
