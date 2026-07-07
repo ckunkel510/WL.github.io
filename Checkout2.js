@@ -1662,19 +1662,41 @@ steps.forEach(function (step, i) {
           document.querySelector("#ctl00_PageBody_ContinueButton1");
         if (!btn) return false;
 
+        const form = btn.form || btn.closest("form") || document.querySelector("form");
         try {
-          // Prefer a real click on the actual server control
-          btn.disabled = false;
-          btn.style.display = ""; // keep it actionable even if hidden elsewhere
-          btn.click();
-          return true;
+          setReturnStep(steps.length);
+          setExpectedNav(true);
         } catch {}
 
-        // Fallback: explicit WebForms postback
+        try {
+          // Prefer WebTrack's native click when its WebForms helper is available.
+          btn.disabled = false;
+          if (typeof WebForm_DoPostBackWithOptions === "function" && typeof WebForm_PostBackOptions === "function") {
+            btn.click();
+            return true;
+          }
+        } catch {}
+
+        // Some WebTrack checkout instances omit WebForm_DoPostBackWithOptions even
+        // though the Continue input still has an inline onclick that references it.
+        // Submit the form directly with the native Continue button as submitter.
+        try {
+          if (form && typeof form.requestSubmit === "function") {
+            form.requestSubmit(btn);
+            return true;
+          }
+        } catch {}
+
+        // Fallback: include the submit button name/value, then submit the form.
         try {
           const uniqueName = btn.getAttribute("name");
-          if (uniqueName && typeof __doPostBack === "function") {
-            __doPostBack(uniqueName, "");
+          if (form && uniqueName) {
+            const marker = document.createElement("input");
+            marker.type = "hidden";
+            marker.name = uniqueName;
+            marker.value = btn.value || "Continue";
+            form.appendChild(marker);
+            form.submit();
             return true;
           }
         } catch {}
