@@ -73,7 +73,9 @@ function claimMatchesRequest(candidate, requestInput) {
 function getRedis() {
   if (!Redis) return null;
   if (redisClient) return redisClient;
-  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) return null;
+  const hasUpstashEnv = !!(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
+  const hasVercelKvEnv = !!(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
+  if (!hasUpstashEnv && !hasVercelKvEnv) return null;
   redisClient = Redis.fromEnv();
   return redisClient;
 }
