@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var BUILD_VERSION = "20260707-bridge-3";
+  var BUILD_VERSION = "20260707-bridge-4";
 
   if (!/ShoppingCart\.aspx/i.test(window.location.pathname || "")) return;
   if (window.WLShippingPromo && window.WLShippingPromo.version === BUILD_VERSION) return;
@@ -393,16 +393,35 @@
     } catch (e) {}
   }
 
+  function clearNativePromo() {
+    var input = nativePromoInput();
+    if (!input) return;
+    try {
+      input.value = "";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    } catch (e) {}
+  }
+
   function ensureStyles() {
     if (document.getElementById("wl-ups-promo-css")) return;
     var style = document.createElement("style");
     style.id = "wl-ups-promo-css";
     style.textContent = [
       ".wl-ups-promo{margin-top:12px;padding-top:12px;border-top:1px solid #d9dde2;font-family:Arial,sans-serif;}",
+      ".wl-ups-promo-applied{display:none;align-items:center;justify-content:space-between;gap:10px;margin:0 0 10px;padding:9px 10px;border:1px solid #b8d7c1;border-radius:6px;background:#f2fbf5;color:#1f5130;font-size:13px;line-height:1.3;}",
+      ".wl-ups-promo-applied[data-active='true']{display:flex;}",
+      ".wl-ups-promo-applied-copy{min-width:0;}",
+      ".wl-ups-promo-applied-label{font-weight:700;}",
+      ".wl-ups-promo-code{display:inline-flex;align-items:center;min-height:24px;margin-left:5px;padding:2px 7px;border-radius:999px;background:#fff;color:#1f5130;font-weight:800;white-space:nowrap;box-shadow:inset 0 0 0 1px rgba(34,107,53,.22);}",
+      ".wl-ups-promo-remove{display:inline-flex;align-items:center;justify-content:center;width:28px!important;min-width:28px!important;height:28px!important;min-height:28px!important;padding:0!important;border:1px solid #9bc5a8!important;border-radius:999px!important;background:#fff!important;color:#1f5130!important;font-size:18px!important;font-weight:800!important;line-height:1!important;cursor:pointer;}",
+      ".wl-ups-promo-remove:hover,.wl-ups-promo-remove:focus{background:#226b35!important;color:#fff!important;outline:none;}",
       ".wl-ups-promo label{display:block;margin-bottom:6px;color:#25282c;font-size:13px;font-weight:700;}",
       ".wl-ups-promo-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;}",
       ".wl-ups-promo input{width:100%;min-height:38px;padding:8px 10px;border:1px solid #b8bec5;border-radius:6px;font-size:14px;}",
+      ".wl-ups-promo input:disabled{background:#f1f3f4;color:#60656b;cursor:not-allowed;}",
       ".wl-ups-promo button{min-height:38px;padding:8px 12px;border:1px solid #6b0016;border-radius:6px;background:#6b0016;color:#fff;font-weight:700;cursor:pointer;}",
+      ".wl-ups-promo button:disabled{border-color:#b8bec5;background:#e7e9eb;color:#60656b;cursor:not-allowed;}",
       ".wl-ups-promo button[data-action='remove']{border-color:#b8bec5;background:#f5f5f5;color:#25282c;}",
       ".wl-ups-promo-msg{min-height:18px;margin-top:6px;color:#60656b;font-size:12px;line-height:1.35;}",
       ".wl-ups-promo-msg.is-error{color:#8a1f11;}",
@@ -438,6 +457,10 @@
     wrap.className = "wl-ups-promo";
     wrap.setAttribute("data-wl-promo-version", BUILD_VERSION);
     wrap.innerHTML = '' +
+      '<div class="wl-ups-promo-applied" data-active="false">' +
+      '  <div class="wl-ups-promo-applied-copy"><span class="wl-ups-promo-applied-label">Promo code applied:</span><span class="wl-ups-promo-code"></span></div>' +
+      '  <button type="button" class="wl-ups-promo-remove" data-action="remove" aria-label="Remove promo code" title="Remove promo code">&times;</button>' +
+      '</div>' +
       '<label for="wl-ups-promo-input">Shipping promo code</label>' +
       '<div class="wl-ups-promo-row">' +
       '  <input id="wl-ups-promo-input" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false">' +
@@ -452,7 +475,10 @@
     }
 
     var input = wrap.querySelector("input");
-    var button = wrap.querySelector("button");
+    var button = wrap.querySelector(".wl-ups-promo-row button");
+    var appliedRow = wrap.querySelector(".wl-ups-promo-applied");
+    var appliedCode = wrap.querySelector(".wl-ups-promo-code");
+    var removeButton = wrap.querySelector(".wl-ups-promo-remove");
     var msg = wrap.querySelector(".wl-ups-promo-msg");
 
     function setMessage(message, kind) {
@@ -462,18 +488,32 @@
     }
 
     function showApplied(payload) {
-      input.value = payload ? payload.code : "";
-      button.textContent = payload ? "Remove" : "Apply";
-      button.dataset.action = payload ? "remove" : "apply";
-      setMessage(payload ? "Code applied to eligible shipping options." : "", payload ? "ok" : "");
+      var isApplied = !!payload;
+      appliedRow.setAttribute("data-active", isApplied ? "true" : "false");
+      appliedCode.textContent = isApplied ? payload.code : "";
+      input.value = isApplied ? "" : "";
+      input.placeholder = isApplied ? "Remove current code to apply another" : "";
+      input.disabled = isApplied;
+      button.textContent = "Apply";
+      button.dataset.action = "apply";
+      button.disabled = isApplied;
+      setMessage(isApplied ? "Only one promo code can be applied per order." : "", isApplied ? "ok" : "");
     }
 
     showApplied(stored);
 
+    function removeAppliedCode() {
+      clearStored();
+      clearNativePromo();
+      showApplied(null);
+      input.focus();
+    }
+
+    removeButton.addEventListener("click", removeAppliedCode);
+
     button.addEventListener("click", function () {
-      if (button.dataset.action === "remove") {
-        clearStored();
-        showApplied(null);
+      if (currentPromo()) {
+        setMessage("Remove the current promo code before applying another.", "error");
         return;
       }
       var result = applyCode(input.value);
