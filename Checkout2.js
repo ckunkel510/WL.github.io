@@ -6,6 +6,8 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
+  window.WL_CHECKOUT_BUILD = "20260707-submit-fallback-2";
+
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
   const UPS_SHIPPING_ENABLED = true;
 
@@ -1677,16 +1679,6 @@ steps.forEach(function (step, i) {
           }
         } catch {}
 
-        // Some WebTrack checkout instances omit WebForm_DoPostBackWithOptions even
-        // though the Continue input still has an inline onclick that references it.
-        // Submit the form directly with the native Continue button as submitter.
-        try {
-          if (form && typeof form.requestSubmit === "function") {
-            form.requestSubmit(btn);
-            return true;
-          }
-        } catch {}
-
         // Fallback: include the submit button name/value, then submit the form.
         try {
           const uniqueName = btn.getAttribute("name");
@@ -1696,7 +1688,11 @@ steps.forEach(function (step, i) {
             marker.name = uniqueName;
             marker.value = btn.value || "Continue";
             form.appendChild(marker);
-            form.submit();
+            if (typeof HTMLFormElement !== "undefined" && HTMLFormElement.prototype.submit) {
+              HTMLFormElement.prototype.submit.call(form);
+            } else {
+              form.submit();
+            }
             return true;
           }
         } catch {}
