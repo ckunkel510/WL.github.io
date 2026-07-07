@@ -2,11 +2,15 @@
   "use strict";
 
   if (!/ShoppingCart\.aspx/i.test(window.location.pathname || "")) return;
+  if (window.WLShippingPromo && window.WLShippingPromo.version === "20260707-bridge-1") return;
 
   var STORAGE_KEY = "wl_shipping_promo_v1";
   var EVENT_NAME = "wl:shipping-promo-change";
   var PROMO_CODE = "SUMMERCHILL26";
   var DISPLAY_CODE = "SummerChill26";
+  var PRODUCT_DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSg6EOqMwc_5UjWU7ycyvF-rgj717p-WjV2Vhydcb7uc2Mf2Awj6GehQp66AHwViq4uX6mXXrtZZR-1/pub?output=csv";
+  var PROMO_SESSION_URL = "https://wl-upsrates.vercel.app/api/shipping-promo-session";
+  var PRODUCT_DATA_CACHE = null;
 
   var ELIGIBLE_PRODUCTS = [
     ["282948", "TB-ORIG-G3-TAN"],
@@ -135,6 +139,158 @@
     }).sort().join("|");
   }
 
+  function moneyNumber(value) {
+    var numeric = Number(String(value == null ? "" : value).replace(/[^0-9.-]/g, ""));
+    return Number.isFinite(numeric) ? numeric : 0;
+  }
+
+  function parseCsv(source) {
+    var rows = [];
+    var row = [];
+    var cell = "";
+    var inQuotes = false;
+    var textValue = String(source || "");
+    for (var i = 0; i < textValue.length; i += 1) {
+      var ch = textValue[i];
+      var next = textValue[i + 1];
+      if (ch === '"' && inQuotes && next === '"') {
+        cell += '"';
+        i += 1;
+      } else if (ch === '"') {
+        inQuotes = !inQuotes;
+      } else if (ch === "," && !inQuotes) {
+        row.push(cell);
+        cell = "";
+      } else if ((ch === "\n" || ch === "\r") && !inQuotes) {
+        if (ch === "\r" && next === "\n") i += 1;
+        row.push(cell);
+        if (row.some(function (value) { return value !== ""; })) rows.push(row);
+        row = [];
+        cell = "";
+      } else {
+        cell += ch;
+      }
+    }
+    row.push(cell);
+    if (row.some(function (value) { return value !== ""; })) rows.push(row);
+    return rows;
+  }
+
+  function getProductData() {
+    if (PRODUCT_DATA_CACHE) return PRODUCT_DATA_CACHE;
+    PRODUCT_DATA_CACHE = fetch(PRODUCT_DATA_URL, { cache: "no-store" })
+      .then(function (response) { return response.ok ? response.text() : ""; })
+      .then(function (source) {
+        var rows = parseCsv(source);
+        var headers = rows.shift() || [];
+        return rows.map(function (row) {
+          var result = {};
+          headers.forEach(function (header, index) {
+            result[text(header)] = row[index] || "";
+          });
+          return result;
+        });
+      })
+      .catch(function () { return []; });
+    return PRODUCT_DATA_CACHE;
+  }
+
+  function buildPackages(items, products) {
+    var byCode = {};
+    (products || []).forEach(function (product) {
+      byCode[normalizeProductCode(product.ProductCode)] = product;
+    });
+    var totalWeight = 0;
+    for (var i = 0; i < items.length; i += 1) {
+      var item = items[i];
+      var product = byCode[normalizeProductCode(item.productCode)];
+      var weight = moneyNumber(product && product.Weight);
+      if (!weight) return [];
+      totalWeight += weight * (Number(item.quantity) || 1);
+    }
+    if (!totalWeight || totalWeight > 150) return [];
+    return [{ weight: Number(totalWeight.toFixed(2)) }];
+  }
+
+  function checkoutZip() {
+    var selectors = [
+      "#ctl00_PageBody_DeliveryAddress_Postcode",
+      "#ctl00_PageBody_DeliveryAddress_ZipCodeTextBox",
+      "#ctl00_PageBody_DeliveryAddress_PostalCode",
+      "#ctl00_PageBody_DeliveryAddress_PostcodeTextBox",
+      "#gc_del_zip"
+    ];
+    for (var i = 0; i < selectors.length; i += 1) {
+      var el = document.querySelector(selectors[i]);
+      var zip = text(el && el.value).match(/\d{5}/);
+      if (zip) return zip[0];
+    }
+    return "";
+  }
+
+  function savedAccountZip() {
+    return fetch("/AccountInfo_R.aspx", { credentials: "same-origin", cache: "no-store" })
+      .then(function (response) { return response.ok ? response.text() : ""; })
+      .then(function (html) {
+        var doc = new DOMParser().parseFromString(html, "text/html");
+        var addressText = text(Array.prototype.map.call(doc.querySelectorAll(".accountInfoAddress li"), function (el) {
+          return el.textContent;
+        }).join(" "));
+        return (addressText.match(/\b\d{5}(?:-\d{4})?\b/) || [])[0].slice(0, 5);
+      })
+      .catch(function () { return ""; });
+  }
+
+  async function promoSessionPayload() {
+    var stored = currentPromo();
+    if (!stored || stored.eligible !== true) return null;
+    var items = stored.cart && stored.cart.length ? stored.cart : cartItems();
+    var zip = checkoutZip() || await savedAccountZip();
+    if (!zip) return null;
+    var products = await getProductData();
+    var packages = buildPackages(items, products);
+    if (!packages.length) return null;
+    return {
+      code: stored.code,
+      cart: items,
+      cartSignature: stored.cartSignature || cartSignature(items),
+      shipTo: { postalCode: zip, country: "US", residential: true },
+      packages: packages
+    };
+  }
+
+  async function registerPromoSession() {
+    var payload = await promoSessionPayload();
+    if (!payload) return null;
+    try {
+      var response = await fetch(PROMO_SESSION_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      var result = await response.json().catch(function () { return {}; });
+      if (!response.ok || !result.ok) throw new Error(result.error || "Promo could not be saved.");
+      var stored = currentPromo();
+      if (stored) {
+        stored.serverClaim = {
+          fingerprint: result.fingerprint,
+          expiresAt: result.expiresAt,
+          storage: result.storage
+        };
+        writeStored(stored);
+      }
+      return result;
+    } catch (error) {
+      console.warn("[WLShippingPromo] Promo session bridge failed.", error);
+      return null;
+    }
+  }
+
+  function schedulePromoSessionRegistration() {
+    window.setTimeout(registerPromoSession, 150);
+    window.setTimeout(registerPromoSession, 1200);
+  }
+
   function readStored() {
     try {
       var raw = sessionStorage.getItem(STORAGE_KEY) || localStorage.getItem(STORAGE_KEY);
@@ -213,6 +369,7 @@
       cartSignature: cartSignature(items),
       ts: Date.now()
     });
+    schedulePromoSessionRegistration();
     return { ok: true, message: "Code applied to eligible shipping options." };
   }
 
@@ -252,9 +409,10 @@
   }
 
   function promoHost() {
-    return document.querySelector(".custom-subtotal-wrapper .SubtotalWrapper") ||
+    return document.querySelector(".custom-subtotal-wrapper") ||
+      document.querySelector(".custom-subtotal-wrapper .SubtotalWrapper") ||
       document.querySelector(".SubtotalWrapper") ||
-      document.querySelector(".custom-subtotal-wrapper");
+      document.querySelector(".shopping-cart-details");
   }
 
   function renderPromoField() {
@@ -277,7 +435,12 @@
       '  <button type="button" data-action="apply">Apply</button>' +
       '</div>' +
       '<div class="wl-ups-promo-msg" aria-live="polite"></div>';
-    host.appendChild(wrap);
+    var checkout = host.querySelector("#ctl00_PageBody_PlaceOrderButton, [name='ctl00$PageBody$PlaceOrderButton'], .gc-guest-entry");
+    if (checkout && checkout.parentNode && host.contains(checkout)) {
+      checkout.parentNode.insertBefore(wrap, checkout);
+    } else {
+      host.appendChild(wrap);
+    }
 
     var input = wrap.querySelector("input");
     var button = wrap.querySelector("button");
@@ -321,7 +484,10 @@
   function boot() {
     renderPromoField();
     mirrorNativePromo();
+    schedulePromoSessionRegistration();
     window.setTimeout(renderPromoField, 500);
+    window.setTimeout(renderPromoField, 1200);
+    window.setTimeout(renderPromoField, 2500);
     window.setTimeout(mirrorNativePromo, 500);
   }
 
@@ -331,9 +497,18 @@
     cartItems: cartItems,
     isEligibleProduct: isEligible,
     read: currentPromo,
+    registerSession: registerPromoSession,
     storageKey: STORAGE_KEY,
-    toRatePayload: promoPayload
+    toRatePayload: promoPayload,
+    version: "20260707-bridge-1"
   };
+
+  document.addEventListener("wl:fulfillment-change", schedulePromoSessionRegistration);
+  document.addEventListener("change", function (event) {
+    if (event.target && /DeliveryAddress|Postcode|Postal|Zip|gc_del_zip/i.test(event.target.id || event.target.name || "")) {
+      schedulePromoSessionRegistration();
+    }
+  }, true);
 
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", boot, { once: true });

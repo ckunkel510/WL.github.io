@@ -10,6 +10,7 @@
   const CART_SUBTOTAL_KEY = 'wl_cart_subtotal_v1';
   const QUOTE_TTL_MS = 4 * 60 * 60 * 1000;
   const UPS_RATE_URL = 'https://wl-upsrates.vercel.app/api/ups-rates';
+  const SHIPPING_PROMO_SCRIPT_URL = 'https://ckunkel510.github.io/WL.github.io/UpsShippingPromo.js?v=20260707-bridge-1';
   const STORE_ORIGINS = {
     brenham: { name: 'Brenham', city: 'Brenham', state: 'TX', postalCode: '77833' },
     bryan: { name: 'Bryan', city: 'Bryan', state: 'TX', postalCode: '77803' },
@@ -27,6 +28,15 @@
 
   function text(value) {
     return String(value || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function loadShippingPromoScript() {
+    if (window.WLShippingPromo || document.querySelector('script[data-wl-ups-shipping-promo]')) return;
+    const script = document.createElement('script');
+    script.src = SHIPPING_PROMO_SCRIPT_URL;
+    script.async = true;
+    script.setAttribute('data-wl-ups-shipping-promo', 'true');
+    document.head.appendChild(script);
   }
 
   function money(value) {
@@ -430,6 +440,7 @@
     const wrappers = document.querySelectorAll('.SubtotalWrapper');
     if (!wrappers.length) return;
 
+    loadShippingPromoScript();
     injectStyles();
     const signature = getCartSignature();
     saveCartSignature(signature);

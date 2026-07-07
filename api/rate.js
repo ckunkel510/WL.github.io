@@ -5,6 +5,7 @@ const { XMLParser } = require("fast-xml-parser");
 const zipcodes = require("zipcodes");
 const { RequestError, requestRates } = require("./ups-rates")._internal;
 const { applyFreeGroundPromotion } = require("./shipping-promotions");
+const { findPromoClaim } = require("./shipping-promo-sessions");
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -347,7 +348,9 @@ async function handler(req, res) {
     authenticate(access);
     const translated = toOAuthRequest(rating);
     const rated = await requestRates(translated.body);
-    const promoInput = legacyPromotionInput(req, rating);
+    const explicitPromo = legacyPromotionInput(req, rating);
+    const storedPromo = await findPromoClaim(translated.body);
+    const promoInput = storedPromo && storedPromo.eligible ? storedPromo : explicitPromo;
     const { result } = applyFreeGroundPromotion(rated, promoInput);
     return sendXml(res, 200, isSoap ? soapSuccessXml(result, translated.context) : successXml(result, translated.context));
   } catch (error) {
