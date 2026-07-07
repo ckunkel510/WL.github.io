@@ -9,6 +9,10 @@
 
   var doc = win && win.document;
   var RETURN_KEY = "wl_address_return_path";
+  var CONTACT_RETURN_KEY = "wl_contact_return_path";
+  var CONTACT_PAYLOAD_KEY = "wl_checkout_contact_payload";
+  var ADDRESS_DRAFT_KEY = "wl_address_detail_draft_v1";
+  var CHECKOUT_ADDRESS_PAYLOAD_KEY = "wl_checkout_address_payload";
   var DEFAULT_IDS_KEY = "wl_default_address_oids";
   var STYLE_ID = "wl-address-management-styles";
 
@@ -47,6 +51,53 @@
 
   function safeSessionSet(key, value) {
     try { win.sessionStorage.setItem(key, value); } catch (_) {}
+  }
+
+  function safeSessionRemove(key) {
+    try { win.sessionStorage.removeItem(key); } catch (_) {}
+  }
+
+  function setWebTrackValue(input, value, fireChange) {
+    if (!input) return;
+    var normalized = String(value == null ? "" : value);
+    input.value = normalized;
+    try { input.defaultValue = normalized; } catch (_) {}
+
+    var stateInput = input.id && doc.getElementById(input.id + "_ClientState");
+    if (stateInput) {
+      try {
+        var state = JSON.parse(stateInput.value || "{}");
+        state.valueAsString = normalized;
+        state.lastSetTextBoxValue = normalized;
+        state.validationText = normalized;
+        stateInput.value = JSON.stringify(state);
+      } catch (_) {}
+    }
+
+    if (fireChange) {
+      try { input.dispatchEvent(new Event("input", { bubbles: true })); } catch (_) {}
+      try { input.dispatchEvent(new Event("change", { bubbles: true })); } catch (_) {}
+    }
+  }
+
+  function setSelectValue(select, value, textValue) {
+    if (!select) return;
+    var normalizedValue = clean(value);
+    var normalizedText = clean(textValue || value).toLowerCase();
+    var matched = false;
+    Array.prototype.some.call(select.options || [], function (option) {
+      var optionValue = clean(option.value);
+      var optionText = clean(option.text || option.textContent);
+      if ((normalizedValue && optionValue.toLowerCase() === normalizedValue.toLowerCase()) ||
+          (normalizedText && optionText.toLowerCase() === normalizedText)) {
+        select.value = option.value;
+        matched = true;
+        return true;
+      }
+      return false;
+    });
+    if (!matched && normalizedValue) select.value = normalizedValue;
+    try { select.dispatchEvent(new Event("change", { bubbles: true })); } catch (_) {}
   }
 
   function defaultAddressIds() {
@@ -131,6 +182,10 @@
       "body.wl-address-detail-page.wl-default-address-locked .form-control:disabled{opacity:1!important;background:#f2f3f4!important;color:#45484c!important;-webkit-text-fill-color:#45484c!important;cursor:not-allowed;}",
       "body.wl-address-detail-page.wl-default-address-locked #ctl00_PageBody_cmdSave{display:none!important;}",
       ".wl-address-detail-actions{display:flex;justify-content:flex-end;margin-top:14px;}",
+      ".wl-address-contact-tools{grid-column:1/-1;display:flex;flex-wrap:wrap;align-items:flex-end;gap:9px;margin:2px 0 0;padding:12px 13px;border:1px solid #e1e3e5;border-left:4px solid var(--wl-maroon);border-radius:6px;background:#fafafa;}",
+      ".wl-address-contact-tools label{display:block;width:100%;margin:0;color:#303236;font-size:13px;font-weight:800;}",
+      ".wl-address-contact-tools select{flex:1 1 260px;min-height:40px;padding:8px 10px;border:1px solid #afb3b8;border-radius:5px;background:#fff;color:#202124;font-size:15px;}",
+      ".wl-address-contact-tools .wl-address-secondary{min-height:40px;}",
       "@media(max-width:760px){.wl-address-shell,.wl-address-detail-shell{padding:0 12px;}.wl-address-page-header{display:block;}.wl-address-page-header .wl-address-primary{margin-top:14px;width:100%;}.wl-address-toolbar{align-items:stretch;flex-direction:column;}.wl-address-search-wrap{flex-basis:auto;max-width:none;}.wl-address-count{white-space:normal;}.wl-address-grid{grid-template-columns:1fr;}.wl-address-return{align-items:stretch;flex-direction:column;}.wl-address-return .wl-address-secondary{width:100%;}body.wl-address-detail-page .wl-address-form-grid{grid-template-columns:1fr!important;padding:15px!important;}body.wl-address-detail-page .wl-address-field-full{grid-column:1;}.wl-address-card-actions{align-items:stretch;flex-direction:column;}.wl-address-card-actions .wl-address-secondary{width:100%;}.wl-address-detail-actions .wl-address-secondary{width:100%;}}"
     ].join("");
     doc.head.appendChild(style);
@@ -437,8 +492,19 @@
       }
     });
 
+    restoreAddressDraft();
+    applyReturnedContact();
+    mountContactTools(formGrid);
+
     var submitPanel = doc.querySelector(".submit-button-panel");
     if (submitPanel) {
+      var save = doc.getElementById("ctl00_PageBody_cmdSave");
+      if (save) {
+        save.addEventListener("click", function () {
+          captureCheckoutAddressPayload();
+          safeSessionRemove(ADDRESS_DRAFT_KEY);
+        }, true);
+      }
       var submitWrapper = submitPanel.closest(".epi-form-col-single-address");
       formGrid.appendChild(submitPanel);
       if (submitWrapper && !submitWrapper.querySelector(".epi-form-group-address,.submit-button-panel")) {
@@ -466,6 +532,176 @@
 
     if (isDefault) lockDefaultDetail(formGrid);
     return true;
+  }
+
+  function addressDraftPayload() {
+    var state = doc.getElementById("ctl00_PageBody_state");
+    var country = doc.getElementById("ctl00_PageBody_CountrySelector");
+    return {
+      ts: Date.now(),
+      url: win.location.pathname + win.location.search,
+      values: {
+        "ctl00_PageBody_addressCode": clean(doc.getElementById("ctl00_PageBody_addressCode") && doc.getElementById("ctl00_PageBody_addressCode").value),
+        "ctl00_PageBody_addressLine1": clean(doc.getElementById("ctl00_PageBody_addressLine1") && doc.getElementById("ctl00_PageBody_addressLine1").value),
+        "ctl00_PageBody_addressLine2": clean(doc.getElementById("ctl00_PageBody_addressLine2") && doc.getElementById("ctl00_PageBody_addressLine2").value),
+        "ctl00_PageBody_addressLine3": clean(doc.getElementById("ctl00_PageBody_addressLine3") && doc.getElementById("ctl00_PageBody_addressLine3").value),
+        "ctl00_PageBody_city": clean(doc.getElementById("ctl00_PageBody_city") && doc.getElementById("ctl00_PageBody_city").value),
+        "ctl00_PageBody_zipCode": clean(doc.getElementById("ctl00_PageBody_zipCode") && doc.getElementById("ctl00_PageBody_zipCode").value),
+        "ctl00_PageBody_telephone1": clean(doc.getElementById("ctl00_PageBody_telephone1") && doc.getElementById("ctl00_PageBody_telephone1").value),
+        "ctl00_PageBody_telephone2": clean(doc.getElementById("ctl00_PageBody_telephone2") && doc.getElementById("ctl00_PageBody_telephone2").value),
+        "ctl00_PageBody_email": clean(doc.getElementById("ctl00_PageBody_email") && doc.getElementById("ctl00_PageBody_email").value),
+        "ctl00_PageBody_contactName": clean(doc.getElementById("ctl00_PageBody_contactName") && doc.getElementById("ctl00_PageBody_contactName").value),
+        "ctl00_PageBody_contactTelephone": clean(doc.getElementById("ctl00_PageBody_contactTelephone") && doc.getElementById("ctl00_PageBody_contactTelephone").value),
+        "ctl00_PageBody_JobReference": clean(doc.getElementById("ctl00_PageBody_JobReference") && doc.getElementById("ctl00_PageBody_JobReference").value)
+      },
+      selects: {
+        "ctl00_PageBody_state": state ? { value: state.value, text: state.selectedOptions && state.selectedOptions[0] ? state.selectedOptions[0].textContent : "" } : null,
+        "ctl00_PageBody_CountrySelector": country ? { value: country.value, text: country.selectedOptions && country.selectedOptions[0] ? country.selectedOptions[0].textContent : "" } : null
+      }
+    };
+  }
+
+  function captureAddressDraft() {
+    safeSessionSet(ADDRESS_DRAFT_KEY, JSON.stringify(addressDraftPayload()));
+  }
+
+  function restoreAddressDraft() {
+    var raw = safeSessionGet(ADDRESS_DRAFT_KEY);
+    if (!raw) return;
+    try {
+      var draft = JSON.parse(raw);
+      if (!draft || Date.now() - (draft.ts || 0) > 60 * 60 * 1000) return;
+      var current = win.location.pathname + win.location.search;
+      if (draft.url && draft.url !== current) return;
+      Object.keys(draft.values || {}).forEach(function (id) {
+        var input = doc.getElementById(id);
+        if (input && draft.values[id] && !clean(input.value)) setWebTrackValue(input, draft.values[id], true);
+      });
+      Object.keys(draft.selects || {}).forEach(function (id) {
+        var select = doc.getElementById(id);
+        var value = draft.selects[id];
+        if (select && value && !clean(select.value)) setSelectValue(select, value.value, value.text);
+      });
+    } catch (_) {}
+  }
+
+  function checkoutAddressPayload() {
+    var state = doc.getElementById("ctl00_PageBody_state");
+    var country = doc.getElementById("ctl00_PageBody_CountrySelector");
+    return {
+      ts: Date.now(),
+      line1: clean(doc.getElementById("ctl00_PageBody_addressLine1") && doc.getElementById("ctl00_PageBody_addressLine1").value),
+      line2: clean(doc.getElementById("ctl00_PageBody_addressLine2") && doc.getElementById("ctl00_PageBody_addressLine2").value),
+      line3: clean(doc.getElementById("ctl00_PageBody_addressLine3") && doc.getElementById("ctl00_PageBody_addressLine3").value),
+      city: clean(doc.getElementById("ctl00_PageBody_city") && doc.getElementById("ctl00_PageBody_city").value),
+      stateValue: state ? clean(state.value) : "",
+      stateText: state && state.selectedOptions && state.selectedOptions[0] ? clean(state.selectedOptions[0].textContent) : "",
+      zip: clean(doc.getElementById("ctl00_PageBody_zipCode") && doc.getElementById("ctl00_PageBody_zipCode").value),
+      countryValue: country ? clean(country.value) : "",
+      countryText: country && country.selectedOptions && country.selectedOptions[0] ? clean(country.selectedOptions[0].textContent) : "",
+      phone: clean(doc.getElementById("ctl00_PageBody_contactTelephone") && doc.getElementById("ctl00_PageBody_contactTelephone").value) ||
+        clean(doc.getElementById("ctl00_PageBody_telephone1") && doc.getElementById("ctl00_PageBody_telephone1").value),
+      email: clean(doc.getElementById("ctl00_PageBody_email") && doc.getElementById("ctl00_PageBody_email").value),
+      contactName: clean(doc.getElementById("ctl00_PageBody_contactName") && doc.getElementById("ctl00_PageBody_contactName").value)
+    };
+  }
+
+  function captureCheckoutAddressPayload() {
+    if (!safeSessionGet(RETURN_KEY) && !/[?&]from=checkout\b/i.test(win.location.search || "")) return;
+    safeSessionSet(CHECKOUT_ADDRESS_PAYLOAD_KEY, JSON.stringify(checkoutAddressPayload()));
+  }
+
+  function parseContactsFromHtml(html) {
+    var parsed = new DOMParser().parseFromString(html, "text/html");
+    var table = parsed.getElementById("ctl00_PageBody_ContactsGrid_ctl00");
+    if (!table) return [];
+    return Array.prototype.slice.call(table.querySelectorAll("tbody tr")).map(function (row) {
+      var cells = row.cells ? Array.prototype.slice.call(row.cells) : [];
+      var link = cells[1] && cells[1].querySelector("a[href*='ContactDetails']");
+      if (!link) return null;
+      var name = clean(link.textContent);
+      return {
+        displayName: name,
+        href: link.getAttribute("href") || "",
+        telephone: clean(cells[3] && cells[3].textContent),
+        email: clean(cells[5] && cells[5].textContent)
+      };
+    }).filter(Boolean);
+  }
+
+  function fetchContacts() {
+    if (!win.fetch || !win.DOMParser) return Promise.resolve([]);
+    return win.fetch("/Contacts_r.aspx", { credentials: "same-origin" })
+      .then(function (res) { return res.text(); })
+      .then(parseContactsFromHtml)
+      .catch(function () { return []; });
+  }
+
+  function applyContactPayload(payload) {
+    if (!payload) return false;
+    var name = clean(payload.displayName || [payload.firstName, payload.lastName].filter(Boolean).join(" "));
+    var phone = clean(payload.telephone || payload.mobile || payload.phone);
+    setWebTrackValue(doc.getElementById("ctl00_PageBody_contactName"), name, true);
+    setWebTrackValue(doc.getElementById("ctl00_PageBody_contactTelephone"), phone, true);
+    if (payload.email) setWebTrackValue(doc.getElementById("ctl00_PageBody_email"), payload.email, true);
+    return !!(name || phone || payload.email);
+  }
+
+  function applyReturnedContact() {
+    var raw = safeSessionGet(CONTACT_PAYLOAD_KEY);
+    if (!raw) return;
+    try {
+      var payload = JSON.parse(raw);
+      if (!payload || Date.now() - (payload.ts || 0) > 60 * 60 * 1000) return;
+      if (applyContactPayload(payload)) safeSessionRemove(CONTACT_PAYLOAD_KEY);
+    } catch (_) {}
+  }
+
+  function mountContactTools(formGrid) {
+    if (!formGrid || doc.getElementById("wl-address-contact-tools")) return;
+    var contactName = doc.getElementById("ctl00_PageBody_contactName");
+    var contactGroup = fieldGroup("ctl00_PageBody_contactName") || fieldGroup("ctl00_PageBody_contactTelephone");
+    if (!contactName || !contactGroup) return;
+
+    var tools = create("div", "wl-address-contact-tools");
+    tools.id = "wl-address-contact-tools";
+    var label = create("label", "", "Account contact");
+    label.setAttribute("for", "wl-address-contact-select");
+    tools.appendChild(label);
+
+    var select = create("select", "");
+    select.id = "wl-address-contact-select";
+    select.innerHTML = '<option value="">Choose saved contact</option>';
+    tools.appendChild(select);
+
+    var add = create("a", "wl-address-secondary");
+    add.href = "/ContactDetails_r.aspx?oid=0&action=1&from=address";
+    add.appendChild(icon("plus"));
+    add.appendChild(doc.createTextNode("Add contact"));
+    add.addEventListener("click", function () {
+      captureAddressDraft();
+      safeSessionSet(CONTACT_RETURN_KEY, win.location.pathname + win.location.search);
+    });
+    tools.appendChild(add);
+
+    contactGroup.insertAdjacentElement("beforebegin", tools);
+
+    fetchContacts().then(function (contacts) {
+      if (!contacts.length || !select.isConnected) return;
+      contacts.forEach(function (contact, index) {
+        var option = doc.createElement("option");
+        option.value = String(index);
+        option.textContent = [contact.displayName, contact.email || contact.telephone].filter(Boolean).join(" - ");
+        option.dataset.contact = JSON.stringify(contact);
+        select.appendChild(option);
+      });
+    });
+
+    select.addEventListener("change", function () {
+      var option = select.options[select.selectedIndex];
+      if (!option || !option.dataset.contact) return;
+      try { applyContactPayload(JSON.parse(option.dataset.contact)); } catch (_) {}
+    });
   }
 
   function run() {

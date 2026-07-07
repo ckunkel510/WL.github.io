@@ -112,6 +112,9 @@
   const SINGLE_PAGE_SESSION_KEY = "wl_checkout_single_page_preview";
   const AUTO_ADVANCE_KEY = "wl_checkout_auto_advance";
   const FULFILLMENT_INTENT_KEY = "wl_fulfillment_intent";
+  const CHECKOUT_ADDRESS_PAYLOAD_KEY = "wl_checkout_address_payload";
+  const CHECKOUT_CONTACT_PAYLOAD_KEY = "wl_checkout_contact_payload";
+  const CONTACT_RETURN_KEY = "wl_contact_return_path";
 
   function getFulfillmentIntent() {
     try {
@@ -130,6 +133,60 @@
       if (value) sessionStorage.setItem(FULFILLMENT_INTENT_KEY, value);
       else sessionStorage.removeItem(FULFILLMENT_INTENT_KEY);
     } catch {}
+  }
+
+  function cleanText(value) {
+    return String(value == null ? "" : value).replace(/\s+/g, " ").trim();
+  }
+
+  function splitDisplayName(value) {
+    const parts = cleanText(value).split(" ").filter(Boolean);
+    if (!parts.length) return { first: "", last: "" };
+    if (parts.length === 1) return { first: parts[0], last: "" };
+    return { first: parts.slice(0, -1).join(" "), last: parts[parts.length - 1] };
+  }
+
+  function setCheckoutValue(input, value, fireChange) {
+    if (!input) return;
+    const normalized = String(value == null ? "" : value);
+    input.value = normalized;
+    try { input.defaultValue = normalized; } catch {}
+
+    const stateInput = input.id ? document.getElementById(input.id + "_ClientState") : null;
+    if (stateInput) {
+      try {
+        const state = JSON.parse(stateInput.value || "{}");
+        state.valueAsString = normalized;
+        state.lastSetTextBoxValue = normalized;
+        state.validationText = normalized;
+        stateInput.value = JSON.stringify(state);
+      } catch {}
+    }
+
+    if (fireChange) {
+      try { input.dispatchEvent(new Event("input", { bubbles: true })); } catch {}
+      try { input.dispatchEvent(new Event("change", { bubbles: true })); } catch {}
+    }
+  }
+
+  function setCheckoutSelect(select, value, textValue) {
+    if (!select) return;
+    const normalizedValue = cleanText(value);
+    const normalizedText = cleanText(textValue || value).toLowerCase();
+    let matched = false;
+    Array.prototype.some.call(select.options || [], function (option) {
+      const optionValue = cleanText(option.value);
+      const optionText = cleanText(option.text || option.textContent);
+      if ((normalizedValue && optionValue.toLowerCase() === normalizedValue.toLowerCase()) ||
+          (normalizedText && optionText.toLowerCase() === normalizedText)) {
+        select.value = option.value;
+        matched = true;
+        return true;
+      }
+      return false;
+    });
+    if (!matched && normalizedValue) select.value = normalizedValue;
+    try { select.dispatchEvent(new Event("change", { bubbles: true })); } catch {}
   }
 
   function isShippingIntent() {
@@ -259,6 +316,22 @@
       }
       .checkout-wizard.wl-single-page .wl-checkout-address-action:hover,
       .checkout-wizard.wl-single-page .wl-checkout-address-action:focus{background:#f7f1f2;border-color:#6b0016;outline:none;}
+      .checkout-wizard.wl-single-page .wl-checkout-contact-tools{
+        display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px;margin:0 0 14px;padding:12px;
+        border:1px solid #d9dde2;border-left:4px solid #6b0016;border-radius:6px;background:#fafafa;
+      }
+      .checkout-wizard.wl-single-page .wl-checkout-contact-tools label{
+        display:block;width:100%;margin:0;color:#30353a;font-size:13px;font-weight:800;
+      }
+      .checkout-wizard.wl-single-page .wl-checkout-contact-tools select{
+        flex:1 1 260px;min-height:40px;padding:8px 10px;border:1px solid #b9c0c8;border-radius:6px;background:#fff;color:#20242a;font-size:15px;
+      }
+      .checkout-wizard.wl-single-page .wl-checkout-contact-action{
+        display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:8px 12px;
+        border:1px solid #aeb4ba;border-radius:6px;background:#fff;color:#6b0016!important;font-size:13px;font-weight:700;text-decoration:none!important;cursor:pointer;
+      }
+      .checkout-wizard.wl-single-page .wl-checkout-contact-action:hover,
+      .checkout-wizard.wl-single-page .wl-checkout-contact-action:focus{background:#f7f1f2;border-color:#6b0016;outline:none;}
       @media (max-width:991px){
         body.wl-checkout-active #MainLayoutRow{width:100%!important;max-width:none!important;margin:0!important;}
         body.wl-checkout-active #MainLayoutRow>.container-fluid{
@@ -297,6 +370,8 @@
         .checkout-wizard.wl-single-page .wl-smart-handoff-copy,.checkout-wizard.wl-single-page .wl-smart-handoff button{width:100%;min-width:0;}
         .checkout-wizard.wl-single-page .wl-checkout-address-tools{display:grid;grid-template-columns:1fr;}
         .checkout-wizard.wl-single-page .wl-checkout-address-action{width:100%;}
+        .checkout-wizard.wl-single-page .wl-checkout-contact-tools{display:grid;grid-template-columns:1fr;}
+        .checkout-wizard.wl-single-page .wl-checkout-contact-action{width:100%;}
       }
     `;
     document.head.appendChild(style);
@@ -419,6 +494,106 @@
   window.WLCheckout.getStep = getStep;
   window.WLCheckout.setReturnStep = setReturnStep;
   window.WLCheckout.TTL_MS = TTL_MS;
+
+  function readSessionJson(key) {
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || (parsed.ts && Date.now() - parsed.ts > 60 * 60 * 1000)) {
+        sessionStorage.removeItem(key);
+        return null;
+      }
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  function removeSessionKey(key) {
+    try { sessionStorage.removeItem(key); } catch {}
+  }
+
+  function applyCheckoutContactPayload(payload) {
+    if (!payload) return false;
+    const displayName = cleanText(payload.displayName || [payload.firstName, payload.lastName].filter(Boolean).join(" "));
+    const parts = splitDisplayName(displayName);
+    const first = cleanText(payload.firstName || parts.first);
+    const last = cleanText(payload.lastName || parts.last);
+    const phone = cleanText(payload.telephone || payload.mobile || payload.phone);
+
+    setCheckoutValue(document.getElementById("pickupPerson"), displayName, true);
+    setCheckoutValue(document.getElementById("ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox"), first, true);
+    setCheckoutValue(document.getElementById("ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox"), last, true);
+    setCheckoutValue(document.getElementById("ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox"), phone, true);
+    setCheckoutValue(document.getElementById("ctl00_PageBody_InvoiceAddress_ContactFirstNameTextBox"), first, true);
+    setCheckoutValue(document.getElementById("ctl00_PageBody_InvoiceAddress_ContactLastNameTextBox"), last, true);
+    setCheckoutValue(document.getElementById("ctl00_PageBody_InvoiceAddress_ContactTelephoneTextBox"), phone, true);
+    if (payload.email) setCheckoutValue(document.getElementById("ctl00_PageBody_InvoiceAddress_EmailAddressTextBox"), payload.email, true);
+    return !!(displayName || first || last || phone || payload.email);
+  }
+
+  function applyCheckoutAddressPayload(payload) {
+    if (!payload) return false;
+    setCheckoutValue(document.getElementById("ctl00_PageBody_DeliveryAddress_AddressLine1"), payload.line1, true);
+    setCheckoutValue(document.getElementById("ctl00_PageBody_DeliveryAddress_AddressLine2"), payload.line2, true);
+    setCheckoutValue(document.getElementById("ctl00_PageBody_DeliveryAddress_AddressLine3"), payload.line3, true);
+    setCheckoutValue(document.getElementById("ctl00_PageBody_DeliveryAddress_City"), payload.city, true);
+    setCheckoutValue(document.getElementById("ctl00_PageBody_DeliveryAddress_Postcode"), payload.zip, true);
+    setCheckoutValue(document.getElementById("ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox"), payload.phone, true);
+
+    const nameParts = splitDisplayName(payload.contactName || "");
+    setCheckoutValue(document.getElementById("ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox"), nameParts.first, true);
+    setCheckoutValue(document.getElementById("ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox"), nameParts.last, true);
+    if (payload.email) setCheckoutValue(document.getElementById("ctl00_PageBody_InvoiceAddress_EmailAddressTextBox"), payload.email, true);
+    setCheckoutSelect(document.getElementById("ctl00_PageBody_DeliveryAddress_CountySelector_CountyList"), payload.stateValue, payload.stateText);
+    setCheckoutSelect(document.getElementById("ctl00_PageBody_DeliveryAddress_CountrySelector"), payload.countryValue || "USA", payload.countryText || "United States");
+
+    try { sessionStorage.setItem("wl_returnStep", "3"); } catch {}
+    try { window.WLCheckout?.refreshSectionSummaries?.(); } catch {}
+    try { window.WLCheckout?.trySmartAdvance?.(); } catch {}
+    return !!(payload.line1 || payload.city || payload.zip || payload.phone || payload.contactName);
+  }
+
+  function consumeCheckoutReturnPayloads() {
+    const addressPayload = readSessionJson(CHECKOUT_ADDRESS_PAYLOAD_KEY);
+    if (applyCheckoutAddressPayload(addressPayload)) removeSessionKey(CHECKOUT_ADDRESS_PAYLOAD_KEY);
+
+    const contactPayload = readSessionJson(CHECKOUT_CONTACT_PAYLOAD_KEY);
+    if (applyCheckoutContactPayload(contactPayload)) removeSessionKey(CHECKOUT_CONTACT_PAYLOAD_KEY);
+  }
+
+  function parseCheckoutContacts(html) {
+    try {
+      const parsed = new DOMParser().parseFromString(html, "text/html");
+      const table = parsed.getElementById("ctl00_PageBody_ContactsGrid_ctl00");
+      if (!table) return [];
+      return Array.from(table.querySelectorAll("tbody tr")).map(function (row) {
+        const cells = Array.from(row.cells || []);
+        const link = cells[1]?.querySelector("a[href*='ContactDetails']");
+        if (!link) return null;
+        const displayName = cleanText(link.textContent);
+        const parts = splitDisplayName(displayName);
+        return {
+          displayName,
+          firstName: parts.first,
+          lastName: parts.last,
+          telephone: cleanText(cells[3]?.textContent),
+          email: cleanText(cells[5]?.textContent)
+        };
+      }).filter(Boolean);
+    } catch {
+      return [];
+    }
+  }
+
+  function fetchCheckoutContacts() {
+    if (!window.fetch || !window.DOMParser) return Promise.resolve([]);
+    return fetch("/Contacts_r.aspx", { credentials: "same-origin" })
+      .then((res) => res.text())
+      .then(parseCheckoutContacts)
+      .catch(() => []);
+  }
 
   // ---------------------------------------------------------------------------
   // 1) DOM Ready
@@ -2698,6 +2873,55 @@ document.addEventListener("click", function (ev) {
         } catch {}
       }
 
+      function mountPickupContactTools() {
+        const pickupPerson = pickupDiv.querySelector("#pickupPerson");
+        if (!pickupPerson || document.getElementById("wl-checkout-contact-tools")) return;
+
+        const tools = document.createElement("div");
+        tools.id = "wl-checkout-contact-tools";
+        tools.className = "wl-checkout-contact-tools";
+        tools.setAttribute("aria-label", "Saved contact actions");
+        tools.innerHTML = '<label for="wl-checkout-contact-select">Pickup contact</label><select id="wl-checkout-contact-select"><option value="">Choose saved contact</option></select>';
+
+        const addContact = document.createElement("a");
+        addContact.className = "wl-checkout-contact-action";
+        addContact.href = "/ContactDetails_r.aspx?oid=0&action=1&from=checkout";
+        addContact.innerHTML = '<i class="fas fa-user-plus" aria-hidden="true"></i><span>Add contact</span>';
+        addContact.addEventListener("click", function () {
+          try {
+            saveDateState();
+            sessionStorage.setItem(CONTACT_RETURN_KEY, "/ShoppingCart.aspx?wlCheckout=single&wlReturn=contact");
+          } catch {}
+        });
+        tools.appendChild(addContact);
+
+        pickupPerson.closest(".form-group")?.insertBefore(tools, pickupPerson.previousElementSibling || pickupPerson);
+
+        const select = tools.querySelector("#wl-checkout-contact-select");
+        fetchCheckoutContacts().then(function (contacts) {
+          if (!contacts.length || !select.isConnected) return;
+          contacts.forEach(function (contact, index) {
+            const option = document.createElement("option");
+            option.value = String(index);
+            option.textContent = [contact.displayName, contact.email || contact.telephone].filter(Boolean).join(" - ");
+            option.dataset.contact = JSON.stringify(contact);
+            select.appendChild(option);
+          });
+        });
+
+        select.addEventListener("change", function () {
+          const option = select.options[select.selectedIndex];
+          if (!option || !option.dataset.contact) return;
+          try {
+            if (applyCheckoutContactPayload(JSON.parse(option.dataset.contact))) {
+              saveDateState();
+              updateSpecial();
+              try { window.WLCheckout?.refreshSectionSummaries?.(); } catch {}
+            }
+          } catch {}
+        });
+      }
+
       pickupInput.setAttribute("min", isoToday);
       pickupInput.setAttribute("max", formatLocal(maxPickupD));
       deliveryInput.setAttribute("min", formatLocal(minDelD));
@@ -2972,6 +3196,8 @@ document.addEventListener("click", function (ev) {
       deliveryDiv.querySelectorAll('input[name="deliveryTime"]').forEach((node) => node.addEventListener("change", saveDateState, true));
 
       restoreDateState({ onlyBlank: true });
+      consumeCheckoutReturnPayloads();
+      mountPickupContactTools();
       onShip();
 
       // Expose refresh hooks so UpdatePanel partial postbacks can restore visibility/state.
@@ -3939,7 +4165,10 @@ document.addEventListener("click", function (ev) {
       add.href = "/AddressDetails.aspx?oid=0&action=1&from=checkout";
       add.innerHTML = '<i class="fas fa-plus" aria-hidden="true"></i><span>Add saved address</span>';
       add.addEventListener("click", function () {
-        try { sessionStorage.setItem("wl_address_return_path", "/ShoppingCart.aspx"); } catch {}
+        try {
+          window.WLCheckout?.saveCheckoutSnapshot?.();
+          sessionStorage.setItem("wl_address_return_path", "/ShoppingCart.aspx?wlCheckout=single&wlReturn=address");
+        } catch {}
       });
       tools.appendChild(add);
 

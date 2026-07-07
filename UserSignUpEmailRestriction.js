@@ -2,6 +2,7 @@
   'use strict';
 
   const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const REQUEST_PREFILL_KEY = 'wl_request_access_prefill_v1';
 
   function ready(callback) {
     if (document.readyState === 'loading') {
@@ -40,6 +41,21 @@
 
     if (fireInput) {
       try { input.dispatchEvent(new Event('input', { bubbles: true })); } catch (error) {}
+    }
+  }
+
+  function readRequestPrefill() {
+    try {
+      const raw = sessionStorage.getItem(REQUEST_PREFILL_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || (parsed.ts && Date.now() - parsed.ts > 60 * 60 * 1000)) {
+        sessionStorage.removeItem(REQUEST_PREFILL_KEY);
+        return null;
+      }
+      return parsed;
+    } catch (error) {
+      return null;
     }
   }
 
@@ -365,6 +381,22 @@
     const emailGroup = fieldGroup(email, '.epi-form-group-signup1');
     addFieldHelp(emailGroup, 'Your email address will also be your login name.', 'wl-request-email-help');
     bindEmailAsLogin(email, login, button, 'wl-request-email-error');
+
+    const prefill = readRequestPrefill();
+    if (prefill) {
+      const first = document.getElementById('ctl00_PageBody_FirstNameField');
+      const last = document.getElementById('ctl00_PageBody_LastNameField');
+      const phone = document.getElementById('ctl00_PageBody_RequestAccessContactNumber');
+      if (prefill.email) setWebTrackValue(email, String(prefill.email || '').trim().toLowerCase(), true);
+      if (prefill.email) setWebTrackValue(login, String(prefill.email || '').trim().toLowerCase(), true);
+      if (prefill.firstName) setWebTrackValue(first, prefill.firstName, true);
+      if (prefill.lastName) setWebTrackValue(last, prefill.lastName, true);
+      if (prefill.phone) setWebTrackValue(phone, prefill.phone, true);
+      const notice = document.createElement('div');
+      notice.className = 'wl-auth-notice';
+      notice.textContent = 'Contact details were filled from the account contact. Review the account information, then submit the access request.';
+      intro.insertAdjacentElement('afterend', notice);
+    }
 
     const nav = document.createElement('div');
     nav.className = 'wl-request-nav';
