@@ -32,6 +32,34 @@ function startSavedForLater() {
     try { storage.removeItem(key); } catch (e) {}
   }
 
+  function getDetailUrlStorageKeys() {
+    const legacyKey = SFL_DETAIL_URL_KEY;
+    const userKey = wlUserId ? `${SFL_DETAIL_URL_KEY}:${wlUserId}` : null;
+    return userKey ? [userKey, legacyKey] : [legacyKey];
+  }
+
+  function readCachedDetailUrl() {
+    for (const key of getDetailUrlStorageKeys()) {
+      const value = readStorage(key, sessionStorage) || readStorage(key, localStorage);
+      if (value) return value;
+    }
+    return null;
+  }
+
+  function writeCachedDetailUrl(url) {
+    getDetailUrlStorageKeys().forEach((key) => {
+      writeStorage(key, url, sessionStorage);
+      writeStorage(key, url, localStorage);
+    });
+  }
+
+  function clearCachedDetailUrl() {
+    getDetailUrlStorageKeys().forEach((key) => {
+      removeStorage(key, sessionStorage);
+      removeStorage(key, localStorage);
+    });
+  }
+
   let sflImageCache = {};
   try { sflImageCache = JSON.parse(localStorage.getItem(SFL_IMAGE_CACHE_KEY) || "{}") || {}; } catch (e) {}
 
@@ -211,10 +239,10 @@ if (insertAnchor && insertAnchor.parentNode) {
   // --------- Step 2: Resolve detail URL for SFL
   async function ensureSflDetailUrl() {
   console.log("[SFL] Locating Saved For Later Quicklist via Quicklists_R.aspx...");
-  const cachedUrl = readStorage(SFL_DETAIL_URL_KEY, sessionStorage) || readStorage(SFL_DETAIL_URL_KEY, localStorage);
+  const cachedUrl = readCachedDetailUrl();
   if (cachedUrl) {
     console.log("[SFL] Using cached Saved For Later detail URL:", cachedUrl);
-    writeStorage(SFL_DETAIL_URL_KEY, cachedUrl, sessionStorage);
+    writeCachedDetailUrl(cachedUrl);
     return cachedUrl;
   }
 
@@ -222,40 +250,54 @@ if (insertAnchor && insertAnchor.parentNode) {
   if (found.exists && found.detailUrl) {
     console.log("[SFL] Found valid Quicklist detail URL:", found.detailUrl);
     const fixedUrl = found.detailUrl.replace("QuicklistDetails.aspx", "Quicklists_R.aspx");
-writeStorage(SFL_DETAIL_URL_KEY, fixedUrl, sessionStorage);
-writeStorage(SFL_DETAIL_URL_KEY, fixedUrl, localStorage);
-console.log("[SFL] Saved corrected detail URL:", fixedUrl);
+    writeCachedDetailUrl(fixedUrl);
+    console.log("[SFL] Saved corrected detail URL:", fixedUrl);
 
     return fixedUrl;
   }
 
   console.log("[SFL] Not found, creating new Saved For Later list...");
   const createdUrl = await createSavedForLaterList();
-  writeStorage(SFL_DETAIL_URL_KEY, createdUrl, sessionStorage);
-  writeStorage(SFL_DETAIL_URL_KEY, createdUrl, localStorage);
+  writeCachedDetailUrl(createdUrl);
   return createdUrl;
 }
 
 
   // --------- Step 3: Load items
+ function findQuicklistProductTable(detailDoc) {
+  const tables = $all("table.rgMasterTable", detailDoc);
+
+  return tables.find((table) => {
+    const headerText = $all("th", table)
+      .map((th) => th.textContent.trim())
+      .join(" ")
+      .replace(/\s+/g, " ");
+    const hasProductHeaders =
+      /Product Code/i.test(headerText) &&
+      /Description/i.test(headerText) &&
+      /Price/i.test(headerText) &&
+      /Per/i.test(headerText);
+    const hasProductLinks = !!table.querySelector("a[href*='ProductDetail.aspx']");
+    const hasQuicklistDeleteButtons = !!table.querySelector("a[id*='DeleteQuicklistLineButtonX'], a[href*='DeleteQuicklistLineButtonX']");
+
+    return hasProductHeaders || (hasProductLinks && hasQuicklistDeleteButtons);
+  }) || null;
+}
+
+ function hasQuicklistProductTable(detailDoc) {
+  return !!findQuicklistProductTable(detailDoc);
+}
+
  function parseSflItems(detailDoc) {
   console.log("[SFL] Parsing Quicklist detail page...");
 
-  // Find the outer grid div (fallback to .RadGrid or .rgMasterTable)
-  let grid = detailDoc.querySelector(".RadGrid") || detailDoc.querySelector("table.rgMasterTable");
-  if (!grid) {
-    console.error("[SFL] Grid container not found");
-    return [];
-  }
-
-  // Ensure we have the actual table
-  let table = grid.tagName === "TABLE" ? grid : grid.querySelector("table.rgMasterTable");
+  let table = findQuicklistProductTable(detailDoc);
   if (!table) {
-    console.error("[SFL] .rgMasterTable not found inside grid container");
+    console.error("[SFL] Quicklist product table not found");
     return [];
   }
 
-  const rows = table.querySelectorAll("tr.rgRow, tr.rgAltRow");
+  const rows = $all("tr.rgRow, tr.rgAltRow", table).filter((tr) => tr.querySelector("a[href*='ProductDetail.aspx']"));
   console.log(`[SFL] Found ${rows.length} row(s) in Quicklist table`);
 
   const items = [];
@@ -311,18 +353,23 @@ console.log("[SFL] Saved corrected detail URL:", fixedUrl);
 
 
 
-  async function loadSflItems() {
+ async function loadSflItems() {
   const detailUrl = await ensureSflDetailUrl();
   try {
     const { doc } = await fetchHtml(detailUrl);
+    if (!hasQuicklistProductTable(doc)) {
+      throw new Error("Cached Saved For Later URL did not contain the product detail table.");
+    }
     const items = parseSflItems(doc);
     return { detailUrl, items, doc };
   } catch (error) {
     console.warn("[SFL] Cached Saved For Later URL failed; refreshing quicklist lookup.", error);
-    removeStorage(SFL_DETAIL_URL_KEY, sessionStorage);
-    removeStorage(SFL_DETAIL_URL_KEY, localStorage);
+    clearCachedDetailUrl();
     const refreshedUrl = await ensureSflDetailUrl();
     const { doc } = await fetchHtml(refreshedUrl);
+    if (!hasQuicklistProductTable(doc)) {
+      throw new Error("Saved For Later detail page did not contain the product detail table.");
+    }
     const items = parseSflItems(doc);
     return { detailUrl: refreshedUrl, items, doc };
   }
@@ -740,19 +787,39 @@ for (const tr of rows) {
     if (sflLoading) sflLoading.style.display = "block";
 
     // Reload the detail list the same way Phase 1 did
-    const detailUrl = sessionStorage.getItem("sfl_detail_url") || localStorage.getItem("sfl_detail_url");
+    const userId = localStorage.getItem("wl_user_id");
+    const keys = userId ? [`sfl_detail_url:${userId}`, "sfl_detail_url"] : ["sfl_detail_url"];
+    let detailUrl = null;
+    for (const key of keys) {
+      detailUrl = sessionStorage.getItem(key) || localStorage.getItem(key);
+      if (detailUrl) break;
+    }
     if (!detailUrl) {
       location.reload();
       return;
     }
     const { text, doc } = await fetchHtml(detailUrl);
     const parse = (root) => {
-      const grid = root.querySelector("#ctl00_PageBody_ctl01_QuicklistDetailGrid");
-      if (!grid) return [];
-      const table = grid.querySelector("table.rgMasterTable");
+      const tables = Array.from(root.querySelectorAll("table.rgMasterTable"));
+      const table = tables.find((candidate) => {
+        const headerText = Array.from(candidate.querySelectorAll("th"))
+          .map((th) => th.textContent.trim())
+          .join(" ")
+          .replace(/\s+/g, " ");
+        const hasProductHeaders =
+          /Product Code/i.test(headerText) &&
+          /Description/i.test(headerText) &&
+          /Price/i.test(headerText) &&
+          /Per/i.test(headerText);
+        const hasProductLinks = !!candidate.querySelector("a[href*='ProductDetail.aspx']");
+        const hasQuicklistDeleteButtons = !!candidate.querySelector("a[id*='DeleteQuicklistLineButtonX'], a[href*='DeleteQuicklistLineButtonX']");
+
+        return hasProductHeaders || (hasProductLinks && hasQuicklistDeleteButtons);
+      });
       if (!table) return [];
       const items = [];
-      table.querySelectorAll("tbody > tr").forEach(tr => {
+      table.querySelectorAll("tbody > tr.rgRow, tbody > tr.rgAltRow").forEach(tr => {
+        if (!tr.querySelector("a[href*='ProductDetail.aspx']")) return;
         const tds = tr.querySelectorAll("td");
         if (tds.length < 5) return;
         const a = tds[0].querySelector("a[href*='ProductDetail.aspx']");
@@ -1071,11 +1138,6 @@ if (document.readyState === "loading") {
   startSavedForLater();
 }
 })();                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
-
-
-
-
-
 
 
 
