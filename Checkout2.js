@@ -3688,6 +3688,7 @@ document.addEventListener("click", function (ev) {
               try {
                 setFulfillmentIntent(mode);
                 sessionStorage.setItem("wl_fulfillment_method", mode);
+                localStorage.setItem("woodson_cart_method", mode);
               } catch {}
             }
             if (!silent && hasSelection && wlRequestEpalletCartSync(mode)) return;
