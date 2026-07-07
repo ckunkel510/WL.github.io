@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20260707-epallet-sync-1";
+  window.WL_CHECKOUT_BUILD = "20260707-epallet-sync-2";
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
   const UPS_SHIPPING_ENABLED = true;
@@ -3750,6 +3750,12 @@ document.addEventListener("click", function (ev) {
 
           updateAddressAwareOptions();
           updateShippingStyles(getFulfillmentIntent(), { silent: true });
+          window.setTimeout(function () {
+            try {
+              const mode = getSaleType() || getFulfillmentIntent();
+              if (mode) wlRequestEpalletCartSync(mode);
+            } catch {}
+          }, 700);
 
           $(document).on("click", ".modern-shipping-selector button", function () {
             updateShippingStyles($(this).data("mode"));
