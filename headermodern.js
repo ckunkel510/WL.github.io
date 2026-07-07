@@ -1,6 +1,8 @@
 (function () {
   "use strict";
 
+  window.WL_HEADER_BUILD = "20260707-checkout-submit-rescue";
+
   var LOG = "[WL HeaderEnhancer]";
   var DEBUG = false; // Set to true only when actively troubleshooting.
   var LOCATIONS_URL = "/Default.aspx?view=storelocations";
@@ -26,6 +28,50 @@
       fn();
     }
   }
+
+  function installCheckoutSubmitRescue() {
+    if (!/ShoppingCart\.aspx/i.test(location.pathname || "")) return;
+
+    document.addEventListener("click", function (event) {
+      var proxy = event.target && event.target.closest ? event.target.closest(".wl-proxy-continue") : null;
+      if (!proxy) return;
+      if (window.WL_CHECKOUT_BUILD) return;
+      if (typeof window.WebForm_DoPostBackWithOptions === "function" && typeof window.WebForm_PostBackOptions === "function") return;
+
+      var native = document.getElementById("ctl00_PageBody_ContinueButton2") ||
+        document.getElementById("ctl00_PageBody_ContinueButton1");
+      var form = native && (native.form || native.closest("form") || document.querySelector("form"));
+      if (!native || !form) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+
+      try {
+        if (window.WLCheckout && typeof window.WLCheckout.validateBeforeFinalSubmit === "function" && !window.WLCheckout.validateBeforeFinalSubmit()) {
+          return;
+        }
+      } catch (_) {}
+
+      try {
+        var uniqueName = native.getAttribute("name");
+        if (uniqueName) {
+          var marker = document.createElement("input");
+          marker.type = "hidden";
+          marker.name = uniqueName;
+          marker.value = native.value || "Continue";
+          form.appendChild(marker);
+        }
+        if (typeof HTMLFormElement !== "undefined" && HTMLFormElement.prototype.submit) {
+          HTMLFormElement.prototype.submit.call(form);
+        } else {
+          form.submit();
+        }
+      } catch (_) {}
+    }, true);
+  }
+
+  installCheckoutSubmitRescue();
 
   function loadAnalytics() {
     if (window.WLAnalytics || document.querySelector("script[data-wl-analytics]")) return;
