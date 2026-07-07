@@ -10,7 +10,7 @@
   const CART_SUBTOTAL_KEY = 'wl_cart_subtotal_v1';
   const QUOTE_TTL_MS = 4 * 60 * 60 * 1000;
   const UPS_RATE_URL = 'https://wl-upsrates.vercel.app/api/ups-rates';
-  const SHIPPING_PROMO_SCRIPT_URL = 'https://ckunkel510.github.io/WL.github.io/UpsShippingPromo.js?v=20260707-bridge-1';
+  const SHIPPING_PROMO_SCRIPT_URL = 'https://ckunkel510.github.io/WL.github.io/UpsShippingPromo.js?v=20260707-bridge-2';
   const STORE_ORIGINS = {
     brenham: { name: 'Brenham', city: 'Brenham', state: 'TX', postalCode: '77833' },
     bryan: { name: 'Bryan', city: 'Bryan', state: 'TX', postalCode: '77803' },

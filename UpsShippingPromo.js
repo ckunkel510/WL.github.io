@@ -2,14 +2,14 @@
   "use strict";
 
   if (!/ShoppingCart\.aspx/i.test(window.location.pathname || "")) return;
-  if (window.WLShippingPromo && window.WLShippingPromo.version === "20260707-bridge-1") return;
+  if (window.WLShippingPromo && window.WLShippingPromo.version === "20260707-bridge-2") return;
 
   var STORAGE_KEY = "wl_shipping_promo_v1";
   var EVENT_NAME = "wl:shipping-promo-change";
   var PROMO_CODE = "SUMMERCHILL26";
   var DISPLAY_CODE = "SummerChill26";
   var PRODUCT_DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSg6EOqMwc_5UjWU7ycyvF-rgj717p-WjV2Vhydcb7uc2Mf2Awj6GehQp66AHwViq4uX6mXXrtZZR-1/pub?output=csv";
-  var PROMO_SESSION_URL = "https://wl-upsrates.vercel.app/api/shipping-promo-session";
+  var PROMO_SESSION_URL = "https://wl-upsrates.vercel.app/api/rate?promoSession=1";
   var PRODUCT_DATA_CACHE = null;
 
   var ELIGIBLE_PRODUCTS = [
@@ -500,7 +500,7 @@
     registerSession: registerPromoSession,
     storageKey: STORAGE_KEY,
     toRatePayload: promoPayload,
-    version: "20260707-bridge-1"
+    version: "20260707-bridge-2"
   };
 
   document.addEventListener("wl:fulfillment-change", schedulePromoSessionRegistration);

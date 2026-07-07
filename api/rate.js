@@ -4,8 +4,8 @@ const crypto = require("node:crypto");
 const { XMLParser } = require("fast-xml-parser");
 const zipcodes = require("zipcodes");
 const { RequestError, requestRates } = require("./ups-rates")._internal;
-const { applyFreeGroundPromotion } = require("./shipping-promotions");
-const { findPromoClaim } = require("./shipping-promo-sessions");
+const { applyFreeGroundPromotion, cartHasEligibleProduct, promoCodeMatches } = require("./shipping-promotions");
+const { findPromoClaim, storePromoClaim } = require("./shipping-promo-sessions");
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -13,6 +13,12 @@ const parser = new XMLParser({
   parseTagValue: false,
   trimValues: true
 });
+
+const DEFAULT_ORIGINS = [
+  "https://webtrack.woodsonlumber.com",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000"
+];
 
 function asArray(value) {
   if (value === undefined || value === null) return [];
@@ -38,6 +44,42 @@ function safeEqual(left, right) {
   const a = Buffer.from(String(left || ""));
   const b = Buffer.from(String(right || ""));
   return a.length === b.length && a.length > 0 && crypto.timingSafeEqual(a, b);
+}
+
+function allowedOrigins() {
+  const configured = String(process.env.UPS_ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return new Set(configured.length ? configured : DEFAULT_ORIGINS);
+}
+
+function applyCors(req, res) {
+  const origin = String(req.headers.origin || "");
+  if (!origin) {
+    return process.env.VERCEL_ENV !== "production" || process.env.UPS_ALLOW_NO_ORIGIN === "true";
+  }
+  if (allowedOrigins().has(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  }
+  return allowedOrigins().has(origin);
+}
+
+function sendJson(res, status, payload) {
+  res.statusCode = status;
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+  res.end(JSON.stringify(payload));
+}
+
+function isPromoSessionRequest(req) {
+  let params = null;
+  try { params = new URL(req.url || "/", "https://woodson.local").searchParams; } catch {}
+  const contentType = String(req.headers["content-type"] || "");
+  return params?.get("promoSession") === "1" || /\bapplication\/json\b/i.test(contentType);
 }
 
 function findNode(root, names, depth = 0) {
@@ -337,7 +379,40 @@ async function readBody(req) {
   return Buffer.concat(chunks).toString("utf8");
 }
 
+async function handlePromoSession(req, res) {
+  if (!applyCors(req, res)) return sendJson(res, 403, { error: "Origin is not allowed." });
+  if (req.method === "OPTIONS") {
+    res.statusCode = 204;
+    return res.end();
+  }
+  if (req.method !== "POST") return sendJson(res, 405, { error: "Method not allowed." });
+
+  try {
+    const body = req.body && typeof req.body === "object" && !Buffer.isBuffer(req.body)
+      ? req.body
+      : JSON.parse(await readBody(req) || "{}");
+    const cart = Array.isArray(body.cart) ? body.cart : [];
+    if (!promoCodeMatches(body.code)) throw new RequestError(400, "Promo code was not recognized.");
+    if (!cartHasEligibleProduct(cart)) throw new RequestError(400, "This promo is not available for the current cart.");
+    const stored = await storePromoClaim({
+      code: body.code,
+      eligible: true,
+      cart,
+      cartSignature: body.cartSignature,
+      shipTo: body.shipTo,
+      packages: body.packages
+    });
+    if (!stored.ok) throw new RequestError(400, "Promo can be saved after a shipping address is available.");
+    return sendJson(res, 200, { ok: true, ...stored });
+  } catch (error) {
+    const status = error instanceof RequestError ? error.status : 500;
+    const message = error instanceof Error ? error.message : "Shipping promo could not be saved.";
+    return sendJson(res, status, { error: message });
+  }
+}
+
 async function handler(req, res) {
+  if (isPromoSessionRequest(req)) return handlePromoSession(req, res);
   if (req.method !== "POST") return sendXml(res, 405, errorXml(new RequestError(405, "POST is required.")));
 
   let isSoap = false;
