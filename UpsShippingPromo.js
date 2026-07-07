@@ -254,7 +254,6 @@
     if (!zip) return null;
     var products = await getProductData();
     var packages = buildPackages(items, products);
-    if (!packages.length) return null;
     return {
       code: stored.code,
       cart: items,

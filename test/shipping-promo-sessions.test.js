@@ -62,6 +62,26 @@ test("stores and finds a short-lived promo claim by shipping fingerprint", async
   assert.equal(found.cartSignature, "282948:TB-ORIG-G3-TAN:1");
 });
 
+test("stores and finds a ZIP-only promo claim when product weights are unavailable", async () => {
+  const stored = await storePromoClaim({
+    code: "SummerChill26",
+    eligible: true,
+    cartSignature: "282948:TB-ORIG-G3-TAN:1",
+    cart: [{ productId: "282948", productCode: "TB-ORIG-G3-TAN", quantity: 1 }],
+    shipTo: { postalCode: "77833" },
+    packages: []
+  });
+  const found = await findPromoClaim({
+    shipTo: { postalCode: "77833" },
+    packages: [{ weight: 9.4 }]
+  });
+
+  assert.equal(stored.ok, true);
+  assert.equal(stored.fingerprint, "77833");
+  assert.equal(found.code, "SummerChill26");
+  assert.equal(found.eligible, true);
+});
+
 test("matches a stored promo claim when WebTrack sends a slightly different UPS package weight", () => {
   const claim = {
     eligible: true,

@@ -86,8 +86,10 @@ function memorySweep() {
 }
 
 async function storePromoClaim(input) {
-  const fingerprint = promoFingerprint(input);
-  if (!fingerprint) return { ok: false, reason: "missing-fingerprint" };
+  const exactFingerprint = promoFingerprint(input);
+  const postalKey = promoPostalKey(input);
+  if (!exactFingerprint && !postalKey) return { ok: false, reason: "missing-fingerprint" };
+  const fingerprint = exactFingerprint || postalKey.replace(/^wl:shipping-promo-postal:/, "");
 
   const claim = {
     code: cleanText(input.code, 40),
@@ -99,19 +101,17 @@ async function storePromoClaim(input) {
     createdAt: Date.now(),
     expiresAt: Date.now() + (CLAIM_TTL_SECONDS * 1000)
   };
-  const key = "wl:shipping-promo:" + fingerprint;
+  const key = exactFingerprint ? "wl:shipping-promo:" + exactFingerprint : "";
 
   const redis = getRedis();
   if (redis) {
-    await redis.set(key, claim, { ex: CLAIM_TTL_SECONDS });
-    const postalKey = promoPostalKey(input);
+    if (key) await redis.set(key, claim, { ex: CLAIM_TTL_SECONDS });
     if (postalKey) await redis.set(postalKey, claim, { ex: CLAIM_TTL_SECONDS });
     return { ok: true, storage: "redis", fingerprint, expiresAt: new Date(claim.expiresAt).toISOString() };
   }
 
   memorySweep();
-  memoryClaims.set(key, claim);
-  const postalKey = promoPostalKey(input);
+  if (key) memoryClaims.set(key, claim);
   if (postalKey) memoryClaims.set(postalKey, claim);
   return { ok: true, storage: "memory", fingerprint, expiresAt: new Date(claim.expiresAt).toISOString() };
 }
