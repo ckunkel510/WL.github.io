@@ -4,6 +4,7 @@ const crypto = require("node:crypto");
 const { XMLParser } = require("fast-xml-parser");
 const zipcodes = require("zipcodes");
 const { RequestError, requestRates } = require("./ups-rates")._internal;
+const { applyFreeGroundPromotion } = require("./shipping-promotions");
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -51,6 +52,21 @@ function findNode(root, names, depth = 0) {
     if (found !== undefined) return found;
   }
   return undefined;
+}
+
+function collectTextValues(root, depth = 0, result = []) {
+  if (root === undefined || root === null || depth > 12) return result;
+  if (typeof root !== "object") {
+    const value = text(root);
+    if (value) result.push(value);
+    return result;
+  }
+  if ("#text" in root) {
+    const value = text(root["#text"]);
+    if (value) result.push(value);
+  }
+  for (const value of Object.values(root)) collectTextValues(value, depth + 1, result);
+  return result;
 }
 
 function parseLegacyXml(raw) {
@@ -170,6 +186,25 @@ function toOAuthRequest(rating) {
       shipTo: addressFromLegacy(shipment.ShipTo),
       packages
     }
+  };
+}
+
+function legacyPromotionInput(req, rating) {
+  let params = null;
+  try { params = new URL(req.url || "/", "https://woodson.local").searchParams; } catch {}
+  const queryCode = params?.get("promoCode") || params?.get("promo") || params?.get("coupon") || "";
+  const queryEligible = /^(1|true|yes|y)$/i.test(params?.get("promoEligible") || params?.get("eligible") || "");
+  const nodeCode = text(
+    findNode(rating, ["PromotionCode", "PromoCode", "CouponCode", "DiscountCode", "ShippingPromoCode"])
+  );
+  const textValues = collectTextValues(rating);
+  const joined = textValues.join(" ");
+  const contextCode = (joined.match(/\bSummerChill26\b/i) || [])[0] || "";
+  const eligibleByContext = /\bWL_PROMO_ELIGIBLE\b/i.test(joined) || /\bpromoEligible\s*[:=]\s*(?:1|true|yes)\b/i.test(joined);
+
+  return {
+    code: queryCode || nodeCode || contextCode,
+    eligible: queryEligible || eligibleByContext
   };
 }
 
@@ -311,7 +346,9 @@ async function handler(req, res) {
     const { access, rating } = parseLegacyXml(raw);
     authenticate(access);
     const translated = toOAuthRequest(rating);
-    const result = await requestRates(translated.body);
+    const rated = await requestRates(translated.body);
+    const promoInput = legacyPromotionInput(req, rating);
+    const { result } = applyFreeGroundPromotion(rated, promoInput);
     return sendXml(res, 200, isSoap ? soapSuccessXml(result, translated.context) : successXml(result, translated.context));
   } catch (error) {
     return sendXml(res, 200, isSoap ? soapErrorXml(error) : errorXml(error));
@@ -319,4 +356,4 @@ async function handler(req, res) {
 }
 
 module.exports = handler;
-module.exports._test = { authenticate, errorXml, parseLegacyXml, soapSuccessXml, successXml, toOAuthRequest };
+module.exports._test = { authenticate, errorXml, legacyPromotionInput, parseLegacyXml, soapSuccessXml, successXml, toOAuthRequest };

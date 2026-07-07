@@ -153,6 +153,25 @@ document.addEventListener('DOMContentLoaded', function () {
 
 
 (function ($) {
+  var SHIPPING_PROMO_KEY = 'wl_shipping_promo_v1';
+
+  function readShippingPromo() {
+    try {
+      if (window.WLShippingPromo && typeof window.WLShippingPromo.toRatePayload === 'function') {
+        return window.WLShippingPromo.toRatePayload();
+      }
+      var raw = sessionStorage.getItem(SHIPPING_PROMO_KEY) || localStorage.getItem(SHIPPING_PROMO_KEY);
+      var parsed = raw ? JSON.parse(raw) : null;
+      return parsed && parsed.eligible === true && parsed.code ? parsed : null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function isGroundLabel(value) {
+    return /\b(?:ups\s*)?ground\b/i.test(String(value || ''));
+  }
+
   function initDeliveryWidget() {
     var $area = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas'),
         $opts = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList'),
@@ -229,12 +248,13 @@ document.addEventListener('DOMContentLoaded', function () {
       });
     }
 
-    function rememberShippingChoice(label, cost, days) {
+    function rememberShippingChoice(label, cost, days, promoApplied) {
       try {
         sessionStorage.setItem('wl_shipping_selection_v1', JSON.stringify({
           label: label,
           cost: cost,
           arrival: computeExpected(days),
+          promoApplied: !!promoApplied,
           ts: Date.now()
         }));
       } catch (e) {}
@@ -269,6 +289,8 @@ document.addEventListener('DOMContentLoaded', function () {
       '</div>'
     );
 
+    var activeShippingPromo = readShippingPromo();
+
     $opts.find('option').each(function () {
       const $o = $(this),
             txt = $o.text().trim(),
@@ -276,7 +298,8 @@ document.addEventListener('DOMContentLoaded', function () {
             extraMatch = txt.match(/\(([^)]+)\)/),
             extraRaw = extraMatch ? extraMatch[1] : '',
             extra = parseFloat(extraRaw.replace(/[^0-9\.-]/g, '')) || 0,
-            cost = $o.val() === '-1' ? standardCost : standardCost + extra,
+            promoApplied = fulfillmentMethod === 'ship' && activeShippingPromo && isGroundLabel(label || txt),
+            cost = promoApplied ? 0 : ($o.val() === '-1' ? standardCost : standardCost + extra),
             costLbl = '$' + cost.toFixed(2),
             days = /Next\s*Day/i.test(txt) ? 1 :
                    /2nd\s*Day/i.test(txt)  ? 2 :
@@ -291,7 +314,7 @@ document.addEventListener('DOMContentLoaded', function () {
         $btn.removeClass('btn-outline-primary').addClass('btn-primary');
         $expectedWidget.find('.shipping-speed-graphic').html(getArrowGraphic(speedLevel));
         $expectedWidget.find('.expected-by-text').text('Estimated arrival: ' + computeExpected(days));
-        rememberShippingChoice(label, costLbl, days);
+        rememberShippingChoice(label, costLbl, days, promoApplied);
       }
 
       $btn.on('click', function () {
@@ -302,7 +325,7 @@ document.addEventListener('DOMContentLoaded', function () {
         $btn.removeClass('btn-outline-primary').addClass('btn-primary');
         $expectedWidget.find('.shipping-speed-graphic').html(getArrowGraphic(speedLevel));
         $expectedWidget.find('.expected-by-text').text('Estimated arrival: ' + computeExpected(days));
-        rememberShippingChoice(label, costLbl, days);
+        rememberShippingChoice(label, costLbl, days, promoApplied);
       });
 
       $ship.find('.delivery-pills').append($btn);
@@ -313,6 +336,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   $(initDeliveryWidget);
+  document.addEventListener('wl:shipping-promo-change', initDeliveryWidget);
 
   if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
     Sys.WebForms.PageRequestManager.getInstance()

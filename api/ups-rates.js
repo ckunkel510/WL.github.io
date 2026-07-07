@@ -2,6 +2,7 @@
 
 const crypto = require("node:crypto");
 const zipcodes = require("zipcodes");
+const { applyFreeGroundPromotion } = require("./shipping-promotions");
 
 const DEFAULT_ORIGINS = [
   "https://webtrack.woodsonlumber.com",
@@ -310,7 +311,12 @@ async function handler(req, res) {
   try {
     enforceRateLimit(req);
     const body = req.body && typeof req.body === "object" ? req.body : JSON.parse(req.body || "{}");
-    const result = await requestRates(body);
+    const rated = await requestRates(body);
+    const promoInput = {
+      ...(body.promo && typeof body.promo === "object" ? body.promo : {}),
+      cart: body.cart || body.items || []
+    };
+    const { result } = applyFreeGroundPromotion(rated, promoInput);
     return sendJson(res, 200, result);
   } catch (error) {
     const status = error instanceof RequestError ? error.status : 500;

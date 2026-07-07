@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { parseLegacyXml, soapSuccessXml, successXml, toOAuthRequest } = require("../api/rate")._test;
+const { legacyPromotionInput, parseLegacyXml, soapSuccessXml, successXml, toOAuthRequest } = require("../api/rate")._test;
 
 const requestXml = `<?xml version="1.0"?>
 <AccessRequest>
@@ -100,6 +100,22 @@ test("returns legacy rated-shipment XML", () => {
   assert.match(xml, /<ResponseStatusCode>1<\/ResponseStatusCode>/);
   assert.match(xml, /<Code>03<\/Code>/);
   assert.match(xml, /<MonetaryValue>12\.34<\/MonetaryValue>/);
+});
+
+test("reads explicit shipping promo context from a legacy rate URL", () => {
+  const { rating } = parseLegacyXml(requestXml);
+  const promo = legacyPromotionInput({ url: "/api/rate?promoCode=SummerChill26&promoEligible=1" }, rating);
+
+  assert.equal(promo.code, "SummerChill26");
+  assert.equal(promo.eligible, true);
+});
+
+test("does not infer shipping promo eligibility from a normal legacy request", () => {
+  const { rating } = parseLegacyXml(requestXml);
+  const promo = legacyPromotionInput({ url: "/api/rate" }, rating);
+
+  assert.equal(promo.code, "");
+  assert.equal(promo.eligible, false);
 });
 
 test("returns a UPS Rate v1.1 SOAP response", () => {

@@ -5,6 +5,7 @@
 
   const CART_SIGNATURE_KEY = 'wl_cart_signature_v1';
   const SHIPPING_QUOTE_KEY = 'wl_shipping_quote_v1';
+  const SHIPPING_PROMO_KEY = 'wl_shipping_promo_v1';
   const AUTO_ADVANCE_KEY = 'wl_checkout_auto_advance';
   const CART_SUBTOTAL_KEY = 'wl_cart_subtotal_v1';
   const QUOTE_TTL_MS = 4 * 60 * 60 * 1000;
@@ -35,9 +36,7 @@
 
   function getCartRows() {
     return Array.from(document.querySelectorAll('.shopping-cart-item')).filter(function (row) {
-      return Array.from(row.querySelectorAll('a')).some(function (link) {
-        return /^\d{4,}$/.test(text(link.textContent));
-      });
+      return !!(getCartProductCodesForRow(row) || getCartProductIdForRow(row));
     });
   }
 
@@ -53,26 +52,45 @@
   function getCartItems() {
     return getCartRows().map(function (row) {
       const quantityInput = row.querySelector('input[id*="_qty_"]:not([id$="_ClientState"])');
+      const quantitySelect = row.querySelector('select.wl-qty-select');
+      const lockedQty = row.querySelector('.wl-qty-locked');
       return {
+        productId: getCartProductIdForRow(row),
         code: getCartProductCodesForRow(row),
-        quantity: Math.max(1, Number(quantityInput?.value) || 1)
+        productCode: getCartProductCodesForRow(row),
+        quantity: Math.max(1, Number(quantitySelect?.value || quantityInput?.value || lockedQty?.textContent) || 1)
       };
-    }).filter(function (item) { return item.code; });
+    }).filter(function (item) { return item.code || item.productId; });
   }
 
   function getCartSignature() {
     return getCartRows().map(function (row) {
       const code = getCartProductCodesForRow(row);
-      const qty = row.querySelector('input[id*="_qty_"]:not([id$="_ClientState"])')?.value || '';
+      const id = getCartProductIdForRow(row);
+      const qty = row.querySelector('select.wl-qty-select')?.value ||
+        row.querySelector('input[id*="_qty_"]:not([id$="_ClientState"])')?.value ||
+        row.querySelector('.wl-qty-locked')?.textContent ||
+        '';
       const totalMatch = text(row.innerText).match(/Total:\s*(\$[\d,]+(?:\.\d{2})?)/i);
-      return [code, qty, totalMatch ? totalMatch[1] : ''].join(':');
+      return [id, code, qty, totalMatch ? totalMatch[1] : ''].join(':');
     }).filter(Boolean).sort().join('|');
   }
 
-  function getCartProductCodesForRow(row) {
-    const link = Array.from(row.querySelectorAll('a')).find(function (candidate) {
-      return /^\d{4,}$/.test(text(candidate.textContent));
+  function getCartProductIdForRow(row) {
+    const link = Array.from(row.querySelectorAll('a[href*="ProductDetail.aspx"]')).find(function (candidate) {
+      return /[?&]pid=\d+/i.test(candidate.getAttribute('href') || '');
     });
+    const match = (link?.getAttribute('href') || '').match(/[?&]pid=(\d+)/i);
+    return match ? match[1] : '';
+  }
+
+  function getCartProductCodesForRow(row) {
+    const link = row.querySelector('.portalGridLink') ||
+      row.querySelector('.cart-item-card h6 a') ||
+      row.querySelector('h6 a[href*="ProductDetail.aspx"]') ||
+      Array.from(row.querySelectorAll('a[href*="ProductDetail.aspx"]')).find(function (candidate) {
+        return text(candidate.textContent);
+      });
     return link ? text(link.textContent).toUpperCase() : '';
   }
 
@@ -87,6 +105,20 @@
       if (!quote || !['local-delivery', 'ups'].includes(quote.kind) || quote.signature !== signature || !quote.amount) return null;
       if ((Date.now() - Number(quote.ts || 0)) > QUOTE_TTL_MS) return null;
       return quote;
+    } catch {
+      return null;
+    }
+  }
+
+  function readShippingPromo(signature) {
+    try {
+      const native = window.WLShippingPromo && typeof window.WLShippingPromo.toRatePayload === 'function'
+        ? window.WLShippingPromo.toRatePayload()
+        : null;
+      const stored = native || JSON.parse(sessionStorage.getItem(SHIPPING_PROMO_KEY) || localStorage.getItem(SHIPPING_PROMO_KEY) || 'null');
+      if (!stored || stored.eligible !== true || !stored.code) return null;
+      if (stored.cartSignature && signature && stored.cartSignature !== signature) return null;
+      return stored;
     } catch {
       return null;
     }
@@ -227,16 +259,21 @@
     };
   }
 
-  async function getUpsEstimate(userAddress, packageInfo) {
+  async function getUpsEstimate(userAddress, packageInfo, items, signature) {
     const origin = getSelectedStoreOrigin();
     if (!origin) throw new Error('The selected store could not be determined.');
+    const promo = readShippingPromo(signature);
     const response = await fetch(UPS_RATE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         shipFrom: origin,
         shipTo: { postalCode: userAddress.zip, country: 'US', residential: true },
-        packages: packageInfo.packages
+        packages: packageInfo.packages,
+        cart: items.map(function (item) {
+          return { productId: item.productId, productCode: item.productCode || item.code, quantity: item.quantity };
+        }),
+        promo: promo ? { code: promo.code, eligible: promo.eligible === true } : null
       })
     });
     const result = await response.json().catch(function () { return {}; });
@@ -245,10 +282,13 @@
       return candidate.serviceCode === '03';
     }) || (result.rates || [])[0];
     if (!rate || !Number.isFinite(Number(rate.amount))) throw new Error('UPS returned no eligible services.');
+    const promoApplied = result.promotion && result.promotion.applied && rate.serviceCode === result.promotion.serviceCode;
     return {
       label: rate.serviceName || 'UPS shipping',
       amount: '$' + Number(rate.amount).toFixed(2),
-      note: 'Estimated from ' + origin.name + ' to ZIP ' + userAddress.zip + '. Final rate is confirmed before payment.'
+      note: promoApplied
+        ? 'Shipping promo applied to UPS Ground. Final rate is confirmed before payment.'
+        : 'Estimated from ' + origin.name + ' to ZIP ' + userAddress.zip + '. Final rate is confirmed before payment.'
     };
   }
 
@@ -314,7 +354,7 @@
         };
       }
       try {
-        return await getUpsEstimate(userAddress, packageInfo);
+        return await getUpsEstimate(userAddress, packageInfo, items, signature);
       } catch (error) {
         console.warn('[WLCart] Could not calculate the UPS cart estimate.', error);
         return {
