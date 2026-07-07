@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20260707-submit-fallback-2";
+  window.WL_CHECKOUT_BUILD = "20260707-epallet-sync-1";
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
   const UPS_SHIPPING_ENABLED = true;
@@ -117,6 +117,9 @@
   const CHECKOUT_ADDRESS_PAYLOAD_KEY = "wl_checkout_address_payload";
   const CHECKOUT_CONTACT_PAYLOAD_KEY = "wl_checkout_contact_payload";
   const CONTACT_RETURN_KEY = "wl_contact_return_path";
+  const WL_EPALLET_SNAPSHOT_KEY = "wl_epallet_cart_snapshot_v1";
+  const WL_EPALLET_RETURN_KEY = "wl_epallet_checkout_return_v1";
+  const WL_EPALLET_DESIRED_MODE_KEY = "wl_epallet_desired_mode_v1";
 
   function getFulfillmentIntent() {
     try {
@@ -135,6 +138,70 @@
       if (value) sessionStorage.setItem(FULFILLMENT_INTENT_KEY, value);
       else sessionStorage.removeItem(FULFILLMENT_INTENT_KEY);
     } catch {}
+  }
+
+  function wlEpalletRuleMode(mode) {
+    return mode === "pickup" ? "pickup" : "delivery";
+  }
+
+  function wlReadEpalletSnapshot() {
+    try {
+      const raw = sessionStorage.getItem(WL_EPALLET_SNAPSHOT_KEY) || localStorage.getItem(WL_EPALLET_SNAPSHOT_KEY);
+      const snapshot = raw ? JSON.parse(raw) : null;
+      if (!snapshot || !snapshot.requiredByMode) return null;
+      if (Date.now() - Number(snapshot.ts || 0) > 45 * 60 * 1000) return null;
+      return snapshot;
+    } catch { return null; }
+  }
+
+  function wlEpalletNeedsCheckoutSync(mode) {
+    const snapshot = wlReadEpalletSnapshot();
+    if (!snapshot) return false;
+    const key = wlEpalletRuleMode(mode);
+    const required = Number(snapshot.requiredByMode[key] || 0);
+    const existing = Number(snapshot.existingQty || 0);
+    return required !== existing;
+  }
+
+  function wlShowEpalletSyncOverlay(mode) {
+    if (document.getElementById("wl-epallet-checkout-sync")) return;
+    const overlay = document.createElement("div");
+    overlay.id = "wl-epallet-checkout-sync";
+    overlay.setAttribute("role", "status");
+    overlay.setAttribute("aria-live", "polite");
+    overlay.style.cssText = "position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(255,255,255,.96);font-family:Arial,sans-serif;";
+    overlay.innerHTML = '<div style="width:min(100%,440px);padding:28px 24px;text-align:center;border:1px solid #d9dde2;border-radius:8px;background:#fff;box-shadow:0 10px 32px rgba(0,0,0,.12);">' +
+      '<div style="width:34px;height:34px;margin:0 auto 16px;border:4px solid #e4e4e4;border-top-color:#6b0016;border-radius:50%;animation:wl-epallet-spin .8s linear infinite;"></div>' +
+      '<h2 style="margin:0 0 8px;font-size:21px;color:#20242a;">Updating pallet handling</h2>' +
+      '<p style="margin:0;color:#5c6268;font-size:15px;">Keeping the refundable E-Pallet line matched to your ' + (mode === "pickup" ? "pickup" : "delivery") + ' choice.</p>' +
+      '</div>';
+    const style = document.createElement("style");
+    style.textContent = "@keyframes wl-epallet-spin{to{transform:rotate(360deg)}}";
+    document.head.appendChild(style);
+    document.body.appendChild(overlay);
+  }
+
+  function wlRequestEpalletCartSync(mode) {
+    if (!mode || !wlEpalletNeedsCheckoutSync(mode)) return false;
+    try {
+      sessionStorage.setItem(WL_EPALLET_RETURN_KEY, "1");
+      sessionStorage.setItem(WL_EPALLET_DESIRED_MODE_KEY, wlEpalletRuleMode(mode));
+      sessionStorage.setItem("wl_fulfillment_method", mode);
+      setFulfillmentIntent(mode);
+    } catch {}
+    wlShowEpalletSyncOverlay(mode);
+    const back = document.getElementById("ctl00_PageBody_BackToCartButton3") ||
+      document.getElementById("ctl00_PageBody_BackToCartButton2") ||
+      document.getElementById("ctl00_PageBody_BackToCartButton5");
+    if (back) {
+      try {
+        back.disabled = false;
+        back.click();
+        return true;
+      } catch {}
+    }
+    window.location.href = "/ShoppingCart.aspx?wlEpalletSync=1";
+    return true;
   }
 
   function cleanText(value) {
@@ -3623,6 +3690,7 @@ document.addEventListener("click", function (ev) {
                 sessionStorage.setItem("wl_fulfillment_method", mode);
               } catch {}
             }
+            if (!silent && hasSelection && wlRequestEpalletCartSync(mode)) return;
             updateAddressAwareOptions();
             // Keep underlying panels sane (does not trigger postback)
             if (hasSelection) {
@@ -3905,6 +3973,8 @@ document.addEventListener("click", function (ev) {
       const backToCartBtn = document.getElementById("ctl00_PageBody_BackToCartButton3");
 
       function resetWizardState() {
+        let isEpalletCartSync = false;
+        try { isEpalletCartSync = sessionStorage.getItem(WL_EPALLET_RETURN_KEY) === "1"; } catch {}
         setSameAsDelivery(false);
         try { localStorage.removeItem(STEP_KEY); } catch {}
         try {
@@ -3919,8 +3989,10 @@ document.addEventListener("click", function (ev) {
           sessionStorage.removeItem(WL_GUEST_KEY);
           sessionStorage.removeItem(WL_GUEST_AUTOFILL_KEY);
           sessionStorage.removeItem(WL_CHECKOUT_MODE_KEY);
-          sessionStorage.removeItem("wl_fulfillment_method");
-          sessionStorage.removeItem(FULFILLMENT_INTENT_KEY);
+          if (!isEpalletCartSync) {
+            sessionStorage.removeItem("wl_fulfillment_method");
+            sessionStorage.removeItem(FULFILLMENT_INTENT_KEY);
+          }
           sessionStorage.removeItem("wl_shipping_selection_v1");
         } catch {}
       }

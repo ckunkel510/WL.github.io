@@ -3,6 +3,9 @@ $(async function(){
   var WL_EPALLET_PID = "23297";
   var WL_EPALLET_ADD_URL = "/ProductDetail.aspx?pid=" + WL_EPALLET_PID;
   var WL_EPALLET_ACTION_KEY = "wl_epallet_last_action_v1";
+  var WL_EPALLET_SNAPSHOT_KEY = "wl_epallet_cart_snapshot_v1";
+  var WL_EPALLET_RETURN_KEY = "wl_epallet_checkout_return_v1";
+  var WL_EPALLET_DESIRED_MODE_KEY = "wl_epallet_desired_mode_v1";
   var WL_EPALLET_RULES = {
     22444: { code: "ASC", pickupMin: 10, palletQty: 42 },
     23379: { code: "4BSC", pickupMin: 10, palletQty: 30 },
@@ -45,6 +48,11 @@ $(async function(){
     113994: { code: "6CPCC", pickupMin: 10, palletQty: 52 },
     23828: { code: "GWTB", pickupMin: 20, palletQty: 144 }
   };
+  var WL_EPALLET_RULES_BY_CODE = {};
+  Object.keys(WL_EPALLET_RULES).forEach(function (pid) {
+    var rule = WL_EPALLET_RULES[pid];
+    WL_EPALLET_RULES_BY_CODE[String(rule.code || "").replace(/[^A-Z0-9]/gi, "").toUpperCase()] = rule;
+  });
 
   function wlEpalletText(value) {
     return String(value == null ? "" : value).replace(/\s+/g, " ").trim();
@@ -57,6 +65,11 @@ $(async function(){
 
   function wlEpalletCartMode() {
     var values = [];
+    try {
+      if (sessionStorage.getItem(WL_EPALLET_RETURN_KEY) === "1") {
+        values.push(sessionStorage.getItem(WL_EPALLET_DESIRED_MODE_KEY));
+      }
+    } catch (e) {}
     try { values.push(localStorage.getItem("woodson_cart_method")); } catch (e) {}
     try { values.push(sessionStorage.getItem("wl_fulfillment_method")); } catch (e) {}
     try { values.push(sessionStorage.getItem("wl_fulfillment_intent")); } catch (e) {}
@@ -97,6 +110,21 @@ $(async function(){
     return wlEpalletText($row.find(".portalGridLink").first().text() || $row.find("h6 a").first().text()).toUpperCase();
   }
 
+  function wlEpalletNormalizedCode($row) {
+    return wlEpalletLineCode($row).replace(/[^A-Z0-9]/g, "");
+  }
+
+  function wlEpalletRuleForRow($row) {
+    var pid = wlEpalletPidFromRow($row);
+    if (pid && WL_EPALLET_RULES[pid]) return WL_EPALLET_RULES[pid];
+    return WL_EPALLET_RULES_BY_CODE[wlEpalletNormalizedCode($row)] || null;
+  }
+
+  function wlEpalletIsEpalletRow($row) {
+    var normalizedCode = wlEpalletNormalizedCode($row);
+    return wlEpalletPidFromRow($row) === WL_EPALLET_PID || normalizedCode === "EPALLET" || normalizedCode === "EPALLETS";
+  }
+
   function wlEpalletRows() {
     return $(".shopping-cart-details .shopping-cart-item").filter(function () {
       var $row = $(this);
@@ -105,21 +133,50 @@ $(async function(){
   }
 
   function wlEpalletCalculateRequired(rows, mode) {
-    var quantitiesByPid = {};
+    var quantitiesByRule = {};
     rows.each(function () {
       var $row = $(this);
-      var pid = wlEpalletPidFromRow($row);
-      if (!pid || pid === WL_EPALLET_PID || !WL_EPALLET_RULES[pid]) return;
-      quantitiesByPid[pid] = (quantitiesByPid[pid] || 0) + wlEpalletLineQty($row);
+      if (wlEpalletIsEpalletRow($row)) return;
+      var rule = wlEpalletRuleForRow($row);
+      if (!rule) return;
+      var key = rule.code || wlEpalletPidFromRow($row) || wlEpalletNormalizedCode($row);
+      quantitiesByRule[key] = quantitiesByRule[key] || { rule: rule, qty: 0 };
+      quantitiesByRule[key].qty += wlEpalletLineQty($row);
     });
 
-    return Object.keys(quantitiesByPid).reduce(function (total, pid) {
-      var rule = WL_EPALLET_RULES[pid];
-      var qty = quantitiesByPid[pid];
+    return Object.keys(quantitiesByRule).reduce(function (total, key) {
+      var entry = quantitiesByRule[key];
+      var rule = entry.rule;
+      var qty = entry.qty;
       var required = mode === "delivery" ? qty > 0 : qty >= rule.pickupMin;
       if (!required) return total;
       return total + (rule.palletQty ? Math.ceil(qty / rule.palletQty) : 1);
     }, 0);
+  }
+
+  function wlEpalletExistingQty(rows) {
+    var qty = 0;
+    rows.filter(function () { return wlEpalletIsEpalletRow($(this)); }).each(function () {
+      qty += wlEpalletLineQty($(this));
+    });
+    return qty;
+  }
+
+  function wlEpalletSaveSnapshot(rows, mode) {
+    try {
+      var snapshot = {
+        ts: Date.now(),
+        mode: mode || wlEpalletCartMode(),
+        existingQty: wlEpalletExistingQty(rows),
+        requiredByMode: {
+          pickup: wlEpalletCalculateRequired(rows, "pickup"),
+          delivery: wlEpalletCalculateRequired(rows, "delivery")
+        }
+      };
+      var text = JSON.stringify(snapshot);
+      sessionStorage.setItem(WL_EPALLET_SNAPSHOT_KEY, text);
+      localStorage.setItem(WL_EPALLET_SNAPSHOT_KEY, text);
+    } catch (e) {}
   }
 
   function wlEpalletActionRecentlyTried(signature) {
@@ -143,6 +200,34 @@ $(async function(){
       borderLeft: "4px solid #6b0016",
       fontWeight: 700
     }).prependTo($target);
+  }
+
+  function wlEpalletMaybeReturnToCheckout(rows) {
+    var shouldReturn = false;
+    try { shouldReturn = sessionStorage.getItem(WL_EPALLET_RETURN_KEY) === "1"; } catch (e) {}
+    if (!shouldReturn) return;
+
+    var mode = wlEpalletCartMode();
+    var required = wlEpalletCalculateRequired(rows, mode);
+    var existingQty = wlEpalletExistingQty(rows);
+    if (required !== existingQty) {
+      try { sessionStorage.removeItem(WL_EPALLET_RETURN_KEY); } catch (e) {}
+      try { sessionStorage.removeItem(WL_EPALLET_DESIRED_MODE_KEY); } catch (e) {}
+      wlEpalletShowStatus("Please review the E-Pallet line before continuing checkout. The cart still needs a pallet handling adjustment.", true);
+      return;
+    }
+
+    wlEpalletShowStatus("Pallet handling is updated. Reopening checkout now.", false);
+    window.setTimeout(function () {
+      var $button = $("#ctl00_PageBody_PlaceOrderButton, [name='ctl00$PageBody$PlaceOrderButton']").first();
+      try { sessionStorage.removeItem(WL_EPALLET_RETURN_KEY); } catch (e) {}
+      try { sessionStorage.removeItem(WL_EPALLET_DESIRED_MODE_KEY); } catch (e) {}
+      if ($button.length) {
+        $button.trigger("click");
+      } else {
+        window.location.href = "/ShoppingCart.aspx";
+      }
+    }, 700);
   }
 
   function wlEpalletRunNativeLink($link) {
@@ -226,11 +311,10 @@ $(async function(){
     if (!rows.length) return false;
 
     var mode = wlEpalletCartMode();
+    wlEpalletSaveSnapshot(rows, mode);
     var required = wlEpalletCalculateRequired(rows, mode);
     var epalletRows = rows.filter(function () {
-      var $row = $(this);
-      var normalizedCode = wlEpalletLineCode($row).replace(/[^A-Z0-9]/g, "");
-      return wlEpalletPidFromRow($row) === WL_EPALLET_PID || normalizedCode === "EPALLET" || normalizedCode === "EPALLETS";
+      return wlEpalletIsEpalletRow($(this));
     });
     var existingQty = 0;
     epalletRows.each(function () { existingQty += wlEpalletLineQty($(this)); });
@@ -274,12 +358,16 @@ $(async function(){
       .qty-section{gap:8px;min-height:40px;}\
       .wl-native-qty-hidden{display:none!important;}\
       .wl-qty-label,.wl-qty-unit{font-size:13px;color:#555;white-space:nowrap;flex:0 0 auto;}\
-      .wl-qty-stepper{display:inline-grid;grid-template-columns:40px 46px 40px;height:40px;flex:0 0 auto;border:1px solid #b9bec5;border-radius:6px;overflow:hidden;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.06);}\
+      .wl-qty-control{display:inline-grid;grid-template-columns:40px minmax(74px,92px) 40px;height:40px;flex:0 0 auto;border:1px solid #b9bec5;border-radius:6px;overflow:hidden;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.06);}\
+      .wl-qty-control select{width:100%;height:40px;border:0;border-left:1px solid #d8dce1;border-right:1px solid #d8dce1;border-radius:0;background:#fff;color:#222;font-size:15px;font-weight:700;text-align:center;text-align-last:center;appearance:auto;}\
       .wl-qty-stepper button{width:40px;height:40px;padding:0;border:0;border-radius:0;background:#f2f4f6;color:#292d32;font-size:22px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation;}\
       .wl-qty-stepper button.wl-qty-increase{background:#6b0016;color:#fff;}\
       .wl-qty-stepper button:focus-visible{outline:3px solid rgba(107,0,22,.25);outline-offset:-3px;}\
       .wl-qty-stepper button:disabled{opacity:.42;cursor:default;}\
       .wl-qty-value{min-width:46px;height:40px;display:flex;align-items:center;justify-content:center;border-left:1px solid #d8dce1;border-right:1px solid #d8dce1;font-size:16px;font-weight:700;color:#222;font-variant-numeric:tabular-nums;background:#fff;}\
+      .wl-qty-locked{display:inline-flex;align-items:center;min-height:40px;padding:0 10px;border:1px solid #d9dde1;border-radius:6px;background:#f7f8f9;color:#25282c;font-size:13px;font-weight:700;}\
+      .wl-epallet-refund-note{margin:6px 0 0;color:#555;font-size:12px;line-height:1.35;}\
+      .wl-epallet-lock-note{margin-left:4px;color:#666;font-size:12px;line-height:1.3;}\
       @media (max-width:640px){\
         .cart-item-card .card-body>.d-flex.justify-content-between{display:grid!important;grid-template-columns:1fr;gap:10px;align-items:stretch!important;}\
         .cart-item-card .qty-section{width:100%;display:flex!important;flex-wrap:nowrap;justify-content:flex-start;align-items:center;}\
@@ -300,6 +388,7 @@ $(async function(){
     var code = $link.find('.portalGridLink').text().trim();
     var href = $link.attr('href');
     var $origQtyWrap = $item.find('span.RadInput').first();
+    var isEpalletCard = /[?&]pid=23297\b/i.test(href || '') || String(code || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === 'EPALLETS';
 
     // WebTrack can render responsive/helper cart rows that do not contain a
     // product. Skip those so we do not create ghost cards like "ea / Delete".
@@ -368,6 +457,7 @@ $(async function(){
             <div class="flex-grow-1 flex-shrink-1 ms-3">
               <h6 class="mb-1"><a href="${href}">${code}</a></h6>
               <p class="mb-1 small text-secondary text-wrap">${desc}</p>
+              ${isEpalletCard ? '<p class="wl-epallet-refund-note">Refundable when the pallet is returned in good condition.</p>' : ''}
             </div>
             <div class="flex-shrink-0 text-end">
               <span class="fw-bold">${priceText}</span>
@@ -394,7 +484,27 @@ $(async function(){
     var $qtyState = $qtyClone.find("input[type='hidden'][id$='_ClientState']");
     $qtySection.append($qtyClone);
 
-    if ($input.length) {
+    if ($input.length && isEpalletCard) {
+      var lockedQty = parseFloat($input.val());
+      if (!isFinite(lockedQty) || lockedQty <= 0) lockedQty = 1;
+      $qtyClone.addClass('wl-native-qty-hidden');
+      $input.attr({
+        type: 'hidden',
+        tabindex: '-1',
+        autocomplete: 'off',
+        'aria-hidden': 'true',
+        'data-wl-qty-native': '1',
+        'data-form-type': 'other',
+        'data-1p-ignore': 'true',
+        'data-lpignore': 'true'
+      });
+      $qtySection.append(
+        '<span class="wl-qty-label">Qty</span>',
+        '<span class="wl-qty-locked">' + lockedQty + '</span>',
+        '<span class="wl-qty-unit">ea</span>',
+        '<span class="wl-epallet-lock-note">Auto-managed</span>'
+      );
+    } else if ($input.length) {
       var currentQty = parseFloat($input.val());
       if (!isFinite(currentQty) || currentQty <= 0) currentQty = 1;
 
@@ -410,15 +520,30 @@ $(async function(){
         'data-lpignore': 'true'
       });
 
-      var $stepper = $('<div class="wl-qty-stepper" role="group" aria-label="Quantity"></div>');
+      function qtyChoices(value) {
+        var choices = [];
+        for (var i = 1; i <= 20; i += 1) choices.push(i);
+        for (var j = 25; j <= 100; j += 5) choices.push(j);
+        for (var k = 125; k <= 300; k += 25) choices.push(k);
+        for (var m = 350; m <= 1000; m += 50) choices.push(m);
+        if (choices.indexOf(value) === -1) choices.push(value);
+        return choices.sort(function (a, b) { return a - b; });
+      }
+
+      var $stepper = $('<div class="wl-qty-stepper wl-qty-control" role="group" aria-label="Quantity"></div>');
       var $decrease = $('<button type="button" class="wl-qty-decrease" aria-label="Decrease quantity"><span aria-hidden="true">&minus;</span></button>');
-      var $value = $('<span class="wl-qty-value" aria-live="polite" aria-atomic="true"></span>');
+      var $select = $('<select class="wl-qty-select" aria-label="Quantity"></select>');
       var $increase = $('<button type="button" class="wl-qty-increase" aria-label="Increase quantity"><span aria-hidden="true">+</span></button>');
       var busy = false;
 
       function renderQty() {
-        var text = String(currentQty);
-        $value.text(text).attr('aria-label', 'Quantity ' + text);
+        var choices = qtyChoices(currentQty);
+        $select.empty();
+        choices.forEach(function (choice) {
+          $('<option>', { value: String(choice), text: String(choice) }).appendTo($select);
+        });
+        $select.val(String(currentQty));
+        $select.prop('disabled', busy);
         $decrease.prop('disabled', busy || currentQty <= 1);
         $increase.prop('disabled', busy);
       }
@@ -437,9 +562,9 @@ $(async function(){
         }
       }
 
-      function changeQty(delta) {
+      function applyQty(next) {
         if (busy) return;
-        var next = Math.max(1, currentQty + delta);
+        next = Math.max(1, parseFloat(next) || 1);
         if (next === currentQty) return;
         currentQty = next;
         busy = true;
@@ -454,9 +579,14 @@ $(async function(){
         }
       }
 
+      function changeQty(delta) {
+        applyQty(currentQty + delta);
+      }
+
       $decrease.on('click', function(){ changeQty(-1); });
       $increase.on('click', function(){ changeQty(1); });
-      $stepper.append($decrease, $value, $increase);
+      $select.on('change', function(){ applyQty($(this).val()); });
+      $stepper.append($decrease, $select, $increase);
       $qtySection.append('<span class="wl-qty-label">Qty</span>', $stepper, '<span class="wl-qty-unit">ea</span>');
       syncWebTrackQty();
       renderQty();
@@ -465,12 +595,16 @@ $(async function(){
     }
 
     // 9) Attach the Delete link
-    $card.find('.action-block > div:nth-child(2)')
-         .append($delBtn);
+    if (!isEpalletCard) {
+      $card.find('.action-block > div:nth-child(2)')
+           .append($delBtn);
+    }
 
     // 10) Swap out the old row for our new card
     $item.empty().append($card);
   });
+
+  wlEpalletMaybeReturnToCheckout(wlEpalletRows());
 });
 
 

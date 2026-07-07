@@ -394,6 +394,7 @@ $(document).ready(async function () {
           <li>Pickup: added at ${rule.pickupMin}+ units.</li>
           <li>Delivery: added for any quantity.</li>
           <li>${palletLine}</li>
+          <li>The E-Pallet charge is refundable when the pallet is returned in good condition.</li>
         </ul>
       </div>
     `);
