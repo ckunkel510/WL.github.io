@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20260707-epallet-sync-2";
+  window.WL_CHECKOUT_BUILD = "20260709-outstate-ups-1";
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
   const UPS_SHIPPING_ENABLED = true;
@@ -3572,6 +3572,8 @@ document.addEventListener("click", function (ev) {
 .modern-shipping-selector button.wl-selected i{color:#fff !important;}
 .modern-shipping-selector button.wl-unselected{background-color:#f5f5f5 !important;color:#000 !important;border:1px solid #ccc !important;}
 .modern-shipping-selector button.wl-unselected i{color:#000 !important;}
+.wl-outstate-shipping-note{display:none;margin-top:10px;padding:10px 12px;border:1px solid #d9dde2;border-radius:8px;background:#f7f7f7;color:#25282c;font-size:13px;line-height:1.35;}
+.wl-outstate-shipping-note.wl-warning{border-color:#e6c15a;background:#fff8dc;color:#3b2b00;}
 .wl-step-li{display:flex;align-items:center;gap:10px;}
 .wl-step-icon{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;}
 .wl-step-icon svg{width:20px;height:20px;display:block;}
@@ -3627,47 +3629,194 @@ document.addEventListener("click", function (ev) {
             } catch {}
           })();
 
-          function selectedStateText(selector) {
-            const el = document.querySelector(selector);
+          const WL_STATE_NAMES = new Set([
+            "alabama", "alaska", "arizona", "arkansas", "california", "colorado", "connecticut", "delaware",
+            "districtofcolumbia", "florida", "georgia", "hawaii", "idaho", "illinois", "indiana", "iowa",
+            "kansas", "kentucky", "louisiana", "maine", "maryland", "massachusetts", "michigan", "minnesota",
+            "mississippi", "missouri", "montana", "nebraska", "nevada", "newhampshire", "newjersey",
+            "newmexico", "newyork", "northcarolina", "northdakota", "ohio", "oklahoma", "oregon",
+            "pennsylvania", "rhodeisland", "southcarolina", "southdakota", "tennessee", "utah", "vermont",
+            "virginia", "washington", "westvirginia", "wisconsin", "wyoming"
+          ]);
+          const WL_STATE_ABBRS = new Set([
+            "al", "ak", "az", "ar", "ca", "co", "ct", "de", "dc", "fl", "ga", "hi", "id", "il", "in",
+            "ia", "ks", "ky", "la", "me", "md", "ma", "mi", "mn", "ms", "mo", "mt", "ne", "nv", "nh",
+            "nj", "nm", "ny", "nc", "nd", "oh", "ok", "or", "pa", "ri", "sc", "sd", "tn", "ut", "vt",
+            "va", "wa", "wv", "wi", "wy"
+          ]);
+          let addressAwareTimer = null;
+          let addressAwareUpdating = false;
+
+          function cleanStateValue(value) {
+            return String(value || "").replace(/\s+/g, " ").trim();
+          }
+
+          function readStateCandidate(el) {
             if (!el) return "";
             const option = el.selectedOptions && el.selectedOptions[0] ? el.selectedOptions[0] : null;
-            return String((option && (option.text || option.textContent)) || el.value || "").trim().toLowerCase();
+            const values = [];
+            if (option) values.push(option.value, option.text, option.textContent);
+            values.push(el.value, el.getAttribute && el.getAttribute("value"), el.textContent);
+            return values.map(cleanStateValue).filter(Boolean).join(" ");
+          }
+
+          function normalizeStateRegion(value) {
+            const raw = cleanStateValue(value).toLowerCase();
+            if (!raw || /^\[?select/.test(raw) || raw === "0" || raw === "00") return "";
+            const compact = raw.replace(/[^a-z]/g, "");
+            const tokens = raw.split(/[^a-z]+/).filter(Boolean);
+            if (tokens.includes("tx") || tokens.includes("texas") || compact === "texas") return "texas";
+            if (tokens.some(function (token) { return WL_STATE_ABBRS.has(token); })) return "outside";
+            if (WL_STATE_NAMES.has(compact)) return "outside";
+            return "";
+          }
+
+          function collectAddressStateCandidates(kind) {
+            const prefix = kind === "invoice" ? "InvoiceAddress" : "DeliveryAddress";
+            const selectors = [
+              `#ctl00_PageBody_${prefix}_CountySelector_CountyList`,
+              `#ctl00_PageBody_${prefix}_StateSelector`,
+              `#ctl00_PageBody_${prefix}_State`,
+              `#ctl00_PageBody_${prefix}_StateTextBox`,
+              `#ctl00_PageBody_${prefix}_StateCountyTextBox`,
+              `#ctl00_PageBody_${prefix}_CountrySelector`,
+              `#ctl00_PageBody_${prefix}_CountrySelector1`,
+              `select[id*="${prefix}"][id*="State"]`,
+              `select[id*="${prefix}"][id*="County"]`,
+              `input[id*="${prefix}"][id*="State"]`,
+              `input[id*="${prefix}"][id*="County"]`,
+              `textarea[id*="${prefix}"][id*="State"]`,
+              `select[name*="${prefix}"][name*="State"]`,
+              `select[name*="${prefix}"][name*="County"]`,
+              `input[name*="${prefix}"][name*="State"]`,
+              `input[name*="${prefix}"][name*="County"]`
+            ];
+            const seen = new Set();
+            const candidates = [];
+            selectors.forEach(function (selector) {
+              try {
+                document.querySelectorAll(selector).forEach(function (el) {
+                  if (seen.has(el)) return;
+                  seen.add(el);
+                  candidates.push(readStateCandidate(el));
+                });
+              } catch {}
+            });
+            try {
+              document.querySelectorAll("select,input,textarea").forEach(function (el) {
+                const haystack = [
+                  el.id,
+                  el.name,
+                  el.getAttribute("aria-label"),
+                  el.getAttribute("placeholder"),
+                  el.getAttribute("data-val-required")
+                ].join(" ");
+                if (!new RegExp(prefix + "|CustomerAddress|AddressList|AddressSelector", "i").test(haystack)) return;
+                if (!/(state|county|address)/i.test(haystack)) return;
+                if (seen.has(el)) return;
+                seen.add(el);
+                candidates.push(readStateCandidate(el));
+              });
+            } catch {}
+            return candidates.filter(Boolean);
           }
 
           function addressRegion() {
-            const state = selectedStateText("#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList") ||
-              selectedStateText("#ctl00_PageBody_InvoiceAddress_CountySelector_CountyList");
-            if (!state || /^\[?select/.test(state) || state === "0" || state === "00") return "unknown";
-            return state === "tx" || state === "texas" ? "texas" : "outside";
+            const candidates = collectAddressStateCandidates("delivery").concat(collectAddressStateCandidates("invoice"));
+            for (const candidate of candidates) {
+              const region = normalizeStateRegion(candidate);
+              if (region) return region;
+            }
+            return "unknown";
+          }
+
+          function showOutOfStateMessage(message, tone) {
+            const selector = document.querySelector(".modern-shipping-selector");
+            if (!selector) return;
+            let note = document.getElementById("wl-outstate-shipping-note");
+            if (!note) {
+              note = document.createElement("div");
+              note.id = "wl-outstate-shipping-note";
+              note.className = "wl-outstate-shipping-note";
+              selector.insertAdjacentElement("afterend", note);
+            }
+            if (!message) {
+              note.style.display = "none";
+              note.textContent = "";
+              return;
+            }
+            note.className = "wl-outstate-shipping-note" + (tone === "warning" ? " wl-warning" : "");
+            note.textContent = message;
+            note.style.display = "block";
+          }
+
+          function scheduleAddressAwareOptions() {
+            try { window.clearTimeout(addressAwareTimer); } catch {}
+            addressAwareTimer = window.setTimeout(updateAddressAwareOptions, 80);
+          }
+
+          function shouldRefreshAddressRegion(target) {
+            if (!target) return false;
+            const haystack = [
+              target.id,
+              target.name,
+              target.getAttribute && target.getAttribute("aria-label"),
+              target.getAttribute && target.getAttribute("placeholder"),
+              target.className
+            ].join(" ");
+            return /(DeliveryAddress|InvoiceAddress|CustomerAddress|AddressSelector|AddressList|State|County|Postcode|Postal|Zip)/i.test(haystack);
           }
 
           function updateAddressAwareOptions() {
+            if (addressAwareUpdating) return;
+            addressAwareUpdating = true;
             const region = addressRegion();
             const $delivery = $("#btnDelivered");
             const $ship = $("#btnShip");
             const $deliveryTag = $delivery.find("[data-wl-delivery-tag]");
             const $shipTag = $ship.find("[data-wl-ship-tag]");
 
-            if (region === "outside") {
-              $delivery.hide();
-              $shipTag.text("Recommended for your address");
-              const intent = getFulfillmentIntent();
-              if (!intent || intent === "delivery") {
-                setFulfillmentIntent("ship");
-                try { sessionStorage.setItem("wl_fulfillment_method", "ship"); } catch {}
-                window.setTimeout(function () {
-                  const ups = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbUPSDelivery");
-                  updateShippingStyles("ship", { silent: !!(ups && ups.checked) });
-                }, 0);
+            try {
+              if (region === "outside") {
+                $delivery.hide();
+                if ($ship.length) {
+                  $ship.show();
+                  $shipTag.text("Required for this address");
+                  showOutOfStateMessage("Out-of-state shipping addresses use UPS. Local Woodson delivery is hidden for this address.", "");
+                  const intent = getFulfillmentIntent();
+                  if (!intent || intent === "delivery") {
+                    setFulfillmentIntent("ship");
+                    try { sessionStorage.setItem("wl_fulfillment_method", "ship"); } catch {}
+                    window.setTimeout(function () {
+                      const ups = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbUPSDelivery");
+                      updateShippingStyles("ship", { silent: !!(ups && ups.checked), reason: "outside-address" });
+                    }, 0);
+                  }
+                } else {
+                  showOutOfStateMessage("This cart is not offering UPS ship-to-home online. Please choose pickup or update the cart before continuing.", "warning");
+                  const intent = getFulfillmentIntent();
+                  if (intent === "delivery" || intent === "ship") {
+                    try {
+                      sessionStorage.removeItem("wl_fulfillment_intent");
+                      sessionStorage.removeItem("wl_fulfillment_method");
+                      localStorage.removeItem("woodson_cart_method");
+                    } catch {}
+                    updateShippingStyles("", { silent: true, reason: "outside-no-ups" });
+                  }
+                }
+              } else if (region === "texas") {
+                $delivery.show();
+                $deliveryTag.text("Texas option");
+                $shipTag.text("UPS option");
+                showOutOfStateMessage("", "");
+              } else {
+                $delivery.show();
+                $deliveryTag.text("Texas addresses");
+                $shipTag.text("UPS option");
+                showOutOfStateMessage("", "");
               }
-            } else if (region === "texas") {
-              $delivery.show();
-              $deliveryTag.text("Texas option");
-              $shipTag.text("UPS option");
-            } else {
-              $delivery.show();
-              $deliveryTag.text("Texas addresses");
-              $shipTag.text("UPS option");
+            } finally {
+              addressAwareUpdating = false;
             }
           }
 
@@ -3750,8 +3899,6 @@ document.addEventListener("click", function (ev) {
                   delRad.prop("checked", true).trigger("click").trigger("change");
                 } else if (isShip && upsRad.length && !upsRad.is(":checked")) {
                   upsRad.prop("checked", true).trigger("click").trigger("change");
-                } else if (isShip && !upsRad.length && delRad.length && !delRad.is(":checked")) {
-                  delRad.prop("checked", true).trigger("click").trigger("change");
                 } else if (isPickup && pickRad.length && !pickRad.is(":checked")) {
                   pickRad.prop("checked", true).trigger("click").trigger("change");
                 }
@@ -3790,13 +3937,34 @@ document.addEventListener("click", function (ev) {
             } catch {}
           }, 700);
 
-          $(document).on("click", ".modern-shipping-selector button", function () {
-            updateShippingStyles($(this).data("mode"));
+          $(document).on("click", ".modern-shipping-selector button", function (event) {
+            const mode = $(this).data("mode");
+            if (mode === "delivery" && addressRegion() === "outside") {
+              event.preventDefault();
+              event.stopImmediatePropagation();
+              if ($("#btnShip").length) updateShippingStyles("ship", { reason: "outside-address-click" });
+              else showOutOfStateMessage("This address is outside Texas, but UPS is not available for this cart. Please choose pickup or update the cart before continuing.", "warning");
+              return false;
+            }
+            updateShippingStyles(mode);
           });
 
-          $(document).on("change", "#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList, #ctl00_PageBody_InvoiceAddress_CountySelector_CountyList", updateAddressAwareOptions);
+          $(document).on("change", "#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList, #ctl00_PageBody_InvoiceAddress_CountySelector_CountyList", scheduleAddressAwareOptions);
+          try {
+            document.addEventListener("wl:checkout-address-updated", scheduleAddressAwareOptions);
+            document.addEventListener("change", function (event) {
+              if (shouldRefreshAddressRegion(event.target)) scheduleAddressAwareOptions();
+            }, true);
+            document.addEventListener("input", function (event) {
+              if (shouldRefreshAddressRegion(event.target)) scheduleAddressAwareOptions();
+            }, true);
+            window.WLCheckout = window.WLCheckout || {};
+            window.WLCheckout.addressRegion = addressRegion;
+            window.WLCheckout.refreshAddressAwareOptions = updateAddressAwareOptions;
+          } catch {}
           window.setTimeout(updateAddressAwareOptions, 300);
           window.setTimeout(updateAddressAwareOptions, 900);
+          window.setTimeout(updateAddressAwareOptions, 1600);
         }
       });
     }

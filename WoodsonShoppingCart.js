@@ -12,6 +12,7 @@
   const UPS_RATE_URL = 'https://wl-upsrates.vercel.app/api/ups-rates';
   const SHIPPING_PROMO_VERSION = '20260707-bridge-5';
   const SHIPPING_PROMO_SCRIPT_URL = 'https://ckunkel510.github.io/WL.github.io/UpsShippingPromo.js?v=' + SHIPPING_PROMO_VERSION;
+  let checkoutBlockReason = '';
   const STORE_ORIGINS = {
     brenham: { name: 'Brenham', city: 'Brenham', state: 'TX', postalCode: '77833' },
     bryan: { name: 'Bryan', city: 'Bryan', state: 'TX', postalCode: '77803' },
@@ -145,6 +146,7 @@
       .wl-cart-shipping-row{display:flex;align-items:center;justify-content:space-between;gap:16px;margin:4px 0;}
       .wl-cart-shipping-row strong{color:#111;white-space:nowrap;}
       .wl-cart-shipping-note{margin-top:7px;color:#62676d;font-size:12px;max-width:360px;}
+      .wl-cart-shipping-block{margin-top:9px;padding:10px 12px;border:1px solid #e6c15a;border-radius:8px;background:#fff8dc;color:#3b2b00;font-size:13px;line-height:1.35;}
       .wl-cart-shipping-status{display:inline-flex;align-items:center;gap:7px;color:#555;}
       .wl-cart-shipping-dot{width:8px;height:8px;border-radius:50%;background:#6b0016;display:inline-block;}
       .wl-checkout-transition{position:fixed;inset:0;z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(255,255,255,.96);font-family:Arial,sans-serif;}
@@ -161,6 +163,7 @@
   function renderEstimate(result) {
     const wrappers = Array.from(document.querySelectorAll('.SubtotalWrapper'));
     if (!wrappers.length) return;
+    checkoutBlockReason = result && result.blockCheckout ? (result.blockMessage || result.note || '') : '';
 
     wrappers.forEach(function (wrapper) {
       wrapper.querySelectorAll('.wl-cart-shipping').forEach(function (old) { old.remove(); });
@@ -185,6 +188,13 @@
       note.textContent = result.note || 'Final delivery charge is confirmed before payment.';
 
       panel.append(pickup, delivery, note);
+      if (result.blockCheckout) {
+        const block = document.createElement('div');
+        block.className = 'wl-cart-shipping-block';
+        block.setAttribute('role', 'alert');
+        block.textContent = result.blockMessage || result.note || 'This cart needs attention before checkout.';
+        panel.appendChild(block);
+      }
       wrapper.appendChild(panel);
     });
   }
@@ -354,15 +364,19 @@
       if (packageInfo.containsLargeItems) {
         return {
           label: 'UPS shipping',
-          amount: 'Freight review needed',
-          note: 'One or more oversized items require a custom shipping review.'
+          amount: 'Not available online',
+          note: 'One or more oversized items require a custom shipping review.',
+          blockCheckout: true,
+          blockMessage: 'This saved address is outside Texas, and one or more oversized items cannot ship UPS online. Please remove those items, choose pickup, or contact Woodson for freight help.'
         };
       }
       if (packageInfo.unavailable) {
         return {
           label: 'UPS shipping',
-          amount: 'Calculated at checkout',
-          note: 'The final UPS service and rate will be shown before payment.'
+          amount: 'Not available online',
+          note: 'One or more items are not configured for UPS ship-to-home yet.',
+          blockCheckout: true,
+          blockMessage: 'This saved address is outside Texas, and one or more items in this cart are not configured for UPS ship-to-home. Please remove those items, choose pickup, or contact Woodson.'
         };
       }
       try {
@@ -424,6 +438,18 @@
         ? event.target.closest('#ctl00_PageBody_PlaceOrderButton, [name="ctl00$PageBody$PlaceOrderButton"]')
         : null;
       if (!target) return;
+
+      if (checkoutBlockReason) {
+        event.preventDefault();
+        event.stopPropagation();
+        const block = document.querySelector('.wl-cart-shipping-block');
+        try { block?.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch {}
+        if (block) {
+          block.style.outline = '3px solid rgba(107,0,22,.22)';
+          window.setTimeout(function () { block.style.outline = ''; }, 1400);
+        }
+        return;
+      }
 
       saveCartSignature(signature || getCartSignature());
       if (isSignedIn()) {

@@ -799,6 +799,11 @@
     try { window.WLCheckout?.refreshInvoiceSummary?.(false); } catch {}
     try { window.WLCheckout?.applyInvoiceDefaultView?.(); } catch {}
     try { window.WLCheckout?.refreshDeliverySummary?.(); } catch {}
+    try {
+      document.dispatchEvent(new CustomEvent('wl:checkout-address-updated', {
+        detail: { deliveryState: payload.d_state, invoiceState: payload.i_state2 || payload.d_state }
+      }));
+    } catch {}
 
     try { sessionStorage.removeItem(AUTOFILL_KEY); } catch {}
     return true;
