@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20260709-address-picker-1";
+  window.WL_CHECKOUT_BUILD = "20260709-address-picker-2";
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
   const UPS_SHIPPING_ENABLED = true;
@@ -402,6 +402,7 @@
       .checkout-wizard.wl-single-page .wl-checkout-address-row-title{display:block;margin:0 0 3px;font-size:13px;font-weight:800;color:#20242a;overflow-wrap:anywhere;}
       .checkout-wizard.wl-single-page .wl-checkout-address-row-line{display:block;color:#555b61;font-size:12px;line-height:1.35;overflow-wrap:anywhere;}
       .checkout-wizard.wl-single-page .wl-checkout-address-empty{display:none;color:#62676d;font-size:12px;line-height:1.35;}
+      .wl-native-address-hidden{position:absolute!important;left:-10000px!important;top:auto!important;width:1px!important;height:1px!important;overflow:hidden!important;opacity:0!important;}
       .checkout-wizard.wl-single-page .wl-checkout-address-action{
         display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:8px 12px;
         border:1px solid #aeb4ba;border-radius:6px;background:#fff;color:#6b0016!important;font-size:13px;font-weight:700;text-decoration:none!important;cursor:pointer;
@@ -4492,11 +4493,110 @@ document.addEventListener("click", function (ev) {
       const nativeTrigger = document.getElementById("ctl00_PageBody_CustomerAddressSelector_PopupTrigger");
       if (nativeTrigger) {
         try { nativeTrigger.setAttribute("aria-hidden", "true"); } catch {}
-        try { nativeTrigger.style.display = "none"; } catch {}
+        try { nativeTrigger.classList.add("wl-native-address-hidden"); } catch {}
       }
 
       function addressText(value) {
         return String(value || "").replace(/\s+/g, " ").trim();
+      }
+
+      function addressKey(value) {
+        return addressText(value).toLowerCase().replace(/[^a-z0-9]/g, "");
+      }
+
+      function addressOid(href) {
+        try { return new URL(href, window.location.href).searchParams.get("oid") || ""; } catch {}
+        const match = String(href || "").match(/[?&]oid=([^&]+)/i);
+        return match ? decodeURIComponent(match[1]) : "";
+      }
+
+      function parseAddressParts(line) {
+        const parts = addressText(line).split(",").map(addressText).filter(Boolean);
+        const result = { line1: parts[0] || "", city: "", state: "", zip: "" };
+        if (parts.length >= 4) {
+          result.city = parts[parts.length - 3] || "";
+          result.state = parts[parts.length - 2] || "";
+          result.zip = parts[parts.length - 1] || "";
+        } else if (parts.length >= 3) {
+          result.city = parts[1] || "";
+          const match = (parts[2] || "").match(/^(.+?)\s+(\d{5}(?:-\d{4})?)$/);
+          if (match) {
+            result.state = addressText(match[1]);
+            result.zip = match[2] || "";
+          } else {
+            result.state = parts[2] || "";
+          }
+        } else if (parts.length === 2) {
+          result.city = parts[1] || "";
+        }
+        return result;
+      }
+
+      let fetchedAddresses = [];
+      let fetchedAddressPromise = null;
+      let requestedNativeLoad = false;
+
+      function parseAddressList(html) {
+        try {
+          const doc = new DOMParser().parseFromString(html, "text/html");
+          const table = doc.getElementById("ctl00_PageBody_AddressRadGrid_ctl00");
+          if (!table) return [];
+          return Array.from(table.querySelectorAll("tbody tr")).map(function (row, index) {
+            const cells = Array.from(row.cells || []);
+            const link = cells[0]?.querySelector("a[href*='AddressDetails.aspx']");
+            const href = link ? link.getAttribute("href") || "" : "";
+            const addressLine = addressText(cells[3]?.textContent);
+            const title = addressText(link?.textContent) || (addressLine ? addressLine.split(",")[0] : "") || "Saved address";
+            if (!addressLine && !title) return null;
+            const id = addressOid(href) || "saved-" + (index + 1);
+            const parsed = parseAddressParts(addressLine);
+            return {
+              id,
+              href,
+              title,
+              line: addressLine,
+              source: "account-list",
+              parsed,
+              phone: addressText(cells[4]?.textContent),
+              contactName: addressText(cells[6]?.textContent),
+              contactPhone: addressText(cells[7]?.textContent),
+              search: [id, title, addressLine, cells[4]?.textContent, cells[6]?.textContent].join(" ").toLowerCase()
+            };
+          }).filter(Boolean);
+        } catch {
+          return [];
+        }
+      }
+
+      function fetchAddressList() {
+        if (fetchedAddressPromise) return fetchedAddressPromise;
+        if (!window.fetch || !window.DOMParser) {
+          fetchedAddressPromise = Promise.resolve([]);
+          return fetchedAddressPromise;
+        }
+        fetchedAddressPromise = fetch("/AddressList_R.aspx", { credentials: "same-origin" })
+          .then(function (response) { return response.ok ? response.text() : ""; })
+          .then(function (html) {
+            fetchedAddresses = parseAddressList(html);
+            return fetchedAddresses;
+          })
+          .catch(function () {
+            fetchedAddresses = [];
+            return [];
+          });
+        return fetchedAddressPromise;
+      }
+
+      function hideNativeAddressChrome() {
+        try {
+          document.querySelectorAll(".AddressSelectorEntry").forEach(function (entry) {
+            const shell =
+              entry.closest("[id*='CustomerAddressSelector']") ||
+              entry.closest(".RadWindow,.rwWindowContent,.AddressSelector,.AddressSelectorPopup") ||
+              entry.parentElement;
+            if (shell && !tools.contains(shell)) shell.classList.add("wl-native-address-hidden");
+          });
+        } catch {}
       }
 
       function nativeAddressEntries() {
@@ -4522,9 +4622,39 @@ document.addEventListener("click", function (ev) {
             entry,
             title,
             line: addressLine || fullText.replace(/\bAddress\s*Id\b\s*\d+/i, "").trim(),
+            source: "native",
             search: [id, title, addressLine, fullText].join(" ").toLowerCase()
           };
         }).filter(Boolean);
+      }
+
+      function findNativeMatch(item) {
+        if (!item) return null;
+        const itemLineKey = addressKey(item.line);
+        const itemTitleKey = addressKey(item.title);
+        const itemId = addressText(item.id);
+        return nativeAddressEntries().find(function (native) {
+          if (itemId && addressText(native.id) === itemId) return true;
+          const nativeLineKey = addressKey(native.line);
+          const nativeSearchKey = addressKey(native.search);
+          if (itemLineKey && nativeLineKey && itemLineKey === nativeLineKey) return true;
+          if (itemLineKey && nativeSearchKey.indexOf(itemLineKey.slice(0, Math.min(24, itemLineKey.length))) >= 0) return true;
+          if (itemTitleKey && nativeSearchKey.indexOf(itemTitleKey) >= 0 && itemLineKey && nativeSearchKey.indexOf(itemLineKey.slice(0, 10)) >= 0) return true;
+          return false;
+        }) || null;
+      }
+
+      function ensureNativeEntries() {
+        const current = nativeAddressEntries();
+        if (current.length || !nativeTrigger || requestedNativeLoad) return Promise.resolve(current);
+        requestedNativeLoad = true;
+        try { nativeTrigger.click(); } catch {}
+        return new Promise(function (resolve) {
+          window.setTimeout(function () {
+            hideNativeAddressChrome();
+            resolve(nativeAddressEntries());
+          }, 750);
+        });
       }
 
       function clickNativeAddress(entry) {
@@ -4556,8 +4686,60 @@ document.addEventListener("click", function (ev) {
         }, 650);
       }
 
+      function applyAddressFallback(item) {
+        if (!item) return;
+        const parsed = item.parsed || parseAddressParts(item.line);
+        const nameParts = splitDisplayName(item.contactName || "");
+        try {
+          window.WLCheckout?.saveCheckoutSnapshot?.();
+          setReturnStep(3);
+          sessionStorage.setItem("wl_pendingStep", "3");
+        } catch {}
+
+        setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_DeliveryAddress_AddressLine1"), parsed.line1, true);
+        setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_DeliveryAddress_City"), parsed.city, true);
+        setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_DeliveryAddress_Postcode"), parsed.zip, true);
+        setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox"), item.contactPhone || item.phone, true);
+        setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox"), nameParts.first, true);
+        setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox"), nameParts.last, true);
+        setCheckoutSelect(document.getElementById("ctl00_PageBody_DeliveryAddress_CountySelector_CountyList"), parsed.state, parsed.state);
+        setCheckoutSelect(document.getElementById("ctl00_PageBody_DeliveryAddress_CountrySelector"), "USA", "United States");
+
+        try { window.WLCheckout?.refreshDeliverySummary?.(); } catch {}
+        try { window.WLCheckout?.refreshSectionSummaries?.(); } catch {}
+        try { window.WLCheckout?.refreshAddressAwareOptions?.(); } catch {}
+        try { document.dispatchEvent(new CustomEvent("wl:checkout-address-updated")); } catch {}
+      }
+
+      function chooseAddress(item) {
+        if (!item) return;
+        const native = item.entry ? item : findNativeMatch(item);
+        if (native && native.entry) {
+          clickNativeAddress(native.entry);
+          return;
+        }
+
+        ensureNativeEntries().then(function () {
+          const loadedNative = findNativeMatch(item);
+          if (loadedNative && loadedNative.entry) clickNativeAddress(loadedNative.entry);
+          else applyAddressFallback(item);
+        });
+      }
+
+      function combinedAddresses() {
+        const native = nativeAddressEntries();
+        const used = new Set(native.map(function (item) { return addressKey(item.line || item.title || item.id); }));
+        const fetched = fetchedAddresses.filter(function (item) {
+          const key = addressKey(item.line || item.title || item.id);
+          if (!key || used.has(key)) return false;
+          used.add(key);
+          return true;
+        });
+        return native.concat(fetched);
+      }
+
       function renderAddresses() {
-        const addresses = nativeAddressEntries();
+        const addresses = combinedAddresses();
         list.replaceChildren();
         empty.style.display = addresses.length ? "none" : "block";
 
@@ -4576,7 +4758,7 @@ document.addEventListener("click", function (ev) {
               button.classList.remove("is-selected");
             });
             row.classList.add("is-selected");
-            clickNativeAddress(item.entry);
+            chooseAddress(item);
           });
           list.appendChild(row);
         });
@@ -4588,6 +4770,8 @@ document.addEventListener("click", function (ev) {
       else pane.insertBefore(tools, pane.firstChild);
 
       renderAddresses();
+      fetchAddressList().then(renderAddresses);
+      ensureNativeEntries().then(renderAddresses);
       window.setTimeout(renderAddresses, 450);
       window.setTimeout(renderAddresses, 1200);
       try {
