@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20260709-outstate-ups-1";
+  window.WL_CHECKOUT_BUILD = "20260709-address-picker-1";
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
   const UPS_SHIPPING_ENABLED = true;
@@ -384,8 +384,24 @@
         flex:0 0 auto;min-height:40px;padding:8px 13px;border:1px solid #aab0b6;border-radius:6px;background:#fff;color:#20242a;font-weight:700;
       }
       .checkout-wizard.wl-single-page .wl-checkout-address-tools{
-        display:flex;flex-wrap:wrap;gap:8px;margin:0 0 16px;
+        display:grid;gap:10px;margin:0 0 16px;padding:12px;
+        border:1px solid #d9dde2;border-left:4px solid #6b0016;border-radius:6px;background:#fafafa;
       }
+      .checkout-wizard.wl-single-page .wl-checkout-address-tools-head{
+        display:flex;align-items:center;justify-content:space-between;gap:12px;
+      }
+      .checkout-wizard.wl-single-page .wl-checkout-address-tools-title{margin:0;color:#30353a;font-size:13px;font-weight:800;}
+      .checkout-wizard.wl-single-page .wl-checkout-address-tools-hint{margin:0;color:#62676d;font-size:12px;line-height:1.35;}
+      .checkout-wizard.wl-single-page .wl-checkout-address-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;}
+      .checkout-wizard.wl-single-page .wl-checkout-address-row{
+        display:block;width:100%;min-width:0;padding:10px 11px;border:1px solid #c7ccd1;border-radius:6px;background:#fff;color:#20242a;text-align:left;cursor:pointer;
+      }
+      .checkout-wizard.wl-single-page .wl-checkout-address-row:hover,
+      .checkout-wizard.wl-single-page .wl-checkout-address-row:focus{border-color:#6b0016;outline:3px solid rgba(107,0,22,.12);}
+      .checkout-wizard.wl-single-page .wl-checkout-address-row.is-selected{border-color:#6b0016;background:#f7f1f2;}
+      .checkout-wizard.wl-single-page .wl-checkout-address-row-title{display:block;margin:0 0 3px;font-size:13px;font-weight:800;color:#20242a;overflow-wrap:anywhere;}
+      .checkout-wizard.wl-single-page .wl-checkout-address-row-line{display:block;color:#555b61;font-size:12px;line-height:1.35;overflow-wrap:anywhere;}
+      .checkout-wizard.wl-single-page .wl-checkout-address-empty{display:none;color:#62676d;font-size:12px;line-height:1.35;}
       .checkout-wizard.wl-single-page .wl-checkout-address-action{
         display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:8px 12px;
         border:1px solid #aeb4ba;border-radius:6px;background:#fff;color:#6b0016!important;font-size:13px;font-weight:700;text-decoration:none!important;cursor:pointer;
@@ -445,6 +461,8 @@
         .checkout-wizard.wl-single-page .wl-smart-handoff{display:grid;grid-template-columns:minmax(0,1fr);align-items:stretch;width:100%;}
         .checkout-wizard.wl-single-page .wl-smart-handoff-copy,.checkout-wizard.wl-single-page .wl-smart-handoff button{width:100%;min-width:0;}
         .checkout-wizard.wl-single-page .wl-checkout-address-tools{display:grid;grid-template-columns:1fr;}
+        .checkout-wizard.wl-single-page .wl-checkout-address-tools-head{display:grid;grid-template-columns:1fr;}
+        .checkout-wizard.wl-single-page .wl-checkout-address-list{grid-template-columns:1fr;}
         .checkout-wizard.wl-single-page .wl-checkout-address-action{width:100%;}
         .checkout-wizard.wl-single-page .wl-checkout-contact-tools{display:grid;grid-template-columns:1fr;}
         .checkout-wizard.wl-single-page .wl-checkout-contact-action{width:100%;}
@@ -2721,68 +2739,9 @@ document.addEventListener("click", function (ev) {
       applyInvoiceDefaultView();
     })();
 
-    // -------------------------------------------------------------------------
-    // I) Prefill delivery address (kept light)
-    // -------------------------------------------------------------------------
-    try {
-      if ($ && !$("#ctl00_PageBody_DeliveryAddress_AddressLine1").val()) {
-        const $entries = $(".AddressSelectorEntry");
-        if ($entries.length) {
-          let $pick = $entries.first();
-          let minId = parseInt($pick.find(".AddressId").text(), 10);
-
-          $entries.each(function () {
-            const id = parseInt($(this).find(".AddressId").text(), 10);
-            if (id < minId) {
-              minId = id;
-              $pick = $(this);
-            }
-          });
-
-          const parts = $pick
-            .find("dd p")
-            .first()
-            .text()
-            .trim()
-            .split(",")
-            .map((s) => s.trim());
-
-          const line1 = parts[0] || "";
-          const city = parts[1] || "";
-          let state = "", zip = "";
-
-          if (parts.length >= 4) {
-            state = parts[parts.length - 2] || "";
-            zip = parts[parts.length - 1] || "";
-          } else if (parts.length > 2) {
-            const m = (parts[2] || "").match(/(.+?)\s*(\d{5}(?:-\d{4})?)?$/);
-            if (m) {
-              state = (m[1] || "").trim();
-              zip = m[2] || "";
-            }
-          }
-
-          $("#ctl00_PageBody_DeliveryAddress_AddressLine1").val(line1);
-          $("#ctl00_PageBody_DeliveryAddress_City").val(city);
-          $("#ctl00_PageBody_DeliveryAddress_Postcode").val(zip);
-          $("#ctl00_PageBody_DeliveryAddress_CountrySelector").val("USA");
-
-          $("#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList option").each(function () {
-            if ($(this).text().trim().toLowerCase() === state.toLowerCase()) {
-              $(this).prop("selected", true);
-              return false;
-            }
-          });
-
-          // Update the collapsed delivery summary immediately if present
-          try {
-            if (window.WLCheckout && typeof window.WLCheckout.refreshDeliverySummary === "function") window.WLCheckout.refreshDeliverySummary();
-            if (window.WLCheckout && typeof window.WLCheckout.showDeliverySummaryIfFilled === "function") window.WLCheckout.showDeliverySummaryIfFilled();
-          } catch {}
-
-        }
-      }
-    } catch {}
+    // Address selection is now customer-driven. The inline picker near the
+    // delivery step triggers WebTrack's native address selection/postback instead
+    // of silently pre-filling the first saved address on page load.
 
     window.setTimeout(function () {
       try { window.WLCheckout?.hydrateBlankInvoiceFromDelivery?.(); } catch {}
@@ -4495,17 +4454,18 @@ document.addEventListener("click", function (ev) {
       const tools = document.createElement("div");
       tools.id = "wl-checkout-address-tools";
       tools.className = "wl-checkout-address-tools";
-      tools.setAttribute("aria-label", "Saved address actions");
+      tools.setAttribute("aria-label", "Saved delivery addresses");
 
-      const selector = document.getElementById("ctl00_PageBody_CustomerAddressSelector_PopupTrigger");
-      if (selector) {
-        const choose = document.createElement("button");
-        choose.type = "button";
-        choose.className = "wl-checkout-address-action";
-        choose.innerHTML = '<i class="fas fa-address-book" aria-hidden="true"></i><span>Choose saved address</span>';
-        choose.addEventListener("click", function () { selector.click(); });
-        tools.appendChild(choose);
-      }
+      const head = document.createElement("div");
+      head.className = "wl-checkout-address-tools-head";
+      const copy = document.createElement("div");
+      const title = document.createElement("p");
+      title.className = "wl-checkout-address-tools-title";
+      title.textContent = "Saved delivery addresses";
+      const hint = document.createElement("p");
+      hint.className = "wl-checkout-address-tools-hint";
+      hint.textContent = "Choose an address below and WebTrack will fill the delivery fields.";
+      copy.append(title, hint);
 
       const add = document.createElement("a");
       add.className = "wl-checkout-address-action";
@@ -4517,12 +4477,129 @@ document.addEventListener("click", function (ev) {
           sessionStorage.setItem("wl_address_return_path", "/ShoppingCart.aspx?wlCheckout=single&wlReturn=address");
         } catch {}
       });
-      tools.appendChild(add);
+      head.append(copy, add);
+      tools.appendChild(head);
+
+      const list = document.createElement("div");
+      list.className = "wl-checkout-address-list";
+      tools.appendChild(list);
+
+      const empty = document.createElement("div");
+      empty.className = "wl-checkout-address-empty";
+      empty.textContent = "Saved addresses will appear here when WebTrack loads them for this account.";
+      tools.appendChild(empty);
+
+      const nativeTrigger = document.getElementById("ctl00_PageBody_CustomerAddressSelector_PopupTrigger");
+      if (nativeTrigger) {
+        try { nativeTrigger.setAttribute("aria-hidden", "true"); } catch {}
+        try { nativeTrigger.style.display = "none"; } catch {}
+      }
+
+      function addressText(value) {
+        return String(value || "").replace(/\s+/g, " ").trim();
+      }
+
+      function nativeAddressEntries() {
+        const seen = new Set();
+        return Array.from(document.querySelectorAll(".AddressSelectorEntry")).map(function (entry, index) {
+          if (seen.has(entry)) return null;
+          seen.add(entry);
+
+          const id = addressText(entry.querySelector(".AddressId")?.textContent) || String(index + 1);
+          const addressLine = addressText(entry.querySelector("dd p")?.textContent);
+          const title =
+            addressText(entry.querySelector(".AddressCode")?.textContent) ||
+            addressText(entry.querySelector("dt")?.textContent) ||
+            addressText(entry.querySelector("strong")?.textContent) ||
+            (addressLine ? addressLine.split(",")[0] : "") ||
+            "Saved address";
+
+          const fullText = addressText(entry.textContent);
+          if (!addressLine && !fullText) return null;
+
+          return {
+            id,
+            entry,
+            title,
+            line: addressLine || fullText.replace(/\bAddress\s*Id\b\s*\d+/i, "").trim(),
+            search: [id, title, addressLine, fullText].join(" ").toLowerCase()
+          };
+        }).filter(Boolean);
+      }
+
+      function clickNativeAddress(entry) {
+        if (!entry) return;
+        try {
+          window.WLCheckout?.saveCheckoutSnapshot?.();
+          setReturnStep(3);
+          setExpectedNav(true);
+          sessionStorage.setItem("wl_pendingStep", "3");
+        } catch {}
+
+        const target =
+          entry.querySelector("a[href*='__doPostBack']") ||
+          entry.querySelector("[onclick*='__doPostBack']") ||
+          entry.querySelector("input[type='submit'],input[type='button'],button,a[href]") ||
+          entry;
+
+        try {
+          target.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, view: window }));
+          target.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, view: window }));
+        } catch {}
+        try { target.click(); } catch {}
+
+        window.setTimeout(function () {
+          try { window.WLCheckout?.refreshDeliverySummary?.(); } catch {}
+          try { window.WLCheckout?.refreshSectionSummaries?.(); } catch {}
+          try { window.WLCheckout?.refreshAddressAwareOptions?.(); } catch {}
+          try { document.dispatchEvent(new CustomEvent("wl:checkout-address-updated")); } catch {}
+        }, 650);
+      }
+
+      function renderAddresses() {
+        const addresses = nativeAddressEntries();
+        list.replaceChildren();
+        empty.style.display = addresses.length ? "none" : "block";
+
+        addresses.slice(0, 12).forEach(function (item) {
+          const row = document.createElement("button");
+          row.type = "button";
+          row.className = "wl-checkout-address-row";
+          row.dataset.wlAddressId = item.id;
+          row.innerHTML =
+            '<span class="wl-checkout-address-row-title"></span>' +
+            '<span class="wl-checkout-address-row-line"></span>';
+          row.querySelector(".wl-checkout-address-row-title").textContent = item.title;
+          row.querySelector(".wl-checkout-address-row-line").textContent = item.line;
+          row.addEventListener("click", function () {
+            list.querySelectorAll(".wl-checkout-address-row").forEach(function (button) {
+              button.classList.remove("is-selected");
+            });
+            row.classList.add("is-selected");
+            clickNativeAddress(item.entry);
+          });
+          list.appendChild(row);
+        });
+      }
 
       const heading = pane.querySelector(".wl-section-heading");
       if (heading && heading.nextSibling) pane.insertBefore(tools, heading.nextSibling);
       else if (heading) pane.appendChild(tools);
       else pane.insertBefore(tools, pane.firstChild);
+
+      renderAddresses();
+      window.setTimeout(renderAddresses, 450);
+      window.setTimeout(renderAddresses, 1200);
+      try {
+        const observer = new MutationObserver(function (mutations) {
+          if (mutations.some(function (mutation) {
+            return Array.from(mutation.addedNodes || []).some(function (node) {
+              return node.nodeType === 1 && (node.classList?.contains("AddressSelectorEntry") || node.querySelector?.(".AddressSelectorEntry"));
+            });
+          })) renderAddresses();
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+      } catch {}
     })();
 
     if (expectedNav) {
