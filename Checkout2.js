@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20260709-address-picker-4";
+  window.WL_CHECKOUT_BUILD = "20260709-address-picker-5";
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
   const UPS_SHIPPING_ENABLED = true;
@@ -402,9 +402,6 @@
       .checkout-wizard.wl-single-page .wl-checkout-address-row-title{display:block;margin:0 0 3px;font-size:13px;font-weight:800;color:#20242a;overflow-wrap:anywhere;}
       .checkout-wizard.wl-single-page .wl-checkout-address-row-line{display:block;color:#555b61;font-size:12px;line-height:1.35;overflow-wrap:anywhere;}
       .checkout-wizard.wl-single-page .wl-checkout-address-empty{display:none;color:#62676d;font-size:12px;line-height:1.35;}
-      .checkout-wizard.wl-single-page .checkout-step.wl-section-collapsed>#wl-checkout-address-tools{
-        display:grid!important;margin-top:12px!important;margin-bottom:0!important;
-      }
       .wl-native-address-hidden{position:absolute!important;left:-10000px!important;top:auto!important;width:1px!important;height:1px!important;overflow:hidden!important;opacity:0!important;}
       .checkout-wizard.wl-single-page .wl-checkout-address-action{
         display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:40px;padding:8px 12px;
