@@ -638,14 +638,14 @@
         font-weight: 700;
         line-height: 1.35;
       }
-      .wl-autopay-exception {
+      .wl-autopay-field.wl-autopay-exception {
         display: none;
         border: 1px solid #ecd49c;
         border-radius: 10px;
         background: #fffaf0;
         padding: 12px;
       }
-      .wl-autopay-exception.is-visible {
+      .wl-autopay-field.wl-autopay-exception.is-visible {
         display: grid;
       }
       .wl-autopay-exception-actions {
@@ -894,6 +894,7 @@
   function getAutopayContext() {
     const context = readLocalJson(AUTOPAY_CONTEXT_KEY, {}) || {};
     return {
+      accountId: context.accountId || context.customerId || '',
       accountName: context.accountName || '',
       accountKind: context.accountKind || '',
       termsLabel: context.termsLabel || '',
