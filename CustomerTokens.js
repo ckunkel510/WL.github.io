@@ -1148,9 +1148,17 @@
           return;
         }
 
+        const missingAccountContext = !context.accountName && !context.accountId;
+        const accountName = context.accountName || `WebTrack account pending verification (${signerName})`;
+        const accountId = context.accountId || email;
+        const finalNotes = missingAccountContext
+          ? `${notes ? `${notes}\n` : ''}System note: WebTrack did not expose the account context on this payment methods page. Verify the account before approving AutoPay.`
+          : notes;
+
         const payload = {
           account: {
-            name: context.accountName,
+            name: accountName,
+            id: accountId,
             kind: context.accountKind || 'unknown',
             termsLabel: context.termsLabel,
             statementBalance: context.statementBalance,
@@ -1183,7 +1191,7 @@
             termsAcknowledged: true,
             signerName
           },
-          notes
+          notes: finalNotes
         };
 
         submit.disabled = true;
