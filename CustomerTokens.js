@@ -33,6 +33,7 @@
   const AUTOPAY_ACTIVE_KEY = 'wl_autopay_active_v1';
   const AUTOPAY_ADD_BANK_SESSION_KEY = 'wl_autopay_add_bank_started_v1';
   const AUTOPAY_DAYS = [26, 27, 28, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  const AUTOPAY_REQUEST_DAYS = Array.from({ length: 28 }, (_, index) => index + 1);
 
   const CARD_TYPE_LABELS = {
     VI: 'Visa',
@@ -211,7 +212,7 @@
   function bankOptionLabel(bank) {
     const ending = numericEnding(bank.token);
     const name = bank.name || 'Saved bank account';
-    return ending ? `${name} - ending ${ending}` : `${name} - saved ACH`;
+    return ending ? `${name} (bank ending ${ending})` : `${name} (saved ACH)`;
   }
 
   function statusLabel(value) {
@@ -629,6 +630,31 @@
         font-size: .88rem;
         line-height: 1.45;
       }
+      .wl-autopay-help {
+        display: block;
+        margin-top: 6px;
+        color: #687176;
+        font-size: .8rem;
+        font-weight: 700;
+        line-height: 1.35;
+      }
+      .wl-autopay-exception {
+        display: none;
+        border: 1px solid #ecd49c;
+        border-radius: 10px;
+        background: #fffaf0;
+        padding: 12px;
+      }
+      .wl-autopay-exception.is-visible {
+        display: grid;
+      }
+      .wl-autopay-exception-note {
+        margin-top: 8px;
+        color: #60450d;
+        font-size: .84rem;
+        font-weight: 800;
+        line-height: 1.4;
+      }
       .wl-autopay-form {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -879,11 +905,18 @@
 
     const dayOptions = AUTOPAY_DAYS
       .map(day => `<option value="${day}"${day === 10 ? ' selected' : ''}>${ordinal(day)} of the month</option>`)
+      .concat('<option value="request_other">Request another date</option>')
+      .join('');
+    const requestDayOptions = AUTOPAY_REQUEST_DAYS
+      .map(day => `<option value="${day}"${day === 15 ? ' selected' : ''}>${ordinal(day)} of the month</option>`)
       .join('');
     const active = primaryRecord?.authorization || null;
     const activeDay = active?.schedule?.preferredDay || '';
     const activeMethod = active?.paymentMethod?.label || 'Saved bank account';
     const activeEnding = active?.paymentMethod?.ending ? ` ending ${escapeHtml(active.paymentMethod.ending)}` : '';
+    const activeScheduleNote = active?.schedule?.requiresApproval
+      ? `Requested ${activeDay ? escapeHtml(ordinal(activeDay)) : 'date'} monthly · ${escapeHtml(statusLabel(active.schedule.dateApprovalStatus || 'pending'))}`
+      : `${activeDay ? escapeHtml(ordinal(activeDay)) : 'Selected date'} monthly`;
 
     const panel = dom(`
       <section class="wl-autopay-panel" id="wlAutopayPanel">
@@ -898,13 +931,13 @@
           <div class="wl-autopay-card">
             <h3>Statement-balance authorization</h3>
             <div class="wl-autopay-note">
-              AutoPay pays the full statement balance on the date you select. Eligible dates are the 26th-28th or 1st-10th.
+              AutoPay pays the full statement balance on the date you select. Standard eligible dates are the 26th-28th or 1st-10th.
             </div>
             ${active ? `
               <div class="wl-autopay-existing" data-wl-autopay-existing>
                 <div>
                   <strong>AutoPay request on file</strong>
-                  <span>${escapeHtml(statusLabel(active.status))} · ${escapeHtml(activeMethod)}${activeEnding} · ${activeDay ? escapeHtml(ordinal(activeDay)) : 'Selected date'} monthly</span>
+                  <span>${escapeHtml(statusLabel(active.status))} · ${escapeHtml(activeMethod)}${activeEnding} · ${activeScheduleNote}</span>
                 </div>
                 <button type="button" class="wl-btn" data-wl-autopay-cancel="${escapeHtml(primaryRecord.id)}">Cancel AutoPay</button>
               </div>
@@ -936,6 +969,14 @@
               <label class="wl-autopay-field">
                 AutoPay date
                 <select id="wlAutopayDay">${dayOptions}</select>
+                <span class="wl-autopay-help">Standard dates are available immediately for review. Other dates require Woodson approval.</span>
+              </label>
+              <label class="wl-autopay-field wl-autopay-exception" data-wl-autopay-exception>
+                Requested AutoPay date
+                <select id="wlAutopayRequestedDay">${requestDayOptions}</select>
+                <span class="wl-autopay-exception-note">
+                  Requested dates outside the standard window must be approved by Woodson Lumber. If the request is not approved, the AutoPay may be cancelled.
+                </span>
               </label>
               <label class="wl-autopay-field full">
                 Notes for Woodson
@@ -981,6 +1022,15 @@
     const form = $('#wlAutopayForm', panel);
     const status = $('#wlAutopayStatus', panel);
     const submit = form?.querySelector('button[type="submit"]');
+    const daySelect = $('#wlAutopayDay', panel);
+    const exceptionField = $('[data-wl-autopay-exception]', panel);
+
+    function syncRequestedDateField() {
+      const show = daySelect?.value === 'request_other';
+      if (exceptionField) {
+        exceptionField.classList.toggle('is-visible', Boolean(show));
+      }
+    }
 
     function setStatus(kind, message) {
       status.className = `wl-autopay-status ${kind}`;
@@ -1006,6 +1056,9 @@
     if (primaryRecord) {
       postAutopayAction('status', primaryRecord).catch(() => {});
     }
+
+    daySelect?.addEventListener('change', syncRequestedDateField);
+    syncRequestedDateField();
 
     $$('[data-wl-autopay-cancel]', panel).forEach(button => {
       button.addEventListener('click', async () => {
@@ -1048,8 +1101,10 @@
         const signerName = $('#wlAutopayName', panel)?.value.trim() || '';
         const email = $('#wlAutopayEmail', panel)?.value.trim() || '';
         const phone = $('#wlAutopayPhone', panel)?.value.trim() || '';
-        const scheduleMode = 'fixed_day';
-        const preferredDay = $('#wlAutopayDay', panel)?.value || '10';
+        const dayChoice = $('#wlAutopayDay', panel)?.value || '10';
+        const requestedException = dayChoice === 'request_other';
+        const scheduleMode = requestedException ? 'requested_exception' : 'fixed_day';
+        const preferredDay = requestedException ? ($('#wlAutopayRequestedDay', panel)?.value || '15') : dayChoice;
         const notes = $('#wlAutopayNotes', panel)?.value.trim() || '';
         const consentBalance = $('#wlAutopayConsentBalance', panel)?.checked;
         const consentPayment = $('#wlAutopayConsentPayment', panel)?.checked;
@@ -1089,7 +1144,10 @@
           schedule: {
             mode: scheduleMode,
             day: preferredDay,
-            requestedTermsReview: false
+            requestedException,
+            requiresApproval: requestedException,
+            dateApprovalStatus: requestedException ? 'pending' : 'standard',
+            dateApprovalNote: requestedException ? 'Customer requested an AutoPay date outside the standard schedule.' : ''
           },
           consent: {
             statementBalance: true,
@@ -1113,13 +1171,19 @@
           if (!response.ok || data.ok === false) throw new Error(data.error || 'Unable to save AutoPay request.');
           saveAutopayRecord(data);
           removeLocalItem(AUTOPAY_PENDING_KEY);
-          setStatus('ok', 'AutoPay request received. You can cancel online up to the day before the selected payment date.');
+          setStatus('ok', requestedException
+            ? 'AutoPay request received. Woodson will review the requested date before it can be processed.'
+            : 'AutoPay request received. You can cancel online up to the day before the selected payment date.'
+          );
           form.querySelectorAll('input, select, textarea, button').forEach(control => {
             if (!control.matches('[data-wl-autopay-add-bank]')) control.disabled = true;
           });
         } catch (error) {
           submit.disabled = false;
-          setStatus('bad', error.message || 'Unable to save AutoPay request.');
+          const message = /failed to fetch/i.test(error.message || '')
+            ? 'Unable to reach the AutoPay service. Please try again, or call Woodson so we can help finish the setup.'
+            : (error.message || 'Unable to save AutoPay request.');
+          setStatus('bad', message);
         }
       });
     }

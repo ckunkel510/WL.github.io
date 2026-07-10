@@ -385,10 +385,13 @@
       const method = auth.paymentMethod?.label || 'Saved bank account';
       const ending = auth.paymentMethod?.ending ? ` ending ${escapeHtml(auth.paymentMethod.ending)}` : '';
       const day = auth.schedule?.preferredDay ? `${ordinal(auth.schedule.preferredDay)} monthly` : 'Selected date';
-      const next = auth.nextAutopay?.isoDate ? `Next estimated AutoPay: ${displayISODate(auth.nextAutopay.isoDate)}` : '';
+      const scheduleText = auth.schedule?.requiresApproval
+        ? `Requested ${day} - pending Woodson approval`
+        : day;
+      const next = auth.nextAutopay?.isoDate && !auth.schedule?.requiresApproval ? `Next estimated AutoPay: ${displayISODate(auth.nextAutopay.isoDate)}` : '';
       return `<div class="wl-autopay-mini">
         <strong>AutoPay on file</strong>
-        <span>${escapeHtml(autopayStatusLabel(auth.status))} · ${escapeHtml(method)}${ending} · ${escapeHtml(day)}</span>
+        <span>${escapeHtml(autopayStatusLabel(auth.status))} · ${escapeHtml(method)}${ending} · ${escapeHtml(scheduleText)}</span>
         ${next ? `<span>${escapeHtml(next)}</span>` : ''}
         <a class="wl-btn" href="${escapeAttr(manageAutopayUrl)}">Manage AutoPay</a>
       </div>`;
