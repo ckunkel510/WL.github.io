@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var BUILD_VERSION = "20260707-bridge-5";
+  var BUILD_VERSION = "20260710-ups-fallback-1";
 
   if (!/ShoppingCart\.aspx/i.test(window.location.pathname || "")) return;
   if (window.WLShippingPromo && window.WLShippingPromo.version === BUILD_VERSION) return;
@@ -50,6 +50,32 @@
     ["308735", "YHC6523"],
     ["308781", "MYC4802"],
     ["308784", "MYC-DRAIN03"]
+  ];
+
+  var FALLBACK_UPS_PRODUCTS = [
+    { ProductID: "282948", ProductCode: "TB-ORIG-G3-TAN", Weight: "14" },
+    { ProductID: "282951", ProductCode: "TB-ORIG-G3-GRAY", Weight: "14" },
+    { ProductID: "282949", ProductCode: "TB-ORIG-G3-WHT", Weight: "14" },
+    { ProductID: "282952", ProductCode: "TB-ORIG-G3-ORG", Weight: "14" },
+    { ProductID: "287776", ProductCode: "TB-ORIG-G3-BURNTORANGE", Weight: "14" },
+    { ProductID: "287775", ProductCode: "TB-ORIG-G3-MAROON", Weight: "14" },
+    { ProductID: "282954", ProductCode: "TB-RANG-GRAY", Weight: "7" },
+    { ProductID: "282955", ProductCode: "TB-RANG-IVR", Weight: "7" },
+    { ProductID: "282953", ProductCode: "TB-RANG-TAN", Weight: "7" },
+    { ProductID: "290262", ProductCode: "TB-RANG-DELTA", Weight: "7" },
+    { ProductID: "283538", ProductCode: "TB-GRAN-G1-TAN", Weight: "18" },
+    { ProductID: "308684", ProductCode: "MGDYC84", Weight: "3" },
+    { ProductID: "308685", ProductCode: "MGDYC85", Weight: "3" },
+    { ProductID: "308686", ProductCode: "MGDYC8YVC", Weight: "3" },
+    { ProductID: "308690", ProductCode: "MGSSC801NB", Weight: "5" },
+    { ProductID: "308691", ProductCode: "MGSSC80183", Weight: "5" },
+    { ProductID: "308689", ProductCode: "MGSSC801GE", Weight: "5" },
+    { ProductID: "308692", ProductCode: "MGSSC801YVC", Weight: "5" },
+    { ProductID: "308682", ProductCode: "YHCP30YVC", Weight: "6" },
+    { ProductID: "308679", ProductCode: "YHCP30CHBLK", Weight: "6" },
+    { ProductID: "308680", ProductCode: "YHCP30GVG", Weight: "6" },
+    { ProductID: "308683", ProductCode: "YHCP30GG", Weight: "6" },
+    { ProductID: "308681", ProductCode: "YHCP30XK7", Weight: "6" }
   ];
 
   var eligibleIds = {};
@@ -200,7 +226,12 @@
   function buildPackages(items, products) {
     var byCode = {};
     var byId = {};
+    FALLBACK_UPS_PRODUCTS.forEach(function (product) {
+      byCode[normalizeProductCode(product.ProductCode)] = product;
+      byId[text(product.ProductID)] = product;
+    });
     (products || []).forEach(function (product) {
+      if (!moneyNumber(product && product.Weight)) return;
       byCode[normalizeProductCode(product.ProductCode)] = product;
       var id = text(product.ProductID || product.ProductId || product.productId || product.id);
       if (id) byId[id] = product;

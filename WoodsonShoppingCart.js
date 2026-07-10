@@ -10,7 +10,7 @@
   const CART_SUBTOTAL_KEY = 'wl_cart_subtotal_v1';
   const QUOTE_TTL_MS = 4 * 60 * 60 * 1000;
   const UPS_RATE_URL = 'https://wl-upsrates.vercel.app/api/ups-rates';
-  const SHIPPING_PROMO_VERSION = '20260707-bridge-5';
+  const SHIPPING_PROMO_VERSION = '20260710-ups-fallback-1';
   const SHIPPING_PROMO_SCRIPT_URL = 'https://ckunkel510.github.io/WL.github.io/UpsShippingPromo.js?v=' + SHIPPING_PROMO_VERSION;
   let checkoutBlockReason = '';
   const STORE_ORIGINS = {
@@ -22,6 +22,31 @@
     mexia: { name: 'Mexia', city: 'Mexia', state: 'TX', postalCode: '76667' },
     groesbeck: { name: 'Groesbeck', city: 'Groesbeck', state: 'TX', postalCode: '76642' }
   };
+  const FALLBACK_UPS_PRODUCTS = [
+    { ProductID: '282948', ProductCode: 'TB-ORIG-G3-TAN', Weight: '14', Length: '12', Width: '9', Thickness: '8' },
+    { ProductID: '282951', ProductCode: 'TB-ORIG-G3-GRAY', Weight: '14', Length: '12', Width: '9', Thickness: '8' },
+    { ProductID: '282949', ProductCode: 'TB-ORIG-G3-WHT', Weight: '14', Length: '12', Width: '9', Thickness: '8' },
+    { ProductID: '282952', ProductCode: 'TB-ORIG-G3-ORG', Weight: '14', Length: '12', Width: '9', Thickness: '8' },
+    { ProductID: '287776', ProductCode: 'TB-ORIG-G3-BURNTORANGE', Weight: '14', Length: '12', Width: '9', Thickness: '8' },
+    { ProductID: '287775', ProductCode: 'TB-ORIG-G3-MAROON', Weight: '14', Length: '12', Width: '9', Thickness: '8' },
+    { ProductID: '282954', ProductCode: 'TB-RANG-GRAY', Weight: '7', Length: '11', Width: '7', Thickness: '5' },
+    { ProductID: '282955', ProductCode: 'TB-RANG-IVR', Weight: '7', Length: '11', Width: '7', Thickness: '5' },
+    { ProductID: '282953', ProductCode: 'TB-RANG-TAN', Weight: '7', Length: '11', Width: '7', Thickness: '5' },
+    { ProductID: '290262', ProductCode: 'TB-RANG-DELTA', Weight: '7', Length: '11', Width: '7', Thickness: '5' },
+    { ProductID: '283538', ProductCode: 'TB-GRAN-G1-TAN', Weight: '18', Length: '18', Width: '10', Thickness: '8' },
+    { ProductID: '308684', ProductCode: 'MGDYC84', Weight: '3', Length: '12', Width: '9', Thickness: '7' },
+    { ProductID: '308685', ProductCode: 'MGDYC85', Weight: '3', Length: '12', Width: '9', Thickness: '7' },
+    { ProductID: '308686', ProductCode: 'MGDYC8YVC', Weight: '3', Length: '12', Width: '9', Thickness: '7' },
+    { ProductID: '308690', ProductCode: 'MGSSC801NB', Weight: '5', Length: '16', Width: '10', Thickness: '9' },
+    { ProductID: '308691', ProductCode: 'MGSSC80183', Weight: '5', Length: '16', Width: '10', Thickness: '9' },
+    { ProductID: '308689', ProductCode: 'MGSSC801GE', Weight: '5', Length: '16', Width: '10', Thickness: '9' },
+    { ProductID: '308692', ProductCode: 'MGSSC801YVC', Weight: '5', Length: '16', Width: '10', Thickness: '9' },
+    { ProductID: '308682', ProductCode: 'YHCP30YVC', Weight: '6', Length: '18', Width: '12', Thickness: '10' },
+    { ProductID: '308679', ProductCode: 'YHCP30CHBLK', Weight: '6', Length: '18', Width: '12', Thickness: '10' },
+    { ProductID: '308680', ProductCode: 'YHCP30GVG', Weight: '6', Length: '18', Width: '12', Thickness: '10' },
+    { ProductID: '308683', ProductCode: 'YHCP30GG', Weight: '6', Length: '18', Width: '12', Thickness: '10' },
+    { ProductID: '308681', ProductCode: 'YHCP30XK7', Weight: '6', Length: '18', Width: '12', Thickness: '10' }
+  ];
 
   function ready(fn) {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn, { once: true });
@@ -30,6 +55,10 @@
 
   function text(value) {
     return String(value || '').replace(/\s+/g, ' ').trim();
+  }
+
+  function normalizeProductCode(value) {
+    return text(value).replace(/\s+/g, '').toUpperCase();
   }
 
   function loadShippingPromoScript() {
@@ -231,15 +260,47 @@
     try {
       const response = await fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vSg6EOqMwc_5UjWU7ycyvF-rgj717p-WjV2Vhydcb7uc2Mf2Awj6GehQp66AHwViq4uX6mXXrtZZR-1/pub?output=csv');
       if (!response.ok) return [];
-      const rows = (await response.text()).split(/\r?\n/).map(function (row) { return row.split(','); });
+      const rows = parseCsv(await response.text());
       const headers = rows.shift() || [];
       return rows.map(function (row) {
-        return Object.fromEntries(row.map(function (cell, index) { return [headers[index], cell]; }));
+        return Object.fromEntries(row.map(function (cell, index) { return [text(headers[index]), cell]; }));
       });
     } catch (error) {
       console.warn('[WLCart] Could not read product shipping dimensions.', error);
       return [];
     }
+  }
+
+  function parseCsv(source) {
+    const rows = [];
+    let row = [];
+    let cell = '';
+    let inQuotes = false;
+    const textValue = String(source || '');
+    for (let index = 0; index < textValue.length; index += 1) {
+      const char = textValue[index];
+      const next = textValue[index + 1];
+      if (char === '"' && inQuotes && next === '"') {
+        cell += '"';
+        index += 1;
+      } else if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        row.push(cell);
+        cell = '';
+      } else if ((char === '\n' || char === '\r') && !inQuotes) {
+        if (char === '\r' && next === '\n') index += 1;
+        row.push(cell);
+        if (row.some(function (value) { return value !== ''; })) rows.push(row);
+        row = [];
+        cell = '';
+      } else {
+        cell += char;
+      }
+    }
+    row.push(cell);
+    if (row.some(function (value) { return value !== ''; })) rows.push(row);
+    return rows;
   }
 
   function isWithinCentralDeliveryZone(zip) {
@@ -257,14 +318,28 @@
   }
 
   function buildUpsPackage(items, productData) {
-    const byCode = new Map(productData.map(function (product) {
-      return [text(product.ProductCode).toUpperCase(), product];
-    }));
+    const byCode = new Map();
+    const byId = new Map();
+
+    FALLBACK_UPS_PRODUCTS.forEach(function (product) {
+      byCode.set(normalizeProductCode(product.ProductCode), product);
+      byId.set(text(product.ProductID), product);
+    });
+    (productData || []).forEach(function (product) {
+      const weight = Number(product?.Weight);
+      if (!Number.isFinite(weight) || weight <= 0) return;
+      const code = normalizeProductCode(product.ProductCode);
+      const id = text(product.ProductID || product.ProductId || product.productId || product.id);
+      if (code) byCode.set(code, product);
+      if (id) byId.set(id, product);
+    });
+
     let totalWeight = 0;
     let containsLargeItems = false;
 
     for (const item of items) {
-      const product = byCode.get(item.code);
+      const product = byId.get(text(item.productId)) ||
+        byCode.get(normalizeProductCode(item.productCode || item.code));
       const weight = Number(product?.Weight);
       if (!product || !Number.isFinite(weight) || weight <= 0) {
         return { unavailable: true, containsLargeItems: false };
