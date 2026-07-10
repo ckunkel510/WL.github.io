@@ -30,7 +30,9 @@
   const AUTOPAY_ENDPOINT = 'https://wlmarketingdashboard.vercel.app/api/public/autopay-authorizations';
   const AUTOPAY_CONTEXT_KEY = 'wl_autopay_account_context_v1';
   const AUTOPAY_PENDING_KEY = 'wl_autopay_pending_v1';
+  const AUTOPAY_ACTIVE_KEY = 'wl_autopay_active_v1';
   const AUTOPAY_ADD_BANK_SESSION_KEY = 'wl_autopay_add_bank_started_v1';
+  const AUTOPAY_DAYS = [26, 27, 28, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
   const CARD_TYPE_LABELS = {
     VI: 'Visa',
@@ -155,6 +157,67 @@
     try {
       localStorage.removeItem(key);
     } catch {}
+  }
+
+  function getStoredAutopayRecords() {
+    const raw = readLocalJson(AUTOPAY_ACTIVE_KEY, []);
+    const records = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+    return records.filter(record => record && record.id && record.managementToken);
+  }
+
+  function writeStoredAutopayRecords(records) {
+    writeLocalJson(AUTOPAY_ACTIVE_KEY, records.filter(record => record && record.id && record.managementToken));
+  }
+
+  function isOpenAutopay(record) {
+    return record && !/cancelled/i.test(record.authorization?.status || record.status || '');
+  }
+
+  function saveAutopayRecord(data) {
+    if (!data?.authorization?.id || !data?.managementToken) return;
+    const records = getStoredAutopayRecords().filter(record => record.id !== data.authorization.id);
+    records.unshift({
+      id: data.authorization.id,
+      managementToken: data.managementToken,
+      authorization: data.authorization,
+      savedAt: new Date().toISOString()
+    });
+    writeStoredAutopayRecords(records.slice(0, 5));
+  }
+
+  function updateAutopayRecord(authorization) {
+    if (!authorization?.id) return;
+    const records = getStoredAutopayRecords().map(record => record.id === authorization.id
+      ? { ...record, authorization, savedAt: record.savedAt || new Date().toISOString() }
+      : record
+    );
+    writeStoredAutopayRecords(records);
+  }
+
+  function ordinal(day) {
+    const n = Number(day);
+    if (n % 100 >= 11 && n % 100 <= 13) return `${n}th`;
+    if (n % 10 === 1) return `${n}st`;
+    if (n % 10 === 2) return `${n}nd`;
+    if (n % 10 === 3) return `${n}rd`;
+    return `${n}th`;
+  }
+
+  function numericEnding(token) {
+    const tail = tokenTail(token);
+    return /^\d{4}$/.test(tail) ? tail : '';
+  }
+
+  function bankOptionLabel(bank) {
+    const ending = numericEnding(bank.token);
+    const name = bank.name || 'Saved bank account';
+    return ending ? `${name} - ending ${ending}` : `${name} - saved ACH`;
+  }
+
+  function statusLabel(value) {
+    const clean = String(value || '').replace(/_/g, ' ').trim();
+    if (!clean) return 'Pending review';
+    return clean.replace(/\b\w/g, ch => ch.toUpperCase());
   }
 
   function shouldShowAutopay() {
@@ -618,6 +681,28 @@
       .wl-autopay-check input {
         margin-top: 3px;
       }
+      .wl-autopay-existing {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 12px;
+        border: 1px solid #cbe7d2;
+        border-radius: 12px;
+        background: #f0faf3;
+        padding: 12px;
+        color: #1f5f2f;
+      }
+      .wl-autopay-existing strong,
+      .wl-autopay-existing span {
+        display: block;
+      }
+      .wl-autopay-existing span {
+        margin-top: 2px;
+        color: #426b4c;
+        font-size: .86rem;
+        font-weight: 650;
+      }
       .wl-autopay-actions {
         display: flex;
         flex-wrap: wrap;
@@ -693,6 +778,7 @@
         .wl-autopay-head { flex-direction: column; }
         .wl-autopay-form { grid-template-columns: 1fr; }
         .wl-autopay-actions .wl-btn { width: 100%; }
+        .wl-autopay-existing { align-items: stretch; flex-direction: column; }
       }
     </style>`));
   }
@@ -735,7 +821,7 @@
     const isBank = item.kind === 'bank';
     const label = isBank ? 'Bank Account' : cardTypeLabel(item.typeRaw);
     const iconText = isBank ? '🏦' : cardIcon(item.typeRaw);
-    const ending = maskedEnding(item.token);
+    const ending = isBank && !numericEnding(item.token) ? 'Saved ACH' : maskedEnding(item.token);
     const status = expiryStatus(item.expiry);
     const statusClass = status === 'Expired' ? 'status-expired' : '';
 
@@ -784,15 +870,20 @@
   function createAutopayPanel({ banks, addCheck }) {
     const context = getAutopayContext();
     const hasBanks = banks.length > 0;
+    const existingRecords = getStoredAutopayRecords().filter(isOpenAutopay);
+    const primaryRecord = existingRecords[0] || null;
     const selectedBankOptions = banks.map((bank, index) => {
-      const ending = tokenTail(bank.token);
-      const label = `${bank.name || 'Bank account'}${ending ? ` - ending ${ending}` : ''}`;
+      const label = bankOptionLabel(bank);
       return `<option value="${index}">${escapeHtml(label)}</option>`;
     }).join('');
 
-    const dayOptions = Array.from({ length: 10 }, (_, index) => index + 1)
-      .map(day => `<option value="${day}"${day === 10 ? ' selected' : ''}>${day}${day === 1 ? 'st' : day === 2 ? 'nd' : day === 3 ? 'rd' : 'th'} of the month</option>`)
+    const dayOptions = AUTOPAY_DAYS
+      .map(day => `<option value="${day}"${day === 10 ? ' selected' : ''}>${ordinal(day)} of the month</option>`)
       .join('');
+    const active = primaryRecord?.authorization || null;
+    const activeDay = active?.schedule?.preferredDay || '';
+    const activeMethod = active?.paymentMethod?.label || 'Saved bank account';
+    const activeEnding = active?.paymentMethod?.ending ? ` ending ${escapeHtml(active.paymentMethod.ending)}` : '';
 
     const panel = dom(`
       <section class="wl-autopay-panel" id="wlAutopayPanel">
@@ -807,8 +898,17 @@
           <div class="wl-autopay-card">
             <h3>Statement-balance authorization</h3>
             <div class="wl-autopay-note">
-              Phase 1 stores your authorization request for Woodson review. It does not automatically charge your account until Woodson activates it.
+              AutoPay pays the full statement balance on the date you select. Eligible dates are the 26th-28th or 1st-10th.
             </div>
+            ${active ? `
+              <div class="wl-autopay-existing" data-wl-autopay-existing>
+                <div>
+                  <strong>AutoPay request on file</strong>
+                  <span>${escapeHtml(statusLabel(active.status))} · ${escapeHtml(activeMethod)}${activeEnding} · ${activeDay ? escapeHtml(ordinal(activeDay)) : 'Selected date'} monthly</span>
+                </div>
+                <button type="button" class="wl-btn" data-wl-autopay-cancel="${escapeHtml(primaryRecord.id)}">Cancel AutoPay</button>
+              </div>
+            ` : ''}
             ${!hasBanks ? `
               <div class="wl-empty" style="margin-top:12px;text-align:left">
                 Add a bank account first so this AutoPay request can point to the right saved ACH method.
@@ -834,20 +934,12 @@
                 <input id="wlAutopayPhone" type="tel" autocomplete="tel" placeholder="(###) ###-####">
               </label>
               <label class="wl-autopay-field">
-                Payment timing
-                <select id="wlAutopaySchedule">
-                  <option value="standard_due_date">By due date, generally the 10th</option>
-                  <option value="fixed_day">Pick a day from the 1st-10th</option>
-                  <option value="terms_confirm">Woodson review account terms</option>
-                </select>
-              </label>
-              <label class="wl-autopay-field">
-                Preferred day
+                AutoPay date
                 <select id="wlAutopayDay">${dayOptions}</select>
               </label>
               <label class="wl-autopay-field full">
                 Notes for Woodson
-                <textarea id="wlAutopayNotes" placeholder="Optional: special terms, job account notes, or who should be contacted."></textarea>
+                <textarea id="wlAutopayNotes" placeholder="Optional: who should be contacted or any account notes."></textarea>
               </label>
               <label class="wl-autopay-check full">
                 <input id="wlAutopayConsentBalance" type="checkbox">
@@ -859,7 +951,7 @@
               </label>
               <label class="wl-autopay-check full">
                 <input id="wlAutopayConsentTerms" type="checkbox">
-                <span>I understand Woodson will review account terms before activating AutoPay and may contact me if the selected day does not match the account terms.</span>
+                <span>I understand AutoPay may be cancelled online up to the day before the selected payment date.</span>
               </label>
               <div class="wl-autopay-status" id="wlAutopayStatus" role="status"></div>
               <div class="wl-autopay-actions">
@@ -871,9 +963,8 @@
           <aside class="wl-autopay-summary" aria-label="AutoPay account summary">
             <div><span>Account</span><strong>${escapeHtml(context.accountName || 'Current account')}</strong></div>
             <div><span>Statement balance</span><strong>${escapeHtml(context.statementBalance || 'Statement balance in full')}</strong></div>
-            <div><span>Due date</span><strong>${escapeHtml(context.dueDate || 'Generally the 10th')}</strong></div>
+            <div><span>Eligible dates</span><strong>26th-28th or 1st-10th</strong></div>
             <div><span>Billing cycle</span><strong>${escapeHtml(context.cycle)}</strong></div>
-            ${context.termsLabel ? `<div><span>Terms</span><strong>${escapeHtml(context.termsLabel)}</strong></div>` : ''}
             ${/cash|test/i.test(context.accountKind || '') ? `<div><span>Test path</span><strong>This account is enabled for rollout testing.</strong></div>` : ''}
           </aside>
         </div>
@@ -896,6 +987,55 @@
       status.textContent = message;
     }
 
+    async function postAutopayAction(action, record) {
+      const response = await fetch(AUTOPAY_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          id: record.id,
+          managementToken: record.managementToken
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || data.ok === false) throw new Error(data.error || 'Unable to update AutoPay.');
+      updateAutopayRecord(data.authorization);
+      return data.authorization;
+    }
+
+    if (primaryRecord) {
+      postAutopayAction('status', primaryRecord).catch(() => {});
+    }
+
+    $$('[data-wl-autopay-cancel]', panel).forEach(button => {
+      button.addEventListener('click', async () => {
+        const record = getStoredAutopayRecords().find(item => item.id === button.getAttribute('data-wl-autopay-cancel'));
+        if (!record) {
+          setStatus('bad', 'Could not find the local AutoPay record to cancel.');
+          return;
+        }
+
+        if (!window.confirm('Cancel this AutoPay request? This can be done online up to the day before the selected payment date.')) {
+          return;
+        }
+
+        button.disabled = true;
+        setStatus('ok', 'Cancelling AutoPay...');
+
+        try {
+          const authorization = await postAutopayAction('cancel', record);
+          setStatus('ok', 'AutoPay has been cancelled.');
+          const existing = panel.querySelector('[data-wl-autopay-existing]');
+          if (existing) {
+            existing.innerHTML = `<div><strong>AutoPay cancelled</strong><span>${escapeHtml(statusLabel(authorization.status))}</span></div>`;
+          }
+        } catch (error) {
+          button.disabled = false;
+          setStatus('bad', error.message || 'Unable to cancel AutoPay.');
+        }
+      });
+    });
+
     if (form && hasBanks) {
       form.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -908,7 +1048,7 @@
         const signerName = $('#wlAutopayName', panel)?.value.trim() || '';
         const email = $('#wlAutopayEmail', panel)?.value.trim() || '';
         const phone = $('#wlAutopayPhone', panel)?.value.trim() || '';
-        const scheduleMode = $('#wlAutopaySchedule', panel)?.value || 'standard_due_date';
+        const scheduleMode = 'fixed_day';
         const preferredDay = $('#wlAutopayDay', panel)?.value || '10';
         const notes = $('#wlAutopayNotes', panel)?.value.trim() || '';
         const consentBalance = $('#wlAutopayConsentBalance', panel)?.checked;
@@ -943,14 +1083,13 @@
             kind: 'bank',
             label: bank.name || 'Bank account',
             type: bank.typeRaw || 'Check',
-            ending: tokenTail(bank.token),
+            ending: numericEnding(bank.token),
             expiry: bank.expiry || ''
           },
           schedule: {
             mode: scheduleMode,
             day: preferredDay,
-            termsLabel: context.termsLabel,
-            requestedTermsReview: scheduleMode === 'terms_confirm'
+            requestedTermsReview: false
           },
           consent: {
             statementBalance: true,
@@ -972,8 +1111,9 @@
           });
           const data = await response.json().catch(() => ({}));
           if (!response.ok || data.ok === false) throw new Error(data.error || 'Unable to save AutoPay request.');
+          saveAutopayRecord(data);
           removeLocalItem(AUTOPAY_PENDING_KEY);
-          setStatus('ok', 'AutoPay request received. Woodson will review the account terms and activate the schedule when approved.');
+          setStatus('ok', 'AutoPay request received. You can cancel online up to the day before the selected payment date.');
           form.querySelectorAll('input, select, textarea, button').forEach(control => {
             if (!control.matches('[data-wl-autopay-add-bank]')) control.disabled = true;
           });
@@ -1120,6 +1260,8 @@
     const addCheck = $(SELECTORS.addCheck);
     const back = $(SELECTORS.back);
     const backHref = back?.getAttribute('href') || 'AccountInfo_R.aspx';
+    const autopayMode = shouldShowAutopay();
+    const hasStoredAutopay = getStoredAutopayRecords().some(isOpenAutopay);
 
     const root = dom(`
       <div class="wl-tokens-root">
@@ -1127,8 +1269,8 @@
           <div class="wl-ham">
             <button class="wl-menu-btn" type="button" aria-expanded="false" aria-controls="wl-tokens-menu">☰ Menu</button>
             <div class="wl-title-wrap">
-              <div class="wl-title">Payment Methods</div>
-              <div class="wl-subtitle">Manage saved cards and bank accounts for faster checkout and account payments.</div>
+              <div class="wl-title">${autopayMode ? 'Set up AutoPay' : 'Payment Methods'}</div>
+              <div class="wl-subtitle">${autopayMode ? 'Choose a saved bank account and payment date for statement-balance AutoPay.' : 'Manage saved cards and bank accounts for faster checkout and account payments.'}</div>
             </div>
             <div id="wl-tokens-menu" class="wl-ham-menu" role="menu"></div>
           </div>
@@ -1141,27 +1283,32 @@
     `);
 
     const layout = $('.wl-token-layout', root);
-    if (shouldShowAutopay()) {
+    if (autopayMode) {
       root.insertBefore(createAutopayPanel({ banks, addCheck }), layout);
     }
-    layout.appendChild(createSection({
-      id: 'wl-card-methods',
-      title: 'Cards',
-      count: cards.length,
-      addLabel: '+ Add Card',
-      addHandler: () => triggerOriginalButton(addCard),
-      items: cards,
-      kind: 'card'
-    }));
-    layout.appendChild(createSection({
-      id: 'wl-bank-methods',
-      title: 'Banking / ACH',
-      count: banks.length,
-      addLabel: '+ Add Bank Account',
-      addHandler: () => triggerOriginalButton(addCheck),
-      items: banks,
-      kind: 'bank'
-    }));
+
+    if (!autopayMode || hasStoredAutopay) {
+      layout.appendChild(createSection({
+        id: 'wl-card-methods',
+        title: 'Cards',
+        count: cards.length,
+        addLabel: '+ Add Card',
+        addHandler: () => triggerOriginalButton(addCard),
+        items: cards,
+        kind: 'card'
+      }));
+      layout.appendChild(createSection({
+        id: 'wl-bank-methods',
+        title: 'Banking / ACH',
+        count: banks.length,
+        addLabel: '+ Add Bank Account',
+        addHandler: () => triggerOriginalButton(addCheck),
+        items: banks,
+        kind: 'bank'
+      }));
+    } else {
+      layout.style.display = 'none';
+    }
 
     const host = $(SELECTORS.bodyFlex) || $('td.pageContentBody') || $('.col') || document.body;
     host.insertBefore(root, host.firstChild);

@@ -29,6 +29,7 @@
   const PAYMENT_METHODS_URL = 'https://webtrack.woodsonlumber.com/CustomerTokens.aspx';
   const AUTOPAY_CONTEXT_KEY = 'wl_autopay_account_context_v1';
   const AUTOPAY_PENDING_KEY = 'wl_autopay_pending_v1';
+  const AUTOPAY_ACTIVE_KEY = 'wl_autopay_active_v1';
 
   // Same-origin lookup used to pull the account email from AccountSettings.aspx
   // instead of relying on localStorage or requiring the customer to re-type it.
@@ -67,6 +68,36 @@
     if(!match) return raw;
     return new Date(+match[3],+match[1]-1,+match[2]).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
   };
+  const ordinal=(value)=>{
+    const n=Number(value);
+    if(!n) return '';
+    if(n%100>=11 && n%100<=13) return `${n}th`;
+    if(n%10===1) return `${n}st`;
+    if(n%10===2) return `${n}nd`;
+    if(n%10===3) return `${n}rd`;
+    return `${n}th`;
+  };
+  const displayISODate=(value)=>{
+    const raw=String(value||'').trim();
+    const m=raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if(!m) return raw;
+    return new Date(Number(m[1]),Number(m[2])-1,Number(m[3])).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  };
+  function readJsonLocal(key, fallback){
+    try { return JSON.parse(localStorage.getItem(key) || ''); } catch { return fallback; }
+  }
+  function autopayStatusLabel(value){
+    const clean=String(value||'pending_review').replace(/_/g,' ').trim();
+    return clean.replace(/\b\w/g, ch=>ch.toUpperCase());
+  }
+  function findLocalAutopay(accountName){
+    const raw=readJsonLocal(AUTOPAY_ACTIVE_KEY, []);
+    const records=Array.isArray(raw)?raw:(raw?[raw]:[]);
+    const open=records.filter(record => record?.authorization && !/cancelled/i.test(record.authorization.status||''));
+    if(!open.length) return null;
+    const needle=String(accountName||'').trim().toLowerCase();
+    return open.find(record => String(record.authorization.account?.name||'').trim().toLowerCase()===needle) || open[0];
+  }
   function getCashBalanceCredit(){
     const el=document.getElementById('ctl00_PageBody_lblBalanceLabel');
     if(!el) return 0;
@@ -260,6 +291,10 @@
   input[type="checkbox"].switch-input:checked + .switch{background:${BRAND.primary};border-color:${BRAND.primary}}
   input[type="checkbox"].switch-input:checked + .switch:after{left:calc(100% - var(--dot) - 3px)}
   .wl-inline{display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap}
+  .wl-autopay-mini{margin-top:10px;border:1px solid #cfe7d6;border-radius:10px;background:#f0faf3;padding:10px;color:#214f2b}
+  .wl-autopay-mini strong{display:block;color:#173d20;font-size:.94rem}
+  .wl-autopay-mini span{display:block;margin-top:3px;color:#41684a;font-size:.84rem;font-weight:650}
+  .wl-autopay-mini a{margin-top:8px}
   `;
   document.head.appendChild(dom(`<style>${styles}</style>`));
 
@@ -290,6 +325,7 @@
     const links={ jobs: $('#JobBalancesButton'), statement: $('#GetInterimStatementLink') };
     const acctName=(txt($('.panel.panelAccountInfo .listPageHeader'))||'').replace(/Account Information for/i,'').trim() || 'Your Account';
     const accountKey = acctName || 'unknown';
+    const localAutopay = findLocalAutopay(acctName || accountKey);
 
     const stmtNetAmt = mNum(last['Last Statement Net Amount']?.amount);
     const stmtDate   = parseUS(last['Last Statement Amount']?.date || last['Last Statement Net Amount']?.date);
@@ -320,6 +356,11 @@
       if (isAutopayTestAccount || isCashAccount) url.searchParams.set('wlAutopayTest', '1');
       return url.href;
     })();
+    const manageAutopayUrl = (() => {
+      const url = new URL(PAYMENT_METHODS_URL, location.origin);
+      url.searchParams.set('wlAutopay', '1');
+      return url.href;
+    })();
 
     function saveAutopayContext(){
       const context = {
@@ -338,6 +379,20 @@
         localStorage.setItem(AUTOPAY_PENDING_KEY, JSON.stringify({ startedAt: Date.now(), source: 'AccountInfo_R.aspx' }));
       } catch(e) {}
     }
+
+    const autopaySummaryHtml = localAutopay ? (() => {
+      const auth = localAutopay.authorization || {};
+      const method = auth.paymentMethod?.label || 'Saved bank account';
+      const ending = auth.paymentMethod?.ending ? ` ending ${escapeHtml(auth.paymentMethod.ending)}` : '';
+      const day = auth.schedule?.preferredDay ? `${ordinal(auth.schedule.preferredDay)} monthly` : 'Selected date';
+      const next = auth.nextAutopay?.isoDate ? `Next estimated AutoPay: ${displayISODate(auth.nextAutopay.isoDate)}` : '';
+      return `<div class="wl-autopay-mini">
+        <strong>AutoPay on file</strong>
+        <span>${escapeHtml(autopayStatusLabel(auth.status))} · ${escapeHtml(method)}${ending} · ${escapeHtml(day)}</span>
+        ${next ? `<span>${escapeHtml(next)}</span>` : ''}
+        <a class="wl-btn" href="${escapeAttr(manageAutopayUrl)}">Manage AutoPay</a>
+      </div>`;
+    })() : '';
 
     /* mount */
     const container = dom(`
@@ -395,6 +450,7 @@
               <div class="wl-meta">Net Amount: <strong>${last['Last Statement Net Amount']?.amount || '—'}</strong></div>
               <div class="wl-meta">Finance Charges: <strong>${last['Last Statement Finance Charges']?.amount || '—'}</strong></div>
               <div class="wl-meta">Due Date: <strong>${stmtDue}</strong></div>
+              ${autopaySummaryHtml}
               <div class="wl-actions" style="margin-top:8px">
                 <a class="wl-btn primary" id="wl-pay-statement" href="${payStmtUrl}">Pay This Statement</a>
                 ${showAutopaySignup ? `<a class="wl-btn" data-wl-autopay-start href="${escapeAttr(autopayUrl)}">Set Up AutoPay</a>` : ''}
