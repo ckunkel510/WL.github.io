@@ -27,6 +27,11 @@
     legacyHeader: '.bodyFlexItem.listPageHeader'
   };
 
+  const AUTOPAY_ENDPOINT = 'https://wlmarketingdashboard.vercel.app/api/public/autopay-authorizations';
+  const AUTOPAY_CONTEXT_KEY = 'wl_autopay_account_context_v1';
+  const AUTOPAY_PENDING_KEY = 'wl_autopay_pending_v1';
+  const AUTOPAY_ADD_BANK_SESSION_KEY = 'wl_autopay_add_bank_started_v1';
+
   const CARD_TYPE_LABELS = {
     VI: 'Visa',
     VISA: 'Visa',
@@ -124,6 +129,46 @@
     return last ? `•••• ${last}` : 'Token saved';
   }
 
+  function safeJsonParse(value, fallback = null) {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return fallback;
+    }
+  }
+
+  function readLocalJson(key, fallback = null) {
+    try {
+      return safeJsonParse(localStorage.getItem(key), fallback);
+    } catch {
+      return fallback;
+    }
+  }
+
+  function writeLocalJson(key, value) {
+    try {
+      localStorage.setItem(key, JSON.stringify(value));
+    } catch {}
+  }
+
+  function removeLocalItem(key) {
+    try {
+      localStorage.removeItem(key);
+    } catch {}
+  }
+
+  function shouldShowAutopay() {
+    const params = new URLSearchParams(location.search || '');
+    if (params.get('wlAutopay') === '1') return true;
+    const pending = readLocalJson(AUTOPAY_PENDING_KEY, null);
+    return Boolean(pending?.startedAt && Date.now() - Number(pending.startedAt) < 60 * 60 * 1000);
+  }
+
+  function shouldAutoOpenAddBank() {
+    const params = new URLSearchParams(location.search || '');
+    return params.get('wlAutopayAddBank') === '1';
+  }
+
   function parseExpiry(value) {
     const m = String(value || '').match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
     if (!m) return null;
@@ -161,13 +206,16 @@
         const editLink = actionCell?.querySelector('a[href*="action=EDIT"], a[id*="Edit"]') || null;
         const deleteLink = actionCell?.querySelector('a[onclick*="PromptDeleteCard"], a[id*="Delete"], a[href^="javascript:__doPostBack"]') || null;
         const typeRaw = getCell(row, 'Card Type');
+        const token = getCell(row, 'Stored Payment Token');
+        const name = getCell(row, 'Name') || (isBankingToken(row, typeRaw, editLink) ? 'Bank Account' : 'Saved Card');
+        if (!token && !typeRaw && !editLink && !deleteLink && !name) return null;
         const kind = isBankingToken(row, typeRaw, editLink) ? 'bank' : 'card';
 
         return {
           index,
           kind,
-          name: getCell(row, 'Name') || (kind === 'bank' ? 'Bank Account' : 'Saved Card'),
-          token: getCell(row, 'Stored Payment Token'),
+          name,
+          token,
           expiry: getCell(row, 'Token Expiry Date'),
           contact: getCell(row, 'Contact Name'),
           zip: getCell(row, 'ZIP Code'),
@@ -175,7 +223,9 @@
           editLink,
           deleteLink
         };
-      });
+      })
+      .filter(Boolean)
+      .filter(item => item.token || item.typeRaw || item.editLink || item.deleteLink);
   }
 
   function addStyles() {
@@ -466,6 +516,159 @@
         text-align: center;
       }
 
+      .wl-autopay-panel {
+        margin: 0 0 14px;
+        border: 1px solid #e5d6da;
+        border-radius: 16px;
+        background: #fff;
+        box-shadow: 0 1px 6px rgba(0,0,0,.06);
+        overflow: hidden;
+      }
+      .wl-autopay-head {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 14px;
+        background: #201a1b;
+        color: #fff;
+      }
+      .wl-autopay-title {
+        font-size: 1.04rem;
+        font-weight: 900;
+      }
+      .wl-autopay-subtitle {
+        margin-top: 3px;
+        color: rgba(255,255,255,.78);
+        font-size: .9rem;
+      }
+      .wl-autopay-body {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) 320px;
+        gap: 14px;
+        padding: 14px;
+        background: ${BRAND.bgSoft};
+      }
+      .wl-autopay-card {
+        min-width: 0;
+        border: 1px solid #ead5da;
+        border-radius: 14px;
+        background: #fff;
+        padding: 14px;
+      }
+      .wl-autopay-card h3 {
+        margin: 0;
+        color: ${BRAND.primary};
+        font-size: 1rem;
+      }
+      .wl-autopay-note {
+        margin-top: 8px;
+        color: ${BRAND.muted};
+        font-size: .88rem;
+        line-height: 1.45;
+      }
+      .wl-autopay-form {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 12px;
+      }
+      .wl-autopay-field {
+        display: grid;
+        gap: 5px;
+        min-width: 0;
+        color: #251f20;
+        font-size: .88rem;
+        font-weight: 800;
+      }
+      .wl-autopay-field.full {
+        grid-column: 1 / -1;
+      }
+      .wl-autopay-field input,
+      .wl-autopay-field select,
+      .wl-autopay-field textarea {
+        width: 100%;
+        min-height: 40px;
+        border: 1px solid #d8c9cc;
+        border-radius: 10px;
+        background: #fff;
+        padding: 9px 10px;
+        color: #201a1b;
+        font: inherit;
+        font-weight: 600;
+      }
+      .wl-autopay-field textarea {
+        min-height: 76px;
+        resize: vertical;
+      }
+      .wl-autopay-check {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        border: 1px solid #eee;
+        border-radius: 10px;
+        background: #fff;
+        padding: 10px;
+        color: #3f3839;
+        font-size: .85rem;
+        line-height: 1.35;
+      }
+      .wl-autopay-check.full {
+        grid-column: 1 / -1;
+      }
+      .wl-autopay-check input {
+        margin-top: 3px;
+      }
+      .wl-autopay-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        grid-column: 1 / -1;
+      }
+      .wl-autopay-status {
+        grid-column: 1 / -1;
+        display: none;
+        border-radius: 10px;
+        padding: 10px;
+        font-size: .9rem;
+        font-weight: 750;
+      }
+      .wl-autopay-status.ok {
+        display: block;
+        border: 1px solid #bde5c8;
+        background: #effaf2;
+        color: #286b37;
+      }
+      .wl-autopay-status.bad {
+        display: block;
+        border: 1px solid #efc1c1;
+        background: #fff4f4;
+        color: #8d1f1f;
+      }
+      .wl-autopay-summary {
+        display: grid;
+        gap: 8px;
+      }
+      .wl-autopay-summary div {
+        border: 1px solid #eee;
+        border-radius: 10px;
+        background: #fff;
+        padding: 10px;
+      }
+      .wl-autopay-summary span {
+        display: block;
+        color: #706467;
+        font-size: .72rem;
+        font-weight: 900;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+      }
+      .wl-autopay-summary strong {
+        display: block;
+        margin-top: 3px;
+        color: #201a1b;
+        font-size: .95rem;
+      }
+
       .wl-token-legacy-hide {
         position: absolute !important;
         left: -9999px !important;
@@ -477,6 +680,7 @@
 
       @media (max-width: 980px) {
         .wl-token-layout { grid-template-columns: 1fr; }
+        .wl-autopay-body { grid-template-columns: 1fr; }
       }
       @media (max-width: 640px) {
         .wl-top { align-items: flex-start; flex-direction: column; }
@@ -486,6 +690,9 @@
         .wl-token-card { grid-template-columns: 1fr; }
         .wl-token-name-row { flex-direction: column; align-items: flex-start; }
         .wl-token-action, .wl-token-actions .wl-btn { flex: 1 1 100%; }
+        .wl-autopay-head { flex-direction: column; }
+        .wl-autopay-form { grid-template-columns: 1fr; }
+        .wl-autopay-actions .wl-btn { width: 100%; }
       }
     </style>`));
   }
@@ -558,6 +765,235 @@
     if (del) actions.appendChild(del);
 
     return tile;
+  }
+
+  function getAutopayContext() {
+    const context = readLocalJson(AUTOPAY_CONTEXT_KEY, {}) || {};
+    return {
+      accountName: context.accountName || '',
+      accountKind: context.accountKind || '',
+      termsLabel: context.termsLabel || '',
+      statementBalance: context.statementBalance || '',
+      lastStatementDate: context.lastStatementDate || '',
+      dueDate: context.dueDate || '',
+      cycle: context.cycle || 'Statements run on the 26th for the 26th-25th cycle and are generally due on the 10th.',
+      source: context.source || 'CustomerTokens.aspx'
+    };
+  }
+
+  function createAutopayPanel({ banks, addCheck }) {
+    const context = getAutopayContext();
+    const hasBanks = banks.length > 0;
+    const selectedBankOptions = banks.map((bank, index) => {
+      const ending = tokenTail(bank.token);
+      const label = `${bank.name || 'Bank account'}${ending ? ` - ending ${ending}` : ''}`;
+      return `<option value="${index}">${escapeHtml(label)}</option>`;
+    }).join('');
+
+    const dayOptions = Array.from({ length: 10 }, (_, index) => index + 1)
+      .map(day => `<option value="${day}"${day === 10 ? ' selected' : ''}>${day}${day === 1 ? 'st' : day === 2 ? 'nd' : day === 3 ? 'rd' : 'th'} of the month</option>`)
+      .join('');
+
+    const panel = dom(`
+      <section class="wl-autopay-panel" id="wlAutopayPanel">
+        <div class="wl-autopay-head">
+          <div>
+            <div class="wl-autopay-title">Set up AutoPay</div>
+            <div class="wl-autopay-subtitle">Authorize Woodson to process your statement balance in full on the schedule you choose.</div>
+          </div>
+          <button type="button" class="wl-btn light-on-dark" data-wl-autopay-add-bank>Add Bank Account</button>
+        </div>
+        <div class="wl-autopay-body">
+          <div class="wl-autopay-card">
+            <h3>Statement-balance authorization</h3>
+            <div class="wl-autopay-note">
+              Phase 1 stores your authorization request for Woodson review. It does not automatically charge your account until Woodson activates it.
+            </div>
+            ${!hasBanks ? `
+              <div class="wl-empty" style="margin-top:12px;text-align:left">
+                Add a bank account first so this AutoPay request can point to the right saved ACH method.
+              </div>
+            ` : ''}
+            <form class="wl-autopay-form" id="wlAutopayForm">
+              <label class="wl-autopay-field full">
+                Bank account for AutoPay
+                <select id="wlAutopayMethod" ${hasBanks ? '' : 'disabled'}>
+                  ${hasBanks ? selectedBankOptions : '<option value="">Add a bank account first</option>'}
+                </select>
+              </label>
+              <label class="wl-autopay-field">
+                Your name
+                <input id="wlAutopayName" type="text" autocomplete="name" placeholder="Authorized signer">
+              </label>
+              <label class="wl-autopay-field">
+                Email for confirmation
+                <input id="wlAutopayEmail" type="email" autocomplete="email" placeholder="name@example.com">
+              </label>
+              <label class="wl-autopay-field">
+                Phone
+                <input id="wlAutopayPhone" type="tel" autocomplete="tel" placeholder="(###) ###-####">
+              </label>
+              <label class="wl-autopay-field">
+                Payment timing
+                <select id="wlAutopaySchedule">
+                  <option value="standard_due_date">By due date, generally the 10th</option>
+                  <option value="fixed_day">Pick a day from the 1st-10th</option>
+                  <option value="terms_confirm">Woodson review account terms</option>
+                </select>
+              </label>
+              <label class="wl-autopay-field">
+                Preferred day
+                <select id="wlAutopayDay">${dayOptions}</select>
+              </label>
+              <label class="wl-autopay-field full">
+                Notes for Woodson
+                <textarea id="wlAutopayNotes" placeholder="Optional: special terms, job account notes, or who should be contacted."></textarea>
+              </label>
+              <label class="wl-autopay-check full">
+                <input id="wlAutopayConsentBalance" type="checkbox">
+                <span>I authorize AutoPay for the full statement balance for this account.</span>
+              </label>
+              <label class="wl-autopay-check full">
+                <input id="wlAutopayConsentPayment" type="checkbox">
+                <span>I authorize Woodson Lumber to use the selected saved bank account for approved AutoPay payments.</span>
+              </label>
+              <label class="wl-autopay-check full">
+                <input id="wlAutopayConsentTerms" type="checkbox">
+                <span>I understand Woodson will review account terms before activating AutoPay and may contact me if the selected day does not match the account terms.</span>
+              </label>
+              <div class="wl-autopay-status" id="wlAutopayStatus" role="status"></div>
+              <div class="wl-autopay-actions">
+                <button type="submit" class="wl-btn primary" ${hasBanks ? '' : 'disabled'}>Submit AutoPay Request</button>
+                <button type="button" class="wl-btn" data-wl-autopay-add-bank>Add another bank account</button>
+              </div>
+            </form>
+          </div>
+          <aside class="wl-autopay-summary" aria-label="AutoPay account summary">
+            <div><span>Account</span><strong>${escapeHtml(context.accountName || 'Current account')}</strong></div>
+            <div><span>Statement balance</span><strong>${escapeHtml(context.statementBalance || 'Statement balance in full')}</strong></div>
+            <div><span>Due date</span><strong>${escapeHtml(context.dueDate || 'Generally the 10th')}</strong></div>
+            <div><span>Billing cycle</span><strong>${escapeHtml(context.cycle)}</strong></div>
+            ${context.termsLabel ? `<div><span>Terms</span><strong>${escapeHtml(context.termsLabel)}</strong></div>` : ''}
+            ${/cash|test/i.test(context.accountKind || '') ? `<div><span>Test path</span><strong>This account is enabled for rollout testing.</strong></div>` : ''}
+          </aside>
+        </div>
+      </section>
+    `);
+
+    $$('[data-wl-autopay-add-bank]', panel).forEach(button => {
+      button.addEventListener('click', () => {
+        writeLocalJson(AUTOPAY_PENDING_KEY, { startedAt: Date.now(), source: 'CustomerTokens.aspx' });
+        triggerOriginalButton(addCheck);
+      });
+    });
+
+    const form = $('#wlAutopayForm', panel);
+    const status = $('#wlAutopayStatus', panel);
+    const submit = form?.querySelector('button[type="submit"]');
+
+    function setStatus(kind, message) {
+      status.className = `wl-autopay-status ${kind}`;
+      status.textContent = message;
+    }
+
+    if (form && hasBanks) {
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const bank = banks[Number($('#wlAutopayMethod', panel)?.value || 0)];
+        if (!bank) {
+          setStatus('bad', 'Choose a saved bank account first.');
+          return;
+        }
+
+        const signerName = $('#wlAutopayName', panel)?.value.trim() || '';
+        const email = $('#wlAutopayEmail', panel)?.value.trim() || '';
+        const phone = $('#wlAutopayPhone', panel)?.value.trim() || '';
+        const scheduleMode = $('#wlAutopaySchedule', panel)?.value || 'standard_due_date';
+        const preferredDay = $('#wlAutopayDay', panel)?.value || '10';
+        const notes = $('#wlAutopayNotes', panel)?.value.trim() || '';
+        const consentBalance = $('#wlAutopayConsentBalance', panel)?.checked;
+        const consentPayment = $('#wlAutopayConsentPayment', panel)?.checked;
+        const consentTerms = $('#wlAutopayConsentTerms', panel)?.checked;
+
+        if (!signerName || !email) {
+          setStatus('bad', 'Enter your name and email before submitting.');
+          return;
+        }
+
+        if (!consentBalance || !consentPayment || !consentTerms) {
+          setStatus('bad', 'Please check all AutoPay authorization acknowledgements.');
+          return;
+        }
+
+        const payload = {
+          account: {
+            name: context.accountName,
+            kind: context.accountKind || 'unknown',
+            termsLabel: context.termsLabel,
+            statementBalance: context.statementBalance,
+            lastStatementDate: context.lastStatementDate,
+            dueDate: context.dueDate
+          },
+          contact: {
+            name: signerName,
+            email,
+            phone
+          },
+          paymentMethod: {
+            kind: 'bank',
+            label: bank.name || 'Bank account',
+            type: bank.typeRaw || 'Check',
+            ending: tokenTail(bank.token),
+            expiry: bank.expiry || ''
+          },
+          schedule: {
+            mode: scheduleMode,
+            day: preferredDay,
+            termsLabel: context.termsLabel,
+            requestedTermsReview: scheduleMode === 'terms_confirm'
+          },
+          consent: {
+            statementBalance: true,
+            paymentAuthorization: true,
+            termsAcknowledged: true,
+            signerName
+          },
+          notes
+        };
+
+        submit.disabled = true;
+        setStatus('ok', 'Saving your AutoPay authorization request...');
+
+        try {
+          const response = await fetch(AUTOPAY_ENDPOINT, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok || data.ok === false) throw new Error(data.error || 'Unable to save AutoPay request.');
+          removeLocalItem(AUTOPAY_PENDING_KEY);
+          setStatus('ok', 'AutoPay request received. Woodson will review the account terms and activate the schedule when approved.');
+          form.querySelectorAll('input, select, textarea, button').forEach(control => {
+            if (!control.matches('[data-wl-autopay-add-bank]')) control.disabled = true;
+          });
+        } catch (error) {
+          submit.disabled = false;
+          setStatus('bad', error.message || 'Unable to save AutoPay request.');
+        }
+      });
+    }
+
+    if (!hasBanks && shouldAutoOpenAddBank() && addCheck) {
+      try {
+        if (!sessionStorage.getItem(AUTOPAY_ADD_BANK_SESSION_KEY)) {
+          sessionStorage.setItem(AUTOPAY_ADD_BANK_SESSION_KEY, String(Date.now()));
+          setTimeout(() => triggerOriginalButton(addCheck), 700);
+        }
+      } catch {}
+    }
+
+    return panel;
   }
 
   function cardIcon(typeRaw) {
@@ -705,6 +1141,9 @@
     `);
 
     const layout = $('.wl-token-layout', root);
+    if (shouldShowAutopay()) {
+      root.insertBefore(createAutopayPanel({ banks, addCheck }), layout);
+    }
     layout.appendChild(createSection({
       id: 'wl-card-methods',
       title: 'Cards',

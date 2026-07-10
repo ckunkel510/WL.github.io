@@ -27,6 +27,8 @@
   const COMM_PREFS_ACCOUNT_EMAILS = COMM_PREFS_POST.replace('action=savePreferences', 'action=getAccountEmails');
 
   const PAYMENT_METHODS_URL = 'https://webtrack.woodsonlumber.com/CustomerTokens.aspx';
+  const AUTOPAY_CONTEXT_KEY = 'wl_autopay_account_context_v1';
+  const AUTOPAY_PENDING_KEY = 'wl_autopay_pending_v1';
 
   // Same-origin lookup used to pull the account email from AccountSettings.aspx
   // instead of relying on localStorage or requiring the customer to re-type it.
@@ -308,6 +310,34 @@
     const cashCreditDisplay = cashCredit > 0 ? fmtMoney(cashCredit) : '—';
     const isCashAccount = !!document.getElementById('ctl00_PageBody_btnLoadCashAccountBalance');
     try { localStorage.setItem('wl_account_is_cash_v1', isCashAccount ? 'true' : 'false'); } catch(e) {}
+    const accountTermsLabel = snapshot['Terms'] || snapshot['Payment Terms'] || snapshot['Account Terms'] || snapshot['Customer Terms'] || '';
+    const isAutopayTestAccount = isCashAccount && /(?:ckunkel|kunkel|woodson expense|woodson lumber)/i.test(acctName || accountKey || '');
+    const showAutopaySignup = !isCashAccount || isAutopayTestAccount || /[?&]wlAutopayTest=1\b/i.test(location.search);
+    const autopayUrl = (() => {
+      const url = new URL(PAYMENT_METHODS_URL, location.origin);
+      url.searchParams.set('wlAutopay', '1');
+      url.searchParams.set('wlAutopayAddBank', '1');
+      if (isAutopayTestAccount || isCashAccount) url.searchParams.set('wlAutopayTest', '1');
+      return url.href;
+    })();
+
+    function saveAutopayContext(){
+      const context = {
+        accountName: acctName || accountKey || '',
+        accountKind: isCashAccount ? (isAutopayTestAccount ? 'test' : 'cash') : 'charge',
+        termsLabel: accountTermsLabel || '',
+        statementBalance: (last['Last Statement Net Amount']?.amount || last['Last Statement Amount']?.amount || snapshot['Net Balance'] || '').trim(),
+        lastStatementDate: (last['Last Statement Amount']?.date || last['Last Statement Net Amount']?.date || '').trim(),
+        dueDate: stmtDue || '',
+        cycle: 'Statements run on the 26th for the 26th-25th cycle and are generally due on the 10th.',
+        source: 'AccountInfo_R.aspx',
+        capturedAt: new Date().toISOString()
+      };
+      try {
+        localStorage.setItem(AUTOPAY_CONTEXT_KEY, JSON.stringify(context));
+        localStorage.setItem(AUTOPAY_PENDING_KEY, JSON.stringify({ startedAt: Date.now(), source: 'AccountInfo_R.aspx' }));
+      } catch(e) {}
+    }
 
     /* mount */
     const container = dom(`
@@ -346,6 +376,7 @@
               <div class="wl-actions" style="margin-bottom:6px">
                 <a class="wl-btn" href="AccountSettings.aspx">Edit Account Settings</a>
                 <a class="wl-btn" href="${PAYMENT_METHODS_URL}">Payment Methods</a>
+                ${showAutopaySignup ? `<a class="wl-btn primary" data-wl-autopay-start href="${escapeAttr(autopayUrl)}">Set Up AutoPay</a>` : ''}
                 <a class="wl-btn" href="AddressList_R.aspx">Addresses</a>
                 <a class="wl-btn" href="Contacts_r.aspx">Contacts</a>
                 <a class="wl-btn" href="https://woodsonwholesaleinc.formstack.com/forms/agtimber2027" target="_blank" rel="noopener">Apply for Tax Exemption</a>
@@ -366,6 +397,7 @@
               <div class="wl-meta">Due Date: <strong>${stmtDue}</strong></div>
               <div class="wl-actions" style="margin-top:8px">
                 <a class="wl-btn primary" id="wl-pay-statement" href="${payStmtUrl}">Pay This Statement</a>
+                ${showAutopaySignup ? `<a class="wl-btn" data-wl-autopay-start href="${escapeAttr(autopayUrl)}">Set Up AutoPay</a>` : ''}
                 <a class="wl-btn" href="${href(links.statement)}" target="_blank" rel="noopener">Generate Interim Statement</a>
                 <a class="wl-btn" href="Statements_R.aspx">View All</a>
               </div>
@@ -675,6 +707,12 @@ if (snapshotActions) {
           });
         });
       }
+
+      $$('[data-wl-autopay-start]', container).forEach(btn => {
+        if (btn.__wlAutopayBound) return;
+        btn.__wlAutopayBound = true;
+        btn.addEventListener('click', saveAutopayContext);
+      });
     })();
 
     /* Normalize account/payment links copied from legacy navigation */
