@@ -34,6 +34,7 @@
   const AUTOPAY_ADD_BANK_SESSION_KEY = 'wl_autopay_add_bank_started_v1';
   const AUTOPAY_DAYS = [26, 27, 28, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
   const AUTOPAY_REQUEST_DAYS = Array.from({ length: 15 }, (_, index) => index + 11);
+  const AUTOPAY_ALLOWED_LOGINS = ['ckunkel2', 'ckunkel3'];
 
   const CARD_TYPE_LABELS = {
     VI: 'Visa',
@@ -221,7 +222,27 @@
     return clean.replace(/\b\w/g, ch => ch.toUpperCase());
   }
 
+  function isAutopayAllowedIdentity(...values) {
+    const tokens = values
+      .flatMap(value => String(value || '').toLowerCase().split(/[^a-z0-9]+/))
+      .filter(Boolean);
+    return AUTOPAY_ALLOWED_LOGINS.some(login => tokens.includes(login));
+  }
+
+  function isAutopayAllowedForCurrentUser() {
+    const context = readLocalJson(AUTOPAY_CONTEXT_KEY, {}) || {};
+    if (context.autopayAllowedTest === true) return true;
+    return isAutopayAllowedIdentity(
+      context.loginName,
+      context.accountId,
+      context.customerId,
+      context.accountName,
+      document.body?.innerText || ''
+    );
+  }
+
   function shouldShowAutopay() {
+    if (!isAutopayAllowedForCurrentUser()) return false;
     const params = new URLSearchParams(location.search || '');
     if (params.get('wlAutopay') === '1') return true;
     const pending = readLocalJson(AUTOPAY_PENDING_KEY, null);
@@ -229,6 +250,7 @@
   }
 
   function shouldAutoOpenAddBank() {
+    if (!isAutopayAllowedForCurrentUser()) return false;
     const params = new URLSearchParams(location.search || '');
     return params.get('wlAutopayAddBank') === '1';
   }
@@ -895,6 +917,8 @@
     const context = readLocalJson(AUTOPAY_CONTEXT_KEY, {}) || {};
     return {
       accountId: context.accountId || context.customerId || '',
+      loginName: context.loginName || '',
+      autopayAllowedTest: context.autopayAllowedTest === true,
       accountName: context.accountName || '',
       accountKind: context.accountKind || '',
       termsLabel: context.termsLabel || '',

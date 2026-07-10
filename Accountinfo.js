@@ -30,6 +30,7 @@
   const AUTOPAY_CONTEXT_KEY = 'wl_autopay_account_context_v1';
   const AUTOPAY_PENDING_KEY = 'wl_autopay_pending_v1';
   const AUTOPAY_ACTIVE_KEY = 'wl_autopay_active_v1';
+  const AUTOPAY_ALLOWED_LOGINS = ['ckunkel2', 'ckunkel3'];
 
   // Same-origin lookup used to pull the account email from AccountSettings.aspx
   // instead of relying on localStorage or requiring the customer to re-type it.
@@ -83,6 +84,12 @@
     if(!m) return raw;
     return new Date(Number(m[1]),Number(m[2])-1,Number(m[3])).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
   };
+  function isAutopayAllowedIdentity(...values){
+    const tokens = values
+      .flatMap(value => String(value || '').toLowerCase().split(/[^a-z0-9]+/))
+      .filter(Boolean);
+    return AUTOPAY_ALLOWED_LOGINS.some(login => tokens.includes(login));
+  }
   function readJsonLocal(key, fallback){
     try { return JSON.parse(localStorage.getItem(key) || ''); } catch { return fallback; }
   }
@@ -306,11 +313,11 @@
       waitFor('#ctl00_PageBody_AccountActivity_AccountActivityLeftColumn', {timeout:1000}),
       waitFor('.accountActivity_r', {timeout:1000})
     ]).catch(()=>{});
-    buildUI();
+    await buildUI();
     loadLists();
   }
 
-  function buildUI(){
+  async function buildUI(){
     /* scrape */
     const snapshot={}, last={};
     $$('#ctl00_PageBody_AccountActivity_AccountActivityLeftColumn tr').forEach(tr=>{
@@ -325,7 +332,17 @@
     const links={ jobs: $('#JobBalancesButton'), statement: $('#GetInterimStatementLink') };
     const acctName=(txt($('.panel.panelAccountInfo .listPageHeader'))||'').replace(/Account Information for/i,'').trim() || 'Your Account';
     const accountKey = acctName || 'unknown';
-    const localAutopay = findLocalAutopay(acctName || accountKey);
+    const accountSettingsDetails = await fetchAccountSettingsDetails().catch(() => ({}));
+    const accountLoginName = accountSettingsDetails.loginName || '';
+    const isAutopayTestAccount = isAutopayAllowedIdentity(
+      accountLoginName,
+      accountSettingsDetails.email,
+      accountSettingsDetails.companyName,
+      acctName,
+      accountKey,
+      document.body?.innerText || ''
+    );
+    const localAutopay = isAutopayTestAccount ? findLocalAutopay(acctName || accountKey) : null;
 
     const stmtNetAmt = mNum(last['Last Statement Net Amount']?.amount);
     const stmtDate   = parseUS(last['Last Statement Amount']?.date || last['Last Statement Net Amount']?.date);
@@ -347,13 +364,12 @@
     const isCashAccount = !!document.getElementById('ctl00_PageBody_btnLoadCashAccountBalance');
     try { localStorage.setItem('wl_account_is_cash_v1', isCashAccount ? 'true' : 'false'); } catch(e) {}
     const accountTermsLabel = snapshot['Terms'] || snapshot['Payment Terms'] || snapshot['Account Terms'] || snapshot['Customer Terms'] || '';
-    const isAutopayTestAccount = isCashAccount && /(?:ckunkel|kunkel|woodson expense|woodson lumber)/i.test(acctName || accountKey || '');
-    const showAutopaySignup = !isCashAccount || isAutopayTestAccount || /[?&]wlAutopayTest=1\b/i.test(location.search);
+    const showAutopaySignup = isAutopayTestAccount;
     const autopayUrl = (() => {
       const url = new URL(PAYMENT_METHODS_URL, location.origin);
       url.searchParams.set('wlAutopay', '1');
       url.searchParams.set('wlAutopayAddBank', '1');
-      if (isAutopayTestAccount || isCashAccount) url.searchParams.set('wlAutopayTest', '1');
+      if (isAutopayTestAccount) url.searchParams.set('wlAutopayTest', '1');
       return url.href;
     })();
     const manageAutopayUrl = (() => {
@@ -364,6 +380,9 @@
 
     function saveAutopayContext(){
       const context = {
+        accountId: accountLoginName || accountSettingsDetails.email || accountKey || '',
+        loginName: accountLoginName || '',
+        autopayAllowedTest: isAutopayTestAccount,
         accountName: acctName || accountKey || '',
         accountKind: isCashAccount ? (isAutopayTestAccount ? 'test' : 'cash') : 'charge',
         termsLabel: accountTermsLabel || '',
@@ -836,6 +855,7 @@ if (snapshotActions) {
           const emailInput = doc.querySelector(ACCOUNT_SETTINGS_EMAIL_SELECTOR);
           const email = ((emailInput && (emailInput.value || emailInput.getAttribute('value'))) || getInputValueByLabel(doc, /email\s*address|email/i)).trim();
           if (emailOK(email)) details.email = email;
+          details.loginName = getInputValueByLabel(doc, /login\s*name|user\s*name|username|login/i);
 
           details.firstName = getInputValueByLabel(doc, /first\s*name|given\s*name/i);
           details.lastName  = getInputValueByLabel(doc, /last\s*name|surname|family\s*name/i);
