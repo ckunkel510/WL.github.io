@@ -27,13 +27,13 @@
     legacyHeader: '.bodyFlexItem.listPageHeader'
   };
 
-  const AUTOPAY_ENDPOINT = 'https://wlmarketingdashboard.vercel.app/api/public/autopay-authorizations';
+  const AUTOPAY_ENDPOINT = 'https://wlmarketingdashboard.vercel.app/api/webtrack-autopay';
   const AUTOPAY_CONTEXT_KEY = 'wl_autopay_account_context_v1';
   const AUTOPAY_PENDING_KEY = 'wl_autopay_pending_v1';
   const AUTOPAY_ACTIVE_KEY = 'wl_autopay_active_v1';
   const AUTOPAY_ADD_BANK_SESSION_KEY = 'wl_autopay_add_bank_started_v1';
   const AUTOPAY_DAYS = [26, 27, 28, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
-  const AUTOPAY_REQUEST_DAYS = Array.from({ length: 28 }, (_, index) => index + 1);
+  const AUTOPAY_REQUEST_DAYS = Array.from({ length: 15 }, (_, index) => index + 11);
 
   const CARD_TYPE_LABELS = {
     VI: 'Visa',
@@ -648,6 +648,9 @@
       .wl-autopay-exception.is-visible {
         display: grid;
       }
+      .wl-autopay-exception-actions {
+        margin-top: 10px;
+      }
       .wl-autopay-exception-note {
         margin-top: 8px;
         color: #60450d;
@@ -671,6 +674,15 @@
       }
       .wl-autopay-field.full {
         grid-column: 1 / -1;
+      }
+      .wl-autopay-request-row {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+      }
+      .wl-autopay-request-row .wl-btn {
+        min-height: 36px;
       }
       .wl-autopay-field input,
       .wl-autopay-field select,
@@ -905,7 +917,6 @@
 
     const dayOptions = AUTOPAY_DAYS
       .map(day => `<option value="${day}"${day === 10 ? ' selected' : ''}>${ordinal(day)} of the month</option>`)
-      .concat('<option value="request_other">Request another date</option>')
       .join('');
     const requestDayOptions = AUTOPAY_REQUEST_DAYS
       .map(day => `<option value="${day}"${day === 15 ? ' selected' : ''}>${ordinal(day)} of the month</option>`)
@@ -969,13 +980,19 @@
               <label class="wl-autopay-field">
                 AutoPay date
                 <select id="wlAutopayDay">${dayOptions}</select>
-                <span class="wl-autopay-help">Standard dates are available immediately for review. Other dates require Woodson approval.</span>
+                <span class="wl-autopay-help">Standard eligible dates are the 26th-28th or 1st-10th.</span>
               </label>
+              <div class="wl-autopay-request-row">
+                <button type="button" class="wl-btn" data-wl-autopay-show-exception>Request a different date</button>
+              </div>
               <label class="wl-autopay-field wl-autopay-exception" data-wl-autopay-exception>
                 Requested AutoPay date
                 <select id="wlAutopayRequestedDay">${requestDayOptions}</select>
                 <span class="wl-autopay-exception-note">
                   Requested dates outside the standard window must be approved by Woodson Lumber. If the request is not approved, the AutoPay may be cancelled.
+                </span>
+                <span class="wl-autopay-exception-actions">
+                  <button type="button" class="wl-btn" data-wl-autopay-hide-exception>Use a standard date instead</button>
                 </span>
               </label>
               <label class="wl-autopay-field full">
@@ -1022,13 +1039,17 @@
     const form = $('#wlAutopayForm', panel);
     const status = $('#wlAutopayStatus', panel);
     const submit = form?.querySelector('button[type="submit"]');
-    const daySelect = $('#wlAutopayDay', panel);
     const exceptionField = $('[data-wl-autopay-exception]', panel);
+    const showExceptionButton = $('[data-wl-autopay-show-exception]', panel);
+    const hideExceptionButton = $('[data-wl-autopay-hide-exception]', panel);
 
     function syncRequestedDateField() {
-      const show = daySelect?.value === 'request_other';
+      const show = exceptionField?.classList.contains('is-visible');
       if (exceptionField) {
         exceptionField.classList.toggle('is-visible', Boolean(show));
+      }
+      if (showExceptionButton) {
+        showExceptionButton.style.display = show ? 'none' : '';
       }
     }
 
@@ -1057,7 +1078,14 @@
       postAutopayAction('status', primaryRecord).catch(() => {});
     }
 
-    daySelect?.addEventListener('change', syncRequestedDateField);
+    showExceptionButton?.addEventListener('click', () => {
+      exceptionField?.classList.add('is-visible');
+      syncRequestedDateField();
+    });
+    hideExceptionButton?.addEventListener('click', () => {
+      exceptionField?.classList.remove('is-visible');
+      syncRequestedDateField();
+    });
     syncRequestedDateField();
 
     $$('[data-wl-autopay-cancel]', panel).forEach(button => {
@@ -1102,7 +1130,7 @@
         const email = $('#wlAutopayEmail', panel)?.value.trim() || '';
         const phone = $('#wlAutopayPhone', panel)?.value.trim() || '';
         const dayChoice = $('#wlAutopayDay', panel)?.value || '10';
-        const requestedException = dayChoice === 'request_other';
+        const requestedException = Boolean(exceptionField?.classList.contains('is-visible'));
         const scheduleMode = requestedException ? 'requested_exception' : 'fixed_day';
         const preferredDay = requestedException ? ($('#wlAutopayRequestedDay', panel)?.value || '15') : dayChoice;
         const notes = $('#wlAutopayNotes', panel)?.value.trim() || '';
