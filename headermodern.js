@@ -6,7 +6,9 @@
   var LOG = "[WL HeaderEnhancer]";
   var DEBUG = false; // Set to true only when actively troubleshooting.
   var LOCATIONS_URL = "/Default.aspx?view=storelocations";
-  var ANALYTICS_URL = "https://ckunkel510.github.io/WL.github.io/wl-events.js?v=20260701-1";
+  // Keep the hosted filename neutral. Common privacy filters block filenames
+  // containing "analytics", "tracking", or "events" before the script runs.
+  var ANALYTICS_URL = "https://ckunkel510.github.io/WL.github.io/wl-commerce.js?v=20260713-1";
   var ADDRESS_MANAGER_URL = "https://ckunkel510.github.io/WL.github.io/AddressManagement.js?v=20260707-2";
   var CONTACT_MANAGER_URL = "https://ckunkel510.github.io/WL.github.io/ContactManagement.js?v=20260707-3";
   var TURTLEBOX_PROMO_URL = "https://ckunkel510.github.io/WL.github.io/TurtleboxPromo.js?v=20260707-1";

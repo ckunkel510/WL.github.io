@@ -3,7 +3,7 @@
 
   if (window.WLAnalytics) return;
 
-  var VERSION = "1.1.0";
+  var VERSION = "1.1.1";
   var EVENT_NAME = "wl_analytics_event";
   var GA_MEASUREMENT_ID = "G-4ZLV1YB6GY";
   var CART_STORAGE_KEY = "wl_analytics_cart_v1";
