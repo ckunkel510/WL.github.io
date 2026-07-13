@@ -6,14 +6,14 @@ const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '..');
 
-test('header loads the privacy-filter-safe commerce runtime', () => {
+test('header loads the privacy-filter-safe site runtime', () => {
   const header = fs.readFileSync(path.join(root, 'headermodern.js'), 'utf8');
-  assert.match(header, /WL\.github\.io\/wl-commerce\.js\?v=20260713-1/);
-  assert.doesNotMatch(header, /ANALYTICS_URL\s*=\s*["'][^"']*(?:analytics|tracking|events)/i);
+  assert.match(header, /WL\.github\.io\/wl-site\.js\?v=20260713-2/);
+  assert.doesNotMatch(header, /ANALYTICS_URL\s*=\s*["'][^"']*(?:analytics|tracking|events|commerce)/i);
 });
 
-test('commerce runtime emits a confirmed GA4 purchase with transaction value', () => {
-  const runtime = fs.readFileSync(path.join(root, 'wl-commerce.js'), 'utf8');
+test('site runtime emits a confirmed GA4 purchase with transaction value', () => {
+  const runtime = fs.readFileSync(path.join(root, 'wl-site.js'), 'utf8');
   assert.match(runtime, /var VERSION = "1\.1\.1"/);
 
   const storage = () => {

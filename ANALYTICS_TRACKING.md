@@ -1,6 +1,6 @@
 # WebTrack analytics event contract
 
-`wl-commerce.js` is the live site-side source of truth for WebTrack behavior tracking. It sends structured events to both `window.dataLayer` and GA4 measurement ID `G-4ZLV1YB6GY`. The direct GA4 transport is used because the current Google Tag Manager container is scanner-paused. `wl-events.js` and `Analytics.js` remain compatibility copies. The live filename deliberately avoids `analytics`, `tracking`, and `events`, which are blocked by some privacy filters before the script can execute.
+`wl-site.js` is the live site-side source of truth for WebTrack behavior tracking. It sends structured events to both `window.dataLayer` and GA4 measurement ID `G-4ZLV1YB6GY`. The direct GA4 transport is used because the current Google Tag Manager container is scanner-paused. `wl-commerce.js`, `wl-events.js`, and `Analytics.js` remain compatibility copies. The live filename deliberately avoids analytics- and commerce-related terms that privacy filters can block before the script executes.
 
 The GA4 configuration uses `send_page_view: false`, so WebTrack's existing page-view tracking remains the source of page views. Ecommerce fields are flattened into GA4's native event format before transmission.
 
