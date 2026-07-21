@@ -3940,15 +3940,18 @@ document.addEventListener("click", function (ev) {
 
 
     // -------------------------------------------------------------------------
-    // N.5) Auto-handle stock shortage modal with a softer flow
-    // - Watches specifically for #stockModal becoming visible on the final step
-    // - Immediately hides the blocking modal/backdrop and triggers native Yes
-    // - Drops a friendly inline notice for the customer
+    // N.5) Replace the branch-stock warning with companywide availability
+    // - Hides WebTrack's blocking selected-branch modal immediately
+    // - Continues silently when another Woodson branch can fulfill the order
+    // - Continues with a clear lead-time notice when an item must be ordered in
+    // - Keeps the companywide clearance quantity as a hard stop
     // -------------------------------------------------------------------------
     (function () {
       const STOCK_NOTICE_KEY = "wl_stock_shortage_notice";
       const CLEARANCE_POLICY_KEY = "wl_clearance_policy_v1";
+      const STOCK_POLICY_URL = "https://wl-upsrates.vercel.app/api/cart-policy";
       let stockProceeding = false;
+      let stockResolving = false;
       let stockLastTriggerAt = 0;
       let stockObserver = null;
       let stockPoll = null;
@@ -3970,23 +3973,76 @@ document.addEventListener("click", function (ev) {
         } catch {}
       }
 
-      function buildShortageMessage(modal) {
+      function hideStockModal(modal) {
+        try { modal.classList.add('wl-auto-bypass'); } catch {}
+        try { modal.setAttribute('aria-hidden', 'true'); } catch {}
+        try { modal.style.display = 'none'; } catch {}
+        removeStockModalArtifacts();
+      }
+
+      function cleanStockText(value) {
+        return String(value || '').replace(/\s+/g, ' ').trim();
+      }
+
+      function stockQuantity(value) {
+        const match = cleanStockText(value).replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
+        const number = match ? Number(match[0]) : NaN;
+        return Number.isFinite(number) && number > 0 ? Math.max(1, Math.ceil(number)) : 1;
+      }
+
+      function shortageRefs(modal) {
+        const grouped = {};
         try {
-          const rows = Array.from(modal.querySelectorAll("table tr")).slice(1);
-          const count = rows.length;
-          if (count > 1) {
-            return "Some items in your order may need a little extra time. We’ll continue processing your order and confirm timing for any quantity that needs to be sourced from available inventory or normal replenishment.";
-          }
-          return "This order includes an item that may need a little extra time. We’ll continue processing your order and confirm timing for any quantity that needs to be sourced from available inventory or normal replenishment.";
-        } catch {
-          return "Some items in your order may need a little extra time. We’ll continue processing your order and confirm timing as needed.";
-        }
+          Array.from(modal.querySelectorAll('table tr')).slice(1).forEach(function (row) {
+            const cells = row.querySelectorAll('td');
+            const productCode = cleanStockText(cells[0] && cells[0].textContent).toUpperCase();
+            if (!productCode) return;
+            const quantity = stockQuantity(cells[2] && cells[2].textContent);
+            if (!grouped[productCode]) grouped[productCode] = { productCode: productCode, quantity: 0 };
+            grouped[productCode].quantity += quantity;
+          });
+        } catch {}
+        return Object.keys(grouped).map(function (key) { return grouped[key]; });
+      }
+
+      function orderInMessage(count, unverified) {
+        const subject = count === 1 ? 'This item' : 'Some items';
+        const reason = unverified
+          ? 'could not be confirmed in companywide stock and may need to be ordered in'
+          : 'will need to be ordered in';
+        return subject + ' ' + reason + '. Availability may take 7 days or longer for pickup, Woodson delivery, or UPS shipment. We’ll confirm the expected timing after reviewing the order.';
       }
 
       function persistShortageNotice(message) {
         try {
           sessionStorage.setItem(STOCK_NOTICE_KEY, JSON.stringify({ message: message || "Some items in your order may need a little extra time.", ts: Date.now() }));
         } catch {}
+      }
+
+      function stockNoticeTarget() {
+        return document.querySelector('.checkout-step[data-step="5"] .checkout-nav') ||
+          document.querySelector('.checkout-step[data-step="5"]') ||
+          document.querySelector('.checkout-wizard') ||
+          document.querySelector('.container');
+      }
+
+      function renderStockNotice(title, message, tone) {
+        const existing = document.getElementById('wlStockNotice');
+        if (existing) existing.remove();
+        if (!message) return;
+
+        const notice = document.createElement('div');
+        notice.id = 'wlStockNotice';
+        notice.className = 'wl-stock-notice wl-stock-notice--' + (tone || 'info');
+        notice.setAttribute('role', tone === 'error' ? 'alert' : 'status');
+        notice.innerHTML = '<div class="wl-stock-notice__title"></div><div class="wl-stock-notice__body"></div>';
+        const titleNode = notice.querySelector('.wl-stock-notice__title');
+        const bodyNode = notice.querySelector('.wl-stock-notice__body');
+        if (titleNode) titleNode.textContent = title || 'Availability update';
+        if (bodyNode) bodyNode.textContent = message;
+
+        const target = stockNoticeTarget();
+        if (target && target.parentNode) target.parentNode.insertBefore(notice, target);
       }
 
       function renderShortageNotice() {
@@ -4000,25 +4056,7 @@ document.addEventListener("click", function (ev) {
           return;
         }
         if (!payload || !payload.message) return;
-
-        const existing = document.getElementById("wlStockNotice");
-        if (existing) existing.remove();
-
-        const notice = document.createElement("div");
-        notice.id = "wlStockNotice";
-        notice.className = "wl-stock-notice";
-        notice.innerHTML = '<div class="wl-stock-notice__title">Order update</div><div class="wl-stock-notice__body"></div>';
-        const body = notice.querySelector('.wl-stock-notice__body');
-        if (body) body.textContent = payload.message;
-
-        const target =
-          document.querySelector('.checkout-step[data-step="5"] .checkout-nav') ||
-          document.querySelector('.checkout-step[data-step="5"]') ||
-          document.querySelector('.checkout-wizard') ||
-          document.querySelector('.container');
-        if (target) {
-          target.parentNode.insertBefore(notice, target);
-        }
+        renderStockNotice('Availability update', payload.message, 'lead');
       }
 
       function injectStockNoticeCss() {
@@ -4029,9 +4067,11 @@ document.addEventListener("click", function (ev) {
           '.wl-stock-notice{margin:12px 0 16px;padding:14px 16px;border-radius:12px;background:#f8fafc;border:1px solid #dbe5ef;color:#243447;box-shadow:0 1px 2px rgba(0,0,0,.04);}',
           '.wl-stock-notice__title{font-weight:700;margin-bottom:4px;}',
           '.wl-stock-notice__body{line-height:1.45;}',
+          '.wl-stock-notice--checking{background:#f4f8fb;border-color:#cbdce9;}',
+          '.wl-stock-notice--lead{background:#fff8dc;border-color:#e6c15a;color:#3b2b00;}',
+          '.wl-stock-notice--error{background:#fff3ee;border-color:#b65c37;color:#6d2107;}',
           '#stockModal.wl-auto-bypass{display:none !important;visibility:hidden !important;opacity:0 !important;pointer-events:none !important;}',
-          '#stockModal.wl-clearance-stock-block #ctl00_PageBody_YesButton{display:none!important;}',
-          '.wl-clearance-stock-alert{margin:12px 0;padding:10px 12px;border:1px solid #b65c37;border-radius:8px;background:#fff3ee;color:#6d2107;font-weight:700;line-height:1.4;}'
+          '#stockModal.wl-clearance-stock-block{display:none!important;visibility:hidden!important;}'
         ].join('');
         document.head.appendChild(style);
       }
@@ -4048,39 +4088,22 @@ document.addEventListener("click", function (ev) {
         }
       }
 
-      function preserveStockModal(modal) {
-        const clearanceItems = clearancePolicyState();
-        if (clearanceItems === null) return { preserve: true, block: false };
-        if (!clearanceItems.length) return { preserve: false, block: false };
-
-        try {
-          modal.classList.remove('wl-auto-bypass');
-          modal.classList.add('wl-clearance-stock-block');
-          modal.removeAttribute('aria-hidden');
-          modal.style.removeProperty('display');
-          let alert = modal.querySelector('.wl-clearance-stock-alert');
-          if (!alert) {
-            alert = document.createElement('div');
-            alert.className = 'wl-clearance-stock-alert';
-            alert.setAttribute('role', 'alert');
-            alert.textContent = 'A clearance quantity in this cart is no longer available companywide. Return to the cart and reduce or remove the affected item before completing the order.';
-            const body = modal.querySelector('.modal-body') || modal;
-            body.insertBefore(alert, body.firstChild);
-          }
-        } catch {}
-        return { preserve: true, block: true };
+      function blockForClearance(modal, message) {
+        try { modal.classList.add('wl-clearance-stock-block'); } catch {}
+        hideStockModal(modal);
+        renderStockNotice(
+          'Update a clearance quantity',
+          message || 'A clearance quantity in this cart is no longer available companywide. Return to the cart and reduce or remove the affected item before completing the order.',
+          'error'
+        );
       }
 
-      function triggerStockYes(modal) {
+      function triggerStockYes(modal, message) {
         const yes = modal && modal.querySelector('#ctl00_PageBody_YesButton');
         if (!yes) return false;
 
-        persistShortageNotice(buildShortageMessage(modal));
-
-        try { modal.classList.add('wl-auto-bypass'); } catch {}
-        try { modal.setAttribute('aria-hidden', 'true'); } catch {}
-        try { modal.style.display = 'none'; } catch {}
-        removeStockModalArtifacts();
+        if (message) persistShortageNotice(message);
+        hideStockModal(modal);
 
         stockProceeding = true;
         stockLastTriggerAt = Date.now();
@@ -4118,21 +4141,95 @@ document.addEventListener("click", function (ev) {
         return false;
       }
 
+      async function fetchCompanyAvailability(refs) {
+        const controller = typeof AbortController === 'function' ? new AbortController() : null;
+        const timer = window.setTimeout(function () {
+          try { if (controller) controller.abort(); } catch {}
+        }, 9000);
+        try {
+          const response = await fetch(STOCK_POLICY_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cart: refs, checkAvailability: true }),
+            signal: controller ? controller.signal : undefined
+          });
+          const result = await response.json().catch(function () { return {}; });
+          if (!response.ok || result.availabilityChecked !== true || !Array.isArray(result.items)) {
+            throw new Error('Companywide availability was not returned.');
+          }
+          return result;
+        } finally {
+          window.clearTimeout(timer);
+        }
+      }
+
+      function fallbackClearanceRisk() {
+        const clearanceItems = clearancePolicyState();
+        return clearanceItems === null || clearanceItems.length > 0;
+      }
+
+      async function resolveStockModal(modal) {
+        stockResolving = true;
+        hideStockModal(modal);
+        renderStockNotice('Checking availability', 'Checking companywide stock before continuing…', 'checking');
+
+        const refs = shortageRefs(modal);
+        try {
+          if (!refs.length) throw new Error('The shortage lines could not be read.');
+          const result = await fetchCompanyAvailability(refs);
+          const items = result.items;
+          const incomplete = items.length !== refs.length || items.some(function (item) { return item.catalogResolved !== true; });
+          const clearanceBlocked = items.some(function (item) {
+            return item.isClearance === true && (
+              item.inventoryVerified !== true ||
+              Number(item.companyInventory) < Number(item.requestedQuantity)
+            );
+          });
+
+          if (clearanceBlocked || (incomplete && fallbackClearanceRisk())) {
+            blockForClearance(modal);
+            return;
+          }
+
+          const orderInItems = items.filter(function (item) {
+            return item.inventoryVerified !== true || item.requiresOrdering === true;
+          });
+          const unverified = orderInItems.some(function (item) { return item.inventoryVerified !== true; });
+          const message = orderInItems.length ? orderInMessage(orderInItems.length, unverified) : '';
+          renderStockNotice('', '', 'info');
+          if (!triggerStockYes(modal, message)) {
+            renderStockNotice('Availability update', 'We could not continue automatically. Please use the checkout button again.', 'error');
+          }
+        } catch {
+          if (fallbackClearanceRisk()) {
+            blockForClearance(modal, 'Companywide availability could not be confirmed for a cart that may contain clearance merchandise. Return to the cart and try again before completing the order.');
+            return;
+          }
+          const message = orderInMessage(Math.max(1, refs.length), true);
+          renderStockNotice('', '', 'info');
+          if (!triggerStockYes(modal, message)) {
+            renderStockNotice('Availability update', 'We could not continue automatically. Please use the checkout button again.', 'error');
+          }
+        } finally {
+          stockResolving = false;
+        }
+      }
+
       function maybeHandleStockModal() {
         const modal = document.getElementById('stockModal');
         if (!modal || !isVisible(modal)) return false;
 
-        const stockPolicy = preserveStockModal(modal);
-        if (stockPolicy.preserve) return true;
-
         const now = Date.now();
-        if (stockProceeding && (now - stockLastTriggerAt) < 2500) {
-          try { modal.classList.add('wl-auto-bypass'); modal.style.display = 'none'; } catch {}
-          removeStockModalArtifacts();
+        if (stockResolving || (stockProceeding && (now - stockLastTriggerAt) < 2500)) {
+          hideStockModal(modal);
           return true;
         }
 
-        return triggerStockYes(modal);
+        resolveStockModal(modal).catch(function () {
+          stockResolving = false;
+          blockForClearance(modal, 'Availability could not be confirmed. Return to the cart and try again before completing the order.');
+        });
+        return true;
       }
 
       function bindStockModalBypass() {

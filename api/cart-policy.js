@@ -9,7 +9,7 @@ const DEFAULT_ORIGINS = [
 ];
 const STOCK_URL = "https://webtrack.woodsonlumber.com/Catalog/ShowStock.aspx?productid=";
 const LIVE_STOCK_CACHE_MS = 3 * 60 * 1000;
-const MAX_CLEARANCE_STOCK_LOOKUPS = 12;
+const MAX_LIVE_STOCK_LOOKUPS = 12;
 const stockCache = new Map();
 
 function decodeHtml(value) {
@@ -60,6 +60,78 @@ async function fetchLiveCompanyInventory(productId, dependencies = {}) {
   }
 }
 
+function requestedQuantity(value) {
+  const quantity = Number(value);
+  return Number.isFinite(quantity) && quantity > 0 ? Math.max(1, Math.ceil(quantity)) : 1;
+}
+
+async function evaluateCartPolicy(cart, options = {}, dependencies = {}) {
+  const requestedCart = Array.isArray(cart) ? cart.slice(0, 50) : [];
+  const checkAvailability = options.checkAvailability === true;
+  const catalog = await (dependencies.getCatalogProducts || getCatalogProducts)(requestedCart);
+  if (!catalog.fresh) {
+    return {
+      enforceClearance: false,
+      catalogFresh: false,
+      availabilityChecked: false,
+      inventoryVerified: false,
+      items: []
+    };
+  }
+
+  const items = catalog.products.map((product, index) => {
+    const requested = requestedCart[index] || {};
+    const catalogResolved = !!product;
+    const isClearance = catalogResolved ? product.isClearance === true : null;
+    return {
+      productId: String(product?.productId || requested.productId || requested.id || ""),
+      productCode: String(product?.productCode || requested.productCode || requested.code || ""),
+      requestedQuantity: requestedQuantity(requested.quantity),
+      catalogResolved,
+      isClearance,
+      maxQuantity: null,
+      companyInventory: null,
+      requiresOrdering: null,
+      inventoryVerified: !checkAvailability && isClearance !== true
+    };
+  }).filter((item) => item.productId || item.productCode);
+
+  const lookupItems = items.filter((item) => item.isClearance === true || checkAvailability);
+  const tooManyLiveLookups = lookupItems.length > MAX_LIVE_STOCK_LOOKUPS;
+  if (!tooManyLiveLookups) {
+    const liveInventory = dependencies.fetchLiveCompanyInventory || fetchLiveCompanyInventory;
+    await Promise.all(lookupItems.map(async (item) => {
+      if (!item.productId || item.isClearance === null) {
+        item.inventoryVerified = false;
+        return;
+      }
+      try {
+        const quantity = await liveInventory(item.productId);
+        item.companyInventory = quantity;
+        item.requiresOrdering = quantity < item.requestedQuantity;
+        item.inventoryVerified = true;
+        if (item.isClearance === true) item.maxQuantity = quantity;
+      } catch {
+        item.inventoryVerified = false;
+        if (item.isClearance === true) item.maxQuantity = 0;
+      }
+    }));
+  } else {
+    lookupItems.forEach((item) => {
+      item.inventoryVerified = false;
+      if (item.isClearance === true) item.maxQuantity = 0;
+    });
+  }
+
+  return {
+    enforceClearance: true,
+    catalogFresh: true,
+    availabilityChecked: checkAvailability,
+    inventoryVerified: items.every((item) => item.inventoryVerified !== false),
+    items
+  };
+}
+
 function allowedOrigins() {
   const configured = String(process.env.UPS_ALLOWED_ORIGINS || "")
     .split(",")
@@ -97,49 +169,24 @@ async function handler(req, res) {
   try {
     const body = req.body && typeof req.body === "object" ? req.body : JSON.parse(req.body || "{}");
     const cart = Array.isArray(body.cart) ? body.cart.slice(0, 50) : [];
-    const catalog = await getCatalogProducts(cart);
-    if (!catalog.fresh) {
-      return sendJson(res, 200, { enforceClearance: false, catalogFresh: false, items: [] });
-    }
-    const clearanceCount = catalog.products.filter((product) => product?.isClearance === true).length;
-    const tooManyClearanceLines = clearanceCount > MAX_CLEARANCE_STOCK_LOOKUPS;
-    const items = [];
-    for (let index = 0; index < catalog.products.length; index += 1) {
-      const product = catalog.products[index];
-      const requested = cart[index] || {};
-      const item = {
-        productId: String(product?.productId || requested.productId || requested.id || ""),
-        productCode: String(product?.productCode || requested.productCode || requested.code || ""),
-        isClearance: product?.isClearance === true,
-        maxQuantity: null,
-        inventoryVerified: product?.isClearance !== true
-      };
-      if (item.isClearance) {
-        if (!tooManyClearanceLines) {
-          try {
-            item.maxQuantity = await fetchLiveCompanyInventory(item.productId);
-            item.inventoryVerified = true;
-          } catch {
-            item.maxQuantity = 0;
-            item.inventoryVerified = false;
-          }
-        } else {
-          item.maxQuantity = 0;
-          item.inventoryVerified = false;
-        }
-      }
-      if (item.productId || item.productCode) items.push(item);
-    }
-    return sendJson(res, 200, {
-      enforceClearance: true,
-      catalogFresh: true,
-      inventoryVerified: items.every((item) => item.inventoryVerified !== false),
-      items
-    });
+    const result = await evaluateCartPolicy(cart, { checkAvailability: body.checkAvailability === true });
+    return sendJson(res, 200, result);
   } catch {
-    return sendJson(res, 200, { enforceClearance: false, catalogFresh: false, items: [] });
+    return sendJson(res, 200, {
+      enforceClearance: false,
+      catalogFresh: false,
+      availabilityChecked: false,
+      inventoryVerified: false,
+      items: []
+    });
   }
 }
 
 module.exports = handler;
-module.exports._test = { decodeHtml, fetchLiveCompanyInventory, parseCompanyInventory };
+module.exports._test = {
+  decodeHtml,
+  evaluateCartPolicy,
+  fetchLiveCompanyInventory,
+  parseCompanyInventory,
+  requestedQuantity
+};
