@@ -3947,6 +3947,7 @@ document.addEventListener("click", function (ev) {
     // -------------------------------------------------------------------------
     (function () {
       const STOCK_NOTICE_KEY = "wl_stock_shortage_notice";
+      const CLEARANCE_POLICY_KEY = "wl_clearance_policy_v1";
       let stockProceeding = false;
       let stockLastTriggerAt = 0;
       let stockObserver = null;
@@ -4028,9 +4029,46 @@ document.addEventListener("click", function (ev) {
           '.wl-stock-notice{margin:12px 0 16px;padding:14px 16px;border-radius:12px;background:#f8fafc;border:1px solid #dbe5ef;color:#243447;box-shadow:0 1px 2px rgba(0,0,0,.04);}',
           '.wl-stock-notice__title{font-weight:700;margin-bottom:4px;}',
           '.wl-stock-notice__body{line-height:1.45;}',
-          '#stockModal.wl-auto-bypass{display:none !important;visibility:hidden !important;opacity:0 !important;pointer-events:none !important;}'
+          '#stockModal.wl-auto-bypass{display:none !important;visibility:hidden !important;opacity:0 !important;pointer-events:none !important;}',
+          '#stockModal.wl-clearance-stock-block #ctl00_PageBody_YesButton{display:none!important;}',
+          '.wl-clearance-stock-alert{margin:12px 0;padding:10px 12px;border:1px solid #b65c37;border-radius:8px;background:#fff3ee;color:#6d2107;font-weight:700;line-height:1.4;}'
         ].join('');
         document.head.appendChild(style);
+      }
+
+      function clearancePolicyState() {
+        try {
+          const raw = sessionStorage.getItem(CLEARANCE_POLICY_KEY);
+          if (!raw) return null;
+          const parsed = JSON.parse(raw);
+          if (!parsed || (Date.now() - Number(parsed.ts || 0)) > 36 * 60 * 60 * 1000) return null;
+          return Array.isArray(parsed.items) ? parsed.items : [];
+        } catch {
+          return null;
+        }
+      }
+
+      function preserveStockModal(modal) {
+        const clearanceItems = clearancePolicyState();
+        if (clearanceItems === null) return { preserve: true, block: false };
+        if (!clearanceItems.length) return { preserve: false, block: false };
+
+        try {
+          modal.classList.remove('wl-auto-bypass');
+          modal.classList.add('wl-clearance-stock-block');
+          modal.removeAttribute('aria-hidden');
+          modal.style.removeProperty('display');
+          let alert = modal.querySelector('.wl-clearance-stock-alert');
+          if (!alert) {
+            alert = document.createElement('div');
+            alert.className = 'wl-clearance-stock-alert';
+            alert.setAttribute('role', 'alert');
+            alert.textContent = 'A clearance quantity in this cart is no longer available companywide. Return to the cart and reduce or remove the affected item before completing the order.';
+            const body = modal.querySelector('.modal-body') || modal;
+            body.insertBefore(alert, body.firstChild);
+          }
+        } catch {}
+        return { preserve: true, block: true };
       }
 
       function triggerStockYes(modal) {
@@ -4083,6 +4121,9 @@ document.addEventListener("click", function (ev) {
       function maybeHandleStockModal() {
         const modal = document.getElementById('stockModal');
         if (!modal || !isVisible(modal)) return false;
+
+        const stockPolicy = preserveStockModal(modal);
+        if (stockPolicy.preserve) return true;
 
         const now = Date.now();
         if (stockProceeding && (now - stockLastTriggerAt) < 2500) {

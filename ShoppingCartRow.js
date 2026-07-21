@@ -6,6 +6,8 @@ $(async function(){
   var WL_EPALLET_SNAPSHOT_KEY = "wl_epallet_cart_snapshot_v1";
   var WL_EPALLET_RETURN_KEY = "wl_epallet_checkout_return_v1";
   var WL_EPALLET_DESIRED_MODE_KEY = "wl_epallet_desired_mode_v1";
+  var WL_CART_POLICY_URL = "https://wl-upsrates.vercel.app/api/cart-policy";
+  var WL_CLEARANCE_POLICY_KEY = "wl_clearance_policy_v1";
   var WL_EPALLET_RULES = {
     22444: { code: "ASC", pickupMin: 10, palletQty: 42 },
     23379: { code: "4BSC", pickupMin: 10, palletQty: 30 },
@@ -97,6 +99,44 @@ $(async function(){
     return $row.find("input[id*='_qty_']:not([id$='_ClientState']), input.riTextBox").filter(function () {
       return !/_ClientState$/i.test(this.id || "");
     }).first();
+  }
+
+  function wlCartPolicyRefs($rows) {
+    return $rows.map(function () {
+      var $row = $(this);
+      return {
+        productId: wlEpalletPidFromRow($row),
+        productCode: wlEpalletLineCode($row),
+        quantity: wlEpalletLineQty($row)
+      };
+    }).get().filter(function (item) { return item.productId || item.productCode; });
+  }
+
+  async function wlLoadCartPolicy($rows) {
+    var refs = wlCartPolicyRefs($rows);
+    try { sessionStorage.removeItem(WL_CLEARANCE_POLICY_KEY); } catch (e) {}
+    if (!refs.length) return { enforceClearance: false, items: [] };
+    try {
+      var response = await fetch(WL_CART_POLICY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cart: refs })
+      });
+      var result = await response.json().catch(function () { return {}; });
+      if (!response.ok || result.enforceClearance !== true || !Array.isArray(result.items)) {
+        return { enforceClearance: false, items: [] };
+      }
+      try {
+        sessionStorage.setItem(WL_CLEARANCE_POLICY_KEY, JSON.stringify({
+          ts: Date.now(),
+          items: result.items.filter(function (item) { return item.isClearance === true; })
+        }));
+      } catch (e) {}
+      return result;
+    } catch (error) {
+      console.warn("[WLCart] Clearance availability could not be checked.", error);
+      return { enforceClearance: false, items: [] };
+    }
   }
 
   function wlEpalletLineQty($row) {
@@ -353,6 +393,28 @@ $(async function(){
 
   if (await wlEpalletEnsureCartSynced()) return;
 
+  var $wlOriginalCartRows = $('.shopping-cart-details .shopping-cart-item');
+  var wlCartPolicy = await wlLoadCartPolicy($wlOriginalCartRows);
+  var wlClearanceById = {};
+  var wlClearanceByCode = {};
+  var wlCartQtyById = {};
+  var wlCartQtyByCode = {};
+  (wlCartPolicy.items || []).forEach(function (item) {
+    if (item.isClearance !== true) return;
+    var id = wlEpalletText(item.productId);
+    var code = wlEpalletText(item.productCode).replace(/\s+/g, '').toUpperCase();
+    if (id) wlClearanceById[id] = item;
+    if (code) wlClearanceByCode[code] = item;
+  });
+  $wlOriginalCartRows.each(function () {
+    var $row = $(this);
+    var id = wlEpalletPidFromRow($row);
+    var code = wlEpalletLineCode($row).replace(/\s+/g, '').toUpperCase();
+    var qty = wlEpalletLineQty($row);
+    if (id) wlCartQtyById[id] = (wlCartQtyById[id] || 0) + qty;
+    if (code) wlCartQtyByCode[code] = (wlCartQtyByCode[code] || 0) + qty;
+  });
+
   if (!document.getElementById('wl-cart-qty-stepper-styles')) {
     $('<style id="wl-cart-qty-stepper-styles">\
       .qty-section{gap:8px;min-height:40px;}\
@@ -368,6 +430,8 @@ $(async function(){
       .wl-qty-locked{display:inline-flex;align-items:center;min-height:40px;padding:0 10px;border:1px solid #d9dde1;border-radius:6px;background:#f7f8f9;color:#25282c;font-size:13px;font-weight:700;}\
       .wl-epallet-refund-note{margin:6px 0 0;color:#555;font-size:12px;line-height:1.35;}\
       .wl-epallet-lock-note{margin-left:4px;color:#666;font-size:12px;line-height:1.3;}\
+      .wl-clearance-stock-note{width:100%;margin-top:6px;color:#7a2100;font-size:12px;font-weight:700;line-height:1.35;}\
+      .wl-clearance-stock-note[data-sold-out="1"]{padding:8px 10px;border:1px solid #d29a82;border-radius:6px;background:#fff3ee;}\
       @media (max-width:640px){\
         .cart-item-card .card-body>.d-flex.justify-content-between{display:grid!important;grid-template-columns:1fr;gap:10px;align-items:stretch!important;}\
         .cart-item-card .qty-section{width:100%;display:flex!important;flex-wrap:nowrap;justify-content:flex-start;align-items:center;}\
@@ -387,6 +451,11 @@ $(async function(){
     var $link = $infoCol.find('a:has(.portalGridLink)').first();
     var code = $link.find('.portalGridLink').text().trim();
     var href = $link.attr('href');
+    var productIdMatch = String(href || '').match(/[?&]pid=(\d+)/i);
+    var productId = productIdMatch ? productIdMatch[1] : '';
+    var normalizedCode = String(code || '').replace(/\s+/g, '').toUpperCase();
+    var clearancePolicy = wlClearanceById[productId] || wlClearanceByCode[normalizedCode] || null;
+    var companyClearanceQty = clearancePolicy ? Math.max(0, Math.trunc(Number(clearancePolicy.maxQuantity) || 0)) : null;
     var $origQtyWrap = $item.find('span.RadInput').first();
     var isEpalletCard = /[?&]pid=23297\b/i.test(href || '') || String(code || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === 'EPALLETS';
 
@@ -522,11 +591,20 @@ $(async function(){
 
       function qtyChoices(value) {
         var choices = [];
+        var lineMax = Infinity;
         for (var i = 1; i <= 20; i += 1) choices.push(i);
         for (var j = 25; j <= 100; j += 5) choices.push(j);
         for (var k = 125; k <= 300; k += 25) choices.push(k);
         for (var m = 350; m <= 1000; m += 50) choices.push(m);
-        if (choices.indexOf(value) === -1) choices.push(value);
+        if (companyClearanceQty !== null) {
+          var otherQty = productId
+            ? Math.max(0, (wlCartQtyById[productId] || 0) - currentQty)
+            : Math.max(0, (wlCartQtyByCode[normalizedCode] || 0) - currentQty);
+          lineMax = Math.max(0, companyClearanceQty - otherQty);
+          choices = choices.filter(function (choice) { return choice <= lineMax; });
+          if (lineMax > 0 && choices.indexOf(lineMax) === -1) choices.push(lineMax);
+        }
+        if (value <= lineMax && choices.indexOf(value) === -1) choices.push(value);
         return choices.sort(function (a, b) { return a - b; });
       }
 
@@ -537,15 +615,19 @@ $(async function(){
       var busy = false;
 
       function renderQty() {
+        var otherQty = companyClearanceQty === null ? 0 : (productId
+          ? Math.max(0, (wlCartQtyById[productId] || 0) - currentQty)
+          : Math.max(0, (wlCartQtyByCode[normalizedCode] || 0) - currentQty));
+        var lineMax = companyClearanceQty === null ? Infinity : Math.max(0, companyClearanceQty - otherQty);
         var choices = qtyChoices(currentQty);
         $select.empty();
         choices.forEach(function (choice) {
           $('<option>', { value: String(choice), text: String(choice) }).appendTo($select);
         });
         $select.val(String(currentQty));
-        $select.prop('disabled', busy);
+        $select.prop('disabled', busy || lineMax < 1);
         $decrease.prop('disabled', busy || currentQty <= 1);
-        $increase.prop('disabled', busy);
+        $increase.prop('disabled', busy || currentQty >= lineMax);
       }
 
       function syncWebTrackQty() {
@@ -565,6 +647,14 @@ $(async function(){
       function applyQty(next) {
         if (busy) return;
         next = Math.max(1, parseFloat(next) || 1);
+        if (companyClearanceQty !== null) {
+          var otherQty = productId
+            ? Math.max(0, (wlCartQtyById[productId] || 0) - currentQty)
+            : Math.max(0, (wlCartQtyByCode[normalizedCode] || 0) - currentQty);
+          var lineMax = Math.max(0, companyClearanceQty - otherQty);
+          if (lineMax < 1) return;
+          next = Math.min(next, lineMax);
+        }
         if (next === currentQty) return;
         currentQty = next;
         busy = true;
@@ -588,8 +678,27 @@ $(async function(){
       $select.on('change', function(){ applyQty($(this).val()); });
       $stepper.append($decrease, $select, $increase);
       $qtySection.append('<span class="wl-qty-label">Qty</span>', $stepper, '<span class="wl-qty-unit">ea</span>');
+      if (companyClearanceQty !== null) {
+        var inventoryVerified = clearancePolicy.inventoryVerified !== false;
+        var soldOut = companyClearanceQty < 1 || !inventoryVerified;
+        var stockText = !inventoryVerified
+          ? 'Clearance inventory could not be confirmed. Please try again before checkout.'
+          : soldOut
+          ? 'This clearance item is sold out companywide. Remove it before checkout.'
+          : 'Clearance item: ' + companyClearanceQty + ' available companywide.';
+        $qtySection.append('<span class="wl-clearance-stock-note" data-sold-out="' + (soldOut ? '1' : '0') + '">' + stockText + '</span>');
+      }
       syncWebTrackQty();
       renderQty();
+      if (companyClearanceQty !== null && companyClearanceQty > 0) {
+        var otherCurrentQty = productId
+          ? Math.max(0, (wlCartQtyById[productId] || 0) - currentQty)
+          : Math.max(0, (wlCartQtyByCode[normalizedCode] || 0) - currentQty);
+        var currentLineMax = Math.max(0, companyClearanceQty - otherCurrentQty);
+        if (currentQty > currentLineMax && currentLineMax > 0) {
+          window.setTimeout(function () { applyQty(currentLineMax); }, 0);
+        }
+      }
     } else {
       $qtySection.append(' ea');
     }
