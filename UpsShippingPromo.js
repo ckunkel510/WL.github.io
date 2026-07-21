@@ -2,6 +2,15 @@
   "use strict";
 
   var BUILD_VERSION = "20260710-ups-fallback-1";
+  var OFFER_VERSION = "20260721-margin-offer-1";
+  var offerPage = /ShoppingCart\.aspx|Checkout|PlaceOrder/i.test(window.location.pathname || "");
+  if (offerPage && !document.querySelector('script[data-wl-ups-shipping-offer="' + OFFER_VERSION + '"]')) {
+    var offerScript = document.createElement("script");
+    offerScript.src = "https://ckunkel510.github.io/WL.github.io/UpsShippingOffer.js?v=" + OFFER_VERSION;
+    offerScript.async = true;
+    offerScript.setAttribute("data-wl-ups-shipping-offer", OFFER_VERSION);
+    document.head.appendChild(offerScript);
+  }
 
   if (!/ShoppingCart\.aspx/i.test(window.location.pathname || "")) return;
   if (window.WLShippingPromo && window.WLShippingPromo.version === BUILD_VERSION) return;

@@ -2,7 +2,8 @@
 
 const crypto = require("node:crypto");
 const zipcodes = require("zipcodes");
-const { applyFreeGroundPromotion } = require("./shipping-promotions");
+const { buildAutomaticShippingQuote } = require("./shipping-quote");
+const { storeShippingOffer } = require("./shipping-offer-sessions");
 
 const DEFAULT_ORIGINS = [
   "https://webtrack.woodsonlumber.com",
@@ -311,13 +312,34 @@ async function handler(req, res) {
   try {
     enforceRateLimit(req);
     const body = req.body && typeof req.body === "object" ? req.body : JSON.parse(req.body || "{}");
+    const cart = Array.isArray(body.cart) ? body.cart : Array.isArray(body.items) ? body.items : [];
+    if (cart.length) {
+      try {
+        const automatic = await buildAutomaticShippingQuote(body, { requestRates });
+        if (automatic.claim?.decision?.reviewRequired) {
+          console.warn("[shipping-margin-review]", JSON.stringify({
+            catalogId: automatic.claim.catalogId,
+            products: automatic.claim.basis?.productRefs || [],
+            packageCount: automatic.claim.basis?.packageCount,
+            groundCost: automatic.claim.decision.groundCost,
+            protectedMargin: automatic.claim.decision.protectedMargin,
+            destinationState: cleanText(body.shipTo?.state, 2).toUpperCase()
+          }));
+        }
+        await storeShippingOffer({
+          shipFrom: body.shipFrom,
+          shipTo: body.shipTo,
+          ...automatic.claim
+        });
+        return sendJson(res, 200, automatic.result);
+      } catch {
+        // A missing/stale catalog, incomplete package data, or unconfigured
+        // operating cost must never create a customer subsidy. Fall through to
+        // the ordinary UPS quote using the supplied package plan.
+      }
+    }
     const rated = await requestRates(body);
-    const promoInput = {
-      ...(body.promo && typeof body.promo === "object" ? body.promo : {}),
-      cart: body.cart || body.items || []
-    };
-    const { result } = applyFreeGroundPromotion(rated, promoInput);
-    return sendJson(res, 200, result);
+    return sendJson(res, 200, rated);
   } catch (error) {
     const status = error instanceof RequestError ? error.status : 500;
     const message = error instanceof RequestError ? error.message : "UPS rating is temporarily unavailable.";
