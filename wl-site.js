@@ -3,13 +3,14 @@
 
   if (window.WLAnalytics) return;
 
-  var VERSION = "1.2.0";
+  var VERSION = "1.2.1";
   var EVENT_NAME = "wl_analytics_event";
   var GA_MEASUREMENT_ID = "G-4ZLV1YB6GY";
   var META_PIXEL_ID = "188974749776655";
   var CART_STORAGE_KEY = "wl_analytics_cart_v1";
   var CHECKOUT_STORAGE_KEY = "wl_analytics_checkout_v1";
   var PURCHASE_STORAGE_KEY = "wl_analytics_purchases_v1";
+  var PENDING_ADD_STORAGE_KEY = "wl_analytics_pending_add_v1";
   var CART_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
   var sent = Object.create(null);
   var observedProductIds = Object.create(null);
@@ -398,6 +399,41 @@
     return result;
   }
 
+  function queueAddToCart(item) {
+    if (!item) return;
+    safeStorage(window.sessionStorage, "set", PENDING_ADD_STORAGE_KEY, JSON.stringify({
+      created_at: Date.now(),
+      item: item
+    }));
+  }
+
+  function emitQueuedAddToCart() {
+    var raw = safeStorage(window.sessionStorage, "get", PENDING_ADD_STORAGE_KEY);
+    if (!raw) return false;
+
+    try {
+      var pending = JSON.parse(raw);
+      if (!pending || !pending.item || !pending.created_at ||
+          Date.now() - pending.created_at > 2 * 60 * 1000) {
+        safeStorage(window.sessionStorage, "remove", PENDING_ADD_STORAGE_KEY);
+        return false;
+      }
+
+      var confirmation = document.getElementById("customCartModal");
+      if (!confirmation || text(confirmation).indexOf("Added to Cart!") === -1) return false;
+
+      safeStorage(window.sessionStorage, "remove", PENDING_ADD_STORAGE_KEY);
+      var quantity = typeof pending.item.quantity === "number" ? pending.item.quantity : 1;
+      var value = typeof pending.item.price === "number" ? pending.item.price * quantity : null;
+      return pushEvent("add_to_cart", {
+        ecommerce: ecommerce([pending.item], value)
+      });
+    } catch (error) {
+      safeStorage(window.sessionStorage, "remove", PENDING_ADD_STORAGE_KEY);
+      return false;
+    }
+  }
+
   function listName() {
     var term = getSearchTerm();
     if (term) return "Search Results";
@@ -674,6 +710,12 @@
     if (/AddProductButton/i.test(id) || target.matches("[data-wl-action='add-to-cart']")) {
       var added = itemForAction(target);
       if (added) {
+        var nativeForm = target.form || (target.closest && target.closest("form"));
+        var buttonType = String(target.getAttribute("type") || "").toLowerCase();
+        if (nativeForm && buttonType !== "button") {
+          queueAddToCart(added);
+          return;
+        }
         pushEvent("add_to_cart", {
           ecommerce: ecommerce([added], typeof added.price === "number" ? added.price * added.quantity : null)
         });
@@ -769,6 +811,7 @@
     document.addEventListener("click", handleClick, true);
     document.addEventListener("change", handleChange, true);
     emitInitialPageEvents();
+    window.setTimeout(emitQueuedAddToCart, 700);
     observeDynamicContent();
   });
 })(window, document);
