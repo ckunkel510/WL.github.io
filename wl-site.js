@@ -3,7 +3,7 @@
 
   if (window.WLAnalytics) return;
 
-  var VERSION = "1.2.1";
+  var VERSION = "1.2.2";
   var EVENT_NAME = "wl_analytics_event";
   var GA_MEASUREMENT_ID = "G-4ZLV1YB6GY";
   var META_PIXEL_ID = "188974749776655";
@@ -752,7 +752,7 @@
         storeCartSnapshot(currentItems, value);
         snapshot = { items: currentItems, value: value };
       }
-      emitBeginCheckout("cart", snapshot);
+      safeStorage(window.sessionStorage, "remove", CHECKOUT_STORAGE_KEY);
       return;
     }
 
