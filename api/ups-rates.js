@@ -333,9 +333,12 @@ async function handler(req, res) {
         });
         return sendJson(res, 200, automatic.result);
       } catch {
-        // A missing/stale catalog, incomplete package data, or unconfigured
-        // operating cost must never create a customer subsidy. Fall through to
-        // the ordinary UPS quote using the supplied package plan.
+        // A missing/stale catalog or incomplete trusted package plan must never
+        // create a customer subsidy. Use a supplied fallback plan when one is
+        // available; otherwise return a clear cart-data error.
+        if (!Array.isArray(body.packages) || !body.packages.length) {
+          throw new RequestError(422, "One or more cart items are missing trusted shipping dimensions.");
+        }
       }
     }
     const rated = await requestRates(body);

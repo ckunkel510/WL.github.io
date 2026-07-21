@@ -30,11 +30,6 @@ function groundRate(result) {
   return result?.rates?.find((rate) => String(rate.serviceCode || "") === "03") || null;
 }
 
-function cartEligibleForMode(lines, mode) {
-  if (mode === "all") return true;
-  return Array.isArray(lines) && lines.some((line) => /^case$/i.test(cleanText(line?.brand, 80)));
-}
-
 function trustedCartLines(cart, products) {
   if (!Array.isArray(cart) || !cart.length || cart.length > 50) throw new Error("The cart is unavailable for automatic shipping offers.");
   if (!Array.isArray(products) || products.length !== cart.length) throw new Error("The trusted product catalog is incomplete.");
@@ -65,14 +60,10 @@ async function buildAutomaticShippingQuote(body, dependencies = {}) {
   const requestRates = dependencies.requestRates;
   if (typeof requestRates !== "function") throw new Error("UPS rating is unavailable.");
   const policy = dependencies.policy || policyFromEnv();
-  if (!policy.configured) throw new Error("Automatic shipping offers are not enabled.");
   const cart = Array.isArray(body?.cart) ? body.cart : Array.isArray(body?.items) ? body.items : [];
   const catalog = await (dependencies.getCatalogProducts || getCatalogProducts)(cart);
   if (!catalog?.fresh) throw new Error("The trusted product catalog is not current.");
   const lines = trustedCartLines(cart, catalog.products);
-  if (!cartEligibleForMode(lines, policy.offerMode)) {
-    throw new Error("The cart is outside the active shipping-offer pilot.");
-  }
   const plans = (dependencies.cartonizeCandidates || cartonizeCandidates)(lines, dependencies.cartonizerOptions);
   if (!plans.length) throw new Error("The cart could not be packed for UPS shipping.");
 
@@ -126,7 +117,7 @@ async function buildAutomaticShippingQuote(body, dependencies = {}) {
       },
       policy: {
         enabled: policy.enabled !== false,
-        offerMode: policy.offerMode || "case-pilot",
+        offerMode: "all",
         marginFloor: policy.marginFloor,
         cardFeeRate: policy.cardFeeRate,
         cogsBufferRate: policy.cogsBufferRate,
@@ -150,7 +141,6 @@ async function buildAutomaticShippingQuote(body, dependencies = {}) {
 
 module.exports = {
   buildAutomaticShippingQuote,
-  cartEligibleForMode,
   groundRate,
   publicPackages,
   trustedCartLines
