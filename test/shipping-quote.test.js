@@ -115,10 +115,10 @@ test("fails closed when the trusted catalog is stale", async () => {
   }), /not current/);
 });
 
-test("keeps the automatic subsidy inside the Case pilot by default", async () => {
+test("includes non-Case brands in the automatic all-products scope", async () => {
   const nonCase = catalog(45);
   nonCase.products[0].brand = "Other Brand";
-  await assert.rejects(() => buildAutomaticShippingQuote({
+  const result = await buildAutomaticShippingQuote({
     shipFrom: { postalCode: "77833" },
     shipTo: { postalCode: "78701" },
     cart: [{ productId: "100", quantity: 1 }]
@@ -126,5 +126,29 @@ test("keeps the automatic subsidy inside the Case pilot by default", async () =>
     requestRates: rateService,
     getCatalogProducts: async () => nonCase,
     policy: policy({ offerMode: "case-pilot" })
-  }), /outside the active shipping-offer pilot/);
+  });
+
+  assert.equal(result.result.shippingOffer.mode, "free");
+  assert.equal(result.claim.policy.offerMode, "all");
+});
+
+test("builds a trusted package plan while customer offers are disabled", async () => {
+  const seenPackages = [];
+  const result = await buildAutomaticShippingQuote({
+    shipFrom: { postalCode: "77833" },
+    shipTo: { postalCode: "78701" },
+    cart: [{ productId: "100", quantity: 1 }]
+  }, {
+    requestRates: async (body) => {
+      seenPackages.push(...body.packages);
+      return rateService(body);
+    },
+    getCatalogProducts: async () => catalog(45),
+    policy: policy({ configured: false, enabled: false })
+  });
+
+  assert.ok(seenPackages.length >= 1);
+  assert.equal(result.result.rates[0].amount, 10);
+  assert.equal(result.result.shippingOffer.applied, false);
+  assert.equal(result.result.shippingOffer.mode, "regular");
 });

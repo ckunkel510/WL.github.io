@@ -30,11 +30,9 @@ function policyFromEnv(env = process.env) {
   const packaging = nonNegative(env.SHIPPING_PACKAGING_COST_PER_PACKAGE);
   const handling = nonNegative(env.SHIPPING_HANDLING_COST_PER_ORDER);
   const enabled = /^(1|true|yes|on)$/i.test(String(env.SHIPPING_OFFER_ENABLED || ""));
-  const requestedMode = String(env.SHIPPING_OFFER_MODE || "case-pilot").trim().toLowerCase();
-  const offerMode = requestedMode === "all" ? "all" : "case-pilot";
   return {
     enabled,
-    offerMode,
+    offerMode: "all",
     marginFloor: rateFromEnv(env.SHIPPING_MARGIN_FLOOR, DEFAULT_MARGIN_FLOOR),
     cardFeeRate: rateFromEnv(env.SHIPPING_CARD_FEE_RATE, DEFAULT_CARD_FEE_RATE),
     cogsBufferRate: rateFromEnv(env.SHIPPING_COGS_BUFFER_RATE, DEFAULT_COGS_BUFFER_RATE),

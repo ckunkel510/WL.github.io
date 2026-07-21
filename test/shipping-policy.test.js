@@ -52,6 +52,17 @@ test("requires an explicit live activation flag even when operating costs are co
   assert.equal(enabled.configured, true);
 });
 
+test("keeps every qualified product in the all-products offer scope", () => {
+  const settings = policyFromEnv({
+    SHIPPING_OFFER_MODE: "case-pilot",
+    SHIPPING_OFFER_ENABLED: "true",
+    SHIPPING_PACKAGING_COST_PER_PACKAGE: "1.25",
+    SHIPPING_HANDLING_COST_PER_ORDER: "2.50"
+  });
+
+  assert.equal(settings.offerMode, "all");
+});
+
 test("includes the card fee on customer-paid shipping", () => {
   const economics = orderEconomics({
     lines: [{ quantity: 1, price: 100, averageCost: 60 }],
@@ -76,6 +87,20 @@ test("grants free Ground when the protected margin remains at least fifteen perc
   assert.equal(decision.mode, "free");
   assert.equal(decision.customerGroundAmount, 0);
   assert.equal(decision.subsidyAmount, 14);
+});
+
+test("grants the Turtlebox cart free Ground under the protected-margin rules", () => {
+  const decision = evaluateShippingOffer({
+    lines: [{ quantity: 1, price: 430, averageCost: 305.7768 }],
+    groundCost: 17.96,
+    packageCount: 1,
+    policy: policy()
+  });
+
+  assert.equal(decision.mode, "free");
+  assert.equal(decision.customerGroundAmount, 0);
+  assert.equal(decision.economics.contribution, 79.197664);
+  assert.ok(decision.economics.margin > 0.18);
 });
 
 test("uses the $6.95 tier when free Ground misses the protected margin", () => {
