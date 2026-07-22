@@ -3800,8 +3800,13 @@ document.addEventListener("click", function (ev) {
                 if ($ship.length) {
                   $ship.show();
                   $shipTag.text("Available nationwide");
-                  showOutOfStateMessage("Ship via UPS is selected for this out-of-state address. Pickup from a Woodson store is also available.", "");
                   const intent = getFulfillmentIntent();
+                  showOutOfStateMessage(
+                    intent === "pickup"
+                      ? "Pickup is selected. Ship via UPS is also available for this out-of-state address."
+                      : "Ship via UPS is selected for this out-of-state address. Pickup from a Woodson store is also available.",
+                    ""
+                  );
                   if (!intent || intent === "delivery") {
                     setFulfillmentIntent("ship");
                     try { sessionStorage.setItem("wl_fulfillment_method", "ship"); } catch {}
