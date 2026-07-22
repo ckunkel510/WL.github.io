@@ -17,13 +17,27 @@ test("cart quantity controls load the trusted companywide clearance limit", () =
   assert.match(cart, /inventory could not be confirmed/i);
 });
 
-test("checkout does not auto-approve a shortage when clearance state is unknown or present", () => {
+test("cart preserves its clearance policy when the shared script runs on checkout", () => {
+  const cart = source("ShoppingCartRow.js");
+  const loaderIndex = cart.indexOf("async function wlLoadCartPolicy");
+  const noRowsIndex = cart.indexOf("if (!refs.length)", loaderIndex);
+  const clearIndex = cart.indexOf("sessionStorage.removeItem(WL_CLEARANCE_POLICY_KEY)", loaderIndex);
+  assert.ok(loaderIndex >= 0);
+  assert.ok(noRowsIndex > loaderIndex);
+  assert.ok(clearIndex > noRowsIndex);
+});
+
+test("checkout resolves branch shortages against companywide stock before continuing", () => {
   const checkout = source("Checkout2.js");
-  const preserveIndex = checkout.indexOf("const stockPolicy = preserveStockModal(modal)");
-  const autoYesIndex = checkout.indexOf("return triggerStockYes(modal)", preserveIndex);
-  assert.ok(preserveIndex >= 0);
-  assert.ok(autoYesIndex > preserveIndex);
+  const lookupIndex = checkout.indexOf("fetchCompanyAvailability(refs)");
+  const autoYesIndex = checkout.indexOf("triggerStockYes(modal, message)", lookupIndex);
+  assert.ok(lookupIndex >= 0);
+  assert.ok(autoYesIndex > lookupIndex);
+  assert.match(checkout, /checkAvailability:\s*true/);
+  assert.match(checkout, /7 days or longer/);
+  assert.match(checkout, /pickup, Woodson delivery, or UPS shipment/);
   assert.match(checkout, /wl-clearance-stock-block/);
+  assert.match(checkout, /Update a clearance quantity/);
 });
 
 test("delivery options display the server-returned rate without a browser-side free override", () => {

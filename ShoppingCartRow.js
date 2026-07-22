@@ -114,8 +114,11 @@ $(async function(){
 
   async function wlLoadCartPolicy($rows) {
     var refs = wlCartPolicyRefs($rows);
-    try { sessionStorage.removeItem(WL_CLEARANCE_POLICY_KEY); } catch (e) {}
+    // ShoppingCartRow.js also loads during checkout, where WebTrack no longer
+    // renders cart rows. Keep the cart-page policy across that postback so the
+    // checkout shortage handler can still protect clearance quantities.
     if (!refs.length) return { enforceClearance: false, items: [] };
+    try { sessionStorage.removeItem(WL_CLEARANCE_POLICY_KEY); } catch (e) {}
     try {
       var response = await fetch(WL_CART_POLICY_URL, {
         method: "POST",
