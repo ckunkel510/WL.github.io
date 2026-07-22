@@ -74,6 +74,8 @@ test("checkout hides local delivery for an address outside Texas", () => {
   assert.match(checkout, /zip >= 75001 && zip <= 79999/);
   assert.match(checkout, /zip >= 88510 && zip <= 88595/);
   assert.match(outsideBranch, /\$delivery\.hide\(\)/);
+  assert.match(outsideBranch, /intent === "pickup"/);
+  assert.match(outsideBranch, /Pickup is selected\. Ship via UPS is also available/);
   assert.match(outsideBranch, /Ship via UPS is selected/);
   assert.match(outsideBranch, /Pickup from a Woodson store is also available/);
   assert.match(outsideBranch, /setFulfillmentIntent\("ship"\)/);
