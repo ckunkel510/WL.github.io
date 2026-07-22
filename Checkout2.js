@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20260709-address-picker-5";
+  window.WL_CHECKOUT_BUILD = "20260722-texas-delivery-1";
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
   const UPS_SHIPPING_ENABLED = true;
@@ -3616,7 +3616,11 @@ document.addEventListener("click", function (ev) {
             const option = el.selectedOptions && el.selectedOptions[0] ? el.selectedOptions[0] : null;
             const values = [];
             if (option) values.push(option.value, option.text, option.textContent);
-            values.push(el.value, el.getAttribute && el.getAttribute("value"), el.textContent);
+            values.push(el.value, el.getAttribute && el.getAttribute("value"));
+            // A select's textContent contains every option, including Texas. Reading
+            // it made any selected state look Texas-based. Only use full element text
+            // for non-select controls that do not expose a selected option.
+            if (!option) values.push(el.textContent);
             return values.map(cleanStateValue).filter(Boolean).join(" ");
           }
 
@@ -3626,7 +3630,10 @@ document.addEventListener("click", function (ev) {
             const compact = raw.replace(/[^a-z]/g, "");
             const tokens = raw.split(/[^a-z]+/).filter(Boolean);
             if (tokens.includes("tx") || tokens.includes("texas") || compact === "texas") return "texas";
+            if (tokens.includes("canada") || compact.includes("canada")) return "outside";
             if (tokens.some(function (token) { return WL_STATE_ABBRS.has(token); })) return "outside";
+            if (tokens.some(function (token) { return WL_STATE_NAMES.has(token); })) return "outside";
+            if (Array.from(WL_STATE_NAMES).some(function (stateName) { return compact.includes(stateName); })) return "outside";
             if (WL_STATE_NAMES.has(compact)) return "outside";
             return "";
           }
@@ -3681,12 +3688,63 @@ document.addEventListener("click", function (ev) {
             return candidates.filter(Boolean);
           }
 
-          function addressRegion() {
-            const candidates = collectAddressStateCandidates("delivery").concat(collectAddressStateCandidates("invoice"));
+          function collectAddressZipCandidates(kind) {
+            const prefix = kind === "invoice" ? "InvoiceAddress" : "DeliveryAddress";
+            const selectors = [
+              `#ctl00_PageBody_${prefix}_Postcode`,
+              `#ctl00_PageBody_${prefix}_PostalCode`,
+              `#ctl00_PageBody_${prefix}_Zip`,
+              `input[id*="${prefix}"][id*="Postcode"]`,
+              `input[id*="${prefix}"][id*="Postal"]`,
+              `input[id*="${prefix}"][id*="Zip"]`,
+              `input[name*="${prefix}"][name*="Postcode"]`,
+              `input[name*="${prefix}"][name*="Postal"]`,
+              `input[name*="${prefix}"][name*="Zip"]`
+            ];
+            const seen = new Set();
+            const candidates = [];
+            selectors.forEach(function (selector) {
+              try {
+                document.querySelectorAll(selector).forEach(function (el) {
+                  if (seen.has(el)) return;
+                  seen.add(el);
+                  candidates.push(cleanStateValue(el.value || el.getAttribute("value") || ""));
+                });
+              } catch {}
+            });
+            return candidates.filter(Boolean);
+          }
+
+          function normalizeZipRegion(value) {
+            const match = cleanStateValue(value).match(/\b(\d{5})(?:-\d{4})?\b/);
+            if (!match) return "";
+            const zip = Number(match[1]);
+            const isTexasZip =
+              (zip >= 73301 && zip <= 73399) ||
+              (zip >= 75001 && zip <= 79999) ||
+              (zip >= 88510 && zip <= 88595);
+            return isTexasZip ? "texas" : "outside";
+          }
+
+          function firstKnownRegion(candidates, normalizer) {
             for (const candidate of candidates) {
-              const region = normalizeStateRegion(candidate);
+              const region = normalizer(candidate);
               if (region) return region;
             }
+            return "";
+          }
+
+          function addressRegion() {
+            // Delivery fields determine fulfillment. Billing is only a fallback for
+            // older saved-address responses that have not populated delivery fields.
+            const deliveryState = firstKnownRegion(collectAddressStateCandidates("delivery"), normalizeStateRegion);
+            if (deliveryState) return deliveryState;
+            const deliveryZip = firstKnownRegion(collectAddressZipCandidates("delivery"), normalizeZipRegion);
+            if (deliveryZip) return deliveryZip;
+            const invoiceState = firstKnownRegion(collectAddressStateCandidates("invoice"), normalizeStateRegion);
+            if (invoiceState) return invoiceState;
+            const invoiceZip = firstKnownRegion(collectAddressZipCandidates("invoice"), normalizeZipRegion);
+            if (invoiceZip) return invoiceZip;
             return "unknown";
           }
 
@@ -3741,8 +3799,8 @@ document.addEventListener("click", function (ev) {
                 $delivery.hide();
                 if ($ship.length) {
                   $ship.show();
-                  $shipTag.text("Required for this address");
-                  showOutOfStateMessage("Out-of-state shipping addresses use UPS. Local Woodson delivery is hidden for this address.", "");
+                  $shipTag.text("Available nationwide");
+                  showOutOfStateMessage("Ship via UPS is selected for this out-of-state address. Pickup from a Woodson store is also available.", "");
                   const intent = getFulfillmentIntent();
                   if (!intent || intent === "delivery") {
                     setFulfillmentIntent("ship");
@@ -3775,6 +3833,7 @@ document.addEventListener("click", function (ev) {
                 $shipTag.text("UPS option");
                 showOutOfStateMessage("", "");
               }
+              try { window.WLCheckout?.refreshSectionSummaries?.(); } catch {}
             } finally {
               addressAwareUpdating = false;
             }
@@ -3902,8 +3961,7 @@ document.addEventListener("click", function (ev) {
             if (mode === "delivery" && addressRegion() === "outside") {
               event.preventDefault();
               event.stopImmediatePropagation();
-              if ($("#btnShip").length) updateShippingStyles("ship", { reason: "outside-address-click" });
-              else showOutOfStateMessage("This address is outside Texas, but UPS is not available for this cart. Please choose pickup or update the cart before continuing.", "warning");
+              updateAddressAwareOptions();
               return false;
             }
             updateShippingStyles(mode);
@@ -4376,6 +4434,9 @@ document.addEventListener("click", function (ev) {
           if (intent === "pickup") return "Pickup from a Woodson store";
           if (intent === "delivery") return "Local Woodson delivery";
           if (intent === "ship" && UPS_SHIPPING_ENABLED) return "Ship via UPS";
+          if (window.WLCheckout?.addressRegion?.() === "outside") {
+            return UPS_SHIPPING_ENABLED ? "Choose Pickup or Ship via UPS" : "Choose Pickup";
+          }
           return UPS_SHIPPING_ENABLED ? "Choose Pickup, Local Delivery, or UPS Shipping" : "Choose Pickup or Local Delivery";
         }
         if (stepNum === 2) {
@@ -4535,9 +4596,14 @@ document.addEventListener("click", function (ev) {
         try { window.WLCheckout?.refreshDateUI?.(); } catch {}
         if (!canAutoAdvance()) {
           if (!getFulfillmentIntent()) {
-            copy.innerHTML = UPS_SHIPPING_ENABLED
-              ? "<strong>How would you like to receive this order?</strong><span>Choose Pickup, Local Delivery, or UPS Shipping below.</span>"
-              : "<strong>How would you like to receive this order?</strong><span>Choose Pickup or Local Delivery below.</span>";
+            const outsideTexas = window.WLCheckout?.addressRegion?.() === "outside";
+            copy.innerHTML = outsideTexas
+              ? (UPS_SHIPPING_ENABLED
+                ? "<strong>How would you like to receive this order?</strong><span>Choose Pickup or Ship via UPS below.</span>"
+                : "<strong>How would you like to receive this order?</strong><span>Choose Pickup below.</span>")
+              : (UPS_SHIPPING_ENABLED
+                ? "<strong>How would you like to receive this order?</strong><span>Choose Pickup, Local Delivery, or UPS Shipping below.</span>"
+                : "<strong>How would you like to receive this order?</strong><span>Choose Pickup or Local Delivery below.</span>");
             return;
           }
           if (attempts < 3) {
