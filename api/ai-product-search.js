@@ -249,7 +249,9 @@ function resultLine(product, index) {
   const code = product.productCode ? `${product.productCode} — ` : "";
   const displayPrice = product.salePrice || product.price;
   const price = displayPrice ? ` — ${displayPrice}` : "";
-  const image = product.imageUrl ? `\n![${product.title} product image](${product.imageUrl})` : "";
+  const image = product.imageUrl
+    ? `\n![${product.title} product image](${product.imageUrl})\n[View product image](${product.imageUrl})`
+    : "";
   const link = product.productUrl ? `\n[View product details](${product.productUrl})` : "";
   return `${index + 1}. ${code}${product.title}${price}${image}${link}`;
 }
