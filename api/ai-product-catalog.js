@@ -57,6 +57,7 @@ function normalizeAiProduct(input) {
     salePrice: finitePositive(source.salePrice),
     availability: cleanText(source.availability, 40).toLowerCase(),
     productUrl: cleanText(source.productUrl || source.link, 500),
+    imageUrl: cleanText(source.imageUrl || source.imageLink, 500),
     category: cleanText(source.category || source.productType, 260),
     gtin: cleanText(source.gtin, 32),
     mpn: cleanText(source.mpn, 100),

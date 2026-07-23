@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: Woodson Customer-Safe Product Search
-  version: 7.0.0
-  description: Search the current Woodson Lumber & Hardware online catalog. This API exposes customer-facing product data only and never exposes cost, margin, markup, profit, supplier, vendor, or advertising-economics data.
+  version: 8.0.0
+  description: Search the current Woodson Lumber & Hardware online catalog and verified WebTrack product groups. This API exposes customer-facing product data only and never exposes cost, margin, markup, profit, supplier, vendor, or advertising-economics data.
 
 servers:
   - url: https://wl-upsrates.vercel.app
@@ -13,13 +13,16 @@ paths:
       operationId: searchProducts
       summary: Search Woodson's current customer-safe product catalog
       description: >
-        Use this tool before answering any product question or product-like phrase.
+        Use this tool before answering any product question, product-like phrase,
+        or request to browse a product group or department.
         Send a POST JSON body with the customer's exact product phrase in the query field.
         Never call this tool with an empty query.
 
         For follow-up product messages, include relevant prior product context in the query.
         If hasResults=true, reply using the answer field exactly. Do not add unreturned
-        products, specifications, prices, availability claims, image links, or assumptions.
+        products, specifications, prices, availability claims, or assumptions.
+        Preserve every Markdown product image, product-details link, and verified product-group
+        link in the answer exactly as returned.
         If hasResults=false or sensitiveRequest=true, reply using the answer field exactly
         and invoke the configured human handoff option.
 
@@ -75,7 +78,12 @@ paths:
                     enum:
                       - exact
                       - close
+                      - group
                       - none
+                  resultType:
+                    type: string
+                    enum:
+                      - groups
                   query:
                     type: string
                   sensitiveRequest:
@@ -111,9 +119,17 @@ paths:
                           type: string
                         productUrl:
                           type: string
+                        imageUrl:
+                          type: string
                         category:
                           type: string
                         gtin:
                           type: string
                         mpn:
+                          type: string
+                        groupName:
+                          type: string
+                        parentGroup:
+                          type: string
+                        groupUrl:
                           type: string

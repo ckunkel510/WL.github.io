@@ -25,6 +25,7 @@ test("AI catalog strips all internal economics before storage", async () => {
     productCode: "M18-DRILL",
     title: "Milwaukee M18 Cordless Drill",
     price: 199.99,
+    imageUrl: "https://example.com/drill.jpg",
     averageCost: 91.25,
     cost: 90,
     margin: 0.54,
@@ -34,6 +35,7 @@ test("AI catalog strips all internal economics before storage", async () => {
     vendorTerms: "secret"
   });
   assert.equal(normalized.price, 199.99);
+  assert.equal(normalized.imageUrl, "https://example.com/drill.jpg");
   assert.deepEqual(Object.keys(normalized).filter((key) => FORBIDDEN_KEYS.test(key)), []);
   assert.equal(JSON.stringify(normalized).includes("91.25"), false);
   assert.equal(JSON.stringify(normalized).includes("secret"), false);
@@ -66,14 +68,50 @@ test("brand-qualified search never substitutes a competing brand", () => {
 
 test("exact product-code search wins and public results contain no economics", () => {
   const products = [
-    { productId: "1", productCode: "2462-22", title: "M12 Cordless Impact Driver", brand: "Milwaukee", price: 135.99, availability: "in_stock", productUrl: "https://example.com/1" },
+    { productId: "1", productCode: "2462-22", title: "M12 Cordless Impact Driver", brand: "Milwaukee", price: 135.99, availability: "in_stock", productUrl: "https://example.com/1", imageUrl: "https://example.com/1.jpg" },
     { productId: "2", productCode: "2462", title: "Driver Bit", brand: "Other", price: 5.99, availability: "in_stock" }
   ];
   const ranked = search.searchCatalog(products, "2462-22");
   assert.equal(ranked[0].product.productId, "1");
   const response = search.formatSearchResponse("2462-22", ranked);
   assert.equal(response.hasResults, true);
+  assert.match(response.answer, /!\[M12 Cordless Impact Driver product image\]\(https:\/\/example\.com\/1\.jpg\)/);
+  assert.match(response.answer, /\[View product details\]\(https:\/\/example\.com\/1\)/);
   assert.deepEqual(Object.keys(response.results[0]).filter((key) => FORBIDDEN_KEYS.test(key)), []);
+});
+
+test("normalizes common Turtlebox phrasing and typo", () => {
+  const products = [
+    { productId: "1", productCode: "TB-G3", title: "Turtlebox Original - Gray", brand: "Turtlebox", category: "Job Site Radios" }
+  ];
+  assert.equal(search.searchCatalog(products, "Do you carry tutle box speakers?")[0].product.productId, "1");
+  assert.equal(search.searchCatalog(products, "Turtle box")[0].product.productId, "1");
+});
+
+test("finds dimensional lumber from compact and conversational requests", () => {
+  const products = [
+    { productId: "1", productCode: "24082YPL", title: "2 X 4 - 08 #2/Stud GR Yellow Pine", category: "Lumber > Yellow Pine > 2x4 #2 Yellow Pine" },
+    { productId: "2", productCode: "71814", title: "Cut-Off Wheel, 4-1/2 x .045 x 7/8", category: "Tools" }
+  ];
+  assert.equal(search.searchCatalog(products, "2x4x8 lumber")[0].product.productId, "1");
+  assert.equal(search.searchCatalog(products, "I'm building a small wall and need a basic 2x4 stud, eight feet long.")[0].product.productId, "1");
+});
+
+test("uses lower weight for contextual words in vague deck-screw requests", () => {
+  const products = [
+    { productId: "1", productCode: "PTN3S1", title: "Grip-Rite PG Ten Exterior Screws, 3 inch (1#)", category: "Bolts, Screws, Etc. > Deck Screws" }
+  ];
+  const ranked = search.searchCatalog(products, "I need exterior screws for treated lumber on a deck, probably around 3 inches long.");
+  assert.equal(ranked[0].product.productId, "1");
+});
+
+test("returns only verified department links for browse requests", () => {
+  const groups = search.searchProductGroups("Where can I browse all of your plumbing products?");
+  assert.equal(groups[0].groupName, "Plumbing");
+  assert.equal(groups[0].groupUrl, "https://webtrack.woodsonlumber.com/Products.aspx?pl1=24&pg=24&sort=StockClassSort&direction=asc");
+  const response = search.formatGroupResponse("browse plumbing", groups.slice(0, 1));
+  assert.equal(response.matchType, "group");
+  assert.match(response.answer, /pl1=24&pg=24/);
 });
 
 test("internal economics questions are refused before catalog lookup", () => {
