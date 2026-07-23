@@ -1,32 +1,31 @@
 openapi: 3.0.3
 info:
-  title: Woodson Product Search
-  version: 6.0.0
-  description: Search Woodson Lumber & Hardware products using POST JSON, cache-first validated results, OpenAI result validation, self-healing query learning, and text-only product links.
+  title: Woodson Customer-Safe Product Search
+  version: 7.0.0
+  description: Search the current Woodson Lumber & Hardware online catalog. This API exposes customer-facing product data only and never exposes cost, margin, markup, profit, supplier, vendor, or advertising-economics data.
 
 servers:
-  - url: https://script.google.com/macros/s/AKfycbyS4LXwHrCDEz7RZFR-X6nLjxoB8DtRURAGxl6D9rozZr9ET8gaIQzMkypqvdGNvF-x9Q
+  - url: https://wl-upsrates.vercel.app
 
 paths:
-  /exec:
+  /api/ai-product-search:
     post:
       operationId: searchProducts
-      summary: Search Woodson products without image links
+      summary: Search Woodson's current customer-safe product catalog
       description: >
         Use this tool before answering any product question or product-like phrase.
         Send a POST JSON body with the customer's exact product phrase in the query field.
         Never call this tool with an empty query.
 
         For follow-up product messages, include relevant prior product context in the query.
-        Example: if the visitor first says "1/2 inch by 6 inch by 16 foot wood fascia"
-        and then says "smart side wood", call this tool with
-        query="1/2 inch by 6 inch by 16 foot wood fascia smart side wood".
+        If hasResults=true, reply using the answer field exactly. Do not add unreturned
+        products, specifications, prices, availability claims, image links, or assumptions.
+        If hasResults=false or sensitiveRequest=true, reply using the answer field exactly
+        and invoke the configured human handoff option.
 
-        If hasResults=true, reply using the answer field exactly. Do not rewrite it,
-        add image markdown, add image links, or list extra products.
-
-        If hasResults=false, reply using the answer field exactly. Do not ask for
-        details already provided by the visitor.
+        Never ask this tool for internal cost, average cost, margin, markup, profit,
+        supplier pricing, vendor terms, or advertising economics. Those fields do not
+        exist in this customer-safe catalog.
       requestBody:
         required: true
         content:
@@ -38,27 +37,24 @@ paths:
               properties:
                 query:
                   type: string
-                  description: REQUIRED. The visitor's exact product message or product identifier. Include prior context for follow-up product questions.
-                action:
-                  type: string
-                  description: Optional. Use searchProducts if provided.
-                  default: searchProducts
+                  maxLength: 240
+                  description: REQUIRED. The visitor's exact product request or identifier, with relevant prior product context for follow-ups.
             examples:
-              frontDoors:
-                summary: Front doors
+              cordlessDrill:
+                summary: Brand-qualified product request
                 value:
-                  query: front doors
+                  query: Milwaukee cordless drill
               fasciaFollowUp:
                 summary: Product follow-up with context
                 value:
-                  query: 1/2 inch by 6 inch by 16 foot wood fascia smart side wood
-              cinderBlocks:
-                summary: No-result item
+                  query: 1/2 inch by 6 inch by 16 foot fascia LP SmartSide
+              productCode:
+                summary: Exact product code
                 value:
-                  query: 12 x 12 x 3 cinder blocks
+                  query: 2462-22
       responses:
         "200":
-          description: Product search response. Use answer exactly.
+          description: Customer-safe product search response. Use answer exactly.
           content:
             application/json:
               schema:
@@ -79,61 +75,45 @@ paths:
                     enum:
                       - exact
                       - close
-                      - loose
                       - none
                   query:
                     type: string
-                  normalizedQuery:
-                    type: string
-                  message:
-                    type: string
-                  instruction:
-                    type: string
+                  sensitiveRequest:
+                    type: boolean
+                    description: True when the request asks for protected internal economics. Use answer and hand off to a human.
                   answer:
                     type: string
                     description: Customer-ready response. Use this exactly whether hasResults is true or false.
-                  openAIUsed:
-                    type: boolean
-                  openAIError:
-                    type: string
-                  validation:
-                    type: object
-                    nullable: true
-                    additionalProperties: true
-                  learningUsed:
-                    type: boolean
                   results:
                     type: array
+                    maxItems: 5
                     items:
                       type: object
+                      additionalProperties: false
                       properties:
+                        rank:
+                          type: integer
                         productId:
                           type: string
                         productCode:
                           type: string
                         title:
                           type: string
-                        internalTitle:
-                          type: string
                         description:
                           type: string
+                        brand:
+                          type: string
                         price:
+                          type: string
+                        salePrice:
                           type: string
                         availability:
                           type: string
                         productUrl:
                           type: string
-                        brand:
+                        category:
                           type: string
                         gtin:
                           type: string
-                        condition:
-                          type: string
-                        confidence:
-                          type: string
-                        matchType:
-                          type: string
-                        matchedText:
-                          type: string
-                        source:
+                        mpn:
                           type: string
