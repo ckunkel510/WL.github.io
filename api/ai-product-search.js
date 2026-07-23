@@ -256,17 +256,25 @@ function publicProduct(product, rank) {
   };
 }
 
-function selectRelevantMatches(ranked, limit = 3) {
+function selectRelevantMatches(ranked, limit = 3, query = "") {
   if (!Array.isArray(ranked) || !ranked.length) return [];
   const top = ranked[0];
   if (top.exactIdentifier || ranked.length === 1) return [top];
 
   const second = ranked[1];
   const scoreGap = top.score - second.score;
+  const normalizedQuery = normalizeText(query);
+  const broadCategoryRequest = !!normalizedQuery &&
+    !/\d/.test(normalizedQuery) &&
+    tokens(normalizedQuery).length <= 2 &&
+    normalizeText(top.product?.title) !== normalizedQuery;
   if (
-    scoreGap >= 60 ||
-    (top.exactPhrase && scoreGap >= 35) ||
-    (top.exactDimension && scoreGap >= 30)
+    !broadCategoryRequest &&
+    (
+      scoreGap >= 60 ||
+      (top.exactPhrase && scoreGap >= 35) ||
+      (top.exactDimension && scoreGap >= 30)
+    )
   ) {
     return [top];
   }
@@ -286,7 +294,7 @@ function resultLine(product, index) {
 }
 
 function formatSearchResponse(query, ranked) {
-  const selected = selectRelevantMatches(ranked);
+  const selected = selectRelevantMatches(ranked, 3, query);
   const results = selected.map((entry, index) => publicProduct(entry.product, index + 1));
   if (!results.length) {
     return {
@@ -312,7 +320,7 @@ function formatSearchResponse(query, ranked) {
 function formatProductActionResponse(query, ranked, action) {
   const exact = ranked.find((entry) => entry.exactIdentifier && entry.product && entry.product.productUrl);
   if (!exact) {
-    const alternatives = selectRelevantMatches(ranked);
+    const alternatives = selectRelevantMatches(ranked, 3, query);
     const results = alternatives.map((entry, index) => publicProduct(entry.product, index + 1));
     if (results.length) {
       return {
