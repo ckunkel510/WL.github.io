@@ -8,6 +8,7 @@ try {
 const ACTIVE_KEY = "wl:ai-product-catalog:active";
 const SNAPSHOT_TTL_SECONDS = 7 * 24 * 60 * 60;
 const MAX_CHUNK_PRODUCTS = 500;
+const REDIS_SCAN_COUNT = 1000;
 const HOT_CACHE_MILLISECONDS = 5 * 60 * 1000;
 const memory = {
   active: null,
@@ -170,6 +171,24 @@ function parseStoredProduct(raw) {
   }
 }
 
+async function readRedisHashValues(redis, key) {
+  const values = [];
+  let cursor = "0";
+  let pageCount = 0;
+  do {
+    const page = await redis.hscan(key, cursor, { count: REDIS_SCAN_COUNT });
+    if (!Array.isArray(page) || page.length !== 2 || !Array.isArray(page[1])) {
+      throw new Error("AI catalog storage returned an invalid scan page.");
+    }
+    cursor = String(page[0]);
+    const entries = page[1];
+    for (let index = 1; index < entries.length; index += 2) values.push(entries[index]);
+    pageCount += 1;
+    if (pageCount > 1000) throw new Error("AI catalog storage scan exceeded its safety limit.");
+  } while (cursor !== "0");
+  return values;
+}
+
 async function getAiCatalogProducts() {
   const active = await activeAiCatalog();
   if (!active || !aiCatalogIsFresh(active)) return { active, fresh: false, products: [] };
@@ -179,7 +198,9 @@ async function getAiCatalogProducts() {
   const redis = getRedis();
   let products;
   if (redis) {
-    const rows = await redis.hvals(productHashKey(active.id));
+    // HVALS can exceed Upstash's per-response limit for a full Woodson catalog.
+    // HSCAN keeps each response bounded while the immutable active snapshot is read.
+    const rows = await readRedisHashValues(redis, productHashKey(active.id));
     products = (Array.isArray(rows) ? rows : []).map(parseStoredProduct).filter(Boolean);
   } else {
     products = Array.from(memory.snapshots.get(active.id)?.products.values() || []);
@@ -203,6 +224,7 @@ module.exports = {
   beginAiCatalogSnapshot,
   getAiCatalogProducts,
   normalizeAiProduct,
+  readRedisHashValues,
   resetMemoryAiCatalog,
   writeAiCatalogChunk
 };
