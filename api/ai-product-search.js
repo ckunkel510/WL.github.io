@@ -18,6 +18,17 @@ const NUMBER_WORDS = new Map([
 ]);
 const GROUP_INTENT = /\b(?:browse|categories|category|department|group|shop|show\s+(?:me\s+)?all|where\s+can\s+i\s+(?:browse|find|shop))\b/i;
 const SENSITIVE_REQUEST = /\b(?:average\s+cost|avg\.?\s+cost|cost\s+basis|dealer\s+cost|invoice\s+cost|landed\s+cost|product\s+cost|purchase\s+cost|wholesale\s+cost|what\s+(?:do|did)\s+(?:you|woodson)\s+pay|margin|markup|profit|supplier\s+price|vendor\s+price)\b/i;
+const WEBTRACK_ORIGIN = "https://webtrack.woodsonlumber.com";
+
+function setCorsHeaders(req, res) {
+  const origin = String(req.headers?.origin || "");
+  if (origin === WEBTRACK_ORIGIN) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Vary", "Origin");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  }
+}
 
 function sendJson(res, status, payload) {
   res.statusCode = status;
@@ -126,7 +137,7 @@ function productFields(product) {
   const code = normalizeText(product.productCode);
   const brand = normalizeText(product.brand);
   const category = normalizeText(product.category);
-  const identifiers = [product.productCode, product.gtin, product.mpn].map(normalizeText).filter(Boolean);
+  const identifiers = [product.productId, product.productCode, product.gtin, product.mpn].map(normalizeText).filter(Boolean);
   const searchable = normalizeText([
     product.productCode,
     product.title,
@@ -245,6 +256,26 @@ function publicProduct(product, rank) {
   };
 }
 
+function selectRelevantMatches(ranked, limit = 3) {
+  if (!Array.isArray(ranked) || !ranked.length) return [];
+  const top = ranked[0];
+  if (top.exactIdentifier || ranked.length === 1) return [top];
+
+  const second = ranked[1];
+  const scoreGap = top.score - second.score;
+  if (
+    scoreGap >= 60 ||
+    (top.exactPhrase && scoreGap >= 35) ||
+    (top.exactDimension && scoreGap >= 30)
+  ) {
+    return [top];
+  }
+
+  return ranked
+    .filter((entry) => top.score - entry.score <= 75)
+    .slice(0, Math.max(1, Math.min(3, Number(limit) || 3)));
+}
+
 function resultLine(product, index) {
   const code = product.productCode ? `${product.productCode} — ` : "";
   const displayPrice = product.salePrice || product.price;
@@ -255,7 +286,8 @@ function resultLine(product, index) {
 }
 
 function formatSearchResponse(query, ranked) {
-  const results = ranked.map((entry, index) => publicProduct(entry.product, index + 1));
+  const selected = selectRelevantMatches(ranked);
+  const results = selected.map((entry, index) => publicProduct(entry.product, index + 1));
   if (!results.length) {
     return {
       success: true,
@@ -266,9 +298,11 @@ function formatSearchResponse(query, ranked) {
       results: []
     };
   }
-  const matchType = ranked[0].exactIdentifier || ranked[0].exactPhrase ? "exact" : "close";
+  const matchType = selected[0].exactIdentifier || selected[0].exactPhrase ? "exact" : "close";
   const answer = [
-    `I found ${results.length === 1 ? "this matching product" : "these matching products"}:`,
+    results.length === 1
+      ? "This is the best match I found:"
+      : "These are the closest matches I found, with the most relevant first:",
     ...results.map(resultLine),
     "Online prices and availability can change; a Woodson team member can confirm before you make the trip."
   ].join("\n");
@@ -278,6 +312,26 @@ function formatSearchResponse(query, ranked) {
 function formatProductActionResponse(query, ranked, action) {
   const exact = ranked.find((entry) => entry.exactIdentifier && entry.product && entry.product.productUrl);
   if (!exact) {
+    const alternatives = selectRelevantMatches(ranked);
+    const results = alternatives.map((entry, index) => publicProduct(entry.product, index + 1));
+    if (results.length) {
+      return {
+        success: true,
+        hasResults: true,
+        matchType: "close",
+        query,
+        requestedAction: action,
+        actionReady: false,
+        answer: [
+          results.length === 1
+            ? "I found this likely match, but I need you to confirm the exact item before I change your cart:"
+            : "I found these likely matches, but I need you to choose the exact item before I change your cart:",
+          ...results.map(resultLine),
+          "I did not change your cart. Reply with the exact item number you want."
+        ].join("\n"),
+        results
+      };
+    }
     return {
       success: true,
       hasResults: false,
@@ -285,7 +339,7 @@ function formatProductActionResponse(query, ranked, action) {
       query,
       requestedAction: action,
       actionReady: false,
-      answer: "I need to confirm the exact product before opening it or changing your cart. Please choose one specific product or ask for a Woodson team member.\n[option] Speak to a human",
+      answer: "I couldn't verify the exact product, so I did not open a page or change your cart. Please send the item number or a more specific product name.",
       results: []
     };
   }
@@ -396,6 +450,11 @@ function sensitiveResponse(query) {
 }
 
 async function handler(req, res) {
+  setCorsHeaders(req, res);
+  if (req.method === "OPTIONS") {
+    res.statusCode = 204;
+    return res.end();
+  }
   if (req.method !== "POST") return sendJson(res, 405, { error: "Only POST is allowed." });
   try {
     const body = req.body && typeof req.body === "object" ? req.body : JSON.parse(req.body || "{}");
@@ -426,7 +485,7 @@ async function handler(req, res) {
         formatProductActionResponse(query, searchCatalog(catalog.products, actionQuery, 5), requestedAction)
       );
     }
-    return sendJson(res, 200, formatSearchResponse(query, searchCatalog(catalog.products, query, 5)));
+    return sendJson(res, 200, formatSearchResponse(query, searchCatalog(catalog.products, query, 8)));
   } catch (error) {
     console.error("AI product search failed:", error instanceof Error ? error.message : error);
     return sendJson(res, 500, {
@@ -450,6 +509,8 @@ module.exports._test = {
   publicProduct,
   searchCatalog,
   searchProductGroups,
+  selectRelevantMatches,
+  setCorsHeaders,
   sensitiveResponse,
   tokens
 };

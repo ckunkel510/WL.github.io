@@ -75,6 +75,7 @@ test("exact product-code search wins and public results contain no economics", (
   assert.equal(ranked[0].product.productId, "1");
   const response = search.formatSearchResponse("2462-22", ranked);
   assert.equal(response.hasResults, true);
+  assert.equal(response.results.length, 1);
   assert.match(response.answer, /\[View product image\]\(https:\/\/example\.com\/1\.jpg\)/);
   assert.match(response.answer, /\[View product details\]\(https:\/\/example\.com\/1\)/);
   assert.deepEqual(Object.keys(response.results[0]).filter((key) => FORBIDDEN_KEYS.test(key)), []);
@@ -114,7 +115,57 @@ test("prepares a browser or cart action only for an exact product code", () => {
     "add_to_cart"
   );
   assert.equal(ambiguous.actionReady, false);
-  assert.equal(ambiguous.results.length, 0);
+  assert.equal(ambiguous.hasResults, true);
+  assert.ok(ambiguous.results.length >= 1);
+  assert.match(ambiguous.answer, /did not change your cart/i);
+  assert.doesNotMatch(ambiguous.answer, /Speak to a human/i);
+});
+
+test("finds products by WebTrack product ID for the clickable image preview", () => {
+  const products = [{
+    productId: "221283",
+    productCode: "2904-22",
+    title: "Milwaukee M18 Fuel Hammer Drill Kit",
+    productUrl: "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=221283",
+    imageUrl: "https://images-woodsonlumber.sirv.com/221283.jpg"
+  }];
+  const ranked = search.searchCatalog(products, "221283");
+  assert.equal(ranked.length, 1);
+  assert.equal(ranked[0].exactIdentifier, true);
+  assert.equal(ranked[0].product.productCode, "2904-22");
+});
+
+test("returns one dominant match and at most three close alternatives", () => {
+  const entries = [
+    { score: 240, exactIdentifier: false, exactPhrase: false, exactDimension: false, product: { title: "Best" } },
+    { score: 170, exactIdentifier: false, exactPhrase: false, exactDimension: false, product: { title: "Second" } },
+    { score: 165, exactIdentifier: false, exactPhrase: false, exactDimension: false, product: { title: "Third" } }
+  ];
+  assert.deepEqual(search.selectRelevantMatches(entries).map((entry) => entry.product.title), ["Best"]);
+
+  const close = entries.map((entry, index) => ({ ...entry, score: 240 - index * 10 }));
+  close.push({ score: 210, exactIdentifier: false, exactPhrase: false, exactDimension: false, product: { title: "Fourth" } });
+  assert.deepEqual(
+    search.selectRelevantMatches(close).map((entry) => entry.product.title),
+    ["Best", "Second", "Third"]
+  );
+});
+
+test("allows only the Woodson storefront to request dynamic product previews", () => {
+  const headers = {};
+  search.setCorsHeaders(
+    { headers: { origin: "https://webtrack.woodsonlumber.com" } },
+    { setHeader(name, value) { headers[name] = value; } }
+  );
+  assert.equal(headers["Access-Control-Allow-Origin"], "https://webtrack.woodsonlumber.com");
+  assert.equal(headers["Access-Control-Allow-Methods"], "POST, OPTIONS");
+
+  const blocked = {};
+  search.setCorsHeaders(
+    { headers: { origin: "https://evil.example" } },
+    { setHeader(name, value) { blocked[name] = value; } }
+  );
+  assert.equal(blocked["Access-Control-Allow-Origin"], undefined);
 });
 
 test("normalizes common Turtlebox phrasing and typo", () => {

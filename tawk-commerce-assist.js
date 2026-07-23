@@ -22,8 +22,9 @@
 })(function () {
   "use strict";
 
-  var VERSION = "1.2.0";
+  var VERSION = "1.3.0";
   var WEBTRACK_ORIGIN = "https://webtrack.woodsonlumber.com";
+  var PRODUCT_SEARCH_API = "https://wl-upsrates.vercel.app/api/ai-product-search";
   var INTENT_KEY = "wl_tawk_commerce_intent_v1";
   var LAST_PRODUCT_KEY = "wl_tawk_last_product_v1";
   var INTENT_MAX_AGE_MS = 3 * 60 * 1000;
@@ -77,6 +78,82 @@
 
     if (viewProduct) return { action: "view_product", quantity: 0 };
     return null;
+  }
+
+  function canUseRememberedProduct(value) {
+    var text = messageText(value).toLowerCase();
+    if (!text) return false;
+
+    text = text
+      .replace(/\b(?:add|put|buy|purchase)\s+(?:\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten)\b/gi, " ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    var ignorable = {
+      a: true,
+      add: true,
+      also: true,
+      am: true,
+      an: true,
+      and: true,
+      another: true,
+      basket: true,
+      buy: true,
+      can: true,
+      cart: true,
+      could: true,
+      do: true,
+      for: true,
+      go: true,
+      i: true,
+      id: true,
+      in: true,
+      into: true,
+      it: true,
+      item: true,
+      just: true,
+      like: true,
+      me: true,
+      my: true,
+      navigate: true,
+      need: true,
+      now: true,
+      of: true,
+      on: true,
+      one: true,
+      open: true,
+      page: true,
+      place: true,
+      please: true,
+      product: true,
+      purchase: true,
+      put: true,
+      ready: true,
+      redirect: true,
+      same: true,
+      second: true,
+      show: true,
+      take: true,
+      that: true,
+      the: true,
+      them: true,
+      these: true,
+      this: true,
+      those: true,
+      to: true,
+      too: true,
+      view: true,
+      want: true,
+      will: true,
+      with: true,
+      would: true,
+      you: true
+    };
+    var remaining = text ? text.split(" ").filter(function (token) {
+      return !ignorable[token];
+    }) : [];
+    return remaining.length === 0;
   }
 
   function extractQuantity(value) {
@@ -389,6 +466,7 @@
     safeStorage(win, INTENT_KEY, "set", JSON.stringify({
       action: intent.action,
       quantity: intent.quantity || 0,
+      useRememberedProduct: !!intent.useRememberedProduct,
       createdAt: Date.now()
     }));
   }
@@ -430,6 +508,136 @@
     } catch (error) {
       safeStorage(win, LAST_PRODUCT_KEY, "remove");
       return null;
+    }
+  }
+
+  function safeImageUrl(value) {
+    try {
+      var parsed = new URL(String(value || "").trim());
+      if (parsed.protocol !== "https:") return "";
+      if (parsed.hostname.toLowerCase() !== "images-woodsonlumber.sirv.com") return "";
+      return parsed.toString();
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function productPreviewFromResponse(payload, product) {
+    if (!payload || !Array.isArray(payload.results) || !product) return null;
+    for (var i = 0; i < payload.results.length; i += 1) {
+      var result = payload.results[i] || {};
+      var resultProduct = safeProductUrl(result.productUrl);
+      var imageUrl = safeImageUrl(result.imageUrl);
+      if (!resultProduct || resultProduct.pid !== product.pid || !imageUrl) continue;
+      return {
+        pid: product.pid,
+        productUrl: product.url,
+        imageUrl: imageUrl,
+        productCode: String(result.productCode || "").trim().slice(0, 80),
+        title: String(result.title || "Woodson Lumber product").trim().slice(0, 180),
+        price: String(result.salePrice || result.price || "").trim().slice(0, 30)
+      };
+    }
+    return null;
+  }
+
+  function clearProductPreview(doc) {
+    var existing = doc && doc.getElementById("wl-tawk-product-preview");
+    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+  }
+
+  function showProductPreview(doc, preview) {
+    if (!doc || !doc.body || !preview) return false;
+    clearProductPreview(doc);
+
+    var card = doc.createElement("aside");
+    card.id = "wl-tawk-product-preview";
+    card.setAttribute("aria-label", "Recommended Woodson Lumber product");
+    card.style.cssText = [
+      "position:fixed",
+      "right:16px",
+      "bottom:16px",
+      "z-index:2147482999",
+      "width:min(310px,calc(100vw - 32px))",
+      "padding:12px",
+      "border-radius:14px",
+      "background:#ffffff",
+      "border:1px solid #d7c2c7",
+      "box-shadow:0 12px 34px rgba(0,0,0,.22)",
+      "color:#231f20",
+      "font:600 14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif"
+    ].join(";");
+
+    var close = doc.createElement("button");
+    close.type = "button";
+    close.setAttribute("aria-label", "Close product preview");
+    close.textContent = "×";
+    close.style.cssText = "position:absolute;right:8px;top:6px;width:30px;height:30px;border:0;background:transparent;color:#6b0016;font-size:24px;line-height:1;cursor:pointer;";
+    close.addEventListener("click", function () {
+      clearProductPreview(doc);
+    });
+    card.appendChild(close);
+
+    var eyebrow = doc.createElement("div");
+    eyebrow.textContent = "Best product match";
+    eyebrow.style.cssText = "margin:0 34px 8px 0;color:#6b0016;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;";
+    card.appendChild(eyebrow);
+
+    var imageLink = doc.createElement("a");
+    imageLink.href = preview.productUrl;
+    imageLink.setAttribute("aria-label", "View " + preview.title);
+    imageLink.style.cssText = "display:block;border-radius:10px;overflow:hidden;background:#f7f5f5;text-align:center;";
+
+    var image = doc.createElement("img");
+    image.src = preview.imageUrl;
+    image.alt = preview.title;
+    image.loading = "lazy";
+    image.style.cssText = "display:block;width:100%;height:150px;object-fit:contain;background:#ffffff;";
+    image.addEventListener("error", function () {
+      clearProductPreview(doc);
+    });
+    imageLink.appendChild(image);
+    card.appendChild(imageLink);
+
+    var titleLink = doc.createElement("a");
+    titleLink.href = preview.productUrl;
+    titleLink.textContent = preview.title;
+    titleLink.style.cssText = "display:block;margin-top:10px;color:#231f20;font-size:15px;font-weight:800;text-decoration:none;";
+    card.appendChild(titleLink);
+
+    if (preview.productCode || preview.price) {
+      var meta = doc.createElement("div");
+      meta.textContent = [preview.productCode, preview.price].filter(Boolean).join(" · ");
+      meta.style.cssText = "margin-top:4px;color:#5f5557;font-size:13px;font-weight:650;";
+      card.appendChild(meta);
+    }
+
+    var viewLink = doc.createElement("a");
+    viewLink.href = preview.productUrl;
+    viewLink.textContent = "View product";
+    viewLink.style.cssText = "display:inline-block;margin-top:10px;color:#6b0016;font-weight:850;text-decoration:underline;";
+    card.appendChild(viewLink);
+
+    doc.body.appendChild(card);
+    return true;
+  }
+
+  async function loadProductPreview(win, doc, product) {
+    if (!win || !doc || !product || typeof win.fetch !== "function") return false;
+    try {
+      var response = await win.fetch(PRODUCT_SEARCH_API, {
+        method: "POST",
+        cache: "no-store",
+        credentials: "omit",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: product.pid })
+      });
+      if (!response.ok) return false;
+      var payload = await response.json();
+      var preview = productPreviewFromResponse(payload, product);
+      return preview ? showProductPreview(doc, preview) : false;
+    } catch (error) {
+      return false;
     }
   }
 
@@ -576,23 +784,35 @@
       }
 
       var recentProduct = readFreshProduct(win);
-      if (recentProduct) {
+      var useRememberedProduct = canUseRememberedProduct(payload);
+      if (recentProduct && useRememberedProduct) {
         safeStorage(win, INTENT_KEY, "remove");
         performProductAction(win, doc, intent, recentProduct);
         return;
       }
 
+      if (!useRememberedProduct) clearProductPreview(doc);
+      intent.useRememberedProduct = useRememberedProduct;
       storeIntent(win, intent);
     });
 
     chainCallback(tawk, "onChatMessageAgent", async function (payload) {
       var products = productLinksFromMessage(payload);
-      if (products.length === 1) rememberProduct(win, products[0]);
+      if (products.length === 1) {
+        rememberProduct(win, products[0]);
+        loadProductPreview(win, doc, products[0]);
+      } else if (products.length > 1) {
+        clearProductPreview(doc);
+      }
 
       var intent = takeFreshIntent(win);
       if (!intent) return;
 
-      var product = products.length === 1 ? products[0] : readFreshProduct(win);
+      var product = products.length === 1
+        ? products[0]
+        : intent.useRememberedProduct
+          ? readFreshProduct(win)
+          : null;
       if (!product) return;
       await performProductAction(win, doc, intent, product);
     });
@@ -603,7 +823,9 @@
   return {
     version: VERSION,
     addPidToCart: addPidToCart,
+    canUseRememberedProduct: canUseRememberedProduct,
     cartStateFromDocument: cartStateFromDocument,
+    clearProductPreview: clearProductPreview,
     detectIntent: detectIntent,
     extractPostbackTarget: extractPostbackTarget,
     extractQuantity: extractQuantity,
@@ -611,10 +833,13 @@
     findAddToCartTarget: findAddToCartTarget,
     messageText: messageText,
     performProductAction: performProductAction,
+    productPreviewFromResponse: productPreviewFromResponse,
     productLinksFromMessage: productLinksFromMessage,
     readFreshProduct: readFreshProduct,
     rememberProduct: rememberProduct,
+    safeImageUrl: safeImageUrl,
     safeProductUrl: safeProductUrl,
+    showProductPreview: showProductPreview,
     init: init
   };
 });
