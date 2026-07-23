@@ -119,6 +119,49 @@ test("prepares a browser or cart action only for an exact product code", () => {
   assert.ok(ambiguous.results.length >= 1);
   assert.match(ambiguous.answer, /did not change your cart/i);
   assert.doesNotMatch(ambiguous.answer, /Speak to a human/i);
+
+  assert.equal(
+    search.findEmbeddedProductIdentifier(products, "add Milwaukee 2904-22 to my cart"),
+    "2904-22"
+  );
+  assert.equal(
+    search.findEmbeddedProductIdentifier(products, "Milwaukee 2904-22"),
+    "2904-22"
+  );
+});
+
+test("extracts a newly named item number from a direct second cart request", () => {
+  const products = [
+    {
+      productId: "221283",
+      productCode: "2904-22",
+      title: "Milwaukee M18 Fuel Hammer Drill Kit",
+      brand: "Milwaukee",
+      productUrl: "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=221283"
+    },
+    {
+      productId: "288202",
+      productCode: "4635843",
+      title: "Dewalt 20V Max XR Brushless Drill Driver",
+      brand: "Dewalt",
+      productUrl: "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=288202"
+    }
+  ];
+  const identifier = search.findEmbeddedProductIdentifier(
+    products,
+    "add Dewalt 4635843 to my cart"
+  );
+  assert.equal(identifier, "4635843");
+
+  const response = search.formatProductActionResponse(
+    "add Dewalt 4635843 to my cart",
+    search.searchCatalog(products, identifier),
+    "add_to_cart"
+  );
+  assert.equal(response.actionReady, true);
+  assert.equal(response.results[0].productCode, "4635843");
+  assert.equal(response.results[0].productId, "288202");
+  assert.doesNotMatch(response.answer, /I have added|has been added|was added/i);
 });
 
 test("finds products by WebTrack product ID for the clickable image preview", () => {

@@ -160,6 +160,33 @@ function productFields(product) {
   };
 }
 
+function findEmbeddedProductIdentifier(products, value) {
+  const normalizedValue = normalizeText(value);
+  if (!normalizedValue) return "";
+  const paddedValue = ` ${normalizedValue} `;
+  let best = "";
+  let bestLength = 0;
+
+  for (const product of products) {
+    const identifiers = [product.productId, product.productCode, product.gtin, product.mpn]
+      .map((identifier) => String(identifier || "").trim())
+      .filter(Boolean);
+    for (const identifier of identifiers) {
+      const normalizedIdentifier = normalizeText(identifier);
+      if (
+        normalizedIdentifier &&
+        paddedValue.includes(` ${normalizedIdentifier} `) &&
+        normalizedIdentifier.length > bestLength
+      ) {
+        best = identifier;
+        bestLength = normalizedIdentifier.length;
+      }
+    }
+  }
+
+  return best;
+}
+
 function requestedBrands(products, normalizedQuery) {
   const matches = new Set();
   for (const product of products) {
@@ -493,7 +520,8 @@ async function handler(req, res) {
       });
     }
     if (requestedAction !== "search") {
-      const actionQuery = productCode || query;
+      const actionInput = productCode || query;
+      const actionQuery = findEmbeddedProductIdentifier(catalog.products, actionInput) || actionInput;
       return sendJson(
         res,
         200,
@@ -517,6 +545,7 @@ module.exports = handler;
 module.exports._test = {
   SENSITIVE_REQUEST,
   dimensionalSignature,
+  findEmbeddedProductIdentifier,
   formatGroupResponse,
   formatProductActionResponse,
   formatSearchResponse,
