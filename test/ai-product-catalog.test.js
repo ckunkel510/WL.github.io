@@ -105,6 +105,8 @@ test("uses lower weight for contextual words in vague deck-screw requests", () =
   ];
   const ranked = search.searchCatalog(products, "I need exterior screws for treated lumber on a deck, probably around 3 inches long.");
   assert.equal(ranked[0].product.productId, "1");
+  const boardRequest = search.searchCatalog(products, "I need exterior screws for treated deck boards, around 3 inches. What should I look at?");
+  assert.equal(boardRequest[0].product.productId, "1");
 });
 
 test("returns only verified department links for browse requests", () => {
