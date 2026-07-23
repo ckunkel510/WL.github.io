@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Woodson Customer-Safe Product Search
-  version: 10.0.0
+  version: 11.0.0
   description: Search the current Woodson Lumber & Hardware online catalog and verified WebTrack product groups. This API exposes customer-facing product data only and never exposes cost, margin, markup, profit, supplier, vendor, or advertising-economics data.
 
 servers:
@@ -25,6 +25,10 @@ paths:
         previously returned product, set action=add_to_cart and copy that result's
         productCode exactly into productCode. Never guess or alter a productCode.
         Never use an action when multiple products remain possible.
+        A new named product or item number always replaces earlier product context.
+        Treat pronouns such as "it", "that", or "this one" as referring to the most
+        recently returned single product only. Never reuse an earlier product when
+        the visitor names a different product in the same add-to-cart request.
 
         If the visitor asks to place, submit, complete, or check out an order, do not
         call this tool for an action and do not claim to place the order. Tell them
@@ -37,10 +41,16 @@ paths:
 
         If hasResults=true, reply using the answer field exactly. Do not add unreturned
         products, specifications, prices, availability claims, or assumptions.
+        Prefer the one best verified product. The API returns up to three choices only
+        when the request is genuinely ambiguous, ordered with the closest match first.
         Preserve every product-image link, product-details link, and verified product-group
         link in the answer exactly as returned.
-        If hasResults=false or sensitiveRequest=true, reply using the answer field exactly
-        and invoke the configured human handoff option.
+        If hasResults=false for an ordinary product or cart request, reply using the
+        answer field exactly and ask one concise clarifying question. Do not transfer
+        the chat merely because a product was not found, an add-to-cart attempt needs
+        clarification, or WebTrack did not confirm the cart change.
+        Invoke the configured human handoff only when sensitiveRequest=true, the visitor
+        explicitly requests a person, or a repeated technical failure still prevents help.
 
         Never ask this tool for internal cost, average cost, margin, markup, profit,
         supplier pricing, vendor terms, or advertising economics. Those fields do not
@@ -136,7 +146,7 @@ paths:
                     description: Customer-ready response. Use this exactly whether hasResults is true or false.
                   results:
                     type: array
-                    maxItems: 5
+                    maxItems: 3
                     items:
                       type: object
                       additionalProperties: false
