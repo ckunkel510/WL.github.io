@@ -12,7 +12,7 @@
   var ADDRESS_MANAGER_URL = "https://ckunkel510.github.io/WL.github.io/AddressManagement.js?v=20260707-2";
   var CONTACT_MANAGER_URL = "https://ckunkel510.github.io/WL.github.io/ContactManagement.js?v=20260707-3";
   var TURTLEBOX_PROMO_URL = "https://ckunkel510.github.io/WL.github.io/TurtleboxPromo.js?v=20260707-1";
-  var TAWK_COMMERCE_ASSIST_URL = "https://ckunkel510.github.io/WL.github.io/tawk-commerce-assist.js?v=20260723-1";
+  var TAWK_COMMERCE_ASSIST_URL = "https://ckunkel510.github.io/WL.github.io/tawk-commerce-assist.js?v=20260723-2";
   var QUAGGA_URL = "https://unpkg.com/quagga@0.12.1/dist/quagga.min.js";
   var DEPARTMENT_CACHE_KEY = "wl_header_departments_v1";
   var STORE_NAMES = ["Brenham", "Bryan", "Caldwell", "Lexington", "Groesbeck", "Mexia", "Buffalo"];

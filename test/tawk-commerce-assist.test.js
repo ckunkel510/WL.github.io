@@ -8,7 +8,7 @@ const assist = require(path.join(root, "tawk-commerce-assist.js"));
 
 test("header loads the tawk commerce bridge from the Woodson-hosted runtime", () => {
   const header = fs.readFileSync(path.join(root, "headermodern.js"), "utf8");
-  assert.match(header, /WL\.github\.io\/tawk-commerce-assist\.js\?v=20260723-1/);
+  assert.match(header, /WL\.github\.io\/tawk-commerce-assist\.js\?v=20260723-2/);
   assert.match(header, /data-wl-tawk-commerce-assist/);
 });
 
@@ -75,6 +75,23 @@ test("understands both WebTrack postback formats used by add-to-cart controls", 
     ),
     "ctl00$PageBody$productDetail$ctl00$AddProductButton"
   );
+});
+
+test("remembers one verified product for safe pronoun follow-ups", () => {
+  const values = new Map();
+  const win = {
+    sessionStorage: {
+      getItem(key) { return values.has(key) ? values.get(key) : null; },
+      removeItem(key) { values.delete(key); },
+      setItem(key, value) { values.set(key, String(value)); }
+    }
+  };
+  const product = {
+    pid: "345",
+    url: "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=345"
+  };
+  assist.rememberProduct(win, product);
+  assert.deepEqual(assist.readFreshProduct(win), product);
 });
 
 test("runtime has no checkout or order-submission controls", () => {
