@@ -8,13 +8,13 @@ const root = path.resolve(__dirname, '..');
 
 test('header loads the privacy-filter-safe site runtime', () => {
   const header = fs.readFileSync(path.join(root, 'headermodern.js'), 'utf8');
-  assert.match(header, /WL\.github\.io\/wl-site\.js\?v=20260713-2/);
+  assert.match(header, /WL\.github\.io\/wl-site\.js\?v=20260721-3/);
   assert.doesNotMatch(header, /ANALYTICS_URL\s*=\s*["'][^"']*(?:analytics|tracking|events|commerce)/i);
 });
 
 test('site runtime emits a confirmed GA4 purchase with transaction value', () => {
   const runtime = fs.readFileSync(path.join(root, 'wl-site.js'), 'utf8');
-  assert.match(runtime, /var VERSION = "1\.1\.1"/);
+  assert.match(runtime, /var VERSION = "1\.2\.2"/);
 
   const storage = () => {
     const values = new Map();
@@ -56,7 +56,8 @@ test('site runtime emits a confirmed GA4 purchase with transaction value', () =>
     dispatchEvent() {},
     localStorage,
     location: { pathname: '/ShoppingCart.aspx' },
-    sessionStorage
+    sessionStorage,
+    setTimeout(callback) { callback(); }
   };
   const context = {
     CustomEvent: function CustomEvent(type, init) { this.type = type; this.detail = init.detail; },
@@ -70,7 +71,7 @@ test('site runtime emits a confirmed GA4 purchase with transaction value', () =>
 
   const purchase = window.dataLayer.find((entry) => entry && entry.event === 'wl_analytics_event' && entry.event_name === 'purchase');
   assert.ok(purchase);
-  assert.equal(purchase.analytics_version, '1.1.1');
+  assert.equal(purchase.analytics_version, '1.2.2');
   assert.equal(purchase.ecommerce.transaction_id, 'WL-12345');
   assert.equal(purchase.ecommerce.currency, 'USD');
   assert.equal(purchase.ecommerce.value, 123.45);

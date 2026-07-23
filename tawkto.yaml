@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Woodson Customer-Safe Product Search
-  version: 8.0.0
+  version: 9.0.0
   description: Search the current Woodson Lumber & Hardware online catalog and verified WebTrack product groups. This API exposes customer-facing product data only and never exposes cost, margin, markup, profit, supplier, vendor, or advertising-economics data.
 
 servers:
@@ -19,6 +19,17 @@ paths:
         Never call this tool with an empty query.
 
         For follow-up product messages, include relevant prior product context in the query.
+        When a visitor explicitly asks to open, view, or go to one previously returned
+        product, set action=view_product and copy that result's productCode exactly into
+        productCode. When a visitor explicitly asks to add, put, buy, or purchase one
+        previously returned product, set action=add_to_cart and copy that result's
+        productCode exactly into productCode. Never guess or alter a productCode.
+        Never use an action when multiple products remain possible.
+
+        If the visitor asks to place, submit, complete, or check out an order, do not
+        call this tool for an action and do not claim to place the order. Tell them
+        they will be taken to their cart to review checkout and submit the order themselves.
+
         If hasResults=true, reply using the answer field exactly. Do not add unreturned
         products, specifications, prices, availability claims, or assumptions.
         Preserve every product-image link, product-details link, and verified product-group
@@ -42,6 +53,18 @@ paths:
                   type: string
                   maxLength: 240
                   description: REQUIRED. The visitor's exact product request or identifier, with relevant prior product context for follow-ups.
+                action:
+                  type: string
+                  enum:
+                    - search
+                    - view_product
+                    - add_to_cart
+                  default: search
+                  description: Use view_product or add_to_cart only after the visitor explicitly requests that action for one previously returned exact product.
+                productCode:
+                  type: string
+                  maxLength: 80
+                  description: For view_product or add_to_cart, copy the exact productCode from the one previously returned result. Never infer or alter it.
             examples:
               cordlessDrill:
                 summary: Brand-qualified product request
@@ -89,6 +112,14 @@ paths:
                   sensitiveRequest:
                     type: boolean
                     description: True when the request asks for protected internal economics. Use answer and hand off to a human.
+                  requestedAction:
+                    type: string
+                    enum:
+                      - view_product
+                      - add_to_cart
+                  actionReady:
+                    type: boolean
+                    description: True only when one exact verified product is safe for the requested browser or cart action.
                   answer:
                     type: string
                     description: Customer-ready response. Use this exactly whether hasResults is true or false.
