@@ -21,7 +21,7 @@ paths:
         For follow-up product messages, include relevant prior product context in the query.
         If hasResults=true, reply using the answer field exactly. Do not add unreturned
         products, specifications, prices, availability claims, or assumptions.
-        Preserve every Markdown product image, product-details link, and verified product-group
+        Preserve every product-image link, product-details link, and verified product-group
         link in the answer exactly as returned.
         If hasResults=false or sensitiveRequest=true, reply using the answer field exactly
         and invoke the configured human handoff option.
