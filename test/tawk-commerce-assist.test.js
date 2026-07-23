@@ -8,7 +8,7 @@ const assist = require(path.join(root, "tawk-commerce-assist.js"));
 
 test("header loads the tawk commerce bridge from the Woodson-hosted runtime", () => {
   const header = fs.readFileSync(path.join(root, "headermodern.js"), "utf8");
-  assert.match(header, /WL\.github\.io\/wl-chat\.js\?v=20260723-5/);
+  assert.match(header, /WL\.github\.io\/wl-chat\.js\?v=20260723-6/);
   assert.match(header, /data-wl-tawk-commerce-assist/);
 });
 
@@ -181,6 +181,23 @@ test("adds two different products sequentially without reusing the first product
         return "";
       }
     };
+    const quantityInput = {
+      name: `ctl00$PageBody$productDetail$ctl00$qty_${pid}`,
+      type: "text",
+      value: "1",
+      disabled: false
+    };
+    const form = {
+      elements: [
+        { name: "__VIEWSTATE", type: "hidden", value: `state-${pid}`, disabled: false },
+        { name: "TopNavInputSearch", type: "text", value: "Shop for More", disabled: false },
+        { name: "ignoredUnchecked", type: "checkbox", value: "yes", checked: false, disabled: false },
+        { name: "ignoredDisabled", type: "text", value: "no", disabled: true },
+        { name: "ignoredSubmit", type: "submit", value: "Add", disabled: false },
+        quantityInput
+      ],
+      getAttribute() { return `/ProductDetail.aspx?pid=${pid}`; }
+    };
     return {
       querySelectorAll(selector) {
         if (selector === 'input[type="hidden"]') return [];
@@ -188,11 +205,16 @@ test("adds two different products sequentially without reusing the first product
         return [];
       },
       querySelector(selector) {
-        if (selector === 'input[name*="Quantity"]') {
-          return { name: "ctl00$PageBody$Quantity", value: "1" };
+        if (
+          selector.includes(`qty_${pid}`) ||
+          selector === 'input[name*="Quantity"]' ||
+          selector === 'input[name*="Qty"]' ||
+          selector === 'input[name*="qty"]'
+        ) {
+          return quantityInput;
         }
         if (selector === "form") {
-          return { getAttribute() { return `/ProductDetail.aspx?pid=${pid}`; } };
+          return form;
         }
         if (selector === "h1") return { textContent: `Product ${pid}` };
         return null;
@@ -202,7 +224,7 @@ test("adds two different products sequentially without reusing the first product
   let postedPid = "";
   const win = {
     location: { origin: "https://webtrack.woodsonlumber.com" },
-    FormData,
+    URLSearchParams,
     DOMParser: class {
       parseFromString(value) {
         return value.startsWith("product:")
@@ -217,6 +239,19 @@ test("adds two different products sequentially without reusing the first product
       }
       const pid = parsed.searchParams.get("pid");
       if (options.method === "POST") {
+        const body = new URLSearchParams(options.body);
+        const validPost =
+          typeof options.body === "string" &&
+          options.headers?.["Content-Type"] === "application/x-www-form-urlencoded; charset=UTF-8" &&
+          body.get("__VIEWSTATE") === `state-${pid}` &&
+          body.get("TopNavInputSearch") === "Shop for More" &&
+          body.get(`ctl00$PageBody$productDetail$ctl00$qty_${pid}`) === "1" &&
+          body.get("__EVENTTARGET") === "" &&
+          body.get("ctl00$PageBody$AddProductButton") === "Add to Cart" &&
+          !body.has("ignoredUnchecked") &&
+          !body.has("ignoredDisabled") &&
+          !body.has("ignoredSubmit");
+        if (!validPost) return { ok: false };
         postedPid = pid;
         cart.set(pid, (cart.get(pid) || 0) + 1);
         return { ok: true };
