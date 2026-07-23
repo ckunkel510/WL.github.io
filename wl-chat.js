@@ -22,7 +22,7 @@
 })(function () {
   "use strict";
 
-  var VERSION = "1.3.0";
+  var VERSION = "1.3.1";
   var WEBTRACK_ORIGIN = "https://webtrack.woodsonlumber.com";
   var PRODUCT_SEARCH_API = "https://wl-upsrates.vercel.app/api/ai-product-search";
   var INTENT_KEY = "wl_tawk_commerce_intent_v1";
@@ -377,6 +377,42 @@
     return cartStateFromDocument(doc, pid);
   }
 
+  function productFormPostData(win, doc, pid, quantity) {
+    var form = doc.querySelector("form");
+    if (!form) throw new Error("The WebTrack product form could not be found.");
+
+    var data = new win.URLSearchParams();
+    Array.prototype.forEach.call(form.elements || [], function (element) {
+      if (!element.name || element.disabled) return;
+      var type = String(element.type || "").toLowerCase();
+      if (["button", "submit", "image", "reset", "file"].indexOf(type) !== -1) return;
+      if ((type === "checkbox" || type === "radio") && !element.checked) return;
+      data.append(element.name, element.value || "");
+    });
+
+    var escapedPid = String(pid).replace(/[^0-9]/g, "");
+    var quantitySelectors = [
+      'input[name="ctl00$PageBody$productDetail$ctl00$qty_' + escapedPid + '"]',
+      'input[id="ctl00_PageBody_productDetail_ctl00_qty_' + escapedPid + '"]',
+      'input[name*="qty_' + escapedPid + '"]',
+      'input[id*="qty_' + escapedPid + '"]',
+      'input[name*="Quantity"]',
+      'input[name*="Qty"]',
+      'input[name*="qty"]'
+    ];
+    var quantityInput = null;
+    for (var i = 0; i < quantitySelectors.length && !quantityInput; i += 1) {
+      quantityInput = doc.querySelector(quantitySelectors[i]);
+    }
+    if (quantityInput && quantityInput.name) {
+      data.set(quantityInput.name, String(quantity));
+    } else {
+      data.set("ctl00$PageBody$productDetail$ctl00$qty_" + escapedPid, String(quantity));
+    }
+
+    return { form: form, data: data };
+  }
+
   async function addPidToCart(win, pid, quantity) {
     if (!win || win.location.origin !== WEBTRACK_ORIGIN) throw new Error("Cart access is available only on WebTrack.");
     if (!/^\d{1,12}$/.test(String(pid || ""))) throw new Error("A valid product is required.");
@@ -392,40 +428,29 @@
 
     var productHtml = await productResponse.text();
     var doc = new win.DOMParser().parseFromString(productHtml, "text/html");
-    var fields = {};
-    Array.prototype.forEach.call(doc.querySelectorAll('input[type="hidden"]'), function (input) {
-      if (input.name) fields[input.name] = input.value || "";
-    });
-
-    var quantityInput =
-      doc.querySelector('input[name*="Quantity"]') ||
-      doc.querySelector('input[name*="Qty"]') ||
-      doc.querySelector('input[name*="qty"]');
-    if (quantityInput && quantityInput.name) fields[quantityInput.name] = String(qty);
+    var formBits = productFormPostData(win, doc, pid, qty);
+    var formData = formBits.data;
 
     var addControl = findAddToCartControl(doc);
     if (!addControl) throw new Error("This product does not expose a direct add-to-cart control.");
 
-    fields.__EVENTTARGET = addControl.target || "";
-    fields.__EVENTARGUMENT = "";
+    formData.set("__EVENTTARGET", addControl.target || "");
+    formData.set("__EVENTARGUMENT", "");
     if (addControl.buttonName) {
-      fields[addControl.buttonName] = addControl.buttonValue;
+      formData.set(addControl.buttonName, addControl.buttonValue);
     }
 
-    var form = doc.querySelector("form");
-    var actionUrl = new URL(form ? form.getAttribute("action") || productPath : productPath, WEBTRACK_ORIGIN);
+    var actionUrl = new URL(formBits.form.getAttribute("action") || productPath, WEBTRACK_ORIGIN);
     if (actionUrl.origin !== WEBTRACK_ORIGIN) throw new Error("The cart action was not recognized.");
-
-    var formData = new win.FormData();
-    Object.keys(fields).forEach(function (key) {
-      formData.append(key, fields[key]);
-    });
 
     var cartResponse = await win.fetch(actionUrl.toString(), {
       method: "POST",
       credentials: "include",
-      cache: "no-cache",
-      body: formData
+      cache: "no-store",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8"
+      },
+      body: formData.toString()
     });
     if (!cartResponse.ok) throw new Error("The item could not be added to the cart.");
 
@@ -833,6 +858,7 @@
     findAddToCartTarget: findAddToCartTarget,
     messageText: messageText,
     performProductAction: performProductAction,
+    productFormPostData: productFormPostData,
     productPreviewFromResponse: productPreviewFromResponse,
     productLinksFromMessage: productLinksFromMessage,
     readFreshProduct: readFreshProduct,
