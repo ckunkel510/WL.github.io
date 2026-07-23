@@ -275,6 +275,43 @@ function formatSearchResponse(query, ranked) {
   return { success: true, hasResults: true, matchType, query, answer, results };
 }
 
+function formatProductActionResponse(query, ranked, action) {
+  const exact = ranked.find((entry) => entry.exactIdentifier && entry.product && entry.product.productUrl);
+  if (!exact) {
+    return {
+      success: true,
+      hasResults: false,
+      matchType: "none",
+      query,
+      requestedAction: action,
+      actionReady: false,
+      answer: "I need to confirm the exact product before opening it or changing your cart. Please choose one specific product or ask for a Woodson team member.\n[option] Speak to a human",
+      results: []
+    };
+  }
+
+  const result = publicProduct(exact.product, 1);
+  const introduction = action === "add_to_cart"
+    ? "I'll add this item to your WebTrack cart. No order will be placed:"
+    : "Opening this product in WebTrack:";
+  const answer = [
+    introduction,
+    resultLine(result, 0),
+    "Online prices and availability can change; a Woodson team member can confirm before you make the trip."
+  ].join("\n");
+
+  return {
+    success: true,
+    hasResults: true,
+    matchType: "exact",
+    query,
+    requestedAction: action,
+    actionReady: true,
+    answer,
+    results: [result]
+  };
+}
+
 function groupRows() {
   const rows = [];
   for (const department of departments) {
@@ -362,9 +399,11 @@ async function handler(req, res) {
   try {
     const body = req.body && typeof req.body === "object" ? req.body : JSON.parse(req.body || "{}");
     const query = String(body.query || "").replace(/\s+/g, " ").trim().slice(0, 240);
+    const requestedAction = ["view_product", "add_to_cart"].includes(body.action) ? body.action : "search";
+    const productCode = String(body.productCode || "").replace(/\s+/g, " ").trim().slice(0, 80);
     if (!query) return sendJson(res, 400, { error: "A non-empty query is required." });
     if (SENSITIVE_REQUEST.test(query)) return sendJson(res, 200, sensitiveResponse(query));
-    const groupMatches = searchProductGroups(query, 5);
+    const groupMatches = requestedAction === "search" ? searchProductGroups(query, 5) : [];
     if (groupMatches.length) return sendJson(res, 200, formatGroupResponse(query, groupMatches));
 
     const catalog = await getAiCatalogProducts();
@@ -377,6 +416,14 @@ async function handler(req, res) {
         answer: "The current product catalog is temporarily unavailable. I'll connect you with Woodson Lumber.\n[option] Speak to a human",
         results: []
       });
+    }
+    if (requestedAction !== "search") {
+      const actionQuery = productCode || query;
+      return sendJson(
+        res,
+        200,
+        formatProductActionResponse(query, searchCatalog(catalog.products, actionQuery, 5), requestedAction)
+      );
     }
     return sendJson(res, 200, formatSearchResponse(query, searchCatalog(catalog.products, query, 5)));
   } catch (error) {
@@ -396,6 +443,7 @@ module.exports._test = {
   SENSITIVE_REQUEST,
   dimensionalSignature,
   formatGroupResponse,
+  formatProductActionResponse,
   formatSearchResponse,
   normalizeText,
   publicProduct,

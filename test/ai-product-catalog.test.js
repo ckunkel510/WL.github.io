@@ -80,6 +80,41 @@ test("exact product-code search wins and public results contain no economics", (
   assert.deepEqual(Object.keys(response.results[0]).filter((key) => FORBIDDEN_KEYS.test(key)), []);
 });
 
+test("prepares a browser or cart action only for an exact product code", () => {
+  const products = [
+    {
+      productId: "221283",
+      productCode: "2904-22",
+      title: "Milwaukee M18 Fuel Hammer Drill Kit",
+      brand: "Milwaukee",
+      price: 319.99,
+      productUrl: "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=221283",
+      imageUrl: "https://images-woodsonlumber.sirv.com/221283.jpg"
+    },
+    {
+      productId: "2",
+      productCode: "2904",
+      title: "Milwaukee Drill Accessory",
+      brand: "Milwaukee",
+      productUrl: "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=2"
+    }
+  ];
+  const exact = search.searchCatalog(products, "2904-22");
+  const add = search.formatProductActionResponse("add that drill", exact, "add_to_cart");
+  assert.equal(add.actionReady, true);
+  assert.equal(add.results.length, 1);
+  assert.equal(add.results[0].productId, "221283");
+  assert.match(add.answer, /No order will be placed/);
+
+  const ambiguous = search.formatProductActionResponse(
+    "add a Milwaukee drill",
+    search.searchCatalog(products, "Milwaukee drill"),
+    "add_to_cart"
+  );
+  assert.equal(ambiguous.actionReady, false);
+  assert.equal(ambiguous.results.length, 0);
+});
+
 test("normalizes common Turtlebox phrasing and typo", () => {
   const products = [
     { productId: "1", productCode: "TB-G3", title: "Turtlebox Original - Gray", brand: "Turtlebox", category: "Job Site Radios" }
