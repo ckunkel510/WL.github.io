@@ -22,10 +22,12 @@
 })(function () {
   "use strict";
 
-  var VERSION = "1.0.0";
+  var VERSION = "1.1.0";
   var WEBTRACK_ORIGIN = "https://webtrack.woodsonlumber.com";
   var INTENT_KEY = "wl_tawk_commerce_intent_v1";
+  var LAST_PRODUCT_KEY = "wl_tawk_last_product_v1";
   var INTENT_MAX_AGE_MS = 3 * 60 * 1000;
+  var LAST_PRODUCT_MAX_AGE_MS = 15 * 60 * 1000;
   var ACTION_DEDUP_MS = 30 * 1000;
   var MAX_QUANTITY = 25;
   var lastAction = { key: "", at: 0 };
@@ -259,11 +261,11 @@
     };
   }
 
-  function safeStorage(win, method, value) {
+  function safeStorage(win, key, method, value) {
     try {
-      if (method === "get") return win.sessionStorage.getItem(INTENT_KEY);
-      if (method === "remove") return win.sessionStorage.removeItem(INTENT_KEY);
-      return win.sessionStorage.setItem(INTENT_KEY, value);
+      if (method === "get") return win.sessionStorage.getItem(key);
+      if (method === "remove") return win.sessionStorage.removeItem(key);
+      return win.sessionStorage.setItem(key, value);
     } catch (error) {
       return null;
     }
@@ -271,7 +273,7 @@
 
   function storeIntent(win, intent) {
     if (!intent) return;
-    safeStorage(win, "set", JSON.stringify({
+    safeStorage(win, INTENT_KEY, "set", JSON.stringify({
       action: intent.action,
       quantity: intent.quantity || 0,
       createdAt: Date.now()
@@ -279,15 +281,41 @@
   }
 
   function takeFreshIntent(win) {
-    var raw = safeStorage(win, "get");
+    var raw = safeStorage(win, INTENT_KEY, "get");
     if (!raw) return null;
-    safeStorage(win, "remove");
+    safeStorage(win, INTENT_KEY, "remove");
 
     try {
       var intent = JSON.parse(raw);
       if (!intent || !intent.createdAt || Date.now() - intent.createdAt > INTENT_MAX_AGE_MS) return null;
       return intent;
     } catch (error) {
+      return null;
+    }
+  }
+
+  function rememberProduct(win, product) {
+    if (!product || !product.pid || !product.url) return;
+    safeStorage(win, LAST_PRODUCT_KEY, "set", JSON.stringify({
+      pid: product.pid,
+      url: product.url,
+      createdAt: Date.now()
+    }));
+  }
+
+  function readFreshProduct(win) {
+    var raw = safeStorage(win, LAST_PRODUCT_KEY, "get");
+    if (!raw) return null;
+
+    try {
+      var stored = JSON.parse(raw);
+      if (!stored || !stored.createdAt || Date.now() - stored.createdAt > LAST_PRODUCT_MAX_AGE_MS) {
+        safeStorage(win, LAST_PRODUCT_KEY, "remove");
+        return null;
+      }
+      return safeProductUrl(stored.url);
+    } catch (error) {
+      safeStorage(win, LAST_PRODUCT_KEY, "remove");
       return null;
     }
   }
@@ -348,6 +376,54 @@
     };
   }
 
+  async function performProductAction(win, doc, intent, product) {
+    if (!intent || !product) return false;
+
+    var actionKey = intent.action + ":" + product.pid + ":" + (intent.quantity || 0);
+    if (lastAction.key === actionKey && Date.now() - lastAction.at < ACTION_DEDUP_MS) return false;
+    lastAction = { key: actionKey, at: Date.now() };
+
+    if (intent.action === "view_product") {
+      showNotice(doc, {
+        message: "Opening the product page…",
+        persistent: true
+      });
+      win.setTimeout(function () {
+        win.location.assign(product.url);
+      }, 650);
+      return true;
+    }
+
+    if (intent.action !== "add_to_cart") return false;
+
+    showNotice(doc, {
+      message: "Adding the item to your cart…",
+      persistent: true
+    });
+
+    try {
+      var result = await addPidToCart(win, product.pid, intent.quantity);
+      showNotice(doc, {
+        message: result.quantity + " × " + result.productName + " added to your cart. No order was placed.",
+        cartLink: true
+      });
+      if (win.WLAnalytics && typeof win.WLAnalytics.refresh === "function") {
+        win.setTimeout(function () {
+          try {
+            win.WLAnalytics.refresh();
+          } catch (error) {}
+        }, 0);
+      }
+      return true;
+    } catch (error) {
+      showNotice(doc, {
+        error: true,
+        message: "I couldn't add that item automatically. Please use the product link in chat or ask a Woodson team member for help."
+      });
+      return false;
+    }
+  }
+
   function init(win, doc) {
     if (!win || !doc || win.__WL_TAWK_COMMERCE_ASSIST_BOOTED__) return false;
     if (win.location.origin !== WEBTRACK_ORIGIN) return false;
@@ -360,7 +436,7 @@
       if (!intent) return;
 
       if (intent.action === "view_cart") {
-        safeStorage(win, "remove");
+        safeStorage(win, INTENT_KEY, "remove");
         showNotice(doc, {
           error: false,
           message: "Taking you to your cart. You will review checkout and submit the order yourself.",
@@ -374,58 +450,26 @@
         return;
       }
 
+      var recentProduct = readFreshProduct(win);
+      if (recentProduct) {
+        safeStorage(win, INTENT_KEY, "remove");
+        performProductAction(win, doc, intent, recentProduct);
+        return;
+      }
+
       storeIntent(win, intent);
     });
 
     chainCallback(tawk, "onChatMessageAgent", async function (payload) {
+      var products = productLinksFromMessage(payload);
+      if (products.length === 1) rememberProduct(win, products[0]);
+
       var intent = takeFreshIntent(win);
       if (!intent) return;
 
-      var products = productLinksFromMessage(payload);
-      if (products.length !== 1) return;
-
-      var product = products[0];
-      var actionKey = intent.action + ":" + product.pid + ":" + (intent.quantity || 0);
-      if (lastAction.key === actionKey && Date.now() - lastAction.at < ACTION_DEDUP_MS) return;
-      lastAction = { key: actionKey, at: Date.now() };
-
-      if (intent.action === "view_product") {
-        showNotice(doc, {
-          message: "Opening the product page…",
-          persistent: true
-        });
-        win.setTimeout(function () {
-          win.location.assign(product.url);
-        }, 650);
-        return;
-      }
-
-      if (intent.action !== "add_to_cart") return;
-
-      showNotice(doc, {
-        message: "Adding the item to your cart…",
-        persistent: true
-      });
-
-      try {
-        var result = await addPidToCart(win, product.pid, intent.quantity);
-        showNotice(doc, {
-          message: result.quantity + " × " + result.productName + " added to your cart. No order was placed.",
-          cartLink: true
-        });
-        if (win.WLAnalytics && typeof win.WLAnalytics.refresh === "function") {
-          win.setTimeout(function () {
-            try {
-              win.WLAnalytics.refresh();
-            } catch (error) {}
-          }, 0);
-        }
-      } catch (error) {
-        showNotice(doc, {
-          error: true,
-          message: "I couldn't add that item automatically. Please use the product link in chat or ask a Woodson team member for help."
-        });
-      }
+      var product = products.length === 1 ? products[0] : readFreshProduct(win);
+      if (!product) return;
+      await performProductAction(win, doc, intent, product);
     });
 
     return true;
@@ -438,7 +482,10 @@
     extractPostbackTarget: extractPostbackTarget,
     extractQuantity: extractQuantity,
     messageText: messageText,
+    performProductAction: performProductAction,
     productLinksFromMessage: productLinksFromMessage,
+    readFreshProduct: readFreshProduct,
+    rememberProduct: rememberProduct,
     safeProductUrl: safeProductUrl,
     init: init
   };
