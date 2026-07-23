@@ -176,6 +176,8 @@ function searchCatalog(products, query, limit = 5) {
   const compactQuery = normalizedQuery.replace(/\s+/g, "");
   const brandGuard = requestedBrands(products, normalizedQuery);
   const queryDimension = dimensionalSignature(query);
+  const genericDrillRequest = queryTokens.includes("drill") &&
+    !queryTokens.some((token) => ["angle", "driver", "hammer", "magnetic", "mixer", "rotary", "sds"].includes(token));
   const ranked = [];
 
   for (const product of products) {
@@ -220,6 +222,11 @@ function searchCatalog(products, query, limit = 5) {
     if (queryDimension && fields.title.startsWith(queryDimension.split("x").join(" x "))) score += 90;
     if (queryDimension && fields.categoryTokens.has("lumber")) score += 35;
     if (fields.title.startsWith(normalizedQuery)) score += 45;
+    if (genericDrillRequest) {
+      if (/\bdrill driver\b/.test(fields.title)) score += 75;
+      if (/\bdrill\b.*\bkit\b/.test(fields.title)) score += 25;
+      if (/\bright angle\b|\brotary hammer\b|\bsds\b|\bmagnetic\b|\bmixer\b/.test(fields.title)) score -= 100;
+    }
     if (product.availability === "in_stock") score += 3;
     ranked.push({ product, score, exactIdentifier, exactPhrase, exactDimension });
   }

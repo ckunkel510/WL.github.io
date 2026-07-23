@@ -181,6 +181,31 @@ test("keeps broad category requests from collapsing to a specialized subtype", (
   );
 });
 
+test("ranks a general drill driver ahead of specialty drills for a generic request", () => {
+  const products = [
+    {
+      productId: "265510",
+      productCode: "2615-20",
+      title: "Milwaukee M18 Cordless Right Angle Drill (Tool Only)",
+      category: "Tools > Power Tools > Electric Drills > Cordless Drills"
+    },
+    {
+      productId: "253038",
+      productCode: "0640532",
+      title: "Dewalt 20V Max XR Brushless Cordless 1 inch SDS Plus Rotary Hammer (Tool Only)",
+      category: "Tools > Power Tools > Electric Drills > Cordless Drills"
+    },
+    {
+      productId: "288202",
+      productCode: "4635843",
+      title: "Dewalt 20V Max XR Brushless Drill Driver (Tool Only)",
+      category: "Tools > Power Tools > Electric Drills > Cordless Drills"
+    }
+  ];
+  const ranked = search.searchCatalog(products, "cordless drill");
+  assert.equal(ranked[0].product.productId, "288202");
+});
+
 test("allows only the Woodson storefront to request dynamic product previews", () => {
   const headers = {};
   search.setCorsHeaders(
