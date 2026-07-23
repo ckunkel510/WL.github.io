@@ -76,6 +76,7 @@ test("exact product-code search wins and public results contain no economics", (
   const response = search.formatSearchResponse("2462-22", ranked);
   assert.equal(response.hasResults, true);
   assert.match(response.answer, /!\[M12 Cordless Impact Driver product image\]\(https:\/\/example\.com\/1\.jpg\)/);
+  assert.match(response.answer, /\[View product image\]\(https:\/\/example\.com\/1\.jpg\)/);
   assert.match(response.answer, /\[View product details\]\(https:\/\/example\.com\/1\)/);
   assert.deepEqual(Object.keys(response.results[0]).filter((key) => FORBIDDEN_KEYS.test(key)), []);
 });
