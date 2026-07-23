@@ -8,7 +8,7 @@ const assist = require(path.join(root, "tawk-commerce-assist.js"));
 
 test("header loads the tawk commerce bridge from the Woodson-hosted runtime", () => {
   const header = fs.readFileSync(path.join(root, "headermodern.js"), "utf8");
-  assert.match(header, /WL\.github\.io\/tawk-commerce-assist\.js\?v=20260723-4/);
+  assert.match(header, /WL\.github\.io\/wl-chat\.js\?v=20260723-5/);
   assert.match(header, /data-wl-tawk-commerce-assist/);
 });
 
@@ -282,7 +282,7 @@ test("builds a clickable preview only from the matching Woodson product and imag
 });
 
 test("runtime has no checkout or order-submission controls", () => {
-  const runtime = fs.readFileSync(path.join(root, "tawk-commerce-assist.js"), "utf8");
+  const runtime = fs.readFileSync(path.join(root, "wl-chat.js"), "utf8");
   assert.doesNotMatch(runtime, /CompleteCheckoutButton|PlaceOrderButton|customCheckoutBtn|HTMLFormElement\.prototype\.submit/);
   assert.match(runtime, /No order was placed/);
   assert.match(runtime, /WebTrack did not confirm/);
