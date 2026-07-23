@@ -151,6 +151,36 @@ test("returns one dominant match and at most three close alternatives", () => {
   );
 });
 
+test("keeps broad category requests from collapsing to a specialized subtype", () => {
+  const entries = [
+    {
+      score: 260,
+      exactIdentifier: false,
+      exactPhrase: true,
+      exactDimension: false,
+      product: { title: "Cordless Right Angle Drill" }
+    },
+    {
+      score: 210,
+      exactIdentifier: false,
+      exactPhrase: true,
+      exactDimension: false,
+      product: { title: "Cordless Hammer Drill Kit" }
+    },
+    {
+      score: 200,
+      exactIdentifier: false,
+      exactPhrase: true,
+      exactDimension: false,
+      product: { title: "Cordless Drill Driver" }
+    }
+  ];
+  assert.deepEqual(
+    search.selectRelevantMatches(entries, 3, "cordless drill").map((entry) => entry.product.title),
+    ["Cordless Right Angle Drill", "Cordless Hammer Drill Kit", "Cordless Drill Driver"]
+  );
+});
+
 test("allows only the Woodson storefront to request dynamic product previews", () => {
   const headers = {};
   search.setCorsHeaders(
