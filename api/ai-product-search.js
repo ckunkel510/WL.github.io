@@ -433,12 +433,14 @@ function groupRows() {
 }
 
 function searchProductGroups(query, limit = 5) {
-  if (!GROUP_INTENT.test(query)) return [];
   const normalizedQuery = normalizeText(query);
   const queryTokens = tokens(normalizedQuery);
   if (!queryTokens.length) return [];
+  const rows = groupRows();
+  const exactGroupName = rows.some((row) => row.normalizedName === normalizedQuery);
+  if (!GROUP_INTENT.test(query) && !exactGroupName) return [];
   const ranked = [];
-  for (const row of groupRows()) {
+  for (const row of rows) {
     const phraseMatch = (` ${normalizedQuery} `).includes(` ${row.normalizedName} `);
     let matched = 0;
     for (const token of queryTokens) matched += tokenMatchScore(token, row.nameTokens);

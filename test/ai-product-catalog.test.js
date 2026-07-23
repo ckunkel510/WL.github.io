@@ -302,6 +302,12 @@ test("returns only verified department links for browse requests", () => {
   const response = search.formatGroupResponse("browse plumbing", groups.slice(0, 1));
   assert.equal(response.matchType, "group");
   assert.match(response.answer, /pl1=24&pg=24/);
+
+  const shortenedByAgent = search.searchProductGroups("power tools");
+  assert.equal(shortenedByAgent[0].groupName, "Power Tools");
+  assert.match(shortenedByAgent[0].groupUrl, /pl1=26&pg=773/);
+
+  assert.deepEqual(search.searchProductGroups("cordless drill"), []);
 });
 
 test("internal economics questions are refused before catalog lookup", () => {
