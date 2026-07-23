@@ -4,13 +4,13 @@ const { getAiCatalogProducts } = require("./ai-product-catalog");
 const { departments = [] } = require("../webtrack-departments.json");
 
 const STOP_WORDS = new Set([
-  "a", "all", "an", "and", "around", "basic", "browse", "building", "can", "carry",
+  "a", "about", "all", "an", "and", "around", "at", "basic", "browse", "building", "can", "carry",
   "category", "categories", "do", "find", "for", "have", "i", "im", "in", "item",
-  "items", "kind", "looking", "me", "need", "of", "on", "or", "please", "probably",
-  "product", "products", "shop", "show", "small", "some", "something", "the", "to",
-  "want", "with", "x", "you", "your"
+  "items", "kind", "look", "looking", "me", "need", "of", "on", "or", "please",
+  "probably", "product", "products", "shop", "should", "show", "small", "some",
+  "something", "the", "to", "want", "what", "with", "x", "you", "your"
 ]);
-const LOW_WEIGHT_TOKENS = new Set(["foot", "long", "lumber", "outdoor", "treated", "wall", "wood"]);
+const LOW_WEIGHT_TOKENS = new Set(["board", "foot", "long", "lumber", "outdoor", "treated", "wall", "wood"]);
 const NUMBER_WORDS = new Map([
   ["one", "1"], ["two", "2"], ["three", "3"], ["four", "4"], ["five", "5"],
   ["six", "6"], ["seven", "7"], ["eight", "8"], ["nine", "9"], ["ten", "10"],
