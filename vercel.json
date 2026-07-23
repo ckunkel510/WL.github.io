@@ -15,6 +15,9 @@
     },
     "api/special-order-probe-v2.js": {
       "maxDuration": 10
+    },
+    "api/ai-product-search.js": {
+      "maxDuration": 10
     }
   }
 }
