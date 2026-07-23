@@ -102,9 +102,11 @@ test("prepares a browser or cart action only for an exact product code", () => {
   const exact = search.searchCatalog(products, "2904-22");
   const add = search.formatProductActionResponse("add that drill", exact, "add_to_cart");
   assert.equal(add.actionReady, true);
+  assert.equal(add.actionStatus, "browser_confirmation_required");
   assert.equal(add.results.length, 1);
   assert.equal(add.results[0].productId, "221283");
   assert.match(add.answer, /No order will be placed/);
+  assert.match(add.answer, /look for the cart confirmation/i);
 
   const ambiguous = search.formatProductActionResponse(
     "add a Milwaukee drill",

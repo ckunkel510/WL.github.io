@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Woodson Customer-Safe Product Search
-  version: 9.0.0
+  version: 10.0.0
   description: Search the current Woodson Lumber & Hardware online catalog and verified WebTrack product groups. This API exposes customer-facing product data only and never exposes cost, margin, markup, profit, supplier, vendor, or advertising-economics data.
 
 servers:
@@ -29,6 +29,11 @@ paths:
         If the visitor asks to place, submit, complete, or check out an order, do not
         call this tool for an action and do not claim to place the order. Tell them
         they will be taken to their cart to review checkout and submit the order themselves.
+
+        actionReady means only that one verified product is safe for a browser action.
+        It never proves that WebTrack changed the cart. For add_to_cart, tell the visitor
+        to look for the Woodson cart confirmation on the page. Never say an item was added
+        unless that on-page confirmation appears.
 
         If hasResults=true, reply using the answer field exactly. Do not add unreturned
         products, specifications, prices, availability claims, or assumptions.
@@ -119,7 +124,13 @@ paths:
                       - add_to_cart
                   actionReady:
                     type: boolean
-                    description: True only when one exact verified product is safe for the requested browser or cart action.
+                    description: True only when one exact verified product is safe for the requested browser or cart action. It does not confirm that WebTrack changed the cart.
+                  actionStatus:
+                    type: string
+                    enum:
+                      - browser_confirmation_required
+                      - browser_navigation_requested
+                    description: For add_to_cart, browser_confirmation_required means the visitor must see the Woodson on-page confirmation before the AI may describe the cart action as successful.
                   answer:
                     type: string
                     description: Customer-ready response. Use this exactly whether hasResults is true or false.
