@@ -22,7 +22,7 @@
 })(function () {
   "use strict";
 
-  var VERSION = "1.1.0";
+  var VERSION = "1.2.0";
   var WEBTRACK_ORIGIN = "https://webtrack.woodsonlumber.com";
   var INTENT_KEY = "wl_tawk_commerce_intent_v1";
   var LAST_PRODUCT_KEY = "wl_tawk_last_product_v1";
@@ -156,23 +156,33 @@
     return options && options[1] ? options[1] : "";
   }
 
-  function findAddToCartTarget(doc) {
+  function findAddToCartControl(doc) {
     var blocked = /saved|later|quicklist|wish|favorite/i;
     var explicitCart = /add\s*(?:to)?\s*(?:cart|basket)|cart|basket|addproductbutton/i;
     var selectors = [
       'a[id*="AddProductButton"]',
       'a[id*="AddToCart"]',
       'a[id*="AddCart"]',
+      'a[href*="AddProductButton"]',
+      'a[href*="AddToCart"]',
+      'a[href*="AddCart"]',
       'button[id*="AddProductButton"]',
       'button[id*="AddToCart"]',
+      'button[name*="AddProductButton"]',
+      'button[name*="AddToCart"]',
       'input[id*="AddProductButton"]',
-      'input[id*="AddToCart"]'
+      'input[id*="AddToCart"]',
+      'input[name*="AddProductButton"]',
+      'input[name*="AddToCart"]'
     ];
 
     for (var i = 0; i < selectors.length; i += 1) {
       var controls = Array.prototype.slice.call(doc.querySelectorAll(selectors[i]));
       for (var j = 0; j < controls.length; j += 1) {
         var control = controls[j];
+        if (control.disabled || String(control.getAttribute("aria-disabled") || "").toLowerCase() === "true") {
+          continue;
+        }
         var combined = [
           control.textContent || control.value || "",
           control.getAttribute("title") || "",
@@ -184,13 +194,36 @@
         if (blocked.test(combined) || !explicitCart.test(combined)) continue;
 
         var target = extractPostbackTarget(control.getAttribute("href") || "");
-        if (target) return target;
-        if (control.name) return control.name;
-        if (control.id) return control.id.replace(/_/g, "$");
+        if (target) {
+          return {
+            target: target,
+            buttonName: "",
+            buttonValue: ""
+          };
+        }
+        if (control.name) {
+          return {
+            target: "",
+            buttonName: control.name,
+            buttonValue: control.value || control.textContent || "Add to Cart"
+          };
+        }
+        if (control.id) {
+          return {
+            target: control.id.replace(/_/g, "$"),
+            buttonName: "",
+            buttonValue: ""
+          };
+        }
       }
     }
 
-    return "ctl00$PageBody$productDetail$ctl00$AddProductButton";
+    return null;
+  }
+
+  function findAddToCartTarget(doc) {
+    var control = findAddToCartControl(doc);
+    return control ? control.target || control.buttonName : "";
   }
 
   function productNameFromDocument(doc, pid) {
@@ -204,9 +237,67 @@
     for (var i = 0; i < candidates.length; i += 1) {
       var element = doc.querySelector(candidates[i]);
       var text = String((element && element.textContent) || "").replace(/\s+/g, " ").trim();
-      if (text) return text.slice(0, 140);
+      if (text && !/^products?\s*\|\s*woodson lumber$/i.test(text)) return text.slice(0, 140);
     }
     return "Product " + pid;
+  }
+
+  function cartStateFromDocument(doc, pid) {
+    var expectedPid = String(pid || "");
+    var links = Array.prototype.slice.call(
+      doc.querySelectorAll('a[href*="ProductDetail.aspx"],a[href*="productdetail.aspx"]')
+    );
+    var matchingLink = null;
+
+    for (var i = 0; i < links.length; i += 1) {
+      var product = safeProductUrl(links[i].getAttribute("href") || "");
+      if (product && product.pid === expectedPid) {
+        matchingLink = links[i];
+        break;
+      }
+    }
+
+    if (!matchingLink) return { present: false, quantity: 0 };
+
+    var quantity = null;
+    var node = matchingLink;
+    var quantitySelector = [
+      'select[name*="Quantity"]',
+      'select[id*="Quantity"]',
+      'input[name*="Quantity"]',
+      'input[id*="Quantity"]',
+      'select[name*="Qty"]',
+      'select[id*="Qty"]',
+      'input[name*="Qty"]',
+      'input[id*="Qty"]'
+    ].join(",");
+
+    for (var depth = 0; node && depth < 9; depth += 1) {
+      if (typeof node.querySelector === "function") {
+        var quantityControl = node.querySelector(quantitySelector);
+        if (quantityControl) {
+          var parsed = parseInt(quantityControl.value, 10);
+          if (Number.isFinite(parsed) && parsed >= 0) {
+            quantity = parsed;
+            break;
+          }
+        }
+      }
+      node = node.parentElement;
+    }
+
+    return { present: true, quantity: quantity };
+  }
+
+  async function readCartState(win, pid) {
+    var response = await win.fetch("/ShoppingCart.aspx", {
+      credentials: "include",
+      cache: "no-store"
+    });
+    if (!response.ok) throw new Error("The cart could not be verified.");
+    var html = await response.text();
+    var doc = new win.DOMParser().parseFromString(html, "text/html");
+    return cartStateFromDocument(doc, pid);
   }
 
   async function addPidToCart(win, pid, quantity) {
@@ -214,6 +305,7 @@
     if (!/^\d{1,12}$/.test(String(pid || ""))) throw new Error("A valid product is required.");
 
     var qty = Math.max(1, Math.min(MAX_QUANTITY, parseInt(quantity, 10) || 1));
+    var before = await readCartState(win, pid);
     var productPath = "/ProductDetail.aspx?pid=" + encodeURIComponent(pid);
     var productResponse = await win.fetch(productPath, {
       credentials: "include",
@@ -234,8 +326,14 @@
       doc.querySelector('input[name*="qty"]');
     if (quantityInput && quantityInput.name) fields[quantityInput.name] = String(qty);
 
-    fields.__EVENTTARGET = findAddToCartTarget(doc);
+    var addControl = findAddToCartControl(doc);
+    if (!addControl) throw new Error("This product does not expose a direct add-to-cart control.");
+
+    fields.__EVENTTARGET = addControl.target || "";
     fields.__EVENTARGUMENT = "";
+    if (addControl.buttonName) {
+      fields[addControl.buttonName] = addControl.buttonValue;
+    }
 
     var form = doc.querySelector("form");
     var actionUrl = new URL(form ? form.getAttribute("action") || productPath : productPath, WEBTRACK_ORIGIN);
@@ -254,10 +352,25 @@
     });
     if (!cartResponse.ok) throw new Error("The item could not be added to the cart.");
 
+    var after = await readCartState(win, pid);
+    if (!after.present) throw new Error("WebTrack did not confirm the product in the cart.");
+
+    var expectedQuantity = before.present && before.quantity !== null
+      ? before.quantity + qty
+      : qty;
+    var quantityMustBeVerified = qty > 1 || before.present;
+    if (
+      quantityMustBeVerified &&
+      (after.quantity === null || after.quantity < expectedQuantity)
+    ) {
+      throw new Error("WebTrack did not confirm the requested cart quantity.");
+    }
+
     return {
       pid: String(pid),
       quantity: qty,
-      productName: productNameFromDocument(doc, pid)
+      productName: productNameFromDocument(doc, pid),
+      cartQuantity: after.quantity
     };
   }
 
@@ -356,6 +469,17 @@
       notice.appendChild(link);
     }
 
+    if (options.productLink) {
+      var product = safeProductUrl(options.productLink);
+      if (product) {
+        var productLink = doc.createElement("a");
+        productLink.href = product.url;
+        productLink.textContent = "Open product";
+        productLink.style.cssText = "display:inline-block;margin-top:8px;color:#6b0016;font-weight:800;text-decoration:underline;";
+        notice.appendChild(productLink);
+      }
+    }
+
     doc.body.appendChild(notice);
     if (!options.persistent) {
       window.setTimeout(function () {
@@ -418,7 +542,8 @@
     } catch (error) {
       showNotice(doc, {
         error: true,
-        message: "I couldn't add that item automatically. Please use the product link in chat or ask a Woodson team member for help."
+        message: "WebTrack did not confirm that item in your cart. Please open the product and add it manually, or ask a Woodson team member for help. No order was placed.",
+        productLink: product.url
       });
       return false;
     }
@@ -478,9 +603,12 @@
   return {
     version: VERSION,
     addPidToCart: addPidToCart,
+    cartStateFromDocument: cartStateFromDocument,
     detectIntent: detectIntent,
     extractPostbackTarget: extractPostbackTarget,
     extractQuantity: extractQuantity,
+    findAddToCartControl: findAddToCartControl,
+    findAddToCartTarget: findAddToCartTarget,
     messageText: messageText,
     performProductAction: performProductAction,
     productLinksFromMessage: productLinksFromMessage,

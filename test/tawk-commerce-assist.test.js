@@ -8,7 +8,7 @@ const assist = require(path.join(root, "tawk-commerce-assist.js"));
 
 test("header loads the tawk commerce bridge from the Woodson-hosted runtime", () => {
   const header = fs.readFileSync(path.join(root, "headermodern.js"), "utf8");
-  assert.match(header, /WL\.github\.io\/tawk-commerce-assist\.js\?v=20260723-2/);
+  assert.match(header, /WL\.github\.io\/tawk-commerce-assist\.js\?v=20260723-3/);
   assert.match(header, /data-wl-tawk-commerce-assist/);
 });
 
@@ -77,6 +77,69 @@ test("understands both WebTrack postback formats used by add-to-cart controls", 
   );
 });
 
+test("does not invent an add-to-cart control when a product cannot be added directly", () => {
+  const emptyDocument = {
+    querySelectorAll() { return []; }
+  };
+  assert.equal(assist.findAddToCartControl(emptyDocument), null);
+  assert.equal(assist.findAddToCartTarget(emptyDocument), "");
+});
+
+test("posts named WebTrack add buttons using their submitted name and value", () => {
+  const control = {
+    disabled: false,
+    id: "",
+    name: "ctl00$PageBody$AddProductButton",
+    textContent: "Add to Cart",
+    value: "Add to Cart",
+    getAttribute(name) {
+      if (name === "aria-disabled") return "false";
+      if (name === "href") return "";
+      return "";
+    }
+  };
+  const doc = {
+    querySelectorAll(selector) {
+      return selector === 'button[name*="AddProductButton"]' ? [control] : [];
+    }
+  };
+
+  assert.deepEqual(assist.findAddToCartControl(doc), {
+    target: "",
+    buttonName: "ctl00$PageBody$AddProductButton",
+    buttonValue: "Add to Cart"
+  });
+});
+
+test("verifies the exact product and quantity from the cart before claiming success", () => {
+  const quantityControl = { value: "2" };
+  const container = {
+    parentElement: null,
+    querySelector() { return quantityControl; }
+  };
+  const link = {
+    parentElement: container,
+    getAttribute(name) {
+      return name === "href"
+        ? "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pg=186&pid=345"
+        : "";
+    },
+    querySelector() { return null; }
+  };
+  const doc = {
+    querySelectorAll() { return [link]; }
+  };
+
+  assert.deepEqual(assist.cartStateFromDocument(doc, "345"), {
+    present: true,
+    quantity: 2
+  });
+  assert.deepEqual(assist.cartStateFromDocument(doc, "999"), {
+    present: false,
+    quantity: 0
+  });
+});
+
 test("remembers one verified product for safe pronoun follow-ups", () => {
   const values = new Map();
   const win = {
@@ -98,4 +161,5 @@ test("runtime has no checkout or order-submission controls", () => {
   const runtime = fs.readFileSync(path.join(root, "tawk-commerce-assist.js"), "utf8");
   assert.doesNotMatch(runtime, /CompleteCheckoutButton|PlaceOrderButton|customCheckoutBtn|HTMLFormElement\.prototype\.submit/);
   assert.match(runtime, /No order was placed/);
+  assert.match(runtime, /WebTrack did not confirm/);
 });

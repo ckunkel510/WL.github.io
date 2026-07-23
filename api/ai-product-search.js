@@ -292,7 +292,7 @@ function formatProductActionResponse(query, ranked, action) {
 
   const result = publicProduct(exact.product, 1);
   const introduction = action === "add_to_cart"
-    ? "I'll add this item to your WebTrack cart. No order will be placed:"
+    ? "I'm sending this item to your WebTrack cart now. Please look for the cart confirmation on this page; do not rely on this message alone. No order will be placed:"
     : "Opening this product in WebTrack:";
   const answer = [
     introduction,
@@ -307,6 +307,7 @@ function formatProductActionResponse(query, ranked, action) {
     query,
     requestedAction: action,
     actionReady: true,
+    actionStatus: action === "add_to_cart" ? "browser_confirmation_required" : "browser_navigation_requested",
     answer,
     results: [result]
   };
