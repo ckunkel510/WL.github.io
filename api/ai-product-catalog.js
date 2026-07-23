@@ -8,7 +8,8 @@ try {
 const ACTIVE_KEY = "wl:ai-product-catalog:active";
 const SNAPSHOT_TTL_SECONDS = 7 * 24 * 60 * 60;
 const MAX_CHUNK_PRODUCTS = 500;
-const REDIS_SCAN_COUNT = 1000;
+const REDIS_READ_BATCH = 1000;
+const REDIS_READ_CONCURRENCY = 6;
 const HOT_CACHE_MILLISECONDS = 5 * 60 * 1000;
 const memory = {
   active: null,
@@ -173,20 +174,29 @@ function parseStoredProduct(raw) {
 }
 
 async function readRedisHashValues(redis, key) {
+  const fields = await redis.hkeys(key);
+  if (!Array.isArray(fields) || !fields.length) return [];
+  const batches = [];
+  for (let index = 0; index < fields.length; index += REDIS_READ_BATCH) {
+    batches.push(fields.slice(index, index + REDIS_READ_BATCH));
+  }
   const values = [];
-  let cursor = "0";
-  let pageCount = 0;
-  do {
-    const page = await redis.hscan(key, cursor, { count: REDIS_SCAN_COUNT });
-    if (!Array.isArray(page) || page.length !== 2 || !Array.isArray(page[1])) {
-      throw new Error("AI catalog storage returned an invalid scan page.");
+  for (let index = 0; index < batches.length; index += REDIS_READ_CONCURRENCY) {
+    const window = batches.slice(index, index + REDIS_READ_CONCURRENCY);
+    const pages = await Promise.all(window.map((batch) => redis.hmget(key, ...batch)));
+    pages.forEach((page, pageIndex) => {
+      if (page === null) return;
+      if (!page || typeof page !== "object" || Array.isArray(page)) {
+        throw new Error("AI catalog storage returned an invalid product page.");
+      }
+      for (const field of window[pageIndex]) {
+        if (Object.prototype.hasOwnProperty.call(page, field) && page[field] !== null) values.push(page[field]);
+      }
+    });
+    if (values.length > fields.length) {
+      throw new Error("AI catalog storage returned more products than requested.");
     }
-    cursor = String(page[0]);
-    const entries = page[1];
-    for (let index = 1; index < entries.length; index += 2) values.push(entries[index]);
-    pageCount += 1;
-    if (pageCount > 1000) throw new Error("AI catalog storage scan exceeded its safety limit.");
-  } while (cursor !== "0");
+  }
   return values;
 }
 
@@ -200,7 +210,7 @@ async function getAiCatalogProducts() {
   let products;
   if (redis) {
     // HVALS can exceed Upstash's per-response limit for a full Woodson catalog.
-    // HSCAN keeps each response bounded while the immutable active snapshot is read.
+    // Bounded parallel HMGET pages keep responses small and reduce cold-start latency.
     const rows = await readRedisHashValues(redis, productHashKey(active.id));
     products = (Array.isArray(rows) ? rows : []).map(parseStoredProduct).filter(Boolean);
   } else {

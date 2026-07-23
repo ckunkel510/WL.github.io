@@ -123,21 +123,22 @@ test("internal economics questions are refused before catalog lookup", () => {
   assert.match(response.answer, /can't provide internal cost, margin, markup/i);
 });
 
-test("reads a large Redis catalog in bounded scan pages", async () => {
+test("reads a large Redis catalog in bounded parallel pages", async () => {
   const calls = [];
+  const fields = Array.from({ length: 2001 }, (_, index) => String(100 + index));
   const redis = {
-    async hscan(key, cursor, options) {
-      calls.push({ key, cursor, options });
-      if (cursor === "0") return ["17", ["100", "{\"productId\":\"100\"}", "101", "{\"productId\":\"101\"}"]];
-      return ["0", ["102", "{\"productId\":\"102\"}"]];
+    async hkeys(key) {
+      calls.push({ operation: "hkeys", key });
+      return fields;
+    },
+    async hmget(key, ...requested) {
+      calls.push({ operation: "hmget", key, requested });
+      return Object.fromEntries(requested.map((field) => [field, { productId: field }]));
     }
   };
   const values = await readRedisHashValues(redis, "wl:ai-product-catalog:test:products");
-  assert.equal(calls.length, 2);
-  assert.deepEqual(calls.map((call) => call.cursor), ["0", "17"]);
-  assert.deepEqual(values, [
-    "{\"productId\":\"100\"}",
-    "{\"productId\":\"101\"}",
-    "{\"productId\":\"102\"}"
-  ]);
+  assert.equal(calls.filter((call) => call.operation === "hkeys").length, 1);
+  assert.deepEqual(calls.filter((call) => call.operation === "hmget").map((call) => call.requested.length), [1000, 1000, 1]);
+  assert.equal(values.length, 2001);
+  assert.deepEqual(values.slice(0, 2), [{ productId: "100" }, { productId: "101" }]);
 });
