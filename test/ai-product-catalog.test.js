@@ -93,7 +93,9 @@ test("finds dimensional lumber from compact and conversational requests", () => 
     { productId: "1", productCode: "24082YPL", title: "2 X 4 - 08 #2/Stud GR Yellow Pine", category: "Lumber > Yellow Pine > 2x4 #2 Yellow Pine" },
     { productId: "2", productCode: "71814", title: "Cut-Off Wheel, 4-1/2 x .045 x 7/8", category: "Tools" }
   ];
-  assert.equal(search.searchCatalog(products, "2x4x8 lumber")[0].product.productId, "1");
+  const compact = search.searchCatalog(products, "2x4x8 lumber");
+  assert.equal(compact[0].product.productId, "1");
+  assert.deepEqual(compact.map((entry) => entry.product.productId), ["1"]);
   assert.equal(search.searchCatalog(products, "I'm building a small wall and need a basic 2x4 stud, eight feet long.")[0].product.productId, "1");
 });
 
