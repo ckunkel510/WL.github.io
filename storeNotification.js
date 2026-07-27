@@ -1,4 +1,17 @@
 
+(function loadOrderConfirmationEnhancement() {
+  if (!/\/ShoppingCart\.aspx$/i.test(window.location.pathname || '')) return;
+  if (!/(?:^|[?&])success=1(?:&|$)/i.test(window.location.search || '')) return;
+  if (window.__wlOrderConfirmationEnhancementLoaded) return;
+  if (document.querySelector('script[data-wl-order-confirmation-loader]')) return;
+
+  var script = document.createElement('script');
+  script.src = 'https://ckunkel510.github.io/WL.github.io/OrderConfirmation.js?v=20260727-1';
+  script.async = true;
+  script.setAttribute('data-wl-order-confirmation-loader', 'true');
+  (document.head || document.documentElement).appendChild(script);
+})();
+
 (function() {
   // ensure it only runs once
   if (window.__orderNotify) return;
@@ -45,4 +58,3 @@
     }, 500);
   });
 })();
-
