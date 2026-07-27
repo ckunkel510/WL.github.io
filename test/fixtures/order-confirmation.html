@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Woodson Lumber — Order Confirmation Preview</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      color: #231f20;
+      background: #fff;
+      font-family: Arial, Helvetica, sans-serif;
+    }
+    .preview-header {
+      background: #6b0016;
+      color: #fff;
+    }
+    .preview-header__top,
+    .preview-header__nav {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+    }
+    .preview-header__top { min-height: 76px; }
+    .preview-logo { font-size: 1.35rem; font-weight: 900; letter-spacing: .02em; }
+    .preview-logo small { display: block; font-size: .65rem; font-weight: 600; opacity: .82; }
+    .preview-search {
+      width: min(470px, 55vw);
+      border: 0;
+      border-radius: 7px;
+      background: #fff;
+      color: #555;
+      padding: 12px 15px;
+    }
+    .preview-header__nav {
+      min-height: 42px;
+      justify-content: flex-start;
+      color: #fff;
+      font-size: .9rem;
+      font-weight: 700;
+    }
+    .preview-promo {
+      padding: 10px 16px;
+      background: #efe5cc;
+      color: #4a391c;
+      text-align: center;
+      font-size: .9rem;
+      font-weight: 700;
+    }
+    .mainContents {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 1px 0 50px;
+    }
+    .legacy-confirmation {
+      margin: 24px auto;
+      border: 1px solid #ccc;
+      padding: 18px;
+    }
+    #CartResponseMessage {
+      margin: 18px 0;
+      padding: 12px;
+      background: #eef7ee;
+    }
+    #ctl00_PageBody_SuccessfulPaymentResults_MerchantDetailsPanel table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    #ctl00_PageBody_SuccessfulPaymentResults_MerchantDetailsPanel th,
+    #ctl00_PageBody_SuccessfulPaymentResults_MerchantDetailsPanel td {
+      border-bottom: 1px solid #ddd;
+      padding: 11px;
+      text-align: left;
+      vertical-align: top;
+    }
+    .native-actions { display: flex; gap: 10px; margin-top: 18px; }
+    .native-actions button {
+      border: 0;
+      border-radius: 5px;
+      background: #6b0016;
+      color: #fff;
+      padding: 10px 16px;
+    }
+    #savedForLater {
+      display: block;
+      margin: 20px 0;
+      border: 1px solid #ccc;
+    }
+    #sflHeader {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 15px 17px;
+      background: #6b0016;
+      color: #fff;
+      font-weight: 800;
+    }
+    #sflBody { padding: 15px; }
+    #sflList {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .preview-product {
+      min-width: 0;
+      border: 1px solid #ddd;
+      border-radius: 7px;
+      padding: 12px;
+    }
+    .preview-product__image {
+      height: 78px;
+      border-radius: 5px;
+      background: linear-gradient(135deg, #ece9e6, #d9d1cc);
+    }
+    .preview-product strong { display: block; margin: 10px 0; font-size: .86rem; }
+    .preview-product button {
+      width: 100%;
+      border: 0;
+      border-radius: 5px;
+      background: #6b0016;
+      color: #fff;
+      padding: 8px;
+      font-weight: 700;
+    }
+    @media (max-width: 680px) {
+      .preview-header__nav { overflow: hidden; white-space: nowrap; }
+      .preview-search { display: none; }
+      #sflList { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+  </style>
+</head>
+<body>
+  <header class="preview-header">
+    <div class="preview-header__top">
+      <div class="preview-logo">WOODSON LUMBER<small>BUILT ON QUALITY &amp; SERVICE</small></div>
+      <div class="preview-search">What can we help you find?</div>
+      <div>Account &nbsp; Cart (0)</div>
+    </div>
+    <nav class="preview-header__nav">Products &nbsp;&nbsp; Departments &nbsp;&nbsp; Locations &nbsp;&nbsp; Services</nav>
+  </header>
+  <div class="preview-promo">Free UPS Ground shipping on eligible orders over $75</div>
+
+  <main class="mainContents">
+    <section class="legacy-confirmation">
+      <h2>Order Results</h2>
+      <div id="CartResponseMessage">
+        Thank you. Your reserved order <strong>RSV-104582</strong> was submitted and will be processed as soon as possible.
+      </div>
+
+      <div id="savedForLater">
+        <div id="sflHeader">
+          <span>Saved For Later</span>
+          <span class="sflCount">(12)</span>
+        </div>
+        <div id="sflBody">
+          <div id="sflList">
+            <div class="preview-product"><div class="preview-product__image"></div><strong>Framing Hammer</strong><button>Add to Cart</button></div>
+            <div class="preview-product"><div class="preview-product__image"></div><strong>Exterior Screws</strong><button>Add to Cart</button></div>
+            <div class="preview-product"><div class="preview-product__image"></div><strong>Work Gloves</strong><button>Add to Cart</button></div>
+            <div class="preview-product"><div class="preview-product__image"></div><strong>Utility Knife</strong><button>Add to Cart</button></div>
+            <div class="preview-product"><div class="preview-product__image"></div><strong>Shop Towels</strong><button>Add to Cart</button></div>
+            <div class="preview-product"><div class="preview-product__image"></div><strong>Safety Glasses</strong><button>Add to Cart</button></div>
+            <div class="preview-product"><div class="preview-product__image"></div><strong>Drill Bit Set</strong><button>Add to Cart</button></div>
+            <div class="preview-product"><div class="preview-product__image"></div><strong>Measuring Tape</strong><button>Add to Cart</button></div>
+            <div class="preview-product"><div class="preview-product__image"></div><strong>Caulk Gun</strong><button>Add to Cart</button></div>
+            <div class="preview-product"><div class="preview-product__image"></div><strong>Level</strong><button>Add to Cart</button></div>
+            <div class="preview-product"><div class="preview-product__image"></div><strong>Pry Bar</strong><button>Add to Cart</button></div>
+            <div class="preview-product"><div class="preview-product__image"></div><strong>Dust Mask</strong><button>Add to Cart</button></div>
+          </div>
+        </div>
+      </div>
+
+      <div id="ctl00_PageBody_SuccessfulPaymentResults_MerchantDetailsPanel">
+        <table>
+          <tbody>
+            <tr><th>Pickup Location</th><td>Woodson Lumber — Brenham</td></tr>
+            <tr><th>Store Address</th><td>301 S Blue Bell Rd, Brenham, TX 77833</td></tr>
+            <tr><th>Requested Pickup Date</th><td>Tuesday, July 28, 2026</td></tr>
+            <tr><th>Requested Pickup Time</th><td>10:00 AM</td></tr>
+            <tr><th>Order Total</th><td>$68.00</td></tr>
+            <tr><th>Payment Status</th><td>Confirmed</td></tr>
+            <tr><th>Invoice Number</th><td>INV-104582</td></tr>
+          </tbody>
+        </table>
+        <div class="native-actions">
+          <button id="preview-native-done" type="button">Done</button>
+          <button id="preview-native-print" type="button">Print</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    history.replaceState(null, '', '/ShoppingCart.aspx?success=1&type=o&ref=RSV-104582');
+    document.getElementById('preview-native-done').addEventListener('click', function () {
+      document.body.setAttribute('data-preview-done-clicked', 'true');
+    });
+    document.getElementById('preview-native-print').addEventListener('click', function () {
+      document.body.setAttribute('data-preview-print-clicked', 'true');
+    });
+  </script>
+  <script src="/OrderConfirmation.js"></script>
+</body>
+</html>
