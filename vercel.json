@@ -18,6 +18,12 @@
     },
     "api/ai-product-search.js": {
       "maxDuration": 10
+    },
+    "api/product-content.js": {
+      "maxDuration": 10
+    },
+    "api/product-content-merchant-feed.js": {
+      "maxDuration": 60
     }
   }
 }

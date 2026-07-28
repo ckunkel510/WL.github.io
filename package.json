@@ -1,5 +1,6 @@
 {
   "scripts": {
+    "audit:product-content": "node scripts/audit-product-content.js",
     "test": "node --test"
   },
   "dependencies": {
