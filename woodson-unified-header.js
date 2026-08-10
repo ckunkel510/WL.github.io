@@ -346,7 +346,9 @@
       navMenuMarkup("wl-locations-menu", "Locations", LOCATION_LINKS, "wl-nav-locations") +
       navMenuMarkup("wl-about-menu", "About Woodson", ABOUT_LINKS) +
       linkMarkup({ label: "Credit", href: MAIN_SITE + "/credit" }, "wl-nav-direct");
-    var accountLinks = ACCOUNT_LINKS.map(function (link) { return linkMarkup(link); }).join("");
+    var accountLinks = ACCOUNT_LINKS.map(function (link) {
+      return linkMarkup(link, link.label === "Sign In" ? "wl-signin-state" : "");
+    }).join("");
     var mobileSiteLinks = MOBILE_SITE_LINKS.map(function (link) {
       return '<a href="' + escapeHtml(link.href) + '"><span>' + escapeHtml(link.label) + '</span>' + icon("chevron") + "</a>";
     }).join("");
