@@ -13,6 +13,7 @@
   var MOBILE_MENU_URL = assetBase + "woodson-mobile-menu.html?v=20260810-1";
   var WEBTRACK = "https://webtrack.woodsonlumber.com";
   var MAIN_SITE = "https://www.woodsonlumber.com";
+  var STATE_BRIDGE_URL = WEBTRACK + "/Help.aspx?wlHeaderBridge=1";
 
   var FALLBACK_DEPARTMENTS = [
     ["Deals", 4546], ["Lawn & Garden", 18], ["Building Materials", 4402],
@@ -31,17 +32,41 @@
     };
   });
 
-  var SITE_LINKS = [
+  var SHOP_LINKS = [
+    { label: "On Sale", href: WEBTRACK + "/Products.aspx?pl1=4518&pg=4518&sort=StockClassSort&direction=asc", featured: true },
+    { label: "Clearance", href: WEBTRACK + "/Products.aspx?pl1=4312&pg=4312&sort=StockClassSort&direction=asc", featured: true },
+    { label: "All Products", href: WEBTRACK + "/Products.aspx" },
     { label: "Project Center", href: MAIN_SITE + "/project-center" },
-    { label: "Learn More", href: MAIN_SITE + "/history" },
     { label: "Faucets", href: WEBTRACK + "/Products.aspx?pl1=24&pg=549&sort=StockClassSort&direction=asc" },
-    { label: "Building Supplies", href: WEBTRACK + "/Products.aspx?pl1=4402&pg=4402&sort=StockClassSort&direction=asc" },
-    { label: "Lighting", href: WEBTRACK + "/Products.aspx?pl1=16&pg=16&sort=StockClassSort&direction=asc" },
-    { label: "Hunting", href: WEBTRACK + "/Products.aspx?pl1=2357&pg=2650&sort=StockClassSort&direction=asc" },
-    { label: "Credit", href: MAIN_SITE + "/credit" },
+    { label: "Building Materials", href: WEBTRACK + "/Products.aspx?pl1=4402&pg=4402&sort=StockClassSort&direction=asc" },
+    { label: "Lighting & Electrical", href: WEBTRACK + "/Products.aspx?pl1=16&pg=16&sort=StockClassSort&direction=asc" },
+    { label: "Outdoor Living", href: WEBTRACK + "/Products.aspx?pl1=2357&pg=2357&sort=StockClassSort&direction=asc" }
+  ];
+
+  var LOCATION_LINKS = [
+    { label: "All Locations", href: MAIN_SITE + "/stores", featured: true },
+    { label: "Brenham", href: MAIN_SITE + "/brenham" },
+    { label: "Bryan", href: MAIN_SITE + "/bryan" },
+    { label: "Buffalo", href: MAIN_SITE + "/buffalo" },
+    { label: "Caldwell", href: MAIN_SITE + "/caldwell" },
+    { label: "Groesbeck", href: MAIN_SITE + "/groesbeck" },
+    { label: "Lexington", href: MAIN_SITE + "/lexington" },
+    { label: "Mexia", href: MAIN_SITE + "/mexia" }
+  ];
+
+  var ABOUT_LINKS = [
+    { label: "Our History", href: MAIN_SITE + "/history" },
+    { label: "Services", href: MAIN_SITE + "/contractor-services" },
     { label: "Careers", href: MAIN_SITE + "/employment" },
+    { label: "Community", href: MAIN_SITE + "/community" },
+    { label: "News & Events", href: MAIN_SITE + "/news-events" },
+    { label: "Brand", href: MAIN_SITE + "/brand" },
     { label: "Contact Us", href: MAIN_SITE + "/contact-us" }
   ];
+
+  var MOBILE_SITE_LINKS = LOCATION_LINKS.slice(0, 1).concat(ABOUT_LINKS, [
+    { label: "Credit", href: MAIN_SITE + "/credit" }
+  ]);
 
   var ACCOUNT_LINKS = [
     { label: "Account Information", href: WEBTRACK + "/Default.aspx?portal=1" },
@@ -70,6 +95,7 @@
       pin: '<path d="M20 10c0 5-8 12-8 12S4 15 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="3"/>',
       grid: '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
       chevron: '<path d="m9 18 6-6-6-6"/>',
+      chevronDown: '<path d="m6 9 6 6 6-6"/>',
       heart: '<path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/>',
       scan: '<path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M10 8v8M14 8v8M17 8v8"/>'
     };
@@ -79,6 +105,19 @@
   function linkMarkup(link, className) {
     return '<a class="' + (className || "") + '" href="' + escapeHtml(link.href) + '">' +
       escapeHtml(link.label) + "</a>";
+  }
+
+  function navMenuMarkup(id, label, links, extraClass) {
+    return '<div class="wl-nav-menu ' + (extraClass || "") + '">' +
+      '<button class="wl-nav-trigger" type="button" aria-expanded="false" aria-controls="' + id + '">' +
+        '<span>' + escapeHtml(label) + '</span>' + icon("chevronDown") +
+      '</button>' +
+      '<div class="wl-nav-panel" id="' + id + '" hidden>' +
+        links.map(function (link) {
+          return linkMarkup(link, link.featured ? "wl-nav-featured" : "");
+        }).join("") +
+      '</div>' +
+    '</div>';
   }
 
   function isUsefulDepartment(department) {
@@ -115,6 +154,7 @@
 
       .wl-shell, .wl-department-panel, .wl-mobile-drawer, .wl-scanner-dialog { pointer-events: auto; }
       .wl-shell { background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.08); }
+      .wl-state-bridge { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; pointer-events: none; }
       .wl-utility { min-height: 34px; padding: 0 max(18px, calc((100vw - 1180px) / 2)); background: var(--wl-maroon); color: #fff; display: flex; align-items: center; justify-content: space-between; gap: 18px; }
       .wl-utility-links, .wl-utility-actions { display: flex; align-items: center; gap: 4px; }
       .wl-utility a { padding: 9px 8px; font-size: 12px; font-weight: 700; text-decoration: none; white-space: nowrap; }
@@ -126,14 +166,23 @@
       .wl-location { display: inline-flex; align-items: center; gap: 7px; padding: 7px 9px; border: 0; background: transparent; color: var(--wl-maroon); font-size: 12px; font-weight: 800; text-decoration: none; white-space: nowrap; }
       .wl-location svg { width: 18px; height: 18px; }
 
-      .wl-feature-links { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 5px; min-width: 0; }
-      .wl-feature-links a { min-height: 34px; display: inline-flex; align-items: center; padding: 7px 9px; border-radius: 5px; font-size: 13px; font-weight: 700; text-decoration: none; white-space: nowrap; }
-      .wl-feature-links a:hover, .wl-feature-links a:focus-visible { background: var(--wl-soft); }
-      .wl-feature-links .wl-promo { background: var(--wl-yellow); color: #111; }
-      .wl-feature-links .wl-promo:hover, .wl-feature-links .wl-promo:focus-visible { background: #ddb400; }
+      .wl-feature-links { display: flex; align-items: center; justify-content: center; gap: 5px; min-width: 0; }
+      .wl-nav-menu { position: relative; }
+      .wl-nav-trigger, .wl-nav-direct { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 8px 11px; border: 0; border-radius: 5px; background: #fff; color: #222; font-size: 13px; font-weight: 800; text-decoration: none; white-space: nowrap; }
+      .wl-nav-trigger svg { width: 15px; height: 15px; transition: transform .16s ease; }
+      .wl-nav-trigger:hover, .wl-nav-trigger:focus-visible, .wl-nav-trigger[aria-expanded="true"], .wl-nav-direct:hover, .wl-nav-direct:focus-visible { background: var(--wl-soft); color: var(--wl-maroon); }
+      .wl-nav-trigger[aria-expanded="true"] svg { transform: rotate(180deg); }
+      .wl-nav-panel { position: absolute; top: calc(100% + 7px); left: 50%; z-index: 30; width: 250px; padding: 8px; display: grid; grid-template-columns: 1fr; gap: 2px; transform: translateX(-50%); background: #fff; border: 1px solid var(--wl-line); border-radius: 7px; box-shadow: 0 14px 34px rgba(0,0,0,.2); }
+      .wl-nav-panel[hidden] { display: none; }
+      .wl-nav-panel a { min-height: 40px; padding: 9px 10px; border-radius: 4px; display: flex; align-items: center; color: #222; font-size: 13px; font-weight: 750; text-decoration: none; }
+      .wl-nav-panel a:hover, .wl-nav-panel a:focus-visible { background: var(--wl-soft); color: var(--wl-maroon); }
+      .wl-nav-panel .wl-nav-featured { color: #111; background: #fff7ce; }
+      .wl-nav-panel .wl-nav-featured:hover, .wl-nav-panel .wl-nav-featured:focus-visible { background: var(--wl-yellow); color: #111; }
+      .wl-nav-menu.wl-nav-locations .wl-nav-panel { width: 330px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
       .wl-user-actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
       .wl-action { min-width: 56px; min-height: 48px; padding: 5px 8px; border: 0; border-radius: 5px; background: #fff; color: #111; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 11px; font-weight: 800; text-decoration: none; position: relative; }
+      .wl-action > span:not(.wl-badge) { max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .wl-action:hover, .wl-action:focus-visible, .wl-action[aria-expanded="true"] { background: var(--wl-soft); }
       .wl-badge { position: absolute; top: 0; right: 3px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #e3e3e3; color: #111; display: grid; place-items: center; font-size: 10px; font-weight: 800; }
       .wl-menu-button { display: none; }
@@ -290,13 +339,15 @@
       { label: "Home", href: MAIN_SITE },
       { label: "Account Information", href: WEBTRACK + "/Default.aspx?portal=1" },
       { label: "Sign In", href: WEBTRACK + "/SignIn.aspx" },
-      { label: "Help", href: WEBTRACK + "/Help.aspx" },
-      { label: "About Us", href: WEBTRACK + "/AboutUs.aspx" }
-    ].map(function (link) { return linkMarkup(link); }).join("");
+      { label: "Help", href: WEBTRACK + "/Help.aspx" }
+    ].map(function (link) { return linkMarkup(link, link.label === "Sign In" ? "wl-signin-state" : ""); }).join("");
 
-    var featureLinks = SITE_LINKS.map(function (link) { return linkMarkup(link); }).join("");
+    var featureLinks = navMenuMarkup("wl-shop-menu", "Shop", SHOP_LINKS) +
+      navMenuMarkup("wl-locations-menu", "Locations", LOCATION_LINKS, "wl-nav-locations") +
+      navMenuMarkup("wl-about-menu", "About Woodson", ABOUT_LINKS) +
+      linkMarkup({ label: "Credit", href: MAIN_SITE + "/credit" }, "wl-nav-direct");
     var accountLinks = ACCOUNT_LINKS.map(function (link) { return linkMarkup(link); }).join("");
-    var mobileSiteLinks = SITE_LINKS.map(function (link) {
+    var mobileSiteLinks = MOBILE_SITE_LINKS.map(function (link) {
       return '<a href="' + escapeHtml(link.href) + '"><span>' + escapeHtml(link.label) + '</span>' + icon("chevron") + "</a>";
     }).join("");
     var mobileAccountLinks = ACCOUNT_LINKS.map(function (link) {
@@ -320,8 +371,6 @@
             '<a class="wl-location" href="' + MAIN_SITE + '/stores" title="Locations">' + icon("pin") + '<span data-store-name>Locations</span></a>' +
           "</div>" +
           '<nav class="wl-feature-links" aria-label="Featured links">' +
-            '<a class="wl-promo" href="' + WEBTRACK + '/Products.aspx?pl1=4518&pg=4518&sort=StockClassSort&direction=asc">On Sale</a>' +
-            '<a class="wl-promo" href="' + WEBTRACK + '/Products.aspx?pl1=4312&pg=4312&sort=StockClassSort&direction=asc">Clearance</a>' +
             featureLinks +
           "</nav>" +
           '<div class="wl-user-actions">' +
@@ -343,6 +392,7 @@
           '<button class="wl-scanner" type="button" aria-label="Scan barcode" title="Scan barcode">' + icon("scan") + "</button>" +
         "</div></div>" +
       "</header>" +
+      '<iframe class="wl-state-bridge" src="' + STATE_BRIDGE_URL + '" title="WebTrack account status" aria-hidden="true" tabindex="-1"></iframe>' +
       '<dialog class="wl-department-panel" aria-label="Shop departments">' +
         '<div class="wl-panel-head"><h2>Shop departments</h2><button class="wl-icon-button wl-department-close" type="button" aria-label="Close departments">' + icon("close") + "</button></div>" +
         '<label class="wl-department-search">' + icon("search") + '<input type="search" placeholder="Search departments and subcategories" aria-label="Search departments and subcategories" autocomplete="off"></label>' +
@@ -383,6 +433,48 @@
     var mobileDepartments = root.querySelector(".wl-mobile-departments");
     var scannerButton = root.querySelector(".wl-scanner");
     var scannerClose = root.querySelector(".wl-scanner-close");
+    var navTriggers = root.querySelectorAll(".wl-nav-trigger");
+
+    function closeNavMenus(exceptTrigger) {
+      Array.prototype.forEach.call(navTriggers, function (trigger) {
+        if (trigger === exceptTrigger) return;
+        trigger.setAttribute("aria-expanded", "false");
+        var panel = root.getElementById(trigger.getAttribute("aria-controls"));
+        if (panel) panel.hidden = true;
+      });
+    }
+
+    function setNavMenuOpen(trigger, open) {
+      var panel = root.getElementById(trigger.getAttribute("aria-controls"));
+      if (!panel) return;
+      closeNavMenus(open ? trigger : null);
+      trigger.setAttribute("aria-expanded", open ? "true" : "false");
+      panel.hidden = !open;
+    }
+
+    Array.prototype.forEach.call(navTriggers, function (trigger) {
+      var menu = trigger.closest(".wl-nav-menu");
+      trigger.addEventListener("click", function () {
+        var open = trigger.getAttribute("aria-expanded") !== "true";
+        accountPopover.hidden = true;
+        accountTrigger.setAttribute("aria-expanded", "false");
+        setNavMenuOpen(trigger, open);
+      });
+      trigger.addEventListener("keydown", function (event) {
+        if (event.key !== "ArrowDown") return;
+        event.preventDefault();
+        setNavMenuOpen(trigger, true);
+        var firstLink = root.getElementById(trigger.getAttribute("aria-controls")).querySelector("a");
+        if (firstLink) firstLink.focus();
+      });
+      menu.addEventListener("focusout", function (event) {
+        if (!event.relatedTarget || !menu.contains(event.relatedTarget)) setNavMenuOpen(trigger, false);
+      });
+    });
+
+    root.addEventListener("click", function (event) {
+      if (!event.target.closest(".wl-nav-menu")) closeNavMenus();
+    });
 
     departmentTrigger.addEventListener("click", function () { self.setDepartmentsOpen(true, departmentTrigger); });
     departmentClose.addEventListener("click", function () { self.setDepartmentsOpen(false); });
@@ -390,6 +482,7 @@
 
     accountTrigger.addEventListener("click", function () {
       var open = accountPopover.hidden;
+      closeNavMenus();
       accountPopover.hidden = !open;
       accountTrigger.setAttribute("aria-expanded", open ? "true" : "false");
     });
@@ -435,14 +528,17 @@
       else if (!accountPopover.hidden) {
         accountPopover.hidden = true;
         accountTrigger.setAttribute("aria-expanded", "false");
+      } else {
+        closeNavMenus();
       }
     });
 
     document.addEventListener("click", function (event) {
-      if (!self.contains(event.target) && !accountPopover.hidden) {
-        accountPopover.hidden = true;
-        accountTrigger.setAttribute("aria-expanded", "false");
-      }
+      if (event.composedPath && event.composedPath().indexOf(self) !== -1) return;
+      closeNavMenus();
+      if (accountPopover.hidden) return;
+      accountPopover.hidden = true;
+      accountTrigger.setAttribute("aria-expanded", "false");
     });
   };
 
@@ -638,13 +734,22 @@
     var root = this.shadowRoot;
     var cartCount = Number(state.cartCount) || 0;
     var savedCount = Number(state.savedCount) || 0;
+    var signedIn = state.signedIn === true;
+    var accountName = String(state.accountName || "").trim();
+    var accountLabel = signedIn ? (accountName || "Signed in") : "Account";
     Array.prototype.forEach.call(root.querySelectorAll("[data-cart-count]"), function (node) { node.textContent = cartCount; });
     Array.prototype.forEach.call(root.querySelectorAll("[data-saved-count]"), function (node) { node.textContent = savedCount; });
     if (state.storeName) root.querySelector("[data-store-name]").textContent = state.storeName;
-    if (state.accountName) {
-      root.querySelector("[data-account-label]").textContent = state.accountName;
-      root.querySelector("[data-mobile-greeting]").textContent = "Howdy, " + state.accountName;
-    }
+    root.querySelector("[data-account-label]").textContent = accountLabel;
+    root.querySelector("[data-mobile-greeting]").textContent = signedIn
+      ? "Howdy, " + (accountName || "welcome back")
+      : "Howdy, welcome to Woodson";
+    Array.prototype.forEach.call(root.querySelectorAll(".wl-signin-state"), function (link) {
+      link.textContent = signedIn ? "My Account" : "Sign In";
+      link.href = signedIn ? WEBTRACK + "/Default.aspx?portal=1" : WEBTRACK + "/SignIn.aspx";
+    });
+    if (signedIn) this.setAttribute("data-signed-in", "");
+    else this.removeAttribute("data-signed-in");
   };
 
   window.customElements.define("woodson-unified-header", WoodsonUnifiedHeader);
