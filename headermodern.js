@@ -1,11 +1,14 @@
 (function () {
   "use strict";
 
-  window.WL_HEADER_BUILD = "20260723-tawk-commerce-assist-2";
+  window.WL_HEADER_BUILD = "20260810-unified-desktop-nav-1";
 
   var LOG = "[WL HeaderEnhancer]";
   var DEBUG = false; // Set to true only when actively troubleshooting.
-  var LOCATIONS_URL = "/Default.aspx?view=storelocations";
+  var MAIN_SITE = "https://www.woodsonlumber.com";
+  var WEBTRACK = "https://webtrack.woodsonlumber.com";
+  var LOCATIONS_URL = MAIN_SITE + "/stores";
+  var STATE_BRIDGE_MODE = /(?:^|[?&])wlHeaderBridge=1(?:&|$)/i.test(window.location.search || "") && window.parent !== window;
   // Keep the hosted filename neutral. Common privacy filters block filenames
   // associated with analytics, tracking, events, or commerce before execution.
   var ANALYTICS_URL = "https://ckunkel510.github.io/WL.github.io/wl-site.js?v=20260721-3";
@@ -19,6 +22,38 @@
   var CENTRAL_TIME_ZONE = "America/Chicago";
   var mobileMenuNameRequest = null;
   var shoppingCartDepartmentRequest = null;
+
+  var SHOP_LINKS = [
+    { label: "On Sale", href: WEBTRACK + "/Products.aspx?pl1=4518&pg=4518&sort=StockClassSort&direction=asc", featured: true },
+    { label: "Clearance", href: WEBTRACK + "/Products.aspx?pl1=4312&pg=4312&sort=StockClassSort&direction=asc", featured: true },
+    { label: "All Products", href: WEBTRACK + "/Products.aspx" },
+    { label: "Project Center", href: MAIN_SITE + "/project-center" },
+    { label: "Faucets", href: WEBTRACK + "/Products.aspx?pl1=24&pg=549&sort=StockClassSort&direction=asc" },
+    { label: "Building Materials", href: WEBTRACK + "/Products.aspx?pl1=4402&pg=4402&sort=StockClassSort&direction=asc" },
+    { label: "Lighting & Electrical", href: WEBTRACK + "/Products.aspx?pl1=16&pg=16&sort=StockClassSort&direction=asc" },
+    { label: "Outdoor Living", href: WEBTRACK + "/Products.aspx?pl1=2357&pg=2357&sort=StockClassSort&direction=asc" }
+  ];
+
+  var LOCATION_LINKS = [
+    { label: "All Locations", href: MAIN_SITE + "/stores", featured: true },
+    { label: "Brenham", href: MAIN_SITE + "/brenham" },
+    { label: "Bryan", href: MAIN_SITE + "/bryan" },
+    { label: "Buffalo", href: MAIN_SITE + "/buffalo" },
+    { label: "Caldwell", href: MAIN_SITE + "/caldwell" },
+    { label: "Groesbeck", href: MAIN_SITE + "/groesbeck" },
+    { label: "Lexington", href: MAIN_SITE + "/lexington" },
+    { label: "Mexia", href: MAIN_SITE + "/mexia" }
+  ];
+
+  var ABOUT_LINKS = [
+    { label: "Our History", href: MAIN_SITE + "/history" },
+    { label: "Services", href: MAIN_SITE + "/contractor-services" },
+    { label: "Careers", href: MAIN_SITE + "/employment" },
+    { label: "Community", href: MAIN_SITE + "/community" },
+    { label: "News & Events", href: MAIN_SITE + "/news-events" },
+    { label: "Brand", href: MAIN_SITE + "/brand" },
+    { label: "Contact Us", href: MAIN_SITE + "/contact-us" }
+  ];
 
   function debugLog() {
     if (!DEBUG || !window.console || typeof window.console.log !== "function") return;
@@ -581,7 +616,7 @@
 
       #brandingLogo > .UserContent {
         display: grid !important;
-        grid-template-columns: 170px auto minmax(0, 1fr);
+        grid-template-columns: 170px minmax(0, 1fr);
         align-items: center;
         gap: 18px;
         min-height: 72px;
@@ -713,13 +748,13 @@
       }
 
       #wlcheaderpromolinks {
-        gap: 7px;
+        display: none !important;
       }
 
       #wlcheaderquicklinks {
         justify-content: flex-end !important;
-        gap: 2px;
-        overflow: hidden;
+        gap: 0;
+        overflow: visible;
       }
 
       #wlcheaderpromolinks a {
@@ -751,20 +786,113 @@
         background: #f2f3f4 !important;
       }
 
-      #wlcheaderquicklinks .wl-header-locations-desktop {
-        min-height: 38px;
-        margin-right: 5px;
-        padding: 8px 12px !important;
-        color: #fff !important;
-        background: #6b0016 !important;
-        border-radius: 6px !important;
-        box-shadow: none;
+      #wlcheaderquicklinks > a {
+        display: none !important;
       }
 
-      #wlcheaderquicklinks .wl-header-locations-desktop:hover {
-        color: #fff !important;
-        background: #510010 !important;
-        transform: none;
+      #wl-desktop-primary-nav {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 5px;
+        width: 100%;
+        min-width: 0;
+        overflow: visible;
+      }
+
+      .wl-primary-menu {
+        position: relative;
+      }
+
+      #wl-desktop-primary-nav .wl-primary-trigger,
+      #wl-desktop-primary-nav .wl-primary-direct-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        min-height: 40px;
+        padding: 8px 11px !important;
+        border: 0;
+        border-radius: 5px !important;
+        background: #fff !important;
+        color: #222 !important;
+        font: 800 13px/1.2 Arial, Helvetica, sans-serif !important;
+        text-decoration: none !important;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+
+      #wl-desktop-primary-nav .wl-primary-trigger:hover,
+      #wl-desktop-primary-nav .wl-primary-trigger:focus-visible,
+      #wl-desktop-primary-nav .wl-primary-trigger[aria-expanded="true"],
+      #wl-desktop-primary-nav .wl-primary-direct-link:hover,
+      #wl-desktop-primary-nav .wl-primary-direct-link:focus-visible {
+        background: #f2f3f4 !important;
+        color: #6b0016 !important;
+      }
+
+      .wl-primary-trigger .fas {
+        font-size: 11px;
+        transition: transform 0.16s ease;
+      }
+
+      .wl-primary-trigger[aria-expanded="true"] .fas {
+        transform: rotate(180deg);
+      }
+
+      .wl-primary-panel {
+        position: absolute;
+        top: calc(100% + 7px);
+        left: 50%;
+        z-index: 180;
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 2px;
+        width: 250px;
+        padding: 8px;
+        transform: translateX(-50%);
+        background: #fff;
+        border: 1px solid #d9d9d9;
+        border-radius: 7px;
+        box-shadow: 0 14px 34px rgba(0,0,0,0.20);
+      }
+
+      .wl-primary-panel[hidden] {
+        display: none !important;
+      }
+
+      .wl-primary-panel a {
+        display: flex !important;
+        align-items: center;
+        min-height: 40px;
+        padding: 9px 10px !important;
+        border-radius: 4px !important;
+        background: #fff !important;
+        color: #222 !important;
+        font: 750 13px/1.2 Arial, Helvetica, sans-serif !important;
+        text-decoration: none !important;
+      }
+
+      .wl-primary-panel a:hover,
+      .wl-primary-panel a:focus-visible {
+        background: #f2f3f4 !important;
+        color: #6b0016 !important;
+      }
+
+      .wl-primary-panel .wl-primary-featured {
+        background: #fff7ce !important;
+        color: #111 !important;
+      }
+
+      .wl-primary-panel .wl-primary-featured:hover,
+      .wl-primary-panel .wl-primary-featured:focus-visible {
+        background: #f4c400 !important;
+        color: #111 !important;
+      }
+
+      .wl-primary-menu--locations .wl-primary-panel {
+        width: 330px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }
 
       #pageTitleHeader {
@@ -2606,6 +2734,76 @@
       .trim();
   }
 
+  function startHeaderStateBridge() {
+    var state = {
+      signedIn: false,
+      accountName: "",
+      cartCount: 0,
+      savedCount: 0,
+      storeName: ""
+    };
+    var tries = 0;
+    var accountHydrationStarted = false;
+
+    function readCount(root) {
+      var value = cleanLabel(root && root.textContent);
+      var match = value.match(/\d+/);
+      return match ? Number(match[0]) || 0 : 0;
+    }
+
+    function postState(update) {
+      Object.keys(update || {}).forEach(function (key) { state[key] = update[key]; });
+      window.parent.postMessage({ type: "WL_HEADER_STATE", payload: state }, "*");
+    }
+
+    function readVisibleState() {
+      var accountList = document.querySelector(".sticky-header .main-nav .menu-t1");
+      var cart = document.querySelector(".sticky-header a[href*='ShoppingCart.aspx'] .link-badge, .sticky-header a[href*='ShoppingCart.aspx']");
+      var saved = document.querySelector("#ctl00_MainMenu_QuickList_QuickListsButton .link-badge, #ctl00_MainMenu_QuickList_QuickListsButton");
+      var signedIn = !!(accountList && accountList.querySelector("a[href*='SignOut=1']"));
+
+      postState({
+        signedIn: signedIn,
+        cartCount: readCount(cart),
+        savedCount: readCount(saved),
+        storeName: detectStoreName() || state.storeName
+      });
+      return !!accountList;
+    }
+
+    function hydrateAccountName() {
+      if (accountHydrationStarted || !state.signedIn || typeof window.fetch !== "function") return;
+      accountHydrationStarted = true;
+
+      var cachedName = "";
+      try { cachedName = cleanLabel(window.sessionStorage.getItem("wlAccountDisplayName")); } catch (error) {}
+      if (cachedName) postState({ accountName: cachedName });
+
+      window.fetch("/AccountInfo_R.aspx", { credentials: "same-origin" })
+        .then(function (response) { return response.ok ? response.text() : ""; })
+        .then(function (html) {
+          if (!html) return;
+          var name = getAccountDisplayName(new DOMParser().parseFromString(html, "text/html"));
+          if (!name) return;
+          try { window.sessionStorage.setItem("wlAccountDisplayName", name); } catch (error) {}
+          postState({ accountName: name });
+        })
+        .catch(function () {});
+    }
+
+    document.documentElement.setAttribute("data-wl-header-state-bridge", "true");
+    if (readVisibleState()) hydrateAccountName();
+    fetchSelectedStore(function (storeName) { postState({ storeName: storeName }); });
+
+    var timer = window.setInterval(function () {
+      tries++;
+      if (readVisibleState() || tries >= 24) {
+        window.clearInterval(timer);
+        hydrateAccountName();
+      }
+    }, 250);
+  }
+
   function updateMobileMenuGreeting(menu, signedIn, accountName) {
     if (!menu) return;
 
@@ -2841,17 +3039,95 @@
     return changed;
   }
 
-  function addDesktopLocationsButton() {
+  function buildDesktopPrimaryNav() {
     var target = document.getElementById("wlcheaderquicklinks");
     if (!target) return false;
-    if (target.querySelector(".wl-header-locations-desktop")) return false;
+    if (document.getElementById("wl-desktop-primary-nav")) return false;
 
-    var a = document.createElement("a");
-    a.className = "wl-header-locations-desktop";
-    a.href = LOCATIONS_URL;
-    a.innerHTML = pinIconMarkup() + "<span>Locations</span>";
+    var nav = document.createElement("nav");
+    nav.id = "wl-desktop-primary-nav";
+    nav.setAttribute("aria-label", "Primary navigation");
 
-    target.insertAdjacentElement("afterbegin", a);
+    function closeMenus(except) {
+      nav.querySelectorAll(".wl-primary-trigger").forEach(function (trigger) {
+        if (trigger === except) return;
+        trigger.setAttribute("aria-expanded", "false");
+        var panel = document.getElementById(trigger.getAttribute("aria-controls"));
+        if (panel) panel.hidden = true;
+      });
+    }
+
+    function setMenuOpen(trigger, open) {
+      var panel = document.getElementById(trigger.getAttribute("aria-controls"));
+      if (!panel) return;
+      closeMenus(open ? trigger : null);
+      trigger.setAttribute("aria-expanded", open ? "true" : "false");
+      panel.hidden = !open;
+    }
+
+    function buildMenu(id, label, links, extraClass) {
+      var menu = document.createElement("div");
+      menu.className = "wl-primary-menu" + (extraClass ? " " + extraClass : "");
+
+      var trigger = document.createElement("button");
+      trigger.className = "wl-primary-trigger";
+      trigger.type = "button";
+      trigger.setAttribute("aria-expanded", "false");
+      trigger.setAttribute("aria-controls", id);
+      trigger.innerHTML = "<span></span><i class=\"fas fa-chevron-down\" aria-hidden=\"true\"></i>";
+      trigger.querySelector("span").textContent = label;
+
+      var panel = document.createElement("div");
+      panel.className = "wl-primary-panel";
+      panel.id = id;
+      panel.hidden = true;
+
+      links.forEach(function (item) {
+        var link = document.createElement("a");
+        if (item.featured) link.className = "wl-primary-featured";
+        link.href = item.href;
+        link.textContent = item.label;
+        panel.appendChild(link);
+      });
+
+      trigger.addEventListener("click", function () {
+        setMenuOpen(trigger, trigger.getAttribute("aria-expanded") !== "true");
+      });
+      trigger.addEventListener("keydown", function (event) {
+        if (event.key !== "ArrowDown") return;
+        event.preventDefault();
+        setMenuOpen(trigger, true);
+        var firstLink = panel.querySelector("a");
+        if (firstLink) firstLink.focus();
+      });
+      menu.addEventListener("focusout", function (event) {
+        if (!event.relatedTarget || !menu.contains(event.relatedTarget)) setMenuOpen(trigger, false);
+      });
+
+      menu.appendChild(trigger);
+      menu.appendChild(panel);
+      return menu;
+    }
+
+    nav.appendChild(buildMenu("wl-primary-shop", "Shop", SHOP_LINKS));
+    nav.appendChild(buildMenu("wl-primary-locations", "Locations", LOCATION_LINKS, "wl-primary-menu--locations"));
+    nav.appendChild(buildMenu("wl-primary-about", "About Woodson", ABOUT_LINKS));
+
+    var credit = document.createElement("a");
+    credit.className = "wl-primary-direct-link";
+    credit.href = MAIN_SITE + "/credit";
+    credit.textContent = "Credit";
+    nav.appendChild(credit);
+
+    document.addEventListener("click", function (event) {
+      if (!nav.contains(event.target)) closeMenus();
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.key !== "Escape") return;
+      closeMenus();
+    });
+
+    target.appendChild(nav);
     return true;
   }
 
@@ -2899,7 +3175,7 @@
       !!document.getElementById("barcode-scanner-container") &&
       !!document.getElementById("wl-store-hours") &&
       !!document.getElementById("wl-mobile-account-menu") &&
-      !!quick.querySelector(".wl-header-locations-desktop") &&
+      !!document.getElementById("wl-desktop-primary-nav") &&
       !!row.querySelector(".wl-header-locations-mobile");
   }
 
@@ -2916,7 +3192,7 @@
     changed = upgradeTopLinksAccessibility() || changed;
     changed = addStoreHours() || changed;
     changed = startStoreHoursTracking() || changed;
-    changed = addDesktopLocationsButton() || changed;
+    changed = buildDesktopPrimaryNav() || changed;
     changed = addMobileLocationsButton() || changed;
     changed = addBarcodeScanner() || changed;
 
@@ -2926,6 +3202,11 @@
       changed: changed,
       complete: isFullyEnhanced()
     };
+  }
+
+  if (STATE_BRIDGE_MODE) {
+    onReady(startHeaderStateBridge);
+    return;
   }
 
   loadAnalytics();
