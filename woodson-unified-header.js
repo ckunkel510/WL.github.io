@@ -9,7 +9,7 @@
   var assetBase = scriptUrl.slice(0, scriptUrl.lastIndexOf("/") + 1);
   var DATA_URL = assetBase + "webtrack-departments.json";
   var LOGO_URL = assetBase + "assets/woodson-built-on-quality-logo.png?v=rooftop-20260703";
-  var TURTLEBOX_PROMO_URL = assetBase + "TurtleboxPromo.js?v=20260707-1";
+  var TURTLEBOX_PROMO_URL = assetBase + "TurtleboxPromo.js?v=20260810-1";
   var WEBTRACK = "https://webtrack.woodsonlumber.com";
   var MAIN_SITE = "https://www.woodsonlumber.com";
 
@@ -271,6 +271,9 @@
   WoodsonUnifiedHeader.prototype.connectedCallback = function () {
     if (this.dataset.ready === "true") return;
     this.dataset.ready = "true";
+    if (this.parentElement && this.parentElement.getAttribute("data-testid") === "custom-element") {
+      this.parentElement.style.pointerEvents = "none";
+    }
     if (window.top !== window || (/woodsonlumber\.com$/i.test(window.location.hostname) && window.location.hostname !== "webtrack.woodsonlumber.com")) {
       this.setAttribute("data-wix", "");
     }
