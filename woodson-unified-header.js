@@ -10,6 +10,7 @@
   var DATA_URL = assetBase + "webtrack-departments.json";
   var LOGO_URL = assetBase + "assets/woodson-built-on-quality-logo.png?v=rooftop-20260703";
   var TURTLEBOX_PROMO_URL = assetBase + "TurtleboxPromo.js?v=20260810-1";
+  var MOBILE_MENU_URL = assetBase + "woodson-mobile-menu.html?v=20260810-1";
   var WEBTRACK = "https://webtrack.woodsonlumber.com";
   var MAIN_SITE = "https://www.woodsonlumber.com";
 
@@ -393,7 +394,17 @@
       accountTrigger.setAttribute("aria-expanded", open ? "true" : "false");
     });
 
-    menuButton.addEventListener("click", function () { self.setMobileMenuOpen(true); });
+    menuButton.addEventListener("click", function () {
+      if (self.hasAttribute("data-modal-bridge")) {
+        self.dispatchEvent(new CustomEvent("open-mobile-departments", {
+          bubbles: true,
+          composed: true,
+          detail: { url: MOBILE_MENU_URL }
+        }));
+        return;
+      }
+      self.setMobileMenuOpen(true);
+    });
     menuClose.addEventListener("click", function () { self.setMobileMenuOpen(false); });
     mobileDepartments.addEventListener("click", function () {
       self.setMobileMenuOpen(false, false);
