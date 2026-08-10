@@ -1,8 +1,23 @@
 (function () {
   "use strict";
 
-  var BUILD_VERSION = "20260707-1";
+  var BUILD_VERSION = "20260810-1";
   if (window.WLTurtleboxPromo && window.WLTurtleboxPromo.version === BUILD_VERSION) return;
+
+  function isWixEditorFrame() {
+    var path = window.location.pathname || "";
+    return /CustomElementPreviewIframe/i.test(path) ||
+      (window.self !== window.top && !!document.getElementById("wix-internal-id"));
+  }
+
+  if (isWixEditorFrame()) {
+    window.WLTurtleboxPromo = {
+      version: BUILD_VERSION,
+      active: false,
+      editorSuppressed: true
+    };
+    return;
+  }
 
   var PROMO_END = "2026-09-01T00:00:00-05:00";
   var POPUP_COOLDOWN_MS = 48 * 60 * 60 * 1000;
@@ -70,6 +85,7 @@
         background: #fff7eb;
         border-top: 1px solid #ead9c7;
         border-bottom: 1px solid #ead9c7;
+        pointer-events: auto;
       }
 
       #wl-turtlebox-header-promo > a {
