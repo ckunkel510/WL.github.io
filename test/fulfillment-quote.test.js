@@ -133,3 +133,22 @@ test("returns a manual freight result when neither automatic method is possible"
   assert.equal(result.recommendation.mode, "manual");
   assert.equal(result.recommendation.amount, null);
 });
+
+test("keeps supplied cart weight for Woodson delivery when UPS is unavailable", async () => {
+  const body = baseBody();
+  delete body.cart;
+  body.packages = [{ weight: 25000.01, length: 48, width: 12, height: 12 }];
+  let deliveryWeight = 0;
+  const result = await buildFulfillmentQuote(body, {
+    requestRates: async () => { throw new Error("UPS unavailable"); },
+    quoteWoodsonDelivery: async (input) => {
+      deliveryWeight = input.totalWeight;
+      return { available: true, mode: "delivery", amount: 50, currency: "USD", serviceCode: "03", serviceName: "Woodson Local Delivery", billingWeight: input.totalWeight };
+    },
+    storeFulfillmentClaim: async () => ({ ok: true })
+  });
+  assert.equal(deliveryWeight, 25000.01);
+  assert.equal(result.packageProfile.totalWeight, 25000.01);
+  assert.equal(result.recommendation.mode, "delivery");
+  assert.equal(result.recommendation.amount, 50);
+});

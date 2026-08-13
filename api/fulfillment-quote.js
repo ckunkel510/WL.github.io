@@ -190,13 +190,13 @@ async function buildFulfillmentQuote(body, dependencies = {}) {
   }
 
   if (!rates.length && suppliedPackages.length) {
+    packages = suppliedPackages;
+    totalWeight = totalWeight || packageWeight(suppliedPackages);
     try {
       const rated = await rateRequest({ shipFrom: body.shipFrom, shipTo: body.shipTo, packages: suppliedPackages });
-      packages = suppliedPackages;
       rates = (Array.isArray(rated?.rates) ? rated.rates : [])
         .map((rate) => ({ ...rate, amount: money(rate.amount) }))
         .filter((rate) => rate.amount > 0);
-      totalWeight = totalWeight || packageWeight(suppliedPackages);
     } catch (error) {
       upsFailure = cleanText(error?.message || "UPS rating was unavailable.", 180);
     }
