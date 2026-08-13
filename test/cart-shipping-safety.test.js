@@ -164,6 +164,101 @@ test("cart UPS requests no longer send browser-controlled promotion eligibility"
   assert.match(cart, /UpsShippingOffer\.js/);
 });
 
+test("saved for later waits for WebTrack's dynamic Quicklist action", async () => {
+  const savedForLater = source("SavedForLater.js");
+  const bundle = source("wl-shoppingcart.bundle.js");
+  const findSavedForLaterLink = extractedFunction(savedForLater, "findSavedForLaterLink");
+  const waitForSavedForLaterLink = extractedFunction(savedForLater, "waitForSavedForLaterLink", {
+    findSavedForLaterLink
+  });
+  const stableLink = { id: "ctl00_QuickList_QuickListRepeater_ctrl0_QuickListAddButton" };
+  const fallbackLink = { textContent: " Add to Saved For Later " };
+
+  assert.equal(findSavedForLaterLink({
+    querySelector: () => stableLink,
+    querySelectorAll: () => []
+  }), stableLink);
+  assert.equal(findSavedForLaterLink({
+    querySelector: () => null,
+    querySelectorAll: () => [{ textContent: "Other" }, fallbackLink]
+  }), fallbackLink);
+
+  let menuOpened = 0;
+  let dynamicLink = null;
+  const quicklistToggle = {
+    click: () => {
+      menuOpened += 1;
+      setTimeout(() => { dynamicLink = stableLink; }, 0);
+    }
+  };
+  const resolvedLink = await waitForSavedForLaterLink({
+    querySelector: (selector) => selector.includes("QuickListAddButton") ? dynamicLink : quicklistToggle,
+    querySelectorAll: () => []
+  }, 500);
+  assert.equal(resolvedLink, stableLink);
+  assert.equal(menuOpened, 1);
+
+  for (const implementation of [savedForLater, bundle]) {
+    assert.match(implementation, /waitForSavedForLaterLink\(doc/);
+    assert.match(implementation, /quicklistToggle\.click\(\)/);
+    assert.match(implementation, /if \(submissionStarted\)/);
+    assert.match(implementation, /Saved For Later postback did not return to the product page/);
+    assert.doesNotMatch(implementation, /Give it time to complete, then cleanup/);
+  }
+});
+
+test("saved for later resolves only after WebTrack completes its postback", async () => {
+  const savedForLater = source("SavedForLater.js");
+  const eventTarget = { value: "" };
+  const eventArgument = { value: "pending" };
+  let iframe;
+  let postbackLoaded = false;
+  let iframeRemoved = false;
+
+  const productDocument = {
+    forms: [{
+      querySelector: (selector) => selector.includes("__EVENTTARGET") ? eventTarget : eventArgument,
+      submit: () => {
+        setTimeout(() => {
+          postbackLoaded = true;
+          iframe.onload();
+        }, 0);
+      }
+    }]
+  };
+  const body = {
+    appendChild: (node) => {
+      iframe = node;
+      node.parentNode = body;
+      setTimeout(() => node.onload(), 0);
+    },
+    removeChild: (node) => {
+      node.parentNode = null;
+      iframeRemoved = true;
+    }
+  };
+  const addToQuicklist = extractedFunction(savedForLater, "addToQuicklist", {
+    document: {
+      body,
+      createElement: () => ({
+        style: {},
+        contentDocument: productDocument,
+        contentWindow: { document: productDocument, location: { pathname: "/ProductDetail.aspx" } }
+      })
+    },
+    waitForSavedForLaterLink: async () => ({
+      getAttribute: () => "javascript:__doPostBack('savedForLaterTarget','')"
+    }),
+    console: { log: () => {}, error: () => {} }
+  });
+
+  await addToQuicklist("6698");
+  assert.equal(postbackLoaded, true);
+  assert.equal(eventTarget.value, "savedForLaterTarget");
+  assert.equal(eventArgument.value, "");
+  assert.equal(iframeRemoved, true);
+});
+
 test("the advertised SummerChill26 bridge remains separate from automatic offers", () => {
   const promo = source("UpsShippingPromo.js");
   const offer = source("UpsShippingOffer.js");

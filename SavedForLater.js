@@ -1026,60 +1026,130 @@ async function removeCartItem(eventTarget) {
   }
 }
 
+function findSavedForLaterLink(doc) {
+  return doc.querySelector('a[id$="_QuickList_QuickListRepeater_ctrl0_QuickListAddButton"]') ||
+    Array.from(doc.querySelectorAll("a")).find(
+      a => a.textContent?.trim() === "Add to Saved For Later"
+    );
+}
+
+function waitForSavedForLaterLink(doc, timeoutMs = 6000) {
+  return new Promise((resolve, reject) => {
+    const startedAt = Date.now();
+    let openedQuicklist = false;
+
+    const check = () => {
+      const link = findSavedForLaterLink(doc);
+      if (link) {
+        resolve(link);
+        return;
+      }
+
+      // product-sidebar.js moves the Quicklist controls after the iframe's
+      // load event. Opening the menu lets WebTrack finish rendering its item.
+      if (!openedQuicklist) {
+        const quicklistToggle = doc.querySelector('a[id$="_QuickList_QuickListLink"]');
+        if (quicklistToggle) {
+          openedQuicklist = true;
+          try { quicklistToggle.click(); } catch (e) {}
+        }
+      }
+
+      if (Date.now() - startedAt >= timeoutMs) {
+        reject(new Error("Could not find 'Add to Saved For Later' after Quicklist finished loading."));
+        return;
+      }
+
+      setTimeout(check, 100);
+    };
+
+    check();
+  });
+}
+
 function addToQuicklist(productId) {
   console.log(`[SFL] Attempting to add ProductID ${productId} to Saved For Later...`);
 
   return new Promise((resolve, reject) => {
     const iframe = document.createElement("iframe");
+    let settled = false;
+    let submissionStarted = false;
+
+    const cleanup = () => {
+      iframe.onload = null;
+      iframe.onerror = null;
+      if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+    };
+
+    const finish = (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(totalTimeout);
+      cleanup();
+      if (err) {
+        console.error("[SFL] Error in addToQuicklist via iframe:", err);
+        reject(err);
+      } else {
+        resolve();
+      }
+    };
+
+    const totalTimeout = setTimeout(() => {
+      finish(new Error("Saved For Later request timed out."));
+    }, 12000);
+
     iframe.style.display = "none";
     iframe.src = `/ProductDetail.aspx?pid=${productId}`;
-    document.body.appendChild(iframe);
+    iframe.onerror = () => finish(new Error("Could not load the product detail page."));
+    iframe.onload = async () => {
+      if (submissionStarted) {
+        try {
+          const responsePath = iframe.contentWindow?.location?.pathname || "";
+          if (!/ProductDetail\.aspx/i.test(responsePath)) {
+            throw new Error("Saved For Later postback did not return to the product page.");
+          }
+          console.log(`[SFL] Product ${productId} was added to the quicklist.`);
+          finish();
+        } catch (err) {
+          finish(err);
+        }
+        return;
+      }
 
-    iframe.onload = () => {
       try {
         const doc = iframe.contentDocument || iframe.contentWindow.document;
+        console.log("[SFL] Product detail iframe loaded; waiting for Quicklist controls.");
 
-        console.log("[SFL] Product detail iframe loaded.");
+        const link = await waitForSavedForLaterLink(doc);
+        if (settled) return;
 
-        const link = Array.from(doc.querySelectorAll("a")).find(
-          a => a.textContent?.trim() === "Add to Saved For Later"
-        );
-
-        if (!link) {
-          throw new Error("Could not find 'Add to Saved For Later' link in iframe.");
-        }
-
-        const href = link.getAttribute("href");
+        const href = link.getAttribute("href") || "";
         const match = href.match(/__doPostBack\('([^']+)'/);
-
         if (!match || !match[1]) {
           throw new Error("Could not extract __doPostBack target.");
         }
 
-        const postbackTarget = match[1];
-        console.log(`[SFL] Found __EVENTTARGET: ${postbackTarget}`);
-
         const form = doc.forms[0];
         if (!form) throw new Error("Form not found in iframe.");
 
-        form.__EVENTTARGET.value = postbackTarget;
-        form.__EVENTARGUMENT.value = "";
+        const eventTarget = form.querySelector('input[name="__EVENTTARGET"]');
+        const eventArgument = form.querySelector('input[name="__EVENTARGUMENT"]');
+        if (!eventTarget || !eventArgument) {
+          throw new Error("WebTrack postback fields were not found.");
+        }
 
+        eventTarget.value = match[1];
+        eventArgument.value = "";
+        submissionStarted = true;
         form.submit();
 
         console.log(`[SFL] Submitted postback to add product ${productId} to quicklist.`);
-
-        // Give it time to complete, then cleanup
-        setTimeout(() => {
-          document.body.removeChild(iframe);
-          resolve();
-        }, 1500); // Adjust timing if needed
       } catch (err) {
-        console.error("[SFL] Error in addToQuicklist via iframe:", err);
-        document.body.removeChild(iframe);
-        reject(err);
+        finish(err);
       }
     };
+
+    document.body.appendChild(iframe);
   });
 }
 
@@ -1138,7 +1208,6 @@ if (document.readyState === "loading") {
   startSavedForLater();
 }
 })();                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
-
 
 
 
