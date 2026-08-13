@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var BUILD_VERSION = "20260813-unified-fulfillment-1";
+  var BUILD_VERSION = "20260813-unified-fulfillment-2";
   var RATE_URL = "https://wl-upsrates.vercel.app/api/fulfillment-quote";
   var PRODUCT_DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSg6EOqMwc_5UjWU7ycyvF-rgj717p-WjV2Vhydcb7uc2Mf2Awj6GehQp66AHwViq4uX6mXXrtZZR-1/pub?output=csv";
   var STORAGE_KEY = "wl_shipping_offer_v1";
@@ -146,7 +146,8 @@
 
   function selectedOrigin() {
     var locationText = text(Array.prototype.filter.call(document.querySelectorAll("a[href]"), function (link) {
-      return String(link.getAttribute("href") || "").toLowerCase().indexOf("storelocations") !== -1;
+      var href = String(link.getAttribute("href") || "").toLowerCase();
+      return href.indexOf("storelocations") !== -1 || /woodsonlumber\.com\/stores(?:[/?#]|$)/.test(href);
     }).map(function (link) { return link.textContent; }).join(" ")).toLowerCase();
     var key = Object.keys(STORE_ORIGINS).find(function (name) { return locationText.indexOf(name) !== -1; });
     var origin = key ? STORE_ORIGINS[key] : null;
