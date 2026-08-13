@@ -86,6 +86,17 @@ test("prefers Woodson for bulky or unknown packages inside a delivery area", () 
   assert.equal(result.reason, "bulky-or-unknown-parcel");
 });
 
+test("requires freight help instead of offering UPS for a bulky item outside delivery areas", () => {
+  const result = recommendFulfillment({
+    ups: { available: true, amount: 308.19 },
+    delivery: { available: false, reason: "outside-delivery-area" },
+    easyParcel: false,
+    threshold: 10
+  });
+  assert.equal(result.mode, "manual");
+  assert.equal(result.reason, "bulky-outside-delivery-area");
+});
+
 test("identifies the conservative easy-parcel threshold", () => {
   assert.equal(isEasyParcel([{ weight: 50, length: 48, width: 12, height: 12 }]), true);
   assert.equal(isEasyParcel([{ weight: 51, length: 12, width: 8, height: 6 }]), false);
@@ -118,6 +129,20 @@ test("falls back to Woodson when UPS packing cannot handle a lumber-size item", 
   assert.equal(result.options.ups.available, false);
   assert.equal(result.recommendation.mode, "delivery");
   assert.equal(result.recommendation.amount, 25);
+});
+
+test("does not offer a carrier-rated 8-foot board as a UPS shipment", async () => {
+  const result = await buildFulfillmentQuote(baseBody(), {
+    requestRates: upsRate(308.19),
+    getCatalogProducts: async () => catalog({ weight: 10.67, length: 96, width: 4, height: 2 }),
+    shippingPolicy: policy,
+    quoteWoodsonDelivery: async () => ({ available: false, reason: "outside-delivery-area" }),
+    storeFulfillmentClaim: async () => ({ ok: true })
+  });
+  assert.equal(result.options.ups.available, false);
+  assert.equal(result.options.ups.reason, "not-easy-parcel");
+  assert.equal(result.recommendation.mode, "manual");
+  assert.equal(result.recommendation.amount, null);
 });
 
 test("returns a manual freight result when neither automatic method is possible", async () => {

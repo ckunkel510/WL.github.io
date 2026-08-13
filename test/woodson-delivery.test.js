@@ -48,6 +48,18 @@ test("calculates the positive Brenham charge by cart weight", () => {
   assert.equal(quote.area.areaCode, "01/000-10");
 });
 
+test("uses the destination delivery area even when the account selected another store", () => {
+  const area = rules.areas.find((item) => item.branchCode === "01" && item.areaCode.endsWith("000-10"));
+  const center = [
+    area.polygons[0].reduce((sum, point) => sum + point[0], 0) / area.polygons[0].length,
+    area.polygons[0].reduce((sum, point) => sum + point[1], 0) / area.polygons[0].length
+  ];
+  const quote = quoteAtCoordinates({ shipFrom: { postalCode: "77836" }, coordinates: center, totalWeight: 10.67 });
+  assert.equal(quote.available, true);
+  assert.equal(quote.amount, 25);
+  assert.equal(quote.area.branchCode, "01");
+});
+
 test("uses the minimum positive tier when delivery weight is unavailable", () => {
   const area = rules.areas.find((item) => item.branchCode === "01" && item.areaCode.endsWith("000-10"));
   const rate = rateForWeight(area, 0);

@@ -93,21 +93,20 @@ function rateForWeight(area, totalWeight) {
   return amount > 0 ? { amount, weight, weightBasis: hasTrustedWeight ? "trusted" : "minimum-tier" } : null;
 }
 
-function matchingAreas(point, origin) {
-  const branchCode = branchCodeForOrigin(origin);
-  const candidates = branchCode
-    ? deliveryRules.areas.filter((area) => area.branchCode === branchCode)
-    : deliveryRules.areas;
-  return candidates.filter((area) => area.polygons.some((polygon) => pointInPolygon(point, polygon)));
+function matchingAreas(point) {
+  return deliveryRules.areas.filter((area) => area.polygons.some((polygon) => pointInPolygon(point, polygon)));
 }
 
 function quoteAtCoordinates({ shipFrom, coordinates, totalWeight }) {
   const point = coordinatePair(coordinates);
   if (!point) return { available: false, reason: "coordinates-unavailable" };
-  const matches = matchingAreas(point, shipFrom)
+  const preferredBranch = branchCodeForOrigin(shipFrom);
+  const matches = matchingAreas(point)
     .map((area) => ({ area, rate: rateForWeight(area, totalWeight) }))
     .filter((item) => item.rate)
-    .sort((left, right) => left.rate.amount - right.rate.amount || left.area.areaId - right.area.areaId);
+    .sort((left, right) => left.rate.amount - right.rate.amount ||
+      Number(right.area.branchCode === preferredBranch) - Number(left.area.branchCode === preferredBranch) ||
+      left.area.areaId - right.area.areaId);
   if (!matches.length) return { available: false, reason: "outside-delivery-area" };
   const selected = matches[0];
   return {
