@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20260813-unified-fulfillment-1";
+  window.WL_CHECKOUT_BUILD = "20260813-unified-fulfillment-2";
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
   const UPS_SHIPPING_ENABLED = true;
