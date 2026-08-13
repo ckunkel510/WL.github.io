@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { legacyPromotionInput, parseLegacyXml, soapSuccessXml, successXml, toOAuthRequest } = require("../api/rate")._test;
+const { fulfillmentResult, legacyPromotionInput, parseLegacyXml, safePositiveRates, soapSuccessXml, successXml, toOAuthRequest } = require("../api/rate")._test;
 
 const requestXml = `<?xml version="1.0"?>
 <AccessRequest>
@@ -127,4 +127,25 @@ test("returns a UPS Rate v1.1 SOAP response", () => {
   assert.match(xml, /<common:ResponseStatus>/);
   assert.match(xml, /<rate:Code>03<\/rate:Code>/);
   assert.match(xml, /<rate:MonetaryValue>12\.34<\/rate:MonetaryValue>/);
+});
+
+test("converts a Woodson fulfillment claim into a legacy-compatible positive rate", () => {
+  const result = fulfillmentResult({
+    totalWeight: 1200,
+    recommendation: { mode: "delivery" },
+    rates: [{ serviceCode: "03", serviceName: "Woodson Local Delivery", amount: 25, currency: "USD" }]
+  });
+  assert.equal(result.rates[0].serviceName, "Woodson Local Delivery");
+  assert.equal(result.rates[0].amount, 25);
+});
+
+test("drops zero and negative rates unless an explicit promotion is later applied", () => {
+  const result = safePositiveRates({
+    rates: [
+      { serviceCode: "03", amount: -25 },
+      { serviceCode: "02", amount: 0 },
+      { serviceCode: "12", amount: 15 }
+    ]
+  });
+  assert.deepEqual(result.rates.map((rate) => rate.amount), [15]);
 });

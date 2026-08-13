@@ -94,7 +94,7 @@ $(function(){
       localStorage.setItem(SHIPPING_QUOTE_KEY, JSON.stringify({
         signature: signature,
         kind: method === "ship" ? "ups" : "local-delivery",
-        label: method === "ship" ? (serviceLabel || "UPS shipping") : "Estimated delivery",
+        label: method === "ship" ? (serviceLabel || "UPS shipping") : "Woodson Local Delivery",
         amount: amount,
         postalCode: method === "ship" ? postalCode.slice(0, 5) : "",
         ts: Date.now()
@@ -197,7 +197,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     var $ship = $(
       '<div class="card shipping-card shadow-sm mb-4">' +
-        '<div class="card-header bg-light"><strong>' + (fulfillmentMethod === 'ship' ? 'UPS Shipping Speed' : 'Delivery Method') + '</strong></div>' +
+        '<div class="card-header bg-light"><strong>' + (fulfillmentMethod === 'ship' ? 'UPS Shipping Speed' : 'Woodson Local Delivery') + '</strong></div>' +
         '<div class="card-body">' +
           '<div class="delivery-summary text-muted small mb-2"></div>' +
           '<div class="delivery-pills d-flex flex-wrap mb-2"></div>' +
@@ -365,12 +365,21 @@ document.addEventListener('DOMContentLoaded', function () {
 
     let method = "";
     try { method = sessionStorage.getItem(METHOD_KEY) || ""; } catch {}
-    // UPS shipping must remain on this screen so the customer can choose a speed
-    // and see the estimated arrival. Only pickup/local-delivery no-choice screens skip.
+    // UPS shipping must remain on this screen so the customer can choose a speed.
+    // Woodson delivery uses the unified rate bridge and returns one recommended rate,
+    // so the default option can be accepted without asking the customer to choose speed.
     if (method !== "pickup" && method !== "delivery") return;
 
+    if (method === "delivery") {
+      const options = document.querySelector("#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList");
+      if (options && options.options.length) {
+        options.selectedIndex = 0;
+        try { options.dispatchEvent(new Event("change", { bubbles: true })); } catch {}
+      }
+    }
+
     const continueButton = document.getElementById(CONTINUE_ID);
-    if (!continueButton || hasShippingChoice()) return;
+    if (!continueButton || (method === "pickup" && hasShippingChoice())) return;
 
     window.__wlPickupShippingAutoAdvance = true;
     addPickupProgress();

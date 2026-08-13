@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20260722-texas-delivery-1";
+  window.WL_CHECKOUT_BUILD = "20260813-unified-fulfillment-1";
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
   const UPS_SHIPPING_ENABLED = true;
@@ -54,8 +54,11 @@
   // ---------------------------------------------------------------------------
   function getDeliveredSelected() {
     const el = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbDelivered");
-    if (el && el.checked) return true;
     const ups = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbUPSDelivery");
+    const intent = getFulfillmentIntent();
+    if (intent === "delivery" && ((el && el.checked) || (ups && ups.checked))) return true;
+    if (intent === "ship" && ups && ups.checked) return true;
+    if (el && el.checked) return true;
     if (ups && ups.checked) return true;
     // Fallback: modern selector buttons (no radio checked yet)
     try {
@@ -268,7 +271,7 @@
   function isShippingIntent() {
     if (!UPS_SHIPPING_ENABLED) return false;
     const ups = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbUPSDelivery");
-    return getFulfillmentIntent() === "ship" || !!(ups && ups.checked);
+    return getFulfillmentIntent() === "ship" || (!getFulfillmentIntent() && !!(ups && ups.checked));
   }
 
   function isSinglePageCheckout() {
@@ -3219,7 +3222,9 @@ document.addEventListener("click", function (ev) {
             const t2 = deliveryDiv.querySelector('input[name="deliveryTime"]:checked');
             baseText = "Delivery on " + d2 + (t2 ? " (" + t2.value + ")" : "");
           } else {
-            baseText = "Ship via UPS; shipping speed and estimated arrival selected on the next screen.";
+            baseText = getFulfillmentIntent() === "delivery"
+              ? "Woodson Local Delivery; delivery charge calculated from the selected address and cart weight."
+              : "Ship via UPS; shipping speed and estimated arrival selected on the next screen.";
           }
         }
 
@@ -3511,16 +3516,16 @@ document.addEventListener("click", function (ev) {
                 <span class="wl-option-meta">Choose a Woodson store</span>
                 <span class="wl-option-tag">Free</span>
               </button>
-              <button type="button" id="btnDelivered" class="btn btn-primary" data-mode="delivery" data-value="rbDelivered">
-                <span class="wl-option-label"><i class="fas fa-truck"></i> Local Delivery</span>
-                <span class="wl-option-meta">Woodson delivery in Texas</span>
-                <span class="wl-option-tag" data-wl-delivery-tag>Texas address</span>
+              <button type="button" id="btnDelivered" class="btn btn-primary" data-mode="delivery" data-value="rbUPSDelivery">
+                <span class="wl-option-label"><i class="fas fa-truck"></i> Delivered by Woodson</span>
+                <span class="wl-option-meta">Local delivery to your address</span>
+                <span class="wl-option-tag" data-wl-delivery-tag>Checking address</span>
               </button>
               ${hasNativeUps ? `
               <button type="button" id="btnShip" class="btn btn-secondary" data-mode="ship" data-value="rbUPSDelivery">
                 <span class="wl-option-label"><i class="fas fa-shipping-fast"></i> Ship via UPS</span>
-                <span class="wl-option-meta">UPS service nationwide</span>
-                <span class="wl-option-tag" data-wl-ship-tag>Rates at checkout</span>
+                <span class="wl-option-meta">Shipped to your address</span>
+                <span class="wl-option-tag" data-wl-ship-tag>Checking cart</span>
               </button>` : ""}
             </div>`;
           $(".epi-form-col-single-checkout:has(.SaleTypeSelector)").append(shipHTML);
@@ -3606,6 +3611,15 @@ document.addEventListener("click", function (ev) {
           ]);
           let addressAwareTimer = null;
           let addressAwareUpdating = false;
+
+          function currentFulfillmentQuote() {
+            try {
+              const quote = window.WLShippingOffer && typeof window.WLShippingOffer.current === "function"
+                ? window.WLShippingOffer.current()
+                : JSON.parse(sessionStorage.getItem("wl_shipping_offer_v1") || "null");
+              return quote && Date.now() - Number(quote.ts || 0) < 15 * 60 * 1000 ? quote : null;
+            } catch { return null; }
+          }
 
           function cleanStateValue(value) {
             return String(value || "").replace(/\s+/g, " ").trim();
@@ -3795,7 +3809,36 @@ document.addEventListener("click", function (ev) {
             const $shipTag = $ship.find("[data-wl-ship-tag]");
 
             try {
-              if (region === "outside") {
+              const quote = currentFulfillmentQuote();
+              const deliveryOption = quote && quote.options && quote.options.delivery;
+              const upsOption = quote && quote.options && quote.options.ups;
+              const recommendedMode = quote && quote.recommendation && quote.recommendation.mode;
+              const deliveryAvailable = !!(deliveryOption && deliveryOption.available);
+              const upsAvailable = !!(upsOption && upsOption.available);
+
+              if (quote) {
+                $delivery.toggle(deliveryAvailable);
+                $ship.toggle(upsAvailable);
+                $deliveryTag.text(deliveryAvailable
+                  ? "$" + Number(deliveryOption.amount || 0).toFixed(2) + (recommendedMode === "delivery" ? " · Recommended" : "")
+                  : "Not available");
+                $shipTag.text(upsAvailable
+                  ? "$" + Number(upsOption.amount || 0).toFixed(2) + (recommendedMode === "ship" ? " · Recommended" : "")
+                  : "Not available");
+                const intent = getFulfillmentIntent();
+                if (!deliveryAvailable && intent === "delivery") {
+                  updateShippingStyles(upsAvailable ? "ship" : "", { silent: true, reason: "delivery-unavailable" });
+                } else if (!upsAvailable && intent === "ship") {
+                  updateShippingStyles(deliveryAvailable ? "delivery" : "", { silent: true, reason: "ups-unavailable" });
+                } else if (!intent && (recommendedMode === "ship" || recommendedMode === "delivery")) {
+                  updateShippingStyles(recommendedMode, { silent: true, reason: "recommended-fulfillment" });
+                }
+                if (!deliveryAvailable && !upsAvailable) {
+                  showOutOfStateMessage("This order needs a freight quote. Pickup is still available; please contact Woodson for delivery help.", "warning");
+                } else {
+                  showOutOfStateMessage("Rates are based on your cart and address. " + (recommendedMode === "delivery" ? "Woodson Delivery is recommended." : "UPS Shipping is recommended."), "");
+                }
+              } else if (region === "outside") {
                 $delivery.hide();
                 if ($ship.length) {
                   $ship.show();
@@ -3829,13 +3872,13 @@ document.addEventListener("click", function (ev) {
                 }
               } else if (region === "texas") {
                 $delivery.show();
-                $deliveryTag.text("Texas option");
-                $shipTag.text("UPS option");
+                $deliveryTag.text("Checking delivery area");
+                $shipTag.text("Checking UPS rate");
                 showOutOfStateMessage("", "");
               } else {
                 $delivery.show();
-                $deliveryTag.text("Texas addresses");
-                $shipTag.text("UPS option");
+                $deliveryTag.text("Enter address");
+                $shipTag.text("Enter address");
                 showOutOfStateMessage("", "");
               }
               try { window.WLCheckout?.refreshSectionSummaries?.(); } catch {}
@@ -3919,8 +3962,8 @@ document.addEventListener("click", function (ev) {
 
               // Select the underlying WebTrack radio (may cause an UpdatePanel postback)
               try {
-                if (isDelivered && delRad.length && !delRad.is(":checked")) {
-                  delRad.prop("checked", true).trigger("click").trigger("change");
+                if (isDelivered && upsRad.length && !upsRad.is(":checked")) {
+                  upsRad.prop("checked", true).trigger("click").trigger("change");
                 } else if (isShip && upsRad.length && !upsRad.is(":checked")) {
                   upsRad.prop("checked", true).trigger("click").trigger("change");
                 } else if (isPickup && pickRad.length && !pickRad.is(":checked")) {
@@ -3961,7 +4004,7 @@ document.addEventListener("click", function (ev) {
             } catch {}
           }, 700);
 
-          $(document).on("click", ".modern-shipping-selector button", function (event) {
+          $(document).on("click", ".modern-shipping-selector button", async function (event) {
             const mode = $(this).data("mode");
             if (mode === "delivery" && addressRegion() === "outside") {
               event.preventDefault();
@@ -3969,12 +4012,21 @@ document.addEventListener("click", function (ev) {
               updateAddressAwareOptions();
               return false;
             }
+            if ((mode === "delivery" || mode === "ship") && window.WLShippingOffer?.select) {
+              event.preventDefault();
+              const saved = await window.WLShippingOffer.select(mode);
+              if (!saved) {
+                showOutOfStateMessage("That rate could not be reserved. Please recheck the address and try again.", "warning");
+                return false;
+              }
+            }
             updateShippingStyles(mode);
           });
 
           $(document).on("change", "#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList, #ctl00_PageBody_InvoiceAddress_CountySelector_CountyList", scheduleAddressAwareOptions);
           try {
             document.addEventListener("wl:checkout-address-updated", scheduleAddressAwareOptions);
+            document.addEventListener("wl:shipping-offer-change", scheduleAddressAwareOptions);
             document.addEventListener("change", function (event) {
               if (shouldRefreshAddressRegion(event.target)) scheduleAddressAwareOptions();
             }, true);
