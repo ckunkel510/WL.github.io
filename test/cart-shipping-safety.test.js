@@ -128,6 +128,15 @@ test("delivery options display the server-returned rate without a browser-side f
   assert.match(delivery, /cost = rawCost/);
 });
 
+test("automatic package planning cannot create a non-promo free Ground rate", () => {
+  const rates = source("api/ups-rates.js");
+  const bridge = source("api/rate.js");
+  assert.match(rates, /only an explicit,[\s\S]*validated promotion may reduce a checkout rate to zero/);
+  assert.match(rates, /shippingOffer:\s*\{[\s\S]*applied:\s*false/);
+  assert.doesNotMatch(bridge, /applyShippingOfferToRates/);
+  assert.match(bridge, /applyFreeGroundPromotion/);
+});
+
 test("cart UPS requests no longer send browser-controlled promotion eligibility", () => {
   const cart = source("WoodsonShoppingCart.js");
   assert.doesNotMatch(cart, /promo:\s*promo/);

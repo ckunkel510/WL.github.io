@@ -6,9 +6,7 @@ const zipcodes = require("zipcodes");
 const { RequestError, requestRates } = require("./ups-rates")._internal;
 const { applyFreeGroundPromotion, cartHasEligibleProduct, promoCodeMatches } = require("./shipping-promotions");
 const { findPromoClaim, storePromoClaim } = require("./shipping-promo-sessions");
-const { findShippingOffer } = require("./shipping-offer-sessions");
 const { findFulfillmentClaim } = require("./fulfillment-sessions");
-const { applyShippingOfferToRates, evaluateShippingOffer, policyFromEnv } = require("./shipping-policy");
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -451,38 +449,11 @@ async function handler(req, res) {
     const translated = toOAuthRequest(rating);
     const fulfillmentClaim = await findFulfillmentClaim(translated.body);
     let result = fulfillmentResult(fulfillmentClaim);
-    const storedOffer = await findShippingOffer(translated.body);
-    const rateBody = storedOffer?.packages?.length
-      ? { ...translated.body, packages: storedOffer.packages }
+    const rateBody = fulfillmentClaim?.packages?.length
+      ? { ...translated.body, packages: fulfillmentClaim.packages }
       : translated.body;
     const rated = result ? null : await requestRates(rateBody);
     if (!result) result = rated;
-    if (!fulfillmentClaim && storedOffer?.basis && storedOffer?.policy && policyFromEnv().configured) {
-      const ground = rated.rates.find((rate) => String(rate.serviceCode || "") === "03");
-      if (ground && Number.isFinite(Number(ground.amount))) {
-        const decision = evaluateShippingOffer({
-          lines: [{
-            quantity: 1,
-            price: storedOffer.basis.merchandiseRevenue,
-            averageCost: storedOffer.basis.rawCogs
-          }],
-          groundCost: Number(ground.amount),
-          packageCount: storedOffer.basis.packageCount,
-          policy: storedOffer.policy
-        });
-        if (decision.reviewRequired) {
-          console.warn("[shipping-margin-review]", JSON.stringify({
-            catalogId: storedOffer.catalogId,
-            products: storedOffer.basis.productRefs || [],
-            packageCount: storedOffer.basis.packageCount,
-            groundCost: decision.groundCost,
-            protectedMargin: Number.isFinite(decision.economics?.margin) ? decision.economics.margin : null,
-            destinationState: translated.body.shipTo.state
-          }));
-        }
-        result = applyShippingOfferToRates(rated, decision, { creditExpedited: false });
-      }
-    }
     // Preserve the already-advertised SummerChill26 promotion as a final,
     // explicit override through its existing campaign lifecycle.
     const explicitPromo = legacyPromotionInput(req, rating);

@@ -3,7 +3,6 @@
 const crypto = require("node:crypto");
 const zipcodes = require("zipcodes");
 const { buildAutomaticShippingQuote } = require("./shipping-quote");
-const { storeShippingOffer } = require("./shipping-offer-sessions");
 
 const DEFAULT_ORIGINS = [
   "https://webtrack.woodsonlumber.com",
@@ -316,22 +315,29 @@ async function handler(req, res) {
     if (cart.length) {
       try {
         const automatic = await buildAutomaticShippingQuote(body, { requestRates });
-        if (automatic.claim?.decision?.reviewRequired) {
-          console.warn("[shipping-margin-review]", JSON.stringify({
-            catalogId: automatic.claim.catalogId,
-            products: automatic.claim.basis?.productRefs || [],
-            packageCount: automatic.claim.basis?.packageCount,
-            groundCost: automatic.claim.decision.groundCost,
-            protectedMargin: automatic.claim.decision.protectedMargin,
-            destinationState: cleanText(body.shipTo?.state, 2).toUpperCase()
-          }));
-        }
-        await storeShippingOffer({
-          shipFrom: body.shipFrom,
-          shipTo: body.shipTo,
-          ...automatic.claim
+        // Automatic package planning remains useful, but only an explicit,
+        // validated promotion may reduce a checkout rate to zero. Return the
+        // actual UPS charges here; the promo bridge is applied later in rate.js.
+        const rawRates = automatic.result.rates.map((rate) => {
+          if (String(rate.serviceCode || "") !== "03") return rate;
+          const rawAmount = Number(automatic.claim?.decision?.groundCost);
+          if (!Number.isFinite(rawAmount) || rawAmount <= 0) return rate;
+          const { originalAmount, promotion, ...rest } = rate;
+          return { ...rest, amount: rawAmount };
         });
-        return sendJson(res, 200, automatic.result);
+        return sendJson(res, 200, {
+          ...automatic.result,
+          rates: rawRates,
+          shippingOffer: {
+            applied: false,
+            mode: "regular",
+            serviceCode: "03",
+            serviceName: "UPS Ground",
+            customerGroundAmount: Number(automatic.claim?.decision?.groundCost) || 0,
+            originalGroundAmount: Number(automatic.claim?.decision?.groundCost) || 0,
+            subsidyAmount: 0
+          }
+        });
       } catch {
         // A missing/stale catalog or incomplete trusted package plan must never
         // create a customer subsidy. Use a supplied fallback plan when one is
