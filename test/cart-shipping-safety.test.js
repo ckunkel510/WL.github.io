@@ -99,6 +99,26 @@ test("checkout uses the unified fulfillment quote to show and recommend UPS or W
   assert.match(checkout, /await window\.WLShippingOffer\.select\(mode\)/);
 });
 
+test("fulfillment quoting recognizes the selected store in the current public stores header", () => {
+  const offer = source("UpsShippingOffer.js");
+  const selectedOrigin = extractedFunction(offer, "selectedOrigin", {
+    text: (value) => String(value == null ? "" : value).replace(/\s+/g, " ").trim(),
+    STORE_ORIGINS: {
+      brenham: { name: "Brenham", postalCode: "77833" },
+      caldwell: { name: "Caldwell", postalCode: "77836" }
+    },
+    storedCartData: () => null,
+    document: {
+      querySelectorAll: () => [{
+        getAttribute: () => "https://www.woodsonlumber.com/stores",
+        textContent: "Caldwell. Open until 5:30 PM"
+      }]
+    }
+  });
+
+  assert.deepEqual(selectedOrigin(), { name: "Caldwell", postalCode: "77836" });
+});
+
 test("checkout classifies selected states and saved ZIPs for Texas-only delivery", () => {
   const checkout = source("Checkout2.js");
   const cleanStateValue = (value) => String(value || "").replace(/\s+/g, " ").trim();
