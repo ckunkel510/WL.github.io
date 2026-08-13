@@ -7,6 +7,9 @@
     "api/ups-rates.js": {
       "maxDuration": 10
     },
+    "api/fulfillment-quote.js": {
+      "maxDuration": 30
+    },
     "api/shipping-promo-session.js": {
       "maxDuration": 10
     },

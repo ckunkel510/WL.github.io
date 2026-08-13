@@ -84,6 +84,21 @@ test("checkout hides local delivery for an address outside Texas", () => {
   assert.doesNotMatch(checkout, /outside-address-click/);
 });
 
+test("checkout uses the unified fulfillment quote to show and recommend UPS or Woodson delivery", () => {
+  const checkout = source("Checkout2.js");
+  const offer = source("UpsShippingOffer.js");
+  assert.match(checkout, /Delivered by Woodson/);
+  assert.match(checkout, /data-mode="delivery" data-value="rbUPSDelivery"/);
+  assert.match(checkout, /quote\.options\.delivery/);
+  assert.match(checkout, /quote\.options\.ups/);
+  assert.match(checkout, /Recommended/);
+  assert.match(offer, /api\/fulfillment-quote/);
+  assert.match(offer, /checkoutAddress/);
+  assert.match(offer, /recommendation:/);
+  assert.match(offer, /action: "select"/);
+  assert.match(checkout, /await window\.WLShippingOffer\.select\(mode\)/);
+});
+
 test("checkout classifies selected states and saved ZIPs for Texas-only delivery", () => {
   const checkout = source("Checkout2.js");
   const cleanStateValue = (value) => String(value || "").replace(/\s+/g, " ").trim();
@@ -111,6 +126,15 @@ test("delivery options display the server-returned rate without a browser-side f
   assert.doesNotMatch(delivery, /WLShippingPromo/);
   assert.doesNotMatch(delivery, /promoApplied\s*\?/);
   assert.match(delivery, /cost = rawCost/);
+});
+
+test("automatic package planning cannot create a non-promo free Ground rate", () => {
+  const rates = source("api/ups-rates.js");
+  const bridge = source("api/rate.js");
+  assert.match(rates, /only an explicit,[\s\S]*validated promotion may reduce a checkout rate to zero/);
+  assert.match(rates, /shippingOffer:\s*\{[\s\S]*applied:\s*false/);
+  assert.doesNotMatch(bridge, /applyShippingOfferToRates/);
+  assert.match(bridge, /applyFreeGroundPromotion/);
 });
 
 test("cart UPS requests no longer send browser-controlled promotion eligibility", () => {

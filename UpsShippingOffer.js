@@ -1,8 +1,8 @@
 (function () {
   "use strict";
 
-  var BUILD_VERSION = "20260721-margin-offer-1";
-  var RATE_URL = "https://wl-upsrates.vercel.app/api/ups-rates";
+  var BUILD_VERSION = "20260813-unified-fulfillment-1";
+  var RATE_URL = "https://wl-upsrates.vercel.app/api/fulfillment-quote";
   var PRODUCT_DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSg6EOqMwc_5UjWU7ycyvF-rgj717p-WjV2Vhydcb7uc2Mf2Awj6GehQp66AHwViq4uX6mXXrtZZR-1/pub?output=csv";
   var STORAGE_KEY = "wl_shipping_offer_v1";
   var CART_DATA_KEY = "wl_shipping_offer_cart_v1";
@@ -10,6 +10,7 @@
   var PRODUCT_DATA_CACHE = null;
   var refreshTimer = null;
   var activeRequest = null;
+  var activeSelectionRequest = null;
 
   if (!/ShoppingCart\.aspx|Checkout|PlaceOrder/i.test(window.location.pathname || "")) return;
   if (window.WLShippingOffer && window.WLShippingOffer.version === BUILD_VERSION) return;
@@ -168,6 +169,29 @@
     return "";
   }
 
+  function checkoutAddress() {
+    function value(id) {
+      var element = document.getElementById(id);
+      return text(element && element.value);
+    }
+    var state = document.getElementById("ctl00_PageBody_DeliveryAddress_CountySelector_CountyList");
+    var stateText = text(state && state.selectedOptions && state.selectedOptions[0]
+      ? state.selectedOptions[0].text || state.selectedOptions[0].textContent
+      : state && state.value);
+    return {
+      addressLine: [
+        value("ctl00_PageBody_DeliveryAddress_AddressLine1"),
+        value("ctl00_PageBody_DeliveryAddress_AddressLine2"),
+        value("ctl00_PageBody_DeliveryAddress_AddressLine3")
+      ].filter(Boolean),
+      city: value("ctl00_PageBody_DeliveryAddress_City"),
+      state: /^texas$/i.test(stateText) ? "TX" : stateText,
+      postalCode: checkoutZip(),
+      country: "US",
+      residential: true
+    };
+  }
+
   function savedZip() {
     try {
       var guest = JSON.parse(sessionStorage.getItem("wl_guest_checkout_payload") || "null");
@@ -196,12 +220,29 @@
       if (code) byCode[code] = product;
     });
     var totalWeight = 0;
+    var describedPackages = [];
     for (var index = 0; index < items.length; index += 1) {
       var item = items[index];
       var product = byId[item.productId] || byCode[normalizeCode(item.productCode)];
       var weight = number(product && product.Weight);
       if (!weight) return [];
       totalWeight += weight * item.quantity;
+      var length = number(product && product.Length);
+      var width = number(product && product.Width);
+      var height = number(product && (product.Height || product.Thickness));
+      if (length && width && height) {
+        for (var copy = 0; copy < item.quantity && describedPackages.length <= 50; copy += 1) {
+          describedPackages.push({
+            weight: Number(weight.toFixed(2)),
+            length: Number(length.toFixed(2)),
+            width: Number(width.toFixed(2)),
+            height: Number(height.toFixed(2))
+          });
+        }
+      }
+    }
+    if (describedPackages.length === items.reduce(function (sum, item) { return sum + item.quantity; }, 0) && describedPackages.length <= 50) {
+      return describedPackages;
     }
     var packages = [];
     while (totalWeight > 0 && packages.length < 50) {
@@ -220,6 +261,9 @@
       }).sort().join("|"),
       shippingOffer: result && result.shippingOffer || null,
       packagePlan: result && result.packagePlan || null,
+      recommendation: result && result.recommendation || null,
+      options: result && result.options || null,
+      packageProfile: result && result.packageProfile || null,
       ts: Date.now()
     };
     try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); } catch (error) {}
@@ -233,13 +277,15 @@
       var items = cartItems();
       var origin = selectedOrigin();
       rememberCart(items, origin);
-      var zip = checkoutZip() || await savedZip();
+      var address = checkoutAddress();
+      var zip = address.postalCode || await savedZip();
       if (!items.length || !origin || !zip) return null;
+      address.postalCode = zip;
       var products = await productData();
       var packages = fallbackPackages(items, products);
       var requestBody = {
         shipFrom: origin,
-        shipTo: { postalCode: zip, country: "US", residential: true },
+        shipTo: address,
         cart: items
       };
       if (packages.length) requestBody.packages = packages;
@@ -252,7 +298,7 @@
       if (!response.ok) throw new Error(result.error || "UPS shipping offer could not be prepared.");
       return writeOffer(result, zip, items);
     })().catch(function (error) {
-      console.warn("[WLShippingOffer] Automatic Ground offer could not be prepared.", error);
+      console.warn("[WLShippingOffer] Automatic fulfillment quote could not be prepared.", error);
       return null;
     }).finally(function () { activeRequest = null; });
     return activeRequest;
@@ -266,23 +312,58 @@
   function currentOffer() {
     try {
       var stored = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || "null");
-      return stored && Date.now() - Number(stored.ts || 0) < 15 * 60 * 1000 ? stored : null;
+      var currentZip = checkoutZip();
+      var sameZip = !currentZip || !stored || stored.zip === currentZip;
+      return stored && sameZip && Date.now() - Number(stored.ts || 0) < 15 * 60 * 1000 ? stored : null;
     } catch (error) {
       return null;
     }
   }
 
+  function selectOffer(mode) {
+    if (mode !== "ship" && mode !== "delivery") return Promise.resolve(false);
+    if (activeSelectionRequest) return activeSelectionRequest;
+    var offer = currentOffer();
+    var origin = selectedOrigin();
+    var address = checkoutAddress();
+    if (!offer || !origin || !address.postalCode) return Promise.resolve(false);
+    activeSelectionRequest = fetch(RATE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "select",
+        mode: mode,
+        shipFrom: origin,
+        shipTo: address,
+        totalWeight: offer.packageProfile && offer.packageProfile.totalWeight
+      })
+    }).then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (result) {
+        if (!response.ok || !result.ok) throw new Error(result.error || "The fulfillment choice could not be saved.");
+        offer.recommendation = result.recommendation || offer.recommendation;
+        offer.ts = Date.now();
+        try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(offer)); } catch (error) {}
+        return true;
+      });
+    }).catch(function (error) {
+      console.warn("[WLShippingOffer] Fulfillment selection could not be saved.", error);
+      return false;
+    }).finally(function () { activeSelectionRequest = null; });
+    return activeSelectionRequest;
+  }
+
   window.WLShippingOffer = {
     version: BUILD_VERSION,
     refresh: refreshOffer,
-    current: currentOffer
+    current: currentOffer,
+    select: selectOffer
   };
 
   document.addEventListener("input", function (event) {
-    if (event.target && /(?:Postcode|PostalCode|ZipCode|gc_del_zip)/i.test(event.target.id || "")) scheduleRefresh(450);
+    if (event.target && /(?:DeliveryAddress|Postcode|PostalCode|ZipCode|gc_del_zip)/i.test(event.target.id || "")) scheduleRefresh(450);
   }, true);
   document.addEventListener("change", function (event) {
-    if (event.target && /(?:Postcode|PostalCode|ZipCode|gc_del_zip|wl-qty-select)/i.test(event.target.id || event.target.className || "")) scheduleRefresh(100);
+    if (event.target && /(?:DeliveryAddress|Postcode|PostalCode|ZipCode|gc_del_zip|wl-qty-select)/i.test(event.target.id || event.target.className || "")) scheduleRefresh(100);
   }, true);
 
   function boot() {

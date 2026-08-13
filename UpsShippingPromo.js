@@ -2,7 +2,7 @@
   "use strict";
 
   var BUILD_VERSION = "20260710-ups-fallback-1";
-  var OFFER_VERSION = "20260721-margin-offer-1";
+  var OFFER_VERSION = "20260813-unified-fulfillment-1";
   var offerPage = /ShoppingCart\.aspx|Checkout|PlaceOrder/i.test(window.location.pathname || "");
   if (offerPage && !document.querySelector('script[data-wl-ups-shipping-offer="' + OFFER_VERSION + '"]')) {
     var offerScript = document.createElement("script");

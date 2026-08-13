@@ -6,8 +6,7 @@ const zipcodes = require("zipcodes");
 const { RequestError, requestRates } = require("./ups-rates")._internal;
 const { applyFreeGroundPromotion, cartHasEligibleProduct, promoCodeMatches } = require("./shipping-promotions");
 const { findPromoClaim, storePromoClaim } = require("./shipping-promo-sessions");
-const { findShippingOffer } = require("./shipping-offer-sessions");
-const { applyShippingOfferToRates, evaluateShippingOffer, policyFromEnv } = require("./shipping-policy");
+const { findFulfillmentClaim } = require("./fulfillment-sessions");
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -373,6 +372,30 @@ function sendXml(res, status, xml) {
   res.end(xml);
 }
 
+function safePositiveRates(result) {
+  if (!result || !Array.isArray(result.rates)) return result;
+  return {
+    ...result,
+    rates: result.rates
+      .map((rate) => ({ ...rate, amount: Math.max(0, Number(rate.amount) || 0) }))
+      .filter((rate) => rate.amount > 0)
+  };
+}
+
+function fulfillmentResult(claim) {
+  if (!claim || !Array.isArray(claim.rates) || !claim.rates.length) return null;
+  const rates = claim.rates
+    .map((rate) => ({
+      serviceCode: text(rate.serviceCode || "03"),
+      serviceName: text(rate.serviceName || (claim.recommendation?.mode === "delivery" ? "Woodson Local Delivery" : "UPS Ground")),
+      currency: text(rate.currency || "USD"),
+      amount: Math.max(0, Number(rate.amount) || 0),
+      billingWeight: Math.max(0, Number(rate.billingWeight || claim.totalWeight) || 0)
+    }))
+    .filter((rate) => rate.amount > 0);
+  return rates.length ? { rates } : null;
+}
+
 async function readBody(req) {
   if (typeof req.body === "string") return req.body;
   if (Buffer.isBuffer(req.body)) return req.body.toString("utf8");
@@ -424,44 +447,21 @@ async function handler(req, res) {
     const { access, rating } = parseLegacyXml(raw);
     authenticate(access);
     const translated = toOAuthRequest(rating);
-    const storedOffer = await findShippingOffer(translated.body);
-    const rateBody = storedOffer?.packages?.length
-      ? { ...translated.body, packages: storedOffer.packages }
+    const fulfillmentClaim = await findFulfillmentClaim(translated.body);
+    let result = fulfillmentResult(fulfillmentClaim);
+    const rateBody = fulfillmentClaim?.packages?.length
+      ? { ...translated.body, packages: fulfillmentClaim.packages }
       : translated.body;
-    const rated = await requestRates(rateBody);
-    let result = rated;
-    if (storedOffer?.basis && storedOffer?.policy && policyFromEnv().configured) {
-      const ground = rated.rates.find((rate) => String(rate.serviceCode || "") === "03");
-      if (ground && Number.isFinite(Number(ground.amount))) {
-        const decision = evaluateShippingOffer({
-          lines: [{
-            quantity: 1,
-            price: storedOffer.basis.merchandiseRevenue,
-            averageCost: storedOffer.basis.rawCogs
-          }],
-          groundCost: Number(ground.amount),
-          packageCount: storedOffer.basis.packageCount,
-          policy: storedOffer.policy
-        });
-        if (decision.reviewRequired) {
-          console.warn("[shipping-margin-review]", JSON.stringify({
-            catalogId: storedOffer.catalogId,
-            products: storedOffer.basis.productRefs || [],
-            packageCount: storedOffer.basis.packageCount,
-            groundCost: decision.groundCost,
-            protectedMargin: Number.isFinite(decision.economics?.margin) ? decision.economics.margin : null,
-            destinationState: translated.body.shipTo.state
-          }));
-        }
-        result = applyShippingOfferToRates(rated, decision, { creditExpedited: false });
-      }
-    }
+    const rated = result ? null : await requestRates(rateBody);
+    if (!result) result = rated;
     // Preserve the already-advertised SummerChill26 promotion as a final,
     // explicit override through its existing campaign lifecycle.
     const explicitPromo = legacyPromotionInput(req, rating);
     const storedPromo = await findPromoClaim(translated.body);
     const promoInput = storedPromo && storedPromo.eligible ? storedPromo : explicitPromo;
     result = applyFreeGroundPromotion(result, promoInput).result;
+    result = result?.promotion?.applied ? result : safePositiveRates(result);
+    if (!result?.rates?.length) throw new RequestError(422, "No positive shipping or delivery rate is available for this order.");
     return sendXml(res, 200, isSoap ? soapSuccessXml(result, translated.context) : successXml(result, translated.context));
   } catch (error) {
     return sendXml(res, 200, isSoap ? soapErrorXml(error) : errorXml(error));
@@ -469,4 +469,4 @@ async function handler(req, res) {
 }
 
 module.exports = handler;
-module.exports._test = { authenticate, errorXml, legacyPromotionInput, parseLegacyXml, soapSuccessXml, successXml, toOAuthRequest };
+module.exports._test = { authenticate, errorXml, fulfillmentResult, legacyPromotionInput, parseLegacyXml, safePositiveRates, soapSuccessXml, successXml, toOAuthRequest };
