@@ -139,6 +139,12 @@ function preferenceThreshold(env = process.env) {
 }
 
 function recommendFulfillment({ ups, delivery, easyParcel, threshold = 10 }) {
+  if (ups?.available && !easyParcel) {
+    if (delivery?.available) {
+      return { mode: "delivery", label: "Woodson Local Delivery", amount: delivery.amount, reason: "bulky-or-unknown-parcel" };
+    }
+    return { mode: "manual", label: "Freight quote required", amount: null, reason: "bulky-outside-delivery-area" };
+  }
   if (ups?.available && !delivery?.available) {
     return { mode: "ship", label: "Ship via UPS", amount: ups.amount, reason: "ups-only" };
   }
@@ -206,13 +212,16 @@ async function buildFulfillmentQuote(body, dependencies = {}) {
     try { totalWeight = await trustedCartWeight(cart, dependencies); } catch {}
   }
 
-  const ups = upsOption(rates) || { available: false, reason: upsFailure || "ups-unavailable" };
+  const ratedUps = upsOption(rates) || { available: false, reason: upsFailure || "ups-unavailable" };
   const delivery = await (dependencies.quoteWoodsonDelivery || quoteWoodsonDelivery)({
     shipFrom: body.shipFrom,
     shipTo: body.shipTo,
     totalWeight
   }, dependencies);
-  const easyParcel = Boolean(ups.available && isEasyParcel(packages));
+  const easyParcel = Boolean(ratedUps.available && isEasyParcel(packages));
+  const ups = ratedUps.available && !easyParcel
+    ? { available: false, reason: "not-easy-parcel" }
+    : ratedUps;
   const recommendation = recommendFulfillment({
     ups,
     delivery,
@@ -240,7 +249,7 @@ async function buildFulfillmentQuote(body, dependencies = {}) {
         recommendation,
         rates: selectedRates,
         availableRates: {
-          ship: rates,
+          ship: ups.available ? rates : [],
           delivery: delivery.available ? [{
             serviceCode: delivery.serviceCode,
             serviceName: delivery.serviceName,
