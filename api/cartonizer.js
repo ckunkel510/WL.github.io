@@ -249,6 +249,62 @@ function planScore(packages, settings) {
   return billableWeight + (packages.length * settings.packagePenalty);
 }
 
+function supportedCartonDimensions(dimensions) {
+  const [length, width, height] = dimensions.slice().sort((left, right) => right - left);
+  return length <= 108 && length + (2 * width) + (2 * height) <= 165;
+}
+
+function paddedDimensions(dimensions, settings) {
+  return dimensions
+    .map((value) => Math.ceil(value + settings.customCartonPadding))
+    .sort((left, right) => right - left);
+}
+
+function consolidationBatchSizes(units, settings) {
+  let batchWeight = 0;
+  let maxBatchSize = 0;
+  for (const unit of units) {
+    if (batchWeight + unit.weight > settings.maxCartonWeight + EPSILON) break;
+    batchWeight += unit.weight;
+    maxBatchSize += 1;
+  }
+  if (maxBatchSize < 2) return [];
+
+  const sizes = new Set();
+  for (let size = 2; size < maxBatchSize; size *= 2) sizes.add(size);
+  sizes.add(maxBatchSize);
+  return Array.from(sizes).sort((left, right) => left - right);
+}
+
+function consolidationCartons(units, settings) {
+  const cartons = [];
+  const seen = new Set();
+  consolidationBatchSizes(units, settings).forEach((batchSize) => {
+    const batch = units.slice(0, batchSize).map((unit) =>
+      [unit.length, unit.width, unit.height].sort((left, right) => right - left)
+    );
+    for (let combinedAxis = 0; combinedAxis < 3; combinedAxis += 1) {
+      const dimensions = [0, 1, 2].map((axis) => axis === combinedAxis
+        ? batch.reduce((sum, item) => sum + item[axis], 0)
+        : Math.max(...batch.map((item) => item[axis])));
+      const padded = paddedDimensions(dimensions, settings);
+      const key = padded.join("x");
+      if (seen.has(key) || !supportedCartonDimensions(padded)) continue;
+      seen.add(key);
+      const [length, width, height] = padded;
+      cartons.push({
+        code: `CONSOLIDATED-${batchSize}-${key}`,
+        length,
+        width,
+        height,
+        maxWeight: settings.maxCartonWeight,
+        tareWeight: settings.tareWeight
+      });
+    }
+  });
+  return cartons;
+}
+
 function customCartons(units, settings) {
   const cartons = [];
   const seen = new Set();
@@ -260,7 +316,7 @@ function customCartons(units, settings) {
     if (seen.has(key)) return;
     seen.add(key);
     const [length, width, height] = dimensions;
-    if (length > 108 || length + (2 * width) + (2 * height) > 165) return;
+    if (!supportedCartonDimensions(dimensions)) return;
     cartons.push({
       code: `CUSTOM-${key}`,
       length,
@@ -271,6 +327,26 @@ function customCartons(units, settings) {
     });
   });
   return cartons;
+}
+
+function selectCandidatePlans(plans, limit = 3) {
+  if (!plans.length || limit < 1) return [];
+  const sorted = plans.slice().sort(
+    (left, right) => left.score - right.score || left.packageCount - right.packageCount
+  );
+  const selected = [sorted[0]];
+  const minimumPackageCount = Math.min(...sorted.map((plan) => plan.packageCount));
+  const minimumPackagePlan = sorted.find((plan) => plan.packageCount === minimumPackageCount);
+  if (minimumPackagePlan && minimumPackagePlan !== sorted[0]) selected.push(minimumPackagePlan);
+  const selectedCounts = new Set(selected.map((plan) => plan.packageCount));
+  const alternatePackageCount = sorted.find((plan) => !selectedCounts.has(plan.packageCount));
+  if (alternatePackageCount) selected.push(alternatePackageCount);
+  for (const plan of sorted) {
+    if (selected.includes(plan)) continue;
+    selected.push(plan);
+    if (selected.length >= limit) break;
+  }
+  return selected.slice(0, limit);
 }
 
 function settingsFromEnv(env = process.env) {
@@ -290,6 +366,7 @@ function cartonizeCandidates(lines, options = {}) {
   const supplied = Array.isArray(options.cartons) && options.cartons.length ? options.cartons : DEFAULT_CARTONS;
   const cartons = supplied.map((carton, index) => normalizeCarton(carton, index, settings));
   cartons.push(...customCartons(units, settings));
+  cartons.push(...consolidationCartons(units, settings));
 
   const plans = [];
   const seen = new Set();
@@ -308,7 +385,7 @@ function cartonizeCandidates(lines, options = {}) {
     });
   });
 
-  return plans.sort((left, right) => left.score - right.score || left.packageCount - right.packageCount).slice(0, 3);
+  return selectCandidatePlans(plans, 3);
 }
 
 function cartonize(lines, options = {}) {
@@ -323,7 +400,9 @@ module.exports = {
   MAX_UNITS,
   cartonize,
   cartonizeCandidates,
+  consolidationCartons,
   packWithCarton,
+  selectCandidatePlans,
   settingsFromEnv,
   uniqueOrientations
 };

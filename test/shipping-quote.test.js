@@ -152,3 +152,43 @@ test("builds a trusted package plan while customer offers are disabled", async (
   assert.equal(result.result.shippingOffer.applied, false);
   assert.equal(result.result.shippingOffer.mode, "regular");
 });
+
+test("rates combined and split plans for two bags and selects the cheaper UPS carton plan", async () => {
+  const ratedPackageCounts = [];
+  const result = await buildAutomaticShippingQuote({
+    shipFrom: { postalCode: "77833" },
+    shipTo: { postalCode: "60712" },
+    cart: [{ productId: "133816", productCode: "7349624", quantity: 2 }]
+  }, {
+    requestRates: async (body) => {
+      const packageCount = body.packages.length;
+      ratedPackageCounts.push(packageCount);
+      const amount = packageCount === 1 ? 14 : 26.86;
+      return {
+        rates: [{ serviceCode: "03", serviceName: "UPS Ground", amount, currency: "USD" }]
+      };
+    },
+    getCatalogProducts: async () => ({
+      active: { id: "catalog-two-bag-test" },
+      fresh: true,
+      products: [{
+        productId: "133816",
+        productCode: "7349624",
+        brand: "Safer",
+        price: 4,
+        averageCost: 0,
+        weight: 4.2,
+        length: 16.75,
+        width: 11.25,
+        height: 4.31
+      }]
+    }),
+    policy: policy({ configured: false, enabled: false })
+  });
+
+  assert.ok(ratedPackageCounts.includes(1));
+  assert.ok(ratedPackageCounts.includes(2));
+  assert.equal(result.claim.basis.packageCount, 1);
+  assert.equal(result.claim.packages.length, 1);
+  assert.equal(result.claim.decision.groundCost, 14);
+});
