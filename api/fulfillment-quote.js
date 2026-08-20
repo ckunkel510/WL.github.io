@@ -288,12 +288,31 @@ async function handler(req, res) {
     if (body.action === "select") {
       const selected = await selectFulfillmentClaim(body);
       if (!selected.ok) throw new RequestError(409, "That fulfillment method is no longer available. Please refresh the quote.");
+      console.log("[api/fulfillment-quote] selection saved", {
+        mode: selected.recommendation?.mode || "",
+        amount: positive(selected.recommendation?.amount) || null
+      });
       return sendJson(res, 200, selected);
     }
     const result = await buildFulfillmentQuote(body);
+    console.log("[api/fulfillment-quote] quote completed", {
+      quoteId: result.quoteId,
+      cartLines: Array.isArray(body.cart) ? body.cart.length : 0,
+      packageCount: result.packageProfile?.packageCount || 0,
+      totalWeight: positive(result.packageProfile?.totalWeight) || null,
+      mode: result.recommendation?.mode || "",
+      amount: positive(result.recommendation?.amount) || null,
+      upsAvailable: result.options?.ups?.available === true,
+      deliveryAvailable: result.options?.delivery?.available === true,
+      sessionStored: result.session?.ok === true
+    });
     return sendJson(res, 200, result);
   } catch (error) {
     const status = error instanceof RequestError ? error.status : 500;
+    console.error("[api/fulfillment-quote] request failed", {
+      status,
+      message: error instanceof Error ? cleanText(error.message, 180) : "Fulfillment quoting failed."
+    });
     return sendJson(res, status, { error: error instanceof Error ? error.message : "Fulfillment quoting is temporarily unavailable." });
   }
 }
