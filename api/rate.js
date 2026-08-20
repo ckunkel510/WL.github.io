@@ -449,6 +449,7 @@ async function handler(req, res) {
     const translated = toOAuthRequest(rating);
     const fulfillmentClaim = await findFulfillmentClaim(translated.body);
     let result = fulfillmentResult(fulfillmentClaim);
+    const rateSource = result ? "fulfillment-claim" : "ups";
     const rateBody = fulfillmentClaim?.packages?.length
       ? { ...translated.body, packages: fulfillmentClaim.packages }
       : translated.body;
@@ -462,8 +463,18 @@ async function handler(req, res) {
     result = applyFreeGroundPromotion(result, promoInput).result;
     result = result?.promotion?.applied ? result : safePositiveRates(result);
     if (!result?.rates?.length) throw new RequestError(422, "No positive shipping or delivery rate is available for this order.");
+    console.log("[api/rate] legacy quote completed", {
+      source: rateSource,
+      rateCount: result.rates.length,
+      groundAmount: Math.max(0, Number(result.rates.find((rate) => String(rate.serviceCode || "") === "03")?.amount) || 0),
+      promotionApplied: result?.promotion?.applied === true
+    });
     return sendXml(res, 200, isSoap ? soapSuccessXml(result, translated.context) : successXml(result, translated.context));
   } catch (error) {
+    console.error("[api/rate] legacy quote failed", {
+      status: error instanceof RequestError ? error.status : 500,
+      message: error instanceof Error ? String(error.message || "").slice(0, 180) : "Legacy rating failed."
+    });
     return sendXml(res, 200, isSoap ? soapErrorXml(error) : errorXml(error));
   }
 }

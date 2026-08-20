@@ -2,6 +2,7 @@
 
 const crypto = require("node:crypto");
 const { buildAutomaticShippingQuote } = require("./shipping-quote");
+const { cartonizeCandidates } = require("./cartonizer");
 const { getCatalogProducts } = require("./shipping-catalog");
 const { RequestError, requestRates } = require("./ups-rates")._internal;
 const { selectFulfillmentClaim, storeFulfillmentClaim } = require("./fulfillment-sessions");
@@ -118,6 +119,68 @@ function groundRate(rates) {
   return (Array.isArray(rates) ? rates : []).find((rate) => String(rate?.serviceCode || "") === "03") || null;
 }
 
+function suppliedPackagePlans(suppliedPackages, dependencies = {}) {
+  const source = Array.isArray(suppliedPackages) ? suppliedPackages : [];
+  if (!source.length) return [];
+  const completeDimensions = source.every((item) =>
+    positive(item?.weight) && positive(item?.length) && positive(item?.width) && positive(item?.height)
+  );
+  if (!completeDimensions) return [{ packages: source }];
+
+  const lines = source.map((item, index) => ({
+    productCode: `WEBTRACK-PACKAGE-${index + 1}`,
+    quantity: Math.max(1, quantity(item?.quantity) || 1),
+    weight: positive(item.weight),
+    length: positive(item.length),
+    width: positive(item.width),
+    height: positive(item.height)
+  }));
+  try {
+    const plans = (dependencies.cartonizeCandidates || cartonizeCandidates)(
+      lines,
+      dependencies.cartonizerOptions
+    );
+    if (plans.length) {
+      return plans.map((plan) => ({
+        packages: plan.packages.map((item) => ({
+          weight: item.weight,
+          length: item.length,
+          width: item.width,
+          height: item.height
+        })),
+        packageCount: plan.packageCount,
+        score: plan.score
+      }));
+    }
+  } catch {}
+  return [{ packages: source }];
+}
+
+async function rateSuppliedPackagePlans(body, rateRequest, dependencies = {}) {
+  const candidates = suppliedPackagePlans(body?.packages, dependencies).slice(0, 3);
+  const ratedPlans = [];
+  let lastError = null;
+  for (const candidate of candidates) {
+    try {
+      const rated = await rateRequest({
+        shipFrom: body.shipFrom,
+        shipTo: body.shipTo,
+        packages: candidate.packages
+      });
+      const rates = (Array.isArray(rated?.rates) ? rated.rates : [])
+        .map((rate) => ({ ...rate, amount: money(rate.amount) }))
+        .filter((rate) => rate.amount > 0);
+      const ground = groundRate(rates);
+      if (ground) ratedPlans.push({ ...candidate, rates, groundAmount: positive(ground.amount) });
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  if (!ratedPlans.length) throw lastError || new Error("UPS Ground is unavailable for the supplied package plan.");
+  ratedPlans.sort((left, right) => left.groundAmount - right.groundAmount || left.packages.length - right.packages.length);
+  return ratedPlans[0];
+}
+
 function upsOption(rates) {
   const ground = groundRate(rates);
   if (!ground || positive(ground.amount) <= 0) return null;
@@ -196,13 +259,11 @@ async function buildFulfillmentQuote(body, dependencies = {}) {
   }
 
   if (!rates.length && suppliedPackages.length) {
-    packages = suppliedPackages;
     totalWeight = totalWeight || packageWeight(suppliedPackages);
     try {
-      const rated = await rateRequest({ shipFrom: body.shipFrom, shipTo: body.shipTo, packages: suppliedPackages });
-      rates = (Array.isArray(rated?.rates) ? rated.rates : [])
-        .map((rate) => ({ ...rate, amount: money(rate.amount) }))
-        .filter((rate) => rate.amount > 0);
+      const selected = await rateSuppliedPackagePlans({ ...body, packages: suppliedPackages }, rateRequest, dependencies);
+      packages = selected.packages;
+      rates = selected.rates;
     } catch (error) {
       upsFailure = cleanText(error?.message || "UPS rating was unavailable.", 180);
     }
@@ -288,12 +349,31 @@ async function handler(req, res) {
     if (body.action === "select") {
       const selected = await selectFulfillmentClaim(body);
       if (!selected.ok) throw new RequestError(409, "That fulfillment method is no longer available. Please refresh the quote.");
+      console.log("[api/fulfillment-quote] selection saved", {
+        mode: selected.recommendation?.mode || "",
+        amount: positive(selected.recommendation?.amount) || null
+      });
       return sendJson(res, 200, selected);
     }
     const result = await buildFulfillmentQuote(body);
+    console.log("[api/fulfillment-quote] quote completed", {
+      quoteId: result.quoteId,
+      cartLines: Array.isArray(body.cart) ? body.cart.length : 0,
+      packageCount: result.packageProfile?.packageCount || 0,
+      totalWeight: positive(result.packageProfile?.totalWeight) || null,
+      mode: result.recommendation?.mode || "",
+      amount: positive(result.recommendation?.amount) || null,
+      upsAvailable: result.options?.ups?.available === true,
+      deliveryAvailable: result.options?.delivery?.available === true,
+      sessionStored: result.session?.ok === true
+    });
     return sendJson(res, 200, result);
   } catch (error) {
     const status = error instanceof RequestError ? error.status : 500;
+    console.error("[api/fulfillment-quote] request failed", {
+      status,
+      message: error instanceof Error ? cleanText(error.message, 180) : "Fulfillment quoting failed."
+    });
     return sendJson(res, status, { error: error instanceof Error ? error.message : "Fulfillment quoting is temporarily unavailable." });
   }
 }
@@ -304,6 +384,8 @@ module.exports._test = {
   isEasyParcel,
   packageWeight,
   recommendFulfillment,
+  rateSuppliedPackagePlans,
   restoreRawRates,
+  suppliedPackagePlans,
   trustedCartWeight
 };
