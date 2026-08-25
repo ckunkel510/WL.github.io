@@ -31,7 +31,7 @@
 
 (function () {
   'use strict';
-  console.log('[AP] PayByInvoice version v37 account-payment cleanup loaded');
+  console.log('[AP] PayByInvoice version v38 saved-account continuity loaded');
 
   if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
@@ -5399,15 +5399,6 @@ function buildReviewHTML(){
     `;
     shell.parentNode.insertBefore(wiz, shell);
 
-    // New wizard run: start pay selection unpicked/unhighlighted
-    try{ clearPickedThisRun(); }catch(e){}
-    try{
-      const st0 = loadPayState() || {};
-      st0.__pickedAccount = false;
-      st0.__userPicked = false;
-      savePayState(st0);
-    }catch(e){}
-
     // Move cards into steps (keeps all original logic intact)
     
 // Step 0 (Info): only show Email + Billing Address + ZIP
@@ -6448,6 +6439,7 @@ bankMount.onclick = (e)=>{
   st.bank = { mode:'saved', value: val, text, __pickedAccount:true };
   st.__pickedAccount = true;
   savePayState(st);
+  try{ markPickedThisRun(); }catch(e){}
 
   ensureCofVisible();
 
