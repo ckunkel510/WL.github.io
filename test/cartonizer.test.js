@@ -62,6 +62,28 @@ test("returns a small bounded set of candidate package plans", () => {
   assert.ok(candidates[0].score <= candidates[candidates.length - 1].score);
 });
 
+test("combines two compatible bags into one rated carton while retaining a split alternative", () => {
+  const candidates = cartonizeCandidates([
+    { productId: "133816", productCode: "7349624", quantity: 2, weight: 4.2, length: 16.75, width: 11.25, height: 4.31 }
+  ], { settings });
+
+  assert.ok(candidates.some((plan) => plan.packageCount === 1));
+  assert.ok(candidates.some((plan) => plan.packageCount === 2));
+  const combined = candidates.find((plan) => plan.packageCount === 1);
+  assert.equal(combined.packages[0].unitCount, 2);
+  assert.equal(combined.packages[0].items.length, 2);
+});
+
+test("splits compatible bags when their combined product weight exceeds the carton limit", () => {
+  const result = cartonize([
+    { productId: "133816", productCode: "7349624", quantity: 12, weight: 4.2, length: 16.75, width: 11.25, height: 4.31 }
+  ], { settings });
+
+  assert.ok(result.packageCount > 1);
+  assert.equal(result.packages.reduce((sum, item) => sum + item.unitCount, 0), 12);
+  assert.ok(result.packages.every((item) => item.weight <= 50.5));
+});
+
 test("rejects a package that exceeds UPS small-package dimensions", () => {
   assert.throws(() => cartonize([
     { productId: "LONG", quantity: 1, weight: 10, length: 120, width: 5, height: 5 }

@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20260813-unified-fulfillment-2";
+  window.WL_CHECKOUT_BUILD = "20260820-native-shipping-charge-guard-1";
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
   const UPS_SHIPPING_ENABLED = true;
@@ -3830,8 +3830,6 @@ document.addEventListener("click", function (ev) {
                   updateShippingStyles(upsAvailable ? "ship" : "", { silent: true, reason: "delivery-unavailable" });
                 } else if (!upsAvailable && intent === "ship") {
                   updateShippingStyles(deliveryAvailable ? "delivery" : "", { silent: true, reason: "ups-unavailable" });
-                } else if (!intent && (recommendedMode === "ship" || recommendedMode === "delivery")) {
-                  updateShippingStyles(recommendedMode, { silent: true, reason: "recommended-fulfillment" });
                 }
                 if (!deliveryAvailable && !upsAvailable) {
                   showOutOfStateMessage("This order needs a freight quote. Pickup is still available; please contact Woodson for delivery help.", "warning");
@@ -3847,16 +3845,18 @@ document.addEventListener("click", function (ev) {
                   showOutOfStateMessage(
                     intent === "pickup"
                       ? "Pickup is selected. Ship via UPS is also available for this out-of-state address."
-                      : "Ship via UPS is selected for this out-of-state address. Pickup from a Woodson store is also available.",
+                      : intent === "ship"
+                        ? "Ship via UPS is selected for this out-of-state address. Pickup from a Woodson store is also available."
+                        : "Choose Ship via UPS or Pickup for this out-of-state address.",
                     ""
                   );
                   if (!intent || intent === "delivery") {
-                    setFulfillmentIntent("ship");
-                    try { sessionStorage.setItem("wl_fulfillment_method", "ship"); } catch {}
-                    window.setTimeout(function () {
-                      const ups = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbUPSDelivery");
-                      updateShippingStyles("ship", { silent: !!(ups && ups.checked), reason: "outside-address" });
-                    }, 0);
+                    setFulfillmentIntent("");
+                    try {
+                      sessionStorage.removeItem("wl_fulfillment_method");
+                      localStorage.removeItem("woodson_cart_method");
+                    } catch {}
+                    updateShippingStyles("", { silent: true, reason: "outside-address-needs-selection" });
                   }
                 } else {
                   showOutOfStateMessage("This cart is not offering UPS ship-to-home online. Please choose pickup or update the cart before continuing.", "warning");
@@ -3939,6 +3939,16 @@ document.addEventListener("click", function (ev) {
                 sessionStorage.setItem("wl_fulfillment_method", mode);
                 localStorage.setItem("woodson_cart_method", mode);
               } catch {}
+            } else {
+              // A cart/address refresh can make a previously selected method
+              // unavailable (for example, an eight-foot board going outside the
+              // Woodson delivery area). Clear every persisted label so the
+              // collapsed summary cannot keep advertising a stale UPS choice.
+              setFulfillmentIntent("");
+              try {
+                sessionStorage.removeItem("wl_fulfillment_method");
+                localStorage.removeItem("woodson_cart_method");
+              } catch {}
             }
             if (!silent && hasSelection && wlRequestEpalletCartSync(mode)) return;
             updateAddressAwareOptions();
@@ -3962,9 +3972,11 @@ document.addEventListener("click", function (ev) {
 
               // Select the underlying WebTrack radio (may cause an UpdatePanel postback)
               try {
-                if (isDelivered && upsRad.length && !upsRad.is(":checked")) {
-                  upsRad.prop("checked", true).trigger("click").trigger("change");
-                } else if (isShip && upsRad.length && !upsRad.is(":checked")) {
+                // Delivery and UPS share WebTrack's native UPS radio. Always fire
+                // its postback after a confirmed customer choice, even when the
+                // radio is already checked, so switching modes or addresses cannot
+                // leave a stale or zero native order charge behind.
+                if ((isDelivered || isShip) && upsRad.length) {
                   upsRad.prop("checked", true).trigger("click").trigger("change");
                 } else if (isPickup && pickRad.length && !pickRad.is(":checked")) {
                   pickRad.prop("checked", true).trigger("click").trigger("change");

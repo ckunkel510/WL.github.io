@@ -129,6 +129,134 @@ $(function(){
 })();
 
 
+(function () {
+  "use strict";
+
+  if (window.__wlShippingChargeGuardBound) return;
+  window.__wlShippingChargeGuardBound = true;
+
+  const FULFILLMENT_METHOD_KEY = "wl_fulfillment_method";
+  const OFFER_KEY = "wl_shipping_offer_v1";
+  const PROMO_KEY = "wl_shipping_promo_v1";
+  const PLACE_ORDER_SELECTOR = "#ctl00_PageBody_PlaceOrderButton, [name='ctl00$PageBody$PlaceOrderButton']";
+
+  function shippingAmount(raw) {
+    const source = String(raw || "").replace(/,/g, "");
+    const match = source.match(/\$\s*(-?\d+(?:\.\d{1,2})?)/) || source.match(/(-?\d+(?:\.\d{1,2})?)\s*USD\b/i);
+    if (!match) return 0;
+    const amount = Number(match[1]);
+    return Number.isFinite(amount) ? amount : 0;
+  }
+
+  function shippingChargeDecision(input) {
+    const method = String(input && input.method || "").toLowerCase();
+    const nativeAmount = Number(input && input.nativeAmount);
+    if (method !== "ship" && method !== "delivery") return { ok: true, reason: "not-shipping" };
+    if (Number.isFinite(nativeAmount) && nativeAmount > 0) return { ok: true, reason: "positive-native-charge" };
+    if (method === "ship" && input && input.promoAllowsFree === true) return { ok: true, reason: "validated-free-shipping-promo" };
+    return { ok: false, reason: "missing-positive-native-charge" };
+  }
+
+  function storedJson(key) {
+    try {
+      const raw = sessionStorage.getItem(key) || localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function currentFulfillmentMethod() {
+    try {
+      const stored = sessionStorage.getItem(FULFILLMENT_METHOD_KEY) || localStorage.getItem("woodson_cart_method") || "";
+      if (stored) return stored;
+    } catch {
+      // Continue with native WebTrack controls below. Storage is an enhancement,
+      // not a safe source of truth for whether an order needs a shipping charge.
+    }
+
+    const summary = String(document.body && document.body.textContent || "").replace(/\s+/g, " ");
+    if (/Shipping Method\s*:\s*UPS\b/i.test(summary)) return "ship";
+    if (/Shipping Method\s*:\s*(?:Delivered|Delivery)\b/i.test(summary)) return "delivery";
+
+    const pickup = document.querySelector("#ctl00_PageBody_SaleTypeSelector_rbCollectLater");
+    if (pickup && pickup.checked) return "pickup";
+    const delivery = document.querySelector("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
+    const ups = document.querySelector("#ctl00_PageBody_SaleTypeSelector_rbUPSDelivery");
+    // Delivery and UPS share a native radio in this WebTrack build. If browser
+    // intent was lost, treat either native delivery-like state as chargeable.
+    if ((delivery && delivery.checked) || (ups && ups.checked)) return "delivery";
+    return "";
+  }
+
+  function validatedFreeShippingPromoActive() {
+    const promo = storedJson(PROMO_KEY);
+    const offer = storedJson(OFFER_KEY);
+    const code = String(promo && promo.code || "").replace(/[\s-]+/g, "").toUpperCase();
+    const expiresAt = Date.parse(promo && promo.serverClaim && promo.serverClaim.expiresAt || "");
+    const sameCart = Boolean(promo && promo.cartSignature && offer && offer.cartSignature && promo.cartSignature === offer.cartSignature);
+    return code === "SUMMERCHILL26" && promo && promo.eligible === true && sameCart && Number.isFinite(expiresAt) && expiresAt > Date.now();
+  }
+
+  function nativeShippingAmount() {
+    const deliveryRow = document.querySelector("#ctl00_PageBody_CartSummary2_DeliveryCostsRow td.numeric");
+    const selectedOption = document.querySelector("#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList option:checked");
+    return Math.max(shippingAmount(deliveryRow && deliveryRow.textContent), shippingAmount(selectedOption && selectedOption.textContent));
+  }
+
+  function showChargeError(target) {
+    let warning = document.getElementById("wl-shipping-charge-guard");
+    if (!warning) {
+      warning = document.createElement("div");
+      warning.id = "wl-shipping-charge-guard";
+      warning.setAttribute("role", "alert");
+      warning.style.cssText = "margin:12px 0;padding:12px 14px;border:1px solid #b00020;border-radius:8px;background:#fff5f6;color:#7a0015;font-weight:700;line-height:1.4;";
+      target.insertAdjacentElement("beforebegin", warning);
+    }
+    warning.textContent = "The shipping charge could not be confirmed, so this order was not submitted. Return to the shipping selection, choose Ship via UPS or Woodson Delivery again, and confirm that a charge appears in the order summary.";
+    try { warning.scrollIntoView({ behavior: "smooth", block: "center" }); } catch {}
+  }
+
+  function removeChargeError() {
+    const warning = document.getElementById("wl-shipping-charge-guard");
+    if (warning) warning.remove();
+  }
+
+  function allowPlaceOrder(target) {
+    const decision = shippingChargeDecision({
+      method: currentFulfillmentMethod(),
+      nativeAmount: nativeShippingAmount(),
+      promoAllowsFree: validatedFreeShippingPromoActive()
+    });
+    if (decision.ok) {
+      removeChargeError();
+      return true;
+    }
+    showChargeError(target);
+    return false;
+  }
+
+  function blockEvent(event, target) {
+    if (allowPlaceOrder(target)) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+  }
+
+  document.addEventListener("click", function (event) {
+    const target = event.target && event.target.closest ? event.target.closest(PLACE_ORDER_SELECTOR) : null;
+    if (target) blockEvent(event, target);
+  }, true);
+
+  document.addEventListener("submit", function (event) {
+    const target = event.submitter && event.submitter.matches && event.submitter.matches(PLACE_ORDER_SELECTOR)
+      ? event.submitter
+      : null;
+    if (target) blockEvent(event, target);
+  }, true);
+})();
+
+
 
 
 

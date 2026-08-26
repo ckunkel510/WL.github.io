@@ -78,8 +78,9 @@ test("checkout hides local delivery for an address outside Texas", () => {
   assert.match(outsideBranch, /Pickup is selected\. Ship via UPS is also available/);
   assert.match(outsideBranch, /Ship via UPS is selected/);
   assert.match(outsideBranch, /Pickup from a Woodson store is also available/);
-  assert.match(outsideBranch, /setFulfillmentIntent\("ship"\)/);
-  assert.match(outsideBranch, /updateShippingStyles\("ship", \{ silent: !!\(ups && ups\.checked\), reason: "outside-address" \}\)/);
+  assert.doesNotMatch(outsideBranch, /setFulfillmentIntent\("ship"\)/);
+  assert.match(outsideBranch, /setFulfillmentIntent\(""\)/);
+  assert.match(outsideBranch, /updateShippingStyles\("", \{ silent: true, reason: "outside-address-needs-selection" \}\)/);
   assert.match(checkout, /button type="button" id="btnPickup"/);
   assert.doesNotMatch(checkout, /outside-address-click/);
 });
@@ -146,6 +147,38 @@ test("delivery options display the server-returned rate without a browser-side f
   assert.doesNotMatch(delivery, /WLShippingPromo/);
   assert.doesNotMatch(delivery, /promoApplied\s*\?/);
   assert.match(delivery, /cost = rawCost/);
+});
+
+test("checkout requires a real choice and forces WebTrack to rerate shared delivery controls", () => {
+  const checkout = source("Checkout2.js");
+  assert.doesNotMatch(checkout, /updateShippingStyles\(recommendedMode, \{ silent: true, reason: "recommended-fulfillment" \}\)/);
+  assert.match(checkout, /Choose Ship via UPS or Pickup for this out-of-state address/);
+  assert.match(checkout, /if \(\(isDelivered \|\| isShip\) && upsRad\.length\)/);
+  assert.doesNotMatch(checkout, /isShip && upsRad\.length && !upsRad\.is\(":checked"\)/);
+  assert.match(checkout, /else \{\s*\/\/ A cart\/address refresh can make a previously selected method/);
+  assert.match(checkout, /sessionStorage\.removeItem\("wl_fulfillment_method"\)/);
+  assert.match(checkout, /localStorage\.removeItem\("woodson_cart_method"\)/);
+});
+
+test("place order blocks missing native shipping charges except for a validated free promo", () => {
+  const delivery = source("DeliveryOptions.js");
+  const shippingAmount = extractedFunction(delivery, "shippingAmount");
+  const shippingChargeDecision = extractedFunction(delivery, "shippingChargeDecision");
+
+  assert.equal(shippingAmount("UPS Ground $26.86"), 26.86);
+  assert.equal(shippingAmount("$1,234.56"), 1234.56);
+  assert.equal(shippingAmount("Calculated at checkout"), 0);
+  assert.equal(shippingChargeDecision({ method: "pickup", nativeAmount: 0 }).ok, true);
+  assert.equal(shippingChargeDecision({ method: "ship", nativeAmount: 26.86 }).ok, true);
+  assert.equal(shippingChargeDecision({ method: "delivery", nativeAmount: 25 }).ok, true);
+  assert.equal(shippingChargeDecision({ method: "ship", nativeAmount: 0 }).ok, false);
+  assert.equal(shippingChargeDecision({ method: "delivery", nativeAmount: 0, promoAllowsFree: true }).ok, false);
+  assert.equal(shippingChargeDecision({ method: "ship", nativeAmount: 0, promoAllowsFree: true }).reason, "validated-free-shipping-promo");
+  assert.match(delivery, /Shipping Method\\s\*:\\s\*UPS/);
+  assert.match(delivery, /SaleTypeSelector_rbUPSDelivery/);
+  assert.match(delivery, /treat either native delivery-like state as chargeable/);
+  assert.match(delivery, /PlaceOrderButton/);
+  assert.match(delivery, /this order was not submitted/);
 });
 
 test("automatic package planning cannot create a non-promo free Ground rate", () => {

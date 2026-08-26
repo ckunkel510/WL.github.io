@@ -177,3 +177,30 @@ test("keeps supplied cart weight for Woodson delivery when UPS is unavailable", 
   assert.equal(result.recommendation.mode, "delivery");
   assert.equal(result.recommendation.amount, 50);
 });
+
+test("optimizes WebTrack fallback dimensions before selecting the lowest UPS carton rate", async () => {
+  const ratedPackageCounts = [];
+  const body = baseBody();
+  delete body.cart;
+  body.shipTo = { addressLine: ["6900 N Lincoln Ave"], city: "Lincolnwood", state: "IL", postalCode: "60712" };
+  body.packages = [
+    { weight: 4.2, length: 16.75, width: 11.25, height: 4.31 },
+    { weight: 4.2, length: 16.75, width: 11.25, height: 4.31 }
+  ];
+
+  const result = await buildFulfillmentQuote(body, {
+    requestRates: async (request) => {
+      ratedPackageCounts.push(request.packages.length);
+      const amount = request.packages.length === 1 ? 14 : 26.86;
+      return { rates: [{ serviceCode: "03", serviceName: "UPS Ground", currency: "USD", amount }] };
+    },
+    quoteWoodsonDelivery: async () => ({ available: false, reason: "outside-delivery-area" }),
+    storeFulfillmentClaim: async () => ({ ok: true })
+  });
+
+  assert.ok(ratedPackageCounts.includes(1));
+  assert.ok(ratedPackageCounts.includes(2));
+  assert.equal(result.recommendation.mode, "ship");
+  assert.equal(result.recommendation.amount, 14);
+  assert.equal(result.packageProfile.packageCount, 1);
+});
