@@ -21,7 +21,7 @@ function offer(overrides = {}) {
     ],
     basis: { merchandiseRevenue: 100, rawCogs: 50, packageCount: 2 },
     policy: { configured: true, marginFloor: 0.15 },
-    decision: { mode: "reduced", customerGroundAmount: 6.95 },
+    decision: { mode: "reduced", customerGroundAmount: 9.95 },
     ...overrides
   };
 }
@@ -35,7 +35,7 @@ test("finds a short-lived offer by origin, destination, and product weight", asy
   });
 
   assert.equal(stored.ok, true);
-  assert.equal(found.decision.customerGroundAmount, 6.95);
+  assert.equal(found.decision.customerGroundAmount, 9.95);
   assert.equal(found.packages.length, 2);
 });
 

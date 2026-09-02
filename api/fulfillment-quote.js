@@ -3,6 +3,7 @@
 const crypto = require("node:crypto");
 const { buildAutomaticShippingQuote } = require("./shipping-quote");
 const { getCatalogProducts } = require("./shipping-catalog");
+const { applyShippingMinimumToRates } = require("./shipping-policy");
 const { RequestError, requestRates } = require("./ups-rates")._internal;
 const { selectFulfillmentClaim, storeFulfillmentClaim } = require("./fulfillment-sessions");
 const { quoteWoodsonDelivery } = require("./woodson-delivery");
@@ -104,14 +105,11 @@ async function trustedCartWeight(cart, dependencies = {}) {
   return total;
 }
 
-function restoreRawRates(automatic) {
-  const rates = Array.isArray(automatic?.result?.rates) ? automatic.result.rates : [];
-  const rawGround = positive(automatic?.claim?.decision?.groundCost);
-  return rates.map((rate) => {
-    const original = positive(rate?.originalAmount) || positive(rate?.amount);
-    const amount = String(rate?.serviceCode || "") === "03" && rawGround ? rawGround : original;
-    return { ...rate, amount: money(amount) };
-  }).filter((rate) => rate.amount > 0);
+function offeredRates(automatic) {
+  const protectedResult = applyShippingMinimumToRates(automatic?.result || { rates: [] });
+  return (Array.isArray(protectedResult?.rates) ? protectedResult.rates : [])
+    .map((rate) => ({ ...rate, amount: money(rate.amount) }))
+    .filter((rate) => rate.amount > 0);
 }
 
 function groundRate(rates) {
@@ -189,7 +187,7 @@ async function buildFulfillmentQuote(body, dependencies = {}) {
       const automatic = await (dependencies.buildAutomaticShippingQuote || buildAutomaticShippingQuote)(body, automaticOptions);
       packages = automatic.claim?.packages || [];
       totalWeight = positive(automatic.claim?.productWeight) || totalWeight;
-      rates = restoreRawRates(automatic);
+      rates = offeredRates(automatic);
     } catch (error) {
       upsFailure = cleanText(error?.message || "UPS automatic packing was unavailable.", 180);
     }
@@ -199,7 +197,9 @@ async function buildFulfillmentQuote(body, dependencies = {}) {
     packages = suppliedPackages;
     totalWeight = totalWeight || packageWeight(suppliedPackages);
     try {
-      const rated = await rateRequest({ shipFrom: body.shipFrom, shipTo: body.shipTo, packages: suppliedPackages });
+      const rated = applyShippingMinimumToRates(
+        await rateRequest({ shipFrom: body.shipFrom, shipTo: body.shipTo, packages: suppliedPackages })
+      );
       rates = (Array.isArray(rated?.rates) ? rated.rates : [])
         .map((rate) => ({ ...rate, amount: money(rate.amount) }))
         .filter((rate) => rate.amount > 0);
@@ -303,7 +303,7 @@ module.exports._test = {
   buildFulfillmentQuote,
   isEasyParcel,
   packageWeight,
+  offeredRates,
   recommendFulfillment,
-  restoreRawRates,
   trustedCartWeight
 };

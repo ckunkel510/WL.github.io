@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 const {
   buildFulfillmentQuote,
   isEasyParcel,
+  offeredRates,
   recommendFulfillment
 } = require("../api/fulfillment-quote")._test;
 
@@ -14,7 +15,8 @@ const policy = {
   cardFeeRate: 0.03,
   cogsBufferRate: 0.02,
   contingencyRate: 0.01,
-  reducedGroundAmount: 6.95,
+  minimumGroundAmount: 9.95,
+  reducedGroundAmount: 9.95,
   packagingCostPerPackage: 0,
   handlingCostPerOrder: 0,
   configured: false
@@ -103,7 +105,7 @@ test("identifies the conservative easy-parcel threshold", () => {
   assert.equal(isEasyParcel([{ weight: 8 }]), false);
 });
 
-test("builds a unified UPS recommendation and stores only positive raw rates", async () => {
+test("builds a unified UPS recommendation and stores only positive customer rates", async () => {
   let stored = null;
   const result = await buildFulfillmentQuote(baseBody(), {
     requestRates: upsRate(28),
@@ -116,6 +118,21 @@ test("builds a unified UPS recommendation and stores only positive raw rates", a
   assert.equal(result.options.ups.amount, 28);
   assert.equal(stored.recommendation.mode, "ship");
   assert.ok(stored.rates.every((rate) => rate.amount > 0));
+});
+
+test("keeps the protected $9.95 customer offer instead of restoring the raw UPS rate", () => {
+  const rates = offeredRates({
+    result: {
+      rates: [
+        { serviceCode: "03", serviceName: "UPS Ground", amount: 9.95, originalAmount: 28, currency: "USD" },
+        { serviceCode: "02", serviceName: "UPS 2nd Day Air", amount: 48, currency: "USD" }
+      ]
+    },
+    claim: { decision: { groundCost: 28 } }
+  });
+
+  assert.equal(rates[0].amount, 9.95);
+  assert.equal(rates[0].originalAmount, 28);
 });
 
 test("falls back to Woodson when UPS packing cannot handle a lumber-size item", async () => {

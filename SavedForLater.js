@@ -8,6 +8,17 @@ function startSavedForLater() {
     return;
   }
 
+  function hasSignedInAccount(root = document) {
+    return Array.from(root.querySelectorAll("a[href]")).some((link) =>
+      /(?:[?&])SignOut=1(?:[&#]|$)/i.test(String(link.getAttribute("href") || ""))
+    );
+  }
+
+  if (!hasSignedInAccount()) {
+    console.log("[SFL] Skipping Saved For Later for a signed-out cart.");
+    return;
+  }
+
   if (window.__wlSavedForLaterLoaded) {
     console.log("[SFL] Saved For Later already initialized.");
     return;
@@ -1208,7 +1219,6 @@ if (document.readyState === "loading") {
   startSavedForLater();
 }
 })();                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
-
 
 
 

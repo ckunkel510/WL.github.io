@@ -122,6 +122,7 @@ async function buildAutomaticShippingQuote(body, dependencies = {}) {
         cardFeeRate: policy.cardFeeRate,
         cogsBufferRate: policy.cogsBufferRate,
         contingencyRate: policy.contingencyRate,
+        minimumGroundAmount: policy.minimumGroundAmount || policy.reducedGroundAmount,
         reducedGroundAmount: policy.reducedGroundAmount,
         packagingCostPerPackage: policy.packagingCostPerPackage,
         handlingCostPerOrder: policy.handlingCostPerOrder,

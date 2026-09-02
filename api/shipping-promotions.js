@@ -1,6 +1,9 @@
 "use strict";
 
-const FREE_GROUND_PROMO = {
+const { DEFAULT_MINIMUM_SHIPPING } = require("./shipping-policy");
+
+const PROMO_END_AT = "2026-09-01T00:00:00-05:00";
+const GROUND_PROMO = {
   code: "SUMMERCHILL26",
   displayCode: "SummerChill26",
   serviceCode: "03",
@@ -82,34 +85,39 @@ function cartHasEligibleProduct(items) {
   return Array.isArray(items) && items.some(isEligibleProduct);
 }
 
-function promoCodeMatches(value) {
-  return normalizePromoCode(value) === FREE_GROUND_PROMO.code;
+function promoCodeMatches(value, now) {
+  return promotionActive(now) && normalizePromoCode(value) === GROUND_PROMO.code;
+}
+
+function promotionActive(now = Date.now()) {
+  const timestamp = now instanceof Date ? now.getTime() : Number(now);
+  return Number.isFinite(timestamp) && timestamp < new Date(PROMO_END_AT).getTime();
 }
 
 function promotionApplies(input) {
   const source = input && typeof input === "object" ? input : {};
-  if (!promoCodeMatches(source.code || source.promoCode || source.couponCode)) return false;
+  if (!promotionActive(source.now) || normalizePromoCode(source.code || source.promoCode || source.couponCode) !== GROUND_PROMO.code) return false;
   if (source.eligible === true || source.cartEligible === true || source.promoEligible === true) return true;
   return cartHasEligibleProduct(source.cart || source.items || source.products || []);
 }
 
-function applyFreeGroundPromotion(result, input) {
+function applyGroundPromotion(result, input) {
   if (!result || !Array.isArray(result.rates) || !promotionApplies(input)) {
     return { result, promotion: null };
   }
 
   let applied = false;
   const rates = result.rates.map((rate) => {
-    if (String(rate.serviceCode || "") !== FREE_GROUND_PROMO.serviceCode) return rate;
+    if (String(rate.serviceCode || "") !== GROUND_PROMO.serviceCode) return rate;
     applied = true;
     return {
       ...rate,
       originalAmount: Number(rate.amount),
-      amount: 0,
+      amount: DEFAULT_MINIMUM_SHIPPING,
       promotion: {
-        code: FREE_GROUND_PROMO.displayCode,
-        label: FREE_GROUND_PROMO.label,
-        serviceCode: FREE_GROUND_PROMO.serviceCode
+        code: GROUND_PROMO.displayCode,
+        label: GROUND_PROMO.label,
+        serviceCode: GROUND_PROMO.serviceCode
       }
     };
   });
@@ -121,26 +129,28 @@ function applyFreeGroundPromotion(result, input) {
       rates,
       promotion: {
         applied: true,
-        code: FREE_GROUND_PROMO.displayCode,
-        label: FREE_GROUND_PROMO.label,
-        serviceCode: FREE_GROUND_PROMO.serviceCode,
-        serviceName: FREE_GROUND_PROMO.serviceName
+        code: GROUND_PROMO.displayCode,
+        label: GROUND_PROMO.label,
+        serviceCode: GROUND_PROMO.serviceCode,
+        serviceName: GROUND_PROMO.serviceName
       }
     },
-    promotion: FREE_GROUND_PROMO
+    promotion: GROUND_PROMO
   };
 }
 
 module.exports = {
-  FREE_GROUND_PROMO,
+  GROUND_PROMO,
+  PROMO_END_AT,
   ELIGIBLE_PRODUCTS,
   EXCLUDED_PRODUCTS,
-  applyFreeGroundPromotion,
+  applyGroundPromotion,
   cartHasEligibleProduct,
   isEligibleProduct,
   normalizeProductCode,
   normalizePromoCode,
   productRef,
+  promotionActive,
   promoCodeMatches,
   promotionApplies
 };

@@ -36,6 +36,18 @@ test("cart quantity controls load the trusted companywide clearance limit", () =
   assert.match(cart, /inventory could not be confirmed/i);
 });
 
+test("saved for later does not create account-only quicklists for guest carts", () => {
+  const savedForLater = source("SavedForLater.js");
+  const hasSignedInAccount = extractedFunction(savedForLater, "hasSignedInAccount");
+  const root = (href) => ({
+    querySelectorAll: () => [{ getAttribute: () => href }]
+  });
+
+  assert.equal(hasSignedInAccount(root("SignIn.aspx")), false);
+  assert.equal(hasSignedInAccount(root("SignIn.aspx?SignOut=1")), true);
+  assert.match(savedForLater, /Skipping Saved For Later for a signed-out cart/);
+});
+
 test("cart preserves its clearance policy when the shared script runs on checkout", () => {
   const cart = source("ShoppingCartRow.js");
   const loaderIndex = cart.indexOf("async function wlLoadCartPolicy");
@@ -119,6 +131,25 @@ test("fulfillment quoting recognizes the selected store in the current public st
   assert.deepEqual(selectedOrigin(), { name: "Caldwell", postalCode: "77836" });
 });
 
+test("cart quoting recognizes the selected store in the current public stores header", () => {
+  const cart = source("WoodsonShoppingCart.js");
+  const getSelectedStoreOrigin = extractedFunction(cart, "getSelectedStoreOrigin", {
+    text: (value) => String(value || "").replace(/\s+/g, " ").trim(),
+    STORE_ORIGINS: {
+      brenham: { name: "Brenham", postalCode: "77833" },
+      caldwell: { name: "Caldwell", postalCode: "77836" }
+    },
+    document: {
+      querySelectorAll: () => [{
+        getAttribute: () => "https://www.woodsonlumber.com/stores",
+        textContent: "Caldwell. Open until 5:30 PM"
+      }]
+    }
+  });
+
+  assert.deepEqual(getSelectedStoreOrigin(), { name: "Caldwell", postalCode: "77836" });
+});
+
 test("checkout classifies selected states and saved ZIPs for Texas-only delivery", () => {
   const checkout = source("Checkout2.js");
   const cleanStateValue = (value) => String(value || "").replace(/\s+/g, " ").trim();
@@ -148,13 +179,15 @@ test("delivery options display the server-returned rate without a browser-side f
   assert.match(delivery, /cost = rawCost/);
 });
 
-test("automatic package planning cannot create a non-promo free Ground rate", () => {
+test("every UPS path enforces the $9.95 floor after subsidies and promotions", () => {
   const rates = source("api/ups-rates.js");
   const bridge = source("api/rate.js");
-  assert.match(rates, /only an explicit,[\s\S]*validated promotion may reduce a checkout rate to zero/);
-  assert.match(rates, /shippingOffer:\s*\{[\s\S]*applied:\s*false/);
-  assert.doesNotMatch(bridge, /applyShippingOfferToRates/);
-  assert.match(bridge, /applyFreeGroundPromotion/);
+  const policy = source("api/shipping-policy.js");
+  assert.match(rates, /applyShippingMinimumToRates\(automatic\.result\)/);
+  assert.match(bridge, /applyGroundPromotion/);
+  assert.match(bridge, /safePositiveRates\(applyShippingMinimumToRates\(result\)\)/);
+  assert.match(policy, /DEFAULT_MINIMUM_SHIPPING = 9\.95/);
+  assert.doesNotMatch(policy, /\[0, reduced, ground\]/);
 });
 
 test("cart UPS requests no longer send browser-controlled promotion eligibility", () => {
@@ -259,12 +292,30 @@ test("saved for later resolves only after WebTrack completes its postback", asyn
   assert.equal(iframeRemoved, true);
 });
 
-test("the advertised SummerChill26 bridge remains separate from automatic offers", () => {
+test("the expired SummerChill26 bridge is retired without disabling fulfillment quotes", () => {
   const promo = source("UpsShippingPromo.js");
   const offer = source("UpsShippingOffer.js");
   assert.match(promo, /SUMMERCHILL26/);
+  assert.match(promo, /PROMO_END_AT = "2026-09-01T00:00:00-05:00"/);
+  assert.match(promo, /This shipping promotion has ended/);
   assert.match(promo, /promoSession=1/);
   assert.match(promo, /UpsShippingOffer\.js/);
   assert.match(offer, /WLShippingOffer/);
   assert.match(offer, /Checkout\|PlaceOrder/);
+});
+
+test("fresh fulfillment quotes preserve only an explicit customer selection", () => {
+  const checkout = source("Checkout2.js");
+  const offer = source("UpsShippingOffer.js");
+  assert.match(checkout, /wl_fulfillment_selection_source_v1/);
+  assert.match(checkout, /selectionSource !== "user"/);
+  assert.match(checkout, /:\s*"user";/);
+  assert.match(offer, /function rememberedSelection\(/);
+  assert.match(offer, /source === "user"/);
+  assert.match(offer, /await selectOffer\(selected\.mode\)/);
+});
+
+test("guest checkout names all three fulfillment choices", () => {
+  const guest = source("Guestcheckout.js");
+  assert.match(guest, /pickup, Woodson delivery, or UPS shipping/);
 });

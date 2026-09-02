@@ -9,7 +9,7 @@
   const CART_SUBTOTAL_KEY = 'wl_cart_subtotal_v1';
   const QUOTE_TTL_MS = 4 * 60 * 60 * 1000;
   const UPS_RATE_URL = 'https://wl-upsrates.vercel.app/api/ups-rates';
-  const SHIPPING_OFFER_VERSION = '20260813-unified-fulfillment-2';
+  const SHIPPING_OFFER_VERSION = '20260902-shipping-floor-1';
   const SHIPPING_OFFER_SCRIPT_URL = 'https://ckunkel510.github.io/WL.github.io/UpsShippingOffer.js?v=' + SHIPPING_OFFER_VERSION;
   let checkoutBlockReason = '';
   const STORE_ORIGINS = {
@@ -294,7 +294,8 @@
 
   function getSelectedStoreOrigin() {
     const locationText = text(Array.from(document.querySelectorAll('a[href]')).filter(function (link) {
-      return String(link.getAttribute('href') || '').toLowerCase().includes('storelocations');
+      const href = String(link.getAttribute('href') || '').toLowerCase();
+      return href.includes('storelocations') || /woodsonlumber\.com\/stores(?:[/?#]|$)/.test(href);
     }).map(function (link) { return link.textContent; }).join(' ')).toLowerCase();
     const key = Object.keys(STORE_ORIGINS).find(function (storeName) {
       return locationText.includes(storeName);
@@ -373,11 +374,9 @@
     return {
       label: rate.serviceName || 'UPS shipping',
       amount: '$' + Number(rate.amount).toFixed(2),
-      note: offer && offer.mode === 'free'
-        ? 'This cart currently qualifies for free UPS Ground to ZIP ' + userAddress.zip + '. Final eligibility is confirmed at checkout.'
-        : offer && offer.mode === 'reduced'
-          ? 'This cart currently qualifies for $6.95 UPS Ground to ZIP ' + userAddress.zip + '. Final eligibility is confirmed at checkout.'
-          : 'Estimated from ' + origin.name + ' to ZIP ' + userAddress.zip + ' using the current UPS Ground return. Final rate is confirmed before payment.'
+      note: offer && (offer.mode === 'reduced' || offer.mode === 'minimum')
+        ? 'This cart currently qualifies for $' + Number(offer.customerGroundAmount || rate.amount).toFixed(2) + ' UPS Ground to ZIP ' + userAddress.zip + '. Final eligibility is confirmed at checkout.'
+        : 'Estimated from ' + origin.name + ' to ZIP ' + userAddress.zip + ' using the current UPS Ground return. Final rate is confirmed before payment.'
     };
   }
 
@@ -538,6 +537,7 @@
         try {
           sessionStorage.removeItem('wl_fulfillment_intent');
           sessionStorage.removeItem('wl_fulfillment_method');
+          sessionStorage.removeItem('wl_fulfillment_selection_source_v1');
           sessionStorage.removeItem('wl_shipping_selection_v1');
           sessionStorage.removeItem(AUTO_ADVANCE_KEY);
         } catch {}

@@ -4,7 +4,8 @@ const DEFAULT_MARGIN_FLOOR = 0.15;
 const DEFAULT_CARD_FEE_RATE = 0.03;
 const DEFAULT_COGS_BUFFER_RATE = 0.02;
 const DEFAULT_CONTINGENCY_RATE = 0.01;
-const DEFAULT_REDUCED_GROUND = 6.95;
+const DEFAULT_MINIMUM_SHIPPING = 9.95;
+const DEFAULT_REDUCED_GROUND = DEFAULT_MINIMUM_SHIPPING;
 
 function finiteNumber(value, fallback = NaN) {
   const number = Number(value);
@@ -30,6 +31,11 @@ function policyFromEnv(env = process.env) {
   const packaging = nonNegative(env.SHIPPING_PACKAGING_COST_PER_PACKAGE);
   const handling = nonNegative(env.SHIPPING_HANDLING_COST_PER_ORDER);
   const enabled = /^(1|true|yes|on)$/i.test(String(env.SHIPPING_OFFER_ENABLED || ""));
+  const configuredMinimum = nonNegative(
+    env.SHIPPING_MINIMUM_GROUND_AMOUNT,
+    nonNegative(env.SHIPPING_REDUCED_GROUND_AMOUNT, DEFAULT_MINIMUM_SHIPPING)
+  );
+  const minimumGroundAmount = Math.max(DEFAULT_MINIMUM_SHIPPING, configuredMinimum);
   return {
     enabled,
     offerMode: "all",
@@ -37,7 +43,10 @@ function policyFromEnv(env = process.env) {
     cardFeeRate: rateFromEnv(env.SHIPPING_CARD_FEE_RATE, DEFAULT_CARD_FEE_RATE),
     cogsBufferRate: rateFromEnv(env.SHIPPING_COGS_BUFFER_RATE, DEFAULT_COGS_BUFFER_RATE),
     contingencyRate: rateFromEnv(env.SHIPPING_CONTINGENCY_RATE, DEFAULT_CONTINGENCY_RATE),
-    reducedGroundAmount: nonNegative(env.SHIPPING_REDUCED_GROUND_AMOUNT, DEFAULT_REDUCED_GROUND),
+    minimumGroundAmount,
+    // Keep the legacy property while existing Vercel configuration and stored
+    // claims transition to the explicit minimum-Ground name.
+    reducedGroundAmount: minimumGroundAmount,
     packagingCostPerPackage: packaging,
     handlingCostPerOrder: handling,
     configured: enabled && Number.isFinite(packaging) && Number.isFinite(handling)
@@ -102,14 +111,21 @@ function orderEconomics({ lines, groundCost, customerShipping = 0, packageCount,
   };
 }
 
-function uniqueCandidateAmounts(groundCost, reducedAmount) {
-  const ground = money(groundCost);
-  const reduced = money(Math.min(ground, reducedAmount));
-  return [...new Set([0, reduced, ground])].sort((left, right) => left - right);
+function minimumGroundAmount(policy = {}) {
+  return money(Math.max(
+    DEFAULT_MINIMUM_SHIPPING,
+    nonNegative(policy.minimumGroundAmount, nonNegative(policy.reducedGroundAmount, DEFAULT_MINIMUM_SHIPPING))
+  ));
+}
+
+function uniqueCandidateAmounts(groundCost, minimumAmount = DEFAULT_MINIMUM_SHIPPING) {
+  const minimum = money(Math.max(DEFAULT_MINIMUM_SHIPPING, minimumAmount));
+  const full = money(Math.max(groundCost, minimum));
+  return [...new Set([minimum, full])].sort((left, right) => left - right);
 }
 
 function modeForAmount(amount, groundCost) {
-  if (amount <= 0) return "free";
+  if (amount > money(groundCost)) return "minimum";
   if (amount < money(groundCost)) return "reduced";
   return "regular";
 }
@@ -117,10 +133,12 @@ function modeForAmount(amount, groundCost) {
 function evaluateShippingOffer(input) {
   const policy = input.policy || policyFromEnv();
   const groundCost = money(nonNegative(input.groundCost, 0));
+  const minimumAmount = minimumGroundAmount(policy);
   if (!policy.configured || groundCost <= 0) {
+    const customerGroundAmount = groundCost > 0 ? money(Math.max(groundCost, minimumAmount)) : groundCost;
     return {
-      mode: "regular",
-      customerGroundAmount: groundCost,
+      mode: modeForAmount(customerGroundAmount, groundCost),
+      customerGroundAmount,
       groundCost,
       subsidyAmount: 0,
       reviewRequired: false,
@@ -131,7 +149,7 @@ function evaluateShippingOffer(input) {
 
   let lastEconomics = null;
   try {
-    for (const amount of uniqueCandidateAmounts(groundCost, policy.reducedGroundAmount)) {
+    for (const amount of uniqueCandidateAmounts(groundCost, minimumAmount)) {
       const economics = orderEconomics({
         lines: input.lines,
         groundCost,
@@ -152,9 +170,10 @@ function evaluateShippingOffer(input) {
       };
     }
   } catch (error) {
+    const customerGroundAmount = money(Math.max(groundCost, minimumAmount));
     return {
-      mode: "regular",
-      customerGroundAmount: groundCost,
+      mode: modeForAmount(customerGroundAmount, groundCost),
+      customerGroundAmount,
       groundCost,
       subsidyAmount: 0,
       reviewRequired: false,
@@ -164,9 +183,10 @@ function evaluateShippingOffer(input) {
     };
   }
 
+  const customerGroundAmount = money(Math.max(groundCost, minimumAmount));
   return {
-    mode: "regular",
-    customerGroundAmount: groundCost,
+    mode: modeForAmount(customerGroundAmount, groundCost),
+    customerGroundAmount,
     groundCost,
     subsidyAmount: 0,
     reviewRequired: Boolean(lastEconomics && lastEconomics.margin < policy.marginFloor),
@@ -182,7 +202,7 @@ function applyShippingOfferToRates(rated, decision, { creditExpedited = false } 
     const originalAmount = money(rate.amount);
     let amount = originalAmount;
     if (String(rate.serviceCode || "") === "03") {
-      amount = money(Math.min(originalAmount, decision.customerGroundAmount));
+      amount = money(Math.max(DEFAULT_MINIMUM_SHIPPING, decision.customerGroundAmount));
     } else if (creditExpedited && subsidy > 0) {
       amount = money(Math.max(0, originalAmount - subsidy));
     }
@@ -194,14 +214,35 @@ function applyShippingOfferToRates(rated, decision, { creditExpedited = false } 
     ...rated,
     rates,
     shippingOffer: {
-      applied: subsidy > 0,
+      applied: amountForService(rates, "03") !== amountForService(rated.rates, "03"),
       mode: decision.mode,
       serviceCode: "03",
       serviceName: "UPS Ground",
-      customerGroundAmount: money(decision.customerGroundAmount),
+      customerGroundAmount: amountForService(rates, "03"),
       originalGroundAmount: money(decision.groundCost),
-      subsidyAmount: subsidy
+      subsidyAmount: subsidy,
+      minimumAmount: DEFAULT_MINIMUM_SHIPPING
     }
+  };
+}
+
+function amountForService(rates, serviceCode) {
+  const rate = (Array.isArray(rates) ? rates : []).find((item) => String(item?.serviceCode || "") === serviceCode);
+  return rate ? money(rate.amount) : 0;
+}
+
+function applyShippingMinimumToRates(rated, minimumAmount = DEFAULT_MINIMUM_SHIPPING) {
+  if (!rated || !Array.isArray(rated.rates)) return rated;
+  const floor = money(Math.max(DEFAULT_MINIMUM_SHIPPING, nonNegative(minimumAmount, DEFAULT_MINIMUM_SHIPPING)));
+  return {
+    ...rated,
+    rates: rated.rates.map((rate) => {
+      const originalAmount = nonNegative(rate?.originalAmount, 0);
+      const currentAmount = nonNegative(rate?.amount, 0);
+      if (currentAmount <= 0 && originalAmount <= 0) return null;
+      const amount = money(Math.max(floor, currentAmount > 0 ? currentAmount : floor));
+      return amount === currentAmount ? rate : { ...rate, amount };
+    }).filter(Boolean)
   };
 }
 
@@ -210,10 +251,13 @@ module.exports = {
   DEFAULT_COGS_BUFFER_RATE,
   DEFAULT_CONTINGENCY_RATE,
   DEFAULT_MARGIN_FLOOR,
+  DEFAULT_MINIMUM_SHIPPING,
   DEFAULT_REDUCED_GROUND,
+  applyShippingMinimumToRates,
   applyShippingOfferToRates,
   evaluateShippingOffer,
   money,
+  minimumGroundAmount,
   orderEconomics,
   policyFromEnv,
   uniqueCandidateAmounts

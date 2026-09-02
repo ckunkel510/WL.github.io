@@ -4,9 +4,10 @@ const crypto = require("node:crypto");
 const { XMLParser } = require("fast-xml-parser");
 const zipcodes = require("zipcodes");
 const { RequestError, requestRates } = require("./ups-rates")._internal;
-const { applyFreeGroundPromotion, cartHasEligibleProduct, promoCodeMatches } = require("./shipping-promotions");
+const { applyGroundPromotion, cartHasEligibleProduct, promoCodeMatches } = require("./shipping-promotions");
 const { findPromoClaim, storePromoClaim } = require("./shipping-promo-sessions");
 const { findFulfillmentClaim } = require("./fulfillment-sessions");
+const { applyShippingMinimumToRates } = require("./shipping-policy");
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -454,13 +455,14 @@ async function handler(req, res) {
       : translated.body;
     const rated = result ? null : await requestRates(rateBody);
     if (!result) result = rated;
-    // Preserve the already-advertised SummerChill26 promotion as a final,
-    // explicit override through its existing campaign lifecycle.
+    // The expired SummerChill26 bridge remains readable for old sessions, but
+    // the promotion policy rejects it after its campaign end. The final floor
+    // is applied after every other adjustment so no delivery rate can be free.
     const explicitPromo = legacyPromotionInput(req, rating);
     const storedPromo = await findPromoClaim(translated.body);
     const promoInput = storedPromo && storedPromo.eligible ? storedPromo : explicitPromo;
-    result = applyFreeGroundPromotion(result, promoInput).result;
-    result = result?.promotion?.applied ? result : safePositiveRates(result);
+    result = applyGroundPromotion(result, promoInput).result;
+    result = safePositiveRates(applyShippingMinimumToRates(result));
     if (!result?.rates?.length) throw new RequestError(422, "No positive shipping or delivery rate is available for this order.");
     return sendXml(res, 200, isSoap ? soapSuccessXml(result, translated.context) : successXml(result, translated.context));
   } catch (error) {

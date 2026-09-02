@@ -1,8 +1,8 @@
 (function () {
   "use strict";
 
-  var BUILD_VERSION = "20260710-ups-fallback-1";
-  var OFFER_VERSION = "20260813-unified-fulfillment-2";
+  var BUILD_VERSION = "20260902-shipping-floor-1";
+  var OFFER_VERSION = "20260902-shipping-floor-1";
   var offerPage = /ShoppingCart\.aspx|Checkout|PlaceOrder/i.test(window.location.pathname || "");
   if (offerPage && !document.querySelector('script[data-wl-ups-shipping-offer="' + OFFER_VERSION + '"]')) {
     var offerScript = document.createElement("script");
@@ -19,6 +19,7 @@
   var EVENT_NAME = "wl:shipping-promo-change";
   var PROMO_CODE = "SUMMERCHILL26";
   var DISPLAY_CODE = "SummerChill26";
+  var PROMO_END_AT = "2026-09-01T00:00:00-05:00";
   var PRODUCT_DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSg6EOqMwc_5UjWU7ycyvF-rgj717p-WjV2Vhydcb7uc2Mf2Awj6GehQp66AHwViq4uX6mXXrtZZR-1/pub?output=csv";
   var PROMO_SESSION_URL = "https://wl-upsrates.vercel.app/api/rate?promoSession=1";
   var PRODUCT_DATA_CACHE = null;
@@ -107,6 +108,11 @@
 
   function normalizePromo(value) {
     return text(value).replace(/[\s-]+/g, "").toUpperCase();
+  }
+
+  function promoActive() {
+    var endTime = new Date(PROMO_END_AT).getTime();
+    return Number.isFinite(endTime) && Date.now() < endTime;
   }
 
   function normalizeProductCode(value) {
@@ -366,6 +372,10 @@
   }
 
   function currentPromo() {
+    if (!promoActive()) {
+      if (readStored()) clearStored();
+      return null;
+    }
     var stored = readStored();
     if (!stored || normalizePromo(stored.code) !== PROMO_CODE) return null;
     var items = cartItems();
@@ -395,6 +405,10 @@
   }
 
   function applyCode(value) {
+    if (!promoActive()) {
+      clearStored();
+      return { ok: false, message: "This shipping promotion has ended." };
+    }
     var code = normalizePromo(value);
     var items = cartItems();
     var eligible = cartEligible(items);
@@ -480,6 +494,10 @@
   }
 
   function renderPromoField() {
+    if (!promoActive()) {
+      Array.prototype.slice.call(document.querySelectorAll("#wl-ups-promo")).forEach(function (node) { node.remove(); });
+      return;
+    }
     var host = promoHost();
     if (!host) return;
     var current = document.querySelector('#wl-ups-promo[data-wl-promo-version="' + BUILD_VERSION + '"]');
@@ -575,6 +593,11 @@
   }
 
   function boot() {
+    if (!promoActive()) {
+      clearStored();
+      renderPromoField();
+      return;
+    }
     renderPromoField();
     mirrorNativePromo();
     schedulePromoSessionRegistration();
@@ -585,6 +608,7 @@
   }
 
   window.WLShippingPromo = {
+    active: promoActive(),
     applyCode: applyCode,
     cartEligible: cartEligible,
     cartItems: cartItems,

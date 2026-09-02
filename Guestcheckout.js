@@ -323,7 +323,7 @@
     modal.innerHTML = `
       <div class="gc-card" role="dialog" aria-modal="true" aria-labelledby="gc_title">
         <div class="gc-head" id="gc_title">Checkout as Guest</div>
-        <div class="gc-sub">Enter the basics once and we’ll move you into checkout. You can still choose pickup or delivery on the next screen.</div>
+        <div class="gc-sub">Enter the basics once and we’ll move you into checkout. You can still choose pickup, Woodson delivery, or UPS shipping on the next screen.</div>
         <div class="gc-error" id="gc_error"></div>
 
         <div class="gc-row">

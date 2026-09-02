@@ -3,6 +3,8 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const {
+  DEFAULT_MINIMUM_SHIPPING,
+  applyShippingMinimumToRates,
   applyShippingOfferToRates,
   evaluateShippingOffer,
   orderEconomics,
@@ -15,7 +17,8 @@ function policy(overrides = {}) {
     cardFeeRate: 0.03,
     cogsBufferRate: 0.02,
     contingencyRate: 0.01,
-    reducedGroundAmount: 6.95,
+    minimumGroundAmount: 9.95,
+    reducedGroundAmount: 9.95,
     packagingCostPerPackage: 1.25,
     handlingCostPerOrder: 2.5,
     configured: true,
@@ -50,6 +53,8 @@ test("requires an explicit live activation flag even when operating costs are co
 
   assert.equal(disabled.configured, false);
   assert.equal(enabled.configured, true);
+  assert.equal(enabled.minimumGroundAmount, 9.95);
+  assert.equal(DEFAULT_MINIMUM_SHIPPING, 9.95);
 });
 
 test("keeps every qualified product in the all-products offer scope", () => {
@@ -67,16 +72,16 @@ test("includes the card fee on customer-paid shipping", () => {
   const economics = orderEconomics({
     lines: [{ quantity: 1, price: 100, averageCost: 60 }],
     groundCost: 20,
-    customerShipping: 6.95,
+    customerShipping: 9.95,
     packageCount: 2,
     policy: policy()
   });
 
-  assert.equal(economics.processingFees, 3.2085);
+  assert.ok(Math.abs(economics.processingFees - 3.2985) < 1e-12);
   assert.equal(economics.fulfillmentCost, 5);
 });
 
-test("grants free Ground when the protected margin remains at least fifteen percent", () => {
+test("subsidizes Ground only down to the $9.95 floor", () => {
   const decision = evaluateShippingOffer({
     lines: [{ quantity: 1, price: 100, averageCost: 45 }],
     groundCost: 14,
@@ -84,12 +89,12 @@ test("grants free Ground when the protected margin remains at least fifteen perc
     policy: policy()
   });
 
-  assert.equal(decision.mode, "free");
-  assert.equal(decision.customerGroundAmount, 0);
-  assert.equal(decision.subsidyAmount, 14);
+  assert.equal(decision.mode, "reduced");
+  assert.equal(decision.customerGroundAmount, 9.95);
+  assert.equal(decision.subsidyAmount, 4.05);
 });
 
-test("grants the Turtlebox cart free Ground under the protected-margin rules", () => {
+test("keeps the Turtlebox subsidy above the shipping floor", () => {
   const decision = evaluateShippingOffer({
     lines: [{ quantity: 1, price: 430, averageCost: 305.7768 }],
     groundCost: 17.96,
@@ -97,13 +102,13 @@ test("grants the Turtlebox cart free Ground under the protected-margin rules", (
     policy: policy()
   });
 
-  assert.equal(decision.mode, "free");
-  assert.equal(decision.customerGroundAmount, 0);
-  assert.equal(decision.economics.contribution, 79.197664);
+  assert.equal(decision.mode, "reduced");
+  assert.equal(decision.customerGroundAmount, 9.95);
+  assert.equal(decision.economics.contribution, 88.849164);
   assert.ok(decision.economics.margin > 0.18);
 });
 
-test("uses the $6.95 tier when free Ground misses the protected margin", () => {
+test("uses the $9.95 tier when it protects the required margin", () => {
   const decision = evaluateShippingOffer({
     lines: [{ quantity: 1, price: 100, averageCost: 61.1 }],
     groundCost: 15,
@@ -112,11 +117,11 @@ test("uses the $6.95 tier when free Ground misses the protected margin", () => {
   });
 
   assert.equal(decision.mode, "reduced");
-  assert.equal(decision.customerGroundAmount, 6.95);
+  assert.equal(decision.customerGroundAmount, 9.95);
   assert.ok(decision.economics.margin >= 0.15);
 });
 
-test("never charges $6.95 when the real Ground rate is lower", () => {
+test("charges the $9.95 minimum when the carrier Ground rate is lower", () => {
   const decision = evaluateShippingOffer({
     lines: [{ quantity: 1, price: 30, averageCost: 25 }],
     groundCost: 4.5,
@@ -124,8 +129,8 @@ test("never charges $6.95 when the real Ground rate is lower", () => {
     policy: policy()
   });
 
-  assert.equal(decision.mode, "regular");
-  assert.equal(decision.customerGroundAmount, 4.5);
+  assert.equal(decision.mode, "minimum");
+  assert.equal(decision.customerGroundAmount, 9.95);
 });
 
 test("charges regular Ground and flags review when even full Ground is below the floor", () => {
@@ -149,12 +154,23 @@ test("keeps the automatic offer limited to Ground", () => {
     ]
   }, {
     mode: "reduced",
-    customerGroundAmount: 6.95,
+    customerGroundAmount: 9.95,
     groundCost: 15,
-    subsidyAmount: 8.05
+    subsidyAmount: 5.05
   });
 
-  assert.equal(result.rates[0].amount, 6.95);
+  assert.equal(result.rates[0].amount, 9.95);
   assert.equal(result.rates[1].amount, 45);
-  assert.equal(result.shippingOffer.subsidyAmount, 8.05);
+  assert.equal(result.shippingOffer.subsidyAmount, 5.05);
+});
+
+test("the final rate safeguard raises discounted and sub-floor charges to $9.95", () => {
+  const result = applyShippingMinimumToRates({
+    rates: [
+      { serviceCode: "03", amount: 0, originalAmount: 18 },
+      { serviceCode: "02", amount: 7 }
+    ]
+  });
+
+  assert.deepEqual(result.rates.map((rate) => rate.amount), [9.95, 9.95]);
 });

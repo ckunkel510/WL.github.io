@@ -497,9 +497,9 @@
           if (cartContainsLargeItems) {
             shippingMessage.textContent = 'Shipping calculated at checkout.';
           } else if (cartSubtotal >= 50) {
-            shippingMessage.textContent = 'Your order qualifies for free shipping in our central delivery zone!';
+            shippingMessage.textContent = 'UPS shipping starts at $9.95; the final rate is calculated at checkout.';
           } else {
-            shippingMessage.textContent = 'Shipping estimated at $9.95 for your location unless your order qualifies for free shipping.';
+            shippingMessage.textContent = 'UPS shipping starts at $9.95; the final rate is calculated at checkout.';
           }
         } else {
           if (cartContainsLargeItems) {

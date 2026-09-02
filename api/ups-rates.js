@@ -3,6 +3,7 @@
 const crypto = require("node:crypto");
 const zipcodes = require("zipcodes");
 const { buildAutomaticShippingQuote } = require("./shipping-quote");
+const { applyShippingMinimumToRates } = require("./shipping-policy");
 
 const DEFAULT_ORIGINS = [
   "https://webtrack.woodsonlumber.com",
@@ -315,29 +316,9 @@ async function handler(req, res) {
     if (cart.length) {
       try {
         const automatic = await buildAutomaticShippingQuote(body, { requestRates });
-        // Automatic package planning remains useful, but only an explicit,
-        // validated promotion may reduce a checkout rate to zero. Return the
-        // actual UPS charges here; the promo bridge is applied later in rate.js.
-        const rawRates = automatic.result.rates.map((rate) => {
-          if (String(rate.serviceCode || "") !== "03") return rate;
-          const rawAmount = Number(automatic.claim?.decision?.groundCost);
-          if (!Number.isFinite(rawAmount) || rawAmount <= 0) return rate;
-          const { originalAmount, promotion, ...rest } = rate;
-          return { ...rest, amount: rawAmount };
-        });
-        return sendJson(res, 200, {
-          ...automatic.result,
-          rates: rawRates,
-          shippingOffer: {
-            applied: false,
-            mode: "regular",
-            serviceCode: "03",
-            serviceName: "UPS Ground",
-            customerGroundAmount: Number(automatic.claim?.decision?.groundCost) || 0,
-            originalGroundAmount: Number(automatic.claim?.decision?.groundCost) || 0,
-            subsidyAmount: 0
-          }
-        });
+        // Trusted cart economics may subsidize Ground, but the shared policy
+        // enforces a positive customer floor before any rate leaves the API.
+        return sendJson(res, 200, applyShippingMinimumToRates(automatic.result));
       } catch {
         // A missing/stale catalog or incomplete trusted package plan must never
         // create a customer subsidy. Use a supplied fallback plan when one is
@@ -347,7 +328,7 @@ async function handler(req, res) {
         }
       }
     }
-    const rated = await requestRates(body);
+    const rated = applyShippingMinimumToRates(await requestRates(body));
     return sendJson(res, 200, rated);
   } catch (error) {
     const status = error instanceof RequestError ? error.status : 500;

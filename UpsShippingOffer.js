@@ -1,11 +1,12 @@
 (function () {
   "use strict";
 
-  var BUILD_VERSION = "20260813-unified-fulfillment-2";
+  var BUILD_VERSION = "20260902-shipping-floor-1";
   var RATE_URL = "https://wl-upsrates.vercel.app/api/fulfillment-quote";
   var PRODUCT_DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSg6EOqMwc_5UjWU7ycyvF-rgj717p-WjV2Vhydcb7uc2Mf2Awj6GehQp66AHwViq4uX6mXXrtZZR-1/pub?output=csv";
   var STORAGE_KEY = "wl_shipping_offer_v1";
   var CART_DATA_KEY = "wl_shipping_offer_cart_v1";
+  var SELECTION_SOURCE_KEY = "wl_fulfillment_selection_source_v1";
   var EVENT_NAME = "wl:shipping-offer-change";
   var PRODUCT_DATA_CACHE = null;
   var refreshTimer = null;
@@ -254,7 +255,11 @@
     return totalWeight > 0 ? [] : packages;
   }
 
-  function writeOffer(result, zip, items) {
+  function notifyOffer(payload) {
+    try { document.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: payload })); } catch (error) {}
+  }
+
+  function writeOffer(result, zip, items, shouldNotify) {
     var payload = {
       zip: zip,
       cartSignature: items.map(function (item) {
@@ -268,8 +273,18 @@
       ts: Date.now()
     };
     try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); } catch (error) {}
-    try { document.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: payload })); } catch (error) {}
+    if (shouldNotify !== false) notifyOffer(payload);
     return payload;
+  }
+
+  function rememberedSelection() {
+    try {
+      var mode = sessionStorage.getItem("wl_fulfillment_intent") || sessionStorage.getItem("wl_fulfillment_method") || "";
+      var source = sessionStorage.getItem(SELECTION_SOURCE_KEY) || "";
+      return source === "user" && (mode === "ship" || mode === "delivery") ? { mode: mode, source: source } : null;
+    } catch (error) {
+      return null;
+    }
   }
 
   async function refreshOffer() {
@@ -297,7 +312,15 @@
       });
       var result = await response.json().catch(function () { return {}; });
       if (!response.ok) throw new Error(result.error || "UPS shipping offer could not be prepared.");
-      return writeOffer(result, zip, items);
+      var payload = writeOffer(result, zip, items, false);
+      var selected = rememberedSelection();
+      var selectedOption = selected && result.options && result.options[selected.mode];
+      if (selectedOption && selectedOption.available && result.recommendation && result.recommendation.mode !== selected.mode) {
+        await selectOffer(selected.mode);
+        payload = currentOffer() || payload;
+      }
+      notifyOffer(payload);
+      return payload;
     })().catch(function (error) {
       console.warn("[WLShippingOffer] Automatic fulfillment quote could not be prepared.", error);
       return null;

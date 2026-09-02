@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20260813-unified-fulfillment-2";
+  window.WL_CHECKOUT_BUILD = "20260902-shipping-floor-1";
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
   const UPS_SHIPPING_ENABLED = true;
@@ -117,6 +117,7 @@
   const SINGLE_PAGE_SESSION_KEY = "wl_checkout_single_page_preview";
   const AUTO_ADVANCE_KEY = "wl_checkout_auto_advance";
   const FULFILLMENT_INTENT_KEY = "wl_fulfillment_intent";
+  const FULFILLMENT_SELECTION_SOURCE_KEY = "wl_fulfillment_selection_source_v1";
   const CHECKOUT_ADDRESS_PAYLOAD_KEY = "wl_checkout_address_payload";
   const CHECKOUT_CONTACT_PAYLOAD_KEY = "wl_checkout_contact_payload";
   const CONTACT_RETURN_KEY = "wl_contact_return_path";
@@ -130,6 +131,7 @@
       if (!UPS_SHIPPING_ENABLED && intent === "ship") {
         sessionStorage.removeItem(FULFILLMENT_INTENT_KEY);
         sessionStorage.removeItem("wl_fulfillment_method");
+        sessionStorage.removeItem(FULFILLMENT_SELECTION_SOURCE_KEY);
         return "";
       }
       return intent;
@@ -139,7 +141,21 @@
   function setFulfillmentIntent(value) {
     try {
       if (value) sessionStorage.setItem(FULFILLMENT_INTENT_KEY, value);
-      else sessionStorage.removeItem(FULFILLMENT_INTENT_KEY);
+      else {
+        sessionStorage.removeItem(FULFILLMENT_INTENT_KEY);
+        sessionStorage.removeItem(FULFILLMENT_SELECTION_SOURCE_KEY);
+      }
+    } catch {}
+  }
+
+  function getFulfillmentSelectionSource() {
+    try { return sessionStorage.getItem(FULFILLMENT_SELECTION_SOURCE_KEY) || ""; } catch { return ""; }
+  }
+
+  function setFulfillmentSelectionSource(value) {
+    try {
+      if (value) sessionStorage.setItem(FULFILLMENT_SELECTION_SOURCE_KEY, value);
+      else sessionStorage.removeItem(FULFILLMENT_SELECTION_SOURCE_KEY);
     } catch {}
   }
 
@@ -3826,11 +3842,12 @@ document.addEventListener("click", function (ev) {
                   ? "$" + Number(upsOption.amount || 0).toFixed(2) + (recommendedMode === "ship" ? " · Recommended" : "")
                   : "Not available");
                 const intent = getFulfillmentIntent();
+                const selectionSource = getFulfillmentSelectionSource();
                 if (!deliveryAvailable && intent === "delivery") {
                   updateShippingStyles(upsAvailable ? "ship" : "", { silent: true, reason: "delivery-unavailable" });
                 } else if (!upsAvailable && intent === "ship") {
                   updateShippingStyles(deliveryAvailable ? "delivery" : "", { silent: true, reason: "ups-unavailable" });
-                } else if (!intent && (recommendedMode === "ship" || recommendedMode === "delivery")) {
+                } else if ((!intent || selectionSource !== "user") && (recommendedMode === "ship" || recommendedMode === "delivery")) {
                   updateShippingStyles(recommendedMode, { silent: true, reason: "recommended-fulfillment" });
                 }
                 if (!deliveryAvailable && !upsAvailable) {
@@ -3852,6 +3869,7 @@ document.addEventListener("click", function (ev) {
                   );
                   if (!intent || intent === "delivery") {
                     setFulfillmentIntent("ship");
+                    setFulfillmentSelectionSource("system");
                     try { sessionStorage.setItem("wl_fulfillment_method", "ship"); } catch {}
                     window.setTimeout(function () {
                       const ups = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbUPSDelivery");
@@ -3865,6 +3883,7 @@ document.addEventListener("click", function (ev) {
                     try {
                       sessionStorage.removeItem("wl_fulfillment_intent");
                       sessionStorage.removeItem("wl_fulfillment_method");
+                      sessionStorage.removeItem(FULFILLMENT_SELECTION_SOURCE_KEY);
                       localStorage.removeItem("woodson_cart_method");
                     } catch {}
                     updateShippingStyles("", { silent: true, reason: "outside-no-ups" });
@@ -3890,6 +3909,8 @@ document.addEventListener("click", function (ev) {
           function updateShippingStyles(mode, opts) {
             opts = opts || {};
             const silent = !!opts.silent;
+            const previousMode = getFulfillmentIntent();
+            const previousSource = getFulfillmentSelectionSource();
 
             const delRad = $("#ctl00_PageBody_SaleTypeSelector_rbDelivered");
             const pickRad = $("#ctl00_PageBody_SaleTypeSelector_rbCollectLater");
@@ -3938,6 +3959,10 @@ document.addEventListener("click", function (ev) {
                 setFulfillmentIntent(mode);
                 sessionStorage.setItem("wl_fulfillment_method", mode);
                 localStorage.setItem("woodson_cart_method", mode);
+                const selectionSource = silent
+                  ? (previousMode === mode && previousSource ? previousSource : "system")
+                  : "user";
+                setFulfillmentSelectionSource(selectionSource);
               } catch {}
             }
             if (!silent && hasSelection && wlRequestEpalletCartSync(mode)) return;
@@ -4413,6 +4438,7 @@ document.addEventListener("click", function (ev) {
           if (!isEpalletCartSync) {
             sessionStorage.removeItem("wl_fulfillment_method");
             sessionStorage.removeItem(FULFILLMENT_INTENT_KEY);
+            sessionStorage.removeItem(FULFILLMENT_SELECTION_SOURCE_KEY);
           }
           sessionStorage.removeItem("wl_shipping_selection_v1");
         } catch {}

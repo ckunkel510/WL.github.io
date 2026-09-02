@@ -10,7 +10,8 @@ function policy(overrides = {}) {
     cardFeeRate: 0.03,
     cogsBufferRate: 0.02,
     contingencyRate: 0.01,
-    reducedGroundAmount: 6.95,
+    minimumGroundAmount: 9.95,
+    reducedGroundAmount: 9.95,
     packagingCostPerPackage: 1.25,
     handlingCostPerOrder: 2.5,
     configured: true,
@@ -64,8 +65,8 @@ test("uses the true destination-specific UPS Ground cost for the subsidy", async
   const local = await quote("78701");
   const hawaii = await quote("96801");
 
-  assert.equal(local.result.shippingOffer.mode, "free");
-  assert.equal(local.result.rates[0].amount, 0);
+  assert.equal(local.result.shippingOffer.mode, "reduced");
+  assert.equal(local.result.rates[0].amount, 9.95);
   assert.equal(hawaii.result.shippingOffer.mode, "regular");
   assert.equal(hawaii.result.rates[0].amount, 45);
 });
@@ -87,11 +88,11 @@ test("builds the claim from trusted catalog revenue and cost instead of browser 
   assert.ok(result.claim.packages.length >= 1);
 });
 
-test("uses the $6.95 Ground tier only when it restores the protected margin", async () => {
+test("uses the $9.95 Ground tier only when it restores the protected margin", async () => {
   const result = await quote("78701", 67);
 
   assert.equal(result.result.shippingOffer.mode, "reduced");
-  assert.equal(result.result.rates[0].amount, 6.95);
+  assert.equal(result.result.rates[0].amount, 9.95);
 });
 
 test("marks a full-Ground order for internal product-margin review", async () => {
@@ -128,7 +129,7 @@ test("includes non-Case brands in the automatic all-products scope", async () =>
     policy: policy({ offerMode: "case-pilot" })
   });
 
-  assert.equal(result.result.shippingOffer.mode, "free");
+  assert.equal(result.result.shippingOffer.mode, "reduced");
   assert.equal(result.claim.policy.offerMode, "all");
 });
 
