@@ -38,13 +38,17 @@ test("cart quantity controls load the trusted companywide clearance limit", () =
 
 test("saved for later does not create account-only quicklists for guest carts", () => {
   const savedForLater = source("SavedForLater.js");
+  const hasCartDetailView = extractedFunction(savedForLater, "hasCartDetailView");
   const hasSignedInAccount = extractedFunction(savedForLater, "hasSignedInAccount");
   const root = (href) => ({
     querySelectorAll: () => [{ getAttribute: () => href }]
   });
 
+  assert.equal(hasCartDetailView({ querySelector: () => null }), false);
+  assert.equal(hasCartDetailView({ querySelector: () => ({}) }), true);
   assert.equal(hasSignedInAccount(root("SignIn.aspx")), false);
   assert.equal(hasSignedInAccount(root("SignIn.aspx?SignOut=1")), true);
+  assert.match(savedForLater, /Skipping Saved For Later outside the cart detail view/);
   assert.match(savedForLater, /Skipping Saved For Later for a signed-out cart/);
 });
 
@@ -313,6 +317,14 @@ test("fresh fulfillment quotes preserve only an explicit customer selection", ()
   assert.match(offer, /function rememberedSelection\(/);
   assert.match(offer, /source === "user"/);
   assert.match(offer, /await selectOffer\(selected\.mode\)/);
+});
+
+test("a guest checkout transition cannot lose an in-flight quote refresh", () => {
+  const offer = source("UpsShippingOffer.js");
+  assert.match(offer, /if \(activeRequest\) \{[\s\S]*refreshQueued = true/);
+  assert.match(offer, /MISSING_CONTEXT_MAX_RETRIES = 10/);
+  assert.match(offer, /scheduleRefresh\(750\)/);
+  assert.match(offer, /if \(refreshQueued\) \{[\s\S]*scheduleRefresh\(50\)/);
 });
 
 test("guest checkout names all three fulfillment choices", () => {

@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var BUILD_VERSION = "20260902-shipping-floor-1";
+  var BUILD_VERSION = "20260902-shipping-floor-2";
   var RATE_URL = "https://wl-upsrates.vercel.app/api/fulfillment-quote";
   var PRODUCT_DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSg6EOqMwc_5UjWU7ycyvF-rgj717p-WjV2Vhydcb7uc2Mf2Awj6GehQp66AHwViq4uX6mXXrtZZR-1/pub?output=csv";
   var STORAGE_KEY = "wl_shipping_offer_v1";
@@ -12,6 +12,9 @@
   var refreshTimer = null;
   var activeRequest = null;
   var activeSelectionRequest = null;
+  var refreshQueued = false;
+  var missingContextRetries = 0;
+  var MISSING_CONTEXT_MAX_RETRIES = 10;
 
   if (!/ShoppingCart\.aspx|Checkout|PlaceOrder/i.test(window.location.pathname || "")) return;
   if (window.WLShippingOffer && window.WLShippingOffer.version === BUILD_VERSION) return;
@@ -288,14 +291,24 @@
   }
 
   async function refreshOffer() {
-    if (activeRequest) return activeRequest;
+    if (activeRequest) {
+      refreshQueued = true;
+      return activeRequest;
+    }
     activeRequest = (async function () {
       var items = cartItems();
       var origin = selectedOrigin();
       rememberCart(items, origin);
       var address = checkoutAddress();
       var zip = address.postalCode || await savedZip();
-      if (!items.length || !origin || !zip) return null;
+      if (!items.length || !origin || !zip) {
+        if (items.length && missingContextRetries < MISSING_CONTEXT_MAX_RETRIES) {
+          missingContextRetries += 1;
+          scheduleRefresh(750);
+        }
+        return null;
+      }
+      missingContextRetries = 0;
       address.postalCode = zip;
       var products = await productData();
       var packages = fallbackPackages(items, products);
@@ -324,7 +337,13 @@
     })().catch(function (error) {
       console.warn("[WLShippingOffer] Automatic fulfillment quote could not be prepared.", error);
       return null;
-    }).finally(function () { activeRequest = null; });
+    }).finally(function () {
+      activeRequest = null;
+      if (refreshQueued) {
+        refreshQueued = false;
+        scheduleRefresh(50);
+      }
+    });
     return activeRequest;
   }
 

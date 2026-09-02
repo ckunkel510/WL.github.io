@@ -8,6 +8,17 @@ function startSavedForLater() {
     return;
   }
 
+  function hasCartDetailView(root = document) {
+    return !!root.querySelector(
+      "#ctl00_PageBody_ShoppingCartDetailPanel, .ShoppingCartDetailPanel, .shopping-cart-details"
+    );
+  }
+
+  if (!hasCartDetailView()) {
+    console.log("[SFL] Skipping Saved For Later outside the cart detail view.");
+    return;
+  }
+
   function hasSignedInAccount(root = document) {
     return Array.from(root.querySelectorAll("a[href]")).some((link) =>
       /(?:[?&])SignOut=1(?:[&#]|$)/i.test(String(link.getAttribute("href") || ""))
@@ -1219,7 +1230,6 @@ if (document.readyState === "loading") {
   startSavedForLater();
 }
 })();                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
-
 
 
 
