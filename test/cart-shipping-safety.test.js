@@ -10,8 +10,10 @@ function source(file) {
 }
 
 function extractedFunction(fileSource, name, dependencies) {
-  const start = fileSource.indexOf(`function ${name}(`);
+  let start = fileSource.indexOf(`function ${name}(`);
   assert.ok(start >= 0, `${name} should exist`);
+  const asyncStart = fileSource.lastIndexOf("async ", start);
+  if (asyncStart >= 0 && fileSource.slice(asyncStart + 6, start) === "") start = asyncStart;
   const bodyStart = fileSource.indexOf("{", start);
   let depth = 0;
   for (let index = bodyStart; index < fileSource.length; index += 1) {
@@ -325,6 +327,29 @@ test("a guest checkout transition cannot lose an in-flight quote refresh", () =>
   assert.match(offer, /MISSING_CONTEXT_MAX_RETRIES = 10/);
   assert.match(offer, /scheduleRefresh\(750\)/);
   assert.match(offer, /if \(refreshQueued\) \{[\s\S]*scheduleRefresh\(50\)/);
+});
+
+test("checkout synchronizes the displayed fulfillment mode before native submit", async () => {
+  const checkout = source("Checkout2.js");
+  const syncFulfillmentForNativeSubmit = extractedFunction(
+    checkout,
+    "syncFulfillmentForNativeSubmit",
+    {
+      getFulfillmentIntent: () => "ship",
+      getSaleType: () => "delivery",
+      window: { WLShippingOffer: { select: async (mode) => mode === "ship" } }
+    }
+  );
+
+  assert.equal(await syncFulfillmentForNativeSubmit(), true);
+  assert.match(checkout, /proxy\.addEventListener\("click", async function/);
+  assert.match(checkout, /await syncFulfillmentForNativeSubmit\(\)/);
+  assert.ok(
+    checkout.indexOf("await syncFulfillmentForNativeSubmit()") < checkout.indexOf("const worked = clickNativeContinue()"),
+    "fulfillment should be synchronized before WebTrack's native postback"
+  );
+  assert.match(checkout, /Please reselect your fulfillment method/);
+  assert.match(checkout, /data-wl-edit-step="1"/);
 });
 
 test("guest checkout names all three fulfillment choices", () => {

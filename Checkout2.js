@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20260902-shipping-floor-1";
+  window.WL_CHECKOUT_BUILD = "20260902-shipping-floor-3";
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
   const UPS_SHIPPING_ENABLED = true;
@@ -157,6 +157,17 @@
       if (value) sessionStorage.setItem(FULFILLMENT_SELECTION_SOURCE_KEY, value);
       else sessionStorage.removeItem(FULFILLMENT_SELECTION_SOURCE_KEY);
     } catch {}
+  }
+
+  async function syncFulfillmentForNativeSubmit() {
+    const mode = getFulfillmentIntent() || getSaleType();
+    if (mode !== "delivery" && mode !== "ship") return true;
+    if (!window.WLShippingOffer || typeof window.WLShippingOffer.select !== "function") return false;
+    try {
+      return !!(await window.WLShippingOffer.select(mode));
+    } catch {
+      return false;
+    }
   }
 
   function wlEpalletRuleMode(mode) {
@@ -1855,7 +1866,7 @@ const navDiv = document.createElement("div");
             ? "Continue Checkout"
             : ((native.value || native.innerText || "Continue").trim() || "Continue");
 
-          proxy.addEventListener("click", function () {
+          proxy.addEventListener("click", async function () {
             // Clear any sticky inline errors on Step 5 before submitting
             try { clearInlineError(5); } catch {}
             const ok = (window.WLCheckout && typeof window.WLCheckout.validateBeforeFinalSubmit === "function")
@@ -1863,16 +1874,43 @@ const navDiv = document.createElement("div");
               : ((typeof validateStep === "function") ? validateStep(5) : true);
             if (!ok) return;
 
+            const originalText = proxy.textContent;
+            let submitted = false;
+            proxy.disabled = true;
+            proxy.textContent = "Confirming fulfillment…";
+
+            const fulfillmentSynced = await syncFulfillmentForNativeSubmit();
+            if (!fulfillmentSynced) {
+              try {
+                showInlineError(1, "<strong>Please reselect your fulfillment method.</strong><br>We could not confirm that rate with WebTrack.");
+                const fulfillmentEdit = wizard.querySelector('[data-wl-edit-step="1"]');
+                if (fulfillmentEdit) fulfillmentEdit.click();
+                else showStep(1);
+              } catch {}
+              proxy.disabled = false;
+              proxy.textContent = originalText;
+              return;
+            }
+
+            try { clearInlineError(1); } catch {}
             syncNativeRequiredDate();
 
             // Trigger native submit/postback
             const worked = clickNativeContinue();
+            submitted = worked;
             if (!worked) {
               // As a last resort, try submitting the form
               try {
                 const form = native.closest("form") || document.querySelector("form");
-                if (form) form.submit();
+                if (form) {
+                  submitted = true;
+                  form.submit();
+                }
               } catch {}
+            }
+            if (!submitted) {
+              proxy.disabled = false;
+              proxy.textContent = originalText;
             }
           });
 
