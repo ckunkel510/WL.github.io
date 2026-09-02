@@ -176,6 +176,7 @@ async function buildFulfillmentQuote(body, dependencies = {}) {
   let rates = [];
   let totalWeight = positive(body?.cartWeight) || positive(body?.totalWeight);
   let upsFailure = "";
+  let upsIssues = [];
 
   if (cart.length) {
     try {
@@ -190,10 +191,13 @@ async function buildFulfillmentQuote(body, dependencies = {}) {
       rates = offeredRates(automatic);
     } catch (error) {
       upsFailure = cleanText(error?.message || "UPS automatic packing was unavailable.", 180);
+      upsIssues = Array.isArray(error?.shippingIssues) ? error.shippingIssues.slice(0, 50) : [];
     }
   }
 
-  if (!rates.length && suppliedPackages.length) {
+  // Browser-supplied packages may support package-only callers, but they must
+  // never override missing or invalid trusted product data for a cart quote.
+  if (!rates.length && suppliedPackages.length && !cart.length) {
     packages = suppliedPackages;
     totalWeight = totalWeight || packageWeight(suppliedPackages);
     try {
@@ -212,7 +216,11 @@ async function buildFulfillmentQuote(body, dependencies = {}) {
     try { totalWeight = await trustedCartWeight(cart, dependencies); } catch {}
   }
 
-  const ratedUps = upsOption(rates) || { available: false, reason: upsFailure || "ups-unavailable" };
+  const ratedUps = upsOption(rates) || {
+    available: false,
+    reason: upsIssues.length ? "shipping-items-unavailable" : (upsFailure || "ups-unavailable"),
+    ...(upsIssues.length ? { issues: upsIssues } : {})
+  };
   const delivery = await (dependencies.quoteWoodsonDelivery || quoteWoodsonDelivery)({
     shipFrom: body.shipFrom,
     shipTo: body.shipTo,
@@ -265,6 +273,7 @@ async function buildFulfillmentQuote(body, dependencies = {}) {
     quoteId: `wl-fulfillment-${Date.now()}-${crypto.randomBytes(3).toString("hex")}`,
     recommendation,
     options: { ups, delivery },
+    shippingIssues: ups.available ? [] : upsIssues,
     packageProfile: {
       easyParcel,
       packageCount: packages.length,
@@ -291,9 +300,24 @@ async function handler(req, res) {
       return sendJson(res, 200, selected);
     }
     const result = await buildFulfillmentQuote(body);
+    console.log("[fulfillment-quote]", JSON.stringify({
+      event: "quote-complete",
+      quoteId: result.quoteId,
+      destinationState: cleanText(body.shipTo?.state || body.shipTo?.StateProvinceCode, 24),
+      productCodes: (Array.isArray(body.cart) ? body.cart : []).map((item) => cleanText(item?.productCode || item?.code, 40)).filter(Boolean),
+      recommendation: result.recommendation?.mode || "manual",
+      upsAvailable: result.options?.ups?.available === true,
+      deliveryAvailable: result.options?.delivery?.available === true,
+      issueCodes: (result.shippingIssues || []).map((issue) => issue.productCode || issue.reason).filter(Boolean)
+    }));
     return sendJson(res, 200, result);
   } catch (error) {
     const status = error instanceof RequestError ? error.status : 500;
+    console.error("[fulfillment-quote]", JSON.stringify({
+      event: "quote-failed",
+      status,
+      error: cleanText(error instanceof Error ? error.message : error, 180)
+    }));
     return sendJson(res, status, { error: error instanceof Error ? error.message : "Fulfillment quoting is temporarily unavailable." });
   }
 }

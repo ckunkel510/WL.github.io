@@ -1,14 +1,12 @@
 (function () {
   "use strict";
 
-  var BUILD_VERSION = "20260902-shipping-floor-2";
+  var BUILD_VERSION = "20260902-shipping-safety-4";
   var RATE_URL = "https://wl-upsrates.vercel.app/api/fulfillment-quote";
-  var PRODUCT_DATA_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSg6EOqMwc_5UjWU7ycyvF-rgj717p-WjV2Vhydcb7uc2Mf2Awj6GehQp66AHwViq4uX6mXXrtZZR-1/pub?output=csv";
   var STORAGE_KEY = "wl_shipping_offer_v1";
   var CART_DATA_KEY = "wl_shipping_offer_cart_v1";
   var SELECTION_SOURCE_KEY = "wl_fulfillment_selection_source_v1";
   var EVENT_NAME = "wl:shipping-offer-change";
-  var PRODUCT_DATA_CACHE = null;
   var refreshTimer = null;
   var activeRequest = null;
   var activeSelectionRequest = null;
@@ -35,60 +33,6 @@
 
   function normalizeCode(value) {
     return text(value).replace(/\s+/g, "").toUpperCase();
-  }
-
-  function number(value) {
-    var parsed = Number(String(value == null ? "" : value).replace(/[^0-9.-]/g, ""));
-    return Number.isFinite(parsed) ? parsed : 0;
-  }
-
-  function parseCsv(source) {
-    var rows = [];
-    var row = [];
-    var cell = "";
-    var quoted = false;
-    var input = String(source || "");
-    for (var index = 0; index < input.length; index += 1) {
-      var ch = input[index];
-      var next = input[index + 1];
-      if (ch === '"' && quoted && next === '"') {
-        cell += '"';
-        index += 1;
-      } else if (ch === '"') {
-        quoted = !quoted;
-      } else if (ch === "," && !quoted) {
-        row.push(cell);
-        cell = "";
-      } else if ((ch === "\n" || ch === "\r") && !quoted) {
-        if (ch === "\r" && next === "\n") index += 1;
-        row.push(cell);
-        if (row.some(Boolean)) rows.push(row);
-        row = [];
-        cell = "";
-      } else {
-        cell += ch;
-      }
-    }
-    row.push(cell);
-    if (row.some(Boolean)) rows.push(row);
-    return rows;
-  }
-
-  function productData() {
-    if (PRODUCT_DATA_CACHE) return PRODUCT_DATA_CACHE;
-    PRODUCT_DATA_CACHE = fetch(PRODUCT_DATA_URL, { cache: "no-store" })
-      .then(function (response) { return response.ok ? response.text() : ""; })
-      .then(function (source) {
-        var rows = parseCsv(source);
-        var headers = rows.shift() || [];
-        return rows.map(function (values) {
-          var record = {};
-          headers.forEach(function (header, index) { record[text(header)] = values[index] || ""; });
-          return record;
-        });
-      })
-      .catch(function () { return []; });
-    return PRODUCT_DATA_CACHE;
   }
 
   function cartRows() {
@@ -215,49 +159,6 @@
       .catch(function () { return ""; });
   }
 
-  function fallbackPackages(items, products) {
-    var byId = {};
-    var byCode = {};
-    (products || []).forEach(function (product) {
-      var id = text(product.ProductID || product.ProductId || product.productId || product.id);
-      var code = normalizeCode(product.ProductCode || product.productCode || product.code);
-      if (id) byId[id] = product;
-      if (code) byCode[code] = product;
-    });
-    var totalWeight = 0;
-    var describedPackages = [];
-    for (var index = 0; index < items.length; index += 1) {
-      var item = items[index];
-      var product = byId[item.productId] || byCode[normalizeCode(item.productCode)];
-      var weight = number(product && product.Weight);
-      if (!weight) return [];
-      totalWeight += weight * item.quantity;
-      var length = number(product && product.Length);
-      var width = number(product && product.Width);
-      var height = number(product && (product.Height || product.Thickness));
-      if (length && width && height) {
-        for (var copy = 0; copy < item.quantity && describedPackages.length <= 50; copy += 1) {
-          describedPackages.push({
-            weight: Number(weight.toFixed(2)),
-            length: Number(length.toFixed(2)),
-            width: Number(width.toFixed(2)),
-            height: Number(height.toFixed(2))
-          });
-        }
-      }
-    }
-    if (describedPackages.length === items.reduce(function (sum, item) { return sum + item.quantity; }, 0) && describedPackages.length <= 50) {
-      return describedPackages;
-    }
-    var packages = [];
-    while (totalWeight > 0 && packages.length < 50) {
-      var packageWeight = Math.min(50, totalWeight);
-      packages.push({ weight: Number(packageWeight.toFixed(2)) });
-      totalWeight = Number((totalWeight - packageWeight).toFixed(2));
-    }
-    return totalWeight > 0 ? [] : packages;
-  }
-
   function notifyOffer(payload) {
     try { document.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: payload })); } catch (error) {}
   }
@@ -310,14 +211,11 @@
       }
       missingContextRetries = 0;
       address.postalCode = zip;
-      var products = await productData();
-      var packages = fallbackPackages(items, products);
       var requestBody = {
         shipFrom: origin,
         shipTo: address,
         cart: items
       };
-      if (packages.length) requestBody.packages = packages;
       var response = await fetch(RATE_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

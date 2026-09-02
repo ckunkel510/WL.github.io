@@ -3,7 +3,7 @@
 const crypto = require("node:crypto");
 const { XMLParser } = require("fast-xml-parser");
 const zipcodes = require("zipcodes");
-const { RequestError, requestRates } = require("./ups-rates")._internal;
+const { RequestError } = require("./ups-rates")._internal;
 const { applyGroundPromotion, cartHasEligibleProduct, promoCodeMatches } = require("./shipping-promotions");
 const { findPromoClaim, storePromoClaim } = require("./shipping-promo-sessions");
 const { findFulfillmentClaim } = require("./fulfillment-sessions");
@@ -449,12 +449,11 @@ async function handler(req, res) {
     authenticate(access);
     const translated = toOAuthRequest(rating);
     const fulfillmentClaim = await findFulfillmentClaim(translated.body);
+    if (!fulfillmentClaim) {
+      throw new RequestError(409, "A current positive fulfillment quote is required before checkout can continue.");
+    }
     let result = fulfillmentResult(fulfillmentClaim);
-    const rateBody = fulfillmentClaim?.packages?.length
-      ? { ...translated.body, packages: fulfillmentClaim.packages }
-      : translated.body;
-    const rated = result ? null : await requestRates(rateBody);
-    if (!result) result = rated;
+    if (!result) throw new RequestError(422, "No positive shipping or delivery rate is available for this order.");
     // The expired SummerChill26 bridge remains readable for old sessions, but
     // the promotion policy rejects it after its campaign end. The final floor
     // is applied after every other adjustment so no delivery rate can be free.
@@ -464,8 +463,20 @@ async function handler(req, res) {
     result = applyGroundPromotion(result, promoInput).result;
     result = safePositiveRates(applyShippingMinimumToRates(result));
     if (!result?.rates?.length) throw new RequestError(422, "No positive shipping or delivery rate is available for this order.");
+    console.log("[legacy-rate]", JSON.stringify({
+      event: "positive-rate-returned",
+      destinationState: text(translated.body.shipTo?.state).slice(0, 24),
+      fulfillmentClaimFound: true,
+      fulfillmentMode: fulfillmentClaim?.recommendation?.mode || "carrier-rate",
+      rateCount: result.rates.length,
+      minimumAmount: Math.min(...result.rates.map((rate) => Number(rate.amount)))
+    }));
     return sendXml(res, 200, isSoap ? soapSuccessXml(result, translated.context) : successXml(result, translated.context));
   } catch (error) {
+    console.error("[legacy-rate]", JSON.stringify({
+      event: "rate-failed",
+      error: error instanceof Error ? error.message : "UPS rating is temporarily unavailable."
+    }));
     return sendXml(res, 200, isSoap ? soapErrorXml(error) : errorXml(error));
   }
 }

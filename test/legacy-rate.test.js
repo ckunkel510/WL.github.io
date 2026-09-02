@@ -2,7 +2,8 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { fulfillmentResult, legacyPromotionInput, parseLegacyXml, safePositiveRates, soapSuccessXml, successXml, toOAuthRequest } = require("../api/rate")._test;
+const rateHandler = require("../api/rate");
+const { fulfillmentResult, legacyPromotionInput, parseLegacyXml, safePositiveRates, soapSuccessXml, successXml, toOAuthRequest } = rateHandler._test;
 
 const requestXml = `<?xml version="1.0"?>
 <AccessRequest>
@@ -148,4 +149,37 @@ test("drops zero and negative rates unless an explicit promotion is later applie
     ]
   });
   assert.deepEqual(result.rates.map((rate) => rate.amount), [15]);
+});
+
+test("the WebTrack rate bridge refuses checkout without a current positive claim", async () => {
+  const previous = {
+    username: process.env.PROXY_USERNAME,
+    password: process.env.PROXY_PASSWORD,
+    license: process.env.PROXY_ACCESS_LICENSE
+  };
+  process.env.PROXY_USERNAME = "woodson";
+  process.env.PROXY_PASSWORD = "secret";
+  process.env.PROXY_ACCESS_LICENSE = "proxy";
+  const response = {
+    statusCode: 0,
+    headers: {},
+    body: "",
+    setHeader(name, value) { this.headers[name] = value; },
+    end(value) { this.body = String(value || ""); }
+  };
+
+  try {
+    await rateHandler({ method: "POST", headers: {}, body: requestXml }, response);
+  } finally {
+    if (previous.username === undefined) delete process.env.PROXY_USERNAME;
+    else process.env.PROXY_USERNAME = previous.username;
+    if (previous.password === undefined) delete process.env.PROXY_PASSWORD;
+    else process.env.PROXY_PASSWORD = previous.password;
+    if (previous.license === undefined) delete process.env.PROXY_ACCESS_LICENSE;
+    else process.env.PROXY_ACCESS_LICENSE = previous.license;
+  }
+
+  assert.equal(response.statusCode, 200, "legacy UPS XML errors stay HTTP-compatible with WebTrack");
+  assert.match(response.body, /ResponseStatusCode>0/);
+  assert.match(response.body, /current positive fulfillment quote is required/i);
 });

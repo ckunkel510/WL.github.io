@@ -319,13 +319,16 @@ async function handler(req, res) {
         // Trusted cart economics may subsidize Ground, but the shared policy
         // enforces a positive customer floor before any rate leaves the API.
         return sendJson(res, 200, applyShippingMinimumToRates(automatic.result));
-      } catch {
-        // A missing/stale catalog or incomplete trusted package plan must never
-        // create a customer subsidy. Use a supplied fallback plan when one is
-        // available; otherwise return a clear cart-data error.
-        if (!Array.isArray(body.packages) || !body.packages.length) {
-          throw new RequestError(422, "One or more cart items are missing trusted shipping dimensions.");
-        }
+      } catch (error) {
+        // A cart quote must always come from the trusted server-side catalog.
+        // Browser-supplied packages cannot bypass missing or reviewed item data.
+        if (error instanceof RequestError) throw error;
+        const unavailable = new RequestError(
+          422,
+          error?.message || "One or more cart items are missing trusted shipping dimensions."
+        );
+        unavailable.shippingIssues = Array.isArray(error?.shippingIssues) ? error.shippingIssues.slice(0, 50) : [];
+        throw unavailable;
       }
     }
     const rated = applyShippingMinimumToRates(await requestRates(body));
@@ -333,7 +336,12 @@ async function handler(req, res) {
   } catch (error) {
     const status = error instanceof RequestError ? error.status : 500;
     const message = error instanceof RequestError ? error.message : "UPS rating is temporarily unavailable.";
-    return sendJson(res, status, { error: message });
+    return sendJson(res, status, {
+      error: message,
+      ...(Array.isArray(error?.shippingIssues) && error.shippingIssues.length
+        ? { shippingIssues: error.shippingIssues }
+        : {})
+    });
   }
 }
 

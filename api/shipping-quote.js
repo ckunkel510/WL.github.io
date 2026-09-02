@@ -8,6 +8,17 @@ const {
   policyFromEnv
 } = require("./shipping-policy");
 
+const DEFAULT_MANUAL_REVIEW_CODES = new Set(["HOGRBP636"]);
+
+class ShippingEligibilityError extends Error {
+  constructor(issues) {
+    super("One or more cart items cannot be shipped by UPS.");
+    this.name = "ShippingEligibilityError";
+    this.code = "shipping-items-unavailable";
+    this.shippingIssues = Array.isArray(issues) ? issues : [];
+  }
+}
+
 function cleanText(value, maxLength = 80) {
   return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
@@ -30,12 +41,65 @@ function groundRate(result) {
   return result?.rates?.find((rate) => String(rate.serviceCode || "") === "03") || null;
 }
 
-function trustedCartLines(cart, products) {
+function manualReviewCodes(env = process.env) {
+  const configured = String(env.SHIPPING_MANUAL_REVIEW_PRODUCT_CODES || "")
+    .split(",")
+    .map((value) => cleanText(value, 80).toUpperCase())
+    .filter(Boolean);
+  return new Set([...DEFAULT_MANUAL_REVIEW_CODES, ...configured]);
+}
+
+function shippingEligibilityIssues(cart, products, env = process.env) {
+  const reviewCodes = manualReviewCodes(env);
+  return (Array.isArray(cart) ? cart : []).flatMap((item, index) => {
+    const product = Array.isArray(products) ? products[index] : null;
+    const productCode = cleanText(product?.productCode || item?.productCode || item?.code, 80).toUpperCase();
+    const productId = cleanText(product?.productId || item?.productId || item?.id, 40);
+    const label = productCode || (productId ? `Item ${productId}` : `Cart item ${index + 1}`);
+
+    if (!product) {
+      return [{
+        productId,
+        productCode,
+        reason: "missing-product-data",
+        message: `${label} cannot be shipped because its shipping information is unavailable.`
+      }];
+    }
+
+    const missingFields = ["weight", "length", "width", "height"]
+      .filter((field) => !(Number.isFinite(Number(product[field])) && Number(product[field]) > 0));
+    if (missingFields.length) {
+      return [{
+        productId,
+        productCode,
+        reason: "missing-package-data",
+        missingFields,
+        message: `${label} cannot be shipped because its package ${missingFields.join(", ")} ${missingFields.length === 1 ? "is" : "are"} unavailable.`
+      }];
+    }
+
+    if (reviewCodes.has(productCode)) {
+      return [{
+        productId,
+        productCode,
+        reason: "package-data-review",
+        message: `${label} cannot be shipped because its package dimensions need to be verified.`
+      }];
+    }
+
+    return [];
+  });
+}
+
+function trustedCartLines(cart, products, env = process.env) {
   if (!Array.isArray(cart) || !cart.length || cart.length > 50) throw new Error("The cart is unavailable for automatic shipping offers.");
-  if (!Array.isArray(products) || products.length !== cart.length) throw new Error("The trusted product catalog is incomplete.");
+  const trustedProducts = Array.isArray(products) ? products : [];
+  const issues = shippingEligibilityIssues(cart, trustedProducts, env);
+  if (issues.length) throw new ShippingEligibilityError(issues);
+  if (trustedProducts.length !== cart.length) throw new Error("The trusted product catalog is incomplete.");
   let totalQuantity = 0;
   const lines = cart.map((item, index) => {
-    const product = products[index];
+    const product = trustedProducts[index];
     const lineQuantity = quantity(item?.quantity);
     totalQuantity += lineQuantity;
     if (!product || !lineQuantity) throw new Error("The trusted product catalog is incomplete.");
@@ -62,8 +126,8 @@ async function buildAutomaticShippingQuote(body, dependencies = {}) {
   const policy = dependencies.policy || policyFromEnv();
   const cart = Array.isArray(body?.cart) ? body.cart : Array.isArray(body?.items) ? body.items : [];
   const catalog = await (dependencies.getCatalogProducts || getCatalogProducts)(cart);
-  if (!catalog?.fresh) throw new Error("The trusted product catalog is not current.");
-  const lines = trustedCartLines(cart, catalog.products);
+  if (!catalog?.fresh) throw new ShippingEligibilityError(shippingEligibilityIssues(cart, [], dependencies.env || process.env));
+  const lines = trustedCartLines(cart, catalog.products, dependencies.env || process.env);
   const plans = (dependencies.cartonizeCandidates || cartonizeCandidates)(lines, dependencies.cartonizerOptions);
   if (!plans.length) throw new Error("The cart could not be packed for UPS shipping.");
 
@@ -141,8 +205,11 @@ async function buildAutomaticShippingQuote(body, dependencies = {}) {
 }
 
 module.exports = {
+  ShippingEligibilityError,
   buildAutomaticShippingQuote,
   groundRate,
+  manualReviewCodes,
   publicPackages,
+  shippingEligibilityIssues,
   trustedCartLines
 };

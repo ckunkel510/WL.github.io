@@ -331,17 +331,29 @@ test("a guest checkout transition cannot lose an in-flight quote refresh", () =>
 
 test("checkout synchronizes the displayed fulfillment mode before native submit", async () => {
   const checkout = source("Checkout2.js");
+  const saved = new Map();
   const syncFulfillmentForNativeSubmit = extractedFunction(
     checkout,
     "syncFulfillmentForNativeSubmit",
     {
       getFulfillmentIntent: () => "ship",
       getSaleType: () => "delivery",
-      window: { WLShippingOffer: { select: async (mode) => mode === "ship" } }
+      FULFILLMENT_CONFIRMATION_KEY: "wl_confirmed_fulfillment_v1",
+      document: {
+        getElementById: (id) => ({ checked: /rbUPSDelivery$/.test(id) })
+      },
+      sessionStorage: { setItem: (key, value) => saved.set(key, value) },
+      window: {
+        WLShippingOffer: {
+          current: () => ({ options: { ups: { available: true, amount: 9.95, serviceName: "UPS Ground" } } }),
+          select: async (mode) => mode === "ship"
+        }
+      }
     }
   );
 
   assert.equal(await syncFulfillmentForNativeSubmit(), true);
+  assert.equal(JSON.parse(saved.get("wl_confirmed_fulfillment_v1")).mode, "ship");
   assert.match(checkout, /proxy\.addEventListener\("click", async function/);
   assert.match(checkout, /await syncFulfillmentForNativeSubmit\(\)/);
   assert.ok(
@@ -350,6 +362,53 @@ test("checkout synchronizes the displayed fulfillment mode before native submit"
   );
   assert.match(checkout, /Please reselect your fulfillment method/);
   assert.match(checkout, /data-wl-edit-step="1"/);
+  assert.match(checkout, /option\?\.available.*Number\(option\.amount\) > 0/);
+  assert.match(checkout, /mode === "pickup"[\s\S]*!pickup\.checked/);
+  assert.match(checkout, /function enforcePaidNativeFulfillmentPath/);
+  assert.match(checkout, /freeDelivery\.disabled = true/);
+  assert.doesNotMatch(checkout, /mode === "delivery" && !\(\(ups && ups\.checked\) \|\| \(delivered && delivered\.checked\)\)/);
+  assert.match(checkout, /Cannot ship · Check item below/);
+  assert.match(checkout, /shippingIssueMessage/);
+  assert.doesNotMatch(source("UpsShippingOffer.js"), /requestBody\.packages\s*=/);
+  assert.doesNotMatch(source("WoodsonShoppingCart.js"), /packages:\s*packageInfo\.packages/);
+});
+
+test("checkout rejects every stale or zero-charge fulfillment handoff", async () => {
+  const checkout = source("Checkout2.js");
+
+  function makeSync(intent, checkedId, amount = 25) {
+    let selections = 0;
+    const sync = extractedFunction(checkout, "syncFulfillmentForNativeSubmit", {
+      getFulfillmentIntent: () => intent,
+      getSaleType: () => intent,
+      FULFILLMENT_CONFIRMATION_KEY: "wl_confirmed_fulfillment_v1",
+      document: {
+        getElementById: (id) => ({ checked: id.endsWith(checkedId) })
+      },
+      sessionStorage: { setItem: () => {} },
+      window: {
+        WLShippingOffer: {
+          current: () => ({
+            options: {
+              ups: { available: true, amount },
+              delivery: { available: true, amount }
+            }
+          }),
+          select: async () => { selections += 1; return true; }
+        }
+      }
+    });
+    return { sync, selections: () => selections };
+  }
+
+  const staleDelivery = makeSync("delivery", "rbDelivered");
+  assert.equal(await staleDelivery.sync(), false, "native free-delivery state must never pass");
+  assert.equal(staleDelivery.selections(), 0);
+
+  assert.equal(await makeSync("delivery", "rbUPSDelivery").sync(), true);
+  assert.equal(await makeSync("ship", "rbUPSDelivery", 0).sync(), false);
+  assert.equal(await makeSync("pickup", "rbUPSDelivery").sync(), false);
+  assert.equal(await makeSync("pickup", "rbCollectLater").sync(), true);
 });
 
 test("guest checkout names all three fulfillment choices", () => {

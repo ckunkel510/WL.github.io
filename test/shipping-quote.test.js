@@ -2,7 +2,7 @@
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { buildAutomaticShippingQuote } = require("../api/shipping-quote");
+const { buildAutomaticShippingQuote, shippingEligibilityIssues } = require("../api/shipping-quote");
 
 function policy(overrides = {}) {
   return {
@@ -113,7 +113,50 @@ test("fails closed when the trusted catalog is stale", async () => {
     requestRates: rateService,
     getCatalogProducts: async () => ({ fresh: false, products: [] }),
     policy: policy()
-  }), /not current/);
+  }), (error) => {
+    assert.equal(error.code, "shipping-items-unavailable");
+    assert.equal(error.shippingIssues[0].productId, "100");
+    assert.equal(error.shippingIssues[0].reason, "missing-product-data");
+    return true;
+  });
+});
+
+test("identifies the exact item when trusted package data is incomplete", async () => {
+  const incomplete = catalog(45);
+  incomplete.products[0].length = null;
+
+  await assert.rejects(() => buildAutomaticShippingQuote({
+    shipFrom: { postalCode: "77833" },
+    shipTo: { postalCode: "23220" },
+    cart: [{ productId: "100", productCode: "CASE-100", quantity: 1 }]
+  }, {
+    requestRates: rateService,
+    getCatalogProducts: async () => incomplete,
+    policy: policy()
+  }), (error) => {
+    assert.equal(error.code, "shipping-items-unavailable");
+    assert.equal(error.shippingIssues[0].productCode, "CASE-100");
+    assert.deepEqual(error.shippingIssues[0].missingFields, ["length"]);
+    return true;
+  });
+});
+
+test("holds HOGRBP636 for manual review until its contradictory package data is corrected", () => {
+  const product = catalog(45).products[0];
+  product.productId = "187017";
+  product.productCode = "HOGRBP636";
+  product.weight = 1.15;
+  product.length = 5.16;
+  product.width = 23.19;
+  product.height = 13.46;
+
+  const issues = shippingEligibilityIssues(
+    [{ productId: "187017", productCode: "HOGRBP636", quantity: 1 }],
+    [product],
+    {}
+  );
+  assert.equal(issues[0].reason, "package-data-review");
+  assert.match(issues[0].message, /HOGRBP636 cannot be shipped/);
 });
 
 test("includes non-Case brands in the automatic all-products scope", async () => {

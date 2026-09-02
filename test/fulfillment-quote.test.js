@@ -176,6 +176,64 @@ test("returns a manual freight result when neither automatic method is possible"
   assert.equal(result.recommendation.amount, null);
 });
 
+test("does not let browser package guesses bypass missing trusted item dimensions", async () => {
+  const body = baseBody();
+  body.shipTo = { city: "Richmond", state: "VA", postalCode: "23220" };
+  body.packages = [{ weight: 8, length: 12, width: 8, height: 6 }];
+  const incomplete = catalog();
+  incomplete.products[0].width = null;
+  let rateCalls = 0;
+
+  const result = await buildFulfillmentQuote(body, {
+    getCatalogProducts: async () => incomplete,
+    requestRates: async () => {
+      rateCalls += 1;
+      return upsRate(20)();
+    },
+    shippingPolicy: policy,
+    quoteWoodsonDelivery: async () => ({ available: false, reason: "outside-texas" }),
+    storeFulfillmentClaim: async () => ({ ok: false })
+  });
+
+  assert.equal(rateCalls, 0);
+  assert.equal(result.options.ups.available, false);
+  assert.equal(result.options.ups.reason, "shipping-items-unavailable");
+  assert.equal(result.options.ups.issues[0].productCode, "ITEM-100");
+  assert.deepEqual(result.options.ups.issues[0].missingFields, ["width"]);
+  assert.equal(result.recommendation.mode, "manual");
+});
+
+test("holds HOGRBP636 out of a Virginia UPS checkout until its dimensions are verified", async () => {
+  const body = baseBody();
+  body.shipTo = { city: "Richmond", state: "VA", postalCode: "23220" };
+  body.cart = [{ productId: "187017", productCode: "HOGRBP636", quantity: 1 }];
+  const hogr = catalog();
+  Object.assign(hogr.products[0], {
+    productId: "187017",
+    productCode: "HOGRBP636",
+    weight: 1.15,
+    length: 5.16,
+    width: 23.19,
+    height: 13.46
+  });
+  let rateCalls = 0;
+
+  const result = await buildFulfillmentQuote(body, {
+    getCatalogProducts: async () => hogr,
+    requestRates: async () => { rateCalls += 1; return upsRate(25.86)(); },
+    shippingPolicy: policy,
+    quoteWoodsonDelivery: async () => ({ available: false, reason: "outside-texas" }),
+    storeFulfillmentClaim: async () => ({ ok: false })
+  });
+
+  assert.equal(rateCalls, 0);
+  assert.equal(result.options.ups.available, false);
+  assert.equal(result.options.ups.reason, "shipping-items-unavailable");
+  assert.equal(result.options.ups.issues[0].productCode, "HOGRBP636");
+  assert.equal(result.options.ups.issues[0].reason, "package-data-review");
+  assert.equal(result.recommendation.mode, "manual");
+});
+
 test("keeps supplied cart weight for Woodson delivery when UPS is unavailable", async () => {
   const body = baseBody();
   delete body.cart;

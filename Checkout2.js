@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20260902-shipping-floor-3";
+  window.WL_CHECKOUT_BUILD = "20260902-shipping-safety-4";
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
   const UPS_SHIPPING_ENABLED = true;
@@ -32,18 +32,36 @@
     });
   }
 
+  function enforcePaidNativeFulfillmentPath() {
+    const freeDelivery = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbDelivered");
+    if (!freeDelivery) return;
+    freeDelivery.checked = false;
+    freeDelivery.disabled = true;
+    freeDelivery.setAttribute("aria-disabled", "true");
+  }
+
   suppressQuoteCheckoutPath();
+  enforcePaidNativeFulfillmentPath();
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", suppressQuoteCheckoutPath, { once: true });
+    document.addEventListener("DOMContentLoaded", function () {
+      suppressQuoteCheckoutPath();
+      enforcePaidNativeFulfillmentPath();
+    }, { once: true });
   }
 
   try {
     if (window.Sys && Sys.WebForms && Sys.WebForms.PageRequestManager) {
-      Sys.WebForms.PageRequestManager.getInstance().add_endRequest(suppressQuoteCheckoutPath);
+      Sys.WebForms.PageRequestManager.getInstance().add_endRequest(function () {
+        suppressQuoteCheckoutPath();
+        enforcePaidNativeFulfillmentPath();
+      });
     }
   } catch {}
 
-  const quoteObserver = new MutationObserver(suppressQuoteCheckoutPath);
+  const quoteObserver = new MutationObserver(function () {
+    suppressQuoteCheckoutPath();
+    enforcePaidNativeFulfillmentPath();
+  });
   if (document.documentElement) quoteObserver.observe(document.documentElement, { childList: true, subtree: true });
   window.setTimeout(function () { quoteObserver.disconnect(); }, 15000);
   
@@ -118,6 +136,7 @@
   const AUTO_ADVANCE_KEY = "wl_checkout_auto_advance";
   const FULFILLMENT_INTENT_KEY = "wl_fulfillment_intent";
   const FULFILLMENT_SELECTION_SOURCE_KEY = "wl_fulfillment_selection_source_v1";
+  const FULFILLMENT_CONFIRMATION_KEY = "wl_confirmed_fulfillment_v1";
   const CHECKOUT_ADDRESS_PAYLOAD_KEY = "wl_checkout_address_payload";
   const CHECKOUT_CONTACT_PAYLOAD_KEY = "wl_checkout_contact_payload";
   const CONTACT_RETURN_KEY = "wl_contact_return_path";
@@ -161,10 +180,44 @@
 
   async function syncFulfillmentForNativeSubmit() {
     const mode = getFulfillmentIntent() || getSaleType();
-    if (mode !== "delivery" && mode !== "ship") return true;
+    const pickup = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbCollectLater");
+    const ups = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbUPSDelivery");
+
+    if (mode === "pickup") {
+      if (!pickup || !pickup.checked) return false;
+      try {
+        sessionStorage.setItem(FULFILLMENT_CONFIRMATION_KEY, JSON.stringify({
+          mode: "pickup",
+          label: "Store pickup",
+          amount: 0,
+          ts: Date.now()
+        }));
+      } catch {}
+      return true;
+    }
+    if (mode !== "delivery" && mode !== "ship") return false;
+    // Both UPS shipping and paid Woodson delivery use WebTrack's native UPS
+    // rate slot. Its separate Delivered radio can finalize with no charge.
+    if (!ups || !ups.checked) return false;
     if (!window.WLShippingOffer || typeof window.WLShippingOffer.select !== "function") return false;
+
+    const quote = typeof window.WLShippingOffer.current === "function"
+      ? window.WLShippingOffer.current()
+      : null;
+    const option = quote?.options?.[mode === "ship" ? "ups" : "delivery"];
+    if (!option?.available || !(Number(option.amount) > 0)) return false;
+
     try {
-      return !!(await window.WLShippingOffer.select(mode));
+      const saved = !!(await window.WLShippingOffer.select(mode));
+      if (!saved) return false;
+      sessionStorage.setItem(FULFILLMENT_CONFIRMATION_KEY, JSON.stringify({
+        mode,
+        label: mode === "ship" ? "UPS shipping" : "Woodson local delivery",
+        amount: Number(option.amount),
+        serviceName: String(option.serviceName || ""),
+        ts: Date.now()
+      }));
+      return true;
     } catch {
       return false;
     }
@@ -3591,6 +3644,7 @@ document.addEventListener("click", function (ev) {
 .modern-shipping-selector button.wl-selected i{color:#fff !important;}
 .modern-shipping-selector button.wl-unselected{background-color:#f5f5f5 !important;color:#000 !important;border:1px solid #ccc !important;}
 .modern-shipping-selector button.wl-unselected i{color:#000 !important;}
+.modern-shipping-selector button.wl-option-disabled{opacity:.72 !important;cursor:not-allowed !important;border-style:dashed !important;}
 .wl-outstate-shipping-note{display:none;margin-top:10px;padding:10px 12px;border:1px solid #d9dde2;border-radius:8px;background:#f7f7f7;color:#25282c;font-size:13px;line-height:1.35;}
 .wl-outstate-shipping-note.wl-warning{border-color:#e6c15a;background:#fff8dc;color:#3b2b00;}
 .wl-step-li{display:flex;align-items:center;gap:10px;}
@@ -3853,6 +3907,23 @@ document.addEventListener("click", function (ev) {
             return /(DeliveryAddress|InvoiceAddress|CustomerAddress|AddressSelector|AddressList|State|County|Postcode|Postal|Zip)/i.test(haystack);
           }
 
+          function shippingIssueMessage(upsOption, deliveryAvailable) {
+            const issues = Array.isArray(upsOption?.issues) ? upsOption.issues : [];
+            if (!issues.length) return "";
+            const labels = Array.from(new Set(issues.map(function (issue, index) {
+              return cleanStateValue(issue?.productCode) ||
+                (cleanStateValue(issue?.productId) ? "Item " + cleanStateValue(issue.productId) : "Cart item " + (index + 1));
+            })));
+            const subject = labels.length === 1 ? labels[0] : labels.join(", ");
+            const reason = issues.length === 1 && cleanStateValue(issues[0]?.message)
+              ? cleanStateValue(issues[0].message)
+              : subject + " cannot be shipped because package information is missing or needs review.";
+            const alternative = deliveryAvailable
+              ? "Choose Woodson delivery or pickup to continue."
+              : "Remove the item from the cart or choose pickup to continue.";
+            return reason + " " + alternative;
+          }
+
           function updateAddressAwareOptions() {
             if (addressAwareUpdating) return;
             addressAwareUpdating = true;
@@ -3869,16 +3940,20 @@ document.addEventListener("click", function (ev) {
               const recommendedMode = quote && quote.recommendation && quote.recommendation.mode;
               const deliveryAvailable = !!(deliveryOption && deliveryOption.available);
               const upsAvailable = !!(upsOption && upsOption.available);
+              const upsIssueMessage = shippingIssueMessage(upsOption, deliveryAvailable);
 
               if (quote) {
                 $delivery.toggle(deliveryAvailable);
-                $ship.toggle(upsAvailable);
+                $ship.show();
+                $ship.prop("disabled", !upsAvailable);
+                $ship.attr("aria-disabled", upsAvailable ? "false" : "true");
+                $ship.toggleClass("wl-option-disabled", !upsAvailable);
                 $deliveryTag.text(deliveryAvailable
                   ? "$" + Number(deliveryOption.amount || 0).toFixed(2) + (recommendedMode === "delivery" ? " · Recommended" : "")
                   : "Not available");
                 $shipTag.text(upsAvailable
                   ? "$" + Number(upsOption.amount || 0).toFixed(2) + (recommendedMode === "ship" ? " · Recommended" : "")
-                  : "Not available");
+                  : (upsIssueMessage ? "Cannot ship · Check item below" : "Not available"));
                 const intent = getFulfillmentIntent();
                 const selectionSource = getFulfillmentSelectionSource();
                 if (!deliveryAvailable && intent === "delivery") {
@@ -3888,7 +3963,9 @@ document.addEventListener("click", function (ev) {
                 } else if ((!intent || selectionSource !== "user") && (recommendedMode === "ship" || recommendedMode === "delivery")) {
                   updateShippingStyles(recommendedMode, { silent: true, reason: "recommended-fulfillment" });
                 }
-                if (!deliveryAvailable && !upsAvailable) {
+                if (upsIssueMessage) {
+                  showOutOfStateMessage(upsIssueMessage, "warning");
+                } else if (!deliveryAvailable && !upsAvailable) {
                   showOutOfStateMessage("This order needs a freight quote. Pickup is still available; please contact Woodson for delivery help.", "warning");
                 } else {
                   showOutOfStateMessage("Rates are based on your cart and address. " + (recommendedMode === "delivery" ? "Woodson Delivery is recommended." : "UPS Shipping is recommended."), "");
@@ -3955,7 +4032,12 @@ document.addEventListener("click", function (ev) {
             const upsRad = $("#ctl00_PageBody_SaleTypeSelector_rbUPSDelivery");
             const $buttons = $(".modern-shipping-selector button[data-mode]");
 
-            $buttons.css({ opacity: 1, pointerEvents: "auto" });
+            // The custom local-delivery and UPS choices are both charged through
+            // rbUPSDelivery. Never leave WebTrack's free Delivered option active.
+            delRad.prop("checked", false).prop("disabled", true).attr("aria-disabled", "true");
+
+            $buttons.filter(":not(:disabled)").css({ opacity: 1, pointerEvents: "auto" });
+            $buttons.filter(":disabled").css({ opacity: 0.72, pointerEvents: "auto" });
 
             const hasSelection = mode === "pickup" || mode === "delivery" || mode === "ship";
             const isPickup = mode === "pickup";
@@ -3992,6 +4074,9 @@ document.addEventListener("click", function (ev) {
 
             // Persist selection for other modules only after the customer/system has actually selected a sale type.
             if (hasSelection) {
+              if (previousMode && previousMode !== mode) {
+                try { sessionStorage.removeItem(FULFILLMENT_CONFIRMATION_KEY); } catch {}
+              }
               document.cookie = "pickupSelected=" + (isDeliveryLike ? "false" : "true") + ";path=/";
               try {
                 setFulfillmentIntent(mode);
@@ -4001,6 +4086,13 @@ document.addEventListener("click", function (ev) {
                   ? (previousMode === mode && previousSource ? previousSource : "system")
                   : "user";
                 setFulfillmentSelectionSource(selectionSource);
+              } catch {}
+            } else {
+              try {
+                setFulfillmentIntent("");
+                sessionStorage.removeItem("wl_fulfillment_method");
+                sessionStorage.removeItem(FULFILLMENT_CONFIRMATION_KEY);
+                localStorage.removeItem("woodson_cart_method");
               } catch {}
             }
             if (!silent && hasSelection && wlRequestEpalletCartSync(mode)) return;
@@ -4069,6 +4161,10 @@ document.addEventListener("click", function (ev) {
 
           $(document).on("click", ".modern-shipping-selector button", async function (event) {
             const mode = $(this).data("mode");
+            if (this.disabled) {
+              event.preventDefault();
+              return false;
+            }
             if (mode === "delivery" && addressRegion() === "outside") {
               event.preventDefault();
               event.stopImmediatePropagation();

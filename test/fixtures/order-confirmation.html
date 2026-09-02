@@ -177,10 +177,11 @@
       <div id="ctl00_PageBody_SuccessfulPaymentResults_MerchantDetailsPanel">
         <table>
           <tbody>
-            <tr><th>Pickup Location</th><td>Woodson Lumber — Brenham</td></tr>
-            <tr><th>Store Address</th><td>301 S Blue Bell Rd, Brenham, TX 77833</td></tr>
-            <tr><th>Requested Pickup Date</th><td>Tuesday, July 28, 2026</td></tr>
-            <tr><th>Requested Pickup Time</th><td>10:00 AM</td></tr>
+            <tr id="preview-method"><th>Pickup Location</th><td>Woodson Lumber — Brenham</td></tr>
+            <tr id="preview-address"><th>Store Address</th><td>301 S Blue Bell Rd, Brenham, TX 77833</td></tr>
+            <tr id="preview-date"><th>Requested Pickup Date</th><td>Tuesday, July 28, 2026</td></tr>
+            <tr id="preview-time"><th>Requested Pickup Time</th><td>10:00 AM</td></tr>
+            <tr id="preview-charge" hidden><th>Shipping Charge</th><td>$9.95</td></tr>
             <tr><th>Order Total</th><td>$68.00</td></tr>
             <tr><th>Payment Status</th><td>Confirmed</td></tr>
             <tr><th>Invoice Number</th><td>INV-104582</td></tr>
@@ -195,6 +196,21 @@
   </main>
 
   <script>
+    var previewParams = new URLSearchParams(window.location.search);
+    var previewMode = previewParams.get('mode') || 'pickup';
+    if (previewMode === 'delivery' || previewMode === 'ship') {
+      var isShip = previewMode === 'ship';
+      document.querySelector('#preview-method th').textContent = isShip ? 'Shipping Method' : 'Delivery Method';
+      document.querySelector('#preview-method td').textContent = isShip ? 'UPS Ground' : 'Delivered';
+      document.querySelector('#preview-address th').textContent = isShip ? 'Ship To Address' : 'Delivery Address';
+      document.querySelector('#preview-address td').textContent = '123 Customer St, Richmond, VA 23220';
+      document.querySelector('#preview-date th').textContent = isShip ? 'Estimated Arrival Date' : 'Requested Delivery Date';
+      document.querySelector('#preview-time th').textContent = isShip ? 'Service' : 'Requested Delivery Time';
+      document.querySelector('#preview-time td').textContent = isShip ? 'UPS Ground' : '10:00 AM';
+      document.querySelector('#preview-charge th').textContent = isShip ? 'Shipping Charge' : 'Delivery Charge';
+      document.querySelector('#preview-charge td').textContent = previewParams.get('zero') === '1' ? '$0.00' : '$9.95';
+      document.getElementById('preview-charge').hidden = false;
+    }
     history.replaceState(null, '', '/ShoppingCart.aspx?success=1&type=o&ref=RSV-104582');
     document.getElementById('preview-native-done').addEventListener('click', function () {
       document.body.setAttribute('data-preview-done-clicked', 'true');

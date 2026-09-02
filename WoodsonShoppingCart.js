@@ -9,7 +9,7 @@
   const CART_SUBTOTAL_KEY = 'wl_cart_subtotal_v1';
   const QUOTE_TTL_MS = 4 * 60 * 60 * 1000;
   const UPS_RATE_URL = 'https://wl-upsrates.vercel.app/api/ups-rates';
-  const SHIPPING_OFFER_VERSION = '20260902-shipping-floor-2';
+  const SHIPPING_OFFER_VERSION = '20260902-shipping-safety-4';
   const SHIPPING_OFFER_SCRIPT_URL = 'https://ckunkel510.github.io/WL.github.io/UpsShippingOffer.js?v=' + SHIPPING_OFFER_VERSION;
   let checkoutBlockReason = '';
   const STORE_ORIGINS = {
@@ -21,32 +21,6 @@
     mexia: { name: 'Mexia', city: 'Mexia', state: 'TX', postalCode: '76667' },
     groesbeck: { name: 'Groesbeck', city: 'Groesbeck', state: 'TX', postalCode: '76642' }
   };
-  const FALLBACK_UPS_PRODUCTS = [
-    { ProductID: '282948', ProductCode: 'TB-ORIG-G3-TAN', Weight: '14', Length: '12', Width: '9', Thickness: '8' },
-    { ProductID: '282951', ProductCode: 'TB-ORIG-G3-GRAY', Weight: '14', Length: '12', Width: '9', Thickness: '8' },
-    { ProductID: '282949', ProductCode: 'TB-ORIG-G3-WHT', Weight: '14', Length: '12', Width: '9', Thickness: '8' },
-    { ProductID: '282952', ProductCode: 'TB-ORIG-G3-ORG', Weight: '14', Length: '12', Width: '9', Thickness: '8' },
-    { ProductID: '287776', ProductCode: 'TB-ORIG-G3-BURNTORANGE', Weight: '14', Length: '12', Width: '9', Thickness: '8' },
-    { ProductID: '287775', ProductCode: 'TB-ORIG-G3-MAROON', Weight: '14', Length: '12', Width: '9', Thickness: '8' },
-    { ProductID: '282954', ProductCode: 'TB-RANG-GRAY', Weight: '7', Length: '11', Width: '7', Thickness: '5' },
-    { ProductID: '282955', ProductCode: 'TB-RANG-IVR', Weight: '7', Length: '11', Width: '7', Thickness: '5' },
-    { ProductID: '282953', ProductCode: 'TB-RANG-TAN', Weight: '7', Length: '11', Width: '7', Thickness: '5' },
-    { ProductID: '290262', ProductCode: 'TB-RANG-DELTA', Weight: '7', Length: '11', Width: '7', Thickness: '5' },
-    { ProductID: '283538', ProductCode: 'TB-GRAN-G1-TAN', Weight: '18', Length: '18', Width: '10', Thickness: '8' },
-    { ProductID: '308684', ProductCode: 'MGDYC84', Weight: '3', Length: '12', Width: '9', Thickness: '7' },
-    { ProductID: '308685', ProductCode: 'MGDYC85', Weight: '3', Length: '12', Width: '9', Thickness: '7' },
-    { ProductID: '308686', ProductCode: 'MGDYC8YVC', Weight: '3', Length: '12', Width: '9', Thickness: '7' },
-    { ProductID: '308690', ProductCode: 'MGSSC801NB', Weight: '5', Length: '16', Width: '10', Thickness: '9' },
-    { ProductID: '308691', ProductCode: 'MGSSC80183', Weight: '5', Length: '16', Width: '10', Thickness: '9' },
-    { ProductID: '308689', ProductCode: 'MGSSC801GE', Weight: '5', Length: '16', Width: '10', Thickness: '9' },
-    { ProductID: '308692', ProductCode: 'MGSSC801YVC', Weight: '5', Length: '16', Width: '10', Thickness: '9' },
-    { ProductID: '308682', ProductCode: 'YHCP30YVC', Weight: '6', Length: '18', Width: '12', Thickness: '10' },
-    { ProductID: '308679', ProductCode: 'YHCP30CHBLK', Weight: '6', Length: '18', Width: '12', Thickness: '10' },
-    { ProductID: '308680', ProductCode: 'YHCP30GVG', Weight: '6', Length: '18', Width: '12', Thickness: '10' },
-    { ProductID: '308683', ProductCode: 'YHCP30GG', Weight: '6', Length: '18', Width: '12', Thickness: '10' },
-    { ProductID: '308681', ProductCode: 'YHCP30XK7', Weight: '6', Length: '18', Width: '12', Thickness: '10' }
-  ];
-
   function ready(fn) {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', fn, { once: true });
     else fn();
@@ -307,13 +281,7 @@
     const byCode = new Map();
     const byId = new Map();
 
-    FALLBACK_UPS_PRODUCTS.forEach(function (product) {
-      byCode.set(normalizeProductCode(product.ProductCode), product);
-      byId.set(text(product.ProductID), product);
-    });
     (productData || []).forEach(function (product) {
-      const weight = Number(product?.Weight);
-      if (!Number.isFinite(weight) || weight <= 0) return;
       const code = normalizeProductCode(product.ProductCode);
       const id = text(product.ProductID || product.ProductId || product.productId || product.id);
       if (code) byCode.set(code, product);
@@ -322,34 +290,32 @@
 
     let totalWeight = 0;
     let containsLargeItems = false;
+    const unavailableItems = [];
 
     for (const item of items) {
       const product = byId.get(text(item.productId)) ||
         byCode.get(normalizeProductCode(item.productCode || item.code));
       const weight = Number(product?.Weight);
-      if (!product || !Number.isFinite(weight) || weight <= 0) {
-        return { unavailable: true, containsLargeItems: false };
+      const dimensions = [Number(product?.Length), Number(product?.Width), Number(product?.Height || product?.Thickness)];
+      if (!product || !Number.isFinite(weight) || weight <= 0 || dimensions.some(function (value) {
+        return !Number.isFinite(value) || value <= 0;
+      })) {
+        unavailableItems.push(normalizeProductCode(item.productCode || item.code) || (item.productId ? 'Item ' + item.productId : 'Cart item'));
+        continue;
       }
-      containsLargeItems = containsLargeItems || weight > 35 || Number(product.Width) > 36 ||
-        Number(product.Thickness) > 36 || Number(product.Length) > 36;
+      containsLargeItems = containsLargeItems || weight > 35 || dimensions.some(function (value) { return value > 36; });
       totalWeight += weight * item.quantity;
     }
 
-    const packages = [];
-    let remainingWeight = totalWeight;
-    while (remainingWeight > 0 && packages.length < 50) {
-      const packageWeight = Math.min(50, remainingWeight);
-      packages.push({ weight: Number(packageWeight.toFixed(2)) });
-      remainingWeight = Number((remainingWeight - packageWeight).toFixed(2));
-    }
     return {
-      unavailable: !items.length || totalWeight <= 0 || remainingWeight > 0,
+      unavailable: !items.length || unavailableItems.length > 0 || totalWeight <= 0,
+      unavailableItems: unavailableItems,
       containsLargeItems: containsLargeItems,
-      packages: packages
+      totalWeight: totalWeight
     };
   }
 
-  async function getUpsEstimate(userAddress, packageInfo, items) {
+  async function getUpsEstimate(userAddress, items) {
     const origin = getSelectedStoreOrigin();
     if (!origin) throw new Error('The selected store could not be determined.');
     const response = await fetch(UPS_RATE_URL, {
@@ -358,14 +324,17 @@
       body: JSON.stringify({
         shipFrom: origin,
         shipTo: { postalCode: userAddress.zip, country: 'US', residential: true },
-        packages: packageInfo.packages,
         cart: items.map(function (item) {
           return { productId: item.productId, productCode: item.productCode || item.code, quantity: item.quantity };
         })
       })
     });
     const result = await response.json().catch(function () { return {}; });
-    if (!response.ok) throw new Error(result.error || 'UPS could not calculate a rate.');
+    if (!response.ok) {
+      const error = new Error(result.error || 'UPS could not calculate a rate.');
+      error.shippingIssues = Array.isArray(result.shippingIssues) ? result.shippingIssues : [];
+      throw error;
+    }
     const rate = (result.rates || []).find(function (candidate) {
       return candidate.serviceCode === '03';
     }) || (result.rates || [])[0];
@@ -378,6 +347,17 @@
         ? 'This cart currently qualifies for $' + Number(offer.customerGroundAmount || rate.amount).toFixed(2) + ' UPS Ground to ZIP ' + userAddress.zip + '. Final eligibility is confirmed at checkout.'
         : 'Estimated from ' + origin.name + ' to ZIP ' + userAddress.zip + ' using the current UPS Ground return. Final rate is confirmed before payment.'
     };
+  }
+
+  function shippingIssueBlock(issues, fallbackItems) {
+    const issueList = Array.isArray(issues) ? issues : [];
+    const labels = Array.from(new Set(issueList.map(function (issue) {
+      return normalizeProductCode(issue?.productCode) ||
+        (text(issue?.productId) ? 'Item ' + text(issue.productId) : '');
+    }).concat(fallbackItems || []).filter(Boolean)));
+    const subject = labels.length ? labels.join(', ') : 'One or more cart items';
+    const specific = issueList.length === 1 && text(issueList[0]?.message) ? text(issueList[0].message) : '';
+    return specific || subject + ' cannot be shipped because package dimensions or weight are missing or need review.';
   }
 
   function cartSubtotal() {
@@ -394,14 +374,6 @@
     const userAddress = results[0];
     const productData = results[1];
     const items = getCartItems();
-    const codes = items.map(function (item) { return item.code; });
-    const products = productData.filter(function (product) {
-      return codes.includes(text(product.ProductCode).toUpperCase());
-    });
-    const containsLargeItems = products.some(function (product) {
-      return Number(product.Weight) > 35 || Number(product.Width) > 36 ||
-        Number(product.Thickness) > 36 || Number(product.Length) > 36;
-    });
 
     if (!userAddress) {
       return {
@@ -437,18 +409,29 @@
         };
       }
       if (packageInfo.unavailable) {
+        const issue = shippingIssueBlock([], packageInfo.unavailableItems);
         return {
           label: 'UPS shipping',
           amount: 'Not available online',
-          note: 'One or more items are not configured for UPS ship-to-home yet.',
+          note: issue,
           blockCheckout: true,
-          blockMessage: 'This saved address is outside Texas, and one or more items in this cart are not configured for UPS ship-to-home. Please remove those items, choose pickup, or contact Woodson.'
+          blockMessage: issue + ' Remove the item, choose pickup, or contact Woodson for help.'
         };
       }
       try {
-        return await getUpsEstimate(userAddress, packageInfo, items);
+        return await getUpsEstimate(userAddress, items);
       } catch (error) {
         console.warn('[WLCart] Could not calculate the UPS cart estimate.', error);
+        if (Array.isArray(error.shippingIssues) && error.shippingIssues.length) {
+          const issue = shippingIssueBlock(error.shippingIssues, []);
+          return {
+            label: 'UPS shipping',
+            amount: 'Not available online',
+            note: issue,
+            blockCheckout: true,
+            blockMessage: issue + ' Remove the item, choose pickup, or contact Woodson for help.'
+          };
+        }
         return {
           label: 'UPS shipping',
           amount: 'Calculated at checkout',
@@ -461,7 +444,7 @@
       try {
         // Register the same destination-specific UPS decision for customers who
         // later choose the shipping path instead of Woodson local delivery.
-        await getUpsEstimate(userAddress, packageInfo, items);
+        await getUpsEstimate(userAddress, items);
       } catch (error) {
         console.warn('[WLCart] Could not prepare the UPS checkout offer.', error);
       }
@@ -470,8 +453,8 @@
     if (!isWithinCentralDeliveryZone(userAddress.zip)) {
       return {
         label: 'Estimated delivery',
-        amount: containsLargeItems ? 'Address review needed' : 'Calculated at checkout',
-        note: containsLargeItems
+        amount: packageInfo.containsLargeItems ? 'Address review needed' : 'Calculated at checkout',
+        note: packageInfo.containsLargeItems
           ? 'Some oversized items may require another address or a custom freight quote.'
           : 'Ground freight is confirmed after your delivery address.'
       };
@@ -480,7 +463,7 @@
     return {
       label: 'Local delivery',
       amount: 'Calculated at checkout',
-      note: containsLargeItems
+      note: packageInfo.containsLargeItems
         ? 'WebTrack will calculate the exact charge after confirming the delivery address and oversized items.'
         : 'WebTrack will calculate the exact Woodson delivery charge after confirming the delivery address.'
     };
@@ -533,6 +516,7 @@
       }
 
       saveCartSignature(signature || getCartSignature());
+      try { sessionStorage.removeItem('wl_confirmed_fulfillment_v1'); } catch {}
       if (isSignedIn()) {
         try {
           sessionStorage.removeItem('wl_fulfillment_intent');

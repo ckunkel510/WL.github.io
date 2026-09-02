@@ -18,6 +18,8 @@
   var ROOT_ID = 'wl-order-confirmation';
   var STYLE_ID = 'wl-order-confirmation-styles';
   var PRODUCT_URL = '/Products.aspx';
+  var FULFILLMENT_CONFIRMATION_KEY = 'wl_confirmed_fulfillment_v1';
+  window.WL_ORDER_CONFIRMATION_BUILD = '20260902-shipping-safety-4';
 
   function cleanText(value) {
     return String(value || '').replace(/\s+/g, ' ').trim();
@@ -136,6 +138,78 @@
     return dateMatch ? cleanText(dateMatch[0].replace(/^[^:]*:\s*/, '')) : '';
   }
 
+  function fulfillmentFromValue(value) {
+    var normalized = cleanText(value).toLowerCase();
+    if (!normalized) return null;
+    if (/\bups\b|\bship(?:ped|ping)?\b/.test(normalized)) {
+      return { mode: 'ship', label: 'UPS shipping', amount: null };
+    }
+    if (/\bdelivered\b|\blocal delivery\b|\bwoodson delivery\b|^delivery$/.test(normalized)) {
+      return { mode: 'delivery', label: 'Woodson local delivery', amount: null };
+    }
+    if (/\bpickup\b|\bpick up\b|\bcollect(?:ion)?\b/.test(normalized)) {
+      return { mode: 'pickup', label: 'Store pickup', amount: 0 };
+    }
+    return null;
+  }
+
+  function savedFulfillment() {
+    try {
+      var stored = JSON.parse(sessionStorage.getItem(FULFILLMENT_CONFIRMATION_KEY) || 'null');
+      if (!stored || !['pickup', 'delivery', 'ship'].includes(stored.mode)) return null;
+      if (Date.now() - Number(stored.ts || 0) > 60 * 60 * 1000) return null;
+      return {
+        mode: stored.mode,
+        label: cleanText(stored.label) || (stored.mode === 'ship'
+          ? 'UPS shipping'
+          : stored.mode === 'delivery' ? 'Woodson local delivery' : 'Store pickup'),
+        amount: Number.isFinite(Number(stored.amount)) ? Number(stored.amount) : null
+      };
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function getFulfillment(merchantText, merchant) {
+    var labeled = findLabeledValue(
+      merchant,
+      /^(?:(?:shipping|delivery|fulfillment|sale)\s+(?:method|type)|fulfillment)$/i
+    );
+    var explicit = fulfillmentFromValue(labeled);
+    if (!explicit) {
+      var textMatch = merchantText.match(
+        /(?:shipping|delivery|fulfillment|sale)\s+(?:method|type)\s*:?\s*(ups(?: ground)?|ship(?:ped|ping)?|delivered|local delivery|pickup|collect(?:ion)?)/i
+      );
+      explicit = fulfillmentFromValue(textMatch && textMatch[1]);
+    }
+
+    var saved = savedFulfillment();
+    if (saved) {
+      // WebTrack's paid native slot says UPS for both parcel shipping and
+      // Woodson delivery. The just-confirmed choice disambiguates those modes.
+      if (!explicit || (["ship", "delivery"].includes(saved.mode) && ["ship", "delivery"].includes(explicit.mode))) {
+        return saved;
+      }
+    }
+    if (explicit) return explicit;
+
+    if (/\brequested\s+pickup\b|\bpickup\s+location\b/i.test(merchantText)) {
+      return { mode: 'pickup', label: 'Store pickup', amount: 0 };
+    }
+    return { mode: '', label: '', amount: null };
+  }
+
+  function getRequestedDelivery(merchantText, merchant) {
+    var date = findLabeledValue(merchant, /^(?:requested\s+)?(?:delivery|arrival)\s+date$/i);
+    var time = findLabeledValue(merchant, /^(?:requested\s+)?delivery\s+time$/i);
+    var combined = [date, time].filter(Boolean).join(' at ');
+    if (combined) return combined;
+    var match = merchantText.match(
+      /(?:delivery|arrival)(?:\s+requested)?(?:\s+for|\s+date|\s+time)?\s*:?\s*((?:mon|tue|wed|thu|fri|sat|sun)[a-z]*,?\s+)?([a-z]+\s+\d{1,2}(?:,\s+\d{4})?)/i
+    );
+    return match ? cleanText(match[0].replace(/^[^:]*:\s*/, '')) : '';
+  }
+
   function getOrderTotal(merchantText, merchant) {
     var labeled = findLabeledValue(
       merchant,
@@ -150,15 +224,33 @@
       : '';
   }
 
+  function getFulfillmentCharge(merchant) {
+    var labeled = findLabeledValue(
+      merchant,
+      /^(?:shipping|delivery)(?:\s+\(without tax\))?(?:\s+(?:charge|cost|amount))?$/i
+    );
+    var amount = cleanText(labeled).match(/\$?\s*([\d,]+(?:\.\d{2})?)/);
+    if (!amount) return null;
+    var value = Number(amount[1].replace(/,/g, ''));
+    return Number.isFinite(value) && value >= 0 ? value : null;
+  }
+
   function getConfirmationData(response, merchant) {
     var merchantText = cleanText(merchant.textContent);
+    var fulfillment = getFulfillment(merchantText, merchant);
+    var fulfillmentCharge = getFulfillmentCharge(merchant);
     var branch =
-      findLabeledValue(merchant, /^(?:pickup\s+)?(?:location|branch|store)$/i) ||
-      getFirstMerchantLine(merchant);
+      findLabeledValue(merchant, /^(?:pickup\s+|fulfilling\s+)?(?:location|branch|store)$/i) ||
+      (fulfillment.mode === 'pickup' ? getFirstMerchantLine(merchant) : '');
     var address = findLabeledValue(
       merchant,
-      /^(?:pickup\s+|store\s+)?address$/i
+      /^(?:(?:pickup|store|delivery|shipping|ship\s+to)\s+)?address$/i
     );
+    var requested = fulfillment.mode === 'pickup'
+      ? getRequestedPickup(merchantText, merchant)
+      : (fulfillment.mode === 'delivery' || fulfillment.mode === 'ship')
+        ? getRequestedDelivery(merchantText, merchant)
+        : '';
     var paymentValue = findLabeledValue(
       merchant,
       /^(?:payment\s+)?(?:status|result|confirmation)$/i
@@ -173,9 +265,12 @@
 
     return {
       orderNumber: getOrderNumber(response),
+      fulfillmentMode: fulfillment.mode,
+      fulfillment: fulfillment.label,
+      fulfillmentAmount: fulfillmentCharge !== null ? fulfillmentCharge : fulfillment.amount,
       branch: branch.slice(0, 160),
       address: address.slice(0, 220),
-      pickup: getRequestedPickup(merchantText, merchant).slice(0, 120),
+      requested: requested.slice(0, 120),
       total: getOrderTotal(merchantText, merchant).slice(0, 32),
       payment: (paymentValue || (paymentConfirmed ? 'Confirmed' : '')).slice(0, 100),
       paymentConfirmed: paymentConfirmed,
@@ -289,6 +384,7 @@
       '.wl-order-confirmation__chip{display:inline-flex;align-items:center;gap:7px;border-radius:999px;background:var(--wl-green-soft);color:var(--wl-green);font-size:.84rem;font-weight:800;padding:7px 11px;}',
       '.wl-order-confirmation__chip-dot{width:7px;height:7px;border-radius:50%;background:currentColor;}',
       '.wl-order-confirmation__grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:0 0 24px;}',
+      '.wl-order-confirmation__alert{margin:0 0 18px;border:1px solid #d5a400;border-left:5px solid #b00020;border-radius:12px;background:#fff8dc;color:#3b2b00;padding:13px 15px;font-size:.92rem;font-weight:700;line-height:1.45;}',
       '.wl-order-confirmation__fact{min-width:0;border:1px solid var(--wl-line);border-radius:14px;background:#fff;padding:15px 16px;}',
       '.wl-order-confirmation__fact:last-child:nth-child(odd){grid-column:1/-1;}',
       '.wl-order-confirmation__fact-label{display:block;margin-bottom:5px;color:var(--wl-muted);font-size:.77rem;font-weight:800;letter-spacing:.055em;text-transform:uppercase;}',
@@ -348,16 +444,37 @@
       section.setAttribute('data-wl-order-number', data.orderNumber);
     }
 
-    var pickupDetail = data.address || '';
+    var locationLabel = data.fulfillmentMode === 'pickup'
+      ? 'Pickup location'
+      : data.fulfillmentMode === 'ship'
+        ? 'Ship to'
+        : data.fulfillmentMode === 'delivery' ? 'Delivery address' : 'Order location';
+    var locationValue = data.fulfillmentMode === 'pickup'
+      ? data.branch
+      : (data.address || data.branch);
+    var locationDetail = data.fulfillmentMode === 'pickup'
+      ? data.address
+      : (data.address && data.branch && data.address !== data.branch ? data.branch : '');
+    var requestedLabel = data.fulfillmentMode === 'pickup'
+      ? 'Requested pickup'
+      : data.fulfillmentMode === 'ship' ? 'Estimated arrival' : 'Requested delivery';
+    var hasFulfillmentAmount = data.fulfillmentAmount !== null && Number.isFinite(Number(data.fulfillmentAmount));
+    var fulfillmentDetail = data.fulfillmentMode !== 'pickup' && hasFulfillmentAmount
+      ? 'Charge: $' + Number(data.fulfillmentAmount).toFixed(2)
+      : '';
+    var fulfillmentWarning = data.fulfillmentMode !== 'pickup' && (!hasFulfillmentAmount || Number(data.fulfillmentAmount) <= 0)
+      ? '<div class="wl-order-confirmation__alert" role="alert">Your shipping or delivery charge needs review. Woodson will confirm fulfillment before the order is released.</div>'
+      : '';
     var facts = [
-      createFact('Pickup location', data.branch, pickupDetail),
-      createFact('Requested pickup', data.pickup, ''),
+      createFact('Fulfillment', data.fulfillment, fulfillmentDetail),
+      createFact(locationLabel, locationValue, locationDetail),
+      createFact(requestedLabel, data.requested, ''),
       createFact('Order total', data.total, ''),
       createFact('Payment', data.payment, ''),
       createFact('Invoice', data.invoice, '')
     ].filter(Boolean).join('');
 
-    var branchPhrase = data.branch ? ' at ' + html(data.branch) : '';
+    var branchPhrase = data.fulfillmentMode === 'pickup' && data.branch ? ' at ' + html(data.branch) : '';
     var orderBlock = data.orderNumber
       ? [
           '<div class="wl-order-confirmation__order">',
@@ -390,6 +507,7 @@
       '<span class="wl-order-confirmation__chip"><span class="wl-order-confirmation__chip-dot"></span>Order received</span>',
       paymentChip,
       '</div>',
+      fulfillmentWarning,
       facts ? '<div class="wl-order-confirmation__grid">' + facts + '</div>' : '',
       '<div class="wl-order-confirmation__next">',
       '<span class="wl-order-confirmation__next-number">1</span>',
