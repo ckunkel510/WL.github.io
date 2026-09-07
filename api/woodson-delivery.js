@@ -1,6 +1,7 @@
 "use strict";
 
 const deliveryRules = require("../data/woodson-delivery-rules.json");
+const { normalizeUsStateForPostal } = require("./us-state");
 
 const CENSUS_GEOCODER_URL = "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress";
 const BRANCH_BY_POSTAL = {
@@ -133,8 +134,8 @@ function oneLineAddress(input) {
   const lines = Array.isArray(source.addressLine) ? source.addressLine : [source.addressLine];
   const street = lines.map((line) => cleanText(line, 80)).filter(Boolean).join(" ");
   const city = cleanText(source.city, 50);
-  const state = cleanText(source.state, 2).toUpperCase();
   const zip = postal5(source.postalCode);
+  const state = normalizeUsStateForPostal(source.state, zip);
   if (!street || !city || state !== "TX" || !zip) return "";
   return [street, city, state, zip].join(", ");
 }
@@ -182,7 +183,7 @@ async function geocodeAddress(address, dependencies = {}) {
 async function quoteWoodsonDelivery(input, dependencies = {}) {
   const source = input && typeof input === "object" ? input : {};
   const shipTo = source.shipTo && typeof source.shipTo === "object" ? source.shipTo : {};
-  const state = cleanText(shipTo.state, 2).toUpperCase();
+  const state = normalizeUsStateForPostal(shipTo.state, shipTo.postalCode);
   if (state && state !== "TX") return { available: false, reason: "outside-texas" };
   let geocoded;
   try {

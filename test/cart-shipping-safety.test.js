@@ -117,6 +117,31 @@ test("checkout uses the unified fulfillment quote to show and recommend UPS or W
   assert.match(checkout, /await window\.WLShippingOffer\.select\(mode\)/);
 });
 
+test("checkout sends USPS state codes and distinguishes address failures from item failures", () => {
+  const offer = source("UpsShippingOffer.js");
+  const checkout = source("Checkout2.js");
+  const stateMap = { virginia: "VA", newyork: "NY", georgia: "GA", california: "CA" };
+  const stateCodes = { VA: true, NY: true, GA: true, CA: true };
+  const normalizeUsState = extractedFunction(offer, "normalizeUsState", {
+    text: (value) => String(value == null ? "" : value).replace(/\s+/g, " ").trim(),
+    US_STATE_CODES_BY_NAME: stateMap,
+    US_STATE_CODES: stateCodes
+  });
+  const shippingAddressMessage = extractedFunction(checkout, "shippingAddressMessage", {
+    cleanStateValue: (value) => String(value || "").replace(/\s+/g, " ").trim()
+  });
+
+  assert.equal(normalizeUsState("Virginia"), "VA");
+  assert.equal(normalizeUsState("New York"), "NY");
+  assert.equal(normalizeUsState("58 Georgia Georgia 58"), "GA");
+  assert.match(offer, /state:\s*normalizeUsState\(stateText\) \|\| stateText/);
+  assert.match(shippingAddressMessage({ reason: "VI is not a valid state for the specified shipment." }), /check the city, state, and ZIP/i);
+  assert.match(shippingAddressMessage({ reason: "The postal code is invalid." }), /check the city, state, and ZIP/i);
+  assert.equal(shippingAddressMessage({ reason: "shipping-items-unavailable" }), "");
+  assert.match(checkout, /Cannot ship · Check item below/);
+  assert.match(checkout, /Check shipping address/);
+});
+
 test("fulfillment quoting recognizes the selected store in the current public stores header", () => {
   const offer = source("UpsShippingOffer.js");
   const selectedOrigin = extractedFunction(offer, "selectedOrigin", {

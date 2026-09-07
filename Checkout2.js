@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20260902-shipping-safety-4";
+  window.WL_CHECKOUT_BUILD = "20260907-shipping-state-normalization-5";
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
   const UPS_SHIPPING_ENABLED = true;
@@ -3924,6 +3924,13 @@ document.addEventListener("click", function (ev) {
             return reason + " " + alternative;
           }
 
+          function shippingAddressMessage(upsOption) {
+            const reason = cleanStateValue(upsOption?.reason);
+            if (!reason || !/(state|postal|zip|address|city)/i.test(reason)) return "";
+            if (!/(invalid|required|not (?:a )?valid|does not match|verify)/i.test(reason)) return "";
+            return "We couldn't verify this shipping address with UPS. Check the city, state, and ZIP code, then try again.";
+          }
+
           function updateAddressAwareOptions() {
             if (addressAwareUpdating) return;
             addressAwareUpdating = true;
@@ -3940,7 +3947,9 @@ document.addEventListener("click", function (ev) {
               const recommendedMode = quote && quote.recommendation && quote.recommendation.mode;
               const deliveryAvailable = !!(deliveryOption && deliveryOption.available);
               const upsAvailable = !!(upsOption && upsOption.available);
-              const upsIssueMessage = shippingIssueMessage(upsOption, deliveryAvailable);
+              const upsItemIssueMessage = shippingIssueMessage(upsOption, deliveryAvailable);
+              const upsAddressMessage = shippingAddressMessage(upsOption);
+              const upsProblemMessage = upsItemIssueMessage || upsAddressMessage;
 
               if (quote) {
                 $delivery.toggle(deliveryAvailable);
@@ -3953,7 +3962,9 @@ document.addEventListener("click", function (ev) {
                   : "Not available");
                 $shipTag.text(upsAvailable
                   ? "$" + Number(upsOption.amount || 0).toFixed(2) + (recommendedMode === "ship" ? " · Recommended" : "")
-                  : (upsIssueMessage ? "Cannot ship · Check item below" : "Not available"));
+                  : (upsItemIssueMessage
+                    ? "Cannot ship · Check item below"
+                    : (upsAddressMessage ? "Check shipping address" : "Not available")));
                 const intent = getFulfillmentIntent();
                 const selectionSource = getFulfillmentSelectionSource();
                 if (!deliveryAvailable && intent === "delivery") {
@@ -3963,8 +3974,8 @@ document.addEventListener("click", function (ev) {
                 } else if ((!intent || selectionSource !== "user") && (recommendedMode === "ship" || recommendedMode === "delivery")) {
                   updateShippingStyles(recommendedMode, { silent: true, reason: "recommended-fulfillment" });
                 }
-                if (upsIssueMessage) {
-                  showOutOfStateMessage(upsIssueMessage, "warning");
+                if (upsProblemMessage) {
+                  showOutOfStateMessage(upsProblemMessage, "warning");
                 } else if (!deliveryAvailable && !upsAvailable) {
                   showOutOfStateMessage("This order needs a freight quote. Pickup is still available; please contact Woodson for delivery help.", "warning");
                 } else {

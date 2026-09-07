@@ -4,6 +4,7 @@ const crypto = require("node:crypto");
 const zipcodes = require("zipcodes");
 const { buildAutomaticShippingQuote } = require("./shipping-quote");
 const { applyShippingMinimumToRates } = require("./shipping-policy");
+const { normalizeUsStateForPostal } = require("./us-state");
 
 const DEFAULT_ORIGINS = [
   "https://webtrack.woodsonlumber.com",
@@ -86,7 +87,7 @@ function normalizeAddress(input, label) {
     throw new RequestError(400, `${label} postal code is required.`);
   }
   const postalMatch = zipcodes.lookup(postalCode.slice(0, 5));
-  const state = cleanText(address.state || postalMatch?.state, 2).toUpperCase();
+  const state = normalizeUsStateForPostal(address.state, postalCode);
   const city = cleanText(address.city || postalMatch?.city, 30);
   const country = cleanText(address.country || "US", 2).toUpperCase();
   if (!/^[A-Z]{2}$/.test(state)) throw new RequestError(400, `${label} state is required.`);

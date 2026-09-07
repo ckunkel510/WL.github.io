@@ -8,6 +8,7 @@ const {
   geocodeAddress,
   pointInPolygon,
   quoteAtCoordinates,
+  quoteWoodsonDelivery,
   rateForWeight,
   resetGeocodeCache
 } = require("../api/woodson-delivery");
@@ -58,6 +59,24 @@ test("uses the destination delivery area even when the account selected another 
   assert.equal(quote.available, true);
   assert.equal(quote.amount, 25);
   assert.equal(quote.area.branchCode, "01");
+});
+
+test("accepts WebTrack's full Texas state name for local delivery", async () => {
+  const area = rules.areas.find((item) => item.branchCode === "01" && item.areaCode.endsWith("000-10"));
+  const center = [
+    area.polygons[0].reduce((sum, point) => sum + point[0], 0) / area.polygons[0].length,
+    area.polygons[0].reduce((sum, point) => sum + point[1], 0) / area.polygons[0].length
+  ];
+  const quote = await quoteWoodsonDelivery({
+    shipFrom: { postalCode: "77833" },
+    shipTo: { state: "Texas", postalCode: "77833" },
+    totalWeight: 10
+  }, {
+    geocodeAddress: async () => ({ coordinates: center, matchedAddress: "test", source: "test" })
+  });
+
+  assert.equal(quote.available, true);
+  assert.equal(quote.amount, 25);
 });
 
 test("uses the minimum positive tier when delivery weight is unavailable", () => {

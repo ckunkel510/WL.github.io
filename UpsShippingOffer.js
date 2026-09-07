@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var BUILD_VERSION = "20260902-shipping-safety-4";
+  var BUILD_VERSION = "20260907-shipping-state-normalization-5";
   var RATE_URL = "https://wl-upsrates.vercel.app/api/fulfillment-quote";
   var STORAGE_KEY = "wl_shipping_offer_v1";
   var CART_DATA_KEY = "wl_shipping_offer_cart_v1";
@@ -26,6 +26,22 @@
     mexia: { name: "Mexia", city: "Mexia", state: "TX", postalCode: "76667" },
     groesbeck: { name: "Groesbeck", city: "Groesbeck", state: "TX", postalCode: "76642" }
   };
+  var US_STATE_CODES_BY_NAME = {
+    alabama: "AL", alaska: "AK", arizona: "AZ", arkansas: "AR", california: "CA", colorado: "CO",
+    connecticut: "CT", delaware: "DE", districtofcolumbia: "DC", florida: "FL", georgia: "GA",
+    hawaii: "HI", idaho: "ID", illinois: "IL", indiana: "IN", iowa: "IA", kansas: "KS",
+    kentucky: "KY", louisiana: "LA", maine: "ME", maryland: "MD", massachusetts: "MA",
+    michigan: "MI", minnesota: "MN", mississippi: "MS", missouri: "MO", montana: "MT",
+    nebraska: "NE", nevada: "NV", newhampshire: "NH", newjersey: "NJ", newmexico: "NM",
+    newyork: "NY", northcarolina: "NC", northdakota: "ND", ohio: "OH", oklahoma: "OK",
+    oregon: "OR", pennsylvania: "PA", rhodeisland: "RI", southcarolina: "SC", southdakota: "SD",
+    tennessee: "TN", texas: "TX", utah: "UT", vermont: "VT", virginia: "VA", washington: "WA",
+    westvirginia: "WV", wisconsin: "WI", wyoming: "WY"
+  };
+  var US_STATE_CODES = {};
+  Object.keys(US_STATE_CODES_BY_NAME).forEach(function (name) {
+    US_STATE_CODES[US_STATE_CODES_BY_NAME[name]] = true;
+  });
 
   function text(value) {
     return String(value == null ? "" : value).replace(/\s+/g, " ").trim();
@@ -33,6 +49,22 @@
 
   function normalizeCode(value) {
     return text(value).replace(/\s+/g, "").toUpperCase();
+  }
+
+  function normalizeUsState(value) {
+    var raw = text(value);
+    if (!raw) return "";
+    var upper = raw.toUpperCase();
+    if (US_STATE_CODES[upper]) return upper;
+    var tokens = upper.split(/[^A-Z]+/).filter(Boolean);
+    var suppliedCode = tokens.find(function (token) { return US_STATE_CODES[token]; });
+    if (suppliedCode) return suppliedCode;
+    var compact = raw.toLowerCase().replace(/[^a-z]/g, "");
+    if (US_STATE_CODES_BY_NAME[compact]) return US_STATE_CODES_BY_NAME[compact];
+    var embeddedName = Object.keys(US_STATE_CODES_BY_NAME).find(function (name) {
+      return compact.indexOf(name) !== -1;
+    });
+    return embeddedName ? US_STATE_CODES_BY_NAME[embeddedName] : "";
   }
 
   function cartRows() {
@@ -134,7 +166,7 @@
         value("ctl00_PageBody_DeliveryAddress_AddressLine3")
       ].filter(Boolean),
       city: value("ctl00_PageBody_DeliveryAddress_City"),
-      state: /^texas$/i.test(stateText) ? "TX" : stateText,
+      state: normalizeUsState(stateText) || stateText,
       postalCode: checkoutZip(),
       country: "US",
       residential: true

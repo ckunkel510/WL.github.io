@@ -23,6 +23,14 @@ test("fills in a US city and state from the postal code", () => {
   assert.equal(address.CountryCode, "US");
 });
 
+test("accepts WebTrack's full state names and verifies them from the ZIP", () => {
+  const virginia = normalizeAddress({ city: "Richmond", state: "Virginia", postalCode: "23220" }, "Ship-to");
+  const mismatched = normalizeAddress({ city: "Richmond", state: "CA", postalCode: "23220" }, "Ship-to");
+
+  assert.equal(virginia.StateProvinceCode, "VA");
+  assert.equal(mismatched.StateProvinceCode, "VA");
+});
+
 test("builds a UPS multi-package shop request", () => {
   process.env.UPS_ACCOUNT_NUMBER = "ABC123";
   const result = buildRateRequest({
