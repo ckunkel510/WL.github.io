@@ -1,3 +1,16 @@
+// Hide login-gated prices before the page is rearranged to prevent a price flash.
+(function wlPrehideLoginGatedPrice() {
+  try {
+    const productId = new URLSearchParams(window.location.search).get("pid");
+    if (productId !== "6821" || document.getElementById("wl-login-price-prehide")) return;
+
+    const style = document.createElement("style");
+    style.id = "wl-login-price-prehide";
+    style.textContent = ".productPriceSegment,.productPerSegment{visibility:hidden!important;}";
+    (document.head || document.documentElement).appendChild(style);
+  } catch (e) {}
+})();
+
 $(document).ready(async function () {
   if ($("#product-page").length) return;
 
@@ -151,6 +164,35 @@ $(document).ready(async function () {
         line-height: 1;
       }
       .wl-product-price-row .wl-product-unit { font-size: 15px !important; }
+      .wl-price-login-gate {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 5px;
+        padding: 14px;
+        border: 1px solid #d9dde1;
+        border-left: 5px solid #6b0016;
+        border-radius: 6px;
+        background: #fff7f8;
+        color: #20262d;
+      }
+      .wl-price-login-gate strong { color: #6b0016; font-size: 18px; }
+      .wl-price-login-gate span { color: #59636e; font-size: 13px; line-height: 1.35; }
+      .wl-price-login-link {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 38px;
+        margin-top: 3px;
+        padding: 8px 14px;
+        border-radius: 5px;
+        background: #6b0016;
+        color: #fff !important;
+        font-weight: 800;
+        text-decoration: none !important;
+      }
+      .wl-price-login-link:hover,
+      .wl-price-login-link:focus { background: #8d8d8d; }
       .wl-pdp-action-row {
         display: grid !important;
         grid-template-columns: auto minmax(0, 1fr);
@@ -337,6 +379,20 @@ $(document).ready(async function () {
   // Current product id (first pid= in the URL)
   const currentPID = new URLSearchParams(window.location.search).get("pid");
   const isBlockedProduct = currentPID && BLOCKED_PIDS.includes(String(currentPID));
+
+  // Products whose price is visible only after the customer signs in.
+  const WL_LOGIN_PRICE_PIDS = new Set(["6821"]);
+  const signInLink = Array.from(document.querySelectorAll("a")).find((link) => {
+    const label = (link.textContent || "").trim();
+    const href = link.getAttribute("href") || "";
+    return /^sign in$/i.test(label) && /signin\.aspx/i.test(href);
+  });
+  const hidePriceUntilSignedIn =
+    currentPID &&
+    WL_LOGIN_PRICE_PIDS.has(String(currentPID)) &&
+    Boolean(signInLink);
+  const signInHref = signInLink ? signInLink.getAttribute("href") : "SignIn.aspx";
+
   const WL_EPALLET_RULES = {
     22444: { code: "ASC", pickupMin: 10, palletQty: 42 },
     23379: { code: "4BSC", pickupMin: 10, palletQty: 30 },
@@ -528,6 +584,10 @@ $(document).ready(async function () {
   const $quicklistBtn = $("#ctl00_PageBody_productDetail_ctl00_QuickList_QuickListLink").first().closest("div.mb-1").detach();
   const $stockBtn = $("#ctl00_PageBody_productDetail_ctl00_btnShowStock").first().closest("div").detach();
 
+  // The live price is now detached; the temporary anti-flash rule is no longer needed.
+  const prehideStyle = document.getElementById("wl-login-price-prehide");
+  if (prehideStyle) prehideStyle.remove();
+
   // Build buy box
   // === Build price + uom row ===
   const $priceRow = $("<div>").addClass("wl-product-price-row").css({
@@ -538,7 +598,7 @@ $(document).ready(async function () {
     color: "#333",
   });
 
-  if ($price.length) {
+  if ($price.length && !hidePriceUntilSignedIn) {
     $priceRow.append($("<span>").text($price.text().trim()));
     if ($unit.length) {
       $priceRow.append(
@@ -550,6 +610,17 @@ $(document).ready(async function () {
       );
     }
   }
+
+  const $priceDisplay = hidePriceUntilSignedIn
+    ? $("<div>", { class: "wl-price-login-gate", role: "note" })
+        .append($("<strong>").text("Sign in to see price"))
+        .append($("<span>").text("Pricing is available to signed-in customers."))
+        .append($("<a>", {
+          href: signInHref,
+          class: "wl-price-login-link",
+          text: "Sign in"
+        }))
+    : $priceRow;
 
   // === Quantity + Add to Cart in one row ===
   const $actionRow = $("<div>").addClass("wl-pdp-action-row").css({
@@ -701,7 +772,7 @@ $(document).ready(async function () {
     // Don't show qty/add controls at all
     // (We already detached them from the page; we simply don't add them back.)
     // But keep quicklist + stock if you want the “in-store tools” still available.
-    $buyBox.empty().append($methodRow, epalletNotice(epalletRule), $priceRow, $notEligible, $quicklistBtn.css("marginTop", "10px"), $stockBtn);
+    $buyBox.empty().append($methodRow, epalletNotice(epalletRule), $priceDisplay, $notEligible, $quicklistBtn.css("marginTop", "10px"), $stockBtn);
 
   } else {
     // Normal purchase flow
@@ -711,7 +782,7 @@ $(document).ready(async function () {
     $actionRow.append($qtyInput, $addBtn);
 
     // Final assembly
-    $buyBox.empty().append($methodRow, $banner, epalletNotice(epalletRule), $priceRow, $actionRow, $quicklistBtn.css("marginTop", "10px"), $stockBtn);
+    $buyBox.empty().append($methodRow, $banner, epalletNotice(epalletRule), $priceDisplay, $actionRow, $quicklistBtn.css("marginTop", "10px"), $stockBtn);
   }
 
   $sidebar.append($buyBox);
