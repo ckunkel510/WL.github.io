@@ -25,9 +25,13 @@
     <main class="bodyFlexContainer">
       <div class="bodyFlexItem listPageHeader" id="fixtureHeading">Make a Payment</div>
 
+      <div class="epi-form-group-acctPayment">
+        <label for="ctl00_PageBody_AddressDropdownList">Saved address:</label>
+        <select id="ctl00_PageBody_AddressDropdownList" name="ctl00$PageBody$AddressDropdownList"><option value="-1">(none)</option><option value="1">123 Main Street</option></select>
+      </div>
       <div class="epi-form-group-acctPayment" id="ctl00_PageBody_BillingAddressContainer">
         <label for="ctl00_PageBody_BillingAddressTextBox">Billing address:</label>
-        <input id="ctl00_PageBody_BillingAddressTextBox" name="ctl00$PageBody$BillingAddressTextBox" type="text">
+        <input id="ctl00_PageBody_BillingAddressTextBox" name="ctl00$PageBody$BillingAddressTextBox" type="text" onchange="window.fixturePostbackCount=(window.fixturePostbackCount||0)+1">
       </div>
       <div class="epi-form-group-acctPayment">
         <label for="ctl00_PageBody_PostalCodeTextBox">Zip code:</label>
@@ -57,6 +61,8 @@
 
       <section id="ctl00_PageBody_accountsTransactionsPanel">
         <h2>Invoices</h2>
+        <label for="ctl00_PageBody_SearchType">Search by:</label>
+        <select id="ctl00_PageBody_SearchType"><option value="TransactionDate">Date Range</option><option value="JobReference">Job Ref</option><option value="DocumentNumber">Document #</option></select>
         <table id="ctl00_PageBody_InvoicesGrid">
           <thead><tr><th>Select</th><th>Invoice</th><th>Outstanding</th></tr></thead>
           <tbody>
@@ -107,6 +113,6 @@
       document.documentElement.setAttribute('data-wl-payment-preview-account', previewIdentity.accountId);
     }
   </script>
-  <script src="../../PayByInvoice.js?v=local-router-2"></script>
+  <script src="../../PayByInvoice.js?v=local-router-3"></script>
 </body>
 </html>

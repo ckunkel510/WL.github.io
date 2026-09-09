@@ -17,7 +17,7 @@ test('preview router requires an approved account ID and the preview URL', () =>
   assert.match(routerAndLegacySource, /requestedMode !== 'preview'/);
   assert.match(routerAndLegacySource, /expectedAccountIds\.indexOf\(accountId\) !== -1/);
   assert.match(routerAndLegacySource, /expiresAt > Date\.now\(\)/);
-  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260909-2/);
+  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260909-3/);
 });
 
 test('legacy payment enhancements remain the default and stop only for an approved preview', () => {
@@ -42,6 +42,8 @@ test('account overview enables preview only for the two approved account IDs', (
   assert.match(accountInfoSource, /sessionStorage\.removeItem\(PAYMENT_FLOW_PREVIEW_KEY\)/);
   assert.match(accountInfoSource, /url\.searchParams\.set\('wl_payment_flow','preview'\)/);
   assert.match(accountInfoSource, /withPaymentFlowPreview\('AccountPayment_r\.aspx'\)/);
+  assert.match(accountInfoSource, /utm_statement_total/);
+  assert.match(accountInfoSource, /statementTotal\.toFixed\(2\)/);
 });
 
 test('preview is progressive enhancement with an explicit native escape hatch', () => {
@@ -91,13 +93,34 @@ test('preview enhances native fields in place for cash and charge accounts', () 
   assert.match(previewSource, /Back to Account Overview/);
   assert.match(previewSource, /col-auto\.navigation-menu\{display:none!important/);
   assert.match(previewSource, /repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(previewSource, /id="wl-payment-left"/);
+  assert.match(previewSource, /id="wl-payment-right"/);
+  assert.match(previewSource, /Current balance/);
+  assert.match(previewSource, /wl-payment-card\.wl-payment-balance-field/);
+  assert.match(previewSource, /wl-payment-card\.wl-payment-remittance-field/);
   assert.doesNotMatch(previewSource, /wl-hidden-native/);
 });
 
 test('preview convenience actions update native fields without submitting', () => {
   assert.match(previewSource, /data-wl-action="pay-balance"/);
+  assert.match(previewSource, /data-wl-action="pay-statement"/);
   assert.match(previewSource, /data-wl-action="choose-invoices"/);
   assert.match(previewSource, /data-wl-action="choose-job"/);
   assert.match(previewSource, /input\.dispatchEvent\(new Event\('input'/);
-  assert.match(previewSource, /input\.dispatchEvent\(new Event\('change'/);
+  assert.match(previewSource, /Pay last statement/);
+});
+
+test('invoice and job choices open the native transaction selector in a modal', () => {
+  assert.match(previewSource, /id="wl-invoice-dialog-card"/);
+  assert.match(previewSource, /aria-modal/);
+  assert.match(previewSource, /wl_invoice_mode/);
+  assert.match(previewSource, /openInvoiceDialog\('invoices'/);
+  assert.match(previewSource, /openInvoiceDialog\('job'/);
+  assert.match(previewSource, /searchType\.value = 'JobReference'/);
+});
+
+test('billing entry is stabilized without changing the native final payment handler', () => {
+  assert.match(previewSource, /data-wl-native-onchange/);
+  assert.match(previewSource, /control\.removeAttribute\('onchange'\)/);
+  assert.match(previewSource, /\[billing, postal, email, amount\]/);
 });

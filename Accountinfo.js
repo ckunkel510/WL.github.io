@@ -376,10 +376,11 @@
     const stmtNetAmt = mNum(last['Last Statement Net Amount']?.amount);
     const stmtDate   = parseUS(last['Last Statement Amount']?.date || last['Last Statement Net Amount']?.date);
     const lastStmtAmtVal = mNum(last['Last Statement Amount']?.amount);
+    const statementTotal = stmtNetAmt>0 ? stmtNetAmt : lastStmtAmtVal;
     const hasStatements  = !!(stmtDate || stmtNetAmt>0 || lastStmtAmtVal>0);
     const stmtDue    = next10(stmtDate);
     const payStmtPayload = (()=>({
-      total: stmtNetAmt>0 ? stmtNetAmt.toFixed(2) : '',
+      total: statementTotal>0 ? statementTotal.toFixed(2) : '',
       notes: stmtDate ? `Statement ${stmtDate.toLocaleDateString()}` : '',
       source: 'AccountInfo',
       action: 'PayStatement',
@@ -391,6 +392,13 @@
     const cashCredit = getCashBalanceCredit();
     const cashCreditDisplay = cashCredit > 0 ? fmtMoney(cashCredit) : '—';
     const isCashAccount = !!document.getElementById('ctl00_PageBody_btnLoadCashAccountBalance');
+    const paymentEntryUrl = action => {
+      const q = new URLSearchParams();
+      q.set('utm_source', 'AccountInfo');
+      q.set('utm_action', action);
+      if (!isCashAccount && statementTotal > 0) q.set('utm_statement_total', statementTotal.toFixed(2));
+      return withPaymentFlowPreview(`AccountPayment_r.aspx?${q.toString()}`);
+    };
     try { localStorage.setItem('wl_account_is_cash_v1', isCashAccount ? 'true' : 'false'); } catch(e) {}
     const accountTermsLabel = snapshot['Terms'] || snapshot['Payment Terms'] || snapshot['Account Terms'] || snapshot['Customer Terms'] || '';
     const showAutopaySignup = isAutopayTestAccount;
@@ -455,7 +463,7 @@
             <div id="wl-ham-menu" class="wl-ham-menu" role="menu"></div>
           </div>
           <div class="wl-actions">
-            <a class="wl-btn primary" id="wl-top-pay" href="${withPaymentFlowPreview(`AccountPayment_r.aspx?utm_source=AccountInfo&utm_action=${isCashAccount ? 'ReloadBalance' : 'MakePayment'}`)}">${isCashAccount ? 'Reload Balance' : 'Make a Payment'}</a>
+            <a class="wl-btn primary" id="wl-top-pay" href="${paymentEntryUrl(isCashAccount ? 'ReloadBalance' : 'MakePayment')}">${isCashAccount ? 'Reload Balance' : 'Make a Payment'}</a>
           </div>
         </div>
 
@@ -714,7 +722,9 @@ if (snapshotActions) {
       const menu = $('#wl-ham-menu', container);
       const currentPath = (window.location.pathname || '').split('/').pop().toLowerCase();
 
-      const paymentHref = withPaymentFlowPreview('AccountPayment_r.aspx');
+      const paymentHref = paymentFlowPreviewEnabled
+        ? paymentEntryUrl(isCashAccount ? 'ReloadBalance' : 'MakePayment')
+        : withPaymentFlowPreview('AccountPayment_r.aspx');
       const paymentLabel = isCashAccount ? 'Reload Balance' : 'Make a Payment';
 
       let accountSettingLinks = [
