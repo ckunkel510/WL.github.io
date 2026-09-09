@@ -18,7 +18,7 @@ test('preview router requires an approved account ID and the preview URL', () =>
   assert.match(routerAndLegacySource, /expectedAccountIds\.indexOf\(accountId\) !== -1/);
   assert.match(routerAndLegacySource, /expiresAt > Date\.now\(\)/);
   assert.match(routerAndLegacySource, /__WL_PAYMENT_PREVIEW_ACCOUNT_ID__ = accountId/);
-  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260909-8/);
+  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260909-9/);
 });
 
 test('legacy payment enhancements remain the default and stop only for an approved preview', () => {
@@ -150,6 +150,7 @@ test('charge accounts are limited to the native Forte ACH route', () => {
   assert.match(previewSource, /radio\.disabled = true/);
   assert.match(previewSource, /Bank account \(ACH\/eCheck\)/);
   assert.match(previewSource, /Charge-account payments use secure ACH\/eCheck through Forte/);
+  assert.match(previewSource, /Choose an amount to continue with secure ACH\/eCheck through Forte/);
   assert.match(previewSource, /searchType\.value = 'JobReference'/);
   assert.match(previewSource, /searchType\.dispatchEvent\(new Event\('change'/);
   assert.match(previewSource, /wl-payment-flow-ready\.wl-payment-charge/);

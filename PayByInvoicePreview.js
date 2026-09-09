@@ -21,7 +21,7 @@
   if (requestedMode === 'native') return;
   if (ROLLOUT_MODE === 'preview' && requestedMode !== 'preview') return;
 
-  var VERSION = 'v2-preview-8';
+  var VERSION = 'v2-preview-9';
   var IDS = {
     address: 'ctl00_PageBody_AddressDropdownList',
     billing: 'ctl00_PageBody_BillingAddressTextBox',
@@ -1022,7 +1022,10 @@
       return;
     }
 
-    note.textContent = 'Preparing secure ACH/eCheck payment…';
+    var amount = parseMoney(byId(IDS.amount) && byId(IDS.amount).value);
+    note.textContent = amount > 0
+      ? 'Preparing secure ACH/eCheck payment…'
+      : 'Choose an amount to continue with secure ACH/eCheck through Forte.';
     var searchType = byId('ctl00_PageBody_SearchType');
     if (!searchType) return;
     var lastRequest = 0;
@@ -1128,7 +1131,11 @@
     }
     note.textContent = cashAccount
       ? 'Continue to the secure confirmation screen.'
-      : 'Continue to secure ACH/eCheck through Forte.';
+      : nativeSubmit
+        ? 'Continue to secure ACH/eCheck through Forte.'
+        : amount > 0
+          ? 'Preparing secure ACH/eCheck payment…'
+          : 'Choose an amount above to continue.';
   }
 
   function wirePageEvents() {
