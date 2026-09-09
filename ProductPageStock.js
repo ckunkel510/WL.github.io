@@ -85,14 +85,12 @@ $(document).ready(function () {
                         }).catch(() => {
                             console.warn('User location could not be determined. Defaulting to Groesbeck.');
                             loadStockData(productId, DEFAULT_STORE, false); // Not signed-in, use column 3
-                            displayWidget(DEFAULT_STORE, 'No stock available', true);
                         });
                     }
                 }
             }).catch(() => {
                 console.error('Failed to fetch account settings. Adding fallback button.');
                 loadStockData(productId, DEFAULT_STORE, false); // Not signed-in, use column 3
-                displayWidget(DEFAULT_STORE, 'No stock available', true);
             });
         } else {
             console.error("Product ID not found in the URL.");
@@ -137,12 +135,24 @@ $(document).ready(function () {
         filterAndDisplayStockData(stockData, branch, useActualColumn, stockDataUrl, productId);
       } else {
         console.error('Stock table not found in AJAX response.');
-        displayWidget(branch, 'No stock available', true, stockDataUrl, productId);
+        displayWidget(branch, 'No stock available', true, stockDataUrl, productId, "Check nearby stores for pickup today", {
+          branch,
+          quantity: 0,
+          hasStock: false,
+          totalAvailable: 0,
+          productId
+        });
       }
     },
     error: function (xhr, status, error) {
       console.error('Failed to load the stock data:', status, error);
-      displayWidget(branch, 'No stock available', true, stockDataUrl, productId);
+      displayWidget(branch, 'No stock available', true, stockDataUrl, productId, "Check nearby stores for pickup today", {
+        branch,
+        quantity: 0,
+        hasStock: false,
+        totalAvailable: 0,
+        productId
+      });
     }
   });
 }
