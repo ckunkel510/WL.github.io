@@ -23,7 +23,7 @@ Every event uses the same GTM custom event:
 {
   event: "wl_analytics_event",
   event_name: "add_to_cart",
-  analytics_version: "1.0.1",
+  analytics_version: "1.3.0",
   page_type: "product_detail",
   ecommerce: {
     currency: "USD",
@@ -49,6 +49,12 @@ Supported event names:
 - `checkout_submit`
 - `purchase`
 - `share_product`
+- `generate_lead`
+- `pdp_fulfillment_view`
+- `pdp_fulfillment_ready`
+- `pdp_fulfillment_select`
+- `pdp_store_availability`
+- `pdp_price_sign_in`
 
 `purchase` is emitted only when WebTrack renders both the order response and successful-payment result elements. It includes the confirmed transaction ID, USD order value, and the retained non-personal cart items. Confirmed transaction IDs are retained only for duplicate-event prevention.
 
@@ -72,3 +78,29 @@ The old click-text triggers should be retired after the new event stream is veri
 The browser stores a non-personal cart snapshot under `wl_analytics_cart_v1` so the funnel can survive WebTrack page transitions. That snapshot alone cannot send a reliable abandoned-cart email or SMS.
 
 A later Constant Contact phase needs a server-side service that receives consented customer identity separately, associates it with the cart, waits for an abandonment window, verifies that no purchase occurred, and then calls Constant Contact. Email addresses or phone numbers must not be placed in GTM or GA4.
+
+
+## PDP fulfillment experiment
+
+Experiment ID: `pdp_fulfillment_v1_20260909`
+
+Variant: `enhanced_fulfillment`
+
+Production baseline commit: `f2d483d51ff7e127852be82f0f4f2ec445ca9f3e`
+
+Rollback branch: `backup/pdp-before-fulfillment-v1-20260909`
+
+The product-detail runtime stores only the experiment ID, variant, and current fulfillment method in session storage. The analytics runtime adds those fields to subsequent supported events, including `view_item`, `add_to_cart`, checkout events, and `purchase`. This permits end-to-end conversion analysis without storing customer identity or address information.
+
+Primary KPI:
+
+- Product-detail add-to-cart rate: users with `add_to_cart` divided by users with `view_item`, segmented by `experiment_variant`.
+
+Secondary diagnostics:
+
+- Fulfillment engagement: `pdp_fulfillment_select` divided by `pdp_fulfillment_view`.
+- Store-availability engagement: `pdp_store_availability` divided by `pdp_fulfillment_view`.
+- Price-gate sign-in intent: `pdp_price_sign_in` divided by gated product views.
+- Downstream checkout and purchase rate segmented by `fulfillment_method`.
+
+Because v1 is a full rollout rather than a randomized control, compare equivalent product and traffic windows before and after launch. Avoid launching unrelated PDP conversion changes during the initial measurement window.
