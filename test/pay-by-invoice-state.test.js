@@ -18,7 +18,7 @@ test('preview router requires an approved account ID and the preview URL', () =>
   assert.match(routerAndLegacySource, /expectedAccountIds\.indexOf\(accountId\) !== -1/);
   assert.match(routerAndLegacySource, /expiresAt > Date\.now\(\)/);
   assert.match(routerAndLegacySource, /__WL_PAYMENT_PREVIEW_ACCOUNT_ID__ = accountId/);
-  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260909-5/);
+  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260909-6/);
 });
 
 test('legacy payment enhancements remain the default and stop only for an approved preview', () => {
@@ -104,7 +104,9 @@ test('preview enhances native fields in place for cash and charge accounts', () 
   assert.match(previewSource, /Current balance/);
   assert.match(previewSource, /wl-payment-card\.wl-payment-balance-field/);
   assert.match(previewSource, /wl-payment-card\.wl-payment-remittance-field/);
-  assert.doesNotMatch(previewSource, /wl-hidden-native/);
+  assert.match(previewSource, /parts\.balanceSummary\) left\.appendChild\(parts\.balanceSummary\)/);
+  assert.match(previewSource, /\[parts\.amountGroup, parts\.methodHeading/);
+  assert.doesNotMatch(previewSource, /wl-payment-amount-topline/);
 });
 
 test('preview convenience actions update native fields without submitting', () => {
@@ -116,21 +118,45 @@ test('preview convenience actions update native fields without submitting', () =
   assert.match(previewSource, /Pay last statement/);
 });
 
-test('invoice and job choices open the native transaction selector in a modal', () => {
-  assert.match(previewSource, /id="wl-invoice-dialog-card"/);
+test('invoice and job choices open separate custom selectors', () => {
+  assert.match(previewSource, /id = 'wl-invoice-dialog'/);
+  assert.match(previewSource, /id = 'wl-job-dialog'/);
   assert.match(previewSource, /aria-modal/);
-  assert.match(previewSource, /wl_invoice_mode/);
-  assert.match(previewSource, /openInvoiceDialog\('invoices'/);
-  assert.match(previewSource, /openInvoiceDialog\('job'/);
+  assert.match(previewSource, /Pay selected invoices/);
+  assert.match(previewSource, /Use selected items/);
+  assert.match(previewSource, /Use selected jobs/);
+  assert.match(previewSource, /JobBalances_R\.aspx/);
+  assert.match(previewSource, /data-wl-select-invoice/);
+  assert.match(previewSource, /data-wl-select-job/);
+  assert.match(previewSource, /position:absolute!important;left:-100000px/);
+});
+
+test('invoice and credit documents resolve through native WebTrack detail pages', () => {
+  assert.match(previewSource, /Invoices_r\.aspx/);
+  assert.match(previewSource, /CreditNotes_r\.aspx/);
+  assert.match(previewSource, /InvoiceDetails_r\.aspx/);
+  assert.match(previewSource, /CreditNoteDetails_r\.aspx/);
+  assert.match(previewSource, /ProcessDocument\.aspx/);
+  assert.match(previewSource, /data-wl-action="view-document"/);
+  assert.match(previewSource, /url\.origin !== window\.location\.origin/);
+});
+
+test('charge accounts are limited to the native Forte ACH route', () => {
+  assert.match(previewSource, /wl-payment-card-method/);
+  assert.match(previewSource, /radio\.disabled = true/);
+  assert.match(previewSource, /Bank account \(ACH\/eCheck\)/);
+  assert.match(previewSource, /Charge-account payments use secure ACH\/eCheck through Forte/);
   assert.match(previewSource, /searchType\.value = 'JobReference'/);
-  assert.match(previewSource, /form\.setAttribute\('action'/);
-  assert.match(previewSource, /searchType\.value === 'JobReference'/);
+  assert.match(previewSource, /searchType\.dispatchEvent\(new Event\('change'/);
+  assert.match(previewSource, /wl-payment-flow-ready\.wl-payment-charge/);
 });
 
 test('billing entry is stabilized without changing the native final payment handler', () => {
   assert.match(previewSource, /data-wl-native-onchange/);
   assert.match(previewSource, /control\.removeAttribute\('onchange'\)/);
-  assert.match(previewSource, /\[billing, postal, email, amount\]/);
+  assert.match(previewSource, /\[billing, postal, email\]/);
+  assert.doesNotMatch(previewSource, /\[billing, postal, email, amount\]/);
+  assert.match(previewSource, /input\.dispatchEvent\(new Event\('change'/);
   assert.match(previewSource, /wl-payment-validation-requested/);
   assert.match(previewSource, /wl-payment-notes-field textarea\{height:78px!important/);
   assert.match(previewSource, /data-wl-restored-billing/);

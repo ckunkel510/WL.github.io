@@ -48,7 +48,7 @@
       </div>
       <div class="epi-form-group-acctPayment">
         <label for="ctl00_PageBody_PaymentAmountTextBox">Payment amount:</label>
-        <input id="ctl00_PageBody_PaymentAmountTextBox" name="ctl00$PageBody$PaymentAmountTextBox" type="text">
+        <input id="ctl00_PageBody_PaymentAmountTextBox" name="ctl00$PageBody$PaymentAmountTextBox" type="text" onchange="window.fixtureAmountPostbackCount=(window.fixtureAmountPostbackCount||0)+1">
       </div>
       <div class="epi-form-group-acctPayment">
         <label for="ctl00_PageBody_NotesTextBox">Notes:</label>
@@ -62,20 +62,28 @@
       <section id="ctl00_PageBody_accountsTransactionsPanel">
         <h2>Invoices</h2>
         <label for="ctl00_PageBody_SearchType">Search by:</label>
-        <select id="ctl00_PageBody_SearchType"><option value="TransactionDate">Date Range</option><option value="JobReference">Job Ref</option><option value="DocumentNumber">Document #</option></select>
-        <table id="ctl00_PageBody_InvoicesGrid">
-          <thead><tr><th>Select</th><th>Invoice</th><th>Outstanding</th></tr></thead>
+        <select id="ctl00_PageBody_SearchType" onchange="window.fixtureInstallForte && window.fixtureInstallForte()"><option value="TransactionDate">Date Range</option><option value="JobReference">Job Ref</option><option value="DocumentNumber">Document #</option></select>
+        <div id="ctl00_PageBody_InvoicesGrid"><table id="ctl00_PageBody_InvoicesGrid_ctl00" class="rgMasterTable">
+          <thead><tr><th>Select</th><th>Type</th><th>Branch</th><th>Transaction Date</th><th>Doc. #</th><th>Job Ref</th><th>Customer Ref</th><th>Amount</th><th>Amount Outstanding</th><th>Due Date</th></tr></thead>
           <tbody>
-            <tr><td><input id="ctl00_PageBody_InvoicesGrid_ctl00_ctl04_chkSelect" type="checkbox"></td><td>3463597</td><td>$35.26</td></tr>
-            <tr><td><input id="ctl00_PageBody_InvoicesGrid_ctl00_ctl06_chkSelect" type="checkbox"></td><td>3462081</td><td>$16.24</td></tr>
+            <tr><td><input id="ctl00_PageBody_InvoicesGrid_ctl00_ctl04_chkSelect" type="checkbox"></td><td data-title="Type">Invoice</td><td data-title="Branch">Brenham</td><td data-title="Transaction Date">09/09/2026</td><td data-title="Doc. #">3463597</td><td data-title="Job Ref">SHOP</td><td data-title="Customer Ref">Counter sale</td><td data-title="Amount">35.26</td><td data-title="Amount Outstanding">35.26</td><td data-title="Due Date">10/10/2026</td></tr>
+            <tr><td><input id="ctl00_PageBody_InvoicesGrid_ctl00_ctl06_chkSelect" type="checkbox"></td><td data-title="Type">Credit Note</td><td data-title="Branch">Brenham</td><td data-title="Transaction Date">09/04/2026</td><td data-title="Doc. #">222717</td><td data-title="Job Ref">SHOP</td><td data-title="Customer Ref">Return</td><td data-title="Amount">-8.54</td><td data-title="Amount Outstanding">-8.54</td><td data-title="Due Date">09/04/2026</td></tr>
           </tbody>
-        </table>
+        </table></div>
       </section>
 
       <div id="fixtureMethods">
         <div class="radiobutton">
           <input id="ctl00_PageBody_RadioButton_PayByCheck" name="ctl00$PageBody$PayBy" type="radio" checked>
           <label for="ctl00_PageBody_RadioButton_PayByCheck">Pay by Bank (ACH)</label>
+        </div>
+        <div class="radiobutton">
+          <input id="ctl00_PageBody_RadioButton_PayByCredit" name="ctl00$PageBody$PayBy" type="radio">
+          <label for="ctl00_PageBody_RadioButton_PayByCredit">Pay by Card</label>
+        </div>
+        <div class="radiobutton">
+          <input id="ctl00_PageBody_RadioButton_PayByCardOnFile" name="ctl00$PageBody$PayBy" type="radio">
+          <label for="ctl00_PageBody_RadioButton_PayByCardOnFile">Use a saved card</label>
         </div>
       </div>
 
@@ -92,21 +100,8 @@
   <script>
     const fixtureParams = new URL(location.href).searchParams;
     const fixtureIsCash = fixtureParams.get('account') === 'cash';
-    if (fixtureIsCash) {
-      document.getElementById('fixtureHeading').textContent = 'Load Cash Account Balance';
-      document.getElementById('fixtureRemittance').remove();
-      document.getElementById('ctl00_PageBody_accountsTransactionsPanel').remove();
-      document.getElementById('ctl00_PageBody_AmountOwingLiteral').value = '$1.41';
-      document.getElementById('ctl00_PageBody_PaymentAmountTextBox').value = '0.00';
-      document.getElementById('fixtureMethods').insertAdjacentHTML('beforeend', [
-        '<div class="radiobutton"><input id="ctl00_PageBody_RadioButton_PayByCheckOnFile" name="ctl00$PageBody$PayBy" type="radio"><label for="ctl00_PageBody_RadioButton_PayByCheckOnFile">Use a saved bank account</label></div>',
-        '<div class="radiobutton"><input id="ctl00_PageBody_RadioButton_PayByCredit" name="ctl00$PageBody$PayBy" type="radio"><label for="ctl00_PageBody_RadioButton_PayByCredit">Pay by Card</label></div>',
-        '<div class="radiobutton"><input id="ctl00_PageBody_RadioButton_PayByCardOnFile" name="ctl00$PageBody$PayBy" type="radio"><label for="ctl00_PageBody_RadioButton_PayByCardOnFile">Use a saved card</label></div>'
-      ].join(''));
-    }
-
-    if (fixtureParams.get('stage') === 'forte') {
-      document.getElementById('ctl00_PageBody_BillingAddressContainer').remove();
+    window.fixtureInstallForte = function () {
+      if (fixtureIsCash || document.getElementById('ctl00_PageBody_ForteMakePayment')) return;
       document.getElementById('ctl00_PageBody_MakePaymentPanel').outerHTML = [
         '<div id="ctl00_PageBody_ForteControls">',
         '  <div class="epi-form-group-acctPayment">',
@@ -114,6 +109,19 @@
         '  </div>',
         '</div>'
       ].join('');
+    };
+    if (fixtureIsCash) {
+      document.getElementById('fixtureHeading').textContent = 'Load Cash Account Balance';
+      document.getElementById('fixtureRemittance').remove();
+      document.getElementById('ctl00_PageBody_accountsTransactionsPanel').remove();
+      document.getElementById('ctl00_PageBody_AmountOwingLiteral').value = '$1.41';
+      document.getElementById('ctl00_PageBody_PaymentAmountTextBox').value = '0.00';
+      document.getElementById('fixtureMethods').insertAdjacentHTML('afterbegin', '<div class="radiobutton"><input id="ctl00_PageBody_RadioButton_PayByCheckOnFile" name="ctl00$PageBody$PayBy" type="radio"><label for="ctl00_PageBody_RadioButton_PayByCheckOnFile">Use a saved bank account</label></div>');
+    }
+
+    if (fixtureParams.get('stage') === 'forte') {
+      document.getElementById('ctl00_PageBody_BillingAddressContainer').remove();
+      window.fixtureInstallForte();
       document.getElementById('ctl00_PageBody_SearchType').value = 'JobReference';
     }
 
@@ -125,6 +133,6 @@
       document.documentElement.setAttribute('data-wl-payment-preview-account', previewIdentity.accountId);
     }
   </script>
-  <script src="../../PayByInvoice.js?v=local-router-5"></script>
+  <script src="../../PayByInvoice.js?v=local-router-6"></script>
 </body>
 </html>

@@ -21,7 +21,7 @@
   if (requestedMode === 'native') return;
   if (ROLLOUT_MODE === 'preview' && requestedMode !== 'preview') return;
 
-  var VERSION = 'v2-preview-5';
+  var VERSION = 'v2-preview-6';
   var IDS = {
     address: 'ctl00_PageBody_AddressDropdownList',
     billing: 'ctl00_PageBody_BillingAddressTextBox',
@@ -184,7 +184,6 @@
       '.wl-payment-section-heading:first-child{margin-top:0;}',
       '.wl-payment-section-heading h2{margin:0;font-size:18px;line-height:1.22;}',
       '.wl-payment-section-heading p{margin:4px 0 0;color:var(--wl-muted);font-size:13px;line-height:1.4;}',
-      '#wl-payment-amount-topline{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;align-items:stretch;}',
       '#wl-current-balance{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:6px 0;padding:10px 12px;border:1px solid #d7e6dd;border-radius:9px;background:#f6fbf8;}',
       '#wl-current-balance span{color:#3d5545;font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.03em;}',
       '#wl-current-balance strong{color:#173c25;font-size:22px;line-height:1;}',
@@ -217,6 +216,9 @@
       'body.wl-payment-flow-ready .wl-payment-method{width:100%;max-width:none;margin:6px 0!important;padding:10px 12px!important;border:1px solid var(--wl-line)!important;border-radius:9px!important;background:#fff!important;}',
       'body.wl-payment-flow-ready .wl-payment-method:focus-within{border-color:var(--wl-wine)!important;box-shadow:0 0 0 3px rgba(114,0,24,.12);}',
       'body.wl-payment-flow-ready .wl-payment-method input[type="radio"]{width:19px;height:19px;margin-right:9px;accent-color:var(--wl-wine);}',
+      'body.wl-payment-flow-ready.wl-payment-charge .wl-payment-card-method{display:none!important;}',
+      'body.wl-payment-flow-ready.wl-payment-charge #'+IDS.submit+'{display:none!important;}',
+      '#wl-ach-route-note{margin:7px 0;padding:9px 11px;border:1px solid #d7e6dd;border-radius:8px;background:#f6fbf8;color:#31523d;font-size:12px;line-height:1.35;}',
       '#wl-payment-review{margin:10px 0;padding:12px;border:1px solid #d7e6dd;border-radius:10px;background:#f6fbf8;color:var(--wl-ink);font-family:Arial,Helvetica,sans-serif;}',
       '#wl-payment-review h2{margin:0 0 9px;font-size:18px;}',
       '#wl-payment-review dl{display:grid;grid-template-columns:minmax(108px,.65fr) minmax(0,1fr);gap:6px 9px;margin:0;font-size:13px;}',
@@ -231,21 +233,36 @@
       'body.wl-payment-flow-ready #'+IDS.submit+':focus-visible,body.wl-payment-flow-ready #'+IDS.submitAlt+':focus-visible{outline:3px solid rgba(114,0,24,.22)!important;outline-offset:3px;}',
       '#wl-payment-native-note{margin:7px 0 0;color:var(--wl-muted);font-size:12px;line-height:1.35;text-align:center;}',
       'body.wl-payment-dialog-open{overflow:hidden;}',
-      '#wl-invoice-dialog[hidden]{display:none!important;}',
-      '#wl-invoice-dialog{position:fixed;inset:0;z-index:10050;display:grid;place-items:center;padding:20px;background:rgba(17,24,39,.62);}',
-      '#wl-invoice-dialog-card{display:flex;flex-direction:column;width:min(1180px,calc(100vw - 40px));max-height:calc(100vh - 40px);overflow:hidden;border-radius:14px;background:#fff;box-shadow:0 24px 70px rgba(0,0,0,.3);}',
-      '#wl-invoice-dialog-header{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:13px 16px;border-bottom:1px solid var(--wl-line);}',
-      '#wl-invoice-dialog-title{margin:0;font-size:21px;}',
-      '#wl-invoice-dialog-body{min-height:0;padding:0 16px;overflow:auto;}',
-      '#wl-invoice-dialog-footer{display:flex;justify-content:flex-end;padding:12px 16px;border-top:1px solid var(--wl-line);background:#fafafa;}',
-      '#wl-payment-invoice-note{margin:14px 0 8px;padding:10px 12px;border-left:4px solid var(--wl-wine);border-radius:8px;background:#fff8f9;color:var(--wl-ink);font-size:13px;line-height:1.4;}',
-      'body.wl-payment-flow-ready #'+IDS.transactions+'{display:block!important;width:100%;max-width:none;margin:0!important;padding:8px 0 14px!important;border:0!important;background:#fff;overflow-x:auto;}',
-      'body.wl-payment-flow-ready #'+IDS.transactions+' table{width:100%!important;}',
-      'body.wl-payment-flow-ready #'+IDS.transactions+' td,body.wl-payment-flow-ready #'+IDS.transactions+' th{padding:8px 7px!important;}',
-      'body.wl-payment-flow-ready #'+IDS.transactions+' input[type="checkbox"]{width:20px;height:20px;accent-color:var(--wl-wine);}',
+      '.wl-picker-dialog[hidden]{display:none!important;}',
+      '.wl-picker-dialog{position:fixed;inset:0;z-index:10050;display:grid;place-items:center;padding:20px;background:rgba(17,24,39,.62);}',
+      '.wl-picker-card{display:flex;flex-direction:column;width:min(1060px,calc(100vw - 40px));max-height:calc(100vh - 40px);overflow:hidden;border-radius:14px;background:#fff;box-shadow:0 24px 70px rgba(0,0,0,.3);}',
+      '.wl-picker-header{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:13px 16px;background:var(--wl-wine);color:#fff;}',
+      '.wl-picker-header h2{margin:0;font-size:21px;}',
+      '.wl-picker-header-actions{display:flex;align-items:center;gap:8px;}',
+      '.wl-picker-header .wl-flow-button{min-height:36px;border-color:rgba(255,255,255,.55);background:transparent;color:#fff;}',
+      '.wl-picker-tools{display:flex;align-items:center;gap:9px;padding:11px 16px;border-bottom:1px solid var(--wl-line);background:#fafafa;}',
+      '.wl-picker-search{flex:1 1 auto;min-width:0;min-height:40px;padding:8px 11px;border:1px solid #aeb5bf;border-radius:8px;font-size:14px;}',
+      '.wl-picker-summary{flex:0 0 auto;color:var(--wl-ink);font-size:13px;font-weight:800;}',
+      '.wl-picker-body{min-height:0;padding:10px 16px;overflow:auto;}',
+      '.wl-picker-list{display:grid;gap:7px;}',
+      '.wl-picker-row{display:grid;grid-template-columns:28px minmax(105px,.65fr) minmax(150px,1fr) minmax(165px,1.15fr) minmax(100px,.55fr) auto;gap:10px;align-items:center;padding:10px;border:1px solid var(--wl-line);border-radius:9px;background:#fff;}',
+      '.wl-picker-row:hover{border-color:#c9aeb4;background:#fffafb;}',
+      '.wl-picker-row input[type="checkbox"]{width:19px;height:19px;accent-color:var(--wl-wine);}',
+      '.wl-picker-doc{font-weight:900;}',
+      '.wl-picker-meta{color:var(--wl-muted);font-size:12px;line-height:1.35;}',
+      '.wl-picker-amount{text-align:right;font-weight:900;}',
+      '.wl-picker-document{min-height:34px;padding:6px 9px;white-space:nowrap;}',
+      '.wl-picker-kind{display:inline-block;margin-top:3px;padding:2px 7px;border-radius:999px;background:#eef6ff;color:#1e40af;font-size:11px;font-weight:800;}',
+      '.wl-picker-kind.credit{background:#fff7ed;color:#9a3412;}',
+      '.wl-picker-empty{margin:8px 0;padding:18px;border:1px dashed #c8cdd4;border-radius:9px;text-align:center;color:var(--wl-muted);}',
+      '.wl-picker-message{min-height:18px;margin:0;padding:0 16px 8px;color:#9a3412;font-size:12px;font-weight:700;}',
+      '.wl-picker-footer{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;border-top:1px solid var(--wl-line);background:#fafafa;}',
+      '.wl-picker-footer-actions{display:flex;gap:8px;}',
+      '.wl-job-row{grid-template-columns:28px minmax(0,1fr) minmax(110px,.35fr);}',
+      'body.wl-payment-flow-ready #'+IDS.transactions+'{position:absolute!important;left:-100000px!important;top:auto!important;width:1px!important;height:1px!important;overflow:hidden!important;opacity:0!important;pointer-events:none!important;}',
       '.wl-dialog-close{min-width:74px;}',
       '@media (max-width:900px){#wl-payment-guide .wl-guide-card{grid-template-columns:1fr;align-items:start;}#wl-payment-workspace{grid-template-columns:1fr;}#wl-payment-amount-choices .wl-choice-row{grid-template-columns:repeat(2,minmax(0,1fr));}}',
-      '@media (max-width:620px){body.wl-payment-flow-ready #MainLayoutRow{width:calc(100% - 12px)!important;}#wl-payment-guide{margin:8px auto 10px;}#wl-payment-guide .wl-guide-card{padding:11px 12px;}#wl-payment-guide .wl-guide-steps{grid-template-columns:1fr;}#wl-payment-workspace{gap:10px;}.wl-workspace-column{padding:11px;}body.wl-payment-flow-ready .wl-payment-card{grid-template-columns:1fr!important;gap:4px!important;}body.wl-payment-flow-ready .wl-payment-card>div:first-child,body.wl-payment-flow-ready .wl-payment-card>div:nth-child(2),body.wl-payment-flow-ready .wl-payment-card>.wl-field-help{grid-column:1;}#wl-payment-amount-topline,#wl-payment-billing-grid{grid-template-columns:1fr;}#wl-payment-amount-choices .wl-choice-row{grid-template-columns:1fr;}#wl-payment-review dl{grid-template-columns:1fr;gap:2px;}#wl-payment-review dd{margin-bottom:6px;}#wl-invoice-dialog{padding:8px;}#wl-invoice-dialog-card{width:calc(100vw - 16px);max-height:calc(100vh - 16px);}#wl-invoice-dialog-header,#wl-invoice-dialog-footer{padding:11px 12px;}#wl-invoice-dialog-body{padding:0 12px;}}'
+      '@media (max-width:720px){body.wl-payment-flow-ready #MainLayoutRow{width:calc(100% - 12px)!important;}#wl-payment-guide{margin:8px auto 10px;}#wl-payment-guide .wl-guide-card{padding:11px 12px;}#wl-payment-guide .wl-guide-steps{grid-template-columns:1fr;}#wl-payment-workspace{gap:10px;}.wl-workspace-column{padding:11px;}body.wl-payment-flow-ready .wl-payment-card{grid-template-columns:1fr!important;gap:4px!important;}body.wl-payment-flow-ready .wl-payment-card>div:first-child,body.wl-payment-flow-ready .wl-payment-card>div:nth-child(2),body.wl-payment-flow-ready .wl-payment-card>.wl-field-help{grid-column:1;}#wl-payment-billing-grid{grid-template-columns:1fr;}#wl-payment-amount-choices .wl-choice-row{grid-template-columns:1fr;}#wl-payment-review dl{grid-template-columns:1fr;gap:2px;}#wl-payment-review dd{margin-bottom:6px;}.wl-picker-dialog{padding:8px;}.wl-picker-card{width:calc(100vw - 16px);max-height:calc(100vh - 16px);}.wl-picker-header,.wl-picker-tools,.wl-picker-footer{padding:10px 12px;}.wl-picker-header{align-items:flex-start;}.wl-picker-tools{align-items:stretch;flex-direction:column;}.wl-picker-row{grid-template-columns:28px 1fr auto;}.wl-picker-row .wl-picker-secondary{grid-column:2 / -1;}.wl-picker-row .wl-picker-amount{grid-column:3;grid-row:1;text-align:right;}.wl-picker-row .wl-picker-document{grid-column:2 / -1;width:100%;}.wl-job-row{grid-template-columns:28px 1fr auto;}}'
     ].join('\n');
     document.head.appendChild(style);
   }
@@ -380,7 +397,7 @@
 
     input.value = Number(value).toFixed(2);
     input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.focus();
+    input.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
   function ensureBalanceSummary(cashAccount, amountHeading) {
@@ -434,110 +451,464 @@
     ].join('');
   }
 
-  function dialogMode() {
+  var invoicePickerState = {
+    rows: [],
+    selected: new Map(),
+    loaded: false,
+    loading: false,
+    documentUrls: new Map()
+  };
+  var jobPickerState = {
+    rows: [],
+    selected: new Map(),
+    loaded: false,
+    loading: false
+  };
+
+  function escapeHtml(value) {
+    return String(value == null ? '' : value).replace(/[&<>"']/g, function (character) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character];
+    });
+  }
+
+  function transactionCell(row, titles) {
+    var value = '';
+    titles.some(function (title) {
+      var cell = row.querySelector('td[data-title="'+title+'"]');
+      if (!cell) return false;
+      value = cleanText(cell.textContent);
+      return !!value;
+    });
+    return value;
+  }
+
+  function isCreditRow(row) {
+    return /credit|crn|c\/n/i.test(String(row && row.type || '')) || parseMoney(row && row.amount) < 0;
+  }
+
+  function extractTransactionRows(root) {
+    var grid = root.querySelector('#ctl00_PageBody_InvoicesGrid .rgMasterTable, #ctl00_PageBody_InvoicesGrid_ctl00, .RadGrid[id*="InvoicesGrid"] .rgMasterTable');
+    if (!grid) return [];
+
+    return Array.prototype.map.call(grid.querySelectorAll('tbody > tr'), function (tableRow) {
+      var doc = transactionCell(tableRow, ['Doc. #', 'Document #', 'Doc #', 'Invoice #']);
+      if (!doc) return null;
+      var type = transactionCell(tableRow, ['Type']) || 'Invoice';
+      return {
+        key: type.toLowerCase()+'|'+doc,
+        doc: doc,
+        type: type,
+        branch: transactionCell(tableRow, ['Branch']),
+        transactionDate: transactionCell(tableRow, ['Transaction Date', 'Trans Date', 'Date']),
+        dueDate: transactionCell(tableRow, ['Due Date']),
+        job: transactionCell(tableRow, ['Job Ref', 'Job', 'Job Name', 'Project']),
+        reference: transactionCell(tableRow, ['Customer Ref', 'Description', 'Notes', 'Reference']),
+        amount: transactionCell(tableRow, ['Amount', 'Doc Amount', 'Amount With Tax']),
+        outstanding: transactionCell(tableRow, ['Amount Outstanding', 'Outstanding', 'Balance'])
+      };
+    }).filter(Boolean);
+  }
+
+  function mergeTransactionRows(rows) {
+    var known = new Set(invoicePickerState.rows.map(function (row) { return row.key; }));
+    rows.forEach(function (row) {
+      if (!row || known.has(row.key)) return;
+      known.add(row.key);
+      invoicePickerState.rows.push(row);
+    });
+  }
+
+  function normalizePaymentPageUrl(href) {
     try {
-      return new URL(window.location.href).searchParams.get('wl_invoice_mode') || '';
+      var url = new URL(href, window.location.href);
+      if (!/\/AccountPayment_r\.aspx$/i.test(url.pathname)) return '';
+      url.searchParams.delete('wl_invoice_mode');
+      return url.href;
     } catch (error) {}
     return '';
   }
 
-  function setDialogMode(mode) {
-    try {
-      var url = new URL(window.location.href);
-      if (mode) url.searchParams.set('wl_invoice_mode', mode);
-      else url.searchParams.delete('wl_invoice_mode');
-      window.history.replaceState(window.history.state, document.title, url.href);
-      var form = document.getElementById('aspnetForm') || document.querySelector('form');
-      if (form) {
-        var action = new URL(form.getAttribute('action') || url.href, url.href);
-        action.search = url.search;
-        form.setAttribute('action', action.pathname + action.search);
-      }
-    } catch (error) {}
+  function collectPaymentPageUrls(root) {
+    var panel = root.querySelector('#'+IDS.transactions);
+    if (!panel) return [];
+    return Array.prototype.map.call(panel.querySelectorAll('a[href*="pageIndex="],a[href*="itemsPerPage=48"]'), function (anchor) {
+      return normalizePaymentPageUrl(anchor.getAttribute('href') || '');
+    }).filter(Boolean);
   }
 
-  function closeInvoiceDialog() {
-    var dialog = byId('wl-invoice-dialog');
-    if (dialog) dialog.hidden = true;
-    if (document.body) document.body.classList.remove('wl-payment-dialog-open');
-    setDialogMode('');
+  function setPickerMessage(id, message) {
+    var target = byId(id);
+    if (target) target.textContent = message || '';
   }
 
-  function openInvoiceDialog(mode, selectJob) {
-    var dialog = byId('wl-invoice-dialog');
-    var panel = byId(IDS.transactions);
-    if (!dialog || !panel) return;
+  function selectedInvoiceRows() {
+    return invoicePickerState.rows.filter(function (row) {
+      return invoicePickerState.selected.has(row.key);
+    });
+  }
 
-    var title = byId('wl-invoice-dialog-title');
-    var note = byId('wl-payment-invoice-note');
-    var jobMode = mode === 'job';
-    if (title) title.textContent = jobMode ? 'Pay invoices by job' : 'Select invoices to pay';
-    if (note) note.innerHTML = jobMode
-      ? '<strong>Search by job.</strong> Choose a job reference, then select the invoices you want to pay.'
-      : '<strong>Select invoices to pay.</strong> Search or check the invoices you want included.';
+  function selectedInvoiceTotal() {
+    return selectedInvoiceRows().reduce(function (total, row) {
+      var amount = Math.abs(parseMoney(row.outstanding || row.amount));
+      return total + (isCreditRow(row) ? -amount : amount);
+    }, 0);
+  }
 
-    setDialogMode(jobMode ? 'job' : 'invoices');
-    dialog.hidden = false;
-    document.body.classList.add('wl-payment-dialog-open');
-
-    if (jobMode) {
-      var searchType = byId('ctl00_PageBody_SearchType');
-      if (searchType && searchType.value !== 'JobReference' && selectJob) {
-        searchType.value = 'JobReference';
-        searchType.dispatchEvent(new Event('change', { bubbles: true }));
-        return;
+  function seedInvoiceSelection() {
+    invoicePickerState.selected.clear();
+    var remittance = cleanText(byId(IDS.remittance) && byId(IDS.remittance).value);
+    if (!remittance) return;
+    var tokens = remittance.split(/\s*,\s*/).filter(Boolean);
+    invoicePickerState.rows.forEach(function (row) {
+      var invoiceToken = new RegExp('^'+row.doc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')+'\\$','i');
+      var creditToken = new RegExp('^CN'+row.doc.replace(/^(CN|CRN|CR)/i, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')+'$','i');
+      if (tokens.some(function (token) { return invoiceToken.test(token) || creditToken.test(token); })) {
+        invoicePickerState.selected.set(row.key, true);
       }
-      if (searchType) searchType.focus({ preventScroll: true });
+    });
+  }
+
+  function renderInvoiceSummary() {
+    var summary = byId('wl-invoice-summary');
+    if (!summary) return;
+    var count = invoicePickerState.selected.size;
+    summary.textContent = count+' selected · '+formatMoney(Math.max(0, selectedInvoiceTotal()));
+  }
+
+  function renderInvoiceRows() {
+    var list = byId('wl-invoice-list');
+    if (!list) return;
+    var query = cleanText(byId('wl-invoice-filter') && byId('wl-invoice-filter').value).toLowerCase();
+    var rows = invoicePickerState.rows.filter(function (row) {
+      if (!query) return true;
+      return [row.doc, row.type, row.transactionDate, row.dueDate, row.job, row.reference, row.branch]
+        .join(' ').toLowerCase().indexOf(query) !== -1;
+    });
+
+    if (!rows.length) {
+      list.innerHTML = '<p class="wl-picker-empty">'+(invoicePickerState.loading ? 'Loading invoices and credits…' : 'No matching invoices or credits found.')+'</p>';
+      renderInvoiceSummary();
       return;
     }
 
-    var firstCheckbox = panel.querySelector('input[type="checkbox"]');
-    if (firstCheckbox) firstCheckbox.focus({ preventScroll: true });
-  }
-
-  function ensureInvoiceDialog(cashAccount) {
-    var panel = byId(IDS.transactions);
-    if (!panel || cashAccount) return null;
-    panel.classList.add('wl-payment-invoice-panel');
-    panel.hidden = false;
-
-    var dialog = byId('wl-invoice-dialog');
-    if (!dialog) {
-      dialog = document.createElement('div');
-      dialog.id = 'wl-invoice-dialog';
-      dialog.hidden = true;
-      dialog.setAttribute('role', 'dialog');
-      dialog.setAttribute('aria-modal', 'true');
-      dialog.setAttribute('aria-labelledby', 'wl-invoice-dialog-title');
-      dialog.innerHTML = [
-        '<div id="wl-invoice-dialog-card">',
-        '  <div id="wl-invoice-dialog-header">',
-        '    <h2 id="wl-invoice-dialog-title">Select invoices to pay</h2>',
-        '    <button type="button" class="wl-flow-button wl-dialog-close" data-wl-action="close-invoice-dialog" aria-label="Close invoice selection">Close</button>',
-        '  </div>',
-        '  <div id="wl-invoice-dialog-body"></div>',
-        '  <div id="wl-invoice-dialog-footer"><button type="button" class="wl-flow-button primary" data-wl-action="close-invoice-dialog">Done</button></div>',
+    list.innerHTML = rows.map(function (row) {
+      var credit = isCreditRow(row);
+      var amount = Math.abs(parseMoney(row.outstanding || row.amount));
+      return [
+        '<div class="wl-picker-row" data-wl-invoice-key="'+escapeHtml(row.key)+'">',
+        '  <input type="checkbox" aria-label="Select '+(credit ? 'credit ' : 'invoice ')+escapeHtml(row.doc)+'" data-wl-select-invoice="'+escapeHtml(row.key)+'" '+(invoicePickerState.selected.has(row.key) ? 'checked' : '')+'>',
+        '  <span><span class="wl-picker-doc">'+escapeHtml(row.doc)+'</span><br><span class="wl-picker-kind '+(credit ? 'credit' : '')+'">'+(credit ? 'Credit' : 'Invoice')+'</span></span>',
+        '  <span class="wl-picker-secondary"><strong>'+escapeHtml(row.transactionDate || 'No date')+'</strong><br><span class="wl-picker-meta">Due '+escapeHtml(row.dueDate || '—')+'</span></span>',
+        '  <span class="wl-picker-secondary"><strong>'+escapeHtml(row.job && row.job !== '-' ? row.job : 'No job')+'</strong><br><span class="wl-picker-meta">'+escapeHtml(row.reference || row.branch || '—')+'</span></span>',
+        '  <span class="wl-picker-amount">'+(credit ? '−' : '')+formatMoney(amount)+'</span>',
+        '  <button type="button" class="wl-flow-button wl-picker-document" data-wl-action="view-document" data-wl-document-key="'+escapeHtml(row.key)+'">View document</button>',
         '</div>'
       ].join('');
-      var form = document.getElementById('aspnetForm') || document.querySelector('form') || document.body;
-      form.appendChild(dialog);
+    }).join('');
+    renderInvoiceSummary();
+  }
+
+  async function loadInvoiceRows() {
+    if (invoicePickerState.loading || invoicePickerState.loaded) return;
+    invoicePickerState.loading = true;
+    invoicePickerState.rows = [];
+    mergeTransactionRows(extractTransactionRows(document));
+    seedInvoiceSelection();
+    renderInvoiceRows();
+
+    var queued = collectPaymentPageUrls(document);
+    var visited = new Set([normalizePaymentPageUrl(window.location.href)]);
+    var parser = new DOMParser();
+    var requests = 0;
+
+    try {
+      while (queued.length && requests < 24) {
+        var pageUrl = queued.shift();
+        if (!pageUrl || visited.has(pageUrl)) continue;
+        visited.add(pageUrl);
+        requests += 1;
+        var response = await fetch(pageUrl, { credentials: 'same-origin', cache: 'no-cache' });
+        if (!response.ok) continue;
+        var page = parser.parseFromString(await response.text(), 'text/html');
+        mergeTransactionRows(extractTransactionRows(page));
+        collectPaymentPageUrls(page).forEach(function (candidate) {
+          if (!visited.has(candidate) && queued.indexOf(candidate) === -1) queued.push(candidate);
+        });
+        renderInvoiceRows();
+      }
+      invoicePickerState.loaded = true;
+    } catch (error) {
+      setPickerMessage('wl-invoice-message', 'Some older items could not be loaded. You can still select from the items shown.');
+    }
+    invoicePickerState.loading = false;
+    renderInvoiceRows();
+  }
+
+  function dateSearchValue(value) {
+    var match = String(value || '').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (!match) return '';
+    return match[3]+'-'+String(match[1]).padStart(2, '0')+'-'+String(match[2]).padStart(2, '0');
+  }
+
+  function allowedDocumentUrl(href, credit) {
+    try {
+      var url = new URL(href, window.location.origin);
+      if (url.origin !== window.location.origin || !/\/ProcessDocument\.aspx$/i.test(url.pathname)) return '';
+      if (url.searchParams.get('documentType') !== (credit ? '7' : '6')) return '';
+      return url.href;
+    } catch (error) {}
+    return '';
+  }
+
+  async function resolveTransactionDocument(row) {
+    if (invoicePickerState.documentUrls.has(row.key)) return invoicePickerState.documentUrls.get(row.key);
+    var credit = isCreditRow(row);
+    var day = dateSearchValue(row.transactionDate);
+    if (!day) throw new Error('Document date is unavailable.');
+
+    var listUrl = new URL(credit ? 'CreditNotes_r.aspx' : 'Invoices_r.aspx', window.location.origin);
+    listUrl.searchParams.set('searchType', credit ? 'CreditDate' : 'InvoiceDate');
+    listUrl.searchParams.set('startDate', day+'T00:00:00');
+    listUrl.searchParams.set('endDate', day+'T23:59:59');
+
+    var response = await fetch(listUrl.href, { credentials: 'same-origin', cache: 'no-cache' });
+    if (!response.ok) throw new Error('Document list is unavailable.');
+    var parser = new DOMParser();
+    var listPage = parser.parseFromString(await response.text(), 'text/html');
+    var rows = Array.prototype.slice.call(listPage.querySelectorAll('tbody > tr'));
+    var targetRow = rows.find(function (candidate) {
+      var cell = candidate.querySelector(credit ? 'td[data-title="Credit Note #"]' : 'td[data-title="Invoice #"]');
+      return cleanText(cell && cell.textContent).replace(/^(CN|CRN|CR)/i, '') === row.doc.replace(/^(CN|CRN|CR)/i, '');
+    });
+    if (!targetRow) throw new Error('Document was not found.');
+
+    var detailsAnchor = targetRow.querySelector(credit
+      ? 'a[href*="CreditNoteDetails_r.aspx"],a[href*="CreditNotes_r.aspx"][href*="oid="]'
+      : 'a[href*="InvoiceDetails_r.aspx"]');
+    var detailsHref = detailsAnchor && detailsAnchor.getAttribute('href');
+    if (!detailsHref && credit) {
+      var creditId = targetRow.querySelector('[creditnoteid]');
+      if (creditId) detailsHref = 'CreditNoteDetails_r.aspx?id='+encodeURIComponent(creditId.getAttribute('creditnoteid'));
+    }
+    if (!detailsHref) throw new Error('Document details are unavailable.');
+
+    var detailsUrl = new URL(detailsHref, window.location.origin);
+    if (detailsUrl.origin !== window.location.origin) throw new Error('Document link is invalid.');
+    var detailsResponse = await fetch(detailsUrl.href, { credentials: 'same-origin', cache: 'no-cache' });
+    if (!detailsResponse.ok) throw new Error('Document details are unavailable.');
+    var detailsPage = parser.parseFromString(await detailsResponse.text(), 'text/html');
+    var documentAnchor = detailsPage.querySelector('a[href*="ProcessDocument.aspx"][href*="documentType='+(credit ? '7' : '6')+'"]');
+    var documentUrl = allowedDocumentUrl(documentAnchor && documentAnchor.getAttribute('href'), credit);
+    if (!documentUrl) throw new Error('The downloadable document is unavailable.');
+    invoicePickerState.documentUrls.set(row.key, documentUrl);
+    return documentUrl;
+  }
+
+  async function openTransactionDocument(button) {
+    var key = button && button.getAttribute('data-wl-document-key');
+    var row = invoicePickerState.rows.find(function (candidate) { return candidate.key === key; });
+    if (!button || !row) return;
+    var original = button.textContent;
+    var viewer = null;
+    try {
+      viewer = window.open('about:blank', '_blank');
+      if (viewer && viewer.document && viewer.document.body) viewer.document.body.textContent = 'Loading document…';
+    } catch (error) {}
+
+    button.disabled = true;
+    button.textContent = 'Loading…';
+    setPickerMessage('wl-invoice-message', '');
+    try {
+      var documentUrl = await resolveTransactionDocument(row);
+      if (viewer && !viewer.closed) viewer.location.replace(documentUrl);
+      else window.open(documentUrl, '_blank', 'noopener');
+      button.textContent = 'View document';
+    } catch (error) {
+      if (viewer && !viewer.closed) viewer.close();
+      button.textContent = original;
+      setPickerMessage('wl-invoice-message', 'That document could not be loaded. You can still select it for payment.');
+    }
+    button.disabled = false;
+  }
+
+  function setRemittance(value) {
+    var remittance = byId(IDS.remittance);
+    if (!remittance) return;
+    remittance.value = value || '';
+    remittance.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+
+  function applyPaymentSelection(amount, remittance) {
+    var billing = byId(IDS.billing);
+    if (billing) writeBillingDraft(billing.value);
+    setRemittance(remittance);
+    closePickerDialog();
+    setAmount(amount);
+  }
+
+  function commitInvoiceSelection() {
+    var rows = selectedInvoiceRows();
+    var total = selectedInvoiceTotal();
+    if (!rows.length) {
+      setPickerMessage('wl-invoice-message', 'Select at least one invoice or credit.');
+      return;
+    }
+    if (!(total > 0)) {
+      setPickerMessage('wl-invoice-message', 'The selected invoices must be greater than the selected credits.');
+      return;
     }
 
-    var body = byId('wl-invoice-dialog-body');
-    if (body && panel.parentNode !== body) body.appendChild(panel);
+    var tokens = rows.map(function (row) {
+      if (isCreditRow(row)) return 'CN'+row.doc.replace(/^(CN|CRN|CR)/i, '');
+      return row.doc+'$'+Math.abs(parseMoney(row.outstanding || row.amount)).toFixed(2);
+    });
+    jobPickerState.selected.clear();
+    applyPaymentSelection(total, tokens.join(','));
+  }
 
-    var note = byId('wl-payment-invoice-note');
-    if (!note) {
-      note = document.createElement('div');
-      note.id = 'wl-payment-invoice-note';
-      panel.insertBefore(note, panel.firstChild);
+  function renderJobSummary() {
+    var summary = byId('wl-job-summary');
+    if (!summary) return;
+    var total = Array.from(jobPickerState.selected.values()).reduce(function (sum, amount) { return sum + amount; }, 0);
+    summary.textContent = jobPickerState.selected.size+' selected · '+formatMoney(total);
+  }
+
+  function renderJobRows() {
+    var list = byId('wl-job-list');
+    if (!list) return;
+    var query = cleanText(byId('wl-job-filter') && byId('wl-job-filter').value).toLowerCase();
+    var rows = jobPickerState.rows.filter(function (row) {
+      return !query || row.job.toLowerCase().indexOf(query) !== -1;
+    });
+    if (!rows.length) {
+      list.innerHTML = '<p class="wl-picker-empty">'+(jobPickerState.loading ? 'Loading job balances…' : 'No matching job balances found.')+'</p>';
+      renderJobSummary();
+      return;
+    }
+    list.innerHTML = rows.map(function (row) {
+      return [
+        '<label class="wl-picker-row wl-job-row">',
+        '  <input type="checkbox" data-wl-select-job="'+escapeHtml(row.job)+'" '+(jobPickerState.selected.has(row.job) ? 'checked' : '')+'>',
+        '  <span><strong>'+escapeHtml(row.job)+'</strong><br><span class="wl-picker-meta">Pay this job balance</span></span>',
+        '  <span class="wl-picker-amount">'+formatMoney(row.amount)+'</span>',
+        '</label>'
+      ].join('');
+    }).join('');
+    renderJobSummary();
+  }
+
+  async function loadJobRows() {
+    if (jobPickerState.loading || jobPickerState.loaded) return;
+    jobPickerState.loading = true;
+    renderJobRows();
+    try {
+      var response = await fetch('JobBalances_R.aspx', { credentials: 'same-origin', cache: 'no-cache' });
+      if (!response.ok) throw new Error('Job balances are unavailable.');
+      var page = new DOMParser().parseFromString(await response.text(), 'text/html');
+      jobPickerState.rows = Array.prototype.map.call(page.querySelectorAll('table tr'), function (row) {
+        var job = transactionCell(row, ['Job']);
+        var amount = parseMoney(transactionCell(row, ['Net Amount']));
+        return job && amount > 0 ? { job: job, amount: amount } : null;
+      }).filter(Boolean);
+      var existingRemittance = cleanText(byId(IDS.remittance) && byId(IDS.remittance).value);
+      jobPickerState.rows.forEach(function (row) {
+        if (existingRemittance.indexOf(row.job+' - $') !== -1) jobPickerState.selected.set(row.job, row.amount);
+      });
+      jobPickerState.loaded = true;
+    } catch (error) {
+      setPickerMessage('wl-job-message', 'Job balances could not be loaded. Please try again.');
+    }
+    jobPickerState.loading = false;
+    renderJobRows();
+  }
+
+  function commitJobSelection() {
+    if (!jobPickerState.selected.size) {
+      setPickerMessage('wl-job-message', 'Select at least one job.');
+      return;
+    }
+    var total = Array.from(jobPickerState.selected.values()).reduce(function (sum, amount) { return sum + amount; }, 0);
+    var date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    var tokens = Array.from(jobPickerState.selected.entries()).map(function (entry) {
+      return entry[0].replace(/[\r\n,]+/g, ' ').trim()+' - $'+entry[1].toFixed(2)+' balance as of '+date;
+    });
+    invoicePickerState.selected.clear();
+    applyPaymentSelection(total, tokens.join(', '));
+  }
+
+  function closePickerDialog() {
+    ['wl-invoice-dialog', 'wl-job-dialog'].forEach(function (id) {
+      var dialog = byId(id);
+      if (dialog) dialog.hidden = true;
+    });
+    if (document.body) document.body.classList.remove('wl-payment-dialog-open');
+  }
+
+  function openPickerDialog(id) {
+    var dialog = byId(id);
+    if (!dialog) return;
+    dialog.hidden = false;
+    document.body.classList.add('wl-payment-dialog-open');
+    setPickerMessage(id === 'wl-job-dialog' ? 'wl-job-message' : 'wl-invoice-message', '');
+    if (id === 'wl-job-dialog') {
+      renderJobRows();
+      loadJobRows();
+      var jobFilter = byId('wl-job-filter');
+      if (jobFilter) jobFilter.focus({ preventScroll: true });
+      return;
+    }
+    seedInvoiceSelection();
+    renderInvoiceRows();
+    loadInvoiceRows();
+    var invoiceFilter = byId('wl-invoice-filter');
+    if (invoiceFilter) invoiceFilter.focus({ preventScroll: true });
+  }
+
+  function ensurePickerDialogs(cashAccount) {
+    var panel = byId(IDS.transactions);
+    if (!panel || cashAccount) return;
+    panel.classList.add('wl-payment-invoice-panel');
+
+    var form = document.getElementById('aspnetForm') || document.querySelector('form') || document.body;
+    if (!byId('wl-invoice-dialog')) {
+      var invoiceDialog = document.createElement('div');
+      invoiceDialog.id = 'wl-invoice-dialog';
+      invoiceDialog.className = 'wl-picker-dialog';
+      invoiceDialog.hidden = true;
+      invoiceDialog.setAttribute('role', 'dialog');
+      invoiceDialog.setAttribute('aria-modal', 'true');
+      invoiceDialog.setAttribute('aria-labelledby', 'wl-invoice-dialog-title');
+      invoiceDialog.innerHTML = [
+        '<div class="wl-picker-card">',
+        '  <div class="wl-picker-header"><h2 id="wl-invoice-dialog-title">Pay selected invoices</h2><div class="wl-picker-header-actions"><button type="button" class="wl-flow-button" data-wl-action="select-all-invoices">Select all</button><button type="button" class="wl-flow-button" data-wl-action="clear-invoices">Clear</button><button type="button" class="wl-flow-button" data-wl-action="close-picker" aria-label="Close invoice selection">Close</button></div></div>',
+        '  <div class="wl-picker-tools"><input id="wl-invoice-filter" class="wl-picker-search" type="search" placeholder="Search invoice, credit, job, reference, or date" aria-label="Search invoices and credits"><span id="wl-invoice-summary" class="wl-picker-summary">0 selected · $0.00</span></div>',
+        '  <div class="wl-picker-body"><div id="wl-invoice-list" class="wl-picker-list"></div></div>',
+        '  <p id="wl-invoice-message" class="wl-picker-message" aria-live="polite"></p>',
+        '  <div class="wl-picker-footer"><span class="wl-picker-meta">Credits reduce the selected payment.</span><div class="wl-picker-footer-actions"><button type="button" class="wl-flow-button" data-wl-action="close-picker">Cancel</button><button type="button" class="wl-flow-button primary" data-wl-action="use-invoices">Use selected items</button></div></div>',
+        '</div>'
+      ].join('');
+      form.appendChild(invoiceDialog);
     }
 
-    var mode = dialogMode();
-    var searchType = byId('ctl00_PageBody_SearchType');
-    if (!mode && searchType && searchType.value === 'JobReference') mode = 'job';
-    if (mode === 'job' || mode === 'invoices') openInvoiceDialog(mode, false);
-    return dialog;
+    if (!byId('wl-job-dialog')) {
+      var jobDialog = document.createElement('div');
+      jobDialog.id = 'wl-job-dialog';
+      jobDialog.className = 'wl-picker-dialog';
+      jobDialog.hidden = true;
+      jobDialog.setAttribute('role', 'dialog');
+      jobDialog.setAttribute('aria-modal', 'true');
+      jobDialog.setAttribute('aria-labelledby', 'wl-job-dialog-title');
+      jobDialog.innerHTML = [
+        '<div class="wl-picker-card">',
+        '  <div class="wl-picker-header"><h2 id="wl-job-dialog-title">Pay by job</h2><div class="wl-picker-header-actions"><button type="button" class="wl-flow-button" data-wl-action="select-all-jobs">Select all</button><button type="button" class="wl-flow-button" data-wl-action="clear-jobs">Clear</button><button type="button" class="wl-flow-button" data-wl-action="close-picker" aria-label="Close job selection">Close</button></div></div>',
+        '  <div class="wl-picker-tools"><input id="wl-job-filter" class="wl-picker-search" type="search" placeholder="Search jobs" aria-label="Search job balances"><span id="wl-job-summary" class="wl-picker-summary">0 selected · $0.00</span></div>',
+        '  <div class="wl-picker-body"><div id="wl-job-list" class="wl-picker-list"></div></div>',
+        '  <p id="wl-job-message" class="wl-picker-message" aria-live="polite"></p>',
+        '  <div class="wl-picker-footer"><span class="wl-picker-meta">Choose one or more job balances.</span><div class="wl-picker-footer-actions"><button type="button" class="wl-flow-button" data-wl-action="close-picker">Cancel</button><button type="button" class="wl-flow-button primary" data-wl-action="use-jobs">Use selected jobs</button></div></div>',
+        '</div>'
+      ].join('');
+      form.appendChild(jobDialog);
+    }
   }
 
   function ensureWorkspace(parts) {
@@ -555,13 +926,7 @@
     if (!left || !right) return workspace;
 
     if (parts.amountHeading) left.appendChild(parts.amountHeading);
-    var amountTopline = byId('wl-payment-amount-topline');
-    if (!amountTopline) {
-      amountTopline = document.createElement('div');
-      amountTopline.id = 'wl-payment-amount-topline';
-    }
-    left.appendChild(amountTopline);
-    [parts.balanceSummary, parts.amountGroup].forEach(function (node) { if (node) amountTopline.appendChild(node); });
+    if (parts.balanceSummary) left.appendChild(parts.balanceSummary);
     if (parts.amountChoices) left.appendChild(parts.amountChoices);
     if (parts.billingHeading) left.appendChild(parts.billingHeading);
 
@@ -574,12 +939,12 @@
     [parts.addressGroup, parts.billingGroup, parts.postalGroup, parts.emailGroup]
       .forEach(function (node) { if (node) billingGrid.appendChild(node); });
     if (parts.remittanceGroup) left.appendChild(parts.remittanceGroup);
-    [parts.methodHeading, parts.methodSection, parts.notesGroup, parts.submitPanel]
+    [parts.amountGroup, parts.methodHeading, parts.methodSection, parts.notesGroup, parts.submitPanel]
       .forEach(function (node) { if (node) right.appendChild(node); });
     return workspace;
   }
 
-  function enhanceMethods() {
+  function enhanceMethods(cashAccount) {
     var firstGroup = null;
     METHOD_IDS.forEach(function (id) {
       var radio = byId(id);
@@ -588,9 +953,63 @@
       if (!group) return;
       if (!firstGroup) firstGroup = group;
       group.classList.add('wl-payment-method');
-
+      var cardMethod = id === IDS.payByCard || id === IDS.payBySavedCard;
+      group.classList.toggle('wl-payment-card-method', cardMethod);
+      if (!cashAccount && cardMethod) {
+        radio.checked = false;
+        radio.disabled = true;
+        group.hidden = true;
+        group.setAttribute('aria-hidden', 'true');
+      }
     });
+
+    if (!cashAccount) {
+      var bank = byId(IDS.payByBank) || byId(IDS.payBySavedBank);
+      if (bank) {
+        bank.disabled = false;
+        bank.checked = true;
+        var bankLabel = document.querySelector('label[for="'+bank.id+'"]');
+        if (bankLabel) bankLabel.textContent = 'Bank account (ACH/eCheck)';
+      }
+    }
     return firstGroup;
+  }
+
+  var ACH_ROUTE_KEY = 'wl_payment_ach_route_v1_'+String(window.__WL_PAYMENT_PREVIEW_ACCOUNT_ID__ || 'preview').replace(/[^A-Z0-9_-]/gi, '');
+
+  function ensureChargeAchRoute(cashAccount, methodSection) {
+    var note = byId('wl-ach-route-note');
+    if (cashAccount) {
+      if (note) note.remove();
+      return;
+    }
+
+    if (!note) {
+      note = document.createElement('p');
+      note.id = 'wl-ach-route-note';
+      (methodSection || closestGroup(byId(IDS.payByBank)) || byId(IDS.submitAltPanel) || byId(IDS.submitPanel)).appendChild(note);
+    }
+
+    if (byId(IDS.submitAlt)) {
+      note.textContent = 'Charge-account payments use secure ACH/eCheck through Forte.';
+      try { sessionStorage.removeItem(ACH_ROUTE_KEY); } catch (error) {}
+      return;
+    }
+
+    note.textContent = 'Preparing secure ACH/eCheck payment…';
+    var searchType = byId('ctl00_PageBody_SearchType');
+    if (!searchType) return;
+    var lastRequest = 0;
+    try { lastRequest = Number(sessionStorage.getItem(ACH_ROUTE_KEY) || 0); } catch (error) {}
+    if (Date.now() - lastRequest < 10000) return;
+    try { sessionStorage.setItem(ACH_ROUTE_KEY, String(Date.now())); } catch (error) {}
+    searchType.value = 'JobReference';
+    searchType.dispatchEvent(new Event('change', { bubbles: true }));
+    if (byId(IDS.submitAlt)) {
+      note.textContent = 'Charge-account payments use secure ACH/eCheck through Forte.';
+      try { sessionStorage.removeItem(ACH_ROUTE_KEY); } catch (error) {}
+      ensureReview(false);
+    }
   }
 
   function selectedMethodText() {
@@ -605,13 +1024,28 @@
     });
 
     if (!checked) return 'Choose a payment method';
+    if (document.body && document.body.classList.contains('wl-payment-charge')) return 'Bank account (ACH/eCheck)';
     var label = document.querySelector('label[for="'+checked.id+'"]');
     var source = label || checked.closest('.radiobutton') || checked.parentElement;
     return cleanText(source && source.textContent) || 'Selected';
   }
 
   function selectedInvoiceCount() {
-    return document.querySelectorAll('#'+IDS.transactions+' input[type="checkbox"][id*="chkSelect"]:checked:not([id*="SelectAll"])').length;
+    var count = document.querySelectorAll('#'+IDS.transactions+' input[type="checkbox"][id*="chkSelect"]:checked:not([id*="SelectAll"])').length;
+    if (count) return count;
+    var remittance = cleanText(byId(IDS.remittance) && byId(IDS.remittance).value);
+    if (!remittance || /balance as of|^STATEMENT/i.test(remittance)) return 0;
+    return remittance.split(/\s*,\s*/).filter(Boolean).length;
+  }
+
+  function paymentSelectionSummary() {
+    var remittance = cleanText(byId(IDS.remittance) && byId(IDS.remittance).value);
+    var jobCount = (remittance.match(/balance as of/gi) || []).length;
+    if (jobCount) return jobCount+' selected job balance'+(jobCount === 1 ? '' : 's');
+    if (/^STATEMENT/i.test(remittance)) return 'Last statement';
+    var count = selectedInvoiceCount();
+    if (count) return count+' selected invoice'+(count === 1 ? '' : 's')+(remittance.indexOf('CN') !== -1 ? ' / credit' : '');
+    return 'Account balance';
   }
 
   function billingStatus() {
@@ -623,7 +1057,9 @@
   }
 
   function ensureReview(cashAccount) {
-    var panel = byId(IDS.submitPanel) || byId(IDS.submitAltPanel);
+    var panel = cashAccount
+      ? (byId(IDS.submitPanel) || byId(IDS.submitAltPanel))
+      : (byId(IDS.submitAltPanel) || byId(IDS.submitPanel));
     if (!panel) return;
     panel.classList.add('wl-payment-submit-section');
 
@@ -637,19 +1073,20 @@
     }
 
     var amount = parseMoney(byId(IDS.amount) && byId(IDS.amount).value);
-    var invoiceCount = selectedInvoiceCount();
     review.innerHTML = [
       '<h2 id="wl-payment-review-title">Review</h2>',
       '<dl>',
       '<dt>'+(cashAccount ? 'Amount to add' : 'Payment amount')+'</dt><dd>'+(amount > 0 ? formatMoney(amount) : 'Enter an amount')+'</dd>',
-      cashAccount ? '' : '<dt>Invoices selected</dt><dd>'+(invoiceCount ? invoiceCount : 'None — payment applies to the account')+'</dd>',
+      cashAccount ? '' : '<dt>Payment applies to</dt><dd>'+paymentSelectionSummary()+'</dd>',
       '<dt>Payment method</dt><dd>'+selectedMethodText()+'</dd>',
       '<dt>Billing</dt><dd>'+billingStatus()+'</dd>',
       '</dl>',
       '<p class="wl-review-help">You will confirm before payment is submitted.</p>'
     ].join('');
 
-    var nativeSubmit = byId(IDS.submit) || byId(IDS.submitAlt);
+    var nativeSubmit = cashAccount
+      ? (byId(IDS.submit) || byId(IDS.submitAlt))
+      : (byId(IDS.submitAlt) || byId(IDS.submit));
     if (nativeSubmit) {
       var buttonText = cashAccount ? 'Continue to add funds' : 'Continue to secure payment';
       if (nativeSubmit.tagName === 'INPUT') nativeSubmit.value = buttonText;
@@ -663,7 +1100,9 @@
       note.id = 'wl-payment-native-note';
       panel.appendChild(note);
     }
-    note.textContent = 'Continue to the secure confirmation screen.';
+    note.textContent = cashAccount
+      ? 'Continue to the secure confirmation screen.'
+      : 'Continue to secure ACH/eCheck through Forte.';
   }
 
   function wirePageEvents() {
@@ -681,6 +1120,9 @@
 
       var action = actionButton.getAttribute('data-wl-action');
       if (action === 'focus-amount') {
+        setRemittance('');
+        invoicePickerState.selected.clear();
+        jobPickerState.selected.clear();
         var amount = byId(IDS.amount);
         if (amount) {
           amount.focus();
@@ -691,29 +1133,92 @@
       if (action === 'pay-balance') {
         var dueField = byId(IDS.amountDue);
         var due = parseMoney(dueField && (dueField.value || dueField.textContent));
+        setRemittance('');
+        invoicePickerState.selected.clear();
+        jobPickerState.selected.clear();
         setAmount(due);
       }
 
       if (action === 'pay-statement') {
-        setAmount(statementAmount());
+        var statement = statementAmount();
+        setRemittance('STATEMENT - $'+Number(statement || 0).toFixed(2));
+        invoicePickerState.selected.clear();
+        jobPickerState.selected.clear();
+        setAmount(statement);
       }
 
       if (action === 'choose-invoices') {
-        openInvoiceDialog('invoices', false);
+        openPickerDialog('wl-invoice-dialog');
       }
 
       if (action === 'choose-job') {
-        openInvoiceDialog('job', true);
+        openPickerDialog('wl-job-dialog');
       }
 
-      if (action === 'close-invoice-dialog') {
-        closeInvoiceDialog();
+      if (action === 'close-picker') {
+        closePickerDialog();
+      }
+
+      if (action === 'clear-invoices') {
+        invoicePickerState.selected.clear();
+        renderInvoiceRows();
+        setPickerMessage('wl-invoice-message', '');
+      }
+
+      if (action === 'select-all-invoices') {
+        invoicePickerState.rows.forEach(function (row) { invoicePickerState.selected.set(row.key, true); });
+        renderInvoiceRows();
+      }
+
+      if (action === 'use-invoices') {
+        commitInvoiceSelection();
+      }
+
+      if (action === 'clear-jobs') {
+        jobPickerState.selected.clear();
+        renderJobRows();
+        setPickerMessage('wl-job-message', '');
+      }
+
+      if (action === 'select-all-jobs') {
+        jobPickerState.rows.forEach(function (row) { jobPickerState.selected.set(row.job, row.amount); });
+        renderJobRows();
+      }
+
+      if (action === 'use-jobs') {
+        commitJobSelection();
+      }
+
+      if (action === 'view-document') {
+        openTransactionDocument(actionButton);
       }
     });
 
     document.addEventListener('keydown', function (event) {
-      if (event.key === 'Escape' && byId('wl-invoice-dialog') && !byId('wl-invoice-dialog').hidden) {
-        closeInvoiceDialog();
+      if (event.key === 'Escape' && document.querySelector('.wl-picker-dialog:not([hidden])')) {
+        closePickerDialog();
+      }
+    });
+
+    document.addEventListener('input', function (event) {
+      if (event.target && event.target.id === 'wl-invoice-filter') renderInvoiceRows();
+      if (event.target && event.target.id === 'wl-job-filter') renderJobRows();
+    });
+
+    document.addEventListener('change', function (event) {
+      var invoiceKey = event.target && event.target.getAttribute('data-wl-select-invoice');
+      if (invoiceKey) {
+        if (event.target.checked) invoicePickerState.selected.set(invoiceKey, true);
+        else invoicePickerState.selected.delete(invoiceKey);
+        renderInvoiceSummary();
+      }
+
+      var jobName = event.target && event.target.getAttribute('data-wl-select-job');
+      if (jobName) {
+        var job = jobPickerState.rows.find(function (row) { return row.job === jobName; });
+        if (event.target.checked && job) jobPickerState.selected.set(jobName, job.amount);
+        else jobPickerState.selected.delete(jobName);
+        renderJobSummary();
       }
     });
 
@@ -820,7 +1325,7 @@
       if (remittance && remittance.group) remittance.group.setAttribute('aria-hidden', 'true');
     }
 
-    [billing, postal, email, amount].forEach(function (field) {
+    [billing, postal, email].forEach(function (field) {
       stabilizeNativeTextField(field && field.control);
     });
 
@@ -835,14 +1340,14 @@
       (amountDue && amountDue.group) || (amount && amount.group),
       'wl-payment-amount-heading',
       '',
-      cashAccount ? 'Amount to add' : 'Payment amount',
+      cashAccount ? 'Choose amount' : 'Choose what to pay',
       ''
     );
     var balanceSummary = ensureBalanceSummary(cashAccount, amountHeading);
     ensureAmountChoices(cashAccount, amount && amount.group);
-    ensureInvoiceDialog(cashAccount);
+    ensurePickerDialogs(cashAccount);
 
-    var firstMethodGroup = enhanceMethods();
+    var firstMethodGroup = enhanceMethods(cashAccount);
     var methodSection = firstMethodGroup && (firstMethodGroup.closest('.epi-form-group-acctPayment') || firstMethodGroup.parentElement);
     if (methodSection) methodSection.classList.add('wl-payment-method-section');
     var methodHeading = ensureSectionHeading(
@@ -856,6 +1361,9 @@
     var staleReviewHeading = byId('wl-payment-review-heading');
     if (staleReviewHeading) staleReviewHeading.remove();
     ensureReview(cashAccount);
+    submitPanel = cashAccount
+      ? (byId(IDS.submitPanel) || byId(IDS.submitAltPanel))
+      : (byId(IDS.submitAltPanel) || byId(IDS.submitPanel));
     ensureWorkspace({
       amountHeading: amountHeading,
       balanceSummary: balanceSummary,
@@ -873,6 +1381,7 @@
       submitPanel: submitPanel
     });
     wirePageEvents();
+    ensureChargeAchRoute(cashAccount, methodSection);
     return true;
   }
 
