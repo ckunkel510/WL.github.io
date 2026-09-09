@@ -137,6 +137,15 @@ test("recommendation request inputs are bounded and validated", () => {
   assert.deepEqual([...excluded], ["6708", "6723"]);
 });
 
+test("curated category affinities avoid known overly broad parent matches", () => {
+  const categoriesFor = (ruleId) => recommendations.AFFINITY_RULES.find((rule) => rule.id === ruleId)
+    .groups.flatMap((group) => group.categories);
+  assert.equal(categoriesFor("watering").includes("hangers"), false);
+  assert.equal(categoriesFor("power_tools").includes("extension cords"), false);
+  assert.equal(categoriesFor("roofing").includes("underlayments"), false);
+  assert.equal(categoriesFor("lumber").includes("power cutting accessories"), false);
+});
+
 test("PDP client mounts a tracked, accessible rail after reviews", () => {
   const root = path.join(__dirname, "..");
   const sidebar = fs.readFileSync(path.join(root, "product-sidebar.js"), "utf8");

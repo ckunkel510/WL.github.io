@@ -42,20 +42,29 @@ const AFFINITY_RULES = [
     ]
   },
   {
-    id: "decking_fencing",
-    when: ["deck board", "decking", "wood fencing", "chain link fencing", "fence post", "fence panel"],
+    id: "decking",
+    when: ["deck board", "decking"],
     groups: [
-      { id: "hardware", name: "Fasteners & construction hardware", categories: ["deck fasteners", "framing fasteners", "structural screws", "joist hangers", "deck patio hardware", "gate shed hardware"] },
-      { id: "foundation", name: "Posts, forms & concrete", categories: ["fence posts", "bagged products", "building forms", "concrete", "rebar"] },
+      { id: "hardware", name: "Deck fasteners & framing hardware", categories: ["deck fasteners", "structural screws", "joist hangers", "deck patio construction", "post anchors caps"] },
+      { id: "foundation", name: "Posts & structural support", categories: ["treated posts", "post anchors caps", "bagged products", "building forms", "rebar"] },
       { id: "finish", name: "Protect & finish the project", categories: ["deck coating", "exterior stains", "wood stains", "waterproofing", "sealants"] }
+    ]
+  },
+  {
+    id: "fencing",
+    when: ["wood fencing", "chain link fencing", "fence post", "fence panel", "field fence", "barbwire"],
+    groups: [
+      { id: "hardware", name: "Fence & gate hardware", categories: ["gate shed hardware", "chain link parts", "fence brackets", "gate openers", "clips tools"] },
+      { id: "posts", name: "Fence posts & concrete", categories: ["fence posts", "treated posts", "steel t posts", "cedar posts", "bagged products"] },
+      { id: "tools", name: "Fencing tools & accessories", categories: ["fencing materials", "wire products", "crimping sleeves splices", "electric fence products"] }
     ]
   },
   {
     id: "lumber",
     when: ["lumber", "yellow pine", "plywood", "sheathing", "osb", "hardwood"],
     groups: [
-      { id: "fastening", name: "Fasteners & framing hardware", categories: ["framing fasteners", "structural screws", "joist hangers", "construction hardware", "nails", "wood screws"] },
-      { id: "cutting", name: "Cutting & measuring tools", categories: ["saw blades", "power cutting accessories", "measuring marking", "hand saws", "circular saws"] },
+      { id: "fastening", name: "Fasteners & framing hardware", categories: ["framing fasteners", "structural screws", "joist hangers", "nails", "wood screws"] },
+      { id: "cutting", name: "Wood-cutting & measuring tools", categories: ["saw blades carbide combo rip", "saw blades plywood", "tape measures tape rules", "squares speed type", "measuring leveling", "hand saws"] },
       { id: "bonding", name: "Adhesives, sealants & finishes", categories: ["construction adhesives", "caulk sealants", "exterior stains", "wood stains", "primers sealers"] }
     ]
   },
@@ -64,7 +73,7 @@ const AFFINITY_RULES = [
     when: ["power tools", "cordless drill", "electric drill", "impact driver", "circular saw", "reciprocating saw", "grinder"],
     groups: [
       { id: "accessories", name: "Bits, blades & accessories", categories: ["screwdriving bits", "power drilling", "saw blades", "power cutting accessories", "grinding cut off wheels", "power abrasive accessories"] },
-      { id: "power", name: "Batteries & jobsite power", categories: ["batteries accessories", "power tool batteries", "extension cords", "generators accessories"] },
+      { id: "power", name: "Batteries & jobsite power", categories: ["power tool batteries", "batteries accessories", "outdoor extension cords", "multi outlet extension cords", "cord storage adapters", "generators accessories"] },
       { id: "safety", name: "Safety & tool organization", categories: ["safety organization", "tool holders", "garage organizers", "storage hooks"] }
     ]
   },
@@ -72,7 +81,7 @@ const AFFINITY_RULES = [
     id: "roofing",
     when: ["roofing", "asphalt shingles", "metal roofing", "roof flashing", "roof ventilation"],
     groups: [
-      { id: "weatherproofing", name: "Underlayment, flashing & ventilation", categories: ["underlayments", "roof flashing", "ventilation", "metal edgings"] },
+      { id: "weatherproofing", name: "Underlayment, flashing & ventilation", categories: ["roofing underlayments", "roof flashing", "roofing ventilation", "metal edgings"] },
       { id: "fasteners", name: "Roofing fasteners", categories: ["roofing nails", "coil roofing", "roofing screws", "siding roofing fasteners"] },
       { id: "sealants", name: "Roof coatings & sealants", categories: ["roof coatings", "roof driveway", "sealants", "caulk"] }
     ]
