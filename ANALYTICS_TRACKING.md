@@ -90,6 +90,7 @@ Variants:
 
 - Fulfillment v1: `enhanced_fulfillment`
 - Options-layout v2 (current): `three_column_options_v2`
+- Similar-products v1 (release candidate): `similar_products_v1`
 
 Production baseline commit: `f2d483d51ff7e127852be82f0f4f2ec445ca9f3e`
 
@@ -97,6 +98,7 @@ Rollback branches:
 
 - Before fulfillment v1: `backup/pdp-before-fulfillment-v1-20260909`
 - Before options-layout v2: `backup/pdp-before-options-layout-v2-20260909`
+- Before similar-products v1: `backup/pdp-before-similar-products-v1-20260909`
 
 The product-detail runtime stores only the experiment ID, variant, and current fulfillment method in session storage. The analytics runtime adds those fields to subsequent supported events, including `view_item`, `add_to_cart`, checkout events, and `purchase`. This permits end-to-end conversion analysis without storing customer identity or address information.
 
@@ -111,6 +113,29 @@ Secondary diagnostics:
 - Price-gate sign-in intent: `pdp_price_sign_in` divided by gated product views.
 - Option visibility: users with `pdp_option_view` divided by eligible product views.
 - Option engagement: `pdp_option_select` divided by `pdp_option_view`, segmented by `option_type` and `option_value`.
+- Similar-products visibility: users with `view_item_list` where `item_list_id = pdp_similar_products_v1` divided by eligible product views.
+- Similar-products click-through: users with `select_item` where `item_list_id = pdp_similar_products_v1` divided by similar-products viewers.
+- Recommendation-assisted add-to-cart: recommended-product `add_to_cart` events carrying `item_list_id = pdp_similar_products_v1` divided by recommendation selections.
+- Recommendation-assisted purchase: purchases containing an attributed recommended item divided by recommendation selections.
 - Downstream checkout and purchase rate segmented by `fulfillment_method`.
 
 These releases are sequential full rollouts rather than randomized controls. Compare equivalent product and traffic windows before and after each launch, using `experiment_variant` to separate fulfillment v1 from the options-layout v2. Avoid launching unrelated PDP conversion changes during the initial measurement window.
+
+## PDP similar-products release candidate
+
+Algorithm version: `merchant_category_v1`
+
+The product recommendation endpoint uses the existing customer-safe catalog snapshot. It never exposes internal cost or supplier data and does not download the complete catalog in the shopper's browser. Candidates must have a safe WebTrack URL, safe image URL, and current catalog-level `in_stock` status.
+
+Ranking and display rules:
+
+- Prefer the same leaf category, then closely related categories under the same immediate parent.
+- Exclude the current product and every product ID already shown in the PDP option controls.
+- Prefer closer title and catalog-price similarity, then lightly diversify brands.
+- Render at most eight products and hide the entire rail when fewer than three qualified products remain.
+- Do not display catalog prices until a selected-store-aware price source is available. The card CTA is `View price & availability` and opens the native PDP.
+- Keep `Product details` before `Customer reviews`, and mount `Compare similar products` after reviews at desktop and mobile widths.
+
+Recommendation selection is stored in session storage for no more than 24 hours. When the selected product is subsequently viewed, added to cart, or purchased, `wl-site.js` attaches `item_list_id`, `item_list_name`, the recommendation algorithm, and the non-personal source product ID. No customer identity or address is retained.
+
+The first release intentionally does not claim `Frequently bought together`. That module requires anonymized Woodson order-line pairs or sufficiently complete purchase-item exports so the label is supported by actual customer baskets.

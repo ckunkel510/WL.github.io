@@ -3,7 +3,7 @@
 
   if (window.WLAnalytics) return;
 
-  var VERSION = "1.3.1";
+  var VERSION = "1.4.0";
   var EVENT_NAME = "wl_analytics_event";
   var GA_MEASUREMENT_ID = "G-4ZLV1YB6GY";
   var META_PIXEL_ID = "188974749776655";
@@ -12,7 +12,9 @@
   var PURCHASE_STORAGE_KEY = "wl_analytics_purchases_v1";
   var PENDING_ADD_STORAGE_KEY = "wl_analytics_pending_add_v1";
   var EXPERIMENT_STORAGE_KEY = "wl_analytics_experiment_v1";
+  var RECOMMENDATION_STORAGE_KEY = "wl_pdp_recommendation_attribution_v1";
   var CART_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+  var RECOMMENDATION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
   var sent = Object.create(null);
   var observedProductIds = Object.create(null);
   var observerTimer = 0;
@@ -288,10 +290,53 @@
     }
   }
 
+  function recommendationContext(name, parameters) {
+    var stored;
+    try {
+      stored = JSON.parse(safeStorage(window.sessionStorage, "get", RECOMMENDATION_STORAGE_KEY) || "null");
+    } catch (error) {
+      safeStorage(window.sessionStorage, "remove", RECOMMENDATION_STORAGE_KEY);
+      return parameters || {};
+    }
+    if (
+      !stored ||
+      !/^\d{1,20}$/.test(String(stored.productId || "")) ||
+      !Number.isFinite(Number(stored.selectedAt)) ||
+      Date.now() - Number(stored.selectedAt) > RECOMMENDATION_MAX_AGE_MS
+    ) {
+      if (stored) safeStorage(window.sessionStorage, "remove", RECOMMENDATION_STORAGE_KEY);
+      return parameters || {};
+    }
+
+    var source = parameters || {};
+    var ecommerceData = source.ecommerce;
+    var items = ecommerceData && Array.isArray(ecommerceData.items) ? ecommerceData.items : [];
+    var matched = false;
+    var attributedItems = items.map(function (item) {
+      if (String(item && item.item_id || "") !== String(stored.productId)) return item;
+      matched = true;
+      return Object.assign({}, item, {
+        item_list_id: cleanString(stored.listId) || "pdp_similar_products_v1",
+        item_list_name: cleanString(stored.listName) || "Compare similar products"
+      });
+    });
+    if (!matched) return source;
+
+    var enriched = Object.assign({}, source, {
+      item_list_id: cleanString(stored.listId) || "pdp_similar_products_v1",
+      item_list_name: cleanString(stored.listName) || "Compare similar products",
+      recommendation_algorithm: cleanString(stored.algorithm) || "merchant_category_v1",
+      recommendation_source_product_id: cleanString(stored.sourceProductId) || undefined,
+      ecommerce: Object.assign({}, ecommerceData, { items: attributedItems })
+    });
+    if (name === "purchase") safeStorage(window.sessionStorage, "remove", RECOMMENDATION_STORAGE_KEY);
+    return enriched;
+  }
+
   function pushEvent(name, parameters) {
     if (!ALLOWED_EVENTS[name]) return false;
 
-    var enriched = Object.assign({}, experimentContext(), parameters || {});
+    var enriched = Object.assign({}, experimentContext(), recommendationContext(name, parameters));
     var payload = sanitize(enriched, "", 0) || {};
     payload.event = EVENT_NAME;
     payload.event_name = name;

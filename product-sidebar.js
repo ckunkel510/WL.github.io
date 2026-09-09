@@ -19,7 +19,7 @@
     const savedMethod = localStorage.getItem("woodson_cart_method");
     sessionStorage.setItem("wl_analytics_experiment_v1", JSON.stringify({
       experiment_id: "pdp_fulfillment_v1_20260909",
-      experiment_variant: "three_column_options_v2",
+      experiment_variant: "similar_products_v1",
       fulfillment_method: savedMethod === "delivery" ? "delivery" : "pickup"
     }));
   } catch (error) {}
@@ -435,6 +435,150 @@ $(document).ready(async function () {
         margin: 0 !important;
       }
       #product-main > * { max-width: 100%; }
+      #pdp-complete-project-slot:empty,
+      #pdp-similar-products-slot:empty { display: none; }
+      .wl-pdp-recommendations {
+        width: 100%;
+        margin: 32px 0 0;
+        padding: 24px 0 0;
+        border-top: 3px solid #6b0016;
+        box-sizing: border-box;
+      }
+      .wl-pdp-recommendations__header {
+        display: flex;
+        align-items: end;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 16px;
+      }
+      .wl-pdp-recommendations__eyebrow {
+        margin: 0 0 4px;
+        color: #6b0016;
+        font-size: 12px;
+        font-weight: 850;
+        letter-spacing: .06em;
+        text-transform: uppercase;
+      }
+      .wl-pdp-recommendations__title {
+        margin: 0;
+        color: #20262d;
+        font-size: 24px;
+        font-weight: 850;
+        line-height: 1.2;
+      }
+      .wl-pdp-recommendations__copy {
+        margin: 5px 0 0;
+        color: #59636e;
+        font-size: 14px;
+        line-height: 1.4;
+      }
+      .wl-pdp-recommendations__controls {
+        display: flex;
+        flex: 0 0 auto;
+        gap: 8px;
+      }
+      .wl-pdp-recommendations__control {
+        display: inline-grid;
+        place-items: center;
+        width: 40px;
+        height: 40px;
+        padding: 0;
+        border: 1px solid #aeb5bd;
+        border-radius: 50%;
+        background: #fff;
+        color: #20262d;
+        font-size: 23px;
+        line-height: 1;
+        cursor: pointer;
+      }
+      .wl-pdp-recommendations__control:hover,
+      .wl-pdp-recommendations__control:focus-visible {
+        border-color: #6b0016;
+        color: #6b0016;
+        outline: 3px solid rgba(107, 0, 22, .14);
+        outline-offset: 1px;
+      }
+      .wl-pdp-recommendations__rail {
+        display: flex;
+        gap: 14px;
+        width: 100%;
+        max-width: 100%;
+        padding: 2px 2px 16px;
+        overflow-x: auto;
+        overflow-y: hidden;
+        overscroll-behavior-inline: contain;
+        scroll-behavior: smooth;
+        scroll-snap-type: x mandatory;
+        scrollbar-width: thin;
+        box-sizing: border-box;
+      }
+      .wl-pdp-recommendation-card {
+        display: flex;
+        flex: 0 0 calc((100% - 42px) / 4);
+        flex-direction: column;
+        min-width: 0;
+        min-height: 340px;
+        padding: 14px;
+        border: 1px solid #d9dde1;
+        border-radius: 8px;
+        background: #fff;
+        color: #20262d !important;
+        scroll-snap-align: start;
+        text-decoration: none !important;
+        box-sizing: border-box;
+      }
+      .wl-pdp-recommendation-card:hover,
+      .wl-pdp-recommendation-card:focus-visible {
+        border-color: #6b0016;
+        box-shadow: 0 6px 18px rgba(25, 31, 38, .11);
+        outline: none;
+        transform: translateY(-1px);
+      }
+      .wl-pdp-recommendation-card__image {
+        display: block;
+        width: 100%;
+        height: 170px;
+        margin: 0 0 12px;
+        object-fit: contain;
+      }
+      .wl-pdp-recommendation-card__brand,
+      .wl-pdp-recommendation-card__category {
+        color: #59636e;
+        font-size: 12px;
+        font-weight: 750;
+        line-height: 1.3;
+      }
+      .wl-pdp-recommendation-card__title {
+        display: -webkit-box;
+        margin: 7px 0 12px;
+        overflow: hidden;
+        color: #20262d;
+        font-size: 15px;
+        font-weight: 800;
+        line-height: 1.35;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+      }
+      .wl-pdp-recommendation-card__status {
+        margin-top: auto;
+        color: #14713b;
+        font-size: 12px;
+        font-weight: 850;
+      }
+      .wl-pdp-recommendation-card__cta {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 40px;
+        margin-top: 10px;
+        padding: 8px 10px;
+        border-radius: 5px;
+        background: #6b0016;
+        color: #fff;
+        font-size: 13px;
+        font-weight: 850;
+        text-align: center;
+      }
       #WTRelatedProducts {
         width: 100% !important;
         max-width: 100% !important;
@@ -530,6 +674,7 @@ $(document).ready(async function () {
           grid-row: 1 / span 2;
         }
         #product-main { grid-column: 1 / -1; grid-row: 3; }
+        .wl-pdp-recommendation-card { flex-basis: calc((100% - 14px) / 2); }
         #WTRelatedProducts .wl-related-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       }
       @media (max-width: 767px) {
@@ -556,6 +701,20 @@ $(document).ready(async function () {
         #product-main { grid-column: 1; grid-row: 4; }
         #ctl00_PageBody_productDetail_ProductImage { max-height: 420px !important; }
         .wl-product-price-row { font-size: 28px !important; }
+        .wl-pdp-recommendations { margin-top: 24px; padding-top: 20px; }
+        .wl-pdp-recommendations__header { align-items: start; }
+        .wl-pdp-recommendations__title { font-size: 21px; }
+        .wl-pdp-recommendations__controls { display: none; }
+        .wl-pdp-recommendations__rail {
+          width: calc(100vw - 36px);
+          max-width: calc(100vw - 36px);
+          margin-right: calc(50% - 50vw + 18px);
+        }
+        .wl-pdp-recommendation-card {
+          flex-basis: min(78vw, 285px);
+          min-height: 325px;
+        }
+        .wl-pdp-recommendation-card__image { height: 155px; }
         #WTRelatedProducts { overflow: visible; }
         #WTRelatedProducts .relatedProductsScrollingDiv {
           width: calc(100vw - 36px) !important;
@@ -936,7 +1095,7 @@ $(document).ready(async function () {
   // =========================
   const selectedMethodKey = "woodson_cart_method";
   const experimentId = "pdp_fulfillment_v1_20260909";
-  const experimentVariant = "three_column_options_v2";
+  const experimentVariant = "similar_products_v1";
   let pdpStockState = window.WLPdpStockState || null;
   let stockReadyTracked = false;
 
@@ -1355,6 +1514,292 @@ $(document).ready(async function () {
       stock_state: pdpStockState ? "ready" : "loading"
     });
   }, 0);
+
+  // =========================
+  // Product recommendations
+  // =========================
+  const recommendationApi = "https://wl-upsrates.vercel.app/api/product-recommendations";
+  const recommendationAttributionKey = "wl_pdp_recommendation_attribution_v1";
+  let recommendationRequest = 0;
+  let recommendationSignature = "";
+  let recommendationViewTracked = false;
+
+  function normalizeProductContentOrder() {
+    const $content = $(".wl-product-content").first();
+    const $legacyDescription = $("#ctl00_PageBody_productDetail_productDescription").first();
+    const $reviews = $("#customer-reviews, #review-widget").first();
+    let $completeSlot = $("#pdp-complete-project-slot");
+    let $similarSlot = $("#pdp-similar-products-slot");
+
+    if ($content.length && !$content.parent().is($main)) {
+      if ($legacyDescription.length && $legacyDescription.parent().is($main)) {
+        $content.detach().insertBefore($legacyDescription);
+      } else {
+        $main.prepend($content.detach());
+      }
+    }
+    if ($reviews.length && !$reviews.parent().is($main)) $main.append($reviews.detach());
+
+    if (!$completeSlot.length) {
+      $completeSlot = $("<div>", { id: "pdp-complete-project-slot" });
+    }
+    if ($content.length && $content.parent().is($main)) {
+      if ($content.get(0).nextElementSibling !== $completeSlot.get(0)) $completeSlot.insertAfter($content);
+    } else if ($legacyDescription.length && $legacyDescription.parent().is($main)) {
+      if ($legacyDescription.get(0).nextElementSibling !== $completeSlot.get(0)) $completeSlot.insertAfter($legacyDescription);
+    } else {
+      if (!$completeSlot.parent().is($main) || $main.get(0).firstElementChild !== $completeSlot.get(0)) {
+        $main.prepend($completeSlot);
+      }
+    }
+
+    if (
+      $reviews.length &&
+      $reviews.parent().is($main) &&
+      $completeSlot.get(0).nextElementSibling !== $reviews.get(0)
+    ) $reviews.insertAfter($completeSlot);
+
+    if (!$similarSlot.length) {
+      $similarSlot = $("<div>", { id: "pdp-similar-products-slot" });
+    }
+    if ($reviews.length && $reviews.parent().is($main)) {
+      if ($reviews.get(0).nextElementSibling !== $similarSlot.get(0)) $similarSlot.insertAfter($reviews);
+    } else {
+      if (!$similarSlot.parent().is($main) || $main.get(0).lastElementChild !== $similarSlot.get(0)) {
+        $main.append($similarSlot);
+      }
+    }
+    return { content: $content.length, reviews: $reviews.length, similarSlot: $similarSlot };
+  }
+
+  const contentOrderObserver = new MutationObserver(function () {
+    normalizeProductContentOrder();
+  });
+  if (document.body) contentOrderObserver.observe(document.body, { childList: true, subtree: true });
+  normalizeProductContentOrder();
+  window.setTimeout(function () {
+    normalizeProductContentOrder();
+    contentOrderObserver.disconnect();
+  }, 12000);
+
+  function optionProductIds() {
+    const ids = new Set([String(currentPID || "")]);
+    document.querySelectorAll("[data-option-target-id]").forEach(function (element) {
+      const productId = String(element.getAttribute("data-option-target-id") || "").trim();
+      if (/^\d{1,20}$/.test(productId)) ids.add(productId);
+    });
+    return Array.from(ids).filter(Boolean).sort(function (left, right) {
+      return Number(left) - Number(right);
+    });
+  }
+
+  function safeRecommendationUrl(value, kind) {
+    try {
+      const url = new URL(String(value || ""));
+      if (url.protocol !== "https:") return "";
+      if (kind === "product" && url.hostname !== "webtrack.woodsonlumber.com") return "";
+      if (kind === "image" && !["webtrack.woodsonlumber.com", "images-woodsonlumber.sirv.com"].includes(url.hostname)) return "";
+      return url.href;
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function analyticsItems(items, listId, listName) {
+    return items.map(function (item, index) {
+      const analyticsItem = {
+        item_id: String(item.productId),
+        item_name: String(item.title).slice(0, 180),
+        item_list_id: listId,
+        item_list_name: listName,
+        index
+      };
+      if (item.brand) analyticsItem.item_brand = String(item.brand).slice(0, 100);
+      if (item.category) analyticsItem.item_category = String(item.category).slice(0, 200);
+      return analyticsItem;
+    });
+  }
+
+  function rememberRecommendation(item, payload) {
+    try {
+      sessionStorage.setItem(recommendationAttributionKey, JSON.stringify({
+        productId: String(item.productId),
+        sourceProductId: String(currentPID || ""),
+        listId: String(payload.listId || "pdp_similar_products_v1"),
+        listName: String(payload.listName || "Compare similar products"),
+        algorithm: String(payload.algorithm || "merchant_category_v1"),
+        selectedAt: Date.now()
+      }));
+    } catch (error) {}
+  }
+
+  function trackRecommendationView(section, items, payload) {
+    if (recommendationViewTracked) return;
+    const send = function () {
+      if (recommendationViewTracked || !document.documentElement.contains(section)) return;
+      recommendationViewTracked = true;
+      wlTrack("view_item_list", {
+        item_list_id: payload.listId,
+        item_list_name: payload.listName,
+        recommendation_algorithm: payload.algorithm,
+        recommendation_count: items.length,
+        ecommerce: { items: analyticsItems(items, payload.listId, payload.listName) }
+      });
+    };
+    if (typeof IntersectionObserver !== "function") {
+      window.setTimeout(send, 0);
+      return;
+    }
+    const observer = new IntersectionObserver(function (entries) {
+      if (!entries.some(function (entry) { return entry.isIntersecting && entry.intersectionRatio >= 0.35; })) return;
+      observer.disconnect();
+      send();
+    }, { threshold: [0.35] });
+    observer.observe(section);
+  }
+
+  function renderRecommendations(payload) {
+    const layout = normalizeProductContentOrder();
+    const $slot = layout.similarSlot;
+    const excluded = new Set(optionProductIds());
+    const items = Array.isArray(payload.recommendations)
+      ? payload.recommendations.filter(function (item) {
+          return item &&
+            /^\d{1,20}$/.test(String(item.productId || "")) &&
+            !excluded.has(String(item.productId)) &&
+            safeRecommendationUrl(item.productUrl, "product") &&
+            safeRecommendationUrl(item.imageUrl, "image");
+        }).slice(0, 8)
+      : [];
+
+    $slot.empty();
+    if (items.length < 3) return false;
+
+    const listId = String(payload.listId || "pdp_similar_products_v1").slice(0, 100);
+    const listName = String(payload.listName || "Compare similar products").slice(0, 100);
+    const algorithm = String(payload.algorithm || "merchant_category_v1").slice(0, 100);
+    const normalizedPayload = { listId, listName, algorithm };
+    const $section = $("<section>", {
+      id: "wl-pdp-similar-products",
+      class: "wl-pdp-recommendations",
+      "aria-labelledby": "wl-pdp-similar-products-title",
+      "data-recommendation-algorithm": algorithm
+    });
+    const $headingText = $("<div>");
+    $("<p>", { class: "wl-pdp-recommendations__eyebrow", text: "More choices" }).appendTo($headingText);
+    $("<h2>", {
+      id: "wl-pdp-similar-products-title",
+      class: "wl-pdp-recommendations__title",
+      text: listName
+    }).appendTo($headingText);
+    $("<p>", {
+      class: "wl-pdp-recommendations__copy",
+      text: "In-stock alternatives selected from the same part of our catalog."
+    }).appendTo($headingText);
+
+    const $controls = $("<div>", { class: "wl-pdp-recommendations__controls" });
+    const $previous = $("<button>", {
+      type: "button",
+      class: "wl-pdp-recommendations__control",
+      text: "‹",
+      "aria-label": "Show previous similar products"
+    });
+    const $next = $("<button>", {
+      type: "button",
+      class: "wl-pdp-recommendations__control",
+      text: "›",
+      "aria-label": "Show more similar products"
+    });
+    $controls.append($previous, $next);
+    $("<div>", { class: "wl-pdp-recommendations__header" }).append($headingText, $controls).appendTo($section);
+
+    const $rail = $("<div>", {
+      class: "wl-pdp-recommendations__rail",
+      role: "list",
+      "aria-label": listName
+    });
+    items.forEach(function (item, index) {
+      const productUrl = safeRecommendationUrl(item.productUrl, "product");
+      const imageUrl = safeRecommendationUrl(item.imageUrl, "image");
+      const brand = String(item.brand || "").trim();
+      const category = String(item.categoryLabel || "").trim();
+      const $card = $("<a>", {
+        class: "wl-pdp-recommendation-card",
+        href: productUrl,
+        role: "listitem",
+        "data-recommendation-index": index,
+        "data-recommendation-product-id": String(item.productId),
+        "data-recommendation-match": String(item.match || "same_category")
+      });
+      $("<img>", {
+        class: "wl-pdp-recommendation-card__image",
+        src: imageUrl,
+        alt: "",
+        loading: "lazy",
+        decoding: "async"
+      }).appendTo($card);
+      if (brand) $("<span>", { class: "wl-pdp-recommendation-card__brand", text: brand }).appendTo($card);
+      if (category) $("<span>", { class: "wl-pdp-recommendation-card__category", text: category }).appendTo($card);
+      $("<span>", { class: "wl-pdp-recommendation-card__title", text: String(item.title || "") }).appendTo($card);
+      $("<span>", { class: "wl-pdp-recommendation-card__status", text: "Available to order" }).appendTo($card);
+      $("<span>", { class: "wl-pdp-recommendation-card__cta", text: "View price & availability" }).appendTo($card);
+      $card.on("click", function () {
+        rememberRecommendation(item, normalizedPayload);
+        const selectedItem = analyticsItems([item], listId, listName);
+        selectedItem[0].index = index;
+        wlTrack("select_item", {
+          item_list_id: listId,
+          item_list_name: listName,
+          recommendation_algorithm: algorithm,
+          recommendation_rank: index + 1,
+          recommendation_match: String(item.match || "same_category"),
+          ecommerce: { items: selectedItem }
+        });
+      });
+      $rail.append($card);
+    });
+    $section.append($rail);
+    $slot.append($section);
+
+    const scrollRail = function (direction) {
+      const element = $rail.get(0);
+      if (!element) return;
+      element.scrollBy({ left: direction * Math.max(260, element.clientWidth * 0.82), behavior: "smooth" });
+    };
+    $previous.on("click", function () { scrollRail(-1); });
+    $next.on("click", function () { scrollRail(1); });
+
+    const nativeRelated = document.getElementById("WTRelatedProducts");
+    if (nativeRelated) nativeRelated.hidden = true;
+    trackRecommendationView($section.get(0), items, normalizedPayload);
+    return true;
+  }
+
+  async function loadRecommendations() {
+    if (!currentPID) return;
+    const excluded = optionProductIds();
+    const signature = excluded.join(",");
+    if (signature === recommendationSignature && $("#wl-pdp-similar-products").length) return;
+    recommendationSignature = signature;
+    const request = ++recommendationRequest;
+    try {
+      const url = new URL(recommendationApi);
+      url.searchParams.set("pid", String(currentPID));
+      url.searchParams.set("exclude", signature);
+      const response = await fetch(url.href, { headers: { Accept: "application/json" } });
+      if (!response.ok) throw new Error("Recommendation request failed.");
+      const payload = await response.json();
+      if (request !== recommendationRequest || !payload || payload.success !== true) return;
+      renderRecommendations(payload);
+    } catch (error) {
+      if (request === recommendationRequest) $("#pdp-similar-products-slot").empty();
+    }
+  }
+
+  document.addEventListener("wl:pdp-options-ready", function () {
+    window.setTimeout(loadRecommendations, 0);
+  });
+  window.setTimeout(loadRecommendations, 900);
 
   function modernizeRelatedProducts() {
     const root = document.getElementById("WTRelatedProducts");

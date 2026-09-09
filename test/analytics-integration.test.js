@@ -8,13 +8,13 @@ const root = path.resolve(__dirname, '..');
 
 test('header loads the privacy-filter-safe site runtime', () => {
   const header = fs.readFileSync(path.join(root, 'headermodern.js'), 'utf8');
-  assert.match(header, /WL\.github\.io\/wl-site\.js\?v=20260909-2/);
+  assert.match(header, /WL\.github\.io\/wl-site\.js\?v=20260909-3/);
   assert.doesNotMatch(header, /ANALYTICS_URL\s*=\s*["'][^"']*(?:analytics|tracking|events|commerce)/i);
 });
 
 test('site runtime emits a confirmed GA4 purchase with transaction value', () => {
   const runtime = fs.readFileSync(path.join(root, 'wl-site.js'), 'utf8');
-  assert.match(runtime, /var VERSION = "1\.3\.1"/);
+  assert.match(runtime, /var VERSION = "1\.4\.0"/);
 
   const storage = () => {
     const values = new Map();
@@ -76,7 +76,7 @@ test('site runtime emits a confirmed GA4 purchase with transaction value', () =>
 
   const purchase = window.dataLayer.find((entry) => entry && entry.event === 'wl_analytics_event' && entry.event_name === 'purchase');
   assert.ok(purchase);
-  assert.equal(purchase.analytics_version, '1.3.1');
+  assert.equal(purchase.analytics_version, '1.4.0');
   assert.equal(purchase.experiment_id, 'pdp_fulfillment_v1_20260909');
   assert.equal(purchase.experiment_variant, 'enhanced_fulfillment');
   assert.equal(purchase.fulfillment_method, 'delivery');
@@ -86,4 +86,66 @@ test('site runtime emits a confirmed GA4 purchase with transaction value', () =>
 
   window.WLAnalytics.refresh();
   assert.equal(window.dataLayer.filter((entry) => entry && entry.event_name === 'purchase').length, 1);
+});
+
+test('site runtime carries recommendation attribution into downstream ecommerce events', () => {
+  const runtime = fs.readFileSync(path.join(root, 'wl-site.js'), 'utf8');
+  const storage = () => {
+    const values = new Map();
+    return {
+      getItem: (key) => values.has(key) ? values.get(key) : null,
+      removeItem: (key) => values.delete(key),
+      setItem: (key, value) => values.set(key, String(value))
+    };
+  };
+  const localStorage = storage();
+  const sessionStorage = storage();
+  sessionStorage.setItem('wl_pdp_recommendation_attribution_v1', JSON.stringify({
+    productId: '200',
+    sourceProductId: '100',
+    listId: 'pdp_similar_products_v1',
+    listName: 'Compare similar products',
+    algorithm: 'merchant_category_v1',
+    selectedAt: Date.now()
+  }));
+
+  const document = {
+    readyState: 'loading',
+    body: null,
+    head: { appendChild() {} },
+    addEventListener() {},
+    createElement() { return { setAttribute() {} }; },
+    getElementById() { return null; },
+    querySelector() { return null; }
+  };
+  const window = {
+    dataLayer: [],
+    dispatchEvent() {},
+    localStorage,
+    location: { pathname: '/ProductDetail.aspx' },
+    sessionStorage,
+    setTimeout() {}
+  };
+  const context = {
+    CustomEvent: function CustomEvent(type, init) { this.type = type; this.detail = init.detail; },
+    document,
+    window
+  };
+
+  vm.runInNewContext(runtime, context);
+  window.WLAnalytics.track('add_to_cart', {
+    ecommerce: {
+      currency: 'USD',
+      value: 12.34,
+      items: [{ item_id: '200', item_name: 'Recommended item', price: 12.34, quantity: 1 }]
+    }
+  });
+
+  const event = window.dataLayer.find((entry) => entry && entry.event_name === 'add_to_cart');
+  assert.ok(event);
+  assert.equal(event.item_list_id, 'pdp_similar_products_v1');
+  assert.equal(event.recommendation_algorithm, 'merchant_category_v1');
+  assert.equal(event.recommendation_source_product_id, '100');
+  assert.equal(event.ecommerce.items[0].item_list_id, 'pdp_similar_products_v1');
+  assert.equal(event.ecommerce.items[0].item_list_name, 'Compare similar products');
 });
