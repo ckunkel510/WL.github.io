@@ -23,7 +23,7 @@ Every event uses the same GTM custom event:
 {
   event: "wl_analytics_event",
   event_name: "add_to_cart",
-  analytics_version: "1.3.0",
+  analytics_version: "1.3.1",
   page_type: "product_detail",
   ecommerce: {
     currency: "USD",
@@ -55,6 +55,8 @@ Supported event names:
 - `pdp_fulfillment_select`
 - `pdp_store_availability`
 - `pdp_price_sign_in`
+- `pdp_option_view`
+- `pdp_option_select`
 
 `purchase` is emitted only when WebTrack renders both the order response and successful-payment result elements. It includes the confirmed transaction ID, USD order value, and the retained non-personal cart items. Confirmed transaction IDs are retained only for duplicate-event prevention.
 
@@ -84,11 +86,17 @@ A later Constant Contact phase needs a server-side service that receives consent
 
 Experiment ID: `pdp_fulfillment_v1_20260909`
 
-Variant: `enhanced_fulfillment`
+Variants:
+
+- Fulfillment v1: `enhanced_fulfillment`
+- Options-layout v2 (current): `three_column_options_v2`
 
 Production baseline commit: `f2d483d51ff7e127852be82f0f4f2ec445ca9f3e`
 
-Rollback branch: `backup/pdp-before-fulfillment-v1-20260909`
+Rollback branches:
+
+- Before fulfillment v1: `backup/pdp-before-fulfillment-v1-20260909`
+- Before options-layout v2: `backup/pdp-before-options-layout-v2-20260909`
 
 The product-detail runtime stores only the experiment ID, variant, and current fulfillment method in session storage. The analytics runtime adds those fields to subsequent supported events, including `view_item`, `add_to_cart`, checkout events, and `purchase`. This permits end-to-end conversion analysis without storing customer identity or address information.
 
@@ -101,6 +109,8 @@ Secondary diagnostics:
 - Fulfillment engagement: `pdp_fulfillment_select` divided by `pdp_fulfillment_view`.
 - Store-availability engagement: `pdp_store_availability` divided by `pdp_fulfillment_view`.
 - Price-gate sign-in intent: `pdp_price_sign_in` divided by gated product views.
+- Option visibility: users with `pdp_option_view` divided by eligible product views.
+- Option engagement: `pdp_option_select` divided by `pdp_option_view`, segmented by `option_type` and `option_value`.
 - Downstream checkout and purchase rate segmented by `fulfillment_method`.
 
-Because v1 is a full rollout rather than a randomized control, compare equivalent product and traffic windows before and after launch. Avoid launching unrelated PDP conversion changes during the initial measurement window.
+These releases are sequential full rollouts rather than randomized controls. Compare equivalent product and traffic windows before and after each launch, using `experiment_variant` to separate fulfillment v1 from the options-layout v2. Avoid launching unrelated PDP conversion changes during the initial measurement window.
