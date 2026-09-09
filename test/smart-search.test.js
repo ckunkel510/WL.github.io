@@ -57,6 +57,23 @@ test("native result augmentation excludes visible items and labels the related s
   assert.deepEqual(payload.suggestions.map((item) => item.productId), ["3", "4", "5", "6"]);
 });
 
+test("broad typo recovery diversifies equally relevant product categories", () => {
+  const catalog = {
+    products: [
+      product(1), product(2), product(3), product(4),
+      product(5, { category: "Paint & Sundries > Paint & Stains > Valspar Paint > Cabinet Paint" }),
+      product(6, { category: "Paint & Sundries > Paint & Stains > Valspar Paint > Cabinet Paint" }),
+      product(7, { category: "Paint & Sundries > Paint & Stains > Valspar Paint > Floor Paint" }),
+      product(8, { category: "Paint & Sundries > Paint & Stains > Valspar Paint > Floor Paint" })
+    ]
+  };
+  const payload = suggestions.buildSuggestionPayload(catalog, "Vaslpar", 0, new Set());
+  assert.deepEqual(
+    payload.suggestions.slice(0, 6).map((item) => item.categoryLabel),
+    ["Valspar Paint", "Valspar Paint", "Cabinet Paint", "Cabinet Paint", "Floor Paint", "Floor Paint"]
+  );
+});
+
 test("smart search rejects personal-data-shaped queries and unsafe cards", () => {
   assert.equal(suggestions.cleanQuery("person@example.com"), "");
   assert.equal(suggestions.cleanQuery("979-555-1212"), "");

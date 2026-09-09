@@ -100,6 +100,22 @@ function publicSuggestion(entry, index) {
   };
 }
 
+function diversifyRanked(ranked, limit = MAX_RESULTS) {
+  const selected = [];
+  const deferred = [];
+  const categoryCounts = new Map();
+  ranked.forEach((entry) => {
+    const key = normalizeText(entry.product?.category || "") || "uncategorized";
+    const count = categoryCounts.get(key) || 0;
+    if (count >= 2) deferred.push(entry);
+    else {
+      selected.push(entry);
+      categoryCounts.set(key, count + 1);
+    }
+  });
+  return selected.concat(deferred).slice(0, Math.max(1, Math.min(MAX_RESULTS, Number(limit) || MAX_RESULTS)));
+}
+
 function suggestedTerm(query, ranked) {
   const queryTokens = tokens(query);
   if (queryTokens.length !== 1 || !ranked.length) return "";
@@ -125,7 +141,7 @@ function buildSuggestionPayload(catalog, query, nativeResultCount = 0, excluded 
   const eligibleProducts = (catalog.products || []).filter((product) => (
     hasCustomerCardData(product) && !excluded.has(String(product.productId))
   ));
-  const ranked = searchCatalog(eligibleProducts, query, MAX_RESULTS);
+  const ranked = diversifyRanked(searchCatalog(eligibleProducts, query, 32), MAX_RESULTS);
   const suggestions = ranked.map(publicSuggestion);
   const recovery = nativeCount === 0;
   return {
@@ -178,6 +194,7 @@ module.exports._test = {
   categoryLabel,
   cleanNativeResultCount,
   cleanQuery,
+  diversifyRanked,
   excludedProductIds,
   hasCustomerCardData,
   publicSuggestion,

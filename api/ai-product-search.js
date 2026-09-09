@@ -274,7 +274,7 @@ function searchCatalog(products, query, limit = 5) {
     : ranked;
   return eligible
     .sort((left, right) => right.score - left.score || String(left.product.title).localeCompare(String(right.product.title)))
-    .slice(0, Math.max(1, Math.min(8, Number(limit) || 5)));
+    .slice(0, Math.max(1, Math.min(40, Number(limit) || 5)));
 }
 
 function money(value) {
