@@ -21,8 +21,9 @@
   if (requestedMode === 'native') return;
   if (ROLLOUT_MODE === 'preview' && requestedMode !== 'preview') return;
 
-  var VERSION = 'v2-preview-1';
+  var VERSION = 'v2-preview-2';
   var IDS = {
+    address: 'ctl00_PageBody_AddressDropdownList',
     billing: 'ctl00_PageBody_BillingAddressTextBox',
     postal: 'ctl00_PageBody_PostalCodeTextBox',
     postalAlt: 'ctl00_PageBody_BillingPostalCodeTextBox',
@@ -96,25 +97,37 @@
     style.textContent = [
       'body.wl-payment-flow-ready{--wl-wine:#720018;--wl-wine-dark:#540012;--wl-ink:#1f2937;--wl-muted:#5f6773;--wl-line:#dfe3e8;--wl-soft:#f6f7f9;}',
       'body.wl-payment-flow-ready *{box-sizing:border-box;}',
-      '#wl-payment-guide{max-width:980px;margin:16px auto 22px;padding:0 4px;color:var(--wl-ink);font-family:Arial,Helvetica,sans-serif;}',
-      '#wl-payment-guide .wl-guide-card{background:linear-gradient(135deg,#fff 0%,#f9f5f6 100%);border:1px solid #eadadd;border-left:6px solid var(--wl-wine);border-radius:14px;padding:20px;box-shadow:0 6px 22px rgba(31,41,55,.07);}',
+      'body.wl-payment-flow-ready #MainLayoutRow>.container-fluid>.row>.col-auto.navigation-menu{display:none!important;}',
+      'body.wl-payment-flow-ready #MainLayoutRow>.container-fluid>.row>.col{flex:1 1 100%!important;width:100%!important;max-width:100%!important;padding-left:15px!important;}',
+      'body.wl-payment-flow-ready .bodyFlexContainer{display:block!important;width:100%!important;}',
+      'body.wl-payment-flow-ready .bodyFlexContainer>.bodyFlexItem{display:block!important;width:100%!important;}',
+      'body.wl-payment-flow-ready .bodyFlexContainer>.bodyFlexItem.listPageHeader{display:none!important;}',
+      'body.wl-payment-flow-ready .bodyFlexContainer>.bodyFlexItem>.float-left{float:none!important;width:100%!important;max-width:1060px!important;margin:0 auto!important;}',
+      '#wl-payment-guide{max-width:1060px;margin:14px auto 18px;padding:0;color:var(--wl-ink);font-family:Arial,Helvetica,sans-serif;}',
+      '#wl-payment-guide .wl-guide-card{background:linear-gradient(135deg,#fff 0%,#f9f5f6 100%);border:1px solid #eadadd;border-left:6px solid var(--wl-wine);border-radius:14px;padding:16px 20px;box-shadow:0 5px 18px rgba(31,41,55,.06);}',
+      '#wl-payment-guide .wl-back-link{display:inline-flex;align-items:center;min-height:34px;margin:0 0 10px;color:var(--wl-wine);font-size:14px;font-weight:800;text-decoration:none;}',
+      '#wl-payment-guide .wl-back-link:hover{text-decoration:underline;}',
       '#wl-payment-guide .wl-guide-kicker{margin:0 0 6px;color:var(--wl-wine);font-size:12px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;}',
       '#wl-payment-guide h1{margin:0;color:#1b1d21;font-size:clamp(24px,4vw,34px);line-height:1.15;}',
-      '#wl-payment-guide .wl-guide-copy{max-width:720px;margin:9px 0 0;color:var(--wl-muted);font-size:15px;line-height:1.5;}',
-      '#wl-payment-guide .wl-guide-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:18px 0 0;padding:0;list-style:none;}',
+      '#wl-payment-guide .wl-guide-copy{max-width:720px;margin:6px 0 0;color:var(--wl-muted);font-size:14px;line-height:1.4;}',
+      '#wl-payment-guide .wl-guide-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:13px 0 0;padding:0;list-style:none;}',
       '#wl-payment-guide .wl-guide-steps a{display:flex;align-items:center;gap:8px;min-height:44px;padding:9px 10px;border:1px solid var(--wl-line);border-radius:10px;background:#fff;color:var(--wl-ink);font-size:13px;font-weight:700;text-decoration:none;}',
       '#wl-payment-guide .wl-step-number{display:inline-grid;place-items:center;flex:0 0 24px;width:24px;height:24px;border-radius:50%;background:var(--wl-wine);color:#fff;font-size:12px;}',
-      '.wl-payment-section-heading{max-width:980px;margin:22px auto 10px;padding:0 4px;color:var(--wl-ink);font-family:Arial,Helvetica,sans-serif;}',
+      '.wl-payment-section-heading{width:100%;margin:22px 0 9px;padding:0;color:var(--wl-ink);font-family:Arial,Helvetica,sans-serif;}',
       '.wl-payment-section-heading .wl-section-kicker{margin:0 0 3px;color:var(--wl-wine);font-size:12px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;}',
       '.wl-payment-section-heading h2{margin:0;font-size:21px;line-height:1.25;}',
       '.wl-payment-section-heading p{margin:5px 0 0;color:var(--wl-muted);font-size:14px;line-height:1.45;}',
-      'body.wl-payment-flow-ready .wl-payment-card{max-width:980px;margin-left:auto!important;margin-right:auto!important;padding:16px!important;border:1px solid var(--wl-line)!important;border-radius:12px!important;background:#fff!important;box-shadow:0 3px 14px rgba(31,41,55,.05)!important;}',
+      'body.wl-payment-flow-ready .wl-payment-card{display:grid!important;grid-template-columns:minmax(150px,200px) minmax(0,1fr)!important;gap:7px 18px!important;align-items:start!important;width:100%!important;max-width:none!important;margin:8px 0!important;padding:14px 16px!important;border:1px solid var(--wl-line)!important;border-radius:10px!important;background:#fff!important;box-shadow:0 2px 10px rgba(31,41,55,.04)!important;}',
+      'body.wl-payment-flow-ready .wl-payment-card>div{width:auto!important;min-width:0!important;max-width:none!important;flex:none!important;}',
+      'body.wl-payment-flow-ready .wl-payment-card>div:first-child{grid-column:1;align-self:center;}',
+      'body.wl-payment-flow-ready .wl-payment-card>div:nth-child(2){grid-column:2;}',
+      'body.wl-payment-flow-ready .wl-payment-card>.wl-field-help{grid-column:2;margin:0!important;}',
       'body.wl-payment-flow-ready .wl-payment-balance-field{border-color:#d7e6dd!important;background:#f6fbf8!important;}',
       'body.wl-payment-flow-ready .wl-payment-field input[type="text"],body.wl-payment-flow-ready .wl-payment-field input[type="email"],body.wl-payment-flow-ready .wl-payment-field textarea,body.wl-payment-flow-ready .wl-payment-field select{width:100%!important;max-width:none!important;min-height:46px!important;padding:10px 12px!important;border:1px solid #aeb5bf!important;border-radius:8px!important;background:#fff!important;color:#111827!important;font-size:16px!important;}',
       'body.wl-payment-flow-ready .wl-payment-field textarea{min-height:92px!important;resize:vertical;}',
       'body.wl-payment-flow-ready .wl-payment-field input:focus,body.wl-payment-flow-ready .wl-payment-field textarea:focus,body.wl-payment-flow-ready .wl-payment-field select:focus{outline:3px solid rgba(114,0,24,.18)!important;border-color:var(--wl-wine)!important;}',
       '.wl-field-help{margin:7px 0 0;color:var(--wl-muted);font-size:13px;line-height:1.4;}',
-      '#wl-payment-amount-choices{max-width:980px;margin:0 auto 10px;padding:14px;border:1px solid #eadadd;border-radius:12px;background:#fffafa;}',
+      '#wl-payment-amount-choices{width:100%;margin:0 0 10px;padding:13px 14px;border:1px solid #eadadd;border-radius:10px;background:#fffafa;}',
       '#wl-payment-amount-choices .wl-choice-title{margin:0 0 9px;font-size:15px;font-weight:800;color:var(--wl-ink);}',
       '#wl-payment-amount-choices .wl-choice-row{display:flex;flex-wrap:wrap;gap:9px;}',
       '.wl-flow-button{min-height:44px;padding:9px 14px;border:1px solid #aeb5bf;border-radius:9px;background:#fff;color:var(--wl-ink);font-size:14px;font-weight:800;cursor:pointer;}',
@@ -123,11 +136,14 @@
       '.wl-flow-button.primary{border-color:var(--wl-wine);background:var(--wl-wine);color:#fff;}',
       '.wl-flow-button.primary:hover{background:var(--wl-wine-dark);color:#fff;}',
       '#wl-payment-invoice-note{margin:0 0 14px;padding:12px 14px;border-left:4px solid var(--wl-wine);border-radius:8px;background:#fff8f9;color:var(--wl-ink);font-size:14px;line-height:1.45;}',
-      'body.wl-payment-flow-ready #'+IDS.transactions+'{max-width:980px;margin:12px auto!important;padding:16px!important;border:1px solid var(--wl-line);border-radius:12px;background:#fff;overflow-x:auto;}',
+      'body.wl-payment-flow-ready #'+IDS.transactions+'{width:100%;max-width:none;margin:12px 0 20px!important;padding:14px!important;border:1px solid var(--wl-line);border-radius:10px;background:#fff;overflow-x:auto;}',
       'body.wl-payment-flow-ready #'+IDS.transactions+' table{width:100%!important;}',
       'body.wl-payment-flow-ready #'+IDS.transactions+' td,body.wl-payment-flow-ready #'+IDS.transactions+' th{padding:9px 8px!important;}',
       'body.wl-payment-flow-ready #'+IDS.transactions+' input[type="checkbox"]{width:20px;height:20px;accent-color:var(--wl-wine);}',
-      'body.wl-payment-flow-ready .wl-payment-method{max-width:980px;margin:8px auto!important;padding:12px 14px!important;border:1px solid var(--wl-line)!important;border-radius:10px!important;background:#fff!important;}',
+      'body.wl-payment-flow-ready .wl-payment-method-section{display:block!important;width:100%!important;margin:0!important;}',
+      'body.wl-payment-flow-ready .wl-payment-method-section>.container{display:block!important;width:100%!important;max-width:none!important;padding:0!important;}',
+      'body.wl-payment-flow-ready .wl-payment-method-section>.container>div{width:100%!important;}',
+      'body.wl-payment-flow-ready .wl-payment-method{width:100%;max-width:none;margin:8px 0!important;padding:12px 14px!important;border:1px solid var(--wl-line)!important;border-radius:10px!important;background:#fff!important;}',
       'body.wl-payment-flow-ready .wl-payment-method:focus-within{border-color:var(--wl-wine)!important;box-shadow:0 0 0 3px rgba(114,0,24,.12);}',
       'body.wl-payment-flow-ready .wl-payment-method input[type="radio"]{width:20px;height:20px;margin-right:10px;accent-color:var(--wl-wine);}',
       '.wl-method-help{margin:7px 0 0 30px;color:var(--wl-muted);font-size:13px;line-height:1.4;}',
@@ -137,12 +153,14 @@
       '#wl-payment-review dt{color:var(--wl-muted);font-weight:700;}',
       '#wl-payment-review dd{margin:0;font-weight:800;overflow-wrap:anywhere;}',
       '#wl-payment-review .wl-review-help{margin:12px 0 0;color:var(--wl-muted);font-size:13px;line-height:1.4;}',
-      'body.wl-payment-flow-ready #'+IDS.submitPanel+'{max-width:980px;margin:22px auto!important;padding:16px!important;border:1px solid var(--wl-line);border-radius:12px;background:#fff;}',
+      'body.wl-payment-flow-ready #'+IDS.submitPanel+'{width:100%;max-width:none;margin:12px 0 22px!important;padding:16px!important;border:1px solid var(--wl-line);border-radius:10px;background:#fff;}',
+      'body.wl-payment-flow-ready #'+IDS.submitPanel+' .epi-form-group-acctPayment{display:block!important;width:100%!important;}',
+      'body.wl-payment-flow-ready #'+IDS.submitPanel+' .submit-button-panel{display:flex!important;justify-content:flex-start!important;width:100%!important;}',
       'body.wl-payment-flow-ready #'+IDS.submit+',body.wl-payment-flow-ready #'+IDS.submit+':visited{display:inline-flex!important;align-items:center;justify-content:center;min-height:48px;padding:11px 20px!important;border:1px solid var(--wl-wine)!important;border-radius:9px!important;background:var(--wl-wine)!important;color:#fff!important;font-size:16px!important;font-weight:800!important;text-decoration:none!important;}',
       'body.wl-payment-flow-ready #'+IDS.submit+':hover{background:var(--wl-wine-dark)!important;}',
       'body.wl-payment-flow-ready #'+IDS.submit+':focus-visible{outline:3px solid rgba(114,0,24,.22)!important;outline-offset:3px;}',
       '#wl-payment-native-note{margin:10px 0 0;color:var(--wl-muted);font-size:12px;line-height:1.4;}',
-      '@media (max-width:760px){#wl-payment-guide .wl-guide-card{padding:16px;}#wl-payment-guide .wl-guide-steps{grid-template-columns:1fr 1fr;}body.wl-payment-flow-ready .wl-payment-card,body.wl-payment-flow-ready #'+IDS.transactions+',body.wl-payment-flow-ready #'+IDS.submitPanel+'{padding:13px!important;}#wl-payment-review dl{grid-template-columns:1fr;gap:2px;}#wl-payment-review dd{margin-bottom:8px;}}',
+      '@media (max-width:760px){#wl-payment-guide .wl-guide-card{padding:15px;}#wl-payment-guide .wl-guide-steps{grid-template-columns:1fr 1fr;}body.wl-payment-flow-ready .wl-payment-card{grid-template-columns:1fr!important;gap:5px!important;}body.wl-payment-flow-ready .wl-payment-card>div:first-child,body.wl-payment-flow-ready .wl-payment-card>div:nth-child(2),body.wl-payment-flow-ready .wl-payment-card>.wl-field-help{grid-column:1;}body.wl-payment-flow-ready .wl-payment-card,body.wl-payment-flow-ready #'+IDS.transactions+',body.wl-payment-flow-ready #'+IDS.submitPanel+'{padding:13px!important;}#wl-payment-review dl{grid-template-columns:1fr;gap:2px;}#wl-payment-review dd{margin-bottom:8px;}}',
       '@media (max-width:420px){#wl-payment-guide .wl-guide-steps{grid-template-columns:1fr;}.wl-flow-button{width:100%;}body.wl-payment-flow-ready #'+IDS.submit+'{width:100%;}}'
     ].join('\n');
     document.head.appendChild(style);
@@ -189,17 +207,16 @@
     }
 
     var title = cashAccount ? 'Add money to your cash account' : 'Pay your Woodson account';
-    var copy = cashAccount
-      ? 'Enter the amount you want to add, confirm your billing details, and choose a payment method. Everything stays on one page.'
-      : 'Choose what you want to pay, confirm your billing details, and select a payment method. Everything stays on one page.';
+    var copy = 'Complete these 3 steps.';
 
     guide.innerHTML = [
       '<div class="wl-guide-card">',
+      '  <a class="wl-back-link" href="AccountInfo_R.aspx">&larr; Back to Account Overview</a>',
       '  <p class="wl-guide-kicker">Secure account payment</p>',
       '  <h1 id="wl-payment-guide-title">'+title+'</h1>',
       '  <p class="wl-guide-copy">'+copy+'</p>',
       '  <ol class="wl-guide-steps">',
-      '    <li><a href="#'+IDS.billing+'"><span class="wl-step-number">1</span><span>Payment details</span></a></li>',
+      '    <li><a href="#'+IDS.amount+'"><span class="wl-step-number">1</span><span>Choose amount</span></a></li>',
       '    <li><a href="#'+IDS.payByBank+'"><span class="wl-step-number">2</span><span>Payment method</span></a></li>',
       '    <li><a href="#'+IDS.submit+'"><span class="wl-step-number">3</span><span>Review & continue</span></a></li>',
       '  </ol>',
@@ -216,7 +233,9 @@
       heading.className = 'wl-payment-section-heading';
       insertBefore(reference, heading);
     }
-    heading.innerHTML = '<p class="wl-section-kicker">'+step+'</p><h2>'+title+'</h2><p>'+description+'</p>';
+    heading.innerHTML = (step ? '<p class="wl-section-kicker">'+step+'</p>' : '')+
+      '<h2>'+title+'</h2>'+
+      (description ? '<p>'+description+'</p>' : '');
     return heading;
   }
 
@@ -271,7 +290,7 @@
     }
 
     if (cashAccount) {
-      choices.innerHTML = '<p class="wl-choice-title">Start with the amount you want to add.</p><div class="wl-choice-row"><button type="button" class="wl-flow-button primary" data-wl-action="focus-amount">Enter an amount</button></div>';
+      choices.innerHTML = '<p class="wl-choice-title">How much would you like to add?</p><div class="wl-choice-row"><button type="button" class="wl-flow-button primary" data-wl-action="focus-amount">Enter an amount</button></div>';
       return;
     }
 
@@ -281,16 +300,24 @@
       '<p class="wl-choice-title">What would you like to pay?</p>',
       '<div class="wl-choice-row">',
       due > 0 ? '<button type="button" class="wl-flow-button primary" data-wl-action="pay-balance">Pay full balance '+formatMoney(due)+'</button>' : '',
-      byId(IDS.transactions) ? '<button type="button" class="wl-flow-button" data-wl-action="choose-invoices">Choose specific invoices</button>' : '',
-      '<button type="button" class="wl-flow-button" data-wl-action="focus-amount">Enter another amount</button>',
+      byId(IDS.transactions) ? '<button type="button" class="wl-flow-button" data-wl-action="choose-invoices">Pay selected invoices</button>' : '',
+      byId(IDS.transactions) ? '<button type="button" class="wl-flow-button" data-wl-action="choose-job">Find invoices by job</button>' : '',
+      '<button type="button" class="wl-flow-button" data-wl-action="focus-amount">Other amount</button>',
       '</div>'
     ].join('');
   }
 
-  function ensureInvoiceGuidance(cashAccount) {
+  function ensureInvoiceGuidance(cashAccount, insertBeforeReference) {
     var panel = byId(IDS.transactions);
     if (!panel || cashAccount) return;
     panel.classList.add('wl-payment-invoice-panel');
+
+    if (insertBeforeReference && insertBeforeReference.parentNode) {
+      insertBeforeReference.parentNode.insertBefore(panel, insertBeforeReference);
+    }
+
+    var hasCheckedInvoices = !!panel.querySelector('input[type="checkbox"]:checked');
+    if (!panel.hasAttribute('data-wl-payment-invoice-open') && !hasCheckedInvoices) panel.hidden = true;
 
     var note = byId('wl-payment-invoice-note');
     if (!note) {
@@ -298,15 +325,7 @@
       note.id = 'wl-payment-invoice-note';
       panel.insertBefore(note, panel.firstChild);
     }
-    note.innerHTML = '<strong>Paying selected invoices?</strong> Check the invoices below. WebTrack will keep the invoice selections attached to this payment.';
-  }
-
-  function methodHelpText(id) {
-    if (id === IDS.payByBank) return 'Use a new bank account through the secure payment window.';
-    if (id === IDS.payBySavedBank) return 'Use a bank account already saved to your Woodson account.';
-    if (id === IDS.payByCard) return 'Use a new debit or credit card when card payments are available.';
-    if (id === IDS.payBySavedCard) return 'Use a card already saved to your Woodson account.';
-    return '';
+    note.innerHTML = '<strong>Select invoices to pay.</strong> Use Search by to find a job or document.';
   }
 
   function enhanceMethods() {
@@ -319,16 +338,6 @@
       if (!firstGroup) firstGroup = group;
       group.classList.add('wl-payment-method');
 
-      var helpId = 'wl-method-help-'+id;
-      var help = byId(helpId);
-      if (!help) {
-        help = document.createElement('p');
-        help.id = helpId;
-        help.className = 'wl-method-help';
-        group.appendChild(help);
-      }
-      help.textContent = methodHelpText(id);
-      appendDescribedBy(radio, helpId);
     });
     return firstGroup;
   }
@@ -386,7 +395,7 @@
       '<dt>Payment method</dt><dd>'+selectedMethodText()+'</dd>',
       '<dt>Billing</dt><dd>'+billingStatus()+'</dd>',
       '</dl>',
-      '<p class="wl-review-help">The next step opens Woodson\'s secure payment window. Your payment is not submitted until you confirm it there.</p>'
+      '<p class="wl-review-help">You will confirm on the secure payment screen.</p>'
     ].join('');
 
     var nativeSubmit = byId(IDS.submit);
@@ -401,7 +410,7 @@
       note.id = 'wl-payment-native-note';
       panel.appendChild(note);
     }
-    note.textContent = 'Secure processing is handled by Woodson WebTrack. No payment is made by this page enhancement.';
+    note.textContent = 'You will confirm before payment is submitted.';
   }
 
   function wirePageEvents() {
@@ -430,9 +439,22 @@
       if (action === 'choose-invoices') {
         var panel = byId(IDS.transactions);
         if (panel) {
+          panel.hidden = false;
+          panel.setAttribute('data-wl-payment-invoice-open', 'true');
           panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
           var firstCheckbox = panel.querySelector('input[type="checkbox"]');
           if (firstCheckbox) firstCheckbox.focus({ preventScroll: true });
+        }
+      }
+
+      if (action === 'choose-job') {
+        var invoicePanel = byId(IDS.transactions);
+        if (invoicePanel) {
+          invoicePanel.hidden = false;
+          invoicePanel.setAttribute('data-wl-payment-invoice-open', 'true');
+          invoicePanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          var searchType = byId('ctl00_PageBody_SearchType');
+          if (searchType) searchType.focus({ preventScroll: true });
         }
       }
     });
@@ -475,33 +497,40 @@
     ensureStyles();
     ensureGuide(cashAccount);
 
+    var address = enhanceField(
+      IDS.address,
+      'wl-payment-address-field',
+      '',
+      '',
+      {}
+    );
     var billing = enhanceField(
       IDS.billing,
       'wl-payment-billing-field',
-      'wl-billing-help',
-      'Enter the billing street address associated with the bank account or card.',
+      '',
+      '',
       { autocomplete: 'street-address' }
     );
     enhanceField(
       byId(IDS.postal) ? IDS.postal : IDS.postalAlt,
       'wl-payment-postal-field',
-      'wl-postal-help',
-      'Use the billing ZIP code for the payment method.',
+      '',
+      '',
       { autocomplete: 'postal-code', inputmode: 'numeric' }
     );
     enhanceField(
       IDS.email,
       'wl-payment-email-field',
-      'wl-email-help',
-      'We will send the payment receipt to this address.',
+      '',
+      '',
       { autocomplete: 'email', inputmode: 'email' }
     );
 
     var amount = enhanceField(
       IDS.amount,
       'wl-payment-amount-field',
-      'wl-amount-help',
-      cashAccount ? 'Enter the dollar amount to add to this cash account.' : 'Enter an amount, pay the full balance, or select invoices below.',
+      '',
+      '',
       { inputmode: 'decimal', autocomplete: 'off' }
     );
     var amountDue = enhanceField(
@@ -515,44 +544,46 @@
     enhanceField(
       IDS.notes,
       'wl-payment-notes-field',
-      'wl-notes-help',
-      'Optional: add a short note for your records.',
+      '',
+      '',
       {}
     );
     if (!cashAccount) {
       enhanceField(
         IDS.remittance,
         'wl-payment-remittance-field',
-        'wl-remittance-help',
-        'Optional: enter invoice numbers separated by commas if you are not using the invoice checkboxes.',
+        '',
+        '',
         {}
       );
     }
 
     ensureSectionHeading(
-      billing && billing.group,
+      (address && address.group) || (billing && billing.group),
       'wl-payment-billing-heading',
-      'Step 1',
-      'Confirm billing details',
-      'These details are used to verify the payment method and deliver the receipt.'
+      '',
+      'Billing and receipt',
+      ''
     );
     ensureSectionHeading(
       (amountDue && amountDue.group) || (amount && amount.group),
       'wl-payment-amount-heading',
-      'Payment details',
+      'Step 1',
       cashAccount ? 'Enter the amount to add' : 'Choose what to pay',
-      cashAccount ? 'This amount will be added to the cash account balance.' : 'Pay the account balance, selected invoices, or another amount.'
+      ''
     );
     ensureAmountChoices(cashAccount, amount && amount.group);
-    ensureInvoiceGuidance(cashAccount);
+    ensureInvoiceGuidance(cashAccount, byId('wl-payment-billing-heading'));
 
     var firstMethodGroup = enhanceMethods();
+    var methodSection = firstMethodGroup && firstMethodGroup.closest('.epi-form-group-acctPayment');
+    if (methodSection) methodSection.classList.add('wl-payment-method-section');
     ensureSectionHeading(
-      firstMethodGroup,
+      methodSection || firstMethodGroup,
       'wl-payment-method-heading',
       'Step 2',
       'Choose a payment method',
-      'Select a new or saved payment method. WebTrack will load the secure fields it needs.'
+      ''
     );
 
     ensureSectionHeading(
@@ -560,7 +591,7 @@
       'wl-payment-review-heading',
       'Step 3',
       'Review and continue',
-      'Check the summary, then continue to Woodson\'s secure payment window.'
+      ''
     );
     ensureReview(cashAccount);
     wirePageEvents();

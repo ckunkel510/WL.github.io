@@ -17,7 +17,7 @@ test('preview router requires an approved account ID and the preview URL', () =>
   assert.match(routerAndLegacySource, /requestedMode !== 'preview'/);
   assert.match(routerAndLegacySource, /expectedAccountIds\.indexOf\(accountId\) !== -1/);
   assert.match(routerAndLegacySource, /expiresAt > Date\.now\(\)/);
-  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260909-1/);
+  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260909-2/);
 });
 
 test('legacy payment enhancements remain the default and stop only for an approved preview', () => {
@@ -88,14 +88,16 @@ test('preview enhances native fields in place for cash and charge accounts', () 
   assert.match(previewSource, /Load Cash Account Balance/);
   assert.match(previewSource, /Add money to your cash account/);
   assert.match(previewSource, /Pay your Woodson account/);
+  assert.match(previewSource, /Back to Account Overview/);
+  assert.match(previewSource, /col-auto\.navigation-menu\{display:none!important/);
   assert.match(previewSource, /repeat\(3,minmax\(0,1fr\)\)/);
   assert.doesNotMatch(previewSource, /wl-hidden-native/);
-  assert.doesNotMatch(previewSource, /display\s*:\s*none/);
 });
 
 test('preview convenience actions update native fields without submitting', () => {
   assert.match(previewSource, /data-wl-action="pay-balance"/);
   assert.match(previewSource, /data-wl-action="choose-invoices"/);
+  assert.match(previewSource, /data-wl-action="choose-job"/);
   assert.match(previewSource, /input\.dispatchEvent\(new Event\('input'/);
   assert.match(previewSource, /input\.dispatchEvent\(new Event\('change'/);
 });
