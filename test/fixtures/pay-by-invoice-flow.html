@@ -105,6 +105,18 @@
       ].join(''));
     }
 
+    if (fixtureParams.get('stage') === 'forte') {
+      document.getElementById('ctl00_PageBody_BillingAddressContainer').remove();
+      document.getElementById('ctl00_PageBody_MakePaymentPanel').outerHTML = [
+        '<div id="ctl00_PageBody_ForteControls">',
+        '  <div class="epi-form-group-acctPayment">',
+        '    <div><input id="ctl00_PageBody_ForteMakePayment" class="btn btn-primary text-white w-100" type="submit" value="Make Payment"></div>',
+        '  </div>',
+        '</div>'
+      ].join('');
+      document.getElementById('ctl00_PageBody_SearchType').value = 'JobReference';
+    }
+
     if (fixtureParams.get('wl_payment_flow') === 'preview') {
       const previewIdentity = fixtureIsCash
         ? { loginName: 'ckunkel2', accountId: 'EMP2111' }
@@ -113,6 +125,6 @@
       document.documentElement.setAttribute('data-wl-payment-preview-account', previewIdentity.accountId);
     }
   </script>
-  <script src="../../PayByInvoice.js?v=local-router-3"></script>
+  <script src="../../PayByInvoice.js?v=local-router-4"></script>
 </body>
 </html>

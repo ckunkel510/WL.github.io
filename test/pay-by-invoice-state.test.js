@@ -17,7 +17,8 @@ test('preview router requires an approved account ID and the preview URL', () =>
   assert.match(routerAndLegacySource, /requestedMode !== 'preview'/);
   assert.match(routerAndLegacySource, /expectedAccountIds\.indexOf\(accountId\) !== -1/);
   assert.match(routerAndLegacySource, /expiresAt > Date\.now\(\)/);
-  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260909-3/);
+  assert.match(routerAndLegacySource, /__WL_PAYMENT_PREVIEW_ACCOUNT_ID__ = accountId/);
+  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260909-4/);
 });
 
 test('legacy payment enhancements remain the default and stop only for an approved preview', () => {
@@ -55,6 +56,8 @@ test('preview is progressive enhancement with an explicit native escape hatch', 
 
 test('preview leaves the native WebTrack control as the only payment trigger', () => {
   assert.match(previewSource, /ctl00_PageBody_MakePayment/);
+  assert.match(previewSource, /ctl00_PageBody_ForteMakePayment/);
+  assert.match(previewSource, /ctl00_PageBody_ForteControls/);
   assert.match(previewSource, /data-wl-native-payment-control/);
 
   assert.doesNotMatch(previewSource, /wlProxySubmit/);
@@ -65,12 +68,14 @@ test('preview leaves the native WebTrack control as the only payment trigger', (
   assert.doesNotMatch(previewSource, /preventDefault\s*\(/);
 });
 
-test('preview does not force reloads, redirects, or parallel payment state', () => {
+test('preview does not force reloads, redirects, or broad parallel payment state', () => {
   assert.doesNotMatch(previewSource, /location\.reload/);
   assert.doesNotMatch(previewSource, /location\.href\s*=/);
   assert.doesNotMatch(previewSource, /window\.location\s*=/);
-  assert.doesNotMatch(previewSource, /sessionStorage/);
   assert.doesNotMatch(previewSource, /localStorage/);
+  assert.match(previewSource, /wl_payment_billing_draft_v1/);
+  assert.match(previewSource, /30 \* 60 \* 1000/);
+  assert.doesNotMatch(previewSource, /wl_ap_prefill|wlPayState|PendingRemit/);
 });
 
 test('preview enhances native fields in place for cash and charge accounts', () => {
@@ -117,10 +122,16 @@ test('invoice and job choices open the native transaction selector in a modal', 
   assert.match(previewSource, /openInvoiceDialog\('invoices'/);
   assert.match(previewSource, /openInvoiceDialog\('job'/);
   assert.match(previewSource, /searchType\.value = 'JobReference'/);
+  assert.match(previewSource, /form\.setAttribute\('action'/);
+  assert.match(previewSource, /searchType\.value === 'JobReference'/);
 });
 
 test('billing entry is stabilized without changing the native final payment handler', () => {
   assert.match(previewSource, /data-wl-native-onchange/);
   assert.match(previewSource, /control\.removeAttribute\('onchange'\)/);
   assert.match(previewSource, /\[billing, postal, email, amount\]/);
+  assert.match(previewSource, /wl-payment-validation-requested/);
+  assert.match(previewSource, /wl-payment-notes-field textarea\{height:78px!important/);
+  assert.match(previewSource, /data-wl-restored-billing/);
+  assert.match(previewSource, /ctl00\$PageBody\$BillingAddressTextBox/);
 });

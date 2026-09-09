@@ -32,12 +32,13 @@
   if (!approved) return;
 
   window.__WL_PAYMENT_PREVIEW_ACTIVE__ = true;
+  window.__WL_PAYMENT_PREVIEW_ACCOUNT_ID__ = accountId;
 
   var loader = document.createElement('script');
   var currentSource = document.currentScript && document.currentScript.src;
   loader.src = currentSource
-    ? new URL('PayByInvoicePreview.js?v=20260909-3', currentSource).href
-    : 'https://ckunkel510.github.io/WL.github.io/PayByInvoicePreview.js?v=20260909-3';
+    ? new URL('PayByInvoicePreview.js?v=20260909-4', currentSource).href
+    : 'https://ckunkel510.github.io/WL.github.io/PayByInvoicePreview.js?v=20260909-4';
   loader.async = false;
   loader.setAttribute('data-wl-payment-preview-loader', 'true');
   (document.head || document.documentElement).appendChild(loader);
