@@ -21,7 +21,7 @@
   if (requestedMode === 'native') return;
   if (ROLLOUT_MODE === 'preview' && requestedMode !== 'preview') return;
 
-  var VERSION = 'v2-preview-7';
+  var VERSION = 'v2-preview-8';
   var IDS = {
     address: 'ctl00_PageBody_AddressDropdownList',
     billing: 'ctl00_PageBody_BillingAddressTextBox',
@@ -44,6 +44,7 @@
   };
 
   var BILLING_DRAFT_KEY = 'wl_payment_billing_draft_v1_'+String(window.__WL_PAYMENT_PREVIEW_ACCOUNT_ID__ || 'preview').replace(/[^A-Z0-9_-]/gi, '');
+  var REMITTANCE_DRAFT_KEY = 'wl_payment_remittance_draft_v1_'+String(window.__WL_PAYMENT_PREVIEW_ACCOUNT_ID__ || 'preview').replace(/[^A-Z0-9_-]/gi, '');
 
   var METHOD_IDS = [
     IDS.payByBank,
@@ -113,6 +114,27 @@
         return;
       }
       sessionStorage.setItem(BILLING_DRAFT_KEY, JSON.stringify({ value: clean, savedAt: Date.now() }));
+    } catch (error) {}
+  }
+
+  function writeRemittanceDraft(value) {
+    try {
+      var clean = String(value || '');
+      if (!clean) {
+        sessionStorage.removeItem(REMITTANCE_DRAFT_KEY);
+        return;
+      }
+      sessionStorage.setItem(REMITTANCE_DRAFT_KEY, JSON.stringify({ value: clean, savedAt: Date.now() }));
+    } catch (error) {}
+  }
+
+  function restoreRemittanceDraft() {
+    try {
+      var draft = JSON.parse(sessionStorage.getItem(REMITTANCE_DRAFT_KEY) || 'null');
+      sessionStorage.removeItem(REMITTANCE_DRAFT_KEY);
+      if (!draft || !draft.savedAt || Date.now() - Number(draft.savedAt) > 2 * 60 * 1000) return;
+      var remittance = byId(IDS.remittance);
+      if (remittance && !cleanText(remittance.value)) setRemittance(String(draft.value || ''));
     } catch (error) {}
   }
 
@@ -397,6 +419,7 @@
 
     input.value = Number(value).toFixed(2);
     input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
   function ensureBalanceSummary(cashAccount, amountHeading) {
@@ -743,6 +766,7 @@
   function applyPaymentSelection(amount, remittance) {
     var billing = byId(IDS.billing);
     if (billing) writeBillingDraft(billing.value);
+    writeRemittanceDraft(remittance);
     setRemittance(remittance);
     closePickerDialog();
     setAmount(amount);
@@ -1135,18 +1159,16 @@
       if (action === 'pay-balance') {
         var dueField = byId(IDS.amountDue);
         var due = parseMoney(dueField && (dueField.value || dueField.textContent));
-        setRemittance('');
         invoicePickerState.selected.clear();
         jobPickerState.selected.clear();
-        setAmount(due);
+        applyPaymentSelection(due, '');
       }
 
       if (action === 'pay-statement') {
         var statement = statementAmount();
-        setRemittance('STATEMENT - $'+Number(statement || 0).toFixed(2));
         invoicePickerState.selected.clear();
         jobPickerState.selected.clear();
-        setAmount(statement);
+        applyPaymentSelection(statement, 'STATEMENT - $'+Number(statement || 0).toFixed(2));
       }
 
       if (action === 'choose-invoices') {
@@ -1263,6 +1285,7 @@
     ensureStyles();
     ensureGuide(cashAccount);
     ensureBillingControl();
+    restoreRemittanceDraft();
 
     var address = enhanceField(
       IDS.address,

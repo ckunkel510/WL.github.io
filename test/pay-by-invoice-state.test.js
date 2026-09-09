@@ -18,7 +18,7 @@ test('preview router requires an approved account ID and the preview URL', () =>
   assert.match(routerAndLegacySource, /expectedAccountIds\.indexOf\(accountId\) !== -1/);
   assert.match(routerAndLegacySource, /expiresAt > Date\.now\(\)/);
   assert.match(routerAndLegacySource, /__WL_PAYMENT_PREVIEW_ACCOUNT_ID__ = accountId/);
-  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260909-7/);
+  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260909-8/);
 });
 
 test('legacy payment enhancements remain the default and stop only for an approved preview', () => {
@@ -74,7 +74,9 @@ test('preview does not force reloads, redirects, or broad parallel payment state
   assert.doesNotMatch(previewSource, /window\.location\s*=/);
   assert.doesNotMatch(previewSource, /localStorage/);
   assert.match(previewSource, /wl_payment_billing_draft_v1/);
+  assert.match(previewSource, /wl_payment_remittance_draft_v1/);
   assert.match(previewSource, /30 \* 60 \* 1000/);
+  assert.match(previewSource, /2 \* 60 \* 1000/);
   assert.doesNotMatch(previewSource, /wl_ap_prefill|wlPayState|PendingRemit/);
 });
 
@@ -115,7 +117,7 @@ test('preview convenience actions update native fields without submitting', () =
   assert.match(previewSource, /data-wl-action="choose-invoices"/);
   assert.match(previewSource, /data-wl-action="choose-job"/);
   assert.match(previewSource, /input\.dispatchEvent\(new Event\('input'/);
-  assert.doesNotMatch(previewSource, /input\.dispatchEvent\(new Event\('change'/);
+  assert.match(previewSource, /input\.dispatchEvent\(new Event\('change'/);
   assert.match(previewSource, /Pay last statement/);
 });
 
@@ -158,7 +160,7 @@ test('billing entry is stabilized without changing the native final payment hand
   assert.match(previewSource, /control\.removeAttribute\('onchange'\)/);
   assert.match(previewSource, /\[billing, postal, email\]/);
   assert.doesNotMatch(previewSource, /\[billing, postal, email, amount\]/);
-  assert.doesNotMatch(previewSource, /input\.dispatchEvent\(new Event\('change'/);
+  assert.match(previewSource, /input\.dispatchEvent\(new Event\('change'/);
   assert.match(previewSource, /wl-payment-validation-requested/);
   assert.match(previewSource, /wl-payment-notes-field textarea\{height:78px!important/);
   assert.match(previewSource, /data-wl-restored-billing/);
