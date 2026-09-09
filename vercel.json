@@ -22,6 +22,9 @@
     "api/ai-product-search.js": {
       "maxDuration": 10
     },
+    "api/smart-search-suggestions.js": {
+      "maxDuration": 15
+    },
     "api/product-recommendations.js": {
       "maxDuration": 10
     },

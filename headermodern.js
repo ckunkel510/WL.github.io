@@ -11,7 +11,8 @@
   var STATE_BRIDGE_MODE = /(?:^|[?&])wlHeaderBridge=1(?:&|$)/i.test(window.location.search || "") && window.parent !== window;
   // Keep the hosted filename neutral. Common privacy filters block filenames
   // associated with analytics, tracking, events, or commerce before execution.
-  var ANALYTICS_URL = "https://ckunkel510.github.io/WL.github.io/wl-site.js?v=20260909-4";
+  var ANALYTICS_URL = "https://ckunkel510.github.io/WL.github.io/wl-site.js?v=20260909-5";
+  var SMART_SEARCH_URL = "https://ckunkel510.github.io/WL.github.io/smart-search.js?v=20260909-1";
   var ADDRESS_MANAGER_URL = "https://ckunkel510.github.io/WL.github.io/AddressManagement.js?v=20260707-2";
   var CONTACT_MANAGER_URL = "https://ckunkel510.github.io/WL.github.io/ContactManagement.js?v=20260707-3";
   var TURTLEBOX_PROMO_URL = "https://ckunkel510.github.io/WL.github.io/TurtleboxPromo.js?v=20260707-1";
@@ -119,6 +120,18 @@
     script.src = ANALYTICS_URL;
     script.async = true;
     script.setAttribute("data-wl-analytics", "true");
+    document.head.appendChild(script);
+  }
+
+  function loadSmartSearch() {
+    if (!/\/Products\.aspx$/i.test(window.location.pathname || "")) return;
+    if (!(new URLSearchParams(window.location.search || "").get("searchText") || "").trim()) return;
+    if (window.WLSmartSearch || document.querySelector("script[data-wl-smart-search]")) return;
+
+    var script = document.createElement("script");
+    script.src = SMART_SEARCH_URL;
+    script.async = true;
+    script.setAttribute("data-wl-smart-search", "true");
     document.head.appendChild(script);
   }
 
@@ -3210,6 +3223,7 @@
   }
 
   loadAnalytics();
+  loadSmartSearch();
   loadAddressManager();
   loadContactManager();
   loadTurtleboxPromo();

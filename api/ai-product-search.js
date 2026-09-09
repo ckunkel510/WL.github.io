@@ -99,6 +99,17 @@ function dimensionalSignature(value) {
 function editDistanceAtMostOne(left, right) {
   if (left === right) return true;
   if (Math.abs(left.length - right.length) > 1 || Math.max(left.length, right.length) < 5) return false;
+  if (left.length === right.length) {
+    const mismatches = [];
+    for (let index = 0; index < left.length; index += 1) {
+      if (left[index] !== right[index]) mismatches.push(index);
+      if (mismatches.length > 2) return false;
+    }
+    if (mismatches.length <= 1) return true;
+    return mismatches[1] === mismatches[0] + 1 &&
+      left[mismatches[0]] === right[mismatches[1]] &&
+      left[mismatches[1]] === right[mismatches[0]];
+  }
   let i = 0;
   let j = 0;
   let edits = 0;
@@ -547,6 +558,7 @@ module.exports = handler;
 module.exports._test = {
   SENSITIVE_REQUEST,
   dimensionalSignature,
+  editDistanceAtMostOne,
   findEmbeddedProductIdentifier,
   formatGroupResponse,
   formatProductActionResponse,

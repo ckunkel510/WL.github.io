@@ -3,7 +3,7 @@
 
   if (window.WLAnalytics) return;
 
-  var VERSION = "1.5.0";
+  var VERSION = "1.6.0";
   var EVENT_NAME = "wl_analytics_event";
   var GA_MEASUREMENT_ID = "G-4ZLV1YB6GY";
   var META_PIXEL_ID = "188974749776655";
@@ -13,6 +13,7 @@
   var PENDING_ADD_STORAGE_KEY = "wl_analytics_pending_add_v1";
   var EXPERIMENT_STORAGE_KEY = "wl_analytics_experiment_v1";
   var RECOMMENDATION_STORAGE_KEY = "wl_pdp_recommendation_attribution_v1";
+  var DISCOVERY_STORAGE_KEY = "wl_product_discovery_attribution_v1";
   var CART_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
   var RECOMMENDATION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
   var sent = Object.create(null);
@@ -22,6 +23,8 @@
 
   var ALLOWED_EVENTS = {
     search: true,
+    search_results_enhanced: true,
+    search_refine_click: true,
     view_item_list: true,
     select_item: true,
     view_item: true,
@@ -291,22 +294,30 @@
   }
 
   function recommendationContext(name, parameters) {
-    var stored;
-    try {
-      stored = JSON.parse(safeStorage(window.sessionStorage, "get", RECOMMENDATION_STORAGE_KEY) || "null");
-    } catch (error) {
-      safeStorage(window.sessionStorage, "remove", RECOMMENDATION_STORAGE_KEY);
-      return parameters || {};
-    }
-    if (
-      !stored ||
-      !/^\d{1,20}$/.test(String(stored.productId || "")) ||
-      !Number.isFinite(Number(stored.selectedAt)) ||
-      Date.now() - Number(stored.selectedAt) > RECOMMENDATION_MAX_AGE_MS
-    ) {
-      if (stored) safeStorage(window.sessionStorage, "remove", RECOMMENDATION_STORAGE_KEY);
-      return parameters || {};
-    }
+    var candidates = [RECOMMENDATION_STORAGE_KEY, DISCOVERY_STORAGE_KEY].map(function (storageKey) {
+      var stored;
+      try {
+        stored = JSON.parse(safeStorage(window.sessionStorage, "get", storageKey) || "null");
+      } catch (error) {
+        safeStorage(window.sessionStorage, "remove", storageKey);
+        return null;
+      }
+      if (
+        !stored ||
+        !/^\d{1,20}$/.test(String(stored.productId || "")) ||
+        !Number.isFinite(Number(stored.selectedAt)) ||
+        Date.now() - Number(stored.selectedAt) > RECOMMENDATION_MAX_AGE_MS
+      ) {
+        if (stored) safeStorage(window.sessionStorage, "remove", storageKey);
+        return null;
+      }
+      stored.storageKey = storageKey;
+      return stored;
+    }).filter(function (candidate) { return !!candidate; });
+    var stored = candidates.sort(function (left, right) {
+      return Number(right.selectedAt) - Number(left.selectedAt);
+    })[0];
+    if (!stored) return parameters || {};
 
     var source = parameters || {};
     var ecommerceData = source.ecommerce;
@@ -330,7 +341,10 @@
       recommendation_source_product_id: cleanString(stored.sourceProductId) || undefined,
       ecommerce: Object.assign({}, ecommerceData, { items: attributedItems })
     });
-    if (name === "purchase") safeStorage(window.sessionStorage, "remove", RECOMMENDATION_STORAGE_KEY);
+    if (name === "purchase") {
+      safeStorage(window.sessionStorage, "remove", RECOMMENDATION_STORAGE_KEY);
+      safeStorage(window.sessionStorage, "remove", DISCOVERY_STORAGE_KEY);
+    }
     return enriched;
   }
 
@@ -766,6 +780,7 @@
 
     var productLink = target.closest("a[href*='ProductDetail.aspx']");
     if (productLink && pageType() === "product_list") {
+      if (productLink.closest("[data-wl-self-tracked-product-list='true']")) return;
       var selected = itemForAction(productLink);
       if (selected) {
         selected.item_list_name = listName();
