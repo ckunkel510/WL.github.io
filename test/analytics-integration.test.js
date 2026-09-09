@@ -8,13 +8,13 @@ const root = path.resolve(__dirname, '..');
 
 test('header loads the privacy-filter-safe site runtime', () => {
   const header = fs.readFileSync(path.join(root, 'headermodern.js'), 'utf8');
-  assert.match(header, /WL\.github\.io\/wl-site\.js\?v=20260721-3/);
+  assert.match(header, /WL\.github\.io\/wl-site\.js\?v=20260909-1/);
   assert.doesNotMatch(header, /ANALYTICS_URL\s*=\s*["'][^"']*(?:analytics|tracking|events|commerce)/i);
 });
 
 test('site runtime emits a confirmed GA4 purchase with transaction value', () => {
   const runtime = fs.readFileSync(path.join(root, 'wl-site.js'), 'utf8');
-  assert.match(runtime, /var VERSION = "1\.2\.2"/);
+  assert.match(runtime, /var VERSION = "1\.3\.0"/);
 
   const storage = () => {
     const values = new Map();
@@ -27,6 +27,11 @@ test('site runtime emits a confirmed GA4 purchase with transaction value', () =>
   const localStorage = storage();
   const sessionStorage = storage();
   sessionStorage.setItem('purchaseSubtotal', '123.45');
+  sessionStorage.setItem('wl_analytics_experiment_v1', JSON.stringify({
+    experiment_id: 'pdp_fulfillment_v1_20260909',
+    experiment_variant: 'enhanced_fulfillment',
+    fulfillment_method: 'delivery'
+  }));
 
   let onReady;
   const response = {
@@ -71,7 +76,10 @@ test('site runtime emits a confirmed GA4 purchase with transaction value', () =>
 
   const purchase = window.dataLayer.find((entry) => entry && entry.event === 'wl_analytics_event' && entry.event_name === 'purchase');
   assert.ok(purchase);
-  assert.equal(purchase.analytics_version, '1.2.2');
+  assert.equal(purchase.analytics_version, '1.3.0');
+  assert.equal(purchase.experiment_id, 'pdp_fulfillment_v1_20260909');
+  assert.equal(purchase.experiment_variant, 'enhanced_fulfillment');
+  assert.equal(purchase.fulfillment_method, 'delivery');
   assert.equal(purchase.ecommerce.transaction_id, 'WL-12345');
   assert.equal(purchase.ecommerce.currency, 'USD');
   assert.equal(purchase.ecommerce.value, 123.45);
