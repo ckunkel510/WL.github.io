@@ -144,6 +144,8 @@ test("curated category affinities avoid known overly broad parent matches", () =
   assert.equal(categoriesFor("power_tools").includes("extension cords"), false);
   assert.equal(categoriesFor("roofing").includes("underlayments"), false);
   assert.equal(categoriesFor("lumber").includes("power cutting accessories"), false);
+  assert.equal(recommendations.AFFINITY_RULES.find((rule) => rule.id === "lumber")
+    .groups.find((group) => group.id === "fastening").match, "leaf");
 });
 
 test("PDP client mounts a tracked, accessible rail after reviews", () => {

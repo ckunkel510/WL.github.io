@@ -18,8 +18,8 @@ const AFFINITY_RULES = [
     id: "watering",
     when: ["watering", "garden hose", "soaker hose", "hose nozzle", "sprinkler", "irrigation"],
     groups: [
-      { id: "hose_accessories", name: "Nozzles & hose connections", categories: ["hose nozzles", "hose repair parts", "hose carts reels hangers"] },
-      { id: "watering_control", name: "Sprinklers & watering control", categories: ["sprinklers", "watering timers", "drip irrigation", "underground irrigation", "watering cans", "sprinkling cans"] },
+      { id: "hose_accessories", name: "Nozzles & hose connections", match: "leaf", categories: ["hose nozzles", "hose repair parts", "hose carts reels hangers"] },
+      { id: "watering_control", name: "Sprinklers & watering control", match: "leaf", categories: ["sprinklers", "watering timers", "drip irrigation rainbird", "underground irrigation orbit", "underground irrigation rainbird", "watering cans", "sprinkling cans watering cans"] },
       { id: "plant_care", name: "Lawn & garden care", categories: ["lawn fertilizer", "specialty fertilizers", "potting soils", "garden soils", "soil conditioners"] }
     ]
   },
@@ -45,8 +45,8 @@ const AFFINITY_RULES = [
     id: "decking",
     when: ["deck board", "decking"],
     groups: [
-      { id: "hardware", name: "Deck fasteners & framing hardware", categories: ["deck fasteners", "structural screws", "joist hangers", "deck patio construction", "post anchors caps"] },
-      { id: "foundation", name: "Posts & structural support", categories: ["treated posts", "post anchors caps", "bagged products", "building forms", "rebar"] },
+      { id: "hardware", name: "Deck fasteners & framing hardware", match: "leaf", categories: ["deck fasteners", "deck screws", "structural screws", "joist hangers", "deck patio construction", "post anchors caps"] },
+      { id: "foundation", name: "Posts & structural support", match: "leaf", categories: ["treated posts", "post anchors caps", "bagged products", "building forms", "cut rebar rebar pins"] },
       { id: "finish", name: "Protect & finish the project", categories: ["deck coating", "exterior stains", "wood stains", "waterproofing", "sealants"] }
     ]
   },
@@ -54,8 +54,8 @@ const AFFINITY_RULES = [
     id: "fencing",
     when: ["wood fencing", "chain link fencing", "fence post", "fence panel", "field fence", "barbwire"],
     groups: [
-      { id: "hardware", name: "Fence & gate hardware", categories: ["gate shed hardware", "chain link parts", "fence brackets", "gate openers", "clips tools"] },
-      { id: "posts", name: "Fence posts & concrete", categories: ["fence posts", "treated posts", "steel t posts", "cedar posts", "bagged products"] },
+      { id: "hardware", name: "Fence & gate hardware", match: "leaf", categories: ["gate shed hardware", "chain link parts", "fence brackets", "gate openers", "clips tools"] },
+      { id: "posts", name: "Fence posts & concrete", match: "leaf", categories: ["fence posts", "treated posts", "steel t posts", "cedar posts", "bagged products"] },
       { id: "tools", name: "Fencing tools & accessories", categories: ["fencing materials", "wire products", "crimping sleeves splices", "electric fence products"] }
     ]
   },
@@ -63,8 +63,8 @@ const AFFINITY_RULES = [
     id: "lumber",
     when: ["lumber", "yellow pine", "plywood", "sheathing", "osb", "hardwood"],
     groups: [
-      { id: "fastening", name: "Fasteners & framing hardware", categories: ["framing fasteners", "structural screws", "joist hangers", "nails", "wood screws"] },
-      { id: "cutting", name: "Wood-cutting & measuring tools", categories: ["saw blades carbide combo rip", "saw blades plywood", "tape measures tape rules", "squares speed type", "measuring leveling", "hand saws"] },
+      { id: "fastening", name: "Fasteners & framing hardware", match: "leaf", categories: ["structural screws", "joist hangers", "wood screws", "common", "sinker", "box", "stick framing", "brads finish nails"] },
+      { id: "cutting", name: "Wood-cutting & measuring tools", match: "leaf", categories: ["saw blades carbide combo rip", "saw blades plywood", "tape measures tape rules", "squares speed type", "levels torpedo", "hand saws"] },
       { id: "bonding", name: "Adhesives, sealants & finishes", categories: ["construction adhesives", "caulk sealants", "exterior stains", "wood stains", "primers sealers"] }
     ]
   },
@@ -73,7 +73,7 @@ const AFFINITY_RULES = [
     when: ["power tools", "cordless drill", "electric drill", "impact driver", "circular saw", "reciprocating saw", "grinder"],
     groups: [
       { id: "accessories", name: "Bits, blades & accessories", categories: ["screwdriving bits", "power drilling", "saw blades", "power cutting accessories", "grinding cut off wheels", "power abrasive accessories"] },
-      { id: "power", name: "Batteries & jobsite power", categories: ["power tool batteries", "batteries accessories", "outdoor extension cords", "multi outlet extension cords", "cord storage adapters", "generators accessories"] },
+      { id: "power", name: "Batteries & jobsite power", match: "leaf", categories: ["power tool batteries", "batteries accessories", "outdoor extension cords", "multi outlet extension cords", "cord storage adapters", "generators accessories"] },
       { id: "safety", name: "Safety & tool organization", categories: ["safety organization", "tool holders", "garage organizers", "storage hooks"] }
     ]
   },
@@ -356,14 +356,18 @@ function affinityRule(current) {
   return AFFINITY_RULES.find((rule) => phraseIndex(searchable, rule.when) >= 0) || null;
 }
 
+function affinityCategoryIndex(category, group) {
+  return phraseIndex(group.match === "leaf" ? categoryLabel(category) : category, group.categories);
+}
+
 function recommendationsForAffinityGroup(index, current, group, excluded, limit) {
   const currentKey = categoryKey(current.category);
   const candidates = [];
   index.byCategory.forEach((products, key) => {
-    if (key !== currentKey && phraseIndex(key, group.categories) >= 0) candidates.push(...products);
+    if (key !== currentKey && affinityCategoryIndex(products[0]?.category || key, group) >= 0) candidates.push(...products);
   });
   const ranked = rankCandidates(current, candidates, false, excluded, (candidate) => {
-    const matchedAt = phraseIndex(candidate.category, group.categories);
+    const matchedAt = affinityCategoryIndex(candidate.category, group);
     return matchedAt < 0 ? 0 : Math.max(0, group.categories.length - matchedAt) * 8;
   });
   return diversifyCategories(ranked, limit);
