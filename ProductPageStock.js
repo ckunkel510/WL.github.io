@@ -316,36 +316,9 @@ $(document).ready(function () {
 
 
 function displayWidget(branch, quantityMessage, showSignInButton, ctaUrl, productId, ctaLabel = "Check nearby stores for pickup today", stockState = null) {
-  // Ensure only one widget exists
+  // Availability now lives in the fulfillment cards. Keep the modal support, but
+  // do not render the former duplicate Stock Information panel.
   $('#stock-widget').remove();
-
-  let actionsHtml = `
-    <button type="button"
-      onclick="openStockModal('${productId}', '${branch.replace(/'/g, "\\'")}', '${ctaUrl}')"
-      style="display:inline-block; padding:10px 16px; background:#004080; color:white; border:0; border-radius:6px; font-weight:600; margin-top:10px; cursor:pointer;">
-      ${ctaLabel}
-    </button>
-  `;
-
-  if (showSignInButton) {
-    actionsHtml += `
-      <a href="${SIGN_IN_URL}"
-         style="display:inline-block; padding:10px 16px; background:#6b0016; color:white; text-decoration:none; border-radius:6px; font-weight:600; margin:10px 0 0 10px;">
-        Check Your Local Store Inventory
-      </a>
-    `;
-  }
-
-  const widgetHtml = `
-    <div id="stock-widget" style="display:table; border:1px solid #ccc; padding:12px; margin:20px 0; background:#f9f9f9; text-align:center; border-radius:8px;">
-      <h3 style="margin:0 0 8px; font-size:18px;">Stock Information</h3>
-      <p style="margin:4px 0;"><strong>Branch:</strong> ${branch}</p>
-      <p style="margin:4px 0;"><strong>Available Quantity:</strong> ${quantityMessage}</p>
-      ${actionsHtml}
-    </div>
-  `;
-
-  $('#ctl00_PageBody_productDetail_productDescription').before(widgetHtml);
 
   const detail = Object.assign({
     branch: branch || '',
