@@ -357,7 +357,13 @@ function affinityRule(current) {
 }
 
 function affinityCategoryIndex(category, group) {
-  return phraseIndex(group.match === "leaf" ? categoryLabel(category) : category, group.categories);
+  if (group.match !== "leaf") return phraseIndex(category, group.categories);
+  const leaf = normalizeText(categoryLabel(category));
+  for (let index = 0; index < group.categories.length; index += 1) {
+    const phrase = normalizeText(group.categories[index]);
+    if (phrase && (phrase.includes(" ") ? leaf.includes(phrase) : leaf === phrase)) return index;
+  }
+  return -1;
 }
 
 function recommendationsForAffinityGroup(index, current, group, excluded, limit) {
@@ -515,6 +521,7 @@ module.exports._test = {
   AFFINITY_RULES,
   ALGORITHM_VERSION,
   COMPARE_LIST_ID,
+  affinityCategoryIndex,
   affinityRule,
   buildCatalogIndex,
   categoryKey,

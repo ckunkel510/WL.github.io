@@ -146,6 +146,10 @@ test("curated category affinities avoid known overly broad parent matches", () =
   assert.equal(categoriesFor("lumber").includes("power cutting accessories"), false);
   assert.equal(recommendations.AFFINITY_RULES.find((rule) => rule.id === "lumber")
     .groups.find((group) => group.id === "fastening").match, "leaf");
+  const lumberFastening = recommendations.AFFINITY_RULES.find((rule) => rule.id === "lumber")
+    .groups.find((group) => group.id === "fastening");
+  assert.equal(recommendations.affinityCategoryIndex("Electrical > Boxes > Octagon Boxes", lumberFastening), -1);
+  assert.ok(recommendations.affinityCategoryIndex("Bolts, Screws, Nails > Nails > Box", lumberFastening) >= 0);
 });
 
 test("PDP client mounts a tracked, accessible rail after reviews", () => {
