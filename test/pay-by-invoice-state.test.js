@@ -18,7 +18,7 @@ test('preview router requires an approved account ID and the preview URL', () =>
   assert.match(routerAndLegacySource, /expectedAccountIds\.indexOf\(accountId\) !== -1/);
   assert.match(routerAndLegacySource, /expiresAt > Date\.now\(\)/);
   assert.match(routerAndLegacySource, /__WL_PAYMENT_PREVIEW_ACCOUNT_ID__ = accountId/);
-  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260909-4/);
+  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260909-5/);
 });
 
 test('legacy payment enhancements remain the default and stop only for an approved preview', () => {
@@ -98,6 +98,7 @@ test('preview enhances native fields in place for cash and charge accounts', () 
   assert.match(previewSource, /Back to Account Overview/);
   assert.match(previewSource, /col-auto\.navigation-menu\{display:none!important/);
   assert.match(previewSource, /repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(previewSource, /#MainLayoutRow\{width:calc\(100% - 30px\)!important/);
   assert.match(previewSource, /id="wl-payment-left"/);
   assert.match(previewSource, /id="wl-payment-right"/);
   assert.match(previewSource, /Current balance/);

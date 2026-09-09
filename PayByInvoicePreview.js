@@ -21,7 +21,7 @@
   if (requestedMode === 'native') return;
   if (ROLLOUT_MODE === 'preview' && requestedMode !== 'preview') return;
 
-  var VERSION = 'v2-preview-4';
+  var VERSION = 'v2-preview-5';
   var IDS = {
     address: 'ctl00_PageBody_AddressDropdownList',
     billing: 'ctl00_PageBody_BillingAddressTextBox',
@@ -162,6 +162,7 @@
     style.textContent = [
       'body.wl-payment-flow-ready{--wl-wine:#720018;--wl-wine-dark:#540012;--wl-ink:#1f2937;--wl-muted:#5f6773;--wl-line:#dfe3e8;--wl-soft:#f6f7f9;}',
       'body.wl-payment-flow-ready *{box-sizing:border-box;}',
+      'body.wl-payment-flow-ready #MainLayoutRow{width:calc(100% - 30px)!important;max-width:1210px!important;margin-left:auto!important;margin-right:auto!important;}',
       'body.wl-payment-flow-ready #MainLayoutRow>.container-fluid>.row>.col-auto.navigation-menu{display:none!important;}',
       'body.wl-payment-flow-ready #MainLayoutRow>.container-fluid>.row>.col{flex:1 1 100%!important;width:100%!important;max-width:100%!important;padding-left:15px!important;}',
       'body.wl-payment-flow-ready .bodyFlexContainer{display:block!important;width:100%!important;}',
@@ -244,7 +245,7 @@
       'body.wl-payment-flow-ready #'+IDS.transactions+' input[type="checkbox"]{width:20px;height:20px;accent-color:var(--wl-wine);}',
       '.wl-dialog-close{min-width:74px;}',
       '@media (max-width:900px){#wl-payment-guide .wl-guide-card{grid-template-columns:1fr;align-items:start;}#wl-payment-workspace{grid-template-columns:1fr;}#wl-payment-amount-choices .wl-choice-row{grid-template-columns:repeat(2,minmax(0,1fr));}}',
-      '@media (max-width:620px){#wl-payment-guide{margin:8px auto 10px;}#wl-payment-guide .wl-guide-card{padding:11px 12px;}#wl-payment-guide .wl-guide-steps{grid-template-columns:1fr;}#wl-payment-workspace{gap:10px;}.wl-workspace-column{padding:11px;}body.wl-payment-flow-ready .wl-payment-card{grid-template-columns:1fr!important;gap:4px!important;}body.wl-payment-flow-ready .wl-payment-card>div:first-child,body.wl-payment-flow-ready .wl-payment-card>div:nth-child(2),body.wl-payment-flow-ready .wl-payment-card>.wl-field-help{grid-column:1;}#wl-payment-amount-topline,#wl-payment-billing-grid{grid-template-columns:1fr;}#wl-payment-amount-choices .wl-choice-row{grid-template-columns:1fr;}#wl-payment-review dl{grid-template-columns:1fr;gap:2px;}#wl-payment-review dd{margin-bottom:6px;}#wl-invoice-dialog{padding:8px;}#wl-invoice-dialog-card{width:calc(100vw - 16px);max-height:calc(100vh - 16px);}#wl-invoice-dialog-header,#wl-invoice-dialog-footer{padding:11px 12px;}#wl-invoice-dialog-body{padding:0 12px;}}'
+      '@media (max-width:620px){body.wl-payment-flow-ready #MainLayoutRow{width:calc(100% - 12px)!important;}#wl-payment-guide{margin:8px auto 10px;}#wl-payment-guide .wl-guide-card{padding:11px 12px;}#wl-payment-guide .wl-guide-steps{grid-template-columns:1fr;}#wl-payment-workspace{gap:10px;}.wl-workspace-column{padding:11px;}body.wl-payment-flow-ready .wl-payment-card{grid-template-columns:1fr!important;gap:4px!important;}body.wl-payment-flow-ready .wl-payment-card>div:first-child,body.wl-payment-flow-ready .wl-payment-card>div:nth-child(2),body.wl-payment-flow-ready .wl-payment-card>.wl-field-help{grid-column:1;}#wl-payment-amount-topline,#wl-payment-billing-grid{grid-template-columns:1fr;}#wl-payment-amount-choices .wl-choice-row{grid-template-columns:1fr;}#wl-payment-review dl{grid-template-columns:1fr;gap:2px;}#wl-payment-review dd{margin-bottom:6px;}#wl-invoice-dialog{padding:8px;}#wl-invoice-dialog-card{width:calc(100vw - 16px);max-height:calc(100vh - 16px);}#wl-invoice-dialog-header,#wl-invoice-dialog-footer{padding:11px 12px;}#wl-invoice-dialog-body{padding:0 12px;}}'
     ].join('\n');
     document.head.appendChild(style);
   }
