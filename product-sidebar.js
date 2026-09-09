@@ -166,11 +166,12 @@ $(document).ready(async function () {
         padding-top: 14px;
         border-top: 1px solid #e3e6e9;
       }
-      #productoption .wl-product-option-label {
+      #productoption .wl-product-option-group h4 {
         margin: 0;
         color: #3f4852;
         font-size: 13px;
         font-weight: 800;
+        line-height: 1.25;
       }
       #productoption .wl-product-option-list {
         display: flex;
