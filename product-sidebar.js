@@ -11,6 +11,20 @@
   } catch (e) {}
 })();
 
+// Assign every enhanced ProductDetail visit to a stable analytics variant before
+// the shared analytics runtime emits view_item.
+(function wlPrimePdpExperimentContext() {
+  try {
+    if (!/ProductDetail\.aspx/i.test(window.location.pathname || "")) return;
+    const savedMethod = localStorage.getItem("woodson_cart_method");
+    sessionStorage.setItem("wl_analytics_experiment_v1", JSON.stringify({
+      experiment_id: "pdp_fulfillment_v1_20260909",
+      experiment_variant: "enhanced_fulfillment",
+      fulfillment_method: savedMethod === "delivery" ? "delivery" : "pickup"
+    }));
+  } catch (error) {}
+})();
+
 $(document).ready(async function () {
   if ($("#product-page").length) return;
 
@@ -149,11 +163,98 @@ $(document).ready(async function () {
         padding: 0;
       }
       .wl-epallet-product-note li { margin: 3px 0; }
-      .wl-pdp-method-row { gap: 8px !important; }
+      .wl-pdp-method-row {
+        align-items: stretch;
+        gap: 8px !important;
+      }
       .wl-pdp-method-row .method-box {
+        display: flex !important;
+        flex: 1 1 0;
+        flex-direction: column;
+        align-items: flex-start;
         min-width: 0;
-        padding: 10px 8px !important;
+        min-height: 112px;
+        padding: 10px !important;
         border-radius: 6px !important;
+        color: #20262d;
+        font: inherit;
+        line-height: 1.25;
+        text-align: left !important;
+      }
+      .wl-pdp-method-row .method-box.selected {
+        background: #fff7f8 !important;
+        box-shadow: inset 0 0 0 1px #6b0016;
+      }
+      .wl-pdp-method-row .method-box:focus-visible {
+        outline: 3px solid rgba(107, 0, 22, .25);
+        outline-offset: 2px;
+      }
+      .wl-pdp-method-row .method-box:disabled {
+        cursor: not-allowed !important;
+        opacity: .55;
+      }
+      .wl-method-label {
+        display: block;
+        color: #20262d;
+        font-size: 15px;
+        font-weight: 850;
+      }
+      .wl-method-promise {
+        display: block;
+        margin-top: 5px;
+        color: #6b0016;
+        font-size: 13px;
+        font-weight: 800;
+      }
+      .wl-method-meta {
+        display: block;
+        margin-top: 3px;
+        color: #59636e;
+        font-size: 12px;
+        line-height: 1.3;
+      }
+      .wl-method-cost {
+        display: block;
+        margin-top: auto;
+        padding-top: 7px;
+        color: #14713b;
+        font-size: 12px;
+        font-weight: 850;
+      }
+      .wl-method-cost.wl-method-rate { color: #3f4852; }
+      .wl-fulfillment-detail {
+        display: grid;
+        gap: 4px;
+        margin-top: -2px;
+        padding: 10px 11px;
+        border: 1px solid #d9dde1;
+        border-left: 4px solid #6b0016;
+        border-radius: 6px;
+        background: #fff;
+        color: #20262d;
+      }
+      .wl-fulfillment-detail-title {
+        font-size: 13px;
+        font-weight: 850;
+      }
+      .wl-fulfillment-detail-copy,
+      .wl-fulfillment-detail-extra {
+        color: #59636e;
+        font-size: 12px;
+        line-height: 1.35;
+      }
+      .wl-fulfillment-detail-extra strong { color: #20262d; }
+      .wl-fulfillment-store-action {
+        justify-self: start;
+        margin-top: 3px;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        color: #6b0016;
+        font-size: 12px;
+        font-weight: 800;
+        text-decoration: underline;
+        cursor: pointer;
       }
       .wl-product-price-row {
         justify-content: flex-start !important;
@@ -695,72 +796,277 @@ $(document).ready(async function () {
     );
 
   // =========================
-  // Delivery / pickup selector
+  // Delivery / pickup selector + conversion experiment
   // =========================
   const selectedMethodKey = "woodson_cart_method";
+  const experimentId = "pdp_fulfillment_v1_20260909";
+  const experimentVariant = "enhanced_fulfillment";
+  let pdpStockState = window.WLPdpStockState || null;
+  let stockReadyTracked = false;
 
-  const $pickupBtn = $("<div>")
-    .addClass("method-box selected")
-    .css({
-      flex: "1",
-      border: "2px solid #6b0016",
-      borderRadius: "8px",
-      padding: "10px",
-      cursor: "pointer",
-      textAlign: "center",
-      backgroundColor: "#fff",
-    })
-    .html(`<strong>Pickup</strong><br><span class="pickup-info"></span><br><span style="color:green;font-weight:bold;">FREE</span>`);
+  function wlSetExperimentMethod(method) {
+    try {
+      sessionStorage.setItem("wl_analytics_experiment_v1", JSON.stringify({
+        experiment_id: experimentId,
+        experiment_variant: experimentVariant,
+        fulfillment_method: method === "delivery" ? "delivery" : "pickup"
+      }));
+    } catch (error) {}
+  }
 
-  const $deliveryBtn = $("<div>")
-    .addClass("method-box")
-    .css({
-      flex: "1",
-      border: "1px solid #ccc",
-      borderRadius: "8px",
-      padding: "10px",
-      cursor: "pointer",
-      textAlign: "center",
-      backgroundColor: "#fff",
-    })
-    .html(`<strong>Delivery</strong><br><span class="delivery-info">Shipping Available</span>`);
+  function wlTrack(eventName, parameters) {
+    const details = Object.assign({
+      experiment_id: experimentId,
+      experiment_variant: experimentVariant,
+      product_id: String(currentPID || "")
+    }, parameters || {});
+    try {
+      if (window.WLAnalytics && typeof window.WLAnalytics.track === "function") {
+        const sent = window.WLAnalytics.track(eventName, details);
+        if (sent !== false) return;
+      }
+      window.dataLayer = window.dataLayer || [];
+      window.dataLayer.push(Object.assign({
+        event: "wl_analytics_event",
+        event_name: eventName,
+        analytics_version: "pdp-fallback-1",
+        page_type: "product_detail"
+      }, details));
+    } catch (error) {}
+  }
+
+  function copyDate(date) {
+    return date.toLocaleDateString(undefined, {
+      weekday: "short",
+      month: "short",
+      day: "numeric"
+    });
+  }
+
+  function nextPickupDate() {
+    const now = new Date();
+    for (let offset = 0; offset < 8; offset += 1) {
+      const candidate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset);
+      const day = candidate.getDay();
+      if (day === 0) continue;
+      if (offset > 0) return candidate;
+
+      const closeMinutes = day === 6 ? 16 * 60 : 17 * 60 + 30;
+      const earliestStart = Math.ceil((now.getHours() * 60 + now.getMinutes() + 120) / 60) * 60;
+      if (earliestStart + 60 <= closeMinutes) return candidate;
+    }
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  }
+
+  function earliestDeliveryDate() {
+    const today = new Date();
+    const candidate = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 2);
+    if (candidate.getDay() === 0) candidate.setDate(candidate.getDate() + 1);
+    return candidate;
+  }
+
+  function pickupPromise(date) {
+    const today = new Date();
+    const todayKey = [today.getFullYear(), today.getMonth(), today.getDate()].join("-");
+    const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+    const tomorrowKey = [tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate()].join("-");
+    const dateKey = [date.getFullYear(), date.getMonth(), date.getDate()].join("-");
+    if (dateKey === todayKey) return "Ready today";
+    if (dateKey === tomorrowKey) return "Ready tomorrow";
+    return "Ready " + copyDate(date);
+  }
+
+  const $pickupBtn = $("<button>", {
+    type: "button",
+    class: "method-box",
+    "aria-pressed": "false",
+    "aria-label": "Choose pickup"
+  }).css({
+    border: "1px solid #ccc",
+    cursor: "pointer",
+    backgroundColor: "#fff"
+  }).html(
+    '<span class="wl-method-label">Pickup</span>' +
+    '<span class="wl-method-promise pickup-promise">Checking local stock…</span>' +
+    '<span class="wl-method-meta pickup-info">Selected store</span>' +
+    '<span class="wl-method-cost">FREE</span>'
+  );
+
+  const $deliveryBtn = $("<button>", {
+    type: "button",
+    class: "method-box",
+    "aria-pressed": "false",
+    "aria-label": "Choose delivery or shipping"
+  }).css({
+    border: "1px solid #ccc",
+    cursor: "pointer",
+    backgroundColor: "#fff"
+  }).html(
+    '<span class="wl-method-label">Delivery / Ship</span>' +
+    '<span class="wl-method-promise delivery-promise">As soon as ' + copyDate(earliestDeliveryDate()) + '</span>' +
+    '<span class="wl-method-meta delivery-info">Checking company inventory…</span>' +
+    '<span class="wl-method-cost wl-method-rate">Rate based on address</span>'
+  );
 
   const $methodRow = $("<div>").addClass("wl-pdp-method-row").css({
     display: "flex",
     gap: "10px",
-    marginBottom: "10px",
+    marginBottom: "4px"
   });
 
-  // Banner: “Schedule delivery in checkout.”
-  const $banner = $("<div>")
-    .addClass("wl-delivery-banner")
-    .css({
-      display: "flex",
-      alignItems: "center",
-      gap: "10px",
-      marginTop: "10px",
-      fontSize: "14px",
-    })
-    .html(`🚚 <strong>Schedule delivery in checkout.</strong>`);
+  const $banner = $("<div>", {
+    class: "wl-delivery-banner wl-fulfillment-detail",
+    role: "status",
+    "aria-live": "polite"
+  }).html(
+    '<strong class="wl-fulfillment-detail-title"></strong>' +
+    '<span class="wl-fulfillment-detail-copy"></span>' +
+    '<span class="wl-fulfillment-detail-extra"></span>' +
+    '<button type="button" class="wl-fulfillment-store-action">Check other stores</button>'
+  );
 
-  function selectMethod(method) {
-    if (method === "pickup") {
-      $pickupBtn.addClass("selected").css("border", "2px solid #6b0016");
-      $deliveryBtn.removeClass("selected").css("border", "1px solid #ccc");
-    } else {
-      $deliveryBtn.addClass("selected").css("border", "2px solid #6b0016");
-      $pickupBtn.removeClass("selected").css("border", "1px solid #ccc");
-    }
-    localStorage.setItem(selectedMethodKey, method);
+  function quantityNumber(value) {
+    const number = Number(value);
+    return Number.isFinite(number) && number >= 0 ? number : null;
   }
 
-  $pickupBtn.on("click", () => selectMethod("pickup"));
-  $deliveryBtn.on("click", () => selectMethod("delivery"));
+  function updateFulfillmentDetail(method) {
+    const state = pdpStockState;
+    const branch = state && state.branch ? String(state.branch) : "your selected store";
+    const hasStock = !!(state && state.hasStock === true);
+    const pickupDate = nextPickupDate();
+    const deliveryDate = earliestDeliveryDate();
+    const $title = $banner.find(".wl-fulfillment-detail-title");
+    const $copy = $banner.find(".wl-fulfillment-detail-copy");
+    const $extra = $banner.find(".wl-fulfillment-detail-extra");
+    const $storeAction = $banner.find(".wl-fulfillment-store-action");
+
+    if (method === "delivery") {
+      $title.text("Delivery or shipping");
+      $copy.text("Woodson delivery can be scheduled as soon as " + copyDate(deliveryDate) + " with morning or afternoon windows.");
+      $extra.html("<strong>UPS:</strong> Rates and arrival dates appear in checkout when the item and address qualify.");
+      $storeAction.hide();
+      return;
+    }
+
+    $title.text(hasStock ? "Pickup at " + branch : "Pickup options near " + branch);
+    $copy.text(hasStock
+      ? pickupPromise(pickupDate) + ". Choose a one-hour pickup window in checkout; same-day pickup requires at least 2 hours’ notice."
+      : "This store is out. Check nearby stores or ship it to your store for free pickup.");
+    $extra.text("");
+    $storeAction.show();
+  }
+
+  function selectMethod(method, trackSelection) {
+    if (method === "delivery" && $deliveryBtn.prop("disabled")) return;
+    const normalized = method === "delivery" ? "delivery" : "pickup";
+    const isPickup = normalized === "pickup";
+    $pickupBtn.toggleClass("selected", isPickup)
+      .attr("aria-pressed", isPickup ? "true" : "false")
+      .css("border", isPickup ? "2px solid #6b0016" : "1px solid #ccc");
+    $deliveryBtn.toggleClass("selected", !isPickup)
+      .attr("aria-pressed", !isPickup ? "true" : "false")
+      .css("border", !isPickup ? "2px solid #6b0016" : "1px solid #ccc");
+    try { localStorage.setItem(selectedMethodKey, normalized); } catch (error) {}
+    wlSetExperimentMethod(normalized);
+    updateFulfillmentDetail(normalized);
+    if (trackSelection) {
+      wlTrack("pdp_fulfillment_select", {
+        fulfillment_method: normalized,
+        store_branch: pdpStockState && pdpStockState.branch ? String(pdpStockState.branch) : "unknown"
+      });
+    }
+  }
+
+  function applyFulfillmentState() {
+    const state = pdpStockState;
+    if (!state) {
+      updateFulfillmentDetail($deliveryBtn.hasClass("selected") ? "delivery" : "pickup");
+      return;
+    }
+
+    const branch = state.branch ? String(state.branch) : "Selected store";
+    const branchQuantity = quantityNumber(state.quantity);
+    const networkQuantity = quantityNumber(state.totalAvailable);
+    const hasPickupStock = state.hasStock === true;
+    const totalAvailable = Math.max(networkQuantity || 0, branchQuantity || 0);
+
+    if (hasPickupStock) {
+      $(".pickup-promise").text(pickupPromise(nextPickupDate()));
+      $(".pickup-info").text(
+        branchQuantity !== null
+          ? (branchQuantity <= 5 ? "Only " : "") + branchQuantity.toLocaleString() + " at " + branch
+          : "In stock at " + branch
+      );
+    } else if (totalAvailable > 0) {
+      $(".pickup-promise").text("Check nearby stores");
+      $(".pickup-info").text("Out at " + branch);
+    } else {
+      $(".pickup-promise").text("Pickup unavailable");
+      $(".pickup-info").text("No current store inventory");
+    }
+
+    if (totalAvailable > 0) {
+      $deliveryBtn.prop("disabled", false);
+      $(".delivery-promise").text("As soon as " + copyDate(earliestDeliveryDate()));
+      $(".delivery-info").text(totalAvailable.toLocaleString() + " available companywide");
+    } else {
+      $deliveryBtn.prop("disabled", true);
+      $(".delivery-promise").text("Currently unavailable");
+      $(".delivery-info").text("No company inventory");
+      if ($deliveryBtn.hasClass("selected")) selectMethod("pickup", false);
+    }
+
+    updateFulfillmentDetail($deliveryBtn.hasClass("selected") ? "delivery" : "pickup");
+
+    if (!stockReadyTracked) {
+      stockReadyTracked = true;
+      wlTrack("pdp_fulfillment_ready", {
+        store_branch: branch,
+        pickup_available: hasPickupStock ? "yes" : "no",
+        pickup_quantity: branchQuantity,
+        delivery_available: totalAvailable > 0 ? "yes" : "no",
+        delivery_quantity: totalAvailable
+      });
+    }
+  }
+
+  $pickupBtn.on("click", () => selectMethod("pickup", true));
+  $deliveryBtn.on("click", () => selectMethod("delivery", true));
+  $banner.find(".wl-fulfillment-store-action").on("click", function () {
+    wlTrack("pdp_store_availability", {
+      fulfillment_method: "pickup",
+      store_branch: pdpStockState && pdpStockState.branch ? String(pdpStockState.branch) : "unknown"
+    });
+    if (typeof window.openStockModal === "function") {
+      const branch = pdpStockState && pdpStockState.branch ? String(pdpStockState.branch) : "";
+      window.openStockModal(
+        String(currentPID || ""),
+        branch,
+        "https://webtrack.woodsonlumber.com/Catalog/ShowStock.aspx?productid=" + encodeURIComponent(String(currentPID || ""))
+      );
+    } else {
+      document.getElementById("stock-widget")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  });
+
+  document.addEventListener("wl:pdp-stock-ready", function (event) {
+    if (event && event.detail) pdpStockState = event.detail;
+    applyFulfillmentState();
+  });
+
+  let initialMethod = "pickup";
+  try {
+    if (localStorage.getItem(selectedMethodKey) === "delivery") initialMethod = "delivery";
+  } catch (error) {}
+  selectMethod(initialMethod, false);
+  applyFulfillmentState();
 
   // Hook into Add to Cart (if present) to store method
   $addBtn.on("click", () => {
     const selected = $(".method-box.selected").text().includes("Pickup") ? "pickup" : "delivery";
-    localStorage.setItem(selectedMethodKey, selected);
+    try { localStorage.setItem(selectedMethodKey, selected); } catch (error) {}
+    wlSetExperimentMethod(selected);
     if (epalletRule) {
       try { sessionStorage.setItem("wl_epallet_sync_pending", "1"); } catch (e) {}
     }
@@ -787,7 +1093,8 @@ $(document).ready(async function () {
 
   if (isBlockedProduct) {
     // Force pickup preference for these items (and hide delivery UI)
-    localStorage.setItem(selectedMethodKey, "pickup");
+    try { localStorage.setItem(selectedMethodKey, "pickup"); } catch (error) {}
+    wlSetExperimentMethod("pickup");
 
     // Only show pickup selector (optional: still clickable, but only one option)
     $methodRow.append($pickupBtn);
@@ -861,7 +1168,27 @@ $(document).ready(async function () {
       })
     );
 
+  $shippingLink.find("a").on("click", function () {
+    wlTrack("pdp_fulfillment_select", {
+      fulfillment_method: $deliveryBtn.hasClass("selected") ? "delivery" : "pickup",
+      selection_action: "shipping_policy"
+    });
+  });
+  $priceDisplay.find(".wl-price-login-link").on("click", function () {
+    wlTrack("pdp_price_sign_in", { price_gate: "login_required" });
+  });
+  $(document).on("click.wlPdpQuoteTracking", ".wl-quote-product a, a[href*='request_a_quote']", function () {
+    wlTrack("generate_lead", { lead_source: "pdp_quote_request" });
+  });
+
   $sidebar.append($shippingLink);
+
+  window.setTimeout(function () {
+    wlTrack("pdp_fulfillment_view", {
+      default_method: $deliveryBtn.hasClass("selected") ? "delivery" : "pickup",
+      stock_state: pdpStockState ? "ready" : "loading"
+    });
+  }, 0);
 
   function modernizeRelatedProducts() {
     const root = document.getElementById("WTRelatedProducts");
