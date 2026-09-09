@@ -3,7 +3,7 @@
 
   if (window.WLSmartSearch) return;
 
-  var BUILD = "20260909-1";
+  var BUILD = "20260909-2";
   var API_URL = "https://wl-upsrates.vercel.app/api/smart-search-suggestions?v=" + BUILD;
   var RESULTS_PANEL_ID = "ctl00_PageBody_ProductGroupStandardPanel";
   var ATTRIBUTION_KEY = "wl_product_discovery_attribution_v1";
@@ -12,7 +12,7 @@
   var analyticsTimer = 0;
   var analyticsAttempts = 0;
   var enhancementStarted = false;
-  var viewTracked = false;
+  var viewTracked = Object.create(null);
 
   function ready(callback) {
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", callback, { once: true });
@@ -134,7 +134,12 @@
       ".wl-smart-search__eyebrow{margin:0 0 4px;color:#6b0016;font-size:12px;font-weight:850;letter-spacing:.06em;text-transform:uppercase}",
       ".wl-smart-search__title{margin:0;color:#20262d;font-size:24px;font-weight:850;line-height:1.2}",
       ".wl-smart-search__message{max-width:760px;margin:8px 0 0;color:#4f5964;font-size:14px;line-height:1.5}",
-      ".wl-smart-search__correction{font-weight:800;color:#6b0016}",
+      "#productlistcards>.wl-smart-search--in-grid{grid-column:1/-1;width:100%;margin:8px 0 18px}",
+      ".wl-smart-search--in-grid{padding:20px}",
+      ".wl-smart-search__search-links{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:13px 0 2px}",
+      ".wl-smart-search__search-link-label{color:#37414b;font-size:13px;font-weight:800}",
+      ".wl-smart-search__search-chip{display:inline-flex;align-items:center;min-height:34px;padding:6px 11px;border:1px solid #b9bec4;border-radius:999px;background:#fff;color:#6b0016!important;font-size:13px;font-weight:850;text-decoration:none!important;box-sizing:border-box}",
+      ".wl-smart-search__search-chip:hover,.wl-smart-search__search-chip:focus-visible{border-color:#6b0016;background:#fbf4f6;outline:3px solid rgba(107,0,22,.14);outline-offset:1px}",
       ".wl-smart-search__controls{display:flex;flex:0 0 auto;gap:8px}",
       ".wl-smart-search__control{display:inline-grid;place-items:center;width:40px;height:40px;padding:0;border:1px solid #aeb5bd;border-radius:50%;background:#fff;color:#20262d;font-size:23px;line-height:1;cursor:pointer}",
       ".wl-smart-search__control:hover,.wl-smart-search__control:focus-visible{border-color:#6b0016;color:#6b0016;outline:3px solid rgba(107,0,22,.14);outline-offset:1px}",
@@ -151,7 +156,7 @@
       ".wl-smart-search__empty p{margin:0 0 12px;line-height:1.5}",
       ".wl-smart-search__edit{min-height:42px;padding:9px 16px;border:0;border-radius:5px;background:#6b0016;color:#fff;font-weight:800;cursor:pointer}",
       "@media(max-width:900px){.wl-smart-search-card{flex-basis:calc((100% - 14px)/2)}}",
-      "@media(max-width:600px){.wl-smart-search{margin:18px 0;padding:18px 14px}.wl-smart-search__header{align-items:flex-start}.wl-smart-search__title{font-size:21px}.wl-smart-search__controls{display:none}.wl-smart-search__rail{margin-right:-14px;padding-right:14px}.wl-smart-search-card{flex-basis:78%;min-height:318px}.wl-smart-search-card__image,.wl-smart-search-card__image-fallback{height:150px}}"
+      "@media(max-width:600px){.wl-smart-search{margin:18px 0;padding:18px 14px}.wl-smart-search__header{align-items:flex-start}.wl-smart-search__title{font-size:21px}.wl-smart-search__controls{display:none}.wl-smart-search__rail{margin-right:-14px;padding-right:14px}.wl-smart-search-card{flex-basis:78%;min-height:318px}.wl-smart-search-card__image,.wl-smart-search-card__image-fallback{height:150px}#productlistcards>.wl-smart-search--in-grid{margin:6px 0 14px}.wl-smart-search__search-links{align-items:flex-start}}"
     ].join("");
     document.head.appendChild(style);
   }
@@ -200,24 +205,70 @@
     return notice || null;
   }
 
-  function trackResultState(term, state, payload, nativeState, suggestionCount) {
+  function canonicalSearchUrl(term) {
+    return "/Products.aspx?pg=0&sort=Relevance&direction=desc&itemsPerPage=48&searchText=" + encodeURIComponent(cleanText(term, 100));
+  }
+
+  function renderSearchLinks(container, term, payload) {
+    var raw = Array.isArray(payload && payload.searchSuggestions) ? payload.searchSuggestions : [];
+    var seen = Object.create(null);
+    var suggestions = raw.filter(function (suggestion) {
+      var value = cleanText(suggestion && (suggestion.term || suggestion.label), 100);
+      var type = suggestion && suggestion.type === "correction" ? "correction" : "related";
+      var key = value.toLowerCase();
+      if (!value || seen[key]) return false;
+      seen[key] = true;
+      suggestion.safeTerm = value;
+      suggestion.safeType = type;
+      return true;
+    }).slice(0, 5);
+    if (!suggestions.length) return;
+
+    var navigation = element("nav", "wl-smart-search__search-links");
+    navigation.setAttribute("aria-label", "Suggested searches");
+    suggestions.forEach(function (suggestion, index) {
+      var precedingType = index ? suggestions[index - 1].safeType : "";
+      if (suggestion.safeType !== precedingType) {
+        navigation.appendChild(element(
+          "span",
+          "wl-smart-search__search-link-label",
+          suggestion.safeType === "correction" ? "Did you mean:" : "Related searches:"
+        ));
+      }
+      var link = element("a", "wl-smart-search__search-chip", cleanText(suggestion.label || suggestion.safeTerm, 100));
+      link.href = canonicalSearchUrl(suggestion.safeTerm);
+      link.addEventListener("click", function () {
+        track("search_suggestion_click", {
+          search_term: term,
+          suggested_search_term: suggestion.safeTerm,
+          suggestion_type: suggestion.safeType,
+          search_enhancement_version: "smart_search_v2"
+        });
+      });
+      navigation.appendChild(link);
+    });
+    container.appendChild(navigation);
+  }
+
+  function trackResultState(term, state, payload, nativeState, suggestionCount, sectionCount) {
     track("search_results_enhanced", {
       search_term: term,
-      search_enhancement_version: "smart_search_v1",
+      search_enhancement_version: "smart_search_v2",
       search_enhancement_state: state,
       search_match_type: cleanText(payload && payload.matchType || "none", 30),
       suggested_term: cleanText(payload && payload.suggestedTerm || "", 100),
       native_result_count: nativeState.count,
       native_result_total: nativeState.total,
       suggestion_count: suggestionCount,
-      recommendation_algorithm: cleanText(payload && payload.algorithm || "merchant_typo_search_v1", 100)
+      merchandising_section_count: Number(sectionCount) || 0,
+      recommendation_algorithm: cleanText(payload && payload.algorithm || "merchant_search_discovery_v2", 100)
     });
   }
 
   function trackListView(section, items, payload) {
     function send() {
-      if (viewTracked || !document.documentElement.contains(section)) return;
-      viewTracked = true;
+      if (viewTracked[payload.listId] || !document.documentElement.contains(section)) return;
+      viewTracked[payload.listId] = true;
       track("view_item_list", {
         item_list_id: payload.listId,
         item_list_name: payload.listName,
@@ -242,7 +293,7 @@
     var button = element("button", "wl-smart-search__edit", "Edit your search");
     button.type = "button";
     button.addEventListener("click", function () {
-      track("search_refine_click", { search_term: term, search_enhancement_version: "smart_search_v1" });
+      track("search_refine_click", { search_term: term, search_enhancement_version: "smart_search_v2" });
       focusSearchBox();
     });
     empty.appendChild(button);
@@ -267,65 +318,17 @@
     panel.insertBefore(section, insertionPoint(panel));
   }
 
-  function renderSection(panel, term, nativeState, payload) {
-    var recovery = nativeState.count === 0;
-    var rawItems = Array.isArray(payload.suggestions) ? payload.suggestions : [];
-    var items = rawItems.filter(function (item) {
+  function validItems(value, limit) {
+    return (Array.isArray(value) ? value : []).filter(function (item) {
       return item && /^\d{1,20}$/.test(String(item.productId || "")) &&
         safeUrl(item.productUrl, "product") && safeUrl(item.imageUrl, "image");
-    }).slice(0, 8);
-    if (!recovery && items.length < 3) {
-      trackResultState(term, "native_no_additions", payload, nativeState, items.length);
-      return false;
-    }
+    }).slice(0, limit);
+  }
 
-    injectStyles();
-    var previousSection = document.getElementById("wl-smart-search-results");
-    if (previousSection && previousSection.parentNode) previousSection.parentNode.removeChild(previousSection);
-    var section = element("section", "wl-smart-search" + (recovery ? " wl-smart-search--recovery" : ""));
-    section.id = "wl-smart-search-results";
-    section.setAttribute("data-wl-self-tracked-product-list", "true");
-    section.setAttribute("aria-labelledby", "wl-smart-search-title");
-    section.setAttribute("data-search-algorithm", cleanText(payload.algorithm || "merchant_typo_search_v1", 100));
-
-    var header = element("div", "wl-smart-search__header");
-    var heading = element("div", "");
-    heading.appendChild(element("p", "wl-smart-search__eyebrow", recovery ? "Search help" : "Keep exploring"));
-    var title = element("h2", "wl-smart-search__title", recovery ? "We found possible matches" : "Related to your search");
-    title.id = "wl-smart-search-title";
-    heading.appendChild(title);
-    var message = recovery
-      ? "WebTrack did not find an exact match for “" + term + ".” These catalog items may be what you meant."
-      : "More catalog items related to “" + term + ",” shown after the original WebTrack results.";
-    var messageNode = element("p", "wl-smart-search__message", message);
-    if (recovery && payload.suggestedTerm) {
-      messageNode.appendChild(document.createTextNode(" "));
-      messageNode.appendChild(element("span", "wl-smart-search__correction", "Did you mean “" + cleanText(payload.suggestedTerm, 100) + "”?"));
-    }
-    heading.appendChild(messageNode);
-    header.appendChild(heading);
-
-    var controls = element("div", "wl-smart-search__controls");
-    var previous = element("button", "wl-smart-search__control", "‹");
-    var next = element("button", "wl-smart-search__control", "›");
-    previous.type = next.type = "button";
-    previous.setAttribute("aria-label", "Show previous suggested products");
-    next.setAttribute("aria-label", "Show more suggested products");
-    controls.appendChild(previous);
-    controls.appendChild(next);
-    if (items.length) header.appendChild(controls);
-    section.appendChild(header);
-
-    if (!items.length) {
-      renderEmptyHelp(section, term);
-      panel.insertBefore(section, insertionPoint(panel));
-      trackResultState(term, payload.failureState || "empty_no_confident_matches", payload, nativeState, 0);
-      return true;
-    }
-
+  function appendProductRail(section, items, payload, term, label) {
     var rail = element("div", "wl-smart-search__rail");
     rail.setAttribute("role", "list");
-    rail.setAttribute("aria-label", recovery ? "Possible product matches" : "Related products");
+    rail.setAttribute("aria-label", label);
     items.forEach(function (item, index) {
       var card = element("a", "wl-smart-search-card");
       card.href = safeUrl(item.productUrl, "product");
@@ -351,6 +354,7 @@
         var selectedItems = analyticsItems([item], payload.listId, payload.listName);
         selectedItems[0].index = index;
         track("select_item", {
+          search_term: term,
           item_list_id: payload.listId,
           item_list_name: payload.listName,
           recommendation_algorithm: payload.algorithm,
@@ -363,13 +367,124 @@
       rail.appendChild(card);
     });
     section.appendChild(rail);
+    return rail;
+  }
+
+  function appendRailControls(header, rail, label) {
+    var controls = element("div", "wl-smart-search__controls");
+    var previous = element("button", "wl-smart-search__control", "‹");
+    var next = element("button", "wl-smart-search__control", "›");
+    previous.type = next.type = "button";
+    previous.setAttribute("aria-label", "Show previous " + label);
+    next.setAttribute("aria-label", "Show more " + label);
     previous.addEventListener("click", function () { rail.scrollBy({ left: -Math.max(260, rail.clientWidth * 0.82), behavior: "smooth" }); });
     next.addEventListener("click", function () { rail.scrollBy({ left: Math.max(260, rail.clientWidth * 0.82), behavior: "smooth" }); });
-    panel.insertBefore(section, insertionPoint(panel));
+    controls.appendChild(previous);
+    controls.appendChild(next);
+    header.appendChild(controls);
+  }
 
-    trackResultState(term, recovery ? "empty_recovery" : "native_augmented", payload, nativeState, items.length);
-    trackListView(section, items, payload);
+  function renderRecovery(panel, term, nativeState, payload) {
+    var items = validItems(payload.suggestions, 8);
+    injectStyles();
+    var previousSection = document.getElementById("wl-smart-search-results");
+    if (previousSection && previousSection.parentNode) previousSection.parentNode.removeChild(previousSection);
+    var section = element("section", "wl-smart-search wl-smart-search--recovery");
+    section.id = "wl-smart-search-results";
+    section.setAttribute("data-wl-self-tracked-product-list", "true");
+    section.setAttribute("aria-labelledby", "wl-smart-search-title");
+    section.setAttribute("data-search-algorithm", cleanText(payload.algorithm || "merchant_search_discovery_v2", 100));
+
+    var header = element("div", "wl-smart-search__header");
+    var heading = element("div", "");
+    heading.appendChild(element("p", "wl-smart-search__eyebrow", "Search help"));
+    var title = element("h2", "wl-smart-search__title", items.length ? "We found possible matches" : "Let’s try another search");
+    title.id = "wl-smart-search-title";
+    heading.appendChild(title);
+    heading.appendChild(element("p", "wl-smart-search__message", items.length
+      ? "WebTrack did not find an exact match for “" + term + ".” These catalog items may be what you meant."
+      : "WebTrack did not find an exact match for “" + term + ".” Try one of these catalog-backed searches or edit your wording."));
+    renderSearchLinks(heading, term, payload);
+    header.appendChild(heading);
+    section.appendChild(header);
+
+    if (!items.length) renderEmptyHelp(section, term);
+    else {
+      var rail = appendProductRail(section, items, payload, term, "Possible product matches");
+      appendRailControls(header, rail, "possible products");
+      trackListView(section, items, payload);
+    }
+    panel.insertBefore(section, insertionPoint(panel));
+    trackResultState(term, items.length ? "empty_recovery" : (payload.failureState || "empty_no_confident_matches"), payload, nativeState, items.length, 0);
     return true;
+  }
+
+  function createMerchandisingSection(term, payload, sectionPayload, index) {
+    var items = validItems(sectionPayload.recommendations, 4);
+    if (items.length < 3) return null;
+    var listPayload = {
+      algorithm: payload.algorithm,
+      matchType: payload.matchType,
+      listId: cleanText(sectionPayload.listId, 100),
+      listName: cleanText(sectionPayload.listName, 100),
+      strategy: cleanText(sectionPayload.strategy, 100)
+    };
+    if (!listPayload.listId || !listPayload.listName) return null;
+    var section = element("section", "wl-smart-search wl-smart-search--in-grid");
+    section.id = "wl-smart-search-merchandising-" + String(index + 1);
+    section.setAttribute("data-wl-self-tracked-product-list", "true");
+    section.setAttribute("aria-labelledby", section.id + "-title");
+    section.setAttribute("data-search-algorithm", cleanText(payload.algorithm || "merchant_search_discovery_v2", 100));
+
+    var header = element("div", "wl-smart-search__header");
+    var heading = element("div", "");
+    heading.appendChild(element("p", "wl-smart-search__eyebrow", cleanText(sectionPayload.eyebrow || "Keep exploring", 80)));
+    var title = element("h2", "wl-smart-search__title", listPayload.listName);
+    title.id = section.id + "-title";
+    heading.appendChild(title);
+    heading.appendChild(element("p", "wl-smart-search__message", "Helpful additions related to “" + term + "” while you compare the original search results."));
+    header.appendChild(heading);
+    section.appendChild(header);
+    var rail = appendProductRail(section, items, listPayload, term, listPayload.listName);
+    appendRailControls(header, rail, "recommended products");
+    section.wlItems = items;
+    section.wlPayload = listPayload;
+    section.wlPlacementAfter = Math.max(1, Math.floor(Number(sectionPayload.placementAfter) || (index ? 24 : 8)));
+    return section;
+  }
+
+  function renderMerchandising(panel, term, nativeState, payload) {
+    injectStyles();
+    var grid = panel.querySelector("#productlistcards");
+    var nativeCards = grid ? Array.prototype.slice.call(grid.children).filter(function (child) {
+      return child.matches && child.matches(".wl-product-card");
+    }) : [];
+    var rendered = (Array.isArray(payload.sections) ? payload.sections : []).slice(0, 2).map(function (sectionPayload, index) {
+      return createMerchandisingSection(term, payload, sectionPayload, index);
+    }).filter(Boolean);
+    if (!grid || !nativeCards.length || !rendered.length) {
+      trackResultState(term, "native_no_additions", payload, nativeState, 0, 0);
+      return false;
+    }
+    var productCount = 0;
+    var lastInsertedAtPosition = Object.create(null);
+    rendered.forEach(function (section) {
+      var position = Math.min(nativeCards.length, section.wlPlacementAfter);
+      var anchor = lastInsertedAtPosition[position] || nativeCards[position - 1];
+      if (anchor.nextSibling) grid.insertBefore(section, anchor.nextSibling);
+      else grid.appendChild(section);
+      lastInsertedAtPosition[position] = section;
+      productCount += section.wlItems.length;
+      trackListView(section, section.wlItems, section.wlPayload);
+    });
+    trackResultState(term, "native_merchandised", payload, nativeState, productCount, rendered.length);
+    return true;
+  }
+
+  function renderResponse(panel, term, nativeState, payload) {
+    return nativeState.count === 0
+      ? renderRecovery(panel, term, nativeState, payload)
+      : renderMerchandising(panel, term, nativeState, payload);
   }
 
   function requestSuggestions(term, nativeState) {
@@ -404,19 +519,20 @@
     if (nativeState.count === 0) renderLoading(panel, term);
     requestSuggestions(term, nativeState).then(function (payload) {
       if (!payload || payload.success !== true) throw new Error("Suggestion response unavailable");
-      renderSection(panel, term, nativeState, payload);
+      renderResponse(panel, term, nativeState, payload);
     }).catch(function () {
       if (nativeState.count > 0) {
-        trackResultState(term, "native_service_unavailable", null, nativeState, 0);
+        trackResultState(term, "native_service_unavailable", null, nativeState, 0, 0);
         return;
       }
-      renderSection(panel, term, nativeState, {
-        algorithm: "merchant_typo_search_v1",
-        listId: "search_recovery_matches_v1",
+      renderResponse(panel, term, nativeState, {
+        algorithm: "merchant_search_discovery_v2",
+        listId: "search_recovery_matches_v2",
         listName: "Possible matches",
         matchType: "none",
-        strategy: "typo_and_catalog_recovery",
+        strategy: "catalog_correction_and_recovery",
         failureState: "empty_service_unavailable",
+        searchSuggestions: [],
         suggestions: []
       });
     });

@@ -23,7 +23,7 @@ Every event uses the same GTM custom event:
 {
   event: "wl_analytics_event",
   event_name: "add_to_cart",
-  analytics_version: "1.6.0",
+  analytics_version: "1.7.0",
   page_type: "product_detail",
   ecommerce: {
     currency: "USD",
@@ -38,6 +38,7 @@ Supported event names:
 - `search`
 - `search_results_enhanced`
 - `search_refine_click`
+- `search_suggestion_click`
 - `view_item_list`
 - `select_item`
 - `view_item`
@@ -69,7 +70,7 @@ Cart snapshots expire after seven days. `begin_checkout` is deduplicated across 
 Do not publish while the container or tags are flagged by Google's malware scanner. Resolve that warning first, then configure the clean workspace as follows:
 
 1. Create a Custom Event trigger named `CE - WL Analytics Event` for `wl_analytics_event`.
-2. Create Data Layer Variables using Version 2 for `event_name`, `search_term`, `item_list_name`, `shipping_tier`, `payment_type`, `checkout_stage`, `change_type`, `page_type`, `analytics_version`, `search_enhancement_state`, `search_match_type`, `suggested_term`, `native_result_count`, `native_result_total`, `suggestion_count`, and `search_enhancement_version`.
+2. Create Data Layer Variables using Version 2 for `event_name`, `search_term`, `item_list_name`, `shipping_tier`, `payment_type`, `checkout_stage`, `change_type`, `page_type`, `analytics_version`, `search_enhancement_state`, `search_match_type`, `suggested_term`, `suggested_search_term`, `suggestion_type`, `native_result_count`, `native_result_total`, `suggestion_count`, `merchandising_section_count`, and `search_enhancement_version`.
 3. Create one GA4 Event tag using measurement ID `G-4ZLV1YB6GY` and `{{DLV - event_name}}` as the event name.
 4. Enable ecommerce data from the data layer in that tag.
 5. Map the non-ecommerce parameters above as event parameters and attach `CE - WL Analytics Event`.
@@ -77,14 +78,16 @@ Do not publish while the container or tags are flagged by Google's malware scann
 
 The old click-text triggers should be retired after the new event stream is verified. Leaving both enabled will duplicate ecommerce events.
 
-## Products.aspx smart-search recovery v1
+## Products.aspx search discovery v2
 
-Algorithm version: `merchant_typo_search_v1`
+Algorithm version: `merchant_search_discovery_v2`
 
 The enhancement runs only when `Products.aspx` has a non-empty `searchText` parameter. It waits for the native WebTrack results panel, counts only visible cards inside `#productlistcards`, and never hides, reorders, or replaces native results.
 
-- When WebTrack returns zero visible products, it adds `We found possible matches` above the standard price notice. The catalog matcher supports one missing, extra, substituted, or adjacent-transposed character, so `Vaslpar` can match `Valspar` without enabling broad, unrelated fuzzy results.
-- When WebTrack returns products, it preserves all native cards and adds `Related to your search` after the native products and paging controls only when at least three additional qualified items remain.
+- When WebTrack returns zero visible products, it adds `We found possible matches` above the standard price notice. A cached vocabulary built from customer-safe catalog titles, brands, and categories supplies high-confidence spelling corrections. One-edit misspellings and tightly constrained two-edit terms are supported, so examples such as `Vaslpar` → `Valspar` and `drlli` → `drill` work without opening the matcher to broad fuzzy guesses.
+- `Did you mean` and related-search terms are real links to the canonical first-page WebTrack URL (`Products.aspx?pg=0&sort=Relevance&direction=desc&itemsPerPage=48&searchText=...`). Related terms are drawn from general project rules plus catalog categories and brands, and a term is not exposed unless it produces a customer-safe catalog match.
+- When WebTrack returns products, every native card stays in its original order. The enhancement can insert at most two full-width merchandising rails after native cards 8 and 24. Each rail requires at least three non-duplicate products. Known brand-line spotlights are optional; general project-affinity rules provide complementary categories such as drill bits and batteries, hose nozzles and sprinklers, or paint applicators and preparation supplies.
+- The successful-search experience never adds another generic same-query shelf. For example, a Valspar search may spotlight a specific Medallion Plus line and then surface applicators instead of appending more undifferentiated Valspar results.
 - Suggestions come from the customer-safe merchant catalog. Cards require a safe product URL, safe image URL, and catalog-level `in_stock` status. They intentionally omit price until selected-store-aware pricing is available.
 - Visible native product IDs are sent only to the suggestion endpoint for duplicate exclusion. Search text is processed in a POST body, is not included in the request URL, and is never written to application logs. Email- and phone-shaped queries are rejected by both the browser and endpoint.
 - If no confident recovery exists, the blank page becomes a short search-help panel rather than showing unrelated products. If the optional service fails while native WebTrack results exist, the native page remains unchanged.
@@ -92,12 +95,13 @@ The enhancement runs only when `Products.aspx` has a non-empty `searchText` para
 Measurement:
 
 - The existing GA4 `search` event remains the source of the sanitized `search_term`.
-- `search_results_enhanced` records `search_enhancement_state`, `search_match_type`, `suggested_term`, `native_result_count`, `native_result_total`, and `suggestion_count`.
-- Each rendered suggestion rail emits `view_item_list`; clicks emit `select_item` with `item_list_id`, algorithm, strategy, rank, and item data.
+- `search_results_enhanced` records `search_enhancement_state`, `search_match_type`, `suggested_term`, `native_result_count`, `native_result_total`, `suggestion_count`, and `merchandising_section_count`.
+- `search_suggestion_click` records `search_term`, `suggested_search_term`, and `suggestion_type` for correction and related-search links. The destination performs a normal page load, so the existing `search` event then measures whether the revised term returned native results.
+- Each rendered recovery or merchandising rail emits its own `view_item_list`; clicks emit `select_item` with `item_list_id`, algorithm, strategy, rank, and item data.
 - A selected suggestion is retained in session storage for no more than 24 hours. Subsequent matching `view_item`, `add_to_cart`, and `purchase` events inherit the most recent search- or PDP-recommendation attribution.
 - `search_refine_click` measures use of the fallback `Edit your search` action.
 
-Recommended GA4 custom definitions are event-scoped dimensions for `search_enhancement_state`, `search_match_type`, `suggested_term`, and `search_enhancement_version`, plus custom metrics for `native_result_count`, `native_result_total`, and `suggestion_count`. The first report should rank `search_term` where `search_enhancement_state` begins with `empty_`, then compare suggestion click-through, add-to-cart, and purchase rates by `item_list_id`.
+Recommended GA4 custom definitions are event-scoped dimensions for `search_enhancement_state`, `search_match_type`, `suggested_term`, `suggested_search_term`, `suggestion_type`, and `search_enhancement_version`, plus custom metrics for `native_result_count`, `native_result_total`, `suggestion_count`, and `merchandising_section_count`. The first report should rank `search_term` where `search_enhancement_state` begins with `empty_`, compare correction clicks with the next `search` event, and compare item-list click-through, add-to-cart, and purchase rates by `item_list_id` and `recommendation_strategy`.
 
 ## Abandoned-cart follow-up
 

@@ -3,7 +3,7 @@
 
   if (window.WLAnalytics) return;
 
-  var VERSION = "1.6.0";
+  var VERSION = "1.7.0";
   var EVENT_NAME = "wl_analytics_event";
   var GA_MEASUREMENT_ID = "G-4ZLV1YB6GY";
   var META_PIXEL_ID = "188974749776655";
@@ -25,6 +25,7 @@
     search: true,
     search_results_enhanced: true,
     search_refine_click: true,
+    search_suggestion_click: true,
     view_item_list: true,
     select_item: true,
     view_item: true,
