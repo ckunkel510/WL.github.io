@@ -37,7 +37,8 @@
     pdp_fulfillment_view: true,
     pdp_fulfillment_ready: true,
     pdp_fulfillment_select: true,
-    pdp_store_availability: true
+    pdp_store_availability: true,
+    pdp_price_sign_in: true
   };
 
   var BLOCKED_KEYS = /(?:^|_)(?:name|first_name|last_name|email|phone|telephone|address|street|city|state|zip|postal|country|payment|card|account|password|user_id|customer_id|contact|instructions|po_number)(?:$|_)/i;
