@@ -105,7 +105,18 @@ test("PDP client mounts a tracked, accessible rail after reviews", () => {
   assert.match(sidebar, /items\.length < 3/);
   assert.match(sidebar, /View price & availability/);
   assert.match(sidebar, /aria-labelledby/);
+  assert.match(sidebar, /product-recommendations\?v=20260909-1/);
   assert.match(analytics, /wl_pdp_recommendation_attribution_v1/);
   assert.match(analytics, /recommendationContext\(name, parameters\)/);
   assert.match(vercel, /api\/product-recommendations\.js/);
+});
+
+test("recommendation API always emits the storefront CORS contract before CDN caching", () => {
+  const headers = {};
+  recommendations.setCorsHeaders(
+    { headers: {} },
+    { setHeader(name, value) { headers[name] = value; } }
+  );
+  assert.equal(headers["Access-Control-Allow-Origin"], "https://webtrack.woodsonlumber.com");
+  assert.equal(headers["Access-Control-Allow-Methods"], "GET, OPTIONS");
 });

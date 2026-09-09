@@ -1518,7 +1518,7 @@ $(document).ready(async function () {
   // =========================
   // Product recommendations
   // =========================
-  const recommendationApi = "https://wl-upsrates.vercel.app/api/product-recommendations";
+  const recommendationApi = "https://wl-upsrates.vercel.app/api/product-recommendations?v=20260909-1";
   const recommendationAttributionKey = "wl_pdp_recommendation_attribution_v1";
   let recommendationRequest = 0;
   let recommendationSignature = "";

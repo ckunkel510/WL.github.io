@@ -205,12 +205,8 @@ function recommendProducts(catalog, productId, excluded = new Set(), limit = MAX
 }
 
 function setCorsHeaders(req, res) {
-  const origin = String(req.headers?.origin || "");
-  if (origin === WEBTRACK_ORIGIN) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Vary", "Origin");
-    res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-  }
+  res.setHeader("Access-Control-Allow-Origin", WEBTRACK_ORIGIN);
+  res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
 }
 
 function sendJson(res, status, payload, cacheControl = "no-store") {
@@ -273,5 +269,6 @@ module.exports._test = {
   excludedProductIds,
   overlapScore,
   parentCategoryKey,
-  recommendProducts
+  recommendProducts,
+  setCorsHeaders
 };
