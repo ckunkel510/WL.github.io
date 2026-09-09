@@ -3,7 +3,7 @@
 
   if (window.WLAnalytics) return;
 
-  var VERSION = "1.3.0";
+  var VERSION = "1.3.1";
   var EVENT_NAME = "wl_analytics_event";
   var GA_MEASUREMENT_ID = "G-4ZLV1YB6GY";
   var META_PIXEL_ID = "188974749776655";
@@ -38,7 +38,9 @@
     pdp_fulfillment_ready: true,
     pdp_fulfillment_select: true,
     pdp_store_availability: true,
-    pdp_price_sign_in: true
+    pdp_price_sign_in: true,
+    pdp_option_view: true,
+    pdp_option_select: true
   };
 
   var BLOCKED_KEYS = /(?:^|_)(?:name|first_name|last_name|email|phone|telephone|address|street|city|state|zip|postal|country|payment|card|account|password|user_id|customer_id|contact|instructions|po_number)(?:$|_)/i;
