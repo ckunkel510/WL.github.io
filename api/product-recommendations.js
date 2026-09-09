@@ -18,7 +18,7 @@ const AFFINITY_RULES = [
     id: "watering",
     when: ["watering", "garden hose", "soaker hose", "hose nozzle", "sprinkler", "irrigation"],
     groups: [
-      { id: "hose_accessories", name: "Nozzles & hose connections", categories: ["hose nozzles", "hose repair", "hose carts", "reels", "hangers", "hose fittings"] },
+      { id: "hose_accessories", name: "Nozzles & hose connections", categories: ["hose nozzles", "hose repair parts", "hose carts reels hangers"] },
       { id: "watering_control", name: "Sprinklers & watering control", categories: ["sprinklers", "watering timers", "drip irrigation", "underground irrigation", "watering cans", "sprinkling cans"] },
       { id: "plant_care", name: "Lawn & garden care", categories: ["lawn fertilizer", "specialty fertilizers", "potting soils", "garden soils", "soil conditioners"] }
     ]

@@ -61,6 +61,9 @@ test("recommendation shelves pair watering products with useful adjacent project
       product("110", "Metal Spray Nozzle", `${watering} > Hose Nozzles`),
       product("111", "Pistol Grip Nozzle", `${watering} > Hose Nozzles`),
       product("112", "Water Breaker Nozzle", `${watering} > Hose Nozzles`),
+      product("113", "Hose Coupling", `${watering} > Hose Repair & Parts`),
+      product("114", "Hose Mender", `${watering} > Hose Repair & Parts`),
+      product("115", "Hose Washer Set", `${watering} > Hose Repair & Parts`),
       product("120", "Circular Lawn Sprinkler", `${watering} > Sprinklers`),
       product("121", "Oscillating Lawn Sprinkler", `${watering} > Sprinklers`),
       product("122", "Impulse Lawn Sprinkler", `${watering} > Sprinklers`),
@@ -84,10 +87,12 @@ test("recommendation shelves pair watering products with useful adjacent project
     "You may also like",
     "You may also like"
   ]);
-  assert.equal(sections[1].recommendations.every((item) => /Hose Nozzles$/.test(item.category)), true);
+  assert.equal(sections[1].recommendations.every((item) => /(?:Hose Nozzles|Hose Repair & Parts)$/.test(item.category)), true);
   assert.equal(sections[2].recommendations.every((item) => /Sprinklers$/.test(item.category)), true);
   assert.equal(sections[3].recommendations.every((item) => /Lawn Fertilizer$/.test(item.category)), true);
-  assert.equal(new Set(sections.flatMap((section) => section.recommendations.map((item) => item.productId))).size, 12);
+  const sectionProductIds = sections.flatMap((section) => section.recommendations.map((item) => item.productId));
+  assert.equal(new Set(sectionProductIds).size, sectionProductIds.length);
+  assert.equal(sections.flatMap((section) => section.recommendations).some((item) => /Joist Hangers|Pipe\/Tubing Straps/.test(item.category)), false);
 });
 
 test("recommendations fail closed when fewer than three customer-ready matches remain", () => {
