@@ -22,16 +22,11 @@
     } catch (error) {}
   }
 
-  var expectedAccounts = {
-    ckunkel2: 'EMP2111',
-    ckunkel3: '10005'
-  };
-  var loginName = String(context && context.loginName || '').trim().toLowerCase();
+  var expectedAccountIds = ['EMP2111', '10005'];
   var accountId = String(context && context.accountId || '').trim().toUpperCase();
   var expiresAt = Number(context && context.expiresAt || 0);
   var approved = !!(
-    expectedAccounts[loginName] &&
-    expectedAccounts[loginName] === accountId &&
+    expectedAccountIds.indexOf(accountId) !== -1 &&
     expiresAt > Date.now()
   );
   if (!approved) return;

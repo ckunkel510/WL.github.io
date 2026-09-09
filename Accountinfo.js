@@ -32,10 +32,7 @@
   const AUTOPAY_ACTIVE_KEY = 'wl_autopay_active_v1';
   const AUTOPAY_ALLOWED_LOGINS = ['ckunkel2', 'ckunkel3'];
   const PAYMENT_FLOW_PREVIEW_KEY = 'wl_payment_flow_preview_v1';
-  const PAYMENT_FLOW_PREVIEW_ACCOUNTS = Object.freeze({
-    ckunkel2: 'EMP2111',
-    ckunkel3: '10005'
-  });
+  const PAYMENT_FLOW_PREVIEW_ACCOUNT_IDS = Object.freeze(['EMP2111', '10005']);
 
   // Same-origin lookup used to pull the account email from AccountSettings.aspx
   // instead of relying on localStorage or requiring the customer to re-type it.
@@ -99,17 +96,12 @@
     const match=String(value||'').trim().match(/\(([^()]+)\)\s*$/);
     return match ? match[1].trim().toUpperCase() : '';
   }
-  function configurePaymentFlowPreview(loginName, accountName){
-    const login=String(loginName||'').trim().toLowerCase();
+  function configurePaymentFlowPreview(accountName){
     const accountId=accountIdFromName(accountName);
-    const enabled=!!(
-      PAYMENT_FLOW_PREVIEW_ACCOUNTS[login] &&
-      PAYMENT_FLOW_PREVIEW_ACCOUNTS[login]===accountId
-    );
+    const enabled=PAYMENT_FLOW_PREVIEW_ACCOUNT_IDS.includes(accountId);
     try {
       if(enabled){
         sessionStorage.setItem(PAYMENT_FLOW_PREVIEW_KEY, JSON.stringify({
-          loginName: login,
           accountId,
           expiresAt: Date.now() + (30 * 60 * 1000)
         }));
@@ -369,7 +361,7 @@
     const accountKey = acctName || 'unknown';
     const accountSettingsDetails = await fetchAccountSettingsDetails().catch(() => ({}));
     const accountLoginName = accountSettingsDetails.loginName || '';
-    const paymentFlowPreviewEnabled = configurePaymentFlowPreview(accountLoginName, accountKey);
+    const paymentFlowPreviewEnabled = configurePaymentFlowPreview(accountKey);
     const withPaymentFlowPreview = value => paymentFlowUrl(value, paymentFlowPreviewEnabled);
     const isAutopayTestAccount = isAutopayAllowedIdentity(
       accountLoginName,

@@ -8,15 +8,14 @@ const routerAndLegacySource = read('PayByInvoice.js');
 const previewSource = read('PayByInvoicePreview.js');
 const accountInfoSource = read('Accountinfo.js');
 
-test('preview router requires both an approved login/account pair and the preview URL', () => {
-  const mapBlock = routerAndLegacySource.match(/var expectedAccounts = \{([\s\S]*?)\n  \};/);
-  const pairs = [...mapBlock[1].matchAll(/(\w+):\s*'([^']+)'/g)].map((match) => [match[1], match[2]]);
+test('preview router requires an approved account ID and the preview URL', () => {
+  const ids = routerAndLegacySource.match(/var expectedAccountIds = \[([^\]]+)\]/)[1]
+    .match(/'[^']+'/g)
+    .map((value) => value.slice(1, -1));
 
-  assert.deepEqual(pairs, [['ckunkel2', 'EMP2111'], ['ckunkel3', '10005']]);
+  assert.deepEqual(ids, ['EMP2111', '10005']);
   assert.match(routerAndLegacySource, /requestedMode !== 'preview'/);
-  assert.match(routerAndLegacySource, /ckunkel2:\s*'EMP2111'/);
-  assert.match(routerAndLegacySource, /ckunkel3:\s*'10005'/);
-  assert.match(routerAndLegacySource, /expectedAccounts\[loginName\] === accountId/);
+  assert.match(routerAndLegacySource, /expectedAccountIds\.indexOf\(accountId\) !== -1/);
   assert.match(routerAndLegacySource, /expiresAt > Date\.now\(\)/);
   assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260909-1/);
 });
@@ -32,15 +31,14 @@ test('legacy payment enhancements remain the default and stop only for an approv
   assert.match(routerAndLegacySource, /wiz\.id = 'wlApWizard3'/);
 });
 
-test('account overview enables preview only for the two exact login/account tuples', () => {
-  const mapBlock = accountInfoSource.match(/PAYMENT_FLOW_PREVIEW_ACCOUNTS = Object\.freeze\(\{([\s\S]*?)\n  \}\);/);
-  const pairs = [...mapBlock[1].matchAll(/(\w+):\s*'([^']+)'/g)].map((match) => [match[1], match[2]]);
+test('account overview enables preview only for the two approved account IDs', () => {
+  const ids = accountInfoSource.match(/PAYMENT_FLOW_PREVIEW_ACCOUNT_IDS = Object\.freeze\(\[([^\]]+)\]\)/)[1]
+    .match(/'[^']+'/g)
+    .map((value) => value.slice(1, -1));
 
-  assert.deepEqual(pairs, [['ckunkel2', 'EMP2111'], ['ckunkel3', '10005']]);
-  assert.match(accountInfoSource, /PAYMENT_FLOW_PREVIEW_ACCOUNTS = Object\.freeze/);
-  assert.match(accountInfoSource, /ckunkel2:\s*'EMP2111'/);
-  assert.match(accountInfoSource, /ckunkel3:\s*'10005'/);
-  assert.match(accountInfoSource, /PAYMENT_FLOW_PREVIEW_ACCOUNTS\[login\]===accountId/);
+  assert.deepEqual(ids, ['EMP2111', '10005']);
+  assert.match(accountInfoSource, /PAYMENT_FLOW_PREVIEW_ACCOUNT_IDS = Object\.freeze/);
+  assert.match(accountInfoSource, /PAYMENT_FLOW_PREVIEW_ACCOUNT_IDS\.includes\(accountId\)/);
   assert.match(accountInfoSource, /sessionStorage\.removeItem\(PAYMENT_FLOW_PREVIEW_KEY\)/);
   assert.match(accountInfoSource, /url\.searchParams\.set\('wl_payment_flow','preview'\)/);
   assert.match(accountInfoSource, /withPaymentFlowPreview\('AccountPayment_r\.aspx'\)/);
