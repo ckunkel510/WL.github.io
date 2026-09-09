@@ -19,7 +19,7 @@
     const savedMethod = localStorage.getItem("woodson_cart_method");
     sessionStorage.setItem("wl_analytics_experiment_v1", JSON.stringify({
       experiment_id: "pdp_fulfillment_v1_20260909",
-      experiment_variant: "enhanced_fulfillment",
+      experiment_variant: "three_column_options_v2",
       fulfillment_method: savedMethod === "delivery" ? "delivery" : "pickup"
     }));
   } catch (error) {}
@@ -74,6 +74,10 @@ $(document).ready(async function () {
         max-width: 100% !important;
         margin: 0 0 24px;
       }
+      #product-page.wl-has-product-options {
+        grid-template-columns: minmax(0, 1fr) minmax(220px, 280px) minmax(290px, 330px);
+        gap: 20px !important;
+      }
       #product-image-wrapper {
         grid-column: 1;
         grid-row: 1;
@@ -122,6 +126,103 @@ $(document).ready(async function () {
         background: #fff;
       }
       .wl-product-thumbnail img { width: 100% !important; height: 100% !important; object-fit: contain; }
+      #product-options-column {
+        display: none;
+        grid-column: 2;
+        grid-row: 1;
+        min-width: 0;
+        width: 100%;
+      }
+      #product-page.wl-has-product-options #product-options-column {
+        display: block;
+      }
+      #product-page.wl-has-product-options #product-sidebar {
+        grid-column: 3;
+      }
+      #productoption.wl-product-options {
+        display: block !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 16px !important;
+        border: 1px solid #d9dde1;
+        border-radius: 6px;
+        background: #fff;
+        box-sizing: border-box;
+      }
+      #productoption .wl-product-options-title {
+        margin: 0 0 12px;
+        color: #20262d;
+        font-size: 18px;
+        font-weight: 850;
+        line-height: 1.2;
+      }
+      #productoption .wl-product-option-group {
+        display: grid;
+        gap: 8px;
+      }
+      #productoption .wl-product-option-group + .wl-product-option-group {
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 1px solid #e3e6e9;
+      }
+      #productoption .wl-product-option-label {
+        margin: 0;
+        color: #3f4852;
+        font-size: 13px;
+        font-weight: 800;
+      }
+      #productoption .wl-product-option-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      #productoption .wl-product-option-chip,
+      #productoption .wl-product-option-image {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 44px;
+        min-height: 38px;
+        padding: 8px 10px;
+        border: 1px solid #aeb5bd;
+        border-radius: 5px;
+        background: #fff;
+        color: #20262d !important;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 750;
+        line-height: 1.15;
+        text-align: center;
+        text-decoration: none !important;
+        cursor: pointer;
+        box-sizing: border-box;
+      }
+      #productoption .wl-product-option-chip:hover,
+      #productoption .wl-product-option-chip:focus,
+      #productoption .wl-product-option-image:hover,
+      #productoption .wl-product-option-image:focus {
+        border-color: #6b0016;
+        box-shadow: 0 0 0 2px rgba(107, 0, 22, .14);
+        outline: none;
+      }
+      #productoption [aria-current="true"] {
+        border-color: #6b0016;
+        background: #fff7f8;
+        color: #6b0016 !important;
+        box-shadow: inset 0 0 0 1px #6b0016;
+      }
+      #productoption .wl-product-option-image {
+        width: 62px;
+        height: 62px;
+        padding: 5px;
+      }
+      #productoption .wl-product-option-image img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
       #product-sidebar {
         grid-column: 2;
         grid-row: 1;
@@ -412,17 +513,46 @@ $(document).ready(async function () {
       @media (max-width: 1050px) {
         .wl-pdp-heading { grid-template-columns: 1fr; }
         .wl-pdp-heading .wl-quote-product { grid-column: 1; grid-row: auto; }
-        #product-page { grid-template-columns: minmax(0, 1fr) 300px; gap: 18px !important; }
+        #product-page,
+        #product-page.wl-has-product-options {
+          grid-template-columns: minmax(0, 1fr) 300px;
+          gap: 18px !important;
+        }
+        #product-options-column,
+        #product-page.wl-has-product-options #product-options-column {
+          grid-column: 1;
+          grid-row: 2;
+        }
+        #product-sidebar,
+        #product-page.wl-has-product-options #product-sidebar {
+          grid-column: 2;
+          grid-row: 1 / span 2;
+        }
+        #product-main { grid-column: 1 / -1; grid-row: 3; }
         #WTRelatedProducts .wl-related-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       }
       @media (max-width: 767px) {
         .wl-pdp-heading { margin-top: 14px; gap: 8px; }
         #wl-product-title { font-size: 24px; }
         .wl-pdp-heading .wl-quote-product { padding: 12px !important; }
-        #product-page { grid-template-columns: minmax(0, 1fr); gap: 16px !important; }
+        #product-page,
+        #product-page.wl-has-product-options {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 16px !important;
+        }
         #product-image-wrapper { grid-column: 1; grid-row: 1; }
-        #product-sidebar { grid-column: 1; grid-row: 2; padding: 12px !important; }
-        #product-main { grid-column: 1; grid-row: 3; }
+        #product-options-column,
+        #product-page.wl-has-product-options #product-options-column {
+          grid-column: 1;
+          grid-row: 2;
+        }
+        #product-sidebar,
+        #product-page.wl-has-product-options #product-sidebar {
+          grid-column: 1;
+          grid-row: 3;
+          padding: 12px !important;
+        }
+        #product-main { grid-column: 1; grid-row: 4; }
         #ctl00_PageBody_productDetail_ProductImage { max-height: 420px !important; }
         .wl-product-price-row { font-size: 28px !important; }
         #WTRelatedProducts { overflow: visible; }
@@ -451,7 +581,7 @@ $(document).ready(async function () {
         }
       }
       @supports (-webkit-touch-callout: none) {
-        #product-page, #product-image-wrapper, #product-sidebar, #product-main { min-width: 0 !important; }
+        #product-page, #product-image-wrapper, #product-options-column, #product-sidebar, #product-main { min-width: 0 !important; }
         .wl-product-thumbnails { width: 100% !important; }
       }
     `;
@@ -590,6 +720,11 @@ $(document).ready(async function () {
   const $main = $("<div>", { id: "product-main" }).css({
     flex: "1 1 65%",
     minWidth: "300px",
+  });
+
+  const $optionsColumn = $("<aside>", {
+    id: "product-options-column",
+    "aria-label": "Product options"
   });
 
   const $sidebar = $("<div>", { id: "product-sidebar" }).css({
@@ -800,7 +935,7 @@ $(document).ready(async function () {
   // =========================
   const selectedMethodKey = "woodson_cart_method";
   const experimentId = "pdp_fulfillment_v1_20260909";
-  const experimentVariant = "enhanced_fulfillment";
+  const experimentVariant = "three_column_options_v2";
   let pdpStockState = window.WLPdpStockState || null;
   let stockReadyTracked = false;
 
@@ -1123,30 +1258,60 @@ $(document).ready(async function () {
 
   $main.append($description, $reviews);
 
-  // Watch for and pull in widgets
-  function tryMoveWidget(selector) {
-    const $el = $(selector).first();
-    if ($el.length && !$sidebar.find(selector).length) {
-      $sidebar.append($el.detach());
-    }
+  // Product choices belong between imagery and the buy box. The options script
+  // publishes state so cached, delayed, empty, and error responses all settle cleanly.
+  let optionViewTracked = false;
+
+  function clearProductOptions() {
+    $pageWrapper.removeClass("wl-has-product-options");
+    $optionsColumn.empty();
   }
 
-  const intervalId = setInterval(() => {
-    tryMoveWidget("#productoption");
-    tryMoveWidget("#stock-widget");
+  function mountProductOptions() {
+    const $options = $("#productoption").first();
+    if (!$options.length) return false;
 
-    if ($("#productoption").length && $("#stock-widget").length) {
-      clearInterval(intervalId);
+    if (!$optionsColumn.find("#productoption").length) {
+      $optionsColumn.empty().append($options.detach());
     }
-  }, 250);
+    $pageWrapper.addClass("wl-has-product-options");
+
+    if (!optionViewTracked) {
+      optionViewTracked = true;
+      const optionState = window.WLPdpOptionsState || {};
+      wlTrack("pdp_option_view", {
+        option_count: Number(optionState.optionCount) || $options.find("[data-wl-product-option]").length,
+        option_group_count: Number(optionState.groupCount) || $options.find(".wl-product-option-group").length
+      });
+    }
+    return true;
+  }
+
+  document.addEventListener("wl:pdp-options-ready", function (event) {
+    const detail = event && event.detail ? event.detail : {};
+    if (Number(detail.optionCount) > 0) {
+      mountProductOptions();
+    } else if (["ready", "empty", "invalid", "error"].includes(detail.status)) {
+      clearProductOptions();
+    }
+  });
+
+  $optionsColumn.on("click", "[data-wl-product-option]", function () {
+    wlTrack("pdp_option_select", {
+      option_type: String($(this).data("optionType") || "unknown").slice(0, 80),
+      option_value: String($(this).data("optionValue") || $(this).text().trim() || "unknown").slice(0, 100),
+      option_target_id: String($(this).data("optionTargetId") || "").slice(0, 40)
+    });
+  });
+
+  // Covers an option response that completed while the blocklist request was pending.
+  mountProductOptions();
 
   // Inject a stable layout at every viewport. CSS controls the responsive order,
   // so rotating a tablet or resizing a browser cannot strand content in the old tree.
-  if ($imageTd.length) {
-    const $imageWrap = $("<div>", { id: "product-image-wrapper" });
-    $imageWrap.append($imageTd);
-    $pageWrapper.append($imageWrap, $sidebar, $main);
-  }
+  const $imageWrap = $("<div>", { id: "product-image-wrapper" });
+  if ($imageTd.length) $imageWrap.append($imageTd);
+  $pageWrapper.append($imageWrap, $optionsColumn, $sidebar, $main);
 
   $insertionPoint.after($pageWrapper);
 
