@@ -151,6 +151,8 @@ test("PDP client mounts a tracked, accessible rail after reviews", () => {
   assert.match(sidebar, /data-option-target-id/);
   assert.match(sidebar, /items\.length < 3/);
   assert.match(sidebar, /View price & availability/);
+  assert.match(sidebar, /wl-pdp-recommendation-card__image-fallback/);
+  assert.match(sidebar, /Image unavailable/);
   assert.match(sidebar, /aria-labelledby/);
   assert.match(sidebar, /payload\.sections/);
   assert.match(sidebar, /recommendation_strategy/);

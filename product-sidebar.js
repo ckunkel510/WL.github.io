@@ -535,6 +535,21 @@ $(document).ready(async function () {
         margin: 0 0 12px;
         object-fit: contain;
       }
+      .wl-pdp-recommendation-card__image-fallback {
+        display: grid;
+        place-items: center;
+        width: 100%;
+        height: 170px;
+        margin: 0 0 12px;
+        border: 1px dashed #c7ccd1;
+        border-radius: 6px;
+        background: #f6f7f8;
+        color: #68727d;
+        font-size: 13px;
+        font-weight: 750;
+        text-align: center;
+        box-sizing: border-box;
+      }
       .wl-pdp-recommendation-card__brand,
       .wl-pdp-recommendation-card__category {
         color: #59636e;
@@ -708,7 +723,8 @@ $(document).ready(async function () {
           flex-basis: min(78vw, 285px);
           min-height: 325px;
         }
-        .wl-pdp-recommendation-card__image { height: 155px; }
+        .wl-pdp-recommendation-card__image,
+        .wl-pdp-recommendation-card__image-fallback { height: 155px; }
         #WTRelatedProducts { overflow: visible; }
         #WTRelatedProducts .relatedProductsScrollingDiv {
           width: calc(100vw - 36px) !important;
@@ -1723,13 +1739,20 @@ $(document).ready(async function () {
         "data-recommendation-product-id": String(item.productId),
         "data-recommendation-match": String(item.match || "same_category")
       });
-      $("<img>", {
+      const $image = $("<img>", {
         class: "wl-pdp-recommendation-card__image",
-        src: imageUrl,
         alt: "",
         loading: "lazy",
         decoding: "async"
-      }).appendTo($card);
+      });
+      $image.one("error", function () {
+        $(this).replaceWith($("<span>", {
+          class: "wl-pdp-recommendation-card__image-fallback",
+          text: "Image unavailable",
+          "aria-hidden": "true"
+        }));
+      });
+      $image.attr("src", imageUrl).appendTo($card);
       if (brand) $("<span>", { class: "wl-pdp-recommendation-card__brand", text: brand }).appendTo($card);
       if (category) $("<span>", { class: "wl-pdp-recommendation-card__category", text: category }).appendTo($card);
       $("<span>", { class: "wl-pdp-recommendation-card__title", text: String(item.title || "") }).appendTo($card);
