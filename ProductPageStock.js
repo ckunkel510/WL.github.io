@@ -254,6 +254,14 @@ $(document).ready(function () {
   }
   console.log(`Using column index: ${qtyColIndex} for quantity`);
 
+  let networkAvailable = 0;
+  stockData.find('tr').each((_, row) => {
+    const raw = $(row).find(`td:eq(${qtyColIndex})`).text().trim();
+    const match = raw.replace(/,/g, "").match(/-?\d+/);
+    const quantity = match ? parseInt(match[0], 10) : null;
+    if (quantity !== null && quantity > 0) networkAvailable += quantity;
+  });
+
   const filteredRow = stockData.find('tr').filter((_, row) => {
     const branchCell = $(row).find('td').eq(0).text().trim();
     return branchCell.toLowerCase() === branch.toLowerCase();
@@ -268,18 +276,36 @@ $(document).ready(function () {
     const isZero = qtyNumber === 0;
 
     if (isNoStockText || isZero) {
-      displayWidget(branch, "Ship to your store — Free pickup at checkout", false, ctaUrl, productId, "Check nearby stores for pickup today");
+      displayWidget(branch, "Ship to your store — Free pickup at checkout", false, ctaUrl, productId, "Check nearby stores for pickup today", {
+        branch,
+        quantity: 0,
+        hasStock: false,
+        totalAvailable: networkAvailable,
+        productId
+      });
     } else {
-      displayWidget(branch, rawStockValue, false, ctaUrl, productId, "See availability at other stores");
+      displayWidget(branch, rawStockValue, false, ctaUrl, productId, "See availability at other stores", {
+        branch,
+        quantity: qtyNumber,
+        hasStock: true,
+        totalAvailable: networkAvailable,
+        productId
+      });
     }
   } else {
     console.error(`Branch "${branch}" not found in stock table.`);
-    displayWidget(branch, 'No stock available', true, ctaUrl, productId, "Check nearby stores for pickup today");
+    displayWidget(branch, 'No stock available', true, ctaUrl, productId, "Check nearby stores for pickup today", {
+      branch,
+      quantity: 0,
+      hasStock: false,
+      totalAvailable: networkAvailable,
+      productId
+    });
   }
 }
 
 
-function displayWidget(branch, quantityMessage, showSignInButton, ctaUrl, productId, ctaLabel = "Check nearby stores for pickup today") {
+function displayWidget(branch, quantityMessage, showSignInButton, ctaUrl, productId, ctaLabel = "Check nearby stores for pickup today", stockState = null) {
   // Ensure only one widget exists
   $('#stock-widget').remove();
 
@@ -310,6 +336,18 @@ function displayWidget(branch, quantityMessage, showSignInButton, ctaUrl, produc
   `;
 
   $('#ctl00_PageBody_productDetail_productDescription').before(widgetHtml);
+
+  const detail = Object.assign({
+    branch: branch || '',
+    quantity: null,
+    hasStock: false,
+    totalAvailable: 0,
+    productId: productId || ''
+  }, stockState || {});
+  window.WLPdpStockState = detail;
+  try {
+    document.dispatchEvent(new CustomEvent('wl:pdp-stock-ready', { detail }));
+  } catch (error) {}
 }
 
 
@@ -469,51 +507,9 @@ function displayWidget(branch, quantityMessage, showSignInButton, ctaUrl, produc
 
 
 
-    function updatePickupDeliveryDisplay() {
-  console.log("Running updatePickupDeliveryDisplay...");
+    // The stock AJAX response is not inserted into the live DOM. Publish its parsed
+    // state directly so the product buy box can render availability reliably.
 
-  const $stockTable = $("#StockDataGrid_ctl00");
-  if (!$stockTable.length) {
-    console.warn("Stock table not found");
-    return;
-  }
-
-  const pickupBranch = $("#stock-widget p strong:contains('Branch:')")
-    .parent()
-    .text()
-    .replace("Branch:", "")
-    .trim();
-  console.log("Detected pickup branch:", pickupBranch);
-
-  const pickupRow = $stockTable.find("tr").filter((_, row) => {
-    return $(row).find("td").eq(0).text().trim().toLowerCase() === pickupBranch.toLowerCase();
-  });
-
-  const pickupQty = pickupRow.find("td").eq(2).text().trim();
-  console.log("Pickup quantity:", pickupQty);
-  $(".pickup-info").text(pickupQty ? `${pickupQty} in stock` : "Unavailable");
-
-  let totalDelivery = 0;
-  $stockTable.find("tr").each((_, row) => {
-    const qty = parseInt($(row).find("td").eq(2).text().replace(/,/g, ""), 10);
-    if (!isNaN(qty)) totalDelivery += qty;
-  });
-
-  console.log("Total delivery quantity:", totalDelivery);
-  $(".delivery-info").text(`${totalDelivery.toLocaleString()} available`);
-
-  if (totalDelivery === 0) {
-    $(".delivery-info").text("Unavailable");
-    $(".method-box:contains('Delivery')").css({ opacity: 0.5, pointerEvents: "none" });
-  }
-}
-
-const waitForStockAndRun = setInterval(() => {
-  if ($("#StockDataGrid_ctl00").length && $("#stock-widget").length) {
-    updatePickupDeliveryDisplay();
-    clearInterval(waitForStockAndRun);
-  }
-}, 250);
 
 
 });
