@@ -18,7 +18,7 @@ test('preview router requires an approved account ID and the preview URL', () =>
   assert.match(routerAndLegacySource, /expectedAccountIds\.indexOf\(accountId\) !== -1/);
   assert.match(routerAndLegacySource, /expiresAt > Date\.now\(\)/);
   assert.match(routerAndLegacySource, /__WL_PAYMENT_PREVIEW_ACCOUNT_ID__ = accountId/);
-  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260909-6/);
+  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260909-7/);
 });
 
 test('legacy payment enhancements remain the default and stop only for an approved preview', () => {
@@ -115,6 +115,7 @@ test('preview convenience actions update native fields without submitting', () =
   assert.match(previewSource, /data-wl-action="choose-invoices"/);
   assert.match(previewSource, /data-wl-action="choose-job"/);
   assert.match(previewSource, /input\.dispatchEvent\(new Event\('input'/);
+  assert.doesNotMatch(previewSource, /input\.dispatchEvent\(new Event\('change'/);
   assert.match(previewSource, /Pay last statement/);
 });
 
@@ -128,6 +129,7 @@ test('invoice and job choices open separate custom selectors', () => {
   assert.match(previewSource, /JobBalances_R\.aspx/);
   assert.match(previewSource, /data-wl-select-invoice/);
   assert.match(previewSource, /data-wl-select-job/);
+  assert.match(previewSource, /checkbox\.checked = false/);
   assert.match(previewSource, /position:absolute!important;left:-100000px/);
 });
 
@@ -156,7 +158,7 @@ test('billing entry is stabilized without changing the native final payment hand
   assert.match(previewSource, /control\.removeAttribute\('onchange'\)/);
   assert.match(previewSource, /\[billing, postal, email\]/);
   assert.doesNotMatch(previewSource, /\[billing, postal, email, amount\]/);
-  assert.match(previewSource, /input\.dispatchEvent\(new Event\('change'/);
+  assert.doesNotMatch(previewSource, /input\.dispatchEvent\(new Event\('change'/);
   assert.match(previewSource, /wl-payment-validation-requested/);
   assert.match(previewSource, /wl-payment-notes-field textarea\{height:78px!important/);
   assert.match(previewSource, /data-wl-restored-billing/);

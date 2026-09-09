@@ -21,7 +21,7 @@
   if (requestedMode === 'native') return;
   if (ROLLOUT_MODE === 'preview' && requestedMode !== 'preview') return;
 
-  var VERSION = 'v2-preview-6';
+  var VERSION = 'v2-preview-7';
   var IDS = {
     address: 'ctl00_PageBody_AddressDropdownList',
     billing: 'ctl00_PageBody_BillingAddressTextBox',
@@ -397,7 +397,6 @@
 
     input.value = Number(value).toFixed(2);
     input.dispatchEvent(new Event('input', { bubbles: true }));
-    input.dispatchEvent(new Event('change', { bubbles: true }));
   }
 
   function ensureBalanceSummary(cashAccount, amountHeading) {
@@ -734,6 +733,9 @@
   function setRemittance(value) {
     var remittance = byId(IDS.remittance);
     if (!remittance) return;
+    document.querySelectorAll('#'+IDS.transactions+' input[type="checkbox"][id*="chkSelect"]:not([id*="SelectAll"])').forEach(function (checkbox) {
+      checkbox.checked = false;
+    });
     remittance.value = value || '';
     remittance.dispatchEvent(new Event('input', { bubbles: true }));
   }
