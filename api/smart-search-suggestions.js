@@ -43,7 +43,7 @@ const FEATURED_LINE_RULES = [
   }
 ];
 
-let correctionIndexCache = { snapshotId: "", source: null, words: new Map() };
+let correctionIndexCache = { snapshotId: "", source: null, words: new Map(), entries: [] };
 
 function setCorsHeaders(res) {
   res.setHeader("Access-Control-Allow-Origin", WEBTRACK_ORIGIN);
@@ -182,14 +182,17 @@ function correctionIndex(catalog) {
     correctionIndexCache.snapshotId === snapshotId &&
     correctionIndexCache.source === catalog.products &&
     correctionIndexCache.words.size
-  ) return correctionIndexCache.words;
+  ) return correctionIndexCache;
 
   const words = new Map();
+  const entries = [];
   (catalog.products || []).filter(hasCustomerCardData).forEach((product) => {
     const brand = usableText(product.brand);
     const normalizedBrand = normalizeText(brand);
     const oneWordBrand = tokens(normalizedBrand).length === 1 ? tokens(normalizedBrand)[0] : "";
-    const productWords = new Set(tokens(`${product.title} ${product.brand} ${product.category}`));
+    const searchable = normalizeText(`${product.title} ${product.brand} ${product.category}`);
+    const productWords = new Set(tokens(searchable));
+    entries.push({ searchable, words: productWords });
     productWords.forEach((word) => {
       if (!/^[a-z]{4,24}$/.test(word)) return;
       const current = words.get(word) || { word, display: word, count: 0, brandCount: 0 };
@@ -201,15 +204,15 @@ function correctionIndex(catalog) {
       words.set(word, current);
     });
   });
-  correctionIndexCache = { snapshotId, source: catalog.products, words };
-  return words;
+  correctionIndexCache = { snapshotId, source: catalog.products, words, entries };
+  return correctionIndexCache;
 }
 
-function correctedQuery(catalog, query) {
+function correctedQuery(catalog, query, index = correctionIndex(catalog)) {
   const queryTokens = tokens(query);
   if (queryTokens.length !== 1 || !/^[a-z]{4,24}$/.test(queryTokens[0])) return null;
   const queryWord = queryTokens[0];
-  const words = correctionIndex(catalog);
+  const words = index.words;
   if (words.has(queryWord)) return null;
   const candidates = [];
   words.forEach((candidate) => {
@@ -236,6 +239,41 @@ function correctedQuery(catalog, query) {
   };
 }
 
+function correctionFromRanked(query, ranked) {
+  const queryTokens = tokens(query);
+  if (queryTokens.length !== 1 || !ranked.length) return null;
+  const queryWord = queryTokens[0];
+  const candidates = new Map();
+  ranked.slice(0, 12).forEach((entry) => {
+    const brand = usableText(entry.product?.brand);
+    const normalizedBrand = normalizeText(brand);
+    const candidateWords = new Set(tokens(`${entry.product?.title} ${brand} ${entry.product?.category}`));
+    candidateWords.forEach((word) => {
+      if (word === queryWord || !editDistanceAtMostOne(queryWord, word)) return;
+      const current = candidates.get(word) || { normalized: word, display: word, count: 0, brandCount: 0, distance: 1 };
+      current.count += 1;
+      if (tokens(normalizedBrand).length === 1 && tokens(normalizedBrand)[0] === word) {
+        current.brandCount += 1;
+        current.display = brand;
+      }
+      candidates.set(word, current);
+    });
+  });
+  const ordered = [...candidates.values()].sort((left, right) => (
+    right.brandCount - left.brandCount || right.count - left.count || left.normalized.localeCompare(right.normalized)
+  ));
+  return ordered[0] && ordered[0].count >= Math.min(2, ranked.length) ? ordered[0] : null;
+}
+
+function catalogTermMatches(index, term) {
+  const normalized = normalizeText(term);
+  const requiredWords = tokens(normalized);
+  if (!normalized || !requiredWords.length) return false;
+  return index.entries.some((entry) => (
+    entry.searchable.includes(normalized) || requiredWords.every((word) => entry.words.has(word))
+  ));
+}
+
 function relatedSearchRule(query) {
   const normalized = normalizeText(query);
   return RELATED_SEARCH_RULES.find((rule) => rule.when.some((phrase) => {
@@ -244,7 +282,7 @@ function relatedSearchRule(query) {
   })) || null;
 }
 
-function searchSuggestionCandidates(products, query, ranked) {
+function searchSuggestionCandidates(index, query, ranked) {
   const candidates = [];
   const rule = relatedSearchRule(query);
   if (rule) candidates.push(...rule.terms);
@@ -269,15 +307,15 @@ function searchSuggestionCandidates(products, query, ranked) {
     const normalized = normalizeText(term);
     if (!normalized || seen.has(normalized)) continue;
     seen.add(normalized);
-    if (searchCatalog(products, term, 1).length > 0) validated.push(term);
+    if (catalogTermMatches(index, term)) validated.push(term);
   }
   return validated;
 }
 
-function buildSearchSuggestions(products, originalQuery, effectiveQuery, correction, ranked) {
+function buildSearchSuggestions(index, originalQuery, effectiveQuery, correction, ranked) {
   const result = [];
   if (correction) result.push({ term: correction.display, label: correction.display, type: "correction" });
-  searchSuggestionCandidates(products, effectiveQuery, ranked).forEach((term) => {
+  searchSuggestionCandidates(index, effectiveQuery, ranked).forEach((term) => {
     if (result.length >= MAX_SEARCH_SUGGESTIONS) return;
     if (normalizeText(term) === normalizeText(originalQuery)) return;
     result.push({ term: usableText(term).slice(0, 100), label: usableText(term).slice(0, 100), type: "related" });
@@ -385,10 +423,19 @@ function merchandisingSections(products, query, excluded, ranked) {
 function buildSuggestionPayload(catalog, query, nativeResultCount = 0, excluded = new Set()) {
   const nativeCount = cleanNativeResultCount(nativeResultCount);
   const safeProducts = (catalog.products || []).filter(hasCustomerCardData);
-  const correction = nativeCount === 0 ? correctedQuery(catalog, query) : null;
+  const originalRanked = searchCatalog(safeProducts, query, 32);
+  let discoveryIndex = null;
+  let correction = nativeCount === 0 ? correctionFromRanked(query, originalRanked) : null;
+  if (nativeCount === 0 && !correction && !originalRanked.length) {
+    discoveryIndex = correctionIndex(catalog);
+    correction = correctedQuery(catalog, query, discoveryIndex);
+  }
   const effectiveQuery = correction?.normalized || query;
-  const rankedAll = searchCatalog(safeProducts, effectiveQuery, 32);
-  const searchSuggestions = buildSearchSuggestions(safeProducts, query, effectiveQuery, correction, rankedAll);
+  const rankedAll = correction && !originalRanked.length
+    ? searchCatalog(safeProducts, effectiveQuery, 32)
+    : originalRanked;
+  discoveryIndex = discoveryIndex || correctionIndex(catalog);
+  const searchSuggestions = buildSearchSuggestions(discoveryIndex, query, effectiveQuery, correction, rankedAll);
   const recovery = nativeCount === 0;
   const ranked = recovery
     ? diversifyRanked(rankedAll.filter((entry) => !excluded.has(String(entry.product?.productId))), MAX_RESULTS)
@@ -449,10 +496,12 @@ module.exports._test = {
   boundedDamerauLevenshtein,
   buildSearchSuggestions,
   buildSuggestionPayload,
+  catalogTermMatches,
   categoryLabel,
   cleanNativeResultCount,
   cleanQuery,
   correctedQuery,
+  correctionFromRanked,
   correctionIndex,
   diversifyRanked,
   excludedProductIds,
