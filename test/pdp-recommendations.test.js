@@ -48,6 +48,48 @@ test("recommendations prefer exact category matches and exclude visible product 
   assert.equal(results[1].match, "related_category");
 });
 
+test("recommendation shelves pair watering products with useful adjacent project categories", () => {
+  const watering = "Lawn & Garden > Lawn Care > Watering";
+  const lawnCare = "Lawn & Garden > Lawn Care";
+  const catalog = {
+    active: { id: "recommendation-fixture-watering" },
+    products: [
+      product("100", "Flex Garden Hose 50 Foot", `${watering} > Garden Hoses`),
+      product("101", "Garden Hose 25 Foot", `${watering} > Garden Hoses`),
+      product("102", "Garden Hose 75 Foot", `${watering} > Garden Hoses`),
+      product("103", "Heavy Duty Garden Hose", `${watering} > Garden Hoses`),
+      product("110", "Metal Spray Nozzle", `${watering} > Hose Nozzles`),
+      product("111", "Pistol Grip Nozzle", `${watering} > Hose Nozzles`),
+      product("112", "Water Breaker Nozzle", `${watering} > Hose Nozzles`),
+      product("120", "Circular Lawn Sprinkler", `${watering} > Sprinklers`),
+      product("121", "Oscillating Lawn Sprinkler", `${watering} > Sprinklers`),
+      product("122", "Impulse Lawn Sprinkler", `${watering} > Sprinklers`),
+      product("130", "All Purpose Lawn Fertilizer", `${lawnCare} > Lawn Fertilizer`),
+      product("131", "Spring Lawn Fertilizer", `${lawnCare} > Lawn Fertilizer`),
+      product("132", "Slow Release Lawn Fertilizer", `${lawnCare} > Lawn Fertilizer`)
+    ]
+  };
+
+  const sections = recommendations.recommendSections(catalog, "100");
+  assert.equal(sections.length, 4);
+  assert.deepEqual(sections.map((section) => section.listName), [
+    "Compare similar products",
+    "Nozzles & hose connections",
+    "Sprinklers & watering control",
+    "Lawn & garden care"
+  ]);
+  assert.deepEqual(sections.map((section) => section.eyebrow), [
+    "More choices",
+    "You may also like",
+    "You may also like",
+    "You may also like"
+  ]);
+  assert.equal(sections[1].recommendations.every((item) => /Hose Nozzles$/.test(item.category)), true);
+  assert.equal(sections[2].recommendations.every((item) => /Sprinklers$/.test(item.category)), true);
+  assert.equal(sections[3].recommendations.every((item) => /Lawn Fertilizer$/.test(item.category)), true);
+  assert.equal(new Set(sections.flatMap((section) => section.recommendations.map((item) => item.productId))).size, 12);
+});
+
 test("recommendations fail closed when fewer than three customer-ready matches remain", () => {
   const category = "Plumbing > Valves > Pressure Relief Valves";
   const catalog = {
@@ -105,7 +147,10 @@ test("PDP client mounts a tracked, accessible rail after reviews", () => {
   assert.match(sidebar, /items\.length < 3/);
   assert.match(sidebar, /View price & availability/);
   assert.match(sidebar, /aria-labelledby/);
-  assert.match(sidebar, /product-recommendations\?v=20260909-1/);
+  assert.match(sidebar, /payload\.sections/);
+  assert.match(sidebar, /recommendation_strategy/);
+  assert.doesNotMatch(sidebar, /In-stock alternatives selected from the same part of our catalog/);
+  assert.match(sidebar, /product-recommendations\?v=20260909-2/);
   assert.match(analytics, /wl_pdp_recommendation_attribution_v1/);
   assert.match(analytics, /recommendationContext\(name, parameters\)/);
   assert.match(vercel, /api\/product-recommendations\.js/);

@@ -3,7 +3,7 @@
 
   if (window.WLAnalytics) return;
 
-  var VERSION = "1.4.0";
+  var VERSION = "1.5.0";
   var EVENT_NAME = "wl_analytics_event";
   var GA_MEASUREMENT_ID = "G-4ZLV1YB6GY";
   var META_PIXEL_ID = "188974749776655";
@@ -316,16 +316,17 @@
       if (String(item && item.item_id || "") !== String(stored.productId)) return item;
       matched = true;
       return Object.assign({}, item, {
-        item_list_id: cleanString(stored.listId) || "pdp_similar_products_v1",
+        item_list_id: cleanString(stored.listId) || "pdp_compare_similar_v2",
         item_list_name: cleanString(stored.listName) || "Compare similar products"
       });
     });
     if (!matched) return source;
 
     var enriched = Object.assign({}, source, {
-      item_list_id: cleanString(stored.listId) || "pdp_similar_products_v1",
+      item_list_id: cleanString(stored.listId) || "pdp_compare_similar_v2",
       item_list_name: cleanString(stored.listName) || "Compare similar products",
-      recommendation_algorithm: cleanString(stored.algorithm) || "merchant_category_v1",
+      recommendation_algorithm: cleanString(stored.algorithm) || "merchant_category_affinity_v2",
+      recommendation_strategy: cleanString(stored.strategy) || undefined,
       recommendation_source_product_id: cleanString(stored.sourceProductId) || undefined,
       ecommerce: Object.assign({}, ecommerceData, { items: attributedItems })
     });

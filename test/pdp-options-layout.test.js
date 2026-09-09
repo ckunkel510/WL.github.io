@@ -17,7 +17,7 @@ test("PDP uses a measured responsive image-options-buy layout", () => {
   const sidebar = read("product-sidebar.js");
   assert.match(sidebar, /id: "product-options-column"/);
   assert.match(sidebar, /wl-has-product-options/);
-  assert.match(sidebar, /similar_products_v1/);
+  assert.match(sidebar, /recommendation_shelves_v2/);
   assert.match(sidebar, /pdp_option_view/);
   assert.match(sidebar, /pdp_option_select/);
   assert.match(sidebar, /#product-options-column[\s\S]*grid-row: 2/);
@@ -35,7 +35,7 @@ test("product options publish state, cache safely, and expose analytics hooks", 
 
 test("analytics runtime accepts PDP option events", () => {
   const analytics = read("wl-site.js");
-  assert.match(analytics, /var VERSION = "1\.4\.0"/);
+  assert.match(analytics, /var VERSION = "1\.5\.0"/);
   assert.match(analytics, /pdp_option_view: true/);
   assert.match(analytics, /pdp_option_select: true/);
 });

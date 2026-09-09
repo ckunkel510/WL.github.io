@@ -19,7 +19,7 @@
     const savedMethod = localStorage.getItem("woodson_cart_method");
     sessionStorage.setItem("wl_analytics_experiment_v1", JSON.stringify({
       experiment_id: "pdp_fulfillment_v1_20260909",
-      experiment_variant: "similar_products_v1",
+      experiment_variant: "recommendation_shelves_v2",
       fulfillment_method: savedMethod === "delivery" ? "delivery" : "pickup"
     }));
   } catch (error) {}
@@ -465,12 +465,6 @@ $(document).ready(async function () {
         font-size: 24px;
         font-weight: 850;
         line-height: 1.2;
-      }
-      .wl-pdp-recommendations__copy {
-        margin: 5px 0 0;
-        color: #59636e;
-        font-size: 14px;
-        line-height: 1.4;
       }
       .wl-pdp-recommendations__controls {
         display: flex;
@@ -1095,7 +1089,7 @@ $(document).ready(async function () {
   // =========================
   const selectedMethodKey = "woodson_cart_method";
   const experimentId = "pdp_fulfillment_v1_20260909";
-  const experimentVariant = "similar_products_v1";
+  const experimentVariant = "recommendation_shelves_v2";
   let pdpStockState = window.WLPdpStockState || null;
   let stockReadyTracked = false;
 
@@ -1518,11 +1512,11 @@ $(document).ready(async function () {
   // =========================
   // Product recommendations
   // =========================
-  const recommendationApi = "https://wl-upsrates.vercel.app/api/product-recommendations?v=20260909-1";
+  const recommendationApi = "https://wl-upsrates.vercel.app/api/product-recommendations?v=20260909-2";
   const recommendationAttributionKey = "wl_pdp_recommendation_attribution_v1";
   let recommendationRequest = 0;
   let recommendationSignature = "";
-  let recommendationViewTracked = false;
+  const recommendationViewsTracked = new Set();
 
   function normalizeProductContentOrder() {
     const $content = $(".wl-product-content").first();
@@ -1625,23 +1619,26 @@ $(document).ready(async function () {
       sessionStorage.setItem(recommendationAttributionKey, JSON.stringify({
         productId: String(item.productId),
         sourceProductId: String(currentPID || ""),
-        listId: String(payload.listId || "pdp_similar_products_v1"),
+        listId: String(payload.listId || "pdp_compare_similar_v2"),
         listName: String(payload.listName || "Compare similar products"),
-        algorithm: String(payload.algorithm || "merchant_category_v1"),
+        algorithm: String(payload.algorithm || "merchant_category_affinity_v2"),
+        strategy: String(payload.strategy || "same_or_sibling_category"),
         selectedAt: Date.now()
       }));
     } catch (error) {}
   }
 
   function trackRecommendationView(section, items, payload) {
-    if (recommendationViewTracked) return;
+    const viewKey = String(payload.listId || "");
+    if (!viewKey || recommendationViewsTracked.has(viewKey)) return;
     const send = function () {
-      if (recommendationViewTracked || !document.documentElement.contains(section)) return;
-      recommendationViewTracked = true;
+      if (recommendationViewsTracked.has(viewKey) || !document.documentElement.contains(section)) return;
+      recommendationViewsTracked.add(viewKey);
       wlTrack("view_item_list", {
         item_list_id: payload.listId,
         item_list_name: payload.listName,
         recommendation_algorithm: payload.algorithm,
+        recommendation_strategy: payload.strategy,
         recommendation_count: items.length,
         ecommerce: { items: analyticsItems(items, payload.listId, payload.listName) }
       });
@@ -1658,43 +1655,38 @@ $(document).ready(async function () {
     observer.observe(section);
   }
 
-  function renderRecommendations(payload) {
-    const layout = normalizeProductContentOrder();
-    const $slot = layout.similarSlot;
-    const excluded = new Set(optionProductIds());
-    const items = Array.isArray(payload.recommendations)
-      ? payload.recommendations.filter(function (item) {
-          return item &&
-            /^\d{1,20}$/.test(String(item.productId || "")) &&
-            !excluded.has(String(item.productId)) &&
-            safeRecommendationUrl(item.productUrl, "product") &&
-            safeRecommendationUrl(item.imageUrl, "image");
+  function renderRecommendationSection($slot, sectionPayload, algorithm, sectionIndex, usedProductIds) {
+    const listId = String(sectionPayload.listId || `pdp_you_may_also_like_${sectionIndex}_v2`).slice(0, 100);
+    const listName = String(sectionPayload.listName || "You may also like").slice(0, 100);
+    const eyebrow = String(sectionPayload.eyebrow || "You may also like").slice(0, 60);
+    const strategy = String(sectionPayload.strategy || "adjacent_catalog_category").slice(0, 100);
+    const items = Array.isArray(sectionPayload.recommendations)
+      ? sectionPayload.recommendations.filter(function (item) {
+          const productId = String(item && item.productId || "");
+          if (!item || !/^\d{1,20}$/.test(productId) || usedProductIds.has(productId)) return false;
+          if (!safeRecommendationUrl(item.productUrl, "product") || !safeRecommendationUrl(item.imageUrl, "image")) return false;
+          return true;
         }).slice(0, 8)
       : [];
-
-    $slot.empty();
     if (items.length < 3) return false;
+    items.forEach(function (item) { usedProductIds.add(String(item.productId)); });
 
-    const listId = String(payload.listId || "pdp_similar_products_v1").slice(0, 100);
-    const listName = String(payload.listName || "Compare similar products").slice(0, 100);
-    const algorithm = String(payload.algorithm || "merchant_category_v1").slice(0, 100);
-    const normalizedPayload = { listId, listName, algorithm };
+    const normalizedPayload = { listId, listName, algorithm, strategy };
+    const sectionId = sectionIndex === 0 ? "wl-pdp-similar-products" : `wl-pdp-recommendations-${sectionIndex + 1}`;
+    const titleId = `${sectionId}-title`;
     const $section = $("<section>", {
-      id: "wl-pdp-similar-products",
+      id: sectionId,
       class: "wl-pdp-recommendations",
-      "aria-labelledby": "wl-pdp-similar-products-title",
-      "data-recommendation-algorithm": algorithm
+      "aria-labelledby": titleId,
+      "data-recommendation-algorithm": algorithm,
+      "data-recommendation-strategy": strategy
     });
     const $headingText = $("<div>");
-    $("<p>", { class: "wl-pdp-recommendations__eyebrow", text: "More choices" }).appendTo($headingText);
+    $("<p>", { class: "wl-pdp-recommendations__eyebrow", text: eyebrow }).appendTo($headingText);
     $("<h2>", {
-      id: "wl-pdp-similar-products-title",
+      id: titleId,
       class: "wl-pdp-recommendations__title",
       text: listName
-    }).appendTo($headingText);
-    $("<p>", {
-      class: "wl-pdp-recommendations__copy",
-      text: "In-stock alternatives selected from the same part of our catalog."
     }).appendTo($headingText);
 
     const $controls = $("<div>", { class: "wl-pdp-recommendations__controls" });
@@ -1702,13 +1694,13 @@ $(document).ready(async function () {
       type: "button",
       class: "wl-pdp-recommendations__control",
       text: "‹",
-      "aria-label": "Show previous similar products"
+      "aria-label": `Show previous products in ${listName}`
     });
     const $next = $("<button>", {
       type: "button",
       class: "wl-pdp-recommendations__control",
       text: "›",
-      "aria-label": "Show more similar products"
+      "aria-label": `Show more products in ${listName}`
     });
     $controls.append($previous, $next);
     $("<div>", { class: "wl-pdp-recommendations__header" }).append($headingText, $controls).appendTo($section);
@@ -1751,6 +1743,7 @@ $(document).ready(async function () {
           item_list_id: listId,
           item_list_name: listName,
           recommendation_algorithm: algorithm,
+          recommendation_strategy: strategy,
           recommendation_rank: index + 1,
           recommendation_match: String(item.match || "same_category"),
           ecommerce: { items: selectedItem }
@@ -1768,10 +1761,34 @@ $(document).ready(async function () {
     };
     $previous.on("click", function () { scrollRail(-1); });
     $next.on("click", function () { scrollRail(1); });
+    trackRecommendationView($section.get(0), items, normalizedPayload);
+    return true;
+  }
+
+  function renderRecommendations(payload) {
+    const layout = normalizeProductContentOrder();
+    const $slot = layout.similarSlot;
+    const usedProductIds = new Set(optionProductIds());
+    const algorithm = String(payload.algorithm || "merchant_category_affinity_v2").slice(0, 100);
+    const sections = Array.isArray(payload.sections) && payload.sections.length
+      ? payload.sections.slice(0, 4)
+      : [{
+          listId: payload.listId,
+          listName: payload.listName,
+          eyebrow: "More choices",
+          strategy: "same_or_sibling_category",
+          recommendations: payload.recommendations
+        }];
+
+    $slot.empty();
+    let rendered = 0;
+    sections.forEach(function (sectionPayload, index) {
+      if (renderRecommendationSection($slot, sectionPayload || {}, algorithm, index, usedProductIds)) rendered += 1;
+    });
+    if (!rendered) return false;
 
     const nativeRelated = document.getElementById("WTRelatedProducts");
     if (nativeRelated) nativeRelated.hidden = true;
-    trackRecommendationView($section.get(0), items, normalizedPayload);
     return true;
   }
 
@@ -1779,7 +1796,7 @@ $(document).ready(async function () {
     if (!currentPID) return;
     const excluded = optionProductIds();
     const signature = excluded.join(",");
-    if (signature === recommendationSignature && $("#wl-pdp-similar-products").length) return;
+    if (signature === recommendationSignature && $("#pdp-similar-products-slot .wl-pdp-recommendations").length) return;
     recommendationSignature = signature;
     const request = ++recommendationRequest;
     try {

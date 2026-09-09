@@ -8,13 +8,13 @@ const root = path.resolve(__dirname, '..');
 
 test('header loads the privacy-filter-safe site runtime', () => {
   const header = fs.readFileSync(path.join(root, 'headermodern.js'), 'utf8');
-  assert.match(header, /WL\.github\.io\/wl-site\.js\?v=20260909-3/);
+  assert.match(header, /WL\.github\.io\/wl-site\.js\?v=20260909-4/);
   assert.doesNotMatch(header, /ANALYTICS_URL\s*=\s*["'][^"']*(?:analytics|tracking|events|commerce)/i);
 });
 
 test('site runtime emits a confirmed GA4 purchase with transaction value', () => {
   const runtime = fs.readFileSync(path.join(root, 'wl-site.js'), 'utf8');
-  assert.match(runtime, /var VERSION = "1\.4\.0"/);
+  assert.match(runtime, /var VERSION = "1\.5\.0"/);
 
   const storage = () => {
     const values = new Map();
@@ -76,7 +76,7 @@ test('site runtime emits a confirmed GA4 purchase with transaction value', () =>
 
   const purchase = window.dataLayer.find((entry) => entry && entry.event === 'wl_analytics_event' && entry.event_name === 'purchase');
   assert.ok(purchase);
-  assert.equal(purchase.analytics_version, '1.4.0');
+  assert.equal(purchase.analytics_version, '1.5.0');
   assert.equal(purchase.experiment_id, 'pdp_fulfillment_v1_20260909');
   assert.equal(purchase.experiment_variant, 'enhanced_fulfillment');
   assert.equal(purchase.fulfillment_method, 'delivery');
@@ -103,9 +103,10 @@ test('site runtime carries recommendation attribution into downstream ecommerce 
   sessionStorage.setItem('wl_pdp_recommendation_attribution_v1', JSON.stringify({
     productId: '200',
     sourceProductId: '100',
-    listId: 'pdp_similar_products_v1',
-    listName: 'Compare similar products',
-    algorithm: 'merchant_category_v1',
+    listId: 'pdp_you_may_also_like_1_v2',
+    listName: 'Nozzles & hose connections',
+    algorithm: 'merchant_category_affinity_v2',
+    strategy: 'curated_watering_hose_accessories',
     selectedAt: Date.now()
   }));
 
@@ -143,9 +144,10 @@ test('site runtime carries recommendation attribution into downstream ecommerce 
 
   const event = window.dataLayer.find((entry) => entry && entry.event_name === 'add_to_cart');
   assert.ok(event);
-  assert.equal(event.item_list_id, 'pdp_similar_products_v1');
-  assert.equal(event.recommendation_algorithm, 'merchant_category_v1');
+  assert.equal(event.item_list_id, 'pdp_you_may_also_like_1_v2');
+  assert.equal(event.recommendation_algorithm, 'merchant_category_affinity_v2');
+  assert.equal(event.recommendation_strategy, 'curated_watering_hose_accessories');
   assert.equal(event.recommendation_source_product_id, '100');
-  assert.equal(event.ecommerce.items[0].item_list_id, 'pdp_similar_products_v1');
-  assert.equal(event.ecommerce.items[0].item_list_name, 'Compare similar products');
+  assert.equal(event.ecommerce.items[0].item_list_id, 'pdp_you_may_also_like_1_v2');
+  assert.equal(event.ecommerce.items[0].item_list_name, 'Nozzles & hose connections');
 });
