@@ -1,6 +1,56 @@
+(function routeApprovedPaymentPreview() {
+  'use strict';
+  var isFixture = document.documentElement.getAttribute('data-wl-payment-fixture') === 'true';
+  if (!/AccountPayment_r\.aspx/i.test(window.location.pathname) && !isFixture) return;
+
+  var requestedMode = '';
+  try {
+    requestedMode = new URL(window.location.href).searchParams.get('wl_payment_flow') || '';
+  } catch (error) {}
+  if (requestedMode !== 'preview') return;
+
+  var context = null;
+  if (isFixture) {
+    context = {
+      loginName: document.documentElement.getAttribute('data-wl-payment-preview-login'),
+      accountId: document.documentElement.getAttribute('data-wl-payment-preview-account'),
+      expiresAt: Date.now() + 60000
+    };
+  } else {
+    try {
+      context = JSON.parse(sessionStorage.getItem('wl_payment_flow_preview_v1') || 'null');
+    } catch (error) {}
+  }
+
+  var expectedAccounts = {
+    ckunkel2: 'EMP2111',
+    ckunkel3: '10005'
+  };
+  var loginName = String(context && context.loginName || '').trim().toLowerCase();
+  var accountId = String(context && context.accountId || '').trim().toUpperCase();
+  var expiresAt = Number(context && context.expiresAt || 0);
+  var approved = !!(
+    expectedAccounts[loginName] &&
+    expectedAccounts[loginName] === accountId &&
+    expiresAt > Date.now()
+  );
+  if (!approved) return;
+
+  window.__WL_PAYMENT_PREVIEW_ACTIVE__ = true;
+
+  var loader = document.createElement('script');
+  var currentSource = document.currentScript && document.currentScript.src;
+  loader.src = currentSource
+    ? new URL('PayByInvoicePreview.js?v=20260909-1', currentSource).href
+    : 'https://ckunkel510.github.io/WL.github.io/PayByInvoicePreview.js?v=20260909-1';
+  loader.async = false;
+  loader.setAttribute('data-wl-payment-preview-loader', 'true');
+  (document.head || document.documentElement).appendChild(loader);
+})();
+
 (function clearStaleAccountPaymentState() {
   'use strict';
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+  if (window.__WL_PAYMENT_PREVIEW_ACTIVE__ || !/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
   const hasSelectionParams = [
     'utm_invoices', 'utm_docs', 'utm_total', 'utm_jobs', 'utm_remit', 'utm_notes', 'utm_note'
@@ -31,9 +81,9 @@
 
 (function () {
   'use strict';
-  console.log('[AP] PayByInvoice version v38 saved-account continuity loaded');
+  if (window.__WL_PAYMENT_PREVIEW_ACTIVE__ || !/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+  console.log('[AP] PayByInvoice version v38 saved-account continuity loaded');
 
   /* =============================
      URL + Session Pref Handling
@@ -550,7 +600,7 @@ wireFieldPersistence();
    ============================================================================ */
 (function () {
   'use strict';
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+  if (window.__WL_PAYMENT_PREVIEW_ACTIVE__ || !/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
   const STYLE_ID = 'wl-ap-ux-polish-v1';
 
@@ -1112,7 +1162,7 @@ wireFieldPersistence();
    =========================================== */
 (function(){
   'use strict';
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+  if (window.__WL_PAYMENT_PREVIEW_ACTIVE__ || !/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
   /* ---------- logger (shared) ---------- */
   const LVL = { error:0, warn:1, info:2, debug:3 };
@@ -1174,7 +1224,7 @@ wireFieldPersistence();
    ========================================================= */
 (function(){
   'use strict';
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+  if (window.__WL_PAYMENT_PREVIEW_ACTIVE__ || !/AccountPayment_r\.aspx/i.test(location.pathname)) return;
   const LOG = window.WLPayDiag?.getLevel?.() ?? 2;
   const LVL = window.WLPayDiag?.LVL;
   const log = {
@@ -1910,7 +1960,7 @@ return {
    ====================================================== */
 (function(){
   'use strict';
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+  if (window.__WL_PAYMENT_PREVIEW_ACTIVE__ || !/AccountPayment_r\.aspx/i.test(location.pathname)) return;
   const LOG = window.WLPayDiag?.getLevel?.() ?? 2;
   const LVL = window.WLPayDiag?.LVL;
   const log = {
@@ -2173,7 +2223,7 @@ const IDS = {
    ====================================================== */
 (function(){
   'use strict';
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+  if (window.__WL_PAYMENT_PREVIEW_ACTIVE__ || !/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
   const log = (window.WLPayDiag ? {
     info: (...a)=> WLPayDiag.getLevel()>=WLPayDiag.LVL.info && console.log('[AP:BRIDGE]', ...a),
@@ -2521,7 +2571,7 @@ const IDS = {
    ========================= */
 (function(){
   'use strict';
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+  if (window.__WL_PAYMENT_PREVIEW_ACTIVE__ || !/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
   const log = (window.WLPayDiag ? {
     info: (...a)=> WLPayDiag.getLevel()>=WLPayDiag.LVL.info && console.log('[AP:UX]', ...a),
@@ -2624,7 +2674,7 @@ const IDS = {
    =============================== */
 (function(){
   'use strict';
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+  if (window.__WL_PAYMENT_PREVIEW_ACTIVE__ || !/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
   /* ---- CSS overrides ---- */
   (function injectCSS(){
@@ -2762,7 +2812,7 @@ const IDS = {
    ========================================================== */
 (function () {
   'use strict';
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+  if (window.__WL_PAYMENT_PREVIEW_ACTIVE__ || !/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
   /* ---------- logging ---------- */
   const LOG = (window.WLPayDiag?.getLevel?.() ?? 2);
@@ -3401,7 +3451,7 @@ if (jobBtn){
    ========================================================== */
 (function(){
   'use strict';
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+  if (window.__WL_PAYMENT_PREVIEW_ACTIVE__ || !/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
   const LOG = (window.WLPayDiag?.getLevel?.() ?? 2), LVL = window.WLPayDiag?.LVL || { error:0, warn:1, info:2, debug:3 };
   const log = {
@@ -4186,7 +4236,7 @@ if (jobBtn){
 
 /* --- WL_AP.remit: defer remittance writes until after postback --- */
 (function setupWlRemit(){
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+  if (window.__WL_PAYMENT_PREVIEW_ACTIVE__ || !/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
   window.WL_AP = window.WL_AP || {};
   if (window.WL_AP.remit) return;   // already set up
@@ -4367,7 +4417,7 @@ if (jobBtn){
    ============================================================================ */
 (function () {
   'use strict';
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+  if (window.__WL_PAYMENT_PREVIEW_ACTIVE__ || !/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
   // Your existing PayByInvoice.js uses this session key
   const PREF_KEY = 'wl_ap_prefill_v3';
@@ -4933,7 +4983,7 @@ if (jobBtn){
    ============================================================================ */
 (function () {
   'use strict';
-  if (!/AccountPayment_r\.aspx/i.test(location.pathname)) return;
+  if (window.__WL_PAYMENT_PREVIEW_ACTIVE__ || !/AccountPayment_r\.aspx/i.test(location.pathname)) return;
 
   // If we're on the success/receipt view, do NOT mount the wizard UI.
   // The success patch will render a clean confirmation + printable receipt.

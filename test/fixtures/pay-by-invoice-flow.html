@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en" data-wl-payment-fixture="true">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Woodson payment flow fixture</title>
+  <style>
+    body { margin: 0; background: #f3f4f6; color: #222; font-family: Arial, Helvetica, sans-serif; }
+    header { padding: 14px 22px; background: #720018; color: #fff; font-weight: 800; }
+    .bodyFlexContainer { width: min(980px, calc(100% - 24px)); margin: 18px auto 50px; }
+    .bodyFlexItem.listPageHeader { margin-bottom: 12px; padding: 14px 16px; background: #fff; border-radius: 8px; font-size: 18px; font-weight: 800; }
+    .epi-form-group-acctPayment { margin: 10px 0; padding: 12px; background: #fff; }
+    label { display: block; margin-bottom: 6px; font-weight: 700; }
+    input[type="text"], input[type="email"], textarea { width: 440px; max-width: 100%; min-height: 36px; }
+    .radiobutton label { display: inline; }
+    #ctl00_PageBody_accountsTransactionsPanel { margin: 12px 0; padding: 12px; background: #fff; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 8px; border-bottom: 1px solid #ddd; text-align: left; }
+    .epi-button { display: inline-block; padding: 9px 14px; background: #720018; color: #fff; }
+  </style>
+</head>
+<body>
+  <header>WOODSON LUMBER</header>
+  <form id="aspnetForm">
+    <main class="bodyFlexContainer">
+      <div class="bodyFlexItem listPageHeader" id="fixtureHeading">Make a Payment</div>
+
+      <div class="epi-form-group-acctPayment" id="ctl00_PageBody_BillingAddressContainer">
+        <label for="ctl00_PageBody_BillingAddressTextBox">Billing address:</label>
+        <input id="ctl00_PageBody_BillingAddressTextBox" name="ctl00$PageBody$BillingAddressTextBox" type="text">
+      </div>
+      <div class="epi-form-group-acctPayment">
+        <label for="ctl00_PageBody_PostalCodeTextBox">Zip code:</label>
+        <input id="ctl00_PageBody_PostalCodeTextBox" name="ctl00$PageBody$PostalCodeTextBox" type="text" value="77833">
+      </div>
+      <div class="epi-form-group-acctPayment">
+        <label for="ctl00_PageBody_EmailAddressTextBox">Email address:</label>
+        <input id="ctl00_PageBody_EmailAddressTextBox" name="ctl00$PageBody$EmailAddressTextBox" type="email" value="test@example.com">
+      </div>
+
+      <div class="epi-form-group-acctPayment">
+        <label for="ctl00_PageBody_AmountOwingLiteral">Amount owing:</label>
+        <input id="ctl00_PageBody_AmountOwingLiteral" name="ctl00$PageBody$AmountOwingLiteral" type="text" value="$2,254.72" readonly>
+      </div>
+      <div class="epi-form-group-acctPayment">
+        <label for="ctl00_PageBody_PaymentAmountTextBox">Payment amount:</label>
+        <input id="ctl00_PageBody_PaymentAmountTextBox" name="ctl00$PageBody$PaymentAmountTextBox" type="text">
+      </div>
+      <div class="epi-form-group-acctPayment">
+        <label for="ctl00_PageBody_NotesTextBox">Notes:</label>
+        <textarea id="ctl00_PageBody_NotesTextBox" name="ctl00$PageBody$NotesTextBox"></textarea>
+      </div>
+      <div class="epi-form-group-acctPayment" id="fixtureRemittance">
+        <label for="ctl00_PageBody_RemittanceAdviceTextBox">Remittance advice:</label>
+        <textarea id="ctl00_PageBody_RemittanceAdviceTextBox" name="ctl00$PageBody$RemittanceAdviceTextBox"></textarea>
+      </div>
+
+      <section id="ctl00_PageBody_accountsTransactionsPanel">
+        <h2>Invoices</h2>
+        <table id="ctl00_PageBody_InvoicesGrid">
+          <thead><tr><th>Select</th><th>Invoice</th><th>Outstanding</th></tr></thead>
+          <tbody>
+            <tr><td><input id="ctl00_PageBody_InvoicesGrid_ctl00_ctl04_chkSelect" type="checkbox"></td><td>3463597</td><td>$35.26</td></tr>
+            <tr><td><input id="ctl00_PageBody_InvoicesGrid_ctl00_ctl06_chkSelect" type="checkbox"></td><td>3462081</td><td>$16.24</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <div id="fixtureMethods">
+        <div class="radiobutton">
+          <input id="ctl00_PageBody_RadioButton_PayByCheck" name="ctl00$PageBody$PayBy" type="radio" checked>
+          <label for="ctl00_PageBody_RadioButton_PayByCheck">Pay by Bank (ACH)</label>
+        </div>
+      </div>
+
+      <div id="ctl00_PageBody_MakePaymentPanel">
+        <div class="epi-form-group-acctPayment">
+          <div class="submit-button-panel">
+            <a id="ctl00_PageBody_MakePayment" class="epi-button" href="javascript:void(0)" onclick="this.dataset.nativeClicks = String(Number(this.dataset.nativeClicks || 0) + 1); return false;">Make Payment</a>
+          </div>
+        </div>
+      </div>
+    </main>
+  </form>
+
+  <script>
+    const fixtureParams = new URL(location.href).searchParams;
+    const fixtureIsCash = fixtureParams.get('account') === 'cash';
+    if (fixtureIsCash) {
+      document.getElementById('fixtureHeading').textContent = 'Load Cash Account Balance';
+      document.getElementById('fixtureRemittance').remove();
+      document.getElementById('ctl00_PageBody_accountsTransactionsPanel').remove();
+      document.getElementById('ctl00_PageBody_AmountOwingLiteral').value = '$1.41';
+      document.getElementById('ctl00_PageBody_PaymentAmountTextBox').value = '0.00';
+      document.getElementById('fixtureMethods').insertAdjacentHTML('beforeend', [
+        '<div class="radiobutton"><input id="ctl00_PageBody_RadioButton_PayByCheckOnFile" name="ctl00$PageBody$PayBy" type="radio"><label for="ctl00_PageBody_RadioButton_PayByCheckOnFile">Use a saved bank account</label></div>',
+        '<div class="radiobutton"><input id="ctl00_PageBody_RadioButton_PayByCredit" name="ctl00$PageBody$PayBy" type="radio"><label for="ctl00_PageBody_RadioButton_PayByCredit">Pay by Card</label></div>',
+        '<div class="radiobutton"><input id="ctl00_PageBody_RadioButton_PayByCardOnFile" name="ctl00$PageBody$PayBy" type="radio"><label for="ctl00_PageBody_RadioButton_PayByCardOnFile">Use a saved card</label></div>'
+      ].join(''));
+    }
+
+    if (fixtureParams.get('wl_payment_flow') === 'preview') {
+      const previewIdentity = fixtureIsCash
+        ? { loginName: 'ckunkel2', accountId: 'EMP2111' }
+        : { loginName: 'ckunkel3', accountId: '10005' };
+      document.documentElement.setAttribute('data-wl-payment-preview-login', previewIdentity.loginName);
+      document.documentElement.setAttribute('data-wl-payment-preview-account', previewIdentity.accountId);
+    }
+  </script>
+  <script src="../../PayByInvoice.js?v=local-router-2"></script>
+</body>
+</html>

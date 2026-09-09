@@ -31,6 +31,11 @@
   const AUTOPAY_PENDING_KEY = 'wl_autopay_pending_v1';
   const AUTOPAY_ACTIVE_KEY = 'wl_autopay_active_v1';
   const AUTOPAY_ALLOWED_LOGINS = ['ckunkel2', 'ckunkel3'];
+  const PAYMENT_FLOW_PREVIEW_KEY = 'wl_payment_flow_preview_v1';
+  const PAYMENT_FLOW_PREVIEW_ACCOUNTS = Object.freeze({
+    ckunkel2: 'EMP2111',
+    ckunkel3: '10005'
+  });
 
   // Same-origin lookup used to pull the account email from AccountSettings.aspx
   // instead of relying on localStorage or requiring the customer to re-type it.
@@ -89,6 +94,36 @@
       .flatMap(value => String(value || '').toLowerCase().split(/[^a-z0-9]+/))
       .filter(Boolean);
     return AUTOPAY_ALLOWED_LOGINS.some(login => tokens.includes(login));
+  }
+  function accountIdFromName(value){
+    const match=String(value||'').trim().match(/\(([^()]+)\)\s*$/);
+    return match ? match[1].trim().toUpperCase() : '';
+  }
+  function configurePaymentFlowPreview(loginName, accountName){
+    const login=String(loginName||'').trim().toLowerCase();
+    const accountId=accountIdFromName(accountName);
+    const enabled=!!(
+      PAYMENT_FLOW_PREVIEW_ACCOUNTS[login] &&
+      PAYMENT_FLOW_PREVIEW_ACCOUNTS[login]===accountId
+    );
+    try {
+      if(enabled){
+        sessionStorage.setItem(PAYMENT_FLOW_PREVIEW_KEY, JSON.stringify({
+          loginName: login,
+          accountId,
+          expiresAt: Date.now() + (30 * 60 * 1000)
+        }));
+      }else{
+        sessionStorage.removeItem(PAYMENT_FLOW_PREVIEW_KEY);
+      }
+    } catch(e) {}
+    return enabled;
+  }
+  function paymentFlowUrl(value, enabled){
+    if(!enabled) return value;
+    const url=new URL(value, location.href);
+    url.searchParams.set('wl_payment_flow','preview');
+    return `${url.pathname}${url.search}${url.hash}`;
   }
   function readJsonLocal(key, fallback){
     try { return JSON.parse(localStorage.getItem(key) || ''); } catch { return fallback; }
@@ -334,6 +369,8 @@
     const accountKey = acctName || 'unknown';
     const accountSettingsDetails = await fetchAccountSettingsDetails().catch(() => ({}));
     const accountLoginName = accountSettingsDetails.loginName || '';
+    const paymentFlowPreviewEnabled = configurePaymentFlowPreview(accountLoginName, accountKey);
+    const withPaymentFlowPreview = value => paymentFlowUrl(value, paymentFlowPreviewEnabled);
     const isAutopayTestAccount = isAutopayAllowedIdentity(
       accountLoginName,
       accountSettingsDetails.email,
@@ -356,7 +393,7 @@
       action: 'PayStatement',
       back: 'AccountInfo_R.aspx'
     }))();
-    const payStmtUrl = (()=>{ const q=new URLSearchParams(); if(payStmtPayload.total) q.set('utm_total', payStmtPayload.total); if(payStmtPayload.notes) q.set('utm_notes', payStmtPayload.notes); q.set('utm_source', payStmtPayload.source); q.set('utm_action', payStmtPayload.action); q.set('utm_back', payStmtPayload.back); return `AccountPayment_r.aspx?${q.toString()}`; })();
+    const payStmtUrl = (()=>{ const q=new URLSearchParams(); if(payStmtPayload.total) q.set('utm_total', payStmtPayload.total); if(payStmtPayload.notes) q.set('utm_notes', payStmtPayload.notes); q.set('utm_source', payStmtPayload.source); q.set('utm_action', payStmtPayload.action); q.set('utm_back', payStmtPayload.back); return withPaymentFlowPreview(`AccountPayment_r.aspx?${q.toString()}`); })();
 
     // Cash account (store credit) — shown separately from Net Balance
     const cashCredit = getCashBalanceCredit();
@@ -426,7 +463,7 @@
             <div id="wl-ham-menu" class="wl-ham-menu" role="menu"></div>
           </div>
           <div class="wl-actions">
-            <a class="wl-btn primary" id="wl-top-pay" href="AccountPayment_r.aspx?utm_source=AccountInfo&utm_action=${isCashAccount ? 'ReloadBalance' : 'MakePayment'}">${isCashAccount ? 'Reload Balance' : 'Make a Payment'}</a>
+            <a class="wl-btn primary" id="wl-top-pay" href="${withPaymentFlowPreview(`AccountPayment_r.aspx?utm_source=AccountInfo&utm_action=${isCashAccount ? 'ReloadBalance' : 'MakePayment'}`)}">${isCashAccount ? 'Reload Balance' : 'Make a Payment'}</a>
           </div>
         </div>
 
@@ -637,7 +674,12 @@
      // Mount Cash Account reload button if applicable
 const snapshotActions = container.querySelector('#wl-snapshot .wl-actions');
 if (snapshotActions) {
-  mountCashAccountReload(snapshotActions);
+  mountCashAccountReload(
+    snapshotActions,
+    paymentFlowPreviewEnabled
+      ? withPaymentFlowPreview('AccountPayment_r.aspx?utm_source=AccountInfo&utm_action=ReloadBalance')
+      : ''
+  );
 }
 
 
@@ -680,7 +722,7 @@ if (snapshotActions) {
       const menu = $('#wl-ham-menu', container);
       const currentPath = (window.location.pathname || '').split('/').pop().toLowerCase();
 
-      const paymentHref = 'AccountPayment_r.aspx';
+      const paymentHref = withPaymentFlowPreview('AccountPayment_r.aspx');
       const paymentLabel = isCashAccount ? 'Reload Balance' : 'Make a Payment';
 
       let accountSettingLinks = [
@@ -1578,7 +1620,7 @@ if (snapshotActions) {
   }
 })();
 
-function mountCashAccountReload(container){
+function mountCashAccountReload(container, previewUrl){
   const realBtn = document.getElementById('ctl00_PageBody_btnLoadCashAccountBalance');
   if (!realBtn) return; // Not a cash account (or button not rendered)
 
@@ -1586,17 +1628,20 @@ function mountCashAccountReload(container){
   realBtn.classList.add('wl-hide');
 
   // Build the branded button without `dom()`
-  const branded = document.createElement('button');
-  branded.type = 'button';
+  const branded = document.createElement(previewUrl ? 'a' : 'button');
+  if (previewUrl) branded.href = previewUrl;
+  else branded.type = 'button';
   branded.className = 'wl-btn primary';
   branded.id = 'wl-reload-cash';
   branded.textContent = '🔄 Reload Balance';
 
-  branded.addEventListener('click', () => {
-    branded.disabled = true;
-    branded.textContent = 'Reloading…';
-    realBtn.click(); // Trigger the real ASP.NET postback
-  });
+  if (!previewUrl) {
+    branded.addEventListener('click', () => {
+      branded.disabled = true;
+      branded.textContent = 'Reloading…';
+      realBtn.click(); // Trigger the real ASP.NET postback
+    });
+  }
 
   const anchor = document.createElement('span');
   anchor.id = 'reloadBalance';
