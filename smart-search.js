@@ -489,7 +489,7 @@
 
   function requestSuggestions(term, nativeState) {
     var controller = typeof window.AbortController === "function" ? new window.AbortController() : null;
-    var timeout = controller ? window.setTimeout(function () { controller.abort(); }, 12000) : 0;
+    var timeout = controller ? window.setTimeout(function () { controller.abort(); }, 14500) : 0;
     return window.fetch(API_URL, {
       method: "POST",
       mode: "cors",

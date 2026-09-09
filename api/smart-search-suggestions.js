@@ -38,6 +38,8 @@ const FEATURED_LINE_RULES = [
   {
     when: ["valspar"],
     term: "Valspar Medallion Plus",
+    brand: "Valspar",
+    titleTerm: "Medallion Plus",
     listName: "Featured: Valspar Medallion Plus",
     strategy: "featured_line_valspar_medallion_plus"
   }
@@ -355,7 +357,10 @@ function featuredLineSection(products, query, excluded) {
   const rule = FEATURED_LINE_RULES.find((candidate) => candidate.when.some((term) => (` ${normalized} `).includes(` ${normalizeText(term)} `)));
   if (!rule) return null;
   const entries = searchCatalog(products.filter((product) => !excluded.has(String(product.productId))), rule.term, 24)
-    .filter((entry) => normalizeText(entry.product?.title).includes(normalizeText(rule.term)))
+    .filter((entry) => (
+      normalizeText(entry.product?.brand) === normalizeText(rule.brand) &&
+      normalizeText(entry.product?.title).includes(normalizeText(rule.titleTerm))
+    ))
     .slice(0, MAX_MERCHANDISING_RESULTS)
     .map((entry) => ({ ...entry, match: "featured_line" }));
   if (entries.length < 3) return null;
@@ -422,11 +427,12 @@ function merchandisingSections(products, query, excluded, ranked) {
 
 function buildSuggestionPayload(catalog, query, nativeResultCount = 0, excluded = new Set()) {
   const nativeCount = cleanNativeResultCount(nativeResultCount);
+  const recovery = nativeCount === 0;
   const safeProducts = (catalog.products || []).filter(hasCustomerCardData);
   const originalRanked = searchCatalog(safeProducts, query, 32);
   let discoveryIndex = null;
-  let correction = nativeCount === 0 ? correctionFromRanked(query, originalRanked) : null;
-  if (nativeCount === 0 && !correction && !originalRanked.length) {
+  let correction = recovery ? correctionFromRanked(query, originalRanked) : null;
+  if (recovery && !correction && !originalRanked.length) {
     discoveryIndex = correctionIndex(catalog);
     correction = correctedQuery(catalog, query, discoveryIndex);
   }
@@ -434,9 +440,15 @@ function buildSuggestionPayload(catalog, query, nativeResultCount = 0, excluded 
   const rankedAll = correction && !originalRanked.length
     ? searchCatalog(safeProducts, effectiveQuery, 32)
     : originalRanked;
-  discoveryIndex = discoveryIndex || correctionIndex(catalog);
-  const searchSuggestions = buildSearchSuggestions(discoveryIndex, query, effectiveQuery, correction, rankedAll);
-  const recovery = nativeCount === 0;
+  if (recovery && !discoveryIndex) {
+    discoveryIndex = correctionIndex({
+      active: { id: `${String(catalog?.active?.id || "memory")}:ranked` },
+      products: rankedAll.map((entry) => entry.product)
+    });
+  }
+  const searchSuggestions = recovery
+    ? buildSearchSuggestions(discoveryIndex, query, effectiveQuery, correction, rankedAll)
+    : [];
   const ranked = recovery
     ? diversifyRanked(rankedAll.filter((entry) => !excluded.has(String(entry.product?.productId))), MAX_RESULTS)
     : [];
