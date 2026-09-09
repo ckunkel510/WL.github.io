@@ -3,7 +3,7 @@
 
   if (window.WLAnalytics) return;
 
-  var VERSION = "1.2.2";
+  var VERSION = "1.3.0";
   var EVENT_NAME = "wl_analytics_event";
   var GA_MEASUREMENT_ID = "G-4ZLV1YB6GY";
   var META_PIXEL_ID = "188974749776655";
@@ -11,6 +11,7 @@
   var CHECKOUT_STORAGE_KEY = "wl_analytics_checkout_v1";
   var PURCHASE_STORAGE_KEY = "wl_analytics_purchases_v1";
   var PENDING_ADD_STORAGE_KEY = "wl_analytics_pending_add_v1";
+  var EXPERIMENT_STORAGE_KEY = "wl_analytics_experiment_v1";
   var CART_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
   var sent = Object.create(null);
   var observedProductIds = Object.create(null);
@@ -31,7 +32,12 @@
     add_payment_info: true,
     checkout_submit: true,
     purchase: true,
-    share_product: true
+    share_product: true,
+    generate_lead: true,
+    pdp_fulfillment_view: true,
+    pdp_fulfillment_ready: true,
+    pdp_fulfillment_select: true,
+    pdp_store_availability: true
   };
 
   var BLOCKED_KEYS = /(?:^|_)(?:name|first_name|last_name|email|phone|telephone|address|street|city|state|zip|postal|country|payment|card|account|password|user_id|customer_id|contact|instructions|po_number)(?:$|_)/i;
@@ -264,10 +270,26 @@
     window.gtag("event", name, parameters);
   }
 
+  function experimentContext() {
+    try {
+      var stored = JSON.parse(window.sessionStorage.getItem(EXPERIMENT_STORAGE_KEY) || "null");
+      if (!stored || typeof stored !== "object") return {};
+      var context = {};
+      ["experiment_id", "experiment_variant", "fulfillment_method"].forEach(function (key) {
+        var value = cleanString(stored[key]);
+        if (value) context[key] = value;
+      });
+      return context;
+    } catch (error) {
+      return {};
+    }
+  }
+
   function pushEvent(name, parameters) {
     if (!ALLOWED_EVENTS[name]) return false;
 
-    var payload = sanitize(parameters || {}, "", 0) || {};
+    var enriched = Object.assign({}, experimentContext(), parameters || {});
+    var payload = sanitize(enriched, "", 0) || {};
     payload.event = EVENT_NAME;
     payload.event_name = name;
     payload.analytics_version = VERSION;
