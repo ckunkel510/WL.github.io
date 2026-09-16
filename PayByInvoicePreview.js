@@ -21,7 +21,7 @@
   if (requestedMode === 'native') return;
   if (ROLLOUT_MODE === 'preview' && requestedMode !== 'preview') return;
 
-  var VERSION = 'v2-preview-10';
+  var VERSION = 'v2-preview-11';
   var IDS = {
     address: 'ctl00_PageBody_AddressDropdownList',
     billing: 'ctl00_PageBody_BillingAddressTextBox',
@@ -229,6 +229,15 @@
       '#wl-payment-amount-choices{width:100%;margin:0 0 7px;padding:10px;border:1px solid #eadadd;border-radius:9px;background:#fffafa;}',
       '#wl-payment-amount-choices .wl-choice-title{margin:0 0 7px;font-size:14px;font-weight:800;color:var(--wl-ink);}',
       '#wl-payment-amount-choices .wl-choice-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;}',
+      '#wl-payment-amount-choices .wl-flow-button.is-selected{border-color:var(--wl-wine);background:#f7e9ed;color:var(--wl-wine);box-shadow:inset 0 0 0 1px var(--wl-wine);}',
+      '#wl-payment-selection-preview[hidden]{display:none!important;}',
+      '#wl-payment-selection-preview{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:10px 0 0;padding:10px 11px;border:1px solid #c7dfcf;border-left:4px solid #2f6a42;border-radius:9px;background:#f6fbf8;}',
+      '#wl-payment-selection-preview .wl-selection-copy{min-width:0;}',
+      '#wl-payment-selection-preview .wl-selection-label{margin:0 0 2px;color:#31523d;font-size:11px;font-weight:900;letter-spacing:.05em;text-transform:uppercase;}',
+      '#wl-payment-selection-preview .wl-selection-summary{display:block;color:#173c25;font-size:15px;line-height:1.3;}',
+      '#wl-payment-selection-preview .wl-selection-detail{margin:3px 0 0;color:#526259;font-size:12px;line-height:1.35;overflow-wrap:anywhere;}',
+      '#wl-payment-selection-preview .wl-selection-actions{display:flex;flex:0 0 auto;gap:7px;}',
+      '#wl-payment-selection-preview .wl-selection-remove{color:#7f1d1d;}',
       '.wl-flow-button{min-height:40px;padding:7px 10px;border:1px solid #aeb5bf;border-radius:8px;background:#fff;color:var(--wl-ink);font-size:13px;font-weight:800;cursor:pointer;}',
       '.wl-flow-button:hover{border-color:var(--wl-wine);color:var(--wl-wine);}',
       '.wl-flow-button:focus-visible{outline:3px solid rgba(114,0,24,.2);outline-offset:2px;}',
@@ -289,7 +298,7 @@
       'body.wl-payment-flow-ready #'+IDS.transactions+'{position:absolute!important;left:-100000px!important;top:auto!important;width:1px!important;height:1px!important;overflow:hidden!important;opacity:0!important;pointer-events:none!important;}',
       '.wl-dialog-close{min-width:74px;}',
       '@media (max-width:900px){#wl-payment-guide .wl-guide-card{grid-template-columns:1fr;align-items:start;}#wl-payment-workspace{grid-template-columns:1fr;}#wl-payment-amount-choices .wl-choice-row{grid-template-columns:repeat(2,minmax(0,1fr));}}',
-      '@media (max-width:720px){body.wl-payment-flow-ready #MainLayoutRow{width:calc(100% - 12px)!important;}#wl-payment-guide{margin:8px auto 10px;}#wl-payment-guide .wl-guide-card{padding:11px 12px;}#wl-payment-guide .wl-guide-steps{grid-template-columns:1fr;}#wl-payment-workspace{gap:10px;}.wl-workspace-column{padding:11px;}body.wl-payment-flow-ready .wl-payment-card{grid-template-columns:1fr!important;gap:4px!important;}body.wl-payment-flow-ready .wl-payment-card>div:first-child,body.wl-payment-flow-ready .wl-payment-card>div:nth-child(2),body.wl-payment-flow-ready .wl-payment-card>.wl-field-help{grid-column:1;}#wl-payment-billing-grid{grid-template-columns:1fr;}#wl-payment-amount-choices .wl-choice-row{grid-template-columns:1fr;}#wl-payment-review dl{grid-template-columns:1fr;gap:2px;}#wl-payment-review dd{margin-bottom:6px;}.wl-picker-dialog{padding:8px;}.wl-picker-card{width:calc(100vw - 16px);max-height:calc(100vh - 16px);}.wl-picker-header,.wl-picker-tools,.wl-picker-footer{padding:10px 12px;}.wl-picker-header{align-items:flex-start;}.wl-picker-tools{align-items:stretch;flex-direction:column;}.wl-picker-row{grid-template-columns:28px 1fr auto;}.wl-picker-row .wl-picker-secondary{grid-column:2 / -1;}.wl-picker-row .wl-picker-amount{grid-column:3;grid-row:1;text-align:right;}.wl-picker-row .wl-picker-document{grid-column:2 / -1;width:100%;}.wl-job-row{grid-template-columns:28px 1fr auto;}}'
+      '@media (max-width:720px){body.wl-payment-flow-ready #MainLayoutRow{width:calc(100% - 12px)!important;}#wl-payment-guide{margin:8px auto 10px;}#wl-payment-guide .wl-guide-card{padding:11px 12px;}#wl-payment-guide .wl-guide-steps{grid-template-columns:1fr;}#wl-payment-workspace{gap:10px;}.wl-workspace-column{padding:11px;}body.wl-payment-flow-ready .wl-payment-card{grid-template-columns:1fr!important;gap:4px!important;}body.wl-payment-flow-ready .wl-payment-card>div:first-child,body.wl-payment-flow-ready .wl-payment-card>div:nth-child(2),body.wl-payment-flow-ready .wl-payment-card>.wl-field-help{grid-column:1;}#wl-payment-billing-grid{grid-template-columns:1fr;}#wl-payment-amount-choices .wl-choice-row{grid-template-columns:1fr;}#wl-payment-selection-preview{align-items:stretch;flex-direction:column;}#wl-payment-selection-preview .wl-selection-actions{display:grid;grid-template-columns:1fr 1fr;}#wl-payment-review dl{grid-template-columns:1fr;gap:2px;}#wl-payment-review dd{margin-bottom:6px;}.wl-picker-dialog{padding:8px;}.wl-picker-card{width:calc(100vw - 16px);max-height:calc(100vh - 16px);}.wl-picker-header,.wl-picker-tools,.wl-picker-footer{padding:10px 12px;}.wl-picker-header{align-items:flex-start;}.wl-picker-tools{align-items:stretch;flex-direction:column;}.wl-picker-row{grid-template-columns:28px 1fr auto;}.wl-picker-row .wl-picker-secondary{grid-column:2 / -1;}.wl-picker-row .wl-picker-amount{grid-column:3;grid-row:1;text-align:right;}.wl-picker-row .wl-picker-document{grid-column:2 / -1;width:100%;}.wl-job-row{grid-template-columns:28px 1fr auto;}}'
     ].join('\n');
     document.head.appendChild(style);
   }
@@ -471,11 +480,13 @@
       '<div class="wl-choice-row">',
       due > 0 ? '<button type="button" class="wl-flow-button primary" data-wl-action="pay-balance">Pay full balance '+formatMoney(due)+'</button>' : '',
       statement > 0 ? '<button type="button" class="wl-flow-button" data-wl-action="pay-statement">Pay last statement '+formatMoney(statement)+'</button>' : '',
-      byId(IDS.transactions) ? '<button type="button" class="wl-flow-button" data-wl-action="choose-invoices">Pay selected invoices</button>' : '',
+      byId(IDS.transactions) ? '<button type="button" class="wl-flow-button" data-wl-action="choose-invoices">Pay by selected documents</button>' : '',
       byId(IDS.transactions) ? '<button type="button" class="wl-flow-button" data-wl-action="choose-job">Pay by job</button>' : '',
       '<button type="button" class="wl-flow-button" data-wl-action="focus-amount">Other amount</button>',
-      '</div>'
+      '</div>',
+      '<section id="wl-payment-selection-preview" hidden aria-live="polite"></section>'
     ].join('');
+    updatePaymentSelectionUi();
   }
 
   var invoicePickerState = {
@@ -491,6 +502,91 @@
     loaded: false,
     loading: false
   };
+
+  function paymentSelectionState() {
+    var remittance = cleanText(byId(IDS.remittance) && byId(IDS.remittance).value);
+    var amount = parseMoney(byId(IDS.amount) && byId(IDS.amount).value);
+    if (/^STATEMENT/i.test(remittance)) {
+      return { type: 'statement', count: 1, amount: amount, details: [] };
+    }
+    if (/balance as of/i.test(remittance)) {
+      var jobs = remittance.split(/,\s*(?=[^,]+?\s+-\s+\$[\d,.]+\s+balance as of)/i).map(function (token) {
+        return cleanText(token.split(/\s+-\s+\$/)[0]);
+      }).filter(Boolean);
+      return { type: 'jobs', count: jobs.length, amount: amount, details: jobs };
+    }
+    if (remittance) {
+      var documents = remittance.split(/\s*,\s*/).map(function (token) {
+        var credit = /^CN/i.test(token);
+        var number = cleanText(token.split('$')[0]).replace(/^(CN|CRN|CR)/i, '');
+        return (credit ? 'Credit ' : 'Invoice ')+number;
+      }).filter(Boolean);
+      return { type: 'documents', count: documents.length, amount: amount, details: documents };
+    }
+    return { type: 'none', count: 0, amount: amount, details: [] };
+  }
+
+  function updatePaymentSelectionUi() {
+    var choices = byId('wl-payment-amount-choices');
+    if (!choices) return;
+    var state = paymentSelectionState();
+    var statementButton = choices.querySelector('[data-wl-action="pay-statement"]');
+    var documentsButton = choices.querySelector('[data-wl-action="choose-invoices"]');
+    var jobsButton = choices.querySelector('[data-wl-action="choose-job"]');
+    [statementButton, documentsButton, jobsButton].forEach(function (button) {
+      if (!button) return;
+      button.classList.remove('is-selected');
+      button.setAttribute('aria-pressed', 'false');
+    });
+
+    var statement = statementAmount();
+    if (statementButton) statementButton.textContent = state.type === 'statement'
+      ? 'Last statement selected'
+      : 'Pay last statement '+formatMoney(statement);
+    if (documentsButton) documentsButton.textContent = state.type === 'documents'
+      ? 'Edit selected documents'
+      : 'Pay by selected documents';
+    if (jobsButton) jobsButton.textContent = state.type === 'jobs'
+      ? 'Edit selected jobs'
+      : 'Pay by job';
+
+    var activeButton = state.type === 'statement' ? statementButton : state.type === 'documents' ? documentsButton : state.type === 'jobs' ? jobsButton : null;
+    if (activeButton) {
+      activeButton.classList.add('is-selected');
+      activeButton.setAttribute('aria-pressed', 'true');
+    }
+
+    var preview = byId('wl-payment-selection-preview');
+    if (!preview) return;
+    if (['statement', 'documents', 'jobs'].indexOf(state.type) === -1) {
+      preview.hidden = true;
+      preview.innerHTML = '';
+      return;
+    }
+
+    var title = state.type === 'statement'
+      ? 'Last statement selected'
+      : state.count+' '+(state.type === 'documents' ? 'document' : 'job balance')+(state.count === 1 ? '' : 's')+' selected';
+    var editAction = state.type === 'documents' ? 'choose-invoices' : state.type === 'jobs' ? 'choose-job' : '';
+    var editLabel = state.type === 'documents' ? 'Edit selected documents' : 'Edit selected jobs';
+    var removeLabel = state.type === 'statement' ? 'Remove last statement' : 'Remove selection';
+    var shownDetails = state.details.slice(0, 3);
+    var detail = state.type === 'statement'
+      ? 'This payment will be applied to your last statement.'
+      : shownDetails.join(' · ')+(state.details.length > shownDetails.length ? ' · +'+(state.details.length-shownDetails.length)+' more' : '');
+    preview.hidden = false;
+    preview.innerHTML = [
+      '<div class="wl-selection-copy">',
+      '  <p class="wl-selection-label">Your selection</p>',
+      '  <strong class="wl-selection-summary">'+escapeHtml(title)+' · '+formatMoney(state.amount)+'</strong>',
+      '  <p class="wl-selection-detail">'+escapeHtml(detail)+'</p>',
+      '</div>',
+      '<div class="wl-selection-actions">',
+      editAction ? '<button type="button" class="wl-flow-button" data-wl-action="'+editAction+'">'+editLabel+'</button>' : '',
+      '  <button type="button" class="wl-flow-button wl-selection-remove" data-wl-action="clear-selection">'+removeLabel+'</button>',
+      '</div>'
+    ].join('');
+  }
 
   function escapeHtml(value) {
     return String(value == null ? '' : value).replace(/[&<>"']/g, function (character) {
@@ -775,6 +871,26 @@
     setRemittance(remittance);
     closePickerDialog();
     setAmount(amount);
+    updatePaymentSelectionUi();
+    ensureReview(false);
+  }
+
+  function clearPaymentSelection() {
+    var billing = byId(IDS.billing);
+    if (billing) writeBillingDraft(billing.value);
+    writeRemittanceDraft('');
+    setRemittance('');
+    invoicePickerState.selected.clear();
+    jobPickerState.selected.clear();
+    var amount = byId(IDS.amount);
+    if (amount) {
+      amount.value = '0.00';
+      amount.dispatchEvent(new Event('input', { bubbles: true }));
+      amount.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    closePickerDialog();
+    updatePaymentSelectionUi();
+    ensureReview(false);
   }
 
   function commitInvoiceSelection() {
@@ -911,11 +1027,11 @@
       invoiceDialog.setAttribute('aria-labelledby', 'wl-invoice-dialog-title');
       invoiceDialog.innerHTML = [
         '<div class="wl-picker-card">',
-        '  <div class="wl-picker-header"><h2 id="wl-invoice-dialog-title">Pay selected invoices</h2><div class="wl-picker-header-actions"><button type="button" class="wl-flow-button" data-wl-action="select-all-invoices">Select all</button><button type="button" class="wl-flow-button" data-wl-action="clear-invoices">Clear</button><button type="button" class="wl-flow-button" data-wl-action="close-picker" aria-label="Close invoice selection">Close</button></div></div>',
+        '  <div class="wl-picker-header"><h2 id="wl-invoice-dialog-title">Pay by selected documents</h2><div class="wl-picker-header-actions"><button type="button" class="wl-flow-button" data-wl-action="select-all-invoices">Select all</button><button type="button" class="wl-flow-button" data-wl-action="clear-invoices">Clear</button><button type="button" class="wl-flow-button" data-wl-action="close-picker" aria-label="Close document selection">Close</button></div></div>',
         '  <div class="wl-picker-tools"><input id="wl-invoice-filter" class="wl-picker-search" type="search" placeholder="Search invoice, credit, job, reference, or date" aria-label="Search invoices and credits"><span id="wl-invoice-summary" class="wl-picker-summary">0 selected · $0.00</span></div>',
         '  <div class="wl-picker-body"><div id="wl-invoice-list" class="wl-picker-list"></div></div>',
         '  <p id="wl-invoice-message" class="wl-picker-message" aria-live="polite"></p>',
-        '  <div class="wl-picker-footer"><span class="wl-picker-meta">Credits reduce the selected payment.</span><div class="wl-picker-footer-actions"><button type="button" class="wl-flow-button" data-wl-action="close-picker">Cancel</button><button type="button" class="wl-flow-button primary" data-wl-action="use-invoices">Use selected items</button></div></div>',
+        '  <div class="wl-picker-footer"><span class="wl-picker-meta">Credits reduce the selected payment.</span><div class="wl-picker-footer-actions"><button type="button" class="wl-flow-button" data-wl-action="close-picker">Cancel</button><button type="button" class="wl-flow-button primary" data-wl-action="use-invoices">Use selected documents</button></div></div>',
         '</div>'
       ].join('');
       form.appendChild(invoiceDialog);
@@ -1088,21 +1204,11 @@
     return cleanText(source && source.textContent) || 'Selected';
   }
 
-  function selectedInvoiceCount() {
-    var count = document.querySelectorAll('#'+IDS.transactions+' input[type="checkbox"][id*="chkSelect"]:checked:not([id*="SelectAll"])').length;
-    if (count) return count;
-    var remittance = cleanText(byId(IDS.remittance) && byId(IDS.remittance).value);
-    if (!remittance || /balance as of|^STATEMENT/i.test(remittance)) return 0;
-    return remittance.split(/\s*,\s*/).filter(Boolean).length;
-  }
-
   function paymentSelectionSummary() {
-    var remittance = cleanText(byId(IDS.remittance) && byId(IDS.remittance).value);
-    var jobCount = (remittance.match(/balance as of/gi) || []).length;
-    if (jobCount) return jobCount+' selected job balance'+(jobCount === 1 ? '' : 's');
-    if (/^STATEMENT/i.test(remittance)) return 'Last statement';
-    var count = selectedInvoiceCount();
-    if (count) return count+' selected invoice'+(count === 1 ? '' : 's')+(remittance.indexOf('CN') !== -1 ? ' / credit' : '');
+    var state = paymentSelectionState();
+    if (state.type === 'jobs') return state.count+' selected job balance'+(state.count === 1 ? '' : 's');
+    if (state.type === 'statement') return 'Last statement';
+    if (state.type === 'documents') return state.count+' selected document'+(state.count === 1 ? '' : 's');
     return 'Account balance';
   }
 
@@ -1182,9 +1288,11 @@
 
       var action = actionButton.getAttribute('data-wl-action');
       if (action === 'focus-amount') {
+        writeRemittanceDraft('');
         setRemittance('');
         invoicePickerState.selected.clear();
         jobPickerState.selected.clear();
+        updatePaymentSelectionUi();
         var amount = byId(IDS.amount);
         if (amount) {
           amount.focus();
@@ -1205,6 +1313,10 @@
         invoicePickerState.selected.clear();
         jobPickerState.selected.clear();
         applyPaymentSelection(statement, 'STATEMENT - $'+Number(statement || 0).toFixed(2));
+      }
+
+      if (action === 'clear-selection') {
+        clearPaymentSelection();
       }
 
       if (action === 'choose-invoices') {

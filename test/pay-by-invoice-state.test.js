@@ -18,7 +18,7 @@ test('preview router requires an approved account ID and the preview URL', () =>
   assert.match(routerAndLegacySource, /expectedAccountIds\.indexOf\(accountId\) !== -1/);
   assert.match(routerAndLegacySource, /expiresAt > Date\.now\(\)/);
   assert.match(routerAndLegacySource, /__WL_PAYMENT_PREVIEW_ACCOUNT_ID__ = accountId/);
-  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260916-10/);
+  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260916-11/);
 });
 
 test('legacy payment enhancements remain the default and stop only for an approved preview', () => {
@@ -137,12 +137,26 @@ test('preview convenience actions update native fields without submitting', () =
   assert.match(previewSource, /Pay last statement/);
 });
 
+test('document, job, and statement selections have an editable removable preview', () => {
+  assert.match(previewSource, /id="wl-payment-selection-preview"/);
+  assert.match(previewSource, /Your selection/);
+  assert.match(previewSource, /Pay by selected documents/);
+  assert.match(previewSource, /Edit selected documents/);
+  assert.match(previewSource, /Edit selected jobs/);
+  assert.match(previewSource, /Remove last statement/);
+  assert.match(previewSource, /data-wl-action="clear-selection"/);
+  assert.match(previewSource, /function clearPaymentSelection\(\)/);
+  assert.match(previewSource, /amount\.value = '0\.00'/);
+  assert.match(previewSource, /writeRemittanceDraft\(''\)/);
+  assert.match(previewSource, /balance as of\)\/i/);
+});
+
 test('invoice and job choices open separate custom selectors', () => {
   assert.match(previewSource, /id = 'wl-invoice-dialog'/);
   assert.match(previewSource, /id = 'wl-job-dialog'/);
   assert.match(previewSource, /aria-modal/);
-  assert.match(previewSource, /Pay selected invoices/);
-  assert.match(previewSource, /Use selected items/);
+  assert.match(previewSource, /Pay by selected documents/);
+  assert.match(previewSource, /Use selected documents/);
   assert.match(previewSource, /Use selected jobs/);
   assert.match(previewSource, /JobBalances_R\.aspx/);
   assert.match(previewSource, /data-wl-select-invoice/);
