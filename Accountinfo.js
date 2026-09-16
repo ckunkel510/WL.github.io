@@ -32,7 +32,7 @@
   const AUTOPAY_ACTIVE_KEY = 'wl_autopay_active_v1';
   const AUTOPAY_ALLOWED_LOGINS = ['ckunkel2', 'ckunkel3'];
   const PAYMENT_FLOW_CONTEXT_KEY = 'wl_payment_flow_preview_v1';
-  const ACCOUNT_EXPERIENCE_BUILD = '20260916-smooth-1';
+  const ACCOUNT_EXPERIENCE_BUILD = '20260916-smooth-2';
   const ACCOUNT_EXPERIENCE_TEST_USERS = {
     b8f6961397f9c6a3b9cff27038c1d3ed309604ffe607b5dd0d365f5d53179ade: 'ckunkel2',
     '09ec3e2992ac186bf0789d3710e12743302d2d47b4c0410e9d580a32c818e97f': 'ckunkel3'
@@ -200,6 +200,7 @@
   .wl-acct-smooth .wl-title{color:#fff;font-size:1.35rem;letter-spacing:-.02em}
   .wl-acct-smooth .wl-ham button{border-color:rgba(255,255,255,.36);background:rgba(255,255,255,.12);color:#fff;box-shadow:none}
   .wl-acct-smooth .wl-ham button:hover{background:rgba(255,255,255,.2)}
+  .wl-acct-smooth .wl-ham-menu{top:calc(100% + 8px);left:20px}
   .wl-acct-smooth #wl-top-pay{border-color:#fff;background:#fff;color:${BRAND.primary};box-shadow:0 8px 20px rgba(34,0,8,.18)}
   .wl-acct-smooth #wl-top-pay:hover{border-color:#f9e9ed;background:#f9e9ed;color:${BRAND.primaryHover}}
   .wl-acct-smooth .wl-card{border-color:var(--wl-line);border-radius:16px;box-shadow:0 9px 28px rgba(45,27,31,.07)}
@@ -847,6 +848,7 @@ if (snapshotActions) {
       const toggle=(open)=>{ menu.classList.toggle('open', open); btn.setAttribute('aria-expanded', open?'true':'false'); };
       btn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); toggle(!menu.classList.contains('open')); return false; });
       document.addEventListener('click', (e)=>{ if(!menu.classList.contains('open')) return; if(!menu.contains(e.target) && e.target!==btn){ toggle(false); } });
+      document.addEventListener('keydown', (e)=>{ if(e.key!=='Escape'||!menu.classList.contains('open')) return; toggle(false); btn.focus(); });
       btn.setAttribute('onclick','return false;');
     })();
 
