@@ -19,7 +19,7 @@ test('preview router requires an approved account ID and the preview URL', () =>
   assert.match(routerAndLegacySource, /expectedAccountIds\.indexOf\(accountId\) !== -1/);
   assert.match(routerAndLegacySource, /expiresAt > Date\.now\(\)/);
   assert.match(routerAndLegacySource, /__WL_PAYMENT_PREVIEW_ACCOUNT_ID__ = accountId/);
-  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260916-12/);
+  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260916-13/);
 });
 
 test('legacy payment enhancements remain the default and stop only for an approved preview', () => {
@@ -199,6 +199,20 @@ test('charge ACH setup waits for WebForms and recovers from a swallowed postback
   assert.match(previewSource, /if \(!\(amount > 0\)\)/);
   assert.match(paymentFixtureSource, /forte_failures/);
   assert.match(paymentFixtureSource, /data-fixture-forte-attempts/);
+});
+
+test('native payment clicks receive a non-blocking progress acknowledgement', () => {
+  assert.match(previewSource, /id = 'wl-payment-processing'/);
+  assert.match(previewSource, /Your click was received/);
+  assert.match(previewSource, /Opening secure payment…/);
+  assert.match(previewSource, /PAYMENT_PROCESSING_TIMEOUT = 18000/);
+  assert.match(previewSource, /MutationObserver/);
+  assert.match(previewSource, /hostedPaymentIsVisible/);
+  assert.match(previewSource, /The secure window did not open/);
+  assert.match(previewSource, /startPaymentProcessing\(nativeSubmit\)/);
+  assert.match(previewSource, /data-wl-native-payment-control/);
+  assert.match(paymentFixtureSource, /payment_delay/);
+  assert.doesNotMatch(previewSource, /preventDefault\s*\(/);
 });
 
 test('billing entry is stabilized without changing the native final payment handler', () => {

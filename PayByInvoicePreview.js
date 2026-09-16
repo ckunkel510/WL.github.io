@@ -21,7 +21,7 @@
   if (requestedMode === 'native') return;
   if (ROLLOUT_MODE === 'preview' && requestedMode !== 'preview') return;
 
-  var VERSION = 'v2-preview-12';
+  var VERSION = 'v2-preview-13';
   var IDS = {
     address: 'ctl00_PageBody_AddressDropdownList',
     billing: 'ctl00_PageBody_BillingAddressTextBox',
@@ -269,6 +269,17 @@
       'body.wl-payment-flow-ready #'+IDS.submit+':hover,body.wl-payment-flow-ready #'+IDS.submitAlt+':hover{background:var(--wl-wine-dark)!important;}',
       'body.wl-payment-flow-ready #'+IDS.submit+':focus-visible,body.wl-payment-flow-ready #'+IDS.submitAlt+':focus-visible{outline:3px solid rgba(114,0,24,.22)!important;outline-offset:3px;}',
       '#wl-payment-native-note{margin:7px 0 0;color:var(--wl-muted);font-size:12px;line-height:1.35;text-align:center;}',
+      '#wl-payment-processing[hidden]{display:none!important;}',
+      '#wl-payment-processing{display:flex;align-items:center;gap:10px;margin:8px 0 0;padding:10px 12px;border:1px solid #c7d8e8;border-radius:9px;background:#f3f8fc;color:#24445d;text-align:left;}',
+      '#wl-payment-processing .wl-processing-spinner{flex:0 0 20px;width:20px;height:20px;border:3px solid #bdd0df;border-top-color:var(--wl-wine);border-radius:50%;animation:wl-payment-spin .8s linear infinite;}',
+      '#wl-payment-processing .wl-processing-copy{min-width:0;}',
+      '#wl-payment-processing strong{display:block;font-size:13px;line-height:1.3;}',
+      '#wl-payment-processing span{display:block;margin-top:2px;color:#526879;font-size:12px;line-height:1.35;}',
+      '#wl-payment-processing.wl-processing-timeout{border-color:#e5c8a8;background:#fff8ef;color:#784514;}',
+      '#wl-payment-processing.wl-processing-opened{border-color:#c7dfcf;background:#f6fbf8;color:#31523d;}',
+      '#wl-payment-processing.wl-processing-opened .wl-processing-spinner,#wl-payment-processing.wl-processing-timeout .wl-processing-spinner{display:none;}',
+      'body.wl-payment-processing [data-wl-native-payment-control="true"]{pointer-events:none!important;cursor:wait!important;opacity:.74!important;}',
+      '@keyframes wl-payment-spin{to{transform:rotate(360deg);}}',
       'body.wl-payment-dialog-open{overflow:hidden;}',
       '.wl-picker-dialog[hidden]{display:none!important;}',
       '.wl-picker-dialog{position:fixed;inset:0;z-index:10050;display:grid;place-items:center;padding:20px;background:rgba(17,24,39,.62);}',
@@ -1354,6 +1365,17 @@
       if (nativeSubmit.tagName === 'INPUT') nativeSubmit.value = buttonText;
       else nativeSubmit.textContent = buttonText;
       nativeSubmit.setAttribute('data-wl-native-payment-control', 'true');
+      if (document.body && document.body.classList.contains('wl-payment-processing')) {
+        paymentProcessingControl = nativeSubmit;
+        nativeSubmit.setAttribute('aria-busy', 'true');
+        setPaymentControlLabel(nativeSubmit, 'Opening secure payment…');
+        var processingStatus = ensurePaymentProcessingStatus(nativeSubmit);
+        if (processingStatus && processingStatus.hidden) {
+          processingStatus.className = '';
+          processingStatus.hidden = false;
+          processingStatus.innerHTML = '<span class="wl-processing-spinner" aria-hidden="true"></span><div class="wl-processing-copy"><strong>Your click was received.</strong><span>Opening secure payment…</span></div>';
+        }
+      }
     }
 
     var note = byId('wl-payment-native-note');
@@ -1371,13 +1393,164 @@
           : 'Choose an amount above to continue.';
   }
 
+  var PAYMENT_PROCESSING_TIMEOUT = 18000;
+  var paymentProcessingTimer = 0;
+  var paymentProcessingHideTimer = 0;
+  var paymentProcessingObserver = null;
+  var paymentProcessingControl = null;
+  var paymentProcessingStartedAt = 0;
+  var paymentProcessingBlurHandler = null;
+
+  function setPaymentControlLabel(control, label) {
+    if (!control) return;
+    if (control.tagName === 'INPUT') control.value = label;
+    else control.textContent = label;
+  }
+
+  function currentNativePaymentControl() {
+    return isCashAccount()
+      ? (byId(IDS.submit) || byId(IDS.submitAlt))
+      : (byId(IDS.submitAlt) || byId(IDS.submit));
+  }
+
+  function ensurePaymentProcessingStatus(control) {
+    var status = byId('wl-payment-processing');
+    if (status) return status;
+    var panel = (control && control.closest && control.closest('#'+IDS.submitAltPanel+',#'+IDS.submitPanel)) ||
+      byId(IDS.submitAltPanel) || byId(IDS.submitPanel);
+    if (!panel) return null;
+    status = document.createElement('div');
+    status.id = 'wl-payment-processing';
+    status.hidden = true;
+    status.setAttribute('role', 'status');
+    status.setAttribute('aria-live', 'polite');
+    var nativeNote = byId('wl-payment-native-note');
+    if (nativeNote && nativeNote.parentNode === panel) panel.insertBefore(status, nativeNote);
+    else panel.appendChild(status);
+    return status;
+  }
+
+  function paymentElementIsVisible(element) {
+    if (!element || !document.documentElement.contains(element)) return false;
+    var style = window.getComputedStyle ? window.getComputedStyle(element) : null;
+    if (style && (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0)) return false;
+    return !!(element.offsetWidth || element.offsetHeight || (style && style.position === 'fixed'));
+  }
+
+  function hostedPaymentIsVisible() {
+    var frames = document.querySelectorAll([
+      'iframe[src*="forte" i]',
+      'iframe[src*="csg" i]',
+      'iframe[src*="payment" i]',
+      'iframe[title*="payment" i]',
+      'iframe[id*="payment" i]'
+    ].join(','));
+    if (Array.prototype.some.call(frames, paymentElementIsVisible)) return true;
+
+    var dialogs = document.querySelectorAll('[role="dialog"],.modal.show,.modal[style*="display: block"],.k-window');
+    return Array.prototype.some.call(dialogs, function (dialog) {
+      if (!paymentElementIsVisible(dialog)) return false;
+      var identity = cleanText((dialog.id || '')+' '+(dialog.className || '')+' '+(dialog.getAttribute('aria-label') || '')+' '+dialog.textContent);
+      return /forte|csg|routing number|account number|card number|expiration|security code|secure payment/i.test(identity);
+    });
+  }
+
+  function disconnectPaymentProcessingObserver() {
+    if (paymentProcessingObserver) paymentProcessingObserver.disconnect();
+    paymentProcessingObserver = null;
+    if (paymentProcessingBlurHandler) window.removeEventListener('blur', paymentProcessingBlurHandler, true);
+    paymentProcessingBlurHandler = null;
+  }
+
+  function finishPaymentProcessing(result) {
+    window.clearTimeout(paymentProcessingTimer);
+    paymentProcessingTimer = 0;
+    disconnectPaymentProcessingObserver();
+    if (document.body) document.body.classList.remove('wl-payment-processing');
+
+    var cashAccount = isCashAccount();
+    var control = currentNativePaymentControl() || paymentProcessingControl;
+    if (control) {
+      control.removeAttribute('aria-busy');
+      setPaymentControlLabel(control, cashAccount ? 'Continue to add funds' : 'Continue to secure payment');
+    }
+    paymentProcessingControl = null;
+    paymentProcessingStartedAt = 0;
+
+    var status = byId('wl-payment-processing');
+    if (!status) return;
+    status.className = result === 'opened' ? 'wl-processing-opened' : result === 'timeout' ? 'wl-processing-timeout' : '';
+    if (result === 'opened') {
+      status.hidden = false;
+      status.innerHTML = '<span class="wl-processing-spinner" aria-hidden="true"></span><div class="wl-processing-copy"><strong>Secure payment opened.</strong><span>Complete your payment in the secure window.</span></div>';
+      window.clearTimeout(paymentProcessingHideTimer);
+      paymentProcessingHideTimer = window.setTimeout(function () { status.hidden = true; }, 1400);
+      return;
+    }
+    if (result === 'timeout') {
+      status.hidden = false;
+      status.innerHTML = '<span class="wl-processing-spinner" aria-hidden="true"></span><div class="wl-processing-copy"><strong>The secure window did not open.</strong><span>Please select the payment button again.</span></div>';
+      return;
+    }
+    status.hidden = true;
+    status.innerHTML = '';
+  }
+
+  function watchForHostedPayment() {
+    disconnectPaymentProcessingObserver();
+    if (window.MutationObserver) {
+      paymentProcessingObserver = new MutationObserver(function () {
+        if (hostedPaymentIsVisible()) finishPaymentProcessing('opened');
+      });
+      paymentProcessingObserver.observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'style', 'src'] });
+    }
+    paymentProcessingBlurHandler = function () {
+      if (!paymentProcessingStartedAt || Date.now() - paymentProcessingStartedAt > 10000) return;
+      window.setTimeout(function () {
+        if (paymentProcessingStartedAt) finishPaymentProcessing('opened');
+      }, 250);
+    };
+    window.addEventListener('blur', paymentProcessingBlurHandler, true);
+  }
+
+  function startPaymentProcessing(control) {
+    if (!control || !document.body || document.body.classList.contains('wl-payment-processing')) return;
+    window.clearTimeout(paymentProcessingHideTimer);
+    var status = ensurePaymentProcessingStatus(control);
+    if (status) {
+      status.className = '';
+      status.hidden = false;
+      status.innerHTML = '<span class="wl-processing-spinner" aria-hidden="true"></span><div class="wl-processing-copy"><strong>Your click was received.</strong><span>Opening secure payment…</span></div>';
+    }
+    paymentProcessingControl = control;
+    paymentProcessingStartedAt = Date.now();
+    control.setAttribute('aria-busy', 'true');
+    watchForHostedPayment();
+    window.setTimeout(function () {
+      if (!paymentProcessingStartedAt) return;
+      document.body.classList.add('wl-payment-processing');
+      var current = currentNativePaymentControl() || control;
+      paymentProcessingControl = current;
+      current.setAttribute('aria-busy', 'true');
+      setPaymentControlLabel(current, 'Opening secure payment…');
+    }, 0);
+    window.clearTimeout(paymentProcessingTimer);
+    paymentProcessingTimer = window.setTimeout(function () {
+      if (hostedPaymentIsVisible()) finishPaymentProcessing('opened');
+      else finishPaymentProcessing('timeout');
+    }, PAYMENT_PROCESSING_TIMEOUT);
+  }
+
   function wirePageEvents() {
     if (document.documentElement.getAttribute('data-wl-payment-events') === VERSION) return;
     document.documentElement.setAttribute('data-wl-payment-events', VERSION);
 
     document.addEventListener('click', function (event) {
       var nativeSubmit = event.target.closest && event.target.closest('#'+IDS.submit+',#'+IDS.submitAlt);
-      if (nativeSubmit && document.body) document.body.classList.add('wl-payment-validation-requested');
+      if (nativeSubmit && document.body) {
+        document.body.classList.add('wl-payment-validation-requested');
+        startPaymentProcessing(nativeSubmit);
+      }
     }, true);
 
     document.addEventListener('click', function (event) {
@@ -1505,6 +1678,9 @@
 
     document.addEventListener('input', scheduleReview);
     document.addEventListener('change', scheduleReview);
+    window.addEventListener('pageshow', function () {
+      if (document.body && document.body.classList.contains('wl-payment-processing')) finishPaymentProcessing('reset');
+    });
   }
 
   var reviewTimer = 0;

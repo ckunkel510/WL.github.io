@@ -102,6 +102,7 @@
     const fixtureParams = new URL(location.href).searchParams;
     const fixtureIsCash = fixtureParams.get('account') === 'cash';
     const fixtureForteFailures = Number(fixtureParams.get('forte_failures') || 0);
+    const fixturePaymentDelay = Number(fixtureParams.get('payment_delay') || 0);
     window.fixtureForteAttempts = 0;
     window.fixtureInstallForte = function () {
       if (fixtureIsCash || document.getElementById('ctl00_PageBody_ForteMakePayment')) return;
@@ -116,6 +117,22 @@
         '</div>'
       ].join('');
     };
+    if (fixturePaymentDelay > 0) {
+      document.addEventListener('click', function (event) {
+        const paymentControl = event.target.closest && event.target.closest('#ctl00_PageBody_MakePayment,#ctl00_PageBody_ForteMakePayment');
+        if (!paymentControl) return;
+        event.preventDefault();
+        window.setTimeout(function () {
+          if (document.getElementById('fixturePaymentModal')) return;
+          const modal = document.createElement('div');
+          modal.id = 'fixturePaymentModal';
+          modal.setAttribute('role', 'dialog');
+          modal.setAttribute('aria-label', 'Secure payment');
+          modal.innerHTML = '<h2>Secure payment</h2><p>Routing number</p>';
+          document.body.appendChild(modal);
+        }, fixturePaymentDelay);
+      }, true);
+    }
     if (fixtureIsCash) {
       document.getElementById('fixtureHeading').textContent = 'Load Cash Account Balance';
       document.getElementById('fixtureRemittance').remove();
@@ -139,6 +156,6 @@
       document.documentElement.setAttribute('data-wl-payment-preview-account', previewIdentity.accountId);
     }
   </script>
-  <script src="../../PayByInvoice.js?v=local-router-7"></script>
+  <script src="../../PayByInvoice.js?v=local-router-8"></script>
 </body>
 </html>
