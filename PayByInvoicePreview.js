@@ -5,14 +5,11 @@
   if (!/\/AccountPayment_r\.aspx$/i.test(window.location.pathname) && !isFixture) return;
 
   /*
-   * Safe rollout:
+   * Production rollout:
    *   ?wl_payment_flow=native  -> WebTrack's native page, untouched
-   *   ?wl_payment_flow=preview -> the new progressive enhancement
-   *
-   * Keep preview-only until both cash and charge-account paths are approved.
-   * Change ROLLOUT_MODE to "live" when the preview is ready for all customers.
+   *   all other requests       -> the progressive enhancement
    */
-  var ROLLOUT_MODE = 'preview';
+  var ROLLOUT_MODE = 'live';
   var requestedMode = '';
   try {
     requestedMode = new URL(window.location.href).searchParams.get('wl_payment_flow') || '';
@@ -21,7 +18,7 @@
   if (requestedMode === 'native') return;
   if (ROLLOUT_MODE === 'preview' && requestedMode !== 'preview') return;
 
-  var VERSION = 'v2-preview-13';
+  var VERSION = 'v2-live-14';
   var IDS = {
     address: 'ctl00_PageBody_AddressDropdownList',
     billing: 'ctl00_PageBody_BillingAddressTextBox',

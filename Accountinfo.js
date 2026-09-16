@@ -1,8 +1,8 @@
 
 /* ==========================================================
    Woodson — Account Overview (AccountInfo_R.aspx)
-   v4.4 — selected-email preference editing fix,
-          customer fields ready + button-only modal close
+   v4.5 — production payment-flow rollout,
+          selected-email preference editing fix
    ========================================================== */
 (function(){
   'use strict';
@@ -31,8 +31,7 @@
   const AUTOPAY_PENDING_KEY = 'wl_autopay_pending_v1';
   const AUTOPAY_ACTIVE_KEY = 'wl_autopay_active_v1';
   const AUTOPAY_ALLOWED_LOGINS = ['ckunkel2', 'ckunkel3'];
-  const PAYMENT_FLOW_PREVIEW_KEY = 'wl_payment_flow_preview_v1';
-  const PAYMENT_FLOW_PREVIEW_ACCOUNT_IDS = Object.freeze(['EMP2111', '10005']);
+  const PAYMENT_FLOW_CONTEXT_KEY = 'wl_payment_flow_preview_v1';
 
   // Same-origin lookup used to pull the account email from AccountSettings.aspx
   // instead of relying on localStorage or requiring the customer to re-type it.
@@ -96,20 +95,19 @@
     const match=String(value||'').trim().match(/\(([^()]+)\)\s*$/);
     return match ? match[1].trim().toUpperCase() : '';
   }
-  function configurePaymentFlowPreview(accountName){
+  function configurePaymentFlow(accountName){
     const accountId=accountIdFromName(accountName);
-    const enabled=PAYMENT_FLOW_PREVIEW_ACCOUNT_IDS.includes(accountId);
     try {
-      if(enabled){
-        sessionStorage.setItem(PAYMENT_FLOW_PREVIEW_KEY, JSON.stringify({
+      if(accountId){
+        sessionStorage.setItem(PAYMENT_FLOW_CONTEXT_KEY, JSON.stringify({
           accountId,
           expiresAt: Date.now() + (30 * 60 * 1000)
         }));
       }else{
-        sessionStorage.removeItem(PAYMENT_FLOW_PREVIEW_KEY);
+        sessionStorage.removeItem(PAYMENT_FLOW_CONTEXT_KEY);
       }
     } catch(e) {}
-    return enabled;
+    return true;
   }
   function paymentFlowUrl(value, enabled){
     if(!enabled) return value;
@@ -361,8 +359,8 @@
     const accountKey = acctName || 'unknown';
     const accountSettingsDetails = await fetchAccountSettingsDetails().catch(() => ({}));
     const accountLoginName = accountSettingsDetails.loginName || '';
-    const paymentFlowPreviewEnabled = configurePaymentFlowPreview(accountKey);
-    const withPaymentFlowPreview = value => paymentFlowUrl(value, paymentFlowPreviewEnabled);
+    const paymentFlowEnabled = configurePaymentFlow(accountKey);
+    const withPaymentFlow = value => paymentFlowUrl(value, paymentFlowEnabled);
     const isAutopayTestAccount = isAutopayAllowedIdentity(
       accountLoginName,
       accountSettingsDetails.email,
@@ -386,7 +384,7 @@
       action: 'PayStatement',
       back: 'AccountInfo_R.aspx'
     }))();
-    const payStmtUrl = (()=>{ const q=new URLSearchParams(); if(payStmtPayload.total) q.set('utm_total', payStmtPayload.total); if(payStmtPayload.notes) q.set('utm_notes', payStmtPayload.notes); q.set('utm_source', payStmtPayload.source); q.set('utm_action', payStmtPayload.action); q.set('utm_back', payStmtPayload.back); return withPaymentFlowPreview(`AccountPayment_r.aspx?${q.toString()}`); })();
+    const payStmtUrl = (()=>{ const q=new URLSearchParams(); if(payStmtPayload.total) q.set('utm_total', payStmtPayload.total); if(payStmtPayload.notes) q.set('utm_notes', payStmtPayload.notes); q.set('utm_source', payStmtPayload.source); q.set('utm_action', payStmtPayload.action); q.set('utm_back', payStmtPayload.back); return withPaymentFlow(`AccountPayment_r.aspx?${q.toString()}`); })();
 
     // Cash account (store credit) — shown separately from Net Balance
     const cashCredit = getCashBalanceCredit();
@@ -397,7 +395,7 @@
       q.set('utm_source', 'AccountInfo');
       q.set('utm_action', action);
       if (!isCashAccount && statementTotal > 0) q.set('utm_statement_total', statementTotal.toFixed(2));
-      return withPaymentFlowPreview(`AccountPayment_r.aspx?${q.toString()}`);
+      return withPaymentFlow(`AccountPayment_r.aspx?${q.toString()}`);
     };
     try { localStorage.setItem('wl_account_is_cash_v1', isCashAccount ? 'true' : 'false'); } catch(e) {}
     const accountTermsLabel = snapshot['Terms'] || snapshot['Payment Terms'] || snapshot['Account Terms'] || snapshot['Customer Terms'] || '';
@@ -676,8 +674,8 @@ const snapshotActions = container.querySelector('#wl-snapshot .wl-actions');
 if (snapshotActions) {
   mountCashAccountReload(
     snapshotActions,
-    paymentFlowPreviewEnabled
-      ? withPaymentFlowPreview('AccountPayment_r.aspx?utm_source=AccountInfo&utm_action=ReloadBalance')
+    paymentFlowEnabled
+      ? withPaymentFlow('AccountPayment_r.aspx?utm_source=AccountInfo&utm_action=ReloadBalance')
       : ''
   );
 }
@@ -722,9 +720,9 @@ if (snapshotActions) {
       const menu = $('#wl-ham-menu', container);
       const currentPath = (window.location.pathname || '').split('/').pop().toLowerCase();
 
-      const paymentHref = paymentFlowPreviewEnabled
+      const paymentHref = paymentFlowEnabled
         ? paymentEntryUrl(isCashAccount ? 'ReloadBalance' : 'MakePayment')
-        : withPaymentFlowPreview('AccountPayment_r.aspx');
+        : withPaymentFlow('AccountPayment_r.aspx');
       const paymentLabel = isCashAccount ? 'Reload Balance' : 'Make a Payment';
 
       let accountSettingLinks = [

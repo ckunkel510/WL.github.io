@@ -148,14 +148,12 @@
       document.getElementById('ctl00_PageBody_SearchType').value = 'JobReference';
     }
 
-    if (fixtureParams.get('wl_payment_flow') === 'preview') {
-      const previewIdentity = fixtureIsCash
-        ? { loginName: 'ckunkel2', accountId: 'EMP2111' }
-        : { loginName: 'ckunkel3', accountId: '10005' };
-      document.documentElement.setAttribute('data-wl-payment-preview-login', previewIdentity.loginName);
-      document.documentElement.setAttribute('data-wl-payment-preview-account', previewIdentity.accountId);
-    }
+    const previewIdentity = fixtureIsCash
+      ? { loginName: 'cash-customer', accountId: 'CASH-TEST' }
+      : { loginName: 'charge-customer', accountId: 'CHARGE-TEST' };
+    document.documentElement.setAttribute('data-wl-payment-preview-login', previewIdentity.loginName);
+    document.documentElement.setAttribute('data-wl-payment-preview-account', previewIdentity.accountId);
   </script>
-  <script src="../../PayByInvoice.js?v=local-router-8"></script>
+  <script src="../../PayByInvoice.js?v=local-router-9"></script>
 </body>
 </html>

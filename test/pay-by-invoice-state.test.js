@@ -9,20 +9,16 @@ const previewSource = read('PayByInvoicePreview.js');
 const accountInfoSource = read('Accountinfo.js');
 const paymentFixtureSource = read('test/fixtures/pay-by-invoice-flow.html');
 
-test('preview router requires an approved account ID and the preview URL', () => {
-  const ids = routerAndLegacySource.match(/var expectedAccountIds = \[([^\]]+)\]/)[1]
-    .match(/'[^']+'/g)
-    .map((value) => value.slice(1, -1));
-
-  assert.deepEqual(ids, ['EMP2111', '10005']);
-  assert.match(routerAndLegacySource, /requestedMode !== 'preview'/);
-  assert.match(routerAndLegacySource, /expectedAccountIds\.indexOf\(accountId\) !== -1/);
-  assert.match(routerAndLegacySource, /expiresAt > Date\.now\(\)/);
-  assert.match(routerAndLegacySource, /__WL_PAYMENT_PREVIEW_ACCOUNT_ID__ = accountId/);
-  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260916-13/);
+test('production router loads the payment flow for every account by default', () => {
+  assert.match(routerAndLegacySource, /function routeProductionPaymentFlow/);
+  assert.match(routerAndLegacySource, /requestedMode === 'native'/);
+  assert.doesNotMatch(routerAndLegacySource, /expectedAccountIds/);
+  assert.doesNotMatch(routerAndLegacySource, /requestedMode !== 'preview'/);
+  assert.match(routerAndLegacySource, /__WL_PAYMENT_PREVIEW_ACCOUNT_ID__ = accountId \|\| 'live'/);
+  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260916-14/);
 });
 
-test('legacy payment enhancements remain the default and stop only for an approved preview', () => {
+test('legacy payment enhancements remain available behind the native escape hatch', () => {
   const guardedLegacyModules = routerAndLegacySource.match(
     /if \(window\.__WL_PAYMENT_PREVIEW_ACTIVE__ \|\| !\/AccountPayment_r\\\.aspx\/i\.test\(location\.pathname\)\) return;/g
   ) || [];
@@ -33,23 +29,20 @@ test('legacy payment enhancements remain the default and stop only for an approv
   assert.match(routerAndLegacySource, /wiz\.id = 'wlApWizard3'/);
 });
 
-test('account overview enables preview only for the two approved account IDs', () => {
-  const ids = accountInfoSource.match(/PAYMENT_FLOW_PREVIEW_ACCOUNT_IDS = Object\.freeze\(\[([^\]]+)\]\)/)[1]
-    .match(/'[^']+'/g)
-    .map((value) => value.slice(1, -1));
-
-  assert.deepEqual(ids, ['EMP2111', '10005']);
-  assert.match(accountInfoSource, /PAYMENT_FLOW_PREVIEW_ACCOUNT_IDS = Object\.freeze/);
-  assert.match(accountInfoSource, /PAYMENT_FLOW_PREVIEW_ACCOUNT_IDS\.includes\(accountId\)/);
-  assert.match(accountInfoSource, /sessionStorage\.removeItem\(PAYMENT_FLOW_PREVIEW_KEY\)/);
+test('account overview enables the payment flow for every account', () => {
+  assert.doesNotMatch(accountInfoSource, /PAYMENT_FLOW_PREVIEW_ACCOUNT_IDS/);
+  assert.match(accountInfoSource, /function configurePaymentFlow\(accountName\)/);
+  assert.match(accountInfoSource, /sessionStorage\.setItem\(PAYMENT_FLOW_CONTEXT_KEY/);
+  assert.match(accountInfoSource, /sessionStorage\.removeItem\(PAYMENT_FLOW_CONTEXT_KEY\)/);
+  assert.match(accountInfoSource, /return true;/);
   assert.match(accountInfoSource, /url\.searchParams\.set\('wl_payment_flow','preview'\)/);
-  assert.match(accountInfoSource, /withPaymentFlowPreview\('AccountPayment_r\.aspx'\)/);
+  assert.match(accountInfoSource, /withPaymentFlow\('AccountPayment_r\.aspx'\)/);
   assert.match(accountInfoSource, /utm_statement_total/);
   assert.match(accountInfoSource, /statementTotal\.toFixed\(2\)/);
 });
 
-test('preview is progressive enhancement with an explicit native escape hatch', () => {
-  assert.match(previewSource, /var ROLLOUT_MODE = 'preview'/);
+test('production flow is progressive enhancement with an explicit native escape hatch', () => {
+  assert.match(previewSource, /var ROLLOUT_MODE = 'live'/);
   assert.match(previewSource, /requestedMode === 'native'/);
   assert.match(previewSource, /requestedMode !== 'preview'/);
   assert.match(previewSource, /wl_payment_flow/);

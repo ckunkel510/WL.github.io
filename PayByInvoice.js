@@ -1,4 +1,4 @@
-(function routeApprovedPaymentPreview() {
+(function routeProductionPaymentFlow() {
   'use strict';
   var isFixture = document.documentElement.getAttribute('data-wl-payment-fixture') === 'true';
   if (!/AccountPayment_r\.aspx/i.test(window.location.pathname) && !isFixture) return;
@@ -7,7 +7,7 @@
   try {
     requestedMode = new URL(window.location.href).searchParams.get('wl_payment_flow') || '';
   } catch (error) {}
-  if (requestedMode !== 'preview') return;
+  if (requestedMode === 'native') return;
 
   var context = null;
   if (isFixture) {
@@ -22,23 +22,18 @@
     } catch (error) {}
   }
 
-  var expectedAccountIds = ['EMP2111', '10005'];
   var accountId = String(context && context.accountId || '').trim().toUpperCase();
   var expiresAt = Number(context && context.expiresAt || 0);
-  var approved = !!(
-    expectedAccountIds.indexOf(accountId) !== -1 &&
-    expiresAt > Date.now()
-  );
-  if (!approved) return;
+  if (!isFixture && (!accountId || expiresAt <= Date.now())) accountId = '';
 
   window.__WL_PAYMENT_PREVIEW_ACTIVE__ = true;
-  window.__WL_PAYMENT_PREVIEW_ACCOUNT_ID__ = accountId;
+  window.__WL_PAYMENT_PREVIEW_ACCOUNT_ID__ = accountId || 'live';
 
   var loader = document.createElement('script');
   var currentSource = document.currentScript && document.currentScript.src;
   loader.src = currentSource
-    ? new URL('PayByInvoicePreview.js?v=20260916-13', currentSource).href
-    : 'https://ckunkel510.github.io/WL.github.io/PayByInvoicePreview.js?v=20260916-13';
+    ? new URL('PayByInvoicePreview.js?v=20260916-14', currentSource).href
+    : 'https://ckunkel510.github.io/WL.github.io/PayByInvoicePreview.js?v=20260916-14';
   loader.async = false;
   loader.setAttribute('data-wl-payment-preview-loader', 'true');
   (document.head || document.documentElement).appendChild(loader);
