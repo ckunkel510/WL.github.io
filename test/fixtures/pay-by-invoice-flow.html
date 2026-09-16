@@ -101,8 +101,13 @@
   <script>
     const fixtureParams = new URL(location.href).searchParams;
     const fixtureIsCash = fixtureParams.get('account') === 'cash';
+    const fixtureForteFailures = Number(fixtureParams.get('forte_failures') || 0);
+    window.fixtureForteAttempts = 0;
     window.fixtureInstallForte = function () {
       if (fixtureIsCash || document.getElementById('ctl00_PageBody_ForteMakePayment')) return;
+      window.fixtureForteAttempts += 1;
+      document.documentElement.setAttribute('data-fixture-forte-attempts', String(window.fixtureForteAttempts));
+      if (window.fixtureForteAttempts <= fixtureForteFailures) return;
       document.getElementById('ctl00_PageBody_MakePaymentPanel').outerHTML = [
         '<div id="ctl00_PageBody_ForteControls">',
         '  <div class="epi-form-group-acctPayment">',
@@ -134,6 +139,6 @@
       document.documentElement.setAttribute('data-wl-payment-preview-account', previewIdentity.accountId);
     }
   </script>
-  <script src="../../PayByInvoice.js?v=local-router-6"></script>
+  <script src="../../PayByInvoice.js?v=local-router-7"></script>
 </body>
 </html>

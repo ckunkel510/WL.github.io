@@ -7,6 +7,7 @@ const read = (name) => fs.readFileSync(path.join(__dirname, '..', name), 'utf8')
 const routerAndLegacySource = read('PayByInvoice.js');
 const previewSource = read('PayByInvoicePreview.js');
 const accountInfoSource = read('Accountinfo.js');
+const paymentFixtureSource = read('test/fixtures/pay-by-invoice-flow.html');
 
 test('preview router requires an approved account ID and the preview URL', () => {
   const ids = routerAndLegacySource.match(/var expectedAccountIds = \[([^\]]+)\]/)[1]
@@ -18,7 +19,7 @@ test('preview router requires an approved account ID and the preview URL', () =>
   assert.match(routerAndLegacySource, /expectedAccountIds\.indexOf\(accountId\) !== -1/);
   assert.match(routerAndLegacySource, /expiresAt > Date\.now\(\)/);
   assert.match(routerAndLegacySource, /__WL_PAYMENT_PREVIEW_ACCOUNT_ID__ = accountId/);
-  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260916-11/);
+  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260916-12/);
 });
 
 test('legacy payment enhancements remain the default and stop only for an approved preview', () => {
@@ -184,6 +185,20 @@ test('charge accounts are limited to the native Forte ACH route', () => {
   assert.match(previewSource, /searchType\.value = 'JobReference'/);
   assert.match(previewSource, /searchType\.dispatchEvent\(new Event\('change'/);
   assert.match(previewSource, /wl-payment-flow-ready\.wl-payment-charge/);
+});
+
+test('charge ACH setup waits for WebForms and recovers from a swallowed postback', () => {
+  assert.match(previewSource, /ACH_ROUTE_RETRY_LIMIT = 3/);
+  assert.match(previewSource, /ACH_ROUTE_RETRY_DELAY = 1600/);
+  assert.match(previewSource, /get_isInAsyncPostBack/);
+  assert.match(previewSource, /scheduleChargeAchRoute\(350\)/);
+  assert.match(previewSource, /scheduleChargeAchRoute\(ACH_ROUTE_RETRY_DELAY\)/);
+  assert.match(previewSource, /data-wl-action="retry-ach-route"/);
+  assert.match(previewSource, /Secure payment is taking longer than expected/);
+  assert.match(previewSource, /event\.target\.id === IDS\.amount/);
+  assert.match(previewSource, /if \(!\(amount > 0\)\)/);
+  assert.match(paymentFixtureSource, /forte_failures/);
+  assert.match(paymentFixtureSource, /data-fixture-forte-attempts/);
 });
 
 test('billing entry is stabilized without changing the native final payment handler', () => {

@@ -21,7 +21,7 @@
   if (requestedMode === 'native') return;
   if (ROLLOUT_MODE === 'preview' && requestedMode !== 'preview') return;
 
-  var VERSION = 'v2-preview-11';
+  var VERSION = 'v2-preview-12';
   var IDS = {
     address: 'ctl00_PageBody_AddressDropdownList',
     billing: 'ctl00_PageBody_BillingAddressTextBox',
@@ -255,6 +255,7 @@
       'body.wl-payment-flow-ready.wl-payment-charge .wl-payment-card-method{display:none!important;}',
       'body.wl-payment-flow-ready.wl-payment-charge #'+IDS.submit+'{display:none!important;}',
       '#wl-ach-route-note{margin:7px 0;padding:9px 11px;border:1px solid #d7e6dd;border-radius:8px;background:#f6fbf8;color:#31523d;font-size:12px;line-height:1.35;}',
+      '#wl-ach-route-note .wl-ach-retry{min-height:32px;margin-left:8px;padding:4px 9px;vertical-align:middle;}',
       '#wl-payment-review{margin:10px 0;padding:12px;border:1px solid #d7e6dd;border-radius:10px;background:#f6fbf8;color:var(--wl-ink);font-family:Arial,Helvetica,sans-serif;}',
       '#wl-payment-review h2{margin:0 0 9px;font-size:18px;}',
       '#wl-payment-review dl{display:grid;grid-template-columns:minmax(108px,.65fr) minmax(0,1fr);gap:6px 9px;margin:0;font-size:13px;}',
@@ -1146,44 +1147,141 @@
     return firstGroup;
   }
 
-  var ACH_ROUTE_KEY = 'wl_payment_ach_route_v1_'+String(window.__WL_PAYMENT_PREVIEW_ACCOUNT_ID__ || 'preview').replace(/[^A-Z0-9_-]/gi, '');
+  var ACH_ROUTE_KEY = 'wl_payment_ach_route_v2_'+String(window.__WL_PAYMENT_PREVIEW_ACCOUNT_ID__ || 'preview').replace(/[^A-Z0-9_-]/gi, '');
+  var ACH_ROUTE_RETRY_DELAY = 1600;
+  var ACH_ROUTE_RETRY_LIMIT = 3;
+  var achRouteRetryTimer = 0;
+  var achRouteMissingChecks = 0;
+
+  function clearAchRouteRetryTimer() {
+    window.clearTimeout(achRouteRetryTimer);
+    achRouteRetryTimer = 0;
+  }
+
+  function clearAchRouteState() {
+    clearAchRouteRetryTimer();
+    achRouteMissingChecks = 0;
+    try { sessionStorage.removeItem(ACH_ROUTE_KEY); } catch (error) {}
+  }
+
+  function readAchRouteState() {
+    var empty = { startedAt: 0, lastRequest: 0, attempts: 0 };
+    try {
+      var state = JSON.parse(sessionStorage.getItem(ACH_ROUTE_KEY) || 'null');
+      if (!state || !state.startedAt || Date.now() - Number(state.startedAt) > 45000) {
+        sessionStorage.removeItem(ACH_ROUTE_KEY);
+        return empty;
+      }
+      return {
+        startedAt: Number(state.startedAt) || 0,
+        lastRequest: Number(state.lastRequest) || 0,
+        attempts: Number(state.attempts) || 0
+      };
+    } catch (error) {}
+    return empty;
+  }
+
+  function writeAchRouteState(state) {
+    try { sessionStorage.setItem(ACH_ROUTE_KEY, JSON.stringify(state)); } catch (error) {}
+  }
+
+  function webFormsRequestInProgress() {
+    try {
+      if (!window.Sys || !Sys.WebForms || !Sys.WebForms.PageRequestManager) return false;
+      var manager = Sys.WebForms.PageRequestManager.getInstance();
+      return !!(manager && manager.get_isInAsyncPostBack && manager.get_isInAsyncPostBack());
+    } catch (error) {}
+    return false;
+  }
+
+  function scheduleChargeAchRoute(delay) {
+    clearAchRouteRetryTimer();
+    achRouteRetryTimer = window.setTimeout(function () {
+      achRouteRetryTimer = 0;
+      ensureChargeAchRoute(isCashAccount(), null);
+    }, Math.max(0, Number(delay) || 0));
+  }
+
+  function showAchRouteRetry(note) {
+    note.innerHTML = 'Secure payment is taking longer than expected. <button type="button" class="wl-flow-button wl-ach-retry" data-wl-action="retry-ach-route">Try again</button>';
+  }
 
   function ensureChargeAchRoute(cashAccount, methodSection) {
     var note = byId('wl-ach-route-note');
     if (cashAccount) {
       if (note) note.remove();
+      clearAchRouteState();
       return;
     }
 
     if (!note) {
       note = document.createElement('p');
       note.id = 'wl-ach-route-note';
-      (methodSection || closestGroup(byId(IDS.payByBank)) || byId(IDS.submitAltPanel) || byId(IDS.submitPanel)).appendChild(note);
+      var noteHost = methodSection && document.documentElement.contains(methodSection)
+        ? methodSection
+        : (closestGroup(byId(IDS.payByBank)) || byId(IDS.submitAltPanel) || byId(IDS.submitPanel));
+      if (!noteHost) return;
+      noteHost.appendChild(note);
     }
 
     if (byId(IDS.submitAlt)) {
       note.textContent = 'Charge-account payments use secure ACH/eCheck through Forte.';
-      try { sessionStorage.removeItem(ACH_ROUTE_KEY); } catch (error) {}
+      clearAchRouteState();
       return;
     }
 
     var amount = parseMoney(byId(IDS.amount) && byId(IDS.amount).value);
-    note.textContent = amount > 0
-      ? 'Preparing secure ACH/eCheck payment…'
-      : 'Choose an amount to continue with secure ACH/eCheck through Forte.';
+    if (!(amount > 0)) {
+      note.textContent = 'Choose an amount to continue with secure ACH/eCheck through Forte.';
+      clearAchRouteState();
+      return;
+    }
+    note.textContent = 'Preparing secure ACH/eCheck payment…';
+
+    if (webFormsRequestInProgress()) {
+      scheduleChargeAchRoute(350);
+      return;
+    }
+
     var searchType = byId('ctl00_PageBody_SearchType');
-    if (!searchType) return;
-    var lastRequest = 0;
-    try { lastRequest = Number(sessionStorage.getItem(ACH_ROUTE_KEY) || 0); } catch (error) {}
-    if (Date.now() - lastRequest < 10000) return;
-    try { sessionStorage.setItem(ACH_ROUTE_KEY, String(Date.now())); } catch (error) {}
+    if (!searchType) {
+      achRouteMissingChecks += 1;
+      if (achRouteMissingChecks >= 6) {
+        showAchRouteRetry(note);
+        return;
+      }
+      scheduleChargeAchRoute(500);
+      return;
+    }
+    achRouteMissingChecks = 0;
+
+    var state = readAchRouteState();
+    if (state.attempts >= ACH_ROUTE_RETRY_LIMIT) {
+      clearAchRouteRetryTimer();
+      showAchRouteRetry(note);
+      return;
+    }
+
+    var elapsed = Date.now() - state.lastRequest;
+    if (state.lastRequest && elapsed < ACH_ROUTE_RETRY_DELAY) {
+      scheduleChargeAchRoute(ACH_ROUTE_RETRY_DELAY - elapsed + 50);
+      return;
+    }
+
+    var now = Date.now();
+    state.startedAt = state.startedAt || now;
+    state.lastRequest = now;
+    state.attempts += 1;
+    writeAchRouteState(state);
     searchType.value = 'JobReference';
     searchType.dispatchEvent(new Event('change', { bubbles: true }));
     if (byId(IDS.submitAlt)) {
       note.textContent = 'Charge-account payments use secure ACH/eCheck through Forte.';
-      try { sessionStorage.removeItem(ACH_ROUTE_KEY); } catch (error) {}
+      clearAchRouteState();
       ensureReview(false);
+      return;
     }
+    scheduleChargeAchRoute(ACH_ROUTE_RETRY_DELAY);
   }
 
   function selectedMethodText() {
@@ -1266,7 +1364,7 @@
     }
     note.textContent = cashAccount
       ? 'Continue to the secure confirmation screen.'
-      : nativeSubmit
+      : byId(IDS.submitAlt)
         ? 'Continue to secure ACH/eCheck through Forte.'
         : amount > 0
           ? 'Preparing secure ACH/eCheck payment…'
@@ -1317,6 +1415,12 @@
 
       if (action === 'clear-selection') {
         clearPaymentSelection();
+      }
+
+      if (action === 'retry-ach-route') {
+        clearAchRouteState();
+        actionButton.parentElement.textContent = 'Retrying secure ACH/eCheck payment…';
+        scheduleChargeAchRoute(0);
       }
 
       if (action === 'choose-invoices') {
@@ -1378,6 +1482,11 @@
     });
 
     document.addEventListener('change', function (event) {
+      if (event.target && event.target.id === IDS.amount && !isCashAccount()) {
+        clearAchRouteState();
+        scheduleChargeAchRoute(250);
+      }
+
       var invoiceKey = event.target && event.target.getAttribute('data-wl-select-invoice');
       if (invoiceKey) {
         if (event.target.checked) invoicePickerState.selected.set(invoiceKey, true);
