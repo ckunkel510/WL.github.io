@@ -32,7 +32,7 @@
   const AUTOPAY_ACTIVE_KEY = 'wl_autopay_active_v1';
   const AUTOPAY_ALLOWED_LOGINS = ['ckunkel2', 'ckunkel3'];
   const PAYMENT_FLOW_CONTEXT_KEY = 'wl_payment_flow_preview_v1';
-  const ACCOUNT_EXPERIENCE_BUILD = '20260916-smooth-2';
+  const ACCOUNT_EXPERIENCE_BUILD = '20260916-smooth-3';
   const ACCOUNT_EXPERIENCE_TEST_USERS = {
     b8f6961397f9c6a3b9cff27038c1d3ed309604ffe607b5dd0d365f5d53179ade: 'ckunkel2',
     '09ec3e2992ac186bf0789d3710e12743302d2d47b4c0410e9d580a32c818e97f': 'ckunkel3'
@@ -335,6 +335,7 @@
   .wl-cart-list li{gap:12px}
   .wl-cart-left{display:flex;align-items:center;justify-content:center}
   .wl-cart-thumb{width:64px;height:64px;object-fit:contain;border-radius:6px;background:#fff;border:1px solid #eee}
+  .wl-cart-icon{width:64px;height:64px;display:grid;place-items:center;border-radius:8px;background:${BRAND.bgSoft};border:1px solid ${BRAND.border};color:${BRAND.primary};font-size:1.25rem}
   .wl-cart-mid{flex:1 1 auto;min-width:0}
   .wl-cart-code{font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:340px}
   .wl-cart-right{display:flex;align-items:center;gap:8px}
@@ -540,7 +541,7 @@
               <div class="wl-kpis">
                 <div class="wl-kpi"><div class="lbl">Account Balance</div><div class="val">${snapshot['Net Balance'] ?? '—'}</div></div>
                 <div class="wl-kpi"><div class="lbl">Store Credit</div><div class="val">${cashCreditDisplay}</div></div>
-                <div class="wl-kpi"><div class="lbl">On Order</div><div class="val">${snapshot['On Order'] ?? '—'}</div></div>
+                <div class="wl-kpi"><div class="lbl">${smoothExperience?'Open Orders':'On Order'}</div><div class="val"${smoothExperience?' id="wl-open-orders-count" aria-live="polite"':''}>${smoothExperience?'…':(snapshot['On Order'] ?? '—')}</div></div>
               </div>
               ${cashCredit > 0 ? `<div class="wl-meta" style="margin-top:8px">Store Credit works like a gift card balance.</div>` : ''}
               <div class="wl-actions" style="margin-top:8px">
@@ -1574,14 +1575,22 @@ if (snapshotActions) {
     // Open Orders
     (async ()=>{
       const doc=await fetchDoc('OpenOrders_r.aspx');
-      const rows=mapRows(doc,['Order #','Created','Status','Total Amount','Goods Total']).filter(it=>it['Order #']).slice(0,5);
       const card=$('#wl-orders'); if (!card) return;
       const ul=card.querySelector('.wl-list');
+      const countValue=$('#wl-open-orders-count');
+      if(!doc){
+        if(countValue) countValue.textContent='—';
+        keepStableEmpty(card,ul,'Open orders are temporarily unavailable.');
+        return;
+      }
+      const allRows=mapRows(doc,['Order #','Created','Status','Total Amount','Goods Total']).filter(it=>it['Order #']);
+      const rows=allRows.slice(0,5);
+      if(countValue) countValue.textContent=String(allRows.length);
       if (!rows.length){ keepStableEmpty(card,ul,'No open orders right now.'); return; }
-      const total=rows.reduce((sum,it)=>sum+mNum(it['Total Amount']||it['Goods Total']),0);
-      const statuses=new Set(rows.map(it=>it.Status).filter(Boolean));
+      const total=allRows.reduce((sum,it)=>sum+mNum(it['Total Amount']||it['Goods Total']),0);
+      const statuses=new Set(allRows.map(it=>it.Status).filter(Boolean));
       ul.insertAdjacentElement('beforebegin',dom(summaryHtml([
-        {label:'Open orders',value:String(rows.length)},
+        {label:'Open orders',value:String(allRows.length)},
         {label:'Order value',value:fmtMoney(total)},
         {label:'Statuses',value:String(statuses.size||1)}
       ])));
@@ -1683,8 +1692,23 @@ if (snapshotActions) {
     (async ()=>{
       const card=$('#wl-cart'); const rowCart=$('#wl-row-cart');
       const ul=card?.querySelector('.wl-cart-list');
+      const cartBadgeText=txt($('#ctl00_MainMenu_CartInfo_CartLinkText'));
+      const cartBadgeMatch=cartBadgeText.match(/\d+/);
+      const knownCartCount=cartBadgeMatch?Number(cartBadgeMatch[0]):0;
+      const showKnownCartCount=()=>{
+        if(!card||!ul||knownCartCount<1) return false;
+        replaceListItems(ul,[dom(`<li class="wl-cart-count-fallback">
+          <div class="wl-cart-left"><span class="wl-cart-icon" aria-hidden="true"><i class="fas fa-shopping-cart"></i></span></div>
+          <div class="wl-cart-mid"><div class="wl-cart-code">${knownCartCount} ${knownCartCount===1?'item':'items'} in your cart</div><div class="wl-meta">Open your cart to view the current item details.</div></div>
+        </li>`)]);
+        card.querySelector('#wl-cart-cta')?.setAttribute('href','ShoppingCart.aspx');
+        card.style.display='';
+        rowCart.style.display='';
+        return true;
+      };
       const doc = await fetchDoc('ShoppingCart.aspx');  // <— only this page
       if (!doc){
+        if(showKnownCartCount()) return;
         if(keepStableEmpty(card,ul,'Cart details are temporarily unavailable.')){
           card.style.display=''; rowCart.style.display='';
         }else{
@@ -1695,6 +1719,7 @@ if (snapshotActions) {
 
       const root = doc.querySelector('.shopping-cart-details');
       if (!root){
+        if(showKnownCartCount()) return;
         if(keepStableEmpty(card,ul,'Your cart is empty.')){
           card.style.display=''; rowCart.style.display='';
         }else{
@@ -1706,19 +1731,20 @@ if (snapshotActions) {
       // Collect item cards and filter out placeholders/undefined
       let items = Array.from(root.querySelectorAll('.shopping-cart-item .cart-item-card')).map(c=>{
         const imgEl   = c.querySelector('img');
-        const imgSrc  = imgEl?.getAttribute('src')||'';
-        const titleA  = c.querySelector('h6 a[href]');
+        const imgSrc  = absoluteUrl(imgEl?.getAttribute('src'));
+        const titleA  = c.querySelector('h6 a[href], h5 a[href], .mb-1 a[href]');
         const code    = (titleA?.textContent||'').trim();
-        const hrefA   = titleA?.getAttribute('href') || c.querySelector('.flex-shrink-0 a[href]')?.getAttribute('href') || '#';
-        const qtyIn   = c.querySelector('.qty-section input[type="text"]');
+        const hrefA   = absoluteUrl(titleA?.getAttribute('href') || c.querySelector('.flex-shrink-0 a[href]')?.getAttribute('href'));
+        const qtyIn   = c.querySelector('.qty-section input, input[id*="_qty_"]');
         const qty     = qtyIn ? qtyIn.value : '';
         const unitEl  = c.querySelector('.flex-shrink-0.text-end .fw-bold') || c.querySelector('.fw-bold');
         const unitTxt = (unitEl?.textContent||'').replace(/\s+/g,' ').trim(); // "$11.09 ea"
-        const valid   = !!code && !!imgSrc && !/undefined/i.test(imgSrc) && !/undefined/i.test(hrefA);
+        const valid   = !!code && !!hrefA && !/undefined/i.test(imgSrc) && !/undefined/i.test(hrefA);
         return valid ? {imgSrc, href: hrefA, code, qty, unitTxt} : null;
       }).filter(Boolean).slice(0,5);
 
       if (!items.length){
+        if(showKnownCartCount()) return;
         if(keepStableEmpty(card,ul,'Your cart is empty.')){
           card.style.display=''; rowCart.style.display='';
         }else{
@@ -1728,9 +1754,9 @@ if (snapshotActions) {
       }
 
       replaceListItems(ul,items.map(it=>dom(`<li>
-          <div class="wl-cart-left"><a href="${it.href}"><img class="wl-cart-thumb" src="${it.imgSrc}" alt=""></a></div>
-          <div class="wl-cart-mid"><div class="wl-cart-code"><a href="${it.href}">${it.code}</a></div><div class="wl-meta">Qty ${it.qty || '—'}</div></div>
-          <div class="wl-cart-right"><span class="wl-pill">${it.unitTxt||''}</span></div>
+          <div class="wl-cart-left"><a href="${escapeAttr(it.href)}">${it.imgSrc?`<img class="wl-cart-thumb" src="${escapeAttr(it.imgSrc)}" alt="">`:`<span class="wl-cart-icon" aria-hidden="true"><i class="fas fa-shopping-cart"></i></span>`}</a></div>
+          <div class="wl-cart-mid"><div class="wl-cart-code"><a href="${escapeAttr(it.href)}">${escapeHtml(it.code)}</a></div><div class="wl-meta">Qty ${escapeHtml(it.qty || '—')}</div></div>
+          <div class="wl-cart-right"><span class="wl-pill">${escapeHtml(it.unitTxt||'')}</span></div>
         </li>`)));
 
       // Ensure CTA targets ShoppingCart.aspx

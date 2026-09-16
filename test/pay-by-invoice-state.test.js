@@ -42,7 +42,7 @@ test('account overview enables the payment flow for every account', () => {
 });
 
 test('test accounts receive the smooth dashboard without blocking on Account Settings', () => {
-  assert.match(accountInfoSource, /ACCOUNT_EXPERIENCE_BUILD = '20260916-smooth-2'/);
+  assert.match(accountInfoSource, /ACCOUNT_EXPERIENCE_BUILD = '20260916-smooth-3'/);
   assert.match(accountInfoSource, /ACCOUNT_EXPERIENCE_TEST_USERS/);
   assert.match(accountInfoSource, /const smoothExperience=!!testLogin/);
   assert.match(accountInfoSource, /const accountSettingsDetails = smoothExperience\s*\? \{loginName:testLogin/);
@@ -51,6 +51,17 @@ test('test accounts receive the smooth dashboard without blocking on Account Set
   assert.match(accountInfoSource, /keepStableEmpty/);
   assert.match(accountInfoSource, /requestIdleCallback\(hydrateProductMedia/);
   assert.match(accountInfoSource, /e\.key!==\'Escape\'/);
+});
+
+test('smooth dashboard reconciles open-order and cart summaries with authoritative page data', () => {
+  assert.match(accountInfoSource, /id="wl-open-orders-count"/);
+  assert.match(accountInfoSource, /const allRows=mapRows\(doc,\['Order #','Created','Status','Total Amount','Goods Total'\]\)/);
+  assert.match(accountInfoSource, /countValue\.textContent=String\(allRows\.length\)/);
+  assert.match(accountInfoSource, /ctl00_MainMenu_CartInfo_CartLinkText/);
+  assert.match(accountInfoSource, /showKnownCartCount/);
+  assert.match(accountInfoSource, /h6 a\[href\], h5 a\[href\], \.mb-1 a\[href\]/);
+  assert.match(accountInfoSource, /input\[id\*="_qty_"\]/);
+  assert.doesNotMatch(accountInfoSource, /const valid\s*=\s*!!code && !!imgSrc/);
 });
 
 test('production flow is progressive enhancement with an explicit native escape hatch', () => {
