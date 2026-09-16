@@ -18,7 +18,7 @@ test('preview router requires an approved account ID and the preview URL', () =>
   assert.match(routerAndLegacySource, /expectedAccountIds\.indexOf\(accountId\) !== -1/);
   assert.match(routerAndLegacySource, /expiresAt > Date\.now\(\)/);
   assert.match(routerAndLegacySource, /__WL_PAYMENT_PREVIEW_ACCOUNT_ID__ = accountId/);
-  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260909-9/);
+  assert.match(routerAndLegacySource, /PayByInvoicePreview\.js\?v=20260916-10/);
 });
 
 test('legacy payment enhancements remain the default and stop only for an approved preview', () => {
@@ -106,9 +106,25 @@ test('preview enhances native fields in place for cash and charge accounts', () 
   assert.match(previewSource, /Current balance/);
   assert.match(previewSource, /wl-payment-card\.wl-payment-balance-field/);
   assert.match(previewSource, /wl-payment-card\.wl-payment-remittance-field/);
+  assert.match(previewSource, /wl-payment-card\.wl-payment-address-field/);
+  assert.match(previewSource, /address\.group\.hidden = true/);
   assert.match(previewSource, /parts\.balanceSummary\) left\.appendChild\(parts\.balanceSummary\)/);
-  assert.match(previewSource, /\[parts\.amountGroup, parts\.methodHeading/);
+  assert.match(previewSource, /parts\.amountGroup\) left\.appendChild\(parts\.amountGroup\)/);
+  assert.match(previewSource, /\[parts\.methodHeading, parts\.methodSection/);
+  assert.match(previewSource, /Reload amount:/);
+  assert.match(previewSource, /Reload details/);
+  assert.doesNotMatch(previewSource, /How much would you like to add/);
   assert.doesNotMatch(previewSource, /wl-payment-amount-topline/);
+});
+
+test('saved payment selectors have an explicit dropdown treatment', () => {
+  assert.match(previewSource, /wl-payment-token-select/);
+  assert.match(previewSource, /Choose a saved card/);
+  assert.match(previewSource, /Choose a saved bank account/);
+  assert.match(previewSource, /ChecksOnFileContainer/);
+  assert.match(previewSource, /CardsOnFileContainer/);
+  assert.match(previewSource, /background-image:url\("data:image\/svg\+xml/);
+  assert.match(previewSource, /appearance:none!important/);
 });
 
 test('preview convenience actions update native fields without submitting', () => {

@@ -84,6 +84,7 @@
         <div class="radiobutton">
           <input id="ctl00_PageBody_RadioButton_PayByCardOnFile" name="ctl00$PageBody$PayBy" type="radio">
           <label for="ctl00_PageBody_RadioButton_PayByCardOnFile">Use a saved card</label>
+          <select id="ctl00_PageBody_CardOnFileList"><option>Visa ending in 4242</option><option>Mastercard ending in 5100</option></select>
         </div>
       </div>
 
@@ -116,7 +117,7 @@
       document.getElementById('ctl00_PageBody_accountsTransactionsPanel').remove();
       document.getElementById('ctl00_PageBody_AmountOwingLiteral').value = '$1.41';
       document.getElementById('ctl00_PageBody_PaymentAmountTextBox').value = '0.00';
-      document.getElementById('fixtureMethods').insertAdjacentHTML('afterbegin', '<div class="radiobutton"><input id="ctl00_PageBody_RadioButton_PayByCheckOnFile" name="ctl00$PageBody$PayBy" type="radio"><label for="ctl00_PageBody_RadioButton_PayByCheckOnFile">Use a saved bank account</label></div>');
+      document.getElementById('fixtureMethods').insertAdjacentHTML('afterbegin', '<div class="radiobutton"><input id="ctl00_PageBody_RadioButton_PayByCheckOnFile" name="ctl00$PageBody$PayBy" type="radio"><label for="ctl00_PageBody_RadioButton_PayByCheckOnFile">Use a saved bank account</label><select id="ctl00_PageBody_ChecksOnFileList"><option>Checking ending in 6789</option><option>Savings ending in 2468</option></select></div>');
     }
 
     if (fixtureParams.get('stage') === 'forte') {

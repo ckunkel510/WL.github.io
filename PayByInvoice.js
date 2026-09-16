@@ -37,8 +37,8 @@
   var loader = document.createElement('script');
   var currentSource = document.currentScript && document.currentScript.src;
   loader.src = currentSource
-    ? new URL('PayByInvoicePreview.js?v=20260909-9', currentSource).href
-    : 'https://ckunkel510.github.io/WL.github.io/PayByInvoicePreview.js?v=20260909-9';
+    ? new URL('PayByInvoicePreview.js?v=20260916-10', currentSource).href
+    : 'https://ckunkel510.github.io/WL.github.io/PayByInvoicePreview.js?v=20260916-10';
   loader.async = false;
   loader.setAttribute('data-wl-payment-preview-loader', 'true');
   (document.head || document.documentElement).appendChild(loader);

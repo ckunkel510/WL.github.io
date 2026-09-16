@@ -21,7 +21,7 @@
   if (requestedMode === 'native') return;
   if (ROLLOUT_MODE === 'preview' && requestedMode !== 'preview') return;
 
-  var VERSION = 'v2-preview-9';
+  var VERSION = 'v2-preview-10';
   var IDS = {
     address: 'ctl00_PageBody_AddressDropdownList',
     billing: 'ctl00_PageBody_BillingAddressTextBox',
@@ -215,6 +215,7 @@
       'body.wl-payment-flow-ready .wl-payment-card>div:nth-child(2){grid-column:2;}',
       'body.wl-payment-flow-ready .wl-payment-card>.wl-field-help{grid-column:2;margin:0!important;}',
       'body.wl-payment-flow-ready .wl-payment-card.wl-payment-balance-field,body.wl-payment-flow-ready .wl-payment-card.wl-payment-remittance-field{display:none!important;}',
+      'body.wl-payment-flow-ready .wl-payment-card.wl-payment-address-field{display:none!important;}',
       'body.wl-payment-flow-ready .wl-payment-field input[type="text"],body.wl-payment-flow-ready .wl-payment-field input[type="email"],body.wl-payment-flow-ready .wl-payment-field textarea,body.wl-payment-flow-ready .wl-payment-field select{width:100%!important;max-width:none!important;min-height:40px!important;padding:8px 10px!important;border:1px solid #aeb5bf!important;border-radius:7px!important;background:#fff!important;color:#111827!important;font-size:15px!important;}',
       'body.wl-payment-flow-ready .wl-payment-field textarea{min-height:58px!important;resize:vertical;}',
       'body.wl-payment-flow-ready .wl-payment-notes-field textarea{height:78px!important;min-height:58px!important;max-height:110px!important;}',
@@ -223,6 +224,7 @@
       '#wl-payment-billing-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;}',
       '#wl-payment-billing-grid .wl-payment-card{grid-template-columns:1fr!important;align-items:start!important;}',
       '#wl-payment-billing-grid .wl-payment-card>div:first-child,#wl-payment-billing-grid .wl-payment-card>div:nth-child(2){grid-column:1;}',
+      '#wl-payment-billing-grid .wl-payment-billing-field{grid-column:1 / -1;}',
       '.wl-field-help{margin:5px 0 0;color:var(--wl-muted);font-size:12px;line-height:1.35;}',
       '#wl-payment-amount-choices{width:100%;margin:0 0 7px;padding:10px;border:1px solid #eadadd;border-radius:9px;background:#fffafa;}',
       '#wl-payment-amount-choices .wl-choice-title{margin:0 0 7px;font-size:14px;font-weight:800;color:var(--wl-ink);}',
@@ -238,6 +240,9 @@
       'body.wl-payment-flow-ready .wl-payment-method{width:100%;max-width:none;margin:6px 0!important;padding:10px 12px!important;border:1px solid var(--wl-line)!important;border-radius:9px!important;background:#fff!important;}',
       'body.wl-payment-flow-ready .wl-payment-method:focus-within{border-color:var(--wl-wine)!important;box-shadow:0 0 0 3px rgba(114,0,24,.12);}',
       'body.wl-payment-flow-ready .wl-payment-method input[type="radio"]{width:19px;height:19px;margin-right:9px;accent-color:var(--wl-wine);}',
+      'body.wl-payment-flow-ready .wl-payment-token-select{display:block!important;width:100%!important;min-height:42px!important;margin:9px 0 0!important;padding:8px 38px 8px 11px!important;border:1px solid #9ca3af!important;border-radius:8px!important;background-color:#fff!important;background-image:url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%2714%27 height=%278%27 viewBox=%270 0 14 8%27%3E%3Cpath fill=%27%23720018%27 d=%27M1.4.6 7 6.2 12.6.6 14 2l-7 7-7-7z%27/%3E%3C/svg%3E")!important;background-repeat:no-repeat!important;background-position:right 12px center!important;background-size:14px 8px!important;color:#111827!important;font-size:14px!important;font-weight:700!important;appearance:none!important;-webkit-appearance:none!important;cursor:pointer!important;}',
+      'body.wl-payment-flow-ready .wl-payment-token-select:hover{border-color:var(--wl-wine)!important;}',
+      'body.wl-payment-flow-ready .wl-payment-token-select:focus{outline:3px solid rgba(114,0,24,.18)!important;border-color:var(--wl-wine)!important;}',
       'body.wl-payment-flow-ready.wl-payment-charge .wl-payment-card-method{display:none!important;}',
       'body.wl-payment-flow-ready.wl-payment-charge #'+IDS.submit+'{display:none!important;}',
       '#wl-ach-route-note{margin:7px 0;padding:9px 11px;border:1px solid #d7e6dd;border-radius:8px;background:#f6fbf8;color:#31523d;font-size:12px;line-height:1.35;}',
@@ -330,6 +335,7 @@
     }
 
     var title = cashAccount ? 'Add money to your cash account' : 'Pay your Woodson account';
+    var amountStepLabel = cashAccount ? 'Reload amount' : 'Amount';
 
     guide.innerHTML = [
       '<div class="wl-guide-card">',
@@ -338,7 +344,7 @@
       '    <h1 id="wl-payment-guide-title">'+title+'</h1>',
       '  </div>',
       '  <ol class="wl-guide-steps">',
-      '    <li><a href="#'+IDS.amount+'"><span class="wl-step-number">1</span><span>Amount</span></a></li>',
+      '    <li><a href="#'+IDS.amount+'"><span class="wl-step-number">1</span><span>'+amountStepLabel+'</span></a></li>',
       '    <li><a href="#'+IDS.payByBank+'"><span class="wl-step-number">2</span><span>Method</span></a></li>',
       '    <li><a href="#wl-payment-right"><span class="wl-step-number">3</span><span>Review</span></a></li>',
       '  </ol>',
@@ -447,15 +453,14 @@
   function ensureAmountChoices(cashAccount, amountGroup) {
     if (!amountGroup) return;
     var choices = byId('wl-payment-amount-choices');
+    if (cashAccount) {
+      if (choices) choices.remove();
+      return;
+    }
     if (!choices) {
       choices = document.createElement('div');
       choices.id = 'wl-payment-amount-choices';
       insertBefore(amountGroup, choices);
-    }
-
-    if (cashAccount) {
-      choices.innerHTML = '<p class="wl-choice-title">How much would you like to add?</p><div class="wl-choice-row"><button type="button" class="wl-flow-button primary" data-wl-action="focus-amount">Enter an amount</button></div>';
-      return;
     }
 
     var dueField = byId(IDS.amountDue);
@@ -954,6 +959,7 @@
     if (parts.amountHeading) left.appendChild(parts.amountHeading);
     if (parts.balanceSummary) left.appendChild(parts.balanceSummary);
     if (parts.amountChoices) left.appendChild(parts.amountChoices);
+    if (parts.amountGroup) left.appendChild(parts.amountGroup);
     if (parts.billingHeading) left.appendChild(parts.billingHeading);
 
     var billingGrid = byId('wl-payment-billing-grid');
@@ -962,10 +968,10 @@
       billingGrid.id = 'wl-payment-billing-grid';
     }
     left.appendChild(billingGrid);
-    [parts.addressGroup, parts.billingGroup, parts.postalGroup, parts.emailGroup]
+    [parts.billingGroup, parts.postalGroup, parts.emailGroup]
       .forEach(function (node) { if (node) billingGrid.appendChild(node); });
     if (parts.remittanceGroup) left.appendChild(parts.remittanceGroup);
-    [parts.amountGroup, parts.methodHeading, parts.methodSection, parts.notesGroup, parts.submitPanel]
+    [parts.methodHeading, parts.methodSection, parts.notesGroup, parts.submitPanel]
       .forEach(function (node) { if (node) right.appendChild(node); });
     return workspace;
   }
@@ -986,6 +992,29 @@
         radio.disabled = true;
         group.hidden = true;
         group.setAttribute('aria-hidden', 'true');
+      }
+    });
+
+    Array.prototype.forEach.call(document.querySelectorAll([
+      '#ctl00_PageBody_ChecksOnFileContainer select',
+      '#ctl00_PageBody_ChecksOnFileContainer1 select',
+      '#ctl00_PageBody_CardsOnFileContainer select',
+      '#ctl00_PageBody_CardsOnFileContainer1 select',
+      '#ctl00_PageBody_CardOnFileContainer select',
+      '#ctl00_PageBody_CardOnFileContainer1 select',
+      'select[id*="ChecksOnFile"]',
+      'select[id*="CheckOnFile"]',
+      'select[id*="CardsOnFile"]',
+      'select[id*="CardOnFile"]',
+      'select[name*="ChecksOnFile"]',
+      'select[name*="CheckOnFile"]',
+      'select[name*="CardsOnFile"]',
+      'select[name*="CardOnFile"]'
+    ].join(',')), function (select) {
+      select.classList.add('wl-payment-token-select');
+      if (!select.getAttribute('aria-label')) {
+        var identity = String(select.id || '')+' '+String(select.name || '');
+        select.setAttribute('aria-label', /card/i.test(identity) ? 'Choose a saved card' : 'Choose a saved bank account');
       }
     });
 
@@ -1105,7 +1134,7 @@
     review.innerHTML = [
       '<h2 id="wl-payment-review-title">Review</h2>',
       '<dl>',
-      '<dt>'+(cashAccount ? 'Amount to add' : 'Payment amount')+'</dt><dd>'+(amount > 0 ? formatMoney(amount) : 'Enter an amount')+'</dd>',
+      '<dt>'+(cashAccount ? 'Reload amount' : 'Payment amount')+'</dt><dd>'+(amount > 0 ? formatMoney(amount) : 'Enter an amount')+'</dd>',
       cashAccount ? '' : '<dt>Payment applies to</dt><dd>'+paymentSelectionSummary()+'</dd>',
       '<dt>Payment method</dt><dd>'+selectedMethodText()+'</dd>',
       '<dt>Billing</dt><dd>'+billingStatus()+'</dd>',
@@ -1301,6 +1330,10 @@
       '',
       {}
     );
+    if (address && address.group) {
+      address.group.hidden = true;
+      address.group.setAttribute('aria-hidden', 'true');
+    }
     var billing = enhanceField(
       IDS.billing,
       'wl-payment-billing-field',
@@ -1330,6 +1363,8 @@
       '',
       { inputmode: 'decimal', autocomplete: 'off' }
     );
+    var amountLabel = document.querySelector('label[for="'+IDS.amount+'"]');
+    if (amountLabel) amountLabel.textContent = cashAccount ? 'Reload amount:' : 'Payment amount:';
     var amountDue = enhanceField(
       IDS.amountDue,
       'wl-payment-balance-field',
@@ -1362,7 +1397,7 @@
     });
 
     var billingHeading = ensureSectionHeading(
-      (address && address.group) || (billing && billing.group),
+      billing && billing.group,
       'wl-payment-billing-heading',
       '',
       'Billing information',
@@ -1372,7 +1407,7 @@
       (amountDue && amountDue.group) || (amount && amount.group),
       'wl-payment-amount-heading',
       '',
-      cashAccount ? 'Choose amount' : 'Choose what to pay',
+      cashAccount ? 'Reload details' : 'Choose what to pay',
       ''
     );
     var balanceSummary = ensureBalanceSummary(cashAccount, amountHeading);
