@@ -12,6 +12,15 @@ test('header loads the privacy-filter-safe site runtime', () => {
   assert.doesNotMatch(header, /ANALYTICS_URL\s*=\s*["'][^"']*(?:analytics|tracking|events|commerce)/i);
 });
 
+test('smooth account test users defer noncritical header runtimes', () => {
+  const header = fs.readFileSync(path.join(root, 'headermodern.js'), 'utf8');
+  assert.match(header, /function isSmoothAccountExperience\(\)/);
+  assert.match(header, /requestIdleCallback\(loadNonCriticalAccountScripts, \{ timeout: 2200 \}\)/);
+  assert.match(header, /loadAnalytics\(\);\s*loadTawkCommerceAssist\(\);/);
+  assert.doesNotMatch(header, /TURTLEBOX_PROMO_URL/);
+  assert.doesNotMatch(header, /data-wl-turtlebox-promo/);
+});
+
 test('site runtime emits a confirmed GA4 purchase with transaction value', () => {
   const runtime = fs.readFileSync(path.join(root, 'wl-site.js'), 'utf8');
   assert.match(runtime, /var VERSION = "1\.7\.0"/);

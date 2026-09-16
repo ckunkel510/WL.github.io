@@ -41,6 +41,17 @@ test('account overview enables the payment flow for every account', () => {
   assert.match(accountInfoSource, /statementTotal\.toFixed\(2\)/);
 });
 
+test('test accounts receive the smooth dashboard without blocking on Account Settings', () => {
+  assert.match(accountInfoSource, /ACCOUNT_EXPERIENCE_BUILD = '20260916-smooth-1'/);
+  assert.match(accountInfoSource, /ACCOUNT_EXPERIENCE_TEST_USERS/);
+  assert.match(accountInfoSource, /const smoothExperience=!!testLogin/);
+  assert.match(accountInfoSource, /const accountSettingsDetails = smoothExperience\s*\? \{loginName:testLogin/);
+  assert.match(accountInfoSource, /requestAnimationFrame\(\(\)=>requestAnimationFrame\(startHydration\)\)/);
+  assert.match(accountInfoSource, /aria-busy="true"/);
+  assert.match(accountInfoSource, /keepStableEmpty/);
+  assert.match(accountInfoSource, /requestIdleCallback\(hydrateProductMedia/);
+});
+
 test('production flow is progressive enhancement with an explicit native escape hatch', () => {
   assert.match(previewSource, /var ROLLOUT_MODE = 'live'/);
   assert.match(previewSource, /requestedMode === 'native'/);

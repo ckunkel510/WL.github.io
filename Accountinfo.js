@@ -32,6 +32,11 @@
   const AUTOPAY_ACTIVE_KEY = 'wl_autopay_active_v1';
   const AUTOPAY_ALLOWED_LOGINS = ['ckunkel2', 'ckunkel3'];
   const PAYMENT_FLOW_CONTEXT_KEY = 'wl_payment_flow_preview_v1';
+  const ACCOUNT_EXPERIENCE_BUILD = '20260916-smooth-1';
+  const ACCOUNT_EXPERIENCE_TEST_USERS = {
+    b8f6961397f9c6a3b9cff27038c1d3ed309604ffe607b5dd0d365f5d53179ade: 'ckunkel2',
+    '09ec3e2992ac186bf0789d3710e12743302d2d47b4c0410e9d580a32c818e97f': 'ckunkel3'
+  };
 
   // Same-origin lookup used to pull the account email from AccountSettings.aspx
   // instead of relying on localStorage or requiring the customer to re-type it.
@@ -85,6 +90,13 @@
     if(!m) return raw;
     return new Date(Number(m[1]),Number(m[2])-1,Number(m[3])).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
   };
+  function accountExperienceTestLogin(){
+    try {
+      return ACCOUNT_EXPERIENCE_TEST_USERS[String(localStorage.getItem('wl_user_id') || '').trim()] || '';
+    } catch(e) {
+      return '';
+    }
+  }
   function isAutopayAllowedIdentity(...values){
     const tokens = values
       .flatMap(value => String(value || '').toLowerCase().split(/[^a-z0-9]+/))
@@ -182,6 +194,43 @@
   .wl-head{background:${BRAND.primary};color:#fff;padding:10px 14px;font-weight:750;letter-spacing:.2px;white-space:nowrap}
   .wl-body{padding:12px;background:${BRAND.bgSoft}}
 
+  /* Smooth account experience: test users only. */
+  .wl-acct-smooth{--wl-ink:#241f20;--wl-muted:#746b6d;--wl-surface:#fff;--wl-line:#eadfe2;color:var(--wl-ink);padding:4px 0 26px}
+  .wl-acct-smooth .wl-top{min-height:94px;margin:4px 0 18px;padding:18px 20px;border:1px solid rgba(255,255,255,.18);border-radius:18px;background:linear-gradient(135deg,#5b0012 0%,#7d1730 62%,#9c3a52 100%);box-shadow:0 16px 36px rgba(81,0,18,.18);color:#fff}
+  .wl-acct-smooth .wl-title{color:#fff;font-size:1.35rem;letter-spacing:-.02em}
+  .wl-acct-smooth .wl-ham button{border-color:rgba(255,255,255,.36);background:rgba(255,255,255,.12);color:#fff;box-shadow:none}
+  .wl-acct-smooth .wl-ham button:hover{background:rgba(255,255,255,.2)}
+  .wl-acct-smooth #wl-top-pay{border-color:#fff;background:#fff;color:${BRAND.primary};box-shadow:0 8px 20px rgba(34,0,8,.18)}
+  .wl-acct-smooth #wl-top-pay:hover{border-color:#f9e9ed;background:#f9e9ed;color:${BRAND.primaryHover}}
+  .wl-acct-smooth .wl-card{border-color:var(--wl-line);border-radius:16px;box-shadow:0 9px 28px rgba(45,27,31,.07)}
+  .wl-acct-smooth .wl-card>.wl-head{padding:12px 16px;background:linear-gradient(135deg,#620014,#7b1830)}
+  .wl-acct-smooth .wl-card>.wl-body{padding:15px;background:#fff}
+  .wl-acct-smooth .wl-kpis{gap:12px}
+  .wl-acct-smooth .wl-kpi{position:relative;overflow:hidden;border-color:#ead9de;border-radius:13px;padding:13px 14px 13px 17px;background:linear-gradient(180deg,#fff 0%,#fcf8f9 100%)}
+  .wl-acct-smooth .wl-kpi::before{content:"";position:absolute;inset:0 auto 0 0;width:4px;background:${BRAND.primary}}
+  .wl-acct-smooth .wl-kpi .lbl{color:var(--wl-muted);font-weight:700}
+  .wl-acct-smooth .wl-kpi .val{margin-top:5px;font-size:1.2rem;letter-spacing:-.01em}
+  .wl-acct-smooth #wl-settings .wl-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .wl-acct-smooth #wl-settings .wl-btn{min-width:0;justify-content:flex-start;padding:10px 12px;border-color:#eadfe2;background:#fff;color:var(--wl-ink);white-space:normal}
+  .wl-acct-smooth #wl-settings .wl-btn:hover{border-color:#d8b7c0;background:#fcf6f8;color:${BRAND.primary}}
+  .wl-acct-smooth #wl-settings .wl-btn.primary{border-color:${BRAND.primary};background:${BRAND.primary};color:#fff}
+  .wl-acct-smooth .wl-detail-section{border:1px solid var(--wl-line);border-radius:16px;background:#fff;box-shadow:0 9px 28px rgba(45,27,31,.06)}
+  .wl-acct-smooth .wl-detail-section>.wl-head{padding:13px 15px;border:0;background:#fff;color:var(--wl-ink)}
+  .wl-acct-smooth .wl-detail-section>.wl-head::before{content:"";align-self:stretch;width:4px;border-radius:4px;background:${BRAND.primary}}
+  .wl-acct-smooth .wl-detail-section>.wl-body{padding:0 15px 15px;background:#fff}
+  .wl-acct-smooth .wl-section-summary{border-color:#eadfe2;background:#eadfe2}
+  .wl-acct-smooth .wl-entry,.wl-acct-smooth .wl-purchase-item{border-color:#ece4e6;border-radius:11px;box-shadow:none;transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease}
+  .wl-acct-smooth .wl-entry:hover,.wl-acct-smooth .wl-purchase-item:hover{border-color:#dcbcc5;box-shadow:0 7px 18px rgba(61,31,39,.08);transform:translateY(-1px)}
+  .wl-acct-smooth .wl-list:empty::before{box-sizing:border-box;display:grid;min-height:100%;place-items:center;border:1px dashed #dccbd0;border-radius:11px;background:#fcf9fa;color:#716669;font-weight:700}
+  .wl-acct-smooth .wl-list[aria-busy="true"]::before{background:linear-gradient(100deg,#faf6f7 20%,#fff 42%,#faf6f7 64%);background-size:220% 100%;animation:wlAccountPulse 1.35s ease-in-out infinite}
+  .wl-acct-smooth #wl-activity .wl-list,.wl-acct-smooth #wl-orders .wl-list{min-height:214px}
+  .wl-acct-smooth #wl-purchases .wl-list{min-height:245px}
+  .wl-acct-smooth #wl-cart .wl-list{min-height:78px}
+  .wl-acct-smooth .wl-btn{border-radius:10px;transition:background .16s ease,border-color .16s ease,color .16s ease,transform .16s ease}
+  .wl-acct-smooth .wl-btn:hover{transform:translateY(-1px)}
+  @keyframes wlAccountPulse{0%{background-position:110% 0}100%{background-position:-110% 0}}
+  @media (prefers-reduced-motion:reduce){.wl-acct-smooth .wl-list[aria-busy="true"]::before{animation:none}.wl-acct-smooth .wl-entry,.wl-acct-smooth .wl-purchase-item,.wl-acct-smooth .wl-btn{transition:none}.wl-acct-smooth .wl-entry:hover,.wl-acct-smooth .wl-purchase-item:hover,.wl-acct-smooth .wl-btn:hover{transform:none}}
+
   /* KPIs */
   .wl-kpis{display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:10px}
   .wl-kpi{background:#fff;border:1px solid #ecd6db;border-radius:10px;padding:10px;min-width:0}
@@ -265,6 +314,8 @@
     .wl-ham button{width:40px;min-width:40px;height:40px;padding:0;justify-content:center}
     .wl-ham button span{display:none}
     .wl-title{min-width:0;font-size:1rem;line-height:1.3}
+    .wl-acct-smooth .wl-top{padding:14px;border-radius:14px}
+    .wl-acct-smooth #wl-settings .wl-actions{grid-template-columns:1fr}
   }
   @media (max-width: 640px){
     .wl-section-summary,.wl-purchase-summary{grid-template-columns:repeat(3,minmax(0,1fr))}
@@ -333,16 +384,29 @@
   /* -------- init -------- */
   init().catch(()=>{});
   async function init(){
-    await waitFor('td.pageContentBody', {timeout:1000});
-    await Promise.race([
-      waitFor('#ctl00_PageBody_AccountActivity_AccountActivityLeftColumn', {timeout:1000}),
-      waitFor('.accountActivity_r', {timeout:1000})
-    ]).catch(()=>{});
-    await buildUI();
-    loadLists();
+    const testLogin=accountExperienceTestLogin();
+    const smoothExperience=!!testLogin;
+    await waitFor('td.pageContentBody', {timeout:1200});
+    if(!smoothExperience){
+      await Promise.race([
+        waitFor('#ctl00_PageBody_AccountActivity_AccountActivityLeftColumn', {timeout:1000}),
+        waitFor('.accountActivity_r', {timeout:1000})
+      ]).catch(()=>{});
+    }
+    await buildUI({smoothExperience,testLogin});
+    if(!smoothExperience){
+      loadLists();
+      return;
+    }
+    const startHydration=()=>loadLists({smoothExperience:true});
+    if(typeof requestAnimationFrame==='function'){
+      requestAnimationFrame(()=>requestAnimationFrame(startHydration));
+    }else{
+      setTimeout(startHydration,0);
+    }
   }
 
-  async function buildUI(){
+  async function buildUI({smoothExperience=false,testLogin=''}={}){
     /* scrape */
     const snapshot={}, last={};
     $$('#ctl00_PageBody_AccountActivity_AccountActivityLeftColumn tr').forEach(tr=>{
@@ -357,7 +421,9 @@
     const links={ jobs: $('#JobBalancesButton'), statement: $('#GetInterimStatementLink') };
     const acctName=(txt($('.panel.panelAccountInfo .listPageHeader'))||'').replace(/Account Information for/i,'').trim() || 'Your Account';
     const accountKey = acctName || 'unknown';
-    const accountSettingsDetails = await fetchAccountSettingsDetails().catch(() => ({}));
+    const accountSettingsDetails = smoothExperience
+      ? {loginName:testLogin,email:'',firstName:'',lastName:'',companyName:accountKey,phone:'',jobTitle:''}
+      : await fetchAccountSettingsDetails().catch(() => ({}));
     const accountLoginName = accountSettingsDetails.loginName || '';
     const paymentFlowEnabled = configurePaymentFlow(accountKey);
     const withPaymentFlow = value => paymentFlowUrl(value, paymentFlowEnabled);
@@ -453,7 +519,7 @@
 
     /* mount */
     const container = dom(`
-      <div class="wl-acct-root">
+      <div class="wl-acct-root${smoothExperience?' wl-acct-smooth':''}" data-wl-build="${escapeAttr(smoothExperience?ACCOUNT_EXPERIENCE_BUILD:'legacy')}">
         <div class="wl-top">
           <div class="wl-ham">
             <button id="wl-ham-btn" type="button" aria-expanded="false" aria-controls="wl-ham-menu" aria-label="Account menu"><i class="fas fa-bars" aria-hidden="true"></i><span>Menu</span></button>
@@ -523,7 +589,7 @@
           <div class="wl-card wl-detail-section" id="wl-activity">
             <div class="wl-head"><span>Recent Activity</span><span class="wl-head-note">Invoices and credits</span></div>
             <div class="wl-body">
-              <ul class="wl-list wl-entry-list" data-empty="Loading recent activity..."></ul>
+              <ul class="wl-list wl-entry-list" data-empty="Loading recent activity..." aria-busy="true"></ul>
               <div class="wl-actions" style="margin-top:8px">
                 <a class="wl-btn" id="wl-invoices-btn" href="Invoices_r.aspx">View Invoices</a>
                 <a class="wl-btn" id="wl-credits-btn" href="CreditNotes_r.aspx">View Credits</a>
@@ -534,7 +600,7 @@
           <div class="wl-card wl-detail-section" id="wl-orders">
             <div class="wl-head"><span>Open Orders</span><span class="wl-head-note">Orders still in progress</span></div>
             <div class="wl-body">
-              <ul class="wl-list wl-entry-list" data-empty="Loading open orders..."></ul>
+              <ul class="wl-list wl-entry-list" data-empty="Loading open orders..." aria-busy="true"></ul>
               <div class="wl-actions" style="margin-top:8px">
                 <a class="wl-btn" href="OpenOrders_r.aspx">View All Orders</a>
               </div>
@@ -550,7 +616,7 @@
           <div class="wl-card wl-detail-section" id="wl-purchases">
             <div class="wl-head"><span>Recent Purchases</span><span class="wl-head-note">Products you may need again</span></div>
             <div class="wl-body">
-              <ul class="wl-list wl-purchase-grid" data-empty="Loading recent purchases..."></ul>
+              <ul class="wl-list wl-purchase-grid" data-empty="Loading recent purchases..." aria-busy="true"></ul>
               <div class="wl-actions" style="margin-top:8px">
                 <a class="wl-btn" href="ProductsPurchased_R.aspx">View More Purchased Products</a>
               </div>
@@ -683,10 +749,10 @@ if (snapshotActions) {
 
     /* Cart shell (we’ll fill it after fetch) */
     const cartCard = dom(`
-      <div class="wl-card" id="wl-cart" style="display:none">
+      <div class="wl-card" id="wl-cart" style="display:${smoothExperience?'block':'none'}">
         <div class="wl-head">Cart Snapshot</div>
         <div class="wl-body">
-          <ul class="wl-list wl-cart-list"></ul>
+          <ul class="wl-list wl-cart-list" data-empty="Loading cart..." aria-busy="true"></ul>
           <div class="wl-actions" style="margin-top:8px">
             <a class="wl-btn primary" id="wl-cart-cta" href="ShoppingCart.aspx">Go to Cart</a>
           </div>
@@ -1344,10 +1410,31 @@ if (snapshotActions) {
   }
 
   /* -------- async lists + CART (ShoppingCart.aspx only) -------- */
-  async function loadLists(){
+  async function loadLists({smoothExperience=false}={}){
     const parser=new DOMParser();
     async function fetchDoc(url){ try{ const r=await fetch(url,{credentials:'same-origin'}); if(!r.ok) throw 0; const text=await r.text(); return parser.parseFromString(text,'text/html'); }catch{ return null; } }
     const get=(el)=> (el?.textContent||'').trim();
+    function finishList(ul,emptyMessage=''){
+      if(!ul) return;
+      if(emptyMessage) ul.setAttribute('data-empty',emptyMessage);
+      ul.setAttribute('aria-busy','false');
+    }
+    function replaceListItems(ul,items){
+      if(!ul) return;
+      const fragment=document.createDocumentFragment();
+      items.forEach(item=>fragment.appendChild(item));
+      ul.replaceChildren(fragment);
+      finishList(ul);
+    }
+    function keepStableEmpty(card,ul,message){
+      if(!smoothExperience){
+        card?.remove();
+        return false;
+      }
+      finishList(ul,message);
+      card?.classList.add('wl-empty-card');
+      return true;
+    }
     function absoluteUrl(value){
       if(!value || /^javascript:/i.test(value)) return '';
       try { return new URL(value, location.origin).toString(); } catch { return ''; }
@@ -1423,7 +1510,16 @@ if (snapshotActions) {
 
     // Recent Activity
     (async ()=>{
-      const invDoc=await fetchDoc('Invoices_r.aspx');
+      let invDoc=null;
+      let crDoc=null;
+      if(smoothExperience){
+        [invDoc,crDoc]=await Promise.all([
+          fetchDoc('Invoices_r.aspx'),
+          fetchDoc('CreditNotes_r.aspx')
+        ]);
+      }else{
+        invDoc=await fetchDoc('Invoices_r.aspx');
+      }
       let invs=mapRows(invDoc,['Invoice #','Invoice Date','Due Date','Goods Total','Tax','Total Amount','Amount Outstanding','Status']);
       if(!invs.some(x=>x['Invoice #'])) invs=mapRows(invDoc,['Invoice Number','Date','Outstanding','Amount','Status']);
       invs=invs.filter(x=>x['Invoice #']||x['Invoice Number']).map(x=>{
@@ -1437,7 +1533,7 @@ if (snapshotActions) {
           link:x.link||'Invoices_r.aspx'
         };
       });
-      const crDoc=await fetchDoc('CreditNotes_r.aspx');
+      if(!smoothExperience) crDoc=await fetchDoc('CreditNotes_r.aspx');
       let crs=mapRows(crDoc,['Credit Note #','Credit Date','Goods Total','Tax','Total Amount','Status']);
       if(!crs.some(x=>x['Credit Note #'])) crs=mapRows(crDoc,['Credit #','Date','Amount','Status']);
       crs=crs.filter(x=>x['Credit #']||x['Credit Note #']).map(x=>({
@@ -1450,14 +1546,15 @@ if (snapshotActions) {
       }));
       const all=invs.concat(crs).map(x=>({ ...x, _ts:(parseUS(x.date)||new Date(0)).getTime() })).sort((a,b)=> b._ts-a._ts).slice(0,6);
       const card=$('#wl-activity'); const ul=card?.querySelector('.wl-list'); if(!card) return;
-      if (!all.length){ card.remove(); } else {
+      if (!all.length){
+        keepStableEmpty(card,ul,'No recent invoices or credits.');
+      } else {
         ul.insertAdjacentElement('beforebegin',dom(summaryHtml([
           {label:'Latest entries',value:String(all.length)},
           {label:'Invoices',value:String(all.filter(it=>it.type==='Invoice').length)},
           {label:'Credits',value:String(all.filter(it=>it.type==='Credit').length)}
         ])));
-        ul.innerHTML='';
-        all.forEach(it=>ul.appendChild(dom(`<li class="wl-entry">
+        replaceListItems(ul,all.map(it=>dom(`<li class="wl-entry">
           <span class="wl-entry-icon ${it.type==='Credit'?'credit':''}" aria-hidden="true"><i class="fas ${it.type==='Credit'?'fa-receipt':'fa-file-invoice'}"></i></span>
           <div class="wl-entry-main">
             <div class="wl-entry-title"><a href="${escapeAttr(it.link)}">${escapeHtml(it.id)}</a></div>
@@ -1477,17 +1574,16 @@ if (snapshotActions) {
       const doc=await fetchDoc('OpenOrders_r.aspx');
       const rows=mapRows(doc,['Order #','Created','Status','Total Amount','Goods Total']).filter(it=>it['Order #']).slice(0,5);
       const card=$('#wl-orders'); if (!card) return;
-      if (!rows.length){ card.remove(); return; }
+      const ul=card.querySelector('.wl-list');
+      if (!rows.length){ keepStableEmpty(card,ul,'No open orders right now.'); return; }
       const total=rows.reduce((sum,it)=>sum+mNum(it['Total Amount']||it['Goods Total']),0);
       const statuses=new Set(rows.map(it=>it.Status).filter(Boolean));
-      const ul=card.querySelector('.wl-list');
       ul.insertAdjacentElement('beforebegin',dom(summaryHtml([
         {label:'Open orders',value:String(rows.length)},
         {label:'Order value',value:fmtMoney(total)},
         {label:'Statuses',value:String(statuses.size||1)}
       ])));
-      ul.innerHTML='';
-      rows.forEach(it=>ul.appendChild(dom(`<li class="wl-entry">
+      replaceListItems(ul,rows.map(it=>dom(`<li class="wl-entry">
         <span class="wl-entry-icon" aria-hidden="true"><i class="fas fa-box"></i></span>
         <div class="wl-entry-main">
           <div class="wl-entry-title"><a href="${escapeAttr(it.link||'OpenOrders_r.aspx')}">${escapeHtml(it['Order #']||'Order')}</a></div>
@@ -1515,7 +1611,8 @@ if (snapshotActions) {
         return (newer?newer.getTime():0)-(older?older.getTime():0);
       }).slice(0,8);
       const card=$('#wl-purchases'); if(!card) return;
-      if (!rows.length){ card.remove(); return; }
+      const ul=card.querySelector('.wl-list');
+      if (!rows.length){ keepStableEmpty(card,ul,'No recent product purchases to show.'); return; }
       const items=rows.map(it=>{
         const sku=it['Product Code']||it['Product #']||it.Product||'';
         const title=it.Description||it.Product||it['Product #']||sku||'Product';
@@ -1532,15 +1629,12 @@ if (snapshotActions) {
       });
       const spend=items.reduce((sum,item)=>sum+mNum(item.total),0);
       const units=items.reduce((sum,item)=>sum+mNum(item.qty),0);
-      const ul=card.querySelector('.wl-list');
       ul.insertAdjacentElement('beforebegin',dom(summaryHtml([
         {label:'Recent products',value:String(items.length)},
         {label:'Units purchased',value:String(units)},
         {label:'Recent spend',value:fmtMoney(spend)}
       ],'wl-purchase-summary')));
-      ul.innerHTML='';
-      items.forEach((item,index)=>{
-        ul.appendChild(dom(`<li class="wl-purchase-item" data-purchase-index="${index}">
+      replaceListItems(ul,items.map((item,index)=>dom(`<li class="wl-purchase-item" data-purchase-index="${index}">
           <a class="wl-purchase-media" href="${escapeAttr(item.productLink||item.view)}" aria-label="View ${escapeAttr(item.title)}">${item.image?`<img src="${escapeAttr(item.image)}" alt="${escapeAttr(item.title)}" loading="lazy">`:productFallback(item.sku)}</a>
           <div class="wl-purchase-content">
             <div class="wl-product-code">${escapeHtml(item.sku||'Product')}</div>
@@ -1555,10 +1649,9 @@ if (snapshotActions) {
               <a class="wl-product-link" href="${escapeAttr(item.productLink||item.view)}">View product <i class="fas fa-arrow-right" aria-hidden="true"></i></a>
             </div>
           </div>
-        </li>`));
-      });
+        </li>`)));
 
-      mapWithConcurrency(items,3,resolveProductMedia).then(results=>{
+      const hydrateProductMedia=()=>mapWithConcurrency(items,smoothExperience?2:3,resolveProductMedia).then(results=>{
         results.forEach((media,index)=>{
           if(!media) return;
           const item=items[index];
@@ -1575,16 +1668,38 @@ if (snapshotActions) {
           image?.addEventListener('error',()=>{ mediaLink.innerHTML=productFallback(item.sku); },{once:true});
         });
       }).catch(()=>{});
+      if(smoothExperience && typeof requestIdleCallback==='function'){
+        requestIdleCallback(hydrateProductMedia,{timeout:2500});
+      }else if(smoothExperience){
+        setTimeout(hydrateProductMedia,1200);
+      }else{
+        hydrateProductMedia();
+      }
     })();
 
     // Cart Snapshot — ShoppingCart.aspx ONLY
     (async ()=>{
       const card=$('#wl-cart'); const rowCart=$('#wl-row-cart');
+      const ul=card?.querySelector('.wl-cart-list');
       const doc = await fetchDoc('ShoppingCart.aspx');  // <— only this page
-      if (!doc){ card.remove(); rowCart.style.display='none'; return; }
+      if (!doc){
+        if(keepStableEmpty(card,ul,'Cart details are temporarily unavailable.')){
+          card.style.display=''; rowCart.style.display='';
+        }else{
+          rowCart.style.display='none';
+        }
+        return;
+      }
 
       const root = doc.querySelector('.shopping-cart-details');
-      if (!root){ card.remove(); rowCart.style.display='none'; return; }
+      if (!root){
+        if(keepStableEmpty(card,ul,'Your cart is empty.')){
+          card.style.display=''; rowCart.style.display='';
+        }else{
+          rowCart.style.display='none';
+        }
+        return;
+      }
 
       // Collect item cards and filter out placeholders/undefined
       let items = Array.from(root.querySelectorAll('.shopping-cart-item .cart-item-card')).map(c=>{
@@ -1601,16 +1716,20 @@ if (snapshotActions) {
         return valid ? {imgSrc, href: hrefA, code, qty, unitTxt} : null;
       }).filter(Boolean).slice(0,5);
 
-      if (!items.length){ card.remove(); rowCart.style.display='none'; return; }
+      if (!items.length){
+        if(keepStableEmpty(card,ul,'Your cart is empty.')){
+          card.style.display=''; rowCart.style.display='';
+        }else{
+          rowCart.style.display='none';
+        }
+        return;
+      }
 
-      const ul = card.querySelector('.wl-cart-list'); ul.innerHTML='';
-      items.forEach(it=>{
-        ul.appendChild(dom(`<li>
+      replaceListItems(ul,items.map(it=>dom(`<li>
           <div class="wl-cart-left"><a href="${it.href}"><img class="wl-cart-thumb" src="${it.imgSrc}" alt=""></a></div>
           <div class="wl-cart-mid"><div class="wl-cart-code"><a href="${it.href}">${it.code}</a></div><div class="wl-meta">Qty ${it.qty || '—'}</div></div>
           <div class="wl-cart-right"><span class="wl-pill">${it.unitTxt||''}</span></div>
-        </li>`));
-      });
+        </li>`)));
 
       // Ensure CTA targets ShoppingCart.aspx
       card.querySelector('#wl-cart-cta')?.setAttribute('href','ShoppingCart.aspx');

@@ -15,7 +15,6 @@
   var SMART_SEARCH_URL = "https://ckunkel510.github.io/WL.github.io/smart-search.js?v=20260909-2";
   var ADDRESS_MANAGER_URL = "https://ckunkel510.github.io/WL.github.io/AddressManagement.js?v=20260707-2";
   var CONTACT_MANAGER_URL = "https://ckunkel510.github.io/WL.github.io/ContactManagement.js?v=20260707-3";
-  var TURTLEBOX_PROMO_URL = "https://ckunkel510.github.io/WL.github.io/TurtleboxPromo.js?v=20260707-1";
   var TAWK_COMMERCE_ASSIST_URL = "https://ckunkel510.github.io/WL.github.io/wl-chat.js?v=20260723-6";
   var QUAGGA_URL = "https://unpkg.com/quagga@0.12.1/dist/quagga.min.js";
   var DEPARTMENT_CACHE_KEY = "wl_header_departments_v1";
@@ -66,6 +65,17 @@
       document.addEventListener("DOMContentLoaded", fn, { once: true });
     } else {
       fn();
+    }
+  }
+
+  function isSmoothAccountExperience() {
+    if (!/AccountInfo_R\.aspx/i.test(window.location.pathname || "")) return false;
+    try {
+      var userId = String(window.localStorage.getItem("wl_user_id") || "").trim();
+      return userId === "b8f6961397f9c6a3b9cff27038c1d3ed309604ffe607b5dd0d365f5d53179ade" ||
+        userId === "09ec3e2992ac186bf0789d3710e12743302d2d47b4c0410e9d580a32c818e97f";
+    } catch (error) {
+      return false;
     }
   }
 
@@ -143,16 +153,6 @@
     script.src = CONTACT_MANAGER_URL;
     script.async = true;
     script.setAttribute("data-wl-contact-manager", "true");
-    document.head.appendChild(script);
-  }
-
-  function loadTurtleboxPromo() {
-    if (window.WLTurtleboxPromo || document.querySelector("script[data-wl-turtlebox-promo]")) return;
-
-    var script = document.createElement("script");
-    script.src = TURTLEBOX_PROMO_URL;
-    script.async = true;
-    script.setAttribute("data-wl-turtlebox-promo", "true");
     document.head.appendChild(script);
   }
 
@@ -3222,12 +3222,23 @@
     return;
   }
 
-  loadAnalytics();
+  if (isSmoothAccountExperience()) {
+    var loadNonCriticalAccountScripts = function () {
+      loadAnalytics();
+      loadTawkCommerceAssist();
+    };
+    if (typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(loadNonCriticalAccountScripts, { timeout: 2200 });
+    } else {
+      window.setTimeout(loadNonCriticalAccountScripts, 1600);
+    }
+  } else {
+    loadAnalytics();
+    loadTawkCommerceAssist();
+  }
   loadSmartSearch();
   loadAddressManager();
   loadContactManager();
-  loadTurtleboxPromo();
-  loadTawkCommerceAssist();
 
   onReady(function () {
     var firstRun = run();
