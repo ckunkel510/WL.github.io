@@ -1,0 +1,17 @@
+{
+  "version": "2026-09-17-custom-cuts-1",
+  "products": [
+    {
+      "productId": "10496",
+      "productCode": "HM38V",
+      "optionId": "custom-boxable-cuts",
+      "label": "Request custom cut lengths for UPS shipping",
+      "stockLengthIn": 144,
+      "minimumPieceLengthIn": 1,
+      "maximumPiecesPerUnit": 48,
+      "cutAndPackagingFeePerUnit": 10,
+      "nonRefundable": true,
+      "customerNote": "Enter the finished lengths for one 12-foot piece; the same pattern applies to each quantity purchased. Lengths must total 144 inches. No cut loss is assumed for this item. UPS will be offered only when the finished pieces can be packed for shipment. Customized merchandise and its cut/packaging fee are a non-refundable special order."
+    }
+  ]
+}

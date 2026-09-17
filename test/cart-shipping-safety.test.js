@@ -228,6 +228,69 @@ test("cart UPS requests no longer send browser-controlled promotion eligibility"
   assert.match(cart, /UpsShippingOffer\.js/);
 });
 
+test("cart and checkout carry the server-validated cut-to-ship selection into UPS quoting", () => {
+  const cart = source("WoodsonShoppingCart.js");
+  const offer = source("UpsShippingOffer.js");
+  const checkout = source("Checkout2.js");
+  const cutPolicy = JSON.parse(source("data/cut-to-ship-products.json"));
+
+  assert.equal(cutPolicy.products[0].productId, "10496");
+  assert.equal(cutPolicy.products[0].optionId, "custom-boxable-cuts");
+  assert.equal(cutPolicy.products[0].stockLengthIn, 144);
+  assert.equal(cutPolicy.products[0].nonRefundable, true);
+  assert.match(offer, /wl_cut_to_ship_v1/);
+  assert.match(offer, /data\/cut-to-ship-products\.json/);
+  assert.match(offer, /The added charge appears in Shipping & Packaging/);
+  assert.match(offer, /acknowledgedNonRefundable: true/);
+  assert.match(offer, /12 x 12/);
+  assert.match(offer, /cutToShip: cutSelection/);
+  assert.match(cart, /cutToShip: item\.cutToShip \|\| null/);
+  assert.match(checkout, /custom cut request on this step/);
+  assert.match(checkout, /rate includes \$.*custom cutting and packaging/);
+  assert.match(checkout, /CUT TO SHIP/);
+  assert.match(checkout, /CUSTOMIZED SPECIAL ORDER/);
+  assert.match(checkout, /NON-REFUNDABLE/);
+  assert.match(checkout, /cutToShipOrderInstruction/);
+  assert.match(checkout, /getFulfillmentIntent\(\) !== "ship"/);
+  assert.match(checkout, /wl:cut-to-ship-change/);
+});
+
+test("checkout writes a cut instruction only for an actual UPS order", () => {
+  const checkout = source("Checkout2.js");
+  const values = {
+    wl_shipping_offer_v1: JSON.stringify({
+      cutToShip: {
+        applied: true,
+        nonRefundable: true,
+        selections: [{
+          optionId: "custom-boxable-cuts",
+          productId: "10496",
+          productCode: "HM38V",
+          originalQuantity: 2,
+          cutLengthsIn: [48, 48, 24, 24],
+          cutSummary: "2 × 48 in., 2 × 24 in.",
+          cutAndPackagingFeePerUnit: 10
+        }]
+      }
+    })
+  };
+  const sessionStorage = { getItem: (key) => values[key] || null };
+  const shippingInstruction = extractedFunction(checkout, "cutToShipOrderInstruction", {
+    getFulfillmentIntent: () => "ship",
+    sessionStorage
+  });
+  const deliveryInstruction = extractedFunction(checkout, "cutToShipOrderInstruction", {
+    getFulfillmentIntent: () => "delivery",
+    sessionStorage
+  });
+
+  assert.match(shippingInstruction(), /CUT TO SHIP HM38V \(10496\), qty 2/);
+  assert.match(shippingInstruction(), /2 × 48 in\., 2 × 24 in\./);
+  assert.match(shippingInstruction(), /\$10\.00 per-length/);
+  assert.match(shippingInstruction(), /NON-REFUNDABLE/);
+  assert.equal(deliveryInstruction(), "");
+});
+
 test("saved for later waits for WebTrack's dynamic Quicklist action", async () => {
   const savedForLater = source("SavedForLater.js");
   const bundle = source("wl-shoppingcart.bundle.js");

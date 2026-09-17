@@ -252,3 +252,117 @@ test("keeps supplied cart weight for Woodson delivery when UPS is unavailable", 
   assert.equal(result.recommendation.mode, "delivery");
   assert.equal(result.recommendation.amount, 50);
 });
+
+test("offers the configured custom-cut option when product 10496 is otherwise too long for UPS", async () => {
+  const body = baseBody();
+  body.shipTo = { city: "Chicago", state: "IL", postalCode: "60601" };
+  body.cart = [{ productId: "10496", productCode: "HM38V", quantity: 1 }];
+  const longItem = catalog({ weight: 2.4, length: 144, width: 1, height: 0.375 });
+  longItem.products[0].productId = "10496";
+  longItem.products[0].productCode = "HM38V";
+
+  const result = await buildFulfillmentQuote(body, {
+    getCatalogProducts: async () => longItem,
+    requestRates: upsRate(20),
+    shippingPolicy: policy,
+    quoteWoodsonDelivery: async () => ({ available: false, reason: "outside-texas" }),
+    storeFulfillmentClaim: async () => ({ ok: false })
+  });
+
+  assert.equal(result.options.ups.available, false);
+  assert.equal(result.shippingIssues[0].reason, "cut-option-available");
+  assert.equal(result.cutToShip.availableOptions[0].selected, false);
+});
+
+test("returns an easy UPS parcel and non-refundable fee after product 10496 receives valid custom cuts", async () => {
+  const body = baseBody();
+  body.shipTo = { city: "Chicago", state: "IL", postalCode: "60601" };
+  body.cart = [{
+    productId: "10496",
+    productCode: "HM38V",
+    quantity: 1,
+    cutToShip: {
+      optionId: "custom-boxable-cuts",
+      cutLengthsIn: [48, 48, 24, 24],
+      acknowledgedNonRefundable: true
+    }
+  }];
+  const longItem = catalog({ weight: 2.4, length: 144, width: 1, height: 0.375 });
+  longItem.products[0].productId = "10496";
+  longItem.products[0].productCode = "HM38V";
+  let stored = null;
+
+  const result = await buildFulfillmentQuote(body, {
+    getCatalogProducts: async () => longItem,
+    requestRates: upsRate(20),
+    shippingPolicy: policy,
+    quoteWoodsonDelivery: async () => ({ available: false, reason: "outside-texas" }),
+    storeFulfillmentClaim: async (claim) => { stored = claim; return { ok: true }; }
+  });
+
+  assert.equal(result.options.ups.available, true);
+  assert.equal(result.options.ups.amount, 30);
+  assert.equal(result.packageProfile.easyParcel, false);
+  assert.equal(result.packageProfile.customCutParcel, true);
+  assert.equal(result.cutToShip.applied, true);
+  assert.equal(result.cutToShip.addedCharge, 10);
+  assert.equal(result.cutToShip.specialOrder, true);
+  assert.equal(result.cutToShip.nonRefundable, true);
+  assert.equal(stored.rates[0].amount, 30);
+  assert.equal(stored.cutToShip.selections[0].cutSummary, "2 × 48 in., 2 × 24 in.");
+});
+
+test("does not let one custom-cut item bypass the bulky-item safeguard for the rest of a mixed cart", async () => {
+  const body = baseBody();
+  body.shipTo = { city: "Chicago", state: "IL", postalCode: "60601" };
+  body.cart = [{
+    productId: "10496",
+    productCode: "HM38V",
+    quantity: 1,
+    cutToShip: {
+      optionId: "custom-boxable-cuts",
+      cutLengthsIn: [72, 72],
+      acknowledgedNonRefundable: true
+    }
+  }, {
+    productId: "200",
+    productCode: "UNCUT-96",
+    quantity: 1
+  }];
+  const mixedCatalog = {
+    active: { id: "catalog-test" },
+    fresh: true,
+    products: [{
+      productId: "10496",
+      productCode: "HM38V",
+      price: 9.19,
+      averageCost: 4.5,
+      weight: 2.4,
+      length: 144,
+      width: 1,
+      height: 0.375
+    }, {
+      productId: "200",
+      productCode: "UNCUT-96",
+      price: 20,
+      averageCost: 10,
+      weight: 8,
+      length: 96,
+      width: 2,
+      height: 2
+    }]
+  };
+
+  const result = await buildFulfillmentQuote(body, {
+    getCatalogProducts: async () => mixedCatalog,
+    requestRates: upsRate(30),
+    shippingPolicy: policy,
+    quoteWoodsonDelivery: async () => ({ available: false, reason: "outside-texas" }),
+    storeFulfillmentClaim: async () => ({ ok: false })
+  });
+
+  assert.equal(result.cutToShip.applied, true);
+  assert.equal(result.cutToShip.customParcelEligible, false);
+  assert.equal(result.options.ups.available, false);
+  assert.equal(result.recommendation.mode, "manual");
+});

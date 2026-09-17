@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20260907-shipping-state-normalization-5";
+  window.WL_CHECKOUT_BUILD = "20260917-custom-cuts-2";
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
   const UPS_SHIPPING_ENABLED = true;
@@ -3311,6 +3311,29 @@ document.addEventListener("click", function (ev) {
         return true;
       }
 
+      function cutToShipOrderInstruction() {
+        if (getFulfillmentIntent() !== "ship") return "";
+        try {
+          const offer = JSON.parse(sessionStorage.getItem("wl_shipping_offer_v1") || "null");
+          const plan = offer?.cutToShip;
+          if (!plan?.applied || !Array.isArray(plan.selections)) return "";
+          return plan.selections.map(function (selected) {
+            if (!selected || typeof selected !== "object" || !selected.optionId || !Array.isArray(selected.cutLengthsIn)) return "";
+            const quantity = Math.max(1, Number(selected.originalQuantity) || 1);
+            const code = String(selected.productCode || "item").trim();
+            const id = String(selected.productId || "").trim();
+            const itemLabel = code + (id ? " (" + id + ")" : "");
+            const pattern = String(selected.cutSummary || selected.cutLengthsIn.join(", ")).trim();
+            const fee = Number(selected.cutAndPackagingFeePerUnit || 0).toFixed(2);
+            return "CUSTOMIZED SPECIAL ORDER – NON-REFUNDABLE: CUT TO SHIP " + itemLabel + ", qty " + quantity +
+              ": cut each stock length into " + pattern + "; $" + fee +
+              " per-length cut/packaging fee included in Shipping & Packaging and non-refundable.";
+          }).filter(Boolean).join(" | ");
+        } catch {
+          return "";
+        }
+      }
+
       function updateSpecial() {
         let baseText = "";
 
@@ -3335,7 +3358,8 @@ document.addEventListener("click", function (ev) {
           }
         }
 
-        specialIns.value = baseText + (specialExtra.value ? " – " + specialExtra.value : "");
+        const instructions = [baseText, cutToShipOrderInstruction(), specialExtra.value || ""].filter(Boolean);
+        specialIns.value = instructions.join(" – ");
         saveDateState();
       }
 
@@ -3366,6 +3390,8 @@ document.addEventListener("click", function (ev) {
       if (rbPick) rbPick.addEventListener("change", onShip);
       if (rbDel) rbDel.addEventListener("change", onShip);
       if (rbUPS) rbUPS.addEventListener("change", onShip);
+      document.addEventListener("wl:cut-to-ship-change", updateSpecial);
+      document.addEventListener("wl:shipping-offer-change", updateSpecial);
       ["ctl00_PageBody_DeliveryAddress_CountySelector_CountyList", "ctl00_PageBody_DeliveryAddress_Postcode"].forEach(function(id) {
         const node = document.getElementById(id);
         if (node) {
@@ -3910,6 +3936,10 @@ document.addEventListener("click", function (ev) {
           function shippingIssueMessage(upsOption, deliveryAvailable) {
             const issues = Array.isArray(upsOption?.issues) ? upsOption.issues : [];
             if (!issues.length) return "";
+            const cutOptionIssue = issues.find(function (issue) { return issue?.reason === "cut-option-available"; });
+            if (cutOptionIssue) {
+              return cleanStateValue(cutOptionIssue.message) + " Enter and accept a custom cut request on this step to recalculate UPS shipping.";
+            }
             const labels = Array.from(new Set(issues.map(function (issue, index) {
               return cleanStateValue(issue?.productCode) ||
                 (cleanStateValue(issue?.productId) ? "Item " + cleanStateValue(issue.productId) : "Cart item " + (index + 1));
@@ -3945,6 +3975,7 @@ document.addEventListener("click", function (ev) {
               const deliveryOption = quote && quote.options && quote.options.delivery;
               const upsOption = quote && quote.options && quote.options.ups;
               const recommendedMode = quote && quote.recommendation && quote.recommendation.mode;
+              const cutToShip = quote && quote.cutToShip;
               const deliveryAvailable = !!(deliveryOption && deliveryOption.available);
               const upsAvailable = !!(upsOption && upsOption.available);
               const upsItemIssueMessage = shippingIssueMessage(upsOption, deliveryAvailable);
@@ -3978,6 +4009,8 @@ document.addEventListener("click", function (ev) {
                   showOutOfStateMessage(upsProblemMessage, "warning");
                 } else if (!deliveryAvailable && !upsAvailable) {
                   showOutOfStateMessage("This order needs a freight quote. Pickup is still available; please contact Woodson for delivery help.", "warning");
+                } else if (cutToShip && cutToShip.applied) {
+                  showOutOfStateMessage("The UPS rate includes $" + Number(cutToShip.addedCharge || 0).toFixed(2) + " for custom cutting and packaging. Customized merchandise and the added fee are a non-refundable special order.", "");
                 } else {
                   showOutOfStateMessage("Rates are based on your cart and address. " + (recommendedMode === "delivery" ? "Woodson Delivery is recommended." : "UPS Shipping is recommended."), "");
                 }

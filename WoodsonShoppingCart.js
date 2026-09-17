@@ -7,9 +7,10 @@
   const SHIPPING_QUOTE_KEY = 'wl_shipping_quote_v1';
   const AUTO_ADVANCE_KEY = 'wl_checkout_auto_advance';
   const CART_SUBTOTAL_KEY = 'wl_cart_subtotal_v1';
+  const CUT_SELECTION_KEY = 'wl_cut_to_ship_v1';
   const QUOTE_TTL_MS = 4 * 60 * 60 * 1000;
   const UPS_RATE_URL = 'https://wl-upsrates.vercel.app/api/ups-rates';
-  const SHIPPING_OFFER_VERSION = '20260907-shipping-state-normalization-5';
+  const SHIPPING_OFFER_VERSION = '20260917-custom-cuts-2';
   const SHIPPING_OFFER_SCRIPT_URL = 'https://ckunkel510.github.io/WL.github.io/UpsShippingOffer.js?v=' + SHIPPING_OFFER_VERSION;
   let checkoutBlockReason = '';
   const STORE_ORIGINS = {
@@ -32,6 +33,27 @@
 
   function normalizeProductCode(value) {
     return text(value).replace(/\s+/g, '').toUpperCase();
+  }
+
+  function getCutSelection(item) {
+    try {
+      const selections = JSON.parse(sessionStorage.getItem(CUT_SELECTION_KEY) || '{}');
+      const id = text(item?.productId);
+      const key = id ? 'id:' + id : 'code:' + normalizeProductCode(item?.productCode || item?.code);
+      const selected = selections && selections[key];
+      return selected && typeof selected === 'object' && !Array.isArray(selected) ? selected : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function cutSelectionSignature(selection) {
+    if (!selection || typeof selection !== 'object') return '';
+    return [
+      text(selection.optionId),
+      Array.isArray(selection.cutLengthsIn) ? selection.cutLengthsIn.join(',') : '',
+      selection.acknowledgedNonRefundable === true ? 'accepted' : ''
+    ].join(':');
   }
 
   function loadShippingOfferScript() {
@@ -69,12 +91,14 @@
       const quantityInput = row.querySelector('input[id*="_qty_"]:not([id$="_ClientState"])');
       const quantitySelect = row.querySelector('select.wl-qty-select');
       const lockedQty = row.querySelector('.wl-qty-locked');
-      return {
+      const item = {
         productId: getCartProductIdForRow(row),
         code: getCartProductCodesForRow(row),
         productCode: getCartProductCodesForRow(row),
         quantity: Math.max(1, Number(quantitySelect?.value || quantityInput?.value || lockedQty?.textContent) || 1)
       };
+      item.cutToShip = getCutSelection(item);
+      return item;
     }).filter(function (item) { return item.code || item.productId; });
   }
 
@@ -87,7 +111,8 @@
         row.querySelector('.wl-qty-locked')?.textContent ||
         '';
       const totalMatch = text(row.innerText).match(/Total:\s*(\$[\d,]+(?:\.\d{2})?)/i);
-      return [id, code, qty, totalMatch ? totalMatch[1] : ''].join(':');
+      const cutToShip = getCutSelection({ productId: id, productCode: code });
+      return [id, code, qty, totalMatch ? totalMatch[1] : '', cutSelectionSignature(cutToShip)].join(':');
     }).filter(Boolean).sort().join('|');
   }
 
@@ -325,7 +350,12 @@
         shipFrom: origin,
         shipTo: { postalCode: userAddress.zip, country: 'US', residential: true },
         cart: items.map(function (item) {
-          return { productId: item.productId, productCode: item.productCode || item.code, quantity: item.quantity };
+          return {
+            productId: item.productId,
+            productCode: item.productCode || item.code,
+            quantity: item.quantity,
+            cutToShip: item.cutToShip || null
+          };
         })
       })
     });
@@ -397,8 +427,26 @@
     }
 
     const packageInfo = buildUpsPackage(items, productData);
+    const hasCutToShip = items.some(function (item) { return !!item.cutToShip; });
 
     if (!userAddress.isTexas) {
+      if (hasCutToShip) {
+        try {
+          return await getUpsEstimate(userAddress, items);
+        } catch (error) {
+          console.warn('[WLCart] Could not calculate the cut-to-ship UPS estimate.', error);
+          if (Array.isArray(error.shippingIssues) && error.shippingIssues.length) {
+            const issue = shippingIssueBlock(error.shippingIssues, []);
+            return {
+              label: 'UPS shipping',
+              amount: 'Not available online',
+              note: issue,
+              blockCheckout: true,
+              blockMessage: issue + ' Update the option, choose pickup, or contact Woodson for help.'
+            };
+          }
+        }
+      }
       if (packageInfo.containsLargeItems) {
         return {
           label: 'UPS shipping',
@@ -440,7 +488,7 @@
       }
     }
 
-    if (!packageInfo.unavailable && !packageInfo.containsLargeItems) {
+    if (hasCutToShip || (!packageInfo.unavailable && !packageInfo.containsLargeItems)) {
       try {
         // Register the same destination-specific UPS decision for customers who
         // later choose the shipping path instead of Woodson local delivery.

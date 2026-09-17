@@ -196,3 +196,57 @@ test("builds a trusted package plan while customer offers are disabled", async (
   assert.equal(result.result.shippingOffer.applied, false);
   assert.equal(result.result.shippingOffer.mode, "regular");
 });
+
+test("rates product 10496 after valid custom cuts and adds the non-refundable packaging charge", async () => {
+  const cutCatalog = catalog(4.5);
+  Object.assign(cutCatalog.products[0], {
+    productId: "10496",
+    productCode: "HM38V",
+    price: 9.19,
+    averageCost: 4.5,
+    weight: 2.4,
+    length: 144,
+    width: 1,
+    height: 0.375
+  });
+  const seenPackages = [];
+  const result = await buildAutomaticShippingQuote({
+    shipFrom: { postalCode: "77836" },
+    shipTo: { postalCode: "60601" },
+    cart: [{
+      productId: "10496",
+      productCode: "HM38V",
+      quantity: 1,
+      cutToShip: {
+        optionId: "custom-boxable-cuts",
+        cutLengthsIn: [48, 48, 24, 24],
+        acknowledgedNonRefundable: true
+      }
+    }]
+  }, {
+    requestRates: async (body) => {
+      seenPackages.push(...body.packages);
+      return {
+        rates: [
+          { serviceCode: "03", serviceName: "UPS Ground", amount: 20, currency: "USD" },
+          { serviceCode: "02", serviceName: "UPS 2nd Day Air", amount: 40, currency: "USD" }
+        ]
+      };
+    },
+    getCatalogProducts: async () => cutCatalog,
+    policy: policy({ configured: false, enabled: false })
+  });
+
+  assert.ok(seenPackages.length >= 1);
+  assert.ok(seenPackages.every((item) => {
+    const dimensions = [item.length, item.width, item.height].sort((left, right) => right - left);
+    return dimensions[0] <= 108 && dimensions[0] + (2 * dimensions[1]) + (2 * dimensions[2]) <= 165;
+  }));
+  assert.equal(result.claim.productWeight, 2.4);
+  assert.equal(result.result.rates[0].amount, 30);
+  assert.equal(result.result.cutToShip.addedCharge, 10);
+  assert.equal(result.result.cutToShip.nonRefundable, true);
+  assert.equal(result.result.cutToShip.customParcelEligible, true);
+  assert.equal(result.claim.cutToShip.selections[0].productId, "10496");
+  assert.equal(result.claim.cutToShip.selections[0].cutSummary, "2 × 48 in., 2 × 24 in.");
+});

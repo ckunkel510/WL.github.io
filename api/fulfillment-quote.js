@@ -3,6 +3,7 @@
 const crypto = require("node:crypto");
 const { buildAutomaticShippingQuote } = require("./shipping-quote");
 const { getCatalogProducts } = require("./shipping-catalog");
+const { availableCutToShipOptions } = require("./cut-to-ship");
 const { applyShippingMinimumToRates } = require("./shipping-policy");
 const { RequestError, requestRates } = require("./ups-rates")._internal;
 const { selectFulfillmentClaim, storeFulfillmentClaim } = require("./fulfillment-sessions");
@@ -177,6 +178,8 @@ async function buildFulfillmentQuote(body, dependencies = {}) {
   let totalWeight = positive(body?.cartWeight) || positive(body?.totalWeight);
   let upsFailure = "";
   let upsIssues = [];
+  let cutToShip = null;
+  const cutToShipOptions = availableCutToShipOptions(cart);
 
   if (cart.length) {
     try {
@@ -189,6 +192,7 @@ async function buildFulfillmentQuote(body, dependencies = {}) {
       packages = automatic.claim?.packages || [];
       totalWeight = positive(automatic.claim?.productWeight) || totalWeight;
       rates = offeredRates(automatic);
+      cutToShip = automatic.result?.cutToShip || null;
     } catch (error) {
       upsFailure = cleanText(error?.message || "UPS automatic packing was unavailable.", 180);
       upsIssues = Array.isArray(error?.shippingIssues) ? error.shippingIssues.slice(0, 50) : [];
@@ -216,6 +220,16 @@ async function buildFulfillmentQuote(body, dependencies = {}) {
     try { totalWeight = await trustedCartWeight(cart, dependencies); } catch {}
   }
 
+  if (!rates.length && cutToShipOptions.some((option) => !option.selected)) {
+    const pendingOptions = cutToShipOptions.filter((option) => !option.selected);
+    upsIssues = upsIssues.concat(pendingOptions.map((option) => ({
+      productId: option.productId,
+      productCode: option.productCode,
+      reason: "cut-option-available",
+      message: `${option.productCode || `Item ${option.productId}`} can ship by UPS after selecting “${option.label}.”`
+    })));
+  }
+
   const ratedUps = upsOption(rates) || {
     available: false,
     reason: upsIssues.length ? "shipping-items-unavailable" : (upsFailure || "ups-unavailable"),
@@ -227,13 +241,15 @@ async function buildFulfillmentQuote(body, dependencies = {}) {
     totalWeight
   }, dependencies);
   const easyParcel = Boolean(ratedUps.available && isEasyParcel(packages));
-  const ups = ratedUps.available && !easyParcel
+  const customCutParcel = Boolean(ratedUps.available && cutToShip?.applied && cutToShip?.customParcelEligible);
+  const automaticParcel = easyParcel || customCutParcel;
+  const ups = ratedUps.available && !automaticParcel
     ? { available: false, reason: "not-easy-parcel" }
     : ratedUps;
   const recommendation = recommendFulfillment({
     ups,
     delivery,
-    easyParcel,
+    easyParcel: automaticParcel,
     threshold: dependencies.threshold ?? preferenceThreshold()
   });
 
@@ -265,7 +281,8 @@ async function buildFulfillmentQuote(body, dependencies = {}) {
             amount: delivery.amount,
             billingWeight: delivery.billingWeight
           }] : []
-        }
+        },
+        cutToShip
       })
     : { ok: false, reason: "no-automatic-method" };
 
@@ -274,8 +291,18 @@ async function buildFulfillmentQuote(body, dependencies = {}) {
     recommendation,
     options: { ups, delivery },
     shippingIssues: ups.available ? [] : upsIssues,
+    cutToShip: {
+      availableOptions: cutToShipOptions,
+      applied: cutToShip?.applied === true,
+      addedCharge: positive(cutToShip?.addedCharge),
+      specialOrder: cutToShip?.specialOrder === true,
+      nonRefundable: cutToShip?.nonRefundable === true,
+      customParcelEligible: cutToShip?.customParcelEligible === true,
+      selections: Array.isArray(cutToShip?.selections) ? cutToShip.selections : []
+    },
     packageProfile: {
       easyParcel,
+      customCutParcel,
       packageCount: packages.length,
       totalWeight: totalWeight || null
     },

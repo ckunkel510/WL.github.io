@@ -3,6 +3,10 @@
 const { cartonizeCandidates } = require("./cartonizer");
 const { getCatalogProducts } = require("./shipping-catalog");
 const {
+  applyCutToShipCharge,
+  applyCutToShipSelections
+} = require("./cut-to-ship");
+const {
   applyShippingOfferToRates,
   evaluateShippingOffer,
   policyFromEnv
@@ -128,7 +132,13 @@ async function buildAutomaticShippingQuote(body, dependencies = {}) {
   const catalog = await (dependencies.getCatalogProducts || getCatalogProducts)(cart);
   if (!catalog?.fresh) throw new ShippingEligibilityError(shippingEligibilityIssues(cart, [], dependencies.env || process.env));
   const lines = trustedCartLines(cart, catalog.products, dependencies.env || process.env);
-  const plans = (dependencies.cartonizeCandidates || cartonizeCandidates)(lines, dependencies.cartonizerOptions);
+  const cutPlan = (dependencies.applyCutToShipSelections || applyCutToShipSelections)(lines, cart, dependencies.cutToShipPolicy);
+  const cutProductIds = new Set(cutPlan.selections.map((selection) => String(selection.productId || "")));
+  cutPlan.customParcelEligible = cutPlan.selections.length > 0 && lines.every((line) => (
+    cutProductIds.has(String(line.productId || "")) ||
+    (Number(line.weight) <= 50 && Math.max(Number(line.length), Number(line.width), Number(line.height)) <= 48)
+  ));
+  const plans = (dependencies.cartonizeCandidates || cartonizeCandidates)(cutPlan.packingLines, dependencies.cartonizerOptions);
   if (!plans.length) throw new Error("The cart could not be packed for UPS shipping.");
 
   const ratedPlans = [];
@@ -152,7 +162,10 @@ async function buildAutomaticShippingQuote(body, dependencies = {}) {
     packageCount: selected.plan.packageCount,
     policy
   });
-  const result = applyShippingOfferToRates(selected.rated, decision, { creditExpedited: false });
+  const result = (dependencies.applyCutToShipCharge || applyCutToShipCharge)(
+    applyShippingOfferToRates(selected.rated, decision, { creditExpedited: false }),
+    cutPlan
+  );
   const merchandiseRevenue = lines.reduce((sum, line) => sum + (Number(line.price) * line.quantity), 0);
   const rawCogs = lines.reduce((sum, line) => sum + (Number(line.averageCost) * line.quantity), 0);
   const productWeight = lines.reduce((sum, line) => sum + (Number(line.weight) * line.quantity), 0);
@@ -173,10 +186,11 @@ async function buildAutomaticShippingQuote(body, dependencies = {}) {
         merchandiseRevenue,
         rawCogs,
         packageCount: selected.plan.packageCount,
-        productRefs: lines.map((line) => ({
+        productRefs: lines.map((line, index) => ({
           productId: line.productId,
           productCode: line.productCode,
-          quantity: line.quantity
+          quantity: line.quantity,
+          cutToShip: cart[index]?.cutToShip || null
         }))
       },
       policy: {
@@ -199,7 +213,8 @@ async function buildAutomaticShippingQuote(body, dependencies = {}) {
         subsidyAmount: decision.subsidyAmount,
         reviewRequired: decision.reviewRequired === true,
         protectedMargin: Number.isFinite(decision.economics?.margin) ? decision.economics.margin : null
-      }
+      },
+      cutToShip: result.cutToShip || null
     }
   };
 }
