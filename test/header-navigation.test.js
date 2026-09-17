@@ -6,6 +6,7 @@ const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
 const wixHeader = fs.readFileSync(path.join(root, 'woodson-unified-header.js'), 'utf8');
 const webTrackHeader = fs.readFileSync(path.join(root, 'headermodern.js'), 'utf8');
+const urlSanitizer = fs.readFileSync(path.join(root, 'URLSanitize.js'), 'utf8');
 
 test('both desktop headers expose the same compact primary navigation', () => {
   for (const source of [wixHeader, webTrackHeader]) {
@@ -50,4 +51,12 @@ test('WebTrack account links use reliable Woodson-owned destinations', () => {
   const secondUpgrade = webTrackHeader.indexOf('changed = upgradeAccountNavigation() || changed;', firstUpgrade + 1);
   assert.ok(firstUpgrade > -1 && firstUpgrade < mobileMenu);
   assert.ok(secondUpgrade > mobileMenu);
+});
+
+test('URL cleanup preserves only the trusted same-site header return link', () => {
+  assert.match(urlSanitizer, /function isTrustedHeaderSignInLink\(anchor, urlObj\)/);
+  assert.match(urlSanitizer, /data-wl-account-link"\) !== "sign-in"/);
+  assert.match(urlSanitizer, /destination\.origin !== window\.location\.origin/);
+  assert.match(urlSanitizer, /return !\/\\\/SignIn\\\.aspx\$\/i\.test\(destination\.pathname\)/);
+  assert.equal((urlSanitizer.match(/isTrustedHeaderSignInLink\(a, url\)/g) || []).length, 2);
 });
