@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20260917-custom-cuts-2";
+  window.WL_CHECKOUT_BUILD = "20260917-custom-cuts-3";
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
   const UPS_SHIPPING_ENABLED = true;
@@ -289,6 +289,61 @@
 
   function cleanText(value) {
     return String(value == null ? "" : value).replace(/\s+/g, " ").trim();
+  }
+
+  const WL_CUT_SELECTION_KEY = "wl_cut_to_ship_v1";
+  const WL_CUT_APPROVAL_KEY = "wl_customization_approval_v1";
+  const WL_OFFER_CART_KEY = "wl_shipping_offer_cart_v1";
+
+  function checkoutCutApprovalSelectionKey() {
+    try {
+      const selections = JSON.parse(sessionStorage.getItem(WL_CUT_SELECTION_KEY) || "{}");
+      const cart = JSON.parse(sessionStorage.getItem(WL_OFFER_CART_KEY) || "null");
+      const items = Array.isArray(cart?.items) ? cart.items : [];
+      return items.map(function (item) {
+        const id = cleanText(item?.productId);
+        const code = cleanText(item?.productCode || item?.code).replace(/\s+/g, "").toUpperCase();
+        const selected = selections[id ? "id:" + id : "code:" + code];
+        if (!selected?.optionId) return "";
+        return [
+          cleanText(selected.productId || id),
+          cleanText(selected.productCode || code).replace(/\s+/g, "").toUpperCase(),
+          Math.max(1, Math.trunc(Number(item.quantity) || 1)),
+          cleanText(selected.optionId),
+          Array.isArray(selected.cutLengthsIn) ? selected.cutLengthsIn.join(",") : ""
+        ].join(":");
+      }).filter(Boolean).sort().join("|");
+    } catch {
+      return "";
+    }
+  }
+
+  function customizationApprovalReceipt() {
+    try {
+      const receipt = JSON.parse(sessionStorage.getItem(WL_CUT_APPROVAL_KEY) || "null");
+      const selectionKey = checkoutCutApprovalSelectionKey();
+      if (!receipt?.approvalId || !selectionKey || receipt.selectionKey !== selectionKey) return null;
+      if (Date.parse(receipt.expiresAt || "") <= Date.now()) return null;
+      return receipt;
+    } catch {
+      return null;
+    }
+  }
+
+  function validateFinalCustomizationApproval() {
+    if (window.WLShippingOffer?.validateCustomizationBeforeCheckout) {
+      return window.WLShippingOffer.validateCustomizationBeforeCheckout();
+    }
+    let hasCutSelection = false;
+    try {
+      const selections = JSON.parse(sessionStorage.getItem(WL_CUT_SELECTION_KEY) || "{}");
+      hasCutSelection = Object.keys(selections || {}).length > 0;
+    } catch {}
+    if (!hasCutSelection) return { ok: true };
+    const receipt = customizationApprovalReceipt();
+    return receipt
+      ? { ok: true, approval: receipt }
+      : { ok: false, message: "Your non-refundable special-order approval must be recorded before the order can be placed." };
   }
 
   function splitDisplayName(value) {
@@ -3317,7 +3372,7 @@ document.addEventListener("click", function (ev) {
           const offer = JSON.parse(sessionStorage.getItem("wl_shipping_offer_v1") || "null");
           const plan = offer?.cutToShip;
           if (!plan?.applied || !Array.isArray(plan.selections)) return "";
-          return plan.selections.map(function (selected) {
+          const cutInstructions = plan.selections.map(function (selected) {
             if (!selected || typeof selected !== "object" || !selected.optionId || !Array.isArray(selected.cutLengthsIn)) return "";
             const quantity = Math.max(1, Number(selected.originalQuantity) || 1);
             const code = String(selected.productCode || "item").trim();
@@ -3329,6 +3384,11 @@ document.addEventListener("click", function (ev) {
               ": cut each stock length into " + pattern + "; $" + fee +
               " per-length cut/packaging fee included in Shipping & Packaging and non-refundable.";
           }).filter(Boolean).join(" | ");
+          const approval = customizationApprovalReceipt();
+          if (!cutInstructions || !approval) return cutInstructions;
+          return cutInstructions + " | CUSTOMER APPROVAL " + cleanText(approval.approvalId) +
+            " recorded " + cleanText(approval.approvedAt) + " for WebTrack user " +
+            cleanText(approval.webTrackUserId || "guest") + ".";
         } catch {
           return "";
         }
@@ -4622,6 +4682,18 @@ document.addEventListener("click", function (ev) {
         } catch {}
       }
 
+      function guardCustomizationApproval(event) {
+        const validation = validateFinalCustomizationApproval();
+        if (validation.ok) return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        const target = validation.target;
+        try { target?.scrollIntoView?.({ behavior: "smooth", block: "center" }); } catch {}
+        try { target?.focus?.({ preventScroll: true }); } catch {}
+        window.alert(validation.message || "Review and accept the special-order terms before placing this order.");
+      }
+
+      if (placeOrderBtn) placeOrderBtn.addEventListener("click", guardCustomizationApproval, true);
       if (placeOrderBtn) placeOrderBtn.addEventListener("click", resetWizardState);
       if (backToCartBtn) backToCartBtn.addEventListener("click", resetWizardState);
     })();

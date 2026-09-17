@@ -255,6 +255,51 @@ test("cart and checkout carry the server-validated cut-to-ship selection into UP
   assert.match(checkout, /wl:cut-to-ship-change/);
 });
 
+test("customization checkout is blocked until a server receipt records the acknowledgment", () => {
+  const cart = source("WoodsonShoppingCart.js");
+  const offer = source("UpsShippingOffer.js");
+  const checkout = source("Checkout2.js");
+  const approvalApi = source("api/customization-approval.js");
+
+  assert.match(cart, /validateCustomizationHandoff/);
+  assert.match(cart, /data-wl-cut-terms/);
+  assert.match(cart, /stopImmediatePropagation/);
+  assert.match(cart, /#gc_guest_btn/);
+  assert.match(offer, /api\/customization-approval/);
+  assert.match(offer, /wl_customization_approval_v1/);
+  assert.match(offer, /data-wl-cut-request-toggle/);
+  assert.match(offer, /validateCustomizationBeforeCheckout/);
+  assert.match(checkout, /validateFinalCustomizationApproval/);
+  assert.match(checkout, /CUSTOMER APPROVAL/);
+  assert.match(checkout, /webTrackUserId/);
+  assert.match(approvalApi, /storeCustomizationApproval/);
+});
+
+test("cart handoff rejects the reported unchecked acknowledgment state", () => {
+  const cart = source("WoodsonShoppingCart.js");
+  const status = { textContent: "" };
+  const terms = { checked: false };
+  const panel = {
+    querySelector(selector) {
+      if (selector === "[data-wl-cut-request-toggle]:checked") return { checked: true };
+      if (selector === "[data-wl-cut-terms]") return terms;
+      if (selector === ".wl-cut-to-ship-status") return status;
+      return null;
+    }
+  };
+  const validateCustomizationHandoff = extractedFunction(cart, "validateCustomizationHandoff", {
+    document: { querySelectorAll: () => [panel], querySelector: () => panel },
+    window: {},
+    getCartItems: () => []
+  });
+
+  const result = validateCustomizationHandoff();
+  assert.equal(result.ok, false);
+  assert.equal(result.target, terms);
+  assert.match(result.message, /must check/i);
+  assert.match(status.textContent, /before checkout/i);
+});
+
 test("checkout writes a cut instruction only for an actual UPS order", () => {
   const checkout = source("Checkout2.js");
   const values = {
@@ -277,11 +322,15 @@ test("checkout writes a cut instruction only for an actual UPS order", () => {
   const sessionStorage = { getItem: (key) => values[key] || null };
   const shippingInstruction = extractedFunction(checkout, "cutToShipOrderInstruction", {
     getFulfillmentIntent: () => "ship",
-    sessionStorage
+    sessionStorage,
+    customizationApprovalReceipt: () => null,
+    cleanText: (value) => String(value == null ? "" : value).replace(/\s+/g, " ").trim()
   });
   const deliveryInstruction = extractedFunction(checkout, "cutToShipOrderInstruction", {
     getFulfillmentIntent: () => "delivery",
-    sessionStorage
+    sessionStorage,
+    customizationApprovalReceipt: () => null,
+    cleanText: (value) => String(value == null ? "" : value).replace(/\s+/g, " ").trim()
   });
 
   assert.match(shippingInstruction(), /CUT TO SHIP HM38V \(10496\), qty 2/);

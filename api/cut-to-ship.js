@@ -161,6 +161,70 @@ function validateCutRequest(item, rule, label) {
   return { lengths, requestedTotal };
 }
 
+function normalizeCutApprovalCart(cart, data = policyData) {
+  const requestedCart = Array.isArray(cart) ? cart.slice(0, 100) : [];
+  const issues = [];
+  const selections = [];
+
+  requestedCart.forEach((item) => {
+    const optionId = selectedOption(item);
+    if (!optionId) return;
+    const rule = ruleForItem(item, data);
+    const label = cleanText(item?.productCode || item?.code, 80) || `Item ${cleanText(item?.productId || item?.id, 40)}`;
+    if (!rule || optionId !== rule.optionId) {
+      issues.push({
+        productId: cleanText(item?.productId || item?.id, 40),
+        productCode: cleanText(item?.productCode || item?.code, 80),
+        reason: "invalid-cut-option",
+        message: `${label} is not eligible for the requested custom cut option.`
+      });
+      return;
+    }
+    const lineQuantity = quantity(item?.quantity);
+    if (!lineQuantity) {
+      issues.push(selectionIssue(rule, label, "invalid-quantity", "A positive cart quantity is required."));
+      return;
+    }
+    const validation = validateCutRequest(item, rule, label);
+    if (validation.issue) {
+      issues.push(validation.issue);
+      return;
+    }
+    selections.push({
+      productId: rule.productId,
+      productCode: rule.productCode,
+      optionId: rule.optionId,
+      originalQuantity: lineQuantity,
+      stockLengthIn: rule.stockLengthIn,
+      piecesPerUnit: validation.lengths.length,
+      cutLengthsIn: validation.lengths,
+      cutSummary: summarizeLengths(validation.lengths),
+      cutAndPackagingFeePerUnit: rule.cutAndPackagingFeePerUnit,
+      addedCharge: money(rule.cutAndPackagingFeePerUnit * lineQuantity),
+      specialOrder: true,
+      nonRefundable: rule.nonRefundable
+    });
+  });
+
+  if (!selections.length && !issues.length) {
+    issues.push({
+      productId: "",
+      productCode: "",
+      reason: "cut-selection-required",
+      message: "At least one eligible custom cut request is required."
+    });
+  }
+  if (issues.length) throw new CutToShipSelectionError(issues);
+  selections.sort((left, right) => (
+    `${left.productId}:${left.productCode}:${left.optionId}`.localeCompare(`${right.productId}:${right.productCode}:${right.optionId}`)
+  ));
+  return {
+    policyVersion: cleanText(data?.version, 80),
+    selections,
+    addedCharge: money(selections.reduce((sum, selection) => sum + selection.addedCharge, 0))
+  };
+}
+
 function applyCutToShipSelections(lines, cart, data = policyData) {
   const trustedLines = Array.isArray(lines) ? lines : [];
   const requestedCart = Array.isArray(cart) ? cart : [];
@@ -284,6 +348,7 @@ module.exports = {
   applyCutToShipSelections,
   availableCutToShipOptions,
   cutDimensions,
+  normalizeCutApprovalCart,
   normalizeRule,
   requestedLengths,
   ruleForItem,

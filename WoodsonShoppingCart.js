@@ -10,7 +10,7 @@
   const CUT_SELECTION_KEY = 'wl_cut_to_ship_v1';
   const QUOTE_TTL_MS = 4 * 60 * 60 * 1000;
   const UPS_RATE_URL = 'https://wl-upsrates.vercel.app/api/ups-rates';
-  const SHIPPING_OFFER_VERSION = '20260917-custom-cuts-2';
+  const SHIPPING_OFFER_VERSION = '20260917-custom-cuts-3';
   const SHIPPING_OFFER_SCRIPT_URL = 'https://ckunkel510.github.io/WL.github.io/UpsShippingOffer.js?v=' + SHIPPING_OFFER_VERSION;
   let checkoutBlockReason = '';
   const STORE_ORIGINS = {
@@ -539,12 +539,58 @@
     document.body.appendChild(overlay);
   }
 
+  function validateCustomizationHandoff() {
+    const requested = Array.from(document.querySelectorAll('.wl-cut-to-ship')).filter(function (panel) {
+      return !!panel.querySelector('[data-wl-cut-request-toggle]:checked');
+    });
+    for (const panel of requested) {
+      const terms = panel.querySelector('[data-wl-cut-terms]');
+      if (!terms?.checked) {
+        const message = 'You must check the non-refundable special-order acknowledgment before checkout.';
+        const status = panel.querySelector('.wl-cut-to-ship-status');
+        if (status) status.textContent = message;
+        return { ok: false, message, target: terms || panel };
+      }
+    }
+    if (window.WLShippingOffer?.validateCustomizationBeforeCheckout) {
+      return window.WLShippingOffer.validateCustomizationBeforeCheckout();
+    }
+    if (requested.length || getCartItems().some(function (item) { return !!item.cutToShip; })) {
+      return {
+        ok: false,
+        message: 'Please wait while your special-order approval is recorded.',
+        target: requested[0] || document.querySelector('.wl-cut-to-ship')
+      };
+    }
+    return { ok: true };
+  }
+
+  function showCustomizationBlock(validation) {
+    const target = validation?.target;
+    const panel = target?.closest?.('.wl-cut-to-ship') || target;
+    try { panel?.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch {}
+    if (target?.setAttribute) target.setAttribute('aria-invalid', 'true');
+    try { target?.focus?.({ preventScroll: true }); } catch {}
+    if (panel?.style) {
+      panel.style.outline = '3px solid rgba(107,0,22,.3)';
+      window.setTimeout(function () { panel.style.outline = ''; }, 1800);
+    }
+  }
+
   function bindCheckoutHandoff(signature) {
     document.addEventListener('click', function (event) {
       const target = event.target && event.target.closest
-        ? event.target.closest('#ctl00_PageBody_PlaceOrderButton, [name="ctl00$PageBody$PlaceOrderButton"]')
+        ? event.target.closest('#ctl00_PageBody_PlaceOrderButton, [name="ctl00$PageBody$PlaceOrderButton"], #gc_guest_btn')
         : null;
       if (!target) return;
+
+      const customization = validateCustomizationHandoff();
+      if (!customization.ok) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        showCustomizationBlock(customization);
+        return;
+      }
 
       const clearanceBlock = document.querySelector('.wl-clearance-stock-note[data-sold-out="1"]');
       const activeBlockReason = clearanceBlock
@@ -552,7 +598,7 @@
         : checkoutBlockReason;
       if (activeBlockReason) {
         event.preventDefault();
-        event.stopPropagation();
+        event.stopImmediatePropagation();
         let block = document.querySelector('.wl-cart-shipping-block');
         if (!block && clearanceBlock) block = clearanceBlock;
         try { block?.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch {}

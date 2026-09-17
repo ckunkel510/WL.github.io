@@ -1,21 +1,28 @@
 (function () {
   "use strict";
 
-  var BUILD_VERSION = "20260917-custom-cuts-2";
+  var BUILD_VERSION = "20260917-custom-cuts-3";
   var RATE_URL = "https://wl-upsrates.vercel.app/api/fulfillment-quote";
+  var APPROVAL_URL = "https://wl-upsrates.vercel.app/api/customization-approval";
   var CUT_POLICY_URL = "https://ckunkel510.github.io/WL.github.io/data/cut-to-ship-products.json?v=20260917-2";
   var STORAGE_KEY = "wl_shipping_offer_v1";
   var CART_DATA_KEY = "wl_shipping_offer_cart_v1";
   var CUT_SELECTION_KEY = "wl_cut_to_ship_v1";
+  var CUT_APPROVAL_KEY = "wl_customization_approval_v1";
   var SELECTION_SOURCE_KEY = "wl_fulfillment_selection_source_v1";
   var EVENT_NAME = "wl:shipping-offer-change";
+  var APPROVAL_EVENT_NAME = "wl:customization-approval-change";
   var refreshTimer = null;
   var activeRequest = null;
   var activeSelectionRequest = null;
+  var activeApprovalRequest = null;
+  var activeApprovalSelectionKey = "";
+  var approvalRequestSequence = 0;
   var refreshQueued = false;
   var missingContextRetries = 0;
   var MISSING_CONTEXT_MAX_RETRIES = 10;
   var cutPolicyPromise = null;
+  var webTrackUserIdPromise = null;
 
   if (!/ShoppingCart\.aspx|Checkout|PlaceOrder/i.test(window.location.pathname || "")) return;
   if (window.WLShippingOffer && window.WLShippingOffer.version === BUILD_VERSION) return;
@@ -81,6 +88,138 @@
       Array.isArray(selection.cutLengthsIn) ? selection.cutLengthsIn.join(",") : "",
       selection.acknowledgedNonRefundable === true ? "accepted" : ""
     ].join(":");
+  }
+
+  function approvalSelectionKey(items) {
+    return (Array.isArray(items) ? items : []).map(function (item) {
+      var selected = item && item.cutToShip;
+      if (!selected || typeof selected !== "object" || !text(selected.optionId)) return "";
+      return [
+        text(selected.productId || item.productId),
+        normalizeCode(selected.productCode || item.productCode || item.code),
+        Math.max(1, Math.trunc(Number(item.quantity) || 1)),
+        text(selected.optionId),
+        Array.isArray(selected.cutLengthsIn) ? selected.cutLengthsIn.join(",") : ""
+      ].join(":");
+    }).filter(Boolean).sort().join("|");
+  }
+
+  function readCustomizationApproval() {
+    try {
+      var receipt = JSON.parse(sessionStorage.getItem(CUT_APPROVAL_KEY) || "null");
+      if (!receipt || !receipt.approvalId || Date.parse(receipt.expiresAt || "") <= Date.now()) return null;
+      return receipt;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function notifyApproval(receipt) {
+    try { document.dispatchEvent(new CustomEvent(APPROVAL_EVENT_NAME, { detail: receipt || null })); } catch (error) {}
+  }
+
+  function clearCustomizationApproval() {
+    approvalRequestSequence += 1;
+    var existing = readCustomizationApproval();
+    try { sessionStorage.removeItem(CUT_APPROVAL_KEY); } catch (error) {}
+    if (existing) notifyApproval(null);
+  }
+
+  function labeledValue(doc, pattern) {
+    var labels = Array.prototype.slice.call(doc.querySelectorAll("label"));
+    for (var index = 0; index < labels.length; index += 1) {
+      var label = labels[index];
+      if (!pattern.test(text(label.textContent).replace(/:\s*$/, ""))) continue;
+      var input = label.getAttribute("for") ? doc.getElementById(label.getAttribute("for")) : null;
+      if (!input && label.closest) {
+        var group = label.closest("div, tr, .epi-form-group-acctSettings, .form-group");
+        input = group && group.querySelector("input:not([type='password']), select, textarea");
+      }
+      var value = text(input && (input.value || input.getAttribute("value") || input.textContent));
+      if (value) return value;
+    }
+    return "";
+  }
+
+  function webTrackUserId() {
+    if (webTrackUserIdPromise) return webTrackUserIdPromise;
+    webTrackUserIdPromise = fetch("/AccountSettings.aspx", { credentials: "same-origin", cache: "no-store" })
+      .then(function (response) { return response.ok ? response.text() : ""; })
+      .then(function (html) {
+        if (!html) return "guest";
+        var doc = new DOMParser().parseFromString(html, "text/html");
+        var known = doc.querySelector(
+          "input[id*='LoginName']:not([type='password']), input[name*='LoginName']:not([type='password']), " +
+          "input[id*='UserName']:not([type='password']), input[name*='UserName']:not([type='password'])"
+        );
+        return text(known && (known.value || known.getAttribute("value"))) ||
+          labeledValue(doc, /^(?:login\s*name|user\s*name|username|login)$/i) || "guest";
+      })
+      .catch(function () { return "guest"; });
+    return webTrackUserIdPromise;
+  }
+
+  function setApprovalPanelState(state, message) {
+    Array.prototype.forEach.call(document.querySelectorAll(".wl-cut-to-ship"), function (panel) {
+      var toggle = panel.querySelector("[data-wl-cut-request-toggle]");
+      if (!toggle || !toggle.checked) return;
+      panel.setAttribute("data-approval-state", state);
+      var status = panel.querySelector(".wl-cut-to-ship-status");
+      if (status && message) status.textContent = message;
+    });
+  }
+
+  function requestCustomizationApproval(statusElement) {
+    var items = cartItems();
+    var currentKey = approvalSelectionKey(items);
+    if (!currentKey) return Promise.resolve(null);
+    var existing = readCustomizationApproval();
+    if (existing && existing.selectionKey === currentKey) {
+      setApprovalPanelState("recorded", "Approval recorded: " + existing.approvalId + ".");
+      return Promise.resolve(existing);
+    }
+    if (activeApprovalRequest && activeApprovalSelectionKey === currentKey) return activeApprovalRequest;
+    clearCustomizationApproval();
+    var requestSequence = approvalRequestSequence;
+    activeApprovalSelectionKey = currentKey;
+    setApprovalPanelState("pending", "Saving your special-order approval…");
+    activeApprovalRequest = webTrackUserId().then(function (userId) {
+      return fetch(APPROVAL_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cart: items, webTrackUserId: userId })
+      });
+    }).then(function (response) {
+      return response.json().catch(function () { return {}; }).then(function (result) {
+        if (!response.ok || !result.ok || !result.approval) {
+          throw new Error(result.error || "Your approval could not be recorded.");
+        }
+        var latestKey = approvalSelectionKey(cartItems());
+        if (requestSequence !== approvalRequestSequence || latestKey !== currentKey || result.approval.selectionKey !== currentKey) {
+          throw new Error("The cut request changed while approval was being saved. Please review it again.");
+        }
+        try { sessionStorage.setItem(CUT_APPROVAL_KEY, JSON.stringify(result.approval)); } catch (error) {}
+        setApprovalPanelState("recorded", "Approval recorded: " + result.approval.approvalId + ".");
+        notifyApproval(result.approval);
+        return result.approval;
+      });
+    }).catch(function (error) {
+      if (requestSequence !== approvalRequestSequence) return null;
+      clearCustomizationApproval();
+      activeApprovalRequest = null;
+      activeApprovalSelectionKey = "";
+      var message = error instanceof Error ? error.message : "Your approval could not be recorded.";
+      setApprovalPanelState("error", message + " Checkout is paused until this is saved.");
+      if (statusElement) statusElement.textContent = message + " Checkout is paused until this is saved.";
+      console.warn("[WLShippingOffer] Customization approval could not be recorded.", error);
+      return null;
+    }).finally(function () {
+      if (requestSequence === approvalRequestSequence && activeApprovalSelectionKey === currentKey) {
+        activeApprovalRequest = null;
+        activeApprovalSelectionKey = "";
+      }
+    });
+    return activeApprovalRequest;
   }
 
   function writeCutSelection(item, rule, cutLengthsIn) {
@@ -429,6 +568,7 @@
     var panel = document.createElement("div");
     panel.className = "wl-cut-to-ship";
     panel.setAttribute("data-product-id", text(rule.productId));
+    panel.setAttribute("data-maximum-pieces", String(Math.max(2, Number(rule.maximumPiecesPerUnit) || 48)));
     var existingSelection = cutSelection(item);
     var selected = existingSelection && text(existingSelection.optionId) === text(rule.optionId);
     var label = document.createElement("label");
@@ -436,6 +576,7 @@
     checkbox.type = "checkbox";
     checkbox.id = "wl-cut-to-ship-" + text(rule.productId) + "-" + suffix;
     checkbox.checked = !!selected;
+    checkbox.setAttribute("data-wl-cut-request-toggle", "1");
     checkbox.setAttribute("data-option-id", text(rule.optionId));
     var title = document.createElement("span");
     title.textContent = text(rule.label) + " (+$" + Number(rule.cutAndPackagingFeePerUnit || 0).toFixed(2) + " per original length)";
@@ -468,6 +609,7 @@
     terms.type = "checkbox";
     terms.checked = !!(selected && existingSelection.acknowledgedNonRefundable === true);
     terms.disabled = !selected;
+    terms.setAttribute("data-wl-cut-terms", "1");
     var termsText = document.createElement("span");
     termsText.textContent = "I understand this customized item is a special order and the merchandise and cut/packaging fee are non-refundable.";
     termsLabel.appendChild(terms);
@@ -509,6 +651,8 @@
       terms.disabled = !checkbox.checked;
       if (!checkbox.checked) {
         writeCutSelection(item, null, []);
+        clearCustomizationApproval();
+        panel.setAttribute("data-approval-state", "none");
         if (previousSignature) invalidateAndRefresh("Custom cut request removed. Recalculating fulfillment choices…");
         else status.textContent = "";
         return;
@@ -516,12 +660,16 @@
       var validation = validateCutLengths(lengthsInput.value, rule);
       if (validation.error) {
         writeCutSelection(item, null, []);
+        clearCustomizationApproval();
+        panel.setAttribute("data-approval-state", "incomplete");
         status.textContent = validation.error;
         if (previousSignature) invalidateAndRefresh(validation.error + " UPS will be recalculated after the request is complete.");
         return;
       }
       if (!terms.checked) {
         writeCutSelection(item, null, []);
+        clearCustomizationApproval();
+        panel.setAttribute("data-approval-state", "terms-required");
         status.textContent = "Accept the non-refundable special-order terms to apply this request.";
         if (previousSignature) invalidateAndRefresh(status.textContent);
         return;
@@ -529,8 +677,11 @@
       writeCutSelection(item, rule, validation.lengths);
       var nextSignature = cutSelectionSignature(cutSelection(item));
       var savedMessage = "Custom cuts saved: " + cutPatternLabel(validation.lengths) + " Recalculating UPS shipping…";
-      if (nextSignature !== previousSignature) invalidateAndRefresh(savedMessage);
-      else status.textContent = "Custom cuts saved: " + cutPatternLabel(validation.lengths);
+      if (nextSignature !== previousSignature) {
+        clearCustomizationApproval();
+        invalidateAndRefresh(savedMessage);
+      }
+      requestCustomizationApproval(status);
     }
 
     var inputTimer = null;
@@ -544,7 +695,50 @@
     });
     lengthsInput.addEventListener("change", commitSelection);
     terms.addEventListener("change", commitSelection);
+    if (selected && terms.checked) setTimeout(commitSelection, 0);
     return panel;
+  }
+
+  function validateCustomizationBeforeCheckout() {
+    var panels = Array.prototype.slice.call(document.querySelectorAll(".wl-cut-to-ship"));
+    var requested = panels.filter(function (panel) {
+      var toggle = panel.querySelector("[data-wl-cut-request-toggle]");
+      return !!(toggle && toggle.checked);
+    });
+    for (var index = 0; index < requested.length; index += 1) {
+      var panel = requested[index];
+      var terms = panel.querySelector("[data-wl-cut-terms]");
+      var lengths = panel.querySelector(".wl-cut-lengths");
+      var status = panel.querySelector(".wl-cut-to-ship-status");
+      if (!terms || !terms.checked) {
+        var termsMessage = "You must check the non-refundable special-order acknowledgment before checkout.";
+        if (status) status.textContent = termsMessage;
+        panel.setAttribute("data-approval-state", "terms-required");
+        return { ok: false, message: termsMessage, target: terms || panel };
+      }
+      var savedSelection = cutSelection({ productId: panel.getAttribute("data-product-id") });
+      var displayedLengths = parseCutLengths(lengths && lengths.value, panel.getAttribute("data-maximum-pieces"));
+      var displayedSignature = displayedLengths.error ? "" : displayedLengths.lengths.join(",");
+      var savedSignature = savedSelection && Array.isArray(savedSelection.cutLengthsIn)
+        ? savedSelection.cutLengthsIn.join(",")
+        : "";
+      if (!savedSelection || !displayedSignature || displayedSignature !== savedSignature) {
+        var cutMessage = "Complete a valid cut pattern before checkout.";
+        if (status) status.textContent = cutMessage;
+        return { ok: false, message: cutMessage, target: lengths || panel };
+      }
+    }
+    var key = approvalSelectionKey(cartItems());
+    if (!key) return { ok: true };
+    var receipt = readCustomizationApproval();
+    if (!receipt || receipt.selectionKey !== key) {
+      var pendingMessage = activeApprovalRequest
+        ? "Please wait while your special-order approval is recorded."
+        : "Your special-order approval must be recorded before checkout.";
+      setApprovalPanelState(activeApprovalRequest ? "pending" : "error", pendingMessage);
+      return { ok: false, message: pendingMessage, target: requested[0] || document.querySelector(".wl-cut-to-ship") };
+    }
+    return { ok: true, approval: receipt };
   }
 
   function renderCutControls() {
@@ -628,7 +822,9 @@
     refresh: refreshOffer,
     current: currentOffer,
     select: selectOffer,
-    renderCutControls: renderCutControls
+    renderCutControls: renderCutControls,
+    approval: readCustomizationApproval,
+    validateCustomizationBeforeCheckout: validateCustomizationBeforeCheckout
   };
 
   document.addEventListener("input", function (event) {
@@ -636,6 +832,15 @@
   }, true);
   document.addEventListener("change", function (event) {
     if (event.target && /(?:DeliveryAddress|Postcode|PostalCode|ZipCode|gc_del_zip|wl-qty-select)/i.test(event.target.id || event.target.className || "")) scheduleRefresh(100);
+    var quantityChanged = event.target && event.target.matches &&
+      event.target.matches("select.wl-qty-select, input[id*='_qty_']:not([id$='_ClientState'])");
+    if (quantityChanged) {
+      scheduleRefresh(100);
+      clearCustomizationApproval();
+      setTimeout(function () {
+        if (approvalSelectionKey(cartItems())) requestCustomizationApproval();
+      }, 120);
+    }
   }, true);
 
   function boot() {
