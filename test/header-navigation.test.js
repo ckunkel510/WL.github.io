@@ -37,3 +37,17 @@ test('Woodson header receives only sanitized WebTrack header state', () => {
   assert.match(webTrackHeader, /storeName:/);
   assert.doesNotMatch(webTrackHeader, /document\.cookie/);
 });
+
+test('WebTrack account links use reliable Woodson-owned destinations', () => {
+  assert.match(webTrackHeader, /function buildReturnToPageSignInUrl\(\)/);
+  assert.match(webTrackHeader, /signIn\.searchParams\.set\("Redirect", current\.toString\(\)\)/);
+  assert.match(webTrackHeader, /WEBTRACK \+ "\/AccountInfo_R\.aspx"/);
+  assert.match(webTrackHeader, /setAccountLinkLabel\(link, "My Account"\)/);
+  assert.match(webTrackHeader, /"my account": "fa-user-circle"/);
+
+  const firstUpgrade = webTrackHeader.indexOf('changed = upgradeAccountNavigation() || changed;');
+  const mobileMenu = webTrackHeader.indexOf('changed = buildMobileAccountMenu() || changed;');
+  const secondUpgrade = webTrackHeader.indexOf('changed = upgradeAccountNavigation() || changed;', firstUpgrade + 1);
+  assert.ok(firstUpgrade > -1 && firstUpgrade < mobileMenu);
+  assert.ok(secondUpgrade > mobileMenu);
+});

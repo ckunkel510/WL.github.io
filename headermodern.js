@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  window.WL_HEADER_BUILD = "20260810-unified-desktop-nav-1";
+  window.WL_HEADER_BUILD = "20260917-account-navigation-1";
 
   var LOG = "[WL HeaderEnhancer]";
   var DEBUG = false; // Set to true only when actively troubleshooting.
@@ -2709,11 +2709,73 @@
     return changed;
   }
 
+  function buildReturnToPageSignInUrl() {
+    try {
+      var current = new URL(window.location.href);
+      var signIn = new URL("/SignIn.aspx", WEBTRACK);
+
+      // Avoid creating a sign-in loop on the sign-in/sign-out screen itself.
+      if (!/\/SignIn\.aspx$/i.test(current.pathname)) {
+        signIn.searchParams.set("Redirect", current.toString());
+      }
+
+      return signIn.toString();
+    } catch (error) {
+      debugLog("sign-in return URL unavailable", error);
+      return WEBTRACK + "/SignIn.aspx";
+    }
+  }
+
+  function setAccountLinkLabel(link, label) {
+    var mobileLabel = link.querySelector(".wl-mobile-menu-link-label");
+    if (mobileLabel) {
+      mobileLabel.textContent = label;
+    } else {
+      link.textContent = label;
+    }
+    link.setAttribute("title", label);
+  }
+
+  function upgradeAccountNavigation() {
+    var changed = false;
+    var signInUrl = buildReturnToPageSignInUrl();
+    var accountUrl = WEBTRACK + "/AccountInfo_R.aspx";
+    var links = document.querySelectorAll(
+      ".sticky-header .main-nav .menu-t1 a, #wl-mobile-account-menu a"
+    );
+
+    links.forEach(function (link) {
+      var label = cleanLabel(link.textContent);
+      var href = link.getAttribute("href") || "";
+
+      if (/^Sign In$/i.test(label) && /SignIn\.aspx/i.test(href)) {
+        if (link.href !== signInUrl) {
+          link.href = signInUrl;
+          changed = true;
+        }
+        link.setAttribute("data-wl-account-link", "sign-in");
+        return;
+      }
+
+      if (/^Account Information$/i.test(label) || /Default\.aspx\?portal=1/i.test(href)) {
+        if (link.href !== accountUrl || label !== "My Account") {
+          link.href = accountUrl;
+          setAccountLinkLabel(link, "My Account");
+          changed = true;
+        }
+        link.setAttribute("data-wl-account-link", "my-account");
+      }
+    });
+
+    return changed;
+  }
+
   function getMobileMenuIcon(label) {
     var normalized = cleanLabel(label).toLowerCase();
     var icons = {
       "home": "fa-home",
       "account information": "fa-user-circle",
+      "my account": "fa-user-circle",
       "quicklists": "fa-heart",
       "quotes": "fa-file-alt",
       "orders": "fa-box",
@@ -3200,7 +3262,9 @@
     changed = createShoppingCartSearchRow() || changed;
     changed = buildDepartmentMenu() || changed;
     changed = enhanceHeaderControls() || changed;
+    changed = upgradeAccountNavigation() || changed;
     changed = buildMobileAccountMenu() || changed;
+    changed = upgradeAccountNavigation() || changed;
     changed = removeUnusedHeaderSections() || changed;
     changed = upgradeTopLinksAccessibility() || changed;
     changed = addStoreHours() || changed;
