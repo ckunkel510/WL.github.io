@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  window.WL_HEADER_BUILD = "20260917-account-navigation-1";
+  window.WL_HEADER_BUILD = "20260917-account-commerce-header-2";
 
   var LOG = "[WL HeaderEnhancer]";
   var DEBUG = false; // Set to true only when actively troubleshooting.
@@ -21,7 +21,7 @@
   var STORE_NAMES = ["Brenham", "Bryan", "Caldwell", "Lexington", "Groesbeck", "Mexia", "Buffalo"];
   var CENTRAL_TIME_ZONE = "America/Chicago";
   var mobileMenuNameRequest = null;
-  var shoppingCartDepartmentRequest = null;
+  var fallbackDepartmentRequest = null;
 
   var SHOP_LINKS = [
     { label: "On Sale", href: WEBTRACK + "/Products.aspx?pl1=4518&pg=4518&sort=StockClassSort&direction=asc", featured: true },
@@ -2141,9 +2141,9 @@
     return "/Products.aspx?pg=0&sort=Relevance&direction=desc&itemsPerPage=48&searchText=" + encodeURIComponent(value);
   }
 
-  function createShoppingCartSearchRow() {
+  function createFallbackCommerceRow() {
     var path = (window.location.pathname || "").toLowerCase();
-    if (!/\/shoppingcart\.aspx$/.test(path)) return false;
+    if (!/\/(?:shoppingcart|signin|accountinfo_r)\.aspx$/.test(path)) return false;
     if (document.getElementById("ctl00_PageHeader_searchBarTableRow")) return false;
 
     var header = document.getElementById("siteHeaderContent");
@@ -2219,8 +2219,8 @@
       return true;
     }
 
-    if (!shoppingCartDepartmentRequest) {
-      shoppingCartDepartmentRequest = window.fetch("/Products.aspx?itemsPerPage=12&pageIndex=0", { credentials: "same-origin" })
+    if (!fallbackDepartmentRequest) {
+      fallbackDepartmentRequest = window.fetch("/Products.aspx?itemsPerPage=12&pageIndex=0", { credentials: "same-origin" })
         .then(function (response) { return response.ok ? response.text() : ""; })
         .then(function (html) {
           if (!html) return [];
@@ -3259,7 +3259,7 @@
 
     changed = injectStyles() || changed;
     changed = normalizeHeaderContainers() || changed;
-    changed = createShoppingCartSearchRow() || changed;
+    changed = createFallbackCommerceRow() || changed;
     changed = buildDepartmentMenu() || changed;
     changed = enhanceHeaderControls() || changed;
     changed = upgradeAccountNavigation() || changed;

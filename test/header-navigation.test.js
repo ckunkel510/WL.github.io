@@ -53,6 +53,18 @@ test('WebTrack account links use reliable Woodson-owned destinations', () => {
   assert.ok(secondUpgrade > mobileMenu);
 });
 
+test('WebTrack restores search and departments on layouts without a native commerce row', () => {
+  assert.match(webTrackHeader, /function createFallbackCommerceRow\(\)/);
+  assert.match(webTrackHeader, /\/\(\?:shoppingcart\|signin\|accountinfo_r\)\\\.aspx\$/);
+  assert.match(webTrackHeader, /row\.id = "ctl00_PageHeader_searchBarTableRow"/);
+  assert.match(webTrackHeader, /window\.location\.href = productSearchUrl\(query\)/);
+  assert.match(webTrackHeader, /buildDepartmentMenu\(departments\)/);
+
+  const fallbackRow = webTrackHeader.indexOf('changed = createFallbackCommerceRow() || changed;');
+  const departments = webTrackHeader.indexOf('changed = buildDepartmentMenu() || changed;');
+  assert.ok(fallbackRow > -1 && fallbackRow < departments);
+});
+
 test('URL cleanup preserves only the trusted same-site header return link', () => {
   assert.match(urlSanitizer, /function isTrustedSameSiteSignInReturn\(urlObj\)/);
   assert.match(urlSanitizer, /urlObj\.origin !== window\.location\.origin/);
