@@ -54,9 +54,9 @@ test('WebTrack account links use reliable Woodson-owned destinations', () => {
 });
 
 test('URL cleanup preserves only the trusted same-site header return link', () => {
-  assert.match(urlSanitizer, /function isTrustedHeaderSignInLink\(anchor, urlObj\)/);
-  assert.match(urlSanitizer, /data-wl-account-link"\) !== "sign-in"/);
+  assert.match(urlSanitizer, /function isTrustedSameSiteSignInReturn\(urlObj\)/);
+  assert.match(urlSanitizer, /urlObj\.origin !== window\.location\.origin/);
   assert.match(urlSanitizer, /destination\.origin !== window\.location\.origin/);
   assert.match(urlSanitizer, /return !\/\\\/SignIn\\\.aspx\$\/i\.test\(destination\.pathname\)/);
-  assert.equal((urlSanitizer.match(/isTrustedHeaderSignInLink\(a, url\)/g) || []).length, 2);
+  assert.equal((urlSanitizer.match(/isTrustedSameSiteSignInReturn\(url\)/g) || []).length, 2);
 });

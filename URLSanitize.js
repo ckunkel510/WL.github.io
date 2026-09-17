@@ -86,8 +86,7 @@
     try { return new URL(href, base); } catch { return null; }
   }
 
-  function isTrustedHeaderSignInLink(anchor, urlObj) {
-    if (!anchor || anchor.getAttribute("data-wl-account-link") !== "sign-in") return false;
+  function isTrustedSameSiteSignInReturn(urlObj) {
     if (!urlObj || urlObj.origin !== window.location.origin) return false;
     if (!/\/SignIn\.aspx$/i.test(urlObj.pathname)) return false;
 
@@ -226,7 +225,7 @@
     if (!url) return false;
 
     if (SKIP_EXTERNAL && isExternal(url)) return false;
-    if (isTrustedHeaderSignInLink(a, url)) return false;
+    if (isTrustedSameSiteSignInReturn(url)) return false;
 
     const before = url.toString();
     cleanUrlObject(url);
@@ -297,7 +296,7 @@
         if (!url) return;
 
         if (SKIP_EXTERNAL && isExternal(url)) return;
-        if (isTrustedHeaderSignInLink(a, url)) return;
+        if (isTrustedSameSiteSignInReturn(url)) return;
 
         const before = url.toString();
         cleanUrlObject(url);
