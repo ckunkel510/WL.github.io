@@ -2,7 +2,8 @@
 (function wlPrehideLoginGatedPrice() {
   try {
     const productId = new URLSearchParams(window.location.search).get("pid");
-    if (productId !== "6821" || document.getElementById("wl-login-price-prehide")) return;
+    const loginPriceProducts = new Set(["6821", "22984"]);
+    if (!loginPriceProducts.has(String(productId || "")) || document.getElementById("wl-login-price-prehide")) return;
 
     const style = document.createElement("style");
     style.id = "wl-login-price-prehide";
@@ -396,6 +397,60 @@ $(document).ready(async function () {
       }
       .wl-price-login-link:hover,
       .wl-price-login-link:focus { background: #8d8d8d; }
+      .wl-regional-price-store {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px;
+        border: 1px solid #d9dde1;
+        border-radius: 6px;
+        background: #f7f8f9;
+        color: #20262d;
+      }
+      .wl-regional-price-store__title {
+        color: #20262d;
+        font-size: 15px;
+        font-weight: 850;
+      }
+      .wl-regional-price-store__copy,
+      .wl-regional-price-store__status {
+        color: #59636e;
+        font-size: 12px;
+        line-height: 1.4;
+      }
+      .wl-regional-price-store__row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+      }
+      .wl-regional-price-store select,
+      .wl-regional-price-store button {
+        min-height: 40px;
+        border-radius: 5px;
+        font: inherit;
+      }
+      .wl-regional-price-store select {
+        min-width: 0;
+        padding: 7px 9px;
+        border: 1px solid #aeb5bc;
+        background: #fff;
+        color: #20262d;
+      }
+      .wl-regional-price-store button {
+        padding: 8px 12px;
+        border: 0;
+        background: #6b0016;
+        color: #fff;
+        font-weight: 800;
+        cursor: pointer;
+      }
+      .wl-regional-price-store button:hover,
+      .wl-regional-price-store button:focus { background: #8d8d8d; }
+      .wl-regional-price-store button:disabled {
+        background: #b8bdc2;
+        cursor: wait;
+      }
+      .wl-regional-price-store__status[data-state="error"] { color: #8b1d2c; }
       .wl-pdp-action-row {
         display: flex !important;
         align-items: stretch !important;
@@ -805,7 +860,11 @@ $(document).ready(async function () {
   const isBlockedProduct = currentPID && BLOCKED_PIDS.includes(String(currentPID));
 
   // Products whose price is visible only after the customer signs in.
-  const WL_LOGIN_PRICE_PIDS = new Set(["6821"]);
+  const WL_LOGIN_PRICE_PIDS = new Set(["6821", "22984"]);
+  const WL_STORE_PRICE_PIDS = new Set(["22984"]);
+  const ACCOUNT_SETTINGS_URL = "/AccountSettings.aspx?cms=1";
+  const ACCOUNT_STORE_SELECT_ID = "ctl00_PageBody_ChangeUserDetailsControl_ddBranch";
+  const ACCOUNT_UPDATE_BUTTON_ID = "ctl00_PageBody_ChangeUserDetailsControl_UpdateUserDetailsButton";
   const signInLink = Array.from(document.querySelectorAll("a")).find((link) => {
     const label = (link.textContent || "").trim();
     const href = link.getAttribute("href") || "";
@@ -816,6 +875,191 @@ $(document).ready(async function () {
     WL_LOGIN_PRICE_PIDS.has(String(currentPID)) &&
     Boolean(signInLink);
   const signInHref = signInLink ? signInLink.getAttribute("href") : "SignIn.aspx";
+  const isStorePricedProduct = currentPID && WL_STORE_PRICE_PIDS.has(String(currentPID));
+
+  function parseAccountStorePage(html) {
+    const doc = new DOMParser().parseFromString(String(html || ""), "text/html");
+    const select = doc.getElementById(ACCOUNT_STORE_SELECT_ID);
+    const form = select ? select.closest("form") : null;
+    const selected = select
+      ? select.querySelector("option:checked, option[selected='selected']") || select.options[select.selectedIndex]
+      : null;
+    return { doc, form, select, selected };
+  }
+
+  async function fetchAccountStorePage() {
+    const response = await fetch(ACCOUNT_SETTINGS_URL, {
+      credentials: "same-origin",
+      cache: "no-store"
+    });
+    if (!response.ok) throw new Error("account_settings_unavailable");
+
+    const page = parseAccountStorePage(await response.text());
+    if (!page.form || !page.select) throw new Error("sign_in_required");
+    return page;
+  }
+
+  function serializeAccountStoreForm(form, select, selectedValue, updateButton) {
+    const body = new URLSearchParams();
+    Array.from(form.elements || []).forEach((control) => {
+      const name = control && control.name ? String(control.name) : "";
+      if (!name || control.disabled || control === updateButton) return;
+
+      const type = String(control.type || "").toLowerCase();
+      if (["button", "file", "image", "reset", "submit"].includes(type)) return;
+      if (["checkbox", "radio"].includes(type) && !control.checked) return;
+
+      if (control === select) {
+        body.append(name, selectedValue);
+        return;
+      }
+
+      if (type === "select-multiple") {
+        Array.from(control.options || []).forEach((option) => {
+          if (option.selected) body.append(name, option.value);
+        });
+        return;
+      }
+
+      body.append(name, control.value == null ? "" : String(control.value));
+    });
+
+    if (updateButton && updateButton.name) {
+      body.append(updateButton.name, updateButton.value || "Update");
+    } else if (updateButton) {
+      const postbackScript = [
+        updateButton.getAttribute("href") || "",
+        updateButton.getAttribute("onclick") || ""
+      ].join(" ");
+      const postbackMatch =
+        postbackScript.match(/__doPostBack\(\s*['\"]([^'\"]+)['\"]\s*,\s*['\"]([^'\"]*)['\"]\s*\)/i) ||
+        postbackScript.match(/WebForm_PostBackOptions\(\s*['\"]([^'\"]+)['\"]\s*,\s*['\"]([^'\"]*)['\"]/i);
+      if (postbackMatch) {
+        body.set("__EVENTTARGET", postbackMatch[1]);
+        body.set("__EVENTARGUMENT", postbackMatch[2] || "");
+      }
+    }
+    return body;
+  }
+
+  async function updateAccountStore(selectedValue) {
+    const page = await fetchAccountStorePage();
+    const matchingOption = Array.from(page.select.options || []).find((option) => option.value === selectedValue);
+    if (!matchingOption) throw new Error("store_not_found");
+
+    const updateButton = page.doc.getElementById(ACCOUNT_UPDATE_BUTTON_ID);
+    if (!updateButton) throw new Error("store_update_unavailable");
+
+    const action = new URL(page.form.getAttribute("action") || ACCOUNT_SETTINGS_URL, window.location.origin);
+    if (action.origin !== window.location.origin) throw new Error("unsafe_account_action");
+
+    const response = await fetch(action.href, {
+      method: "POST",
+      credentials: "same-origin",
+      cache: "no-store",
+      redirect: "follow",
+      headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+      body: serializeAccountStoreForm(page.form, page.select, selectedValue, updateButton).toString()
+    });
+    if (!response.ok) throw new Error("store_update_failed");
+
+    const verifiedPage = await fetchAccountStorePage();
+    const verifiedOption = verifiedPage.selected;
+    if (!verifiedOption || verifiedOption.value !== selectedValue) throw new Error("store_update_not_verified");
+
+    return (verifiedOption.textContent || "").trim();
+  }
+
+  function buildRegionalStorePicker() {
+    if (!isStorePricedProduct || hidePriceUntilSignedIn) return $();
+
+    const $picker = $("<section>", {
+      class: "wl-regional-price-store",
+      "aria-label": "Choose store for local price"
+    });
+    const $select = $("<select>", {
+      "aria-label": "Store for local deer corn price",
+      disabled: true
+    }).append($("<option>", { value: "", text: "Loading your store…" }));
+    const $button = $("<button>", {
+      type: "button",
+      text: "Update price",
+      disabled: true
+    });
+    const $status = $("<span>", {
+      class: "wl-regional-price-store__status",
+      role: "status",
+      "aria-live": "polite",
+      text: "Checking the store saved to your account…"
+    });
+    let initialValue = "";
+
+    $picker
+      .append($("<strong>", { class: "wl-regional-price-store__title", text: "Local store price" }))
+      .append($("<span>", {
+        class: "wl-regional-price-store__copy",
+        text: "Deer corn pricing varies by location. Choose the store you are shopping, and we’ll refresh this page with that store’s price and availability."
+      }))
+      .append($("<div>", { class: "wl-regional-price-store__row" }).append($select, $button))
+      .append($status);
+
+    fetchAccountStorePage()
+      .then((page) => {
+        const options = Array.from(page.select.options || []).filter((option) => String(option.value || "").trim());
+        if (!options.length || !page.selected) throw new Error("stores_unavailable");
+
+        $select.empty();
+        options.forEach((option) => {
+          $select.append($("<option>", {
+            value: option.value,
+            text: (option.textContent || "").trim()
+          }));
+        });
+        initialValue = page.selected.value;
+        $select.val(initialValue).prop("disabled", false);
+        $status.attr("data-state", "ready").text("Price shown for " + (page.selected.textContent || "your selected store").trim() + ".");
+      })
+      .catch(() => {
+        $select.empty().append($("<option>", { value: "", text: "Store selection unavailable" }));
+        $status.attr("data-state", "error").text("We couldn’t load your saved store. Refresh the page or use Change My Store in the account menu.");
+      });
+
+    $select.on("change", function () {
+      $button.prop("disabled", !this.value || this.value === initialValue);
+      $status.removeAttr("data-state").text(
+        this.value === initialValue
+          ? "Price shown for " + ($(this).find("option:selected").text() || "your selected store") + "."
+          : "Select Update price to apply this store."
+      );
+    });
+
+    $button.on("click", async function () {
+      const selectedValue = String($select.val() || "");
+      if (!selectedValue || selectedValue === initialValue) return;
+
+      $select.prop("disabled", true);
+      $button.prop("disabled", true).text("Updating…");
+      $status.removeAttr("data-state").text("Saving your store without leaving this product…");
+
+      try {
+        const storeName = await updateAccountStore(selectedValue);
+        try { sessionStorage.setItem("wlDetectedStore", storeName); } catch (error) {}
+        wlTrack("pdp_fulfillment_select", {
+          fulfillment_method: "pickup",
+          selection_action: "regional_price_store_change",
+          store_branch: storeName
+        });
+        $status.attr("data-state", "ready").text("Store updated. Refreshing the local price…");
+        window.location.reload();
+      } catch (error) {
+        $select.prop("disabled", false);
+        $button.prop("disabled", false).text("Try again");
+        $status.attr("data-state", "error").text("We couldn’t update your store. Your current price and store have not changed.");
+      }
+    });
+
+    return $picker;
+  }
 
   const WL_EPALLET_RULES = {
     22444: { code: "ASC", pickupMin: 10, palletQty: 42 },
@@ -1043,13 +1287,18 @@ $(document).ready(async function () {
   const $priceDisplay = hidePriceUntilSignedIn
     ? $("<div>", { class: "wl-price-login-gate", role: "note" })
         .append($("<strong>").text("Sign in to see price"))
-        .append($("<span>").text("Pricing is available to signed-in customers."))
+        .append($("<span>").text(
+          isStorePricedProduct
+            ? "Sign in to choose your store and see its local price."
+            : "Pricing is available to signed-in customers."
+        ))
         .append($("<a>", {
           href: signInHref,
           class: "wl-price-login-link",
           text: "Sign in"
         }))
     : $priceRow;
+  const $regionalStorePicker = buildRegionalStorePicker();
 
   // === Quantity + Add to Cart in one row ===
   const $actionRow = $("<div>").addClass("wl-pdp-action-row").css({
@@ -1407,7 +1656,7 @@ $(document).ready(async function () {
     // Don't show qty/add controls at all
     // (We already detached them from the page; we simply don't add them back.)
     // But keep quicklist + stock if you want the “in-store tools” still available.
-    $buyBox.empty().append($methodRow, epalletNotice(epalletRule), $priceDisplay, $notEligible, $quicklistBtn.css("marginTop", "10px"), $stockBtn);
+    $buyBox.empty().append($methodRow, epalletNotice(epalletRule), $regionalStorePicker, $priceDisplay, $notEligible, $quicklistBtn.css("marginTop", "10px"), $stockBtn);
 
   } else {
     // Normal purchase flow
@@ -1417,7 +1666,7 @@ $(document).ready(async function () {
     $actionRow.append($qtyInput, $addBtn);
 
     // Final assembly
-    $buyBox.empty().append($methodRow, $banner, epalletNotice(epalletRule), $priceDisplay, $actionRow, $quicklistBtn.css("marginTop", "10px"), $stockBtn);
+    $buyBox.empty().append($methodRow, $banner, epalletNotice(epalletRule), $regionalStorePicker, $priceDisplay, $actionRow, $quicklistBtn.css("marginTop", "10px"), $stockBtn);
   }
 
   $sidebar.append($buyBox);
