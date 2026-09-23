@@ -250,6 +250,7 @@
     const signUpPanel = document.getElementById('ctl00_PageBody_SignUpPanel');
     const requestText = document.getElementById('ctl00_PageBody_RequestAccessText');
     const requestButton = document.getElementById('ctl00_PageBody_BtnRequestAccess');
+    const forgotPasswordDiv = document.getElementById('ctl00_PageBody_forgotPasswordDiv');
     const shell = user?.closest('.form-small');
     if (!user || !password || !signInButton || !signUpPanel || !requestButton || !shell) return;
 
@@ -288,7 +289,7 @@
     const loginCard = document.createElement('section');
     loginCard.className = 'wl-auth-card wl-auth-login-card';
     loginCard.innerHTML = '<div class="wl-auth-card-head"><h2>Welcome back</h2><p>Use your email address or existing Woodson login name.</p></div><div class="wl-auth-card-body"></div>';
-    loginCard.querySelector('.wl-auth-card-body').appendChild(signInBlock);
+    loginCard.querySelector('.wl-auth-card-body').append(signInBlock, forgotPasswordDiv);
 
     if (new URLSearchParams(location.search).get('from') === 'signup_redirect') {
       const notice = document.createElement('div');
