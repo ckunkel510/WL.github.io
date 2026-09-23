@@ -552,3 +552,10 @@ test("guest checkout names all three fulfillment choices", () => {
   const guest = source("Guestcheckout.js");
   assert.match(guest, /pickup, Woodson delivery, or UPS shipping/);
 });
+
+test("guest checkout marks generated accounts without replacing the customer name", () => {
+  const guest = source("Guestcheckout.js");
+  assert.match(guest, /Guest User - \\$\\{payload\\.contactName\\}/);
+  assert.match(guest, /FirstNameTextBox', payload\\.fname/);
+  assert.match(guest, /LastNameTextBox', payload\\.lname/);
+});
