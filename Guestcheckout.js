@@ -713,7 +713,9 @@
           setVal(Phone, payload.phone);
           setId('ctl00_PageBody_FirstNameTextBox', payload.fname, doc);
           setId('ctl00_PageBody_LastNameTextBox', payload.lname, doc);
-          setId('ctl00_PageBody_ContactNameTextBox', payload.contactName, doc);
+          // Preserve the customer's real first/last name for checkout while
+          // marking the generated account so staff can identify guest signups.
+          setId('ctl00_PageBody_ContactNameTextBox', `Guest User - ${payload.contactName}`, doc);
           setId('ctl00_PageBody_DeliveryAddressLine1TextBox', payload.d_addr1, doc);
           setId('ctl00_PageBody_DeliveryCityTextBox', payload.d_city, doc);
           setId('ctl00_PageBody_DeliveryStateCountyTextBox', payload.d_state, doc);
