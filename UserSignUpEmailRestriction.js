@@ -289,7 +289,9 @@
     const loginCard = document.createElement('section');
     loginCard.className = 'wl-auth-card wl-auth-login-card';
     loginCard.innerHTML = '<div class="wl-auth-card-head"><h2>Welcome back</h2><p>Use your email address or existing Woodson login name.</p></div><div class="wl-auth-card-body"></div>';
-    loginCard.querySelector('.wl-auth-card-body').append(signInBlock, forgotPasswordDiv);
+    const loginBody = loginCard.querySelector('.wl-auth-card-body');
+    loginBody.appendChild(signInBlock);
+    if (forgotPasswordDiv) loginBody.appendChild(forgotPasswordDiv);
 
     if (new URLSearchParams(location.search).get('from') === 'signup_redirect') {
       const notice = document.createElement('div');
