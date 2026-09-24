@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Woodson Customer-Safe Product and Shipping Tools
-  version: 12.0.0
+  version: 12.0.1
   description: Search the current Woodson Lumber & Hardware online catalog, browse verified WebTrack product groups, and check UPS shipping for one exact product. This API exposes customer-facing data only and never exposes cost, margin, markup, profit, supplier, vendor, package dimensions, or advertising-economics data.
 
 servers:
@@ -191,11 +191,13 @@ paths:
       operationId: checkProductShipping
       summary: Check UPS shipping for one exact Woodson product and destination ZIP
       description: >
-        Use this tool when a visitor asks whether one exact, verified Woodson product
-        can ship by UPS or asks for its UPS shipping rate. First resolve the product
-        with searchProducts. Call this operation only after one exact product remains,
-        and copy its productCode and productId exactly from the searchProducts result.
-        Never guess or alter either identifier.
+        Use this tool when a visitor asks whether one exact Woodson product can ship
+        by UPS or asks for its UPS shipping rate. If the visitor supplies an exact
+        product code or SKU, call this operation directly with that code; do not call
+        searchProducts first and do not ask permission to perform the check. If the
+        visitor supplies only a name or description, first resolve one exact product
+        with searchProducts, then copy its productCode and productId exactly. Never
+        guess or alter either identifier.
 
         Ask only for the quantity and destination ZIP code when they are missing.
         Never request a full street address, phone number, email address, payment
@@ -229,7 +231,7 @@ paths:
                 productCode:
                   type: string
                   maxLength: 80
-                  description: Copy the exact productCode returned for the one selected product by searchProducts.
+                  description: Use the exact product code or SKU supplied by the visitor, or copy the exact productCode returned for the one selected product by searchProducts.
                 productId:
                   type: string
                   maxLength: 40
