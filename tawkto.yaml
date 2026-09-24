@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Woodson Customer-Safe Product and Shipping Tools
-  version: 12.0.1
+  version: 12.0.2
   description: Search the current Woodson Lumber & Hardware online catalog, browse verified WebTrack product groups, and check UPS shipping for one exact product. This API exposes customer-facing data only and never exposes cost, margin, markup, profit, supplier, vendor, package dimensions, or advertising-economics data.
 
 servers:
@@ -14,7 +14,10 @@ paths:
       summary: Search Woodson's current customer-safe product catalog
       description: >
         Use this tool before answering any product question, product-like phrase,
-        or request to browse a product group or department.
+        or request to browse a product group or department, except a shipping or
+        rate question that already includes an exact product code or SKU, quantity,
+        and destination ZIP. For that complete shipping request, call
+        checkProductShipping directly and do not call searchProducts first.
         Send a POST JSON body with the customer's exact product phrase in the query field.
         Never call this tool with an empty query.
 
