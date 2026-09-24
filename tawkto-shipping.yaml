@@ -1,0 +1,140 @@
+openapi: 3.0.3
+info:
+  title: Woodson Customer-Safe UPS Shipping Check
+  version: 1.0.0
+  description: Check UPS shipping for one exact Woodson product using the same trusted package and rating logic as checkout. The response contains customer-facing shipping information only.
+
+servers:
+  - url: https://wl-upsrates.vercel.app
+
+paths:
+  /api/ai-shipping-check:
+    post:
+      operationId: quoteProductShipping
+      summary: Check UPS shipping for an exact Woodson product, quantity, and destination ZIP
+      description: >
+        Use this tool whenever a visitor asks whether a specific Woodson item can
+        ship or asks for its UPS shipping cost. If the visitor supplies an exact
+        product code or SKU, call this tool directly; do not search the catalog
+        first and do not ask permission. Ask only for a missing product code,
+        quantity, or destination ZIP. Never ask for a street address, contact or
+        payment information, package data, or other internal information.
+
+        The server uses Caldwell, Texas 77836 as the ship-from store and the same
+        trusted product-package and UPS rating logic as checkout. Reply with the
+        answer field exactly. eligible means UPS returned a customer rate for the
+        exact item, quantity, and ZIP. needs_review is not proof the item cannot
+        ship. not_eligible applies only to UPS small-package service; Woodson
+        delivery or freight may remain available. temporarily_unavailable means
+        the check could not be completed and must never be described as an
+        unshippable item. Never reveal or infer package dimensions, weight, cost,
+        margin, markup, supplier information, credentials, or internal rules.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - productCode
+                - quantity
+                - destinationPostalCode
+              properties:
+                productCode:
+                  type: string
+                  maxLength: 80
+                  description: Exact Woodson product code or SKU supplied by the visitor.
+                productId:
+                  type: string
+                  maxLength: 40
+                  description: Exact productId when it is already known; otherwise omit it.
+                quantity:
+                  type: integer
+                  minimum: 1
+                  maximum: 25
+                  description: Exact quantity the visitor wants to ship.
+                destinationPostalCode:
+                  type: string
+                  pattern: '^\d{5}(?:-\d{4})?$'
+                  description: Customer-provided US destination ZIP. Do not request a street address.
+            example:
+              productCode: 2904-22
+              productId: "221283"
+              quantity: 1
+              destinationPostalCode: "43215"
+      responses:
+        "200":
+          description: Customer-safe UPS eligibility or status response. Use answer exactly.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - success
+                  - status
+                  - eligible
+                  - productCode
+                  - quantity
+                  - destinationPostalCode
+                  - origin
+                  - answer
+                properties:
+                  success:
+                    type: boolean
+                  status:
+                    type: string
+                    enum:
+                      - eligible
+                      - needs_review
+                      - not_eligible
+                      - temporarily_unavailable
+                  eligible:
+                    type: boolean
+                    nullable: true
+                  productId:
+                    type: string
+                  productCode:
+                    type: string
+                  quantity:
+                    type: integer
+                  destinationPostalCode:
+                    type: string
+                  origin:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      name:
+                        type: string
+                      city:
+                        type: string
+                      state:
+                        type: string
+                      postalCode:
+                        type: string
+                      country:
+                        type: string
+                  lowestRate:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      serviceCode:
+                        type: string
+                      serviceName:
+                        type: string
+                      amount:
+                        type: number
+                      currency:
+                        type: string
+                  answer:
+                    type: string
+                    description: Customer-ready response. Reply with this field exactly.
+        "400":
+          description: Missing or invalid product code, quantity, or destination ZIP.
+        "405":
+          description: Method not allowed.
+        "429":
+          description: Too many checks in a short period.
+        "500":
+          description: Temporary service error; do not claim the product cannot ship.
