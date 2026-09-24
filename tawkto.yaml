@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
-  title: Woodson Customer-Safe Product Search
-  version: 11.0.0
-  description: Search the current Woodson Lumber & Hardware online catalog and verified WebTrack product groups. This API exposes customer-facing product data only and never exposes cost, margin, markup, profit, supplier, vendor, or advertising-economics data.
+  title: Woodson Customer-Safe Product and Shipping Tools
+  version: 12.0.0
+  description: Search the current Woodson Lumber & Hardware online catalog, browse verified WebTrack product groups, and check UPS shipping for one exact product. This API exposes customer-facing data only and never exposes cost, margin, markup, profit, supplier, vendor, package dimensions, or advertising-economics data.
 
 servers:
   - url: https://wl-upsrates.vercel.app
@@ -185,3 +185,156 @@ paths:
                           type: string
                         groupUrl:
                           type: string
+
+  /api/ai-shipping-check:
+    post:
+      operationId: checkProductShipping
+      summary: Check UPS shipping for one exact Woodson product and destination ZIP
+      description: >
+        Use this tool when a visitor asks whether one exact, verified Woodson product
+        can ship by UPS or asks for its UPS shipping rate. First resolve the product
+        with searchProducts. Call this operation only after one exact product remains,
+        and copy its productCode and productId exactly from the searchProducts result.
+        Never guess or alter either identifier.
+
+        Ask only for the quantity and destination ZIP code when they are missing.
+        Never request a full street address, phone number, email address, payment
+        information, or other contact details for this check. The server always uses
+        Woodson's Caldwell store, ZIP 77836, as the default ship-from origin and uses
+        the same trusted product-package and UPS rating logic as checkout.
+
+        Reply with the answer field exactly. eligible=true means UPS returned a
+        customer rate for that exact product, quantity, and ZIP. status=needs_review
+        does not prove the product cannot ship; it means a Woodson team member must
+        verify its shipping configuration or arrange delivery/freight.
+        status=not_eligible means UPS small-package service is unavailable for the
+        checked item, quantity, and ZIP, but Woodson delivery or freight may still
+        be possible. If
+        status=temporarily_unavailable, say only that the check could not be completed
+        and never describe the item as unshippable. Never reveal or infer package
+        dimensions, weights, cost, margin, markup, profit, supplier information, UPS
+        credentials, shipping-policy economics, or other internal configuration.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - productCode
+                - quantity
+                - destinationPostalCode
+              properties:
+                productCode:
+                  type: string
+                  maxLength: 80
+                  description: Copy the exact productCode returned for the one selected product by searchProducts.
+                productId:
+                  type: string
+                  maxLength: 40
+                  description: Copy the exact productId returned by searchProducts when it is available.
+                quantity:
+                  type: integer
+                  minimum: 1
+                  maximum: 25
+                  description: Exact quantity the visitor wants to ship.
+                destinationPostalCode:
+                  type: string
+                  pattern: '^\d{5}(?:-\d{4})?$'
+                  description: Customer-provided US destination ZIP code. Do not request a street address.
+            examples:
+              oneItem:
+                summary: Check one exact product to a US ZIP
+                value:
+                  productCode: 2904-22
+                  productId: "221283"
+                  quantity: 1
+                  destinationPostalCode: "43215"
+      responses:
+        "200":
+          description: Customer-safe UPS eligibility or temporary-status response. Use answer exactly.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - success
+                  - eligible
+                  - status
+                  - productCode
+                  - quantity
+                  - destinationPostalCode
+                  - origin
+                  - answer
+                properties:
+                  success:
+                    type: boolean
+                  eligible:
+                    type: boolean
+                    nullable: true
+                    description: True only when a current UPS rate was returned; null when the service could not determine eligibility.
+                  status:
+                    type: string
+                    enum:
+                      - eligible
+                      - not_eligible
+                      - needs_review
+                      - temporarily_unavailable
+                  productId:
+                    type: string
+                  productCode:
+                    type: string
+                  quantity:
+                    type: integer
+                  destinationPostalCode:
+                    type: string
+                  origin:
+                    type: object
+                    additionalProperties: false
+                    properties:
+                      name:
+                        type: string
+                      city:
+                        type: string
+                      state:
+                        type: string
+                      postalCode:
+                        type: string
+                      country:
+                        type: string
+                  reasonCodes:
+                    type: array
+                    items:
+                      type: string
+                  lowestRate:
+                    $ref: '#/components/schemas/PublicShippingRate'
+                  rates:
+                    type: array
+                    maxItems: 8
+                    items:
+                      $ref: '#/components/schemas/PublicShippingRate'
+                  quoteExpiresAt:
+                    type: string
+                  answer:
+                    type: string
+                    description: Customer-ready response. Use this exactly and do not add shipping assumptions.
+        "400":
+          description: The exact product, quantity, or destination ZIP is missing or invalid.
+        "429":
+          description: Too many shipping checks were requested in a short period.
+
+components:
+  schemas:
+    PublicShippingRate:
+      type: object
+      additionalProperties: false
+      properties:
+        serviceCode:
+          type: string
+        serviceName:
+          type: string
+        amount:
+          type: number
+        currency:
+          type: string

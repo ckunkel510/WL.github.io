@@ -8,8 +8,72 @@ const assist = require(path.join(root, "tawk-commerce-assist.js"));
 
 test("header loads the tawk commerce bridge from the Woodson-hosted runtime", () => {
   const header = fs.readFileSync(path.join(root, "headermodern.js"), "utf8");
-  assert.match(header, /WL\.github\.io\/wl-chat\.js\?v=20260723-6/);
+  assert.match(header, /WL\.github\.io\/wl-chat\.js\?v=20260924-1/);
   assert.match(header, /data-wl-tawk-commerce-assist/);
+});
+
+test("shares a privacy-bounded current page and exact product context with human agents", () => {
+  const productDocument = {
+    title: "Milwaukee M18 Fuel Hammer Drill | Woodson Lumber",
+    querySelector(selector) {
+      if (selector === "h1") return { textContent: "Milwaukee M18 Fuel Hammer Drill" };
+      return null;
+    }
+  };
+  const attributes = assist.currentPageAttributes({
+    location: {
+      href: "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=221283&utm_source=private",
+      origin: "https://webtrack.woodsonlumber.com"
+    }
+  }, productDocument);
+
+  assert.deepEqual(attributes, {
+    "current-page-url": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=221283",
+    "current-page-title": "Milwaukee M18 Fuel Hammer Drill | Woodson Lumber",
+    "current-product-id": "221283",
+    "current-product-name": "Milwaukee M18 Fuel Hammer Drill"
+  });
+  assert.doesNotMatch(attributes["current-page-url"], /utm_source/);
+});
+
+test("removes account and search query data before sharing page context", () => {
+  assert.equal(
+    assist.safeCurrentPageUrl({
+      location: {
+        href: "https://webtrack.woodsonlumber.com/AccountInfo_R.aspx?email=customer%40example.com&token=secret"
+      }
+    }),
+    "https://webtrack.woodsonlumber.com/AccountInfo_R.aspx"
+  );
+  assert.equal(
+    assist.safeCurrentPageUrl({
+      location: {
+        href: "https://webtrack.woodsonlumber.com/Products.aspx?pg=4402&pl1=4402&searchText=customer%40example.com"
+      }
+    }),
+    "https://webtrack.woodsonlumber.com/Products.aspx?pg=4402&pl1=4402"
+  );
+});
+
+test("writes current page attributes when tawk is ready", () => {
+  let received = null;
+  const tawk = {
+    setAttributes(attributes, callback) {
+      received = attributes;
+      callback(null);
+    }
+  };
+  const synced = assist.syncTawkPageContext(tawk, {
+    location: {
+      href: "https://webtrack.woodsonlumber.com/ShoppingCart.aspx?session=private"
+    }
+  }, { title: "Shopping Cart", querySelector() { return null; } });
+
+  assert.equal(synced, true);
+  assert.deepEqual(received, {
+    "current-page-url": "https://webtrack.woodsonlumber.com/ShoppingCart.aspx",
+    "current-page-title": "Shopping Cart"
+  });
 });
 
 test("reads current tawk message-object and legacy string payloads", () => {
