@@ -357,7 +357,7 @@ function formatSearchResponse(query, ranked) {
       ? "This is the best match I found:"
       : "These are the closest matches I found, with the most relevant first:",
     ...results.map(resultLine),
-    "Online prices and availability can change; a Woodson team member can confirm before you make the trip."
+    "Prices shown are Woodson's current published online prices. Branch inventory is confirmed separately."
   ].join("\n");
   return { success: true, hasResults: true, matchType, query, answer, results };
 }
@@ -404,7 +404,7 @@ function formatProductActionResponse(query, ranked, action) {
   const answer = [
     introduction,
     resultLine(result, 0),
-    "Online prices and availability can change; a Woodson team member can confirm before you make the trip."
+    "Prices shown are Woodson's current published online prices. Branch inventory is confirmed separately."
   ].join("\n");
 
   return {

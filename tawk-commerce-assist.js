@@ -12,7 +12,7 @@
   if (window.WLTawkCommerceAssist || document.querySelector("script[data-wl-chat-runtime]")) return;
 
   var script = document.createElement("script");
-  script.src = "https://ckunkel510.github.io/WL.github.io/wl-chat.js?v=20260723-6";
+  script.src = "https://ckunkel510.github.io/WL.github.io/wl-chat.js?v=20260924-1";
   script.async = true;
   script.setAttribute("data-wl-chat-runtime", "true");
   document.head.appendChild(script);

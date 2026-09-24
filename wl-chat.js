@@ -22,7 +22,7 @@
 })(function () {
   "use strict";
 
-  var VERSION = "1.3.1";
+  var VERSION = "1.4.0";
   var WEBTRACK_ORIGIN = "https://webtrack.woodsonlumber.com";
   var PRODUCT_SEARCH_API = "https://wl-upsrates.vercel.app/api/ai-product-search";
   var INTENT_KEY = "wl_tawk_commerce_intent_v1";
@@ -317,6 +317,65 @@
       if (text && !/^products?\s*\|\s*woodson lumber$/i.test(text)) return text.slice(0, 140);
     }
     return "Product " + pid;
+  }
+
+  function safeCurrentPageUrl(win) {
+    if (!win || !win.location) return "";
+    try {
+      var current = new URL(String(win.location.href || ""), WEBTRACK_ORIGIN);
+      if (current.origin !== WEBTRACK_ORIGIN) return "";
+      var safe = new URL(current.pathname || "/", WEBTRACK_ORIGIN);
+      var path = safe.pathname.toLowerCase();
+      var allowedKeys = path === "/productdetail.aspx"
+        ? ["pid"]
+        : path === "/products.aspx"
+          ? ["pg", "pl1"]
+          : [];
+      allowedKeys.forEach(function (key) {
+        var value = String(current.searchParams.get(key) || "").trim();
+        if (/^\d{1,12}$/.test(value)) safe.searchParams.set(key, value);
+      });
+      return safe.toString().slice(0, 255);
+    } catch (error) {
+      return "";
+    }
+  }
+
+  function pageTitleFromDocument(doc) {
+    var title = String((doc && doc.title) || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    return title.slice(0, 255);
+  }
+
+  function currentPageAttributes(win, doc) {
+    var pageUrl = safeCurrentPageUrl(win);
+    if (!pageUrl) return {};
+    var attributes = {
+      "current-page-url": pageUrl
+    };
+    var pageTitle = pageTitleFromDocument(doc);
+    if (pageTitle) attributes["current-page-title"] = pageTitle;
+
+    var currentProduct = safeProductUrl(pageUrl);
+    if (currentProduct) {
+      attributes["current-product-id"] = currentProduct.pid;
+      var productName = productNameFromDocument(doc, currentProduct.pid);
+      if (productName) attributes["current-product-name"] = productName.slice(0, 255);
+    }
+    return attributes;
+  }
+
+  function syncTawkPageContext(tawk, win, doc) {
+    if (!tawk || typeof tawk.setAttributes !== "function") return false;
+    var attributes = currentPageAttributes(win, doc);
+    if (!Object.keys(attributes).length) return false;
+    try {
+      tawk.setAttributes(attributes, function () {});
+      return true;
+    } catch (error) {
+      return false;
+    }
   }
 
   function cartStateFromDocument(doc, pid) {
@@ -788,6 +847,13 @@
     win.__WL_TAWK_COMMERCE_ASSIST_BOOTED__ = true;
 
     var tawk = win.Tawk_API = win.Tawk_API || {};
+    var syncPageContext = function () {
+      syncTawkPageContext(tawk, win, doc);
+    };
+
+    chainCallback(tawk, "onLoad", syncPageContext);
+    chainCallback(tawk, "onChatStarted", syncPageContext);
+    syncPageContext();
 
     chainCallback(tawk, "onChatMessageVisitor", function (payload) {
       var intent = detectIntent(payload);
@@ -851,6 +917,7 @@
     canUseRememberedProduct: canUseRememberedProduct,
     cartStateFromDocument: cartStateFromDocument,
     clearProductPreview: clearProductPreview,
+    currentPageAttributes: currentPageAttributes,
     detectIntent: detectIntent,
     extractPostbackTarget: extractPostbackTarget,
     extractQuantity: extractQuantity,
@@ -864,8 +931,10 @@
     readFreshProduct: readFreshProduct,
     rememberProduct: rememberProduct,
     safeImageUrl: safeImageUrl,
+    safeCurrentPageUrl: safeCurrentPageUrl,
     safeProductUrl: safeProductUrl,
     showProductPreview: showProductPreview,
+    syncTawkPageContext: syncTawkPageContext,
     init: init
   };
 });

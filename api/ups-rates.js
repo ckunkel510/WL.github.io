@@ -348,4 +348,4 @@ async function handler(req, res) {
 
 module.exports = handler;
 module.exports._test = { buildRateRequest, normalizeAddress, normalizePackages, normalizedRates };
-module.exports._internal = { RequestError, requestRates };
+module.exports._internal = { RequestError, enforceRateLimit, requestRates };
