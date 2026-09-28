@@ -4,12 +4,10 @@
   if (!/ShoppingCart\.aspx/i.test(window.location.pathname)) return;
 
   const CART_SIGNATURE_KEY = 'wl_cart_signature_v1';
-  const SHIPPING_QUOTE_KEY = 'wl_shipping_quote_v1';
   const AUTO_ADVANCE_KEY = 'wl_checkout_auto_advance';
   const CART_SUBTOTAL_KEY = 'wl_cart_subtotal_v1';
   const CUT_SELECTION_KEY = 'wl_cut_to_ship_v1';
-  const QUOTE_TTL_MS = 4 * 60 * 60 * 1000;
-  const UPS_RATE_URL = 'https://wl-upsrates.vercel.app/api/ups-rates';
+  const FULFILLMENT_QUOTE_URL = 'https://wl-upsrates.vercel.app/api/fulfillment-quote';
   const SHIPPING_OFFER_VERSION = '20260917-custom-cuts-3';
   const SHIPPING_OFFER_SCRIPT_URL = 'https://ckunkel510.github.io/WL.github.io/UpsShippingOffer.js?v=' + SHIPPING_OFFER_VERSION;
   let checkoutBlockReason = '';
@@ -139,17 +137,6 @@
     try { sessionStorage.setItem(CART_SIGNATURE_KEY, signature); } catch {}
   }
 
-  function readQuotedShipping(signature) {
-    try {
-      const quote = JSON.parse(localStorage.getItem(SHIPPING_QUOTE_KEY) || 'null');
-      if (!quote || !['local-delivery', 'ups'].includes(quote.kind) || quote.signature !== signature || !quote.amount) return null;
-      if ((Date.now() - Number(quote.ts || 0)) > QUOTE_TTL_MS) return null;
-      return quote;
-    } catch {
-      return null;
-    }
-  }
-
   function injectStyles() {
     if (document.getElementById('wl-cart-shipping-css')) return;
     const style = document.createElement('style');
@@ -240,57 +227,6 @@
     }
   }
 
-  async function getProductData() {
-    try {
-      const response = await fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vSg6EOqMwc_5UjWU7ycyvF-rgj717p-WjV2Vhydcb7uc2Mf2Awj6GehQp66AHwViq4uX6mXXrtZZR-1/pub?output=csv');
-      if (!response.ok) return [];
-      const rows = parseCsv(await response.text());
-      const headers = rows.shift() || [];
-      return rows.map(function (row) {
-        return Object.fromEntries(row.map(function (cell, index) { return [text(headers[index]), cell]; }));
-      });
-    } catch (error) {
-      console.warn('[WLCart] Could not read product shipping dimensions.', error);
-      return [];
-    }
-  }
-
-  function parseCsv(source) {
-    const rows = [];
-    let row = [];
-    let cell = '';
-    let inQuotes = false;
-    const textValue = String(source || '');
-    for (let index = 0; index < textValue.length; index += 1) {
-      const char = textValue[index];
-      const next = textValue[index + 1];
-      if (char === '"' && inQuotes && next === '"') {
-        cell += '"';
-        index += 1;
-      } else if (char === '"') {
-        inQuotes = !inQuotes;
-      } else if (char === ',' && !inQuotes) {
-        row.push(cell);
-        cell = '';
-      } else if ((char === '\n' || char === '\r') && !inQuotes) {
-        if (char === '\r' && next === '\n') index += 1;
-        row.push(cell);
-        if (row.some(function (value) { return value !== ''; })) rows.push(row);
-        row = [];
-        cell = '';
-      } else {
-        cell += char;
-      }
-    }
-    row.push(cell);
-    if (row.some(function (value) { return value !== ''; })) rows.push(row);
-    return rows;
-  }
-
-  function isWithinCentralDeliveryZone(zip) {
-    return ['77833', '77836', '78947', '77803', '76667', '76642', '75831'].includes(zip);
-  }
-
   function getSelectedStoreOrigin() {
     const locationText = text(Array.from(document.querySelectorAll('a[href]')).filter(function (link) {
       const href = String(link.getAttribute('href') || '').toLowerCase();
@@ -302,53 +238,70 @@
     return key ? STORE_ORIGINS[key] : null;
   }
 
-  function buildUpsPackage(items, productData) {
-    const byCode = new Map();
-    const byId = new Map();
+  function estimateFromFulfillmentQuote(result, userAddress, origin) {
+    const options = result?.options || {};
+    const recommendation = result?.recommendation || {};
+    const recommendedOption = recommendation.mode === 'ship'
+      ? options.ups
+      : recommendation.mode === 'delivery'
+        ? options.delivery
+        : null;
+    const option = recommendedOption?.available
+      ? recommendedOption
+      : options.ups?.available
+        ? options.ups
+        : options.delivery?.available
+          ? options.delivery
+          : null;
 
-    (productData || []).forEach(function (product) {
-      const code = normalizeProductCode(product.ProductCode);
-      const id = text(product.ProductID || product.ProductId || product.productId || product.id);
-      if (code) byCode.set(code, product);
-      if (id) byId.set(id, product);
-    });
-
-    let totalWeight = 0;
-    let containsLargeItems = false;
-    const unavailableItems = [];
-
-    for (const item of items) {
-      const product = byId.get(text(item.productId)) ||
-        byCode.get(normalizeProductCode(item.productCode || item.code));
-      const weight = Number(product?.Weight);
-      const dimensions = [Number(product?.Length), Number(product?.Width), Number(product?.Height || product?.Thickness)];
-      if (!product || !Number.isFinite(weight) || weight <= 0 || dimensions.some(function (value) {
-        return !Number.isFinite(value) || value <= 0;
-      })) {
-        unavailableItems.push(normalizeProductCode(item.productCode || item.code) || (item.productId ? 'Item ' + item.productId : 'Cart item'));
-        continue;
-      }
-      containsLargeItems = containsLargeItems || weight > 35 || dimensions.some(function (value) { return value > 36; });
-      totalWeight += weight * item.quantity;
+    if (option) {
+      const isUps = option === options.ups || option.mode === 'ship';
+      const amount = Number(option.amount);
+      return {
+        label: option.serviceName || (isUps ? 'UPS shipping' : 'Woodson Local Delivery'),
+        amount: Number.isFinite(amount) ? '$' + amount.toFixed(2) : 'Calculated at checkout',
+        note: isUps
+          ? 'Estimated from ' + origin.name + ' to ZIP ' + userAddress.zip + ' using the current UPS Ground rate. Final rate is confirmed before payment.'
+          : 'Current Woodson delivery estimate for ZIP ' + userAddress.zip + '. Final charge is confirmed before payment.'
+      };
     }
 
+    const issues = Array.isArray(result?.shippingIssues) ? result.shippingIssues : [];
+    if (issues.length) {
+      const issue = shippingIssueBlock(issues, []);
+      return {
+        label: 'UPS shipping',
+        amount: 'Not available online',
+        note: issue,
+        blockCheckout: true,
+        blockMessage: issue + ' Update the item, choose pickup, or contact Woodson for help.'
+      };
+    }
+
+    const reason = recommendation.label || 'Freight quote required';
     return {
-      unavailable: !items.length || unavailableItems.length > 0 || totalWeight <= 0,
-      unavailableItems: unavailableItems,
-      containsLargeItems: containsLargeItems,
-      totalWeight: totalWeight
+      label: 'Delivery',
+      amount: reason,
+      note: 'This order needs a manual freight review. Pickup is still available; contact Woodson for delivery help.',
+      blockCheckout: true,
+      blockMessage: 'This order needs a manual freight review. Contact Woodson for delivery help or choose pickup.'
     };
   }
 
-  async function getUpsEstimate(userAddress, items) {
+  async function getFulfillmentEstimate(userAddress, items) {
     const origin = getSelectedStoreOrigin();
     if (!origin) throw new Error('The selected store could not be determined.');
-    const response = await fetch(UPS_RATE_URL, {
+    const response = await fetch(FULFILLMENT_QUOTE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         shipFrom: origin,
-        shipTo: { postalCode: userAddress.zip, country: 'US', residential: true },
+        shipTo: {
+          postalCode: userAddress.zip,
+          state: userAddress.isTexas ? 'TX' : '',
+          country: 'US',
+          residential: true
+        },
         cart: items.map(function (item) {
           return {
             productId: item.productId,
@@ -361,22 +314,11 @@
     });
     const result = await response.json().catch(function () { return {}; });
     if (!response.ok) {
-      const error = new Error(result.error || 'UPS could not calculate a rate.');
+      const error = new Error(result.error || 'Fulfillment could not be calculated.');
       error.shippingIssues = Array.isArray(result.shippingIssues) ? result.shippingIssues : [];
       throw error;
     }
-    const rate = (result.rates || []).find(function (candidate) {
-      return candidate.serviceCode === '03';
-    }) || (result.rates || [])[0];
-    if (!rate || !Number.isFinite(Number(rate.amount))) throw new Error('UPS returned no eligible services.');
-    const offer = result.shippingOffer || null;
-    return {
-      label: rate.serviceName || 'UPS shipping',
-      amount: '$' + Number(rate.amount).toFixed(2),
-      note: offer && (offer.mode === 'reduced' || offer.mode === 'minimum')
-        ? 'This cart currently qualifies for $' + Number(offer.customerGroundAmount || rate.amount).toFixed(2) + ' UPS Ground to ZIP ' + userAddress.zip + '. Final eligibility is confirmed at checkout.'
-        : 'Estimated from ' + origin.name + ' to ZIP ' + userAddress.zip + ' using the current UPS Ground return. Final rate is confirmed before payment.'
-    };
+    return estimateFromFulfillmentQuote(result, userAddress, origin);
   }
 
   function shippingIssueBlock(issues, fallbackItems) {
@@ -399,10 +341,8 @@
     return Number(String(amount).replace(/[^0-9.]/g, '')) || 0;
   }
 
-  async function calculateEstimate(signature) {
-    const results = await Promise.all([getUserAddress(), getProductData()]);
-    const userAddress = results[0];
-    const productData = results[1];
+  async function calculateEstimate() {
+    const userAddress = await getUserAddress();
     const items = getCartItems();
 
     if (!userAddress) {
@@ -413,108 +353,26 @@
       };
     }
 
-    const quoted = readQuotedShipping(signature);
-    const quoteMatchesAddress = quoted && (
-      (userAddress.isTexas && quoted.kind === 'local-delivery') ||
-      (!userAddress.isTexas && quoted.kind === 'ups' && quoted.postalCode === userAddress.zip)
-    );
-    if (quoteMatchesAddress) {
-      return {
-        label: quoted.label || (quoted.kind === 'ups' ? 'UPS shipping' : 'Estimated delivery'),
-        amount: quoted.amount,
-        note: 'Based on WebTrack\'s latest quote for these cart items. Final charge is confirmed before payment.'
-      };
-    }
-
-    const packageInfo = buildUpsPackage(items, productData);
-    const hasCutToShip = items.some(function (item) { return !!item.cutToShip; });
-
-    if (!userAddress.isTexas) {
-      if (hasCutToShip) {
-        try {
-          return await getUpsEstimate(userAddress, items);
-        } catch (error) {
-          console.warn('[WLCart] Could not calculate the cut-to-ship UPS estimate.', error);
-          if (Array.isArray(error.shippingIssues) && error.shippingIssues.length) {
-            const issue = shippingIssueBlock(error.shippingIssues, []);
-            return {
-              label: 'UPS shipping',
-              amount: 'Not available online',
-              note: issue,
-              blockCheckout: true,
-              blockMessage: issue + ' Update the option, choose pickup, or contact Woodson for help.'
-            };
-          }
-        }
-      }
-      if (packageInfo.containsLargeItems) {
+    try {
+      return await getFulfillmentEstimate(userAddress, items);
+    } catch (error) {
+      console.warn('[WLCart] Could not calculate the current fulfillment estimate.', error);
+      if (Array.isArray(error.shippingIssues) && error.shippingIssues.length) {
+        const issue = shippingIssueBlock(error.shippingIssues, []);
         return {
-          label: 'UPS shipping',
-          amount: 'Not available online',
-          note: 'One or more oversized items require a custom shipping review.',
-          blockCheckout: true,
-          blockMessage: 'This saved address is outside Texas, and one or more oversized items cannot ship UPS online. Please remove those items, choose pickup, or contact Woodson for freight help.'
-        };
-      }
-      if (packageInfo.unavailable) {
-        const issue = shippingIssueBlock([], packageInfo.unavailableItems);
-        return {
-          label: 'UPS shipping',
+          label: 'Estimated delivery',
           amount: 'Not available online',
           note: issue,
           blockCheckout: true,
-          blockMessage: issue + ' Remove the item, choose pickup, or contact Woodson for help.'
+          blockMessage: issue + ' Update the item, choose pickup, or contact Woodson for help.'
         };
       }
-      try {
-        return await getUpsEstimate(userAddress, items);
-      } catch (error) {
-        console.warn('[WLCart] Could not calculate the UPS cart estimate.', error);
-        if (Array.isArray(error.shippingIssues) && error.shippingIssues.length) {
-          const issue = shippingIssueBlock(error.shippingIssues, []);
-          return {
-            label: 'UPS shipping',
-            amount: 'Not available online',
-            note: issue,
-            blockCheckout: true,
-            blockMessage: issue + ' Remove the item, choose pickup, or contact Woodson for help.'
-          };
-        }
-        return {
-          label: 'UPS shipping',
-          amount: 'Calculated at checkout',
-          note: 'The final UPS service and rate will be shown before payment.'
-        };
-      }
-    }
-
-    if (hasCutToShip || (!packageInfo.unavailable && !packageInfo.containsLargeItems)) {
-      try {
-        // Register the same destination-specific UPS decision for customers who
-        // later choose the shipping path instead of Woodson local delivery.
-        await getUpsEstimate(userAddress, items);
-      } catch (error) {
-        console.warn('[WLCart] Could not prepare the UPS checkout offer.', error);
-      }
-    }
-
-    if (!isWithinCentralDeliveryZone(userAddress.zip)) {
       return {
         label: 'Estimated delivery',
-        amount: packageInfo.containsLargeItems ? 'Address review needed' : 'Calculated at checkout',
-        note: packageInfo.containsLargeItems
-          ? 'Some oversized items may require another address or a custom freight quote.'
-          : 'Ground freight is confirmed after your delivery address.'
+        amount: 'Calculated at checkout',
+        note: 'The live fulfillment service is temporarily unavailable. The current options and rate will be checked again before payment.'
       };
     }
-
-    return {
-      label: 'Local delivery',
-      amount: 'Calculated at checkout',
-      note: packageInfo.containsLargeItems
-        ? 'WebTrack will calculate the exact charge after confirming the delivery address and oversized items.'
-        : 'WebTrack will calculate the exact Woodson delivery charge after confirming the delivery address.'
-    };
   }
 
   function isSignedIn() {
@@ -635,6 +493,6 @@
     try { sessionStorage.setItem(CART_SUBTOTAL_KEY, cartSubtotal().toFixed(2)); } catch {}
     bindCheckoutHandoff(signature);
     renderChecking();
-    renderEstimate(await calculateEstimate(signature));
+    renderEstimate(await calculateEstimate());
   });
 })();
