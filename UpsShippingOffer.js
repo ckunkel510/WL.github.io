@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var BUILD_VERSION = "20260917-custom-cuts-3";
+  var BUILD_VERSION = "20260928-unified-quote-1";
   var RATE_URL = "https://wl-upsrates.vercel.app/api/fulfillment-quote";
   var APPROVAL_URL = "https://wl-upsrates.vercel.app/api/customization-approval";
   var CUT_POLICY_URL = "https://ckunkel510.github.io/WL.github.io/data/cut-to-ship-products.json?v=20260917-2";
@@ -344,7 +344,9 @@
     }).map(function (link) { return link.textContent; }).join(" ")).toLowerCase();
     var key = Object.keys(STORE_ORIGINS).find(function (name) { return locationText.indexOf(name) !== -1; });
     var origin = key ? STORE_ORIGINS[key] : null;
-    return origin || (storedCartData() && storedCartData().origin) || null;
+    // Customers can reach the cart before choosing a pickup location. Caldwell
+    // is the established Woodson origin for unassigned online UPS checks.
+    return origin || (storedCartData() && storedCartData().origin) || STORE_ORIGINS.caldwell;
   }
 
   function checkoutZip() {
