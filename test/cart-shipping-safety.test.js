@@ -117,6 +117,43 @@ test("checkout uses the unified fulfillment quote to show and recommend UPS or W
   assert.match(checkout, /await window\.WLShippingOffer\.select\(mode\)/);
 });
 
+test("cart uses the current unified fulfillment quote instead of the legacy dimensions sheet", () => {
+  const cart = source("WoodsonShoppingCart.js");
+  const estimateFromFulfillmentQuote = extractedFunction(cart, "estimateFromFulfillmentQuote", {
+    shippingIssueBlock: () => "12024 package information needs review."
+  });
+
+  assert.match(cart, /api\/fulfillment-quote/);
+  assert.doesNotMatch(cart, /2PACX-1vSg6EOqMwc_5UjWU7ycyvF-rgj717p/);
+  assert.doesNotMatch(cart, /function getProductData/);
+  assert.doesNotMatch(cart, /function buildUpsPackage/);
+  assert.doesNotMatch(cart, /api\/ups-rates/);
+
+  assert.deepEqual(estimateFromFulfillmentQuote({
+    recommendation: { mode: "ship", label: "Ship via UPS" },
+    options: {
+      ups: { available: true, mode: "ship", serviceName: "UPS Ground", amount: 12.34 },
+      delivery: { available: false, reason: "outside-texas" }
+    },
+    shippingIssues: []
+  }, { zip: "22030", isTexas: false }, { name: "Caldwell" }), {
+    label: "UPS Ground",
+    amount: "$12.34",
+    note: "Estimated from Caldwell to ZIP 22030 using the current UPS Ground rate. Final rate is confirmed before payment."
+  });
+
+  const blocked = estimateFromFulfillmentQuote({
+    recommendation: { mode: "manual", label: "Freight quote required" },
+    options: {
+      ups: { available: false, reason: "shipping-items-unavailable" },
+      delivery: { available: false, reason: "outside-texas" }
+    },
+    shippingIssues: [{ productCode: "12024", reason: "missing-dimensions" }]
+  }, { zip: "22030", isTexas: false }, { name: "Caldwell" });
+  assert.equal(blocked.blockCheckout, true);
+  assert.match(blocked.blockMessage, /12024 package information needs review/);
+});
+
 test("checkout sends USPS state codes and distinguishes address failures from item failures", () => {
   const offer = source("UpsShippingOffer.js");
   const checkout = source("Checkout2.js");
@@ -224,7 +261,7 @@ test("every UPS path enforces the $9.95 floor after subsidies and promotions", (
 test("cart UPS requests no longer send browser-controlled promotion eligibility", () => {
   const cart = source("WoodsonShoppingCart.js");
   assert.doesNotMatch(cart, /promo:\s*promo/);
-  assert.match(cart, /shippingOffer/);
+  assert.match(cart, /api\/fulfillment-quote/);
   assert.match(cart, /UpsShippingOffer\.js/);
 });
 
