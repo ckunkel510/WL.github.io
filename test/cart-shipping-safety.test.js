@@ -161,8 +161,9 @@ test("cart keeps its compact shipping line and desktop Delete action on one line
   assert.match(cart, /label: 'Shipping from'/);
   assert.match(cart, /if \(note\.textContent\) panel\.appendChild\(note\)/);
   assert.doesNotMatch(cart, /Estimated from .*using the current UPS Ground rate/);
+  assert.match(row, /\.cart-item-card \.action-block\{display:flex!important;[^}]*gap:8px/);
   assert.match(row, /\.cart-item-card \.delete-link\{[^}]*white-space:nowrap!important/);
-  assert.match(row, /\.cart-item-card \.sfl-placeholder \.sfl-button\{margin-left:0!important/);
+  assert.match(row, /\.cart-item-card \.sfl-placeholder \.sfl-button\{white-space:nowrap!important;[^}]*margin-left:0!important/);
 });
 
 test("checkout sends USPS state codes and distinguishes address failures from item failures", () => {
