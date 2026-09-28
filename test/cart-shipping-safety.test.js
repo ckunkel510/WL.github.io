@@ -137,9 +137,9 @@ test("cart uses the current unified fulfillment quote instead of the legacy dime
     },
     shippingIssues: []
   }, { zip: "22030", isTexas: false }, { name: "Caldwell" }), {
-    label: "UPS Ground",
+    label: "Shipping from",
     amount: "$12.34",
-    note: "Estimated from Caldwell to ZIP 22030 using the current UPS Ground rate. Final rate is confirmed before payment."
+    note: ""
   });
 
   const blocked = estimateFromFulfillmentQuote({
@@ -152,6 +152,17 @@ test("cart uses the current unified fulfillment quote instead of the legacy dime
   }, { zip: "22030", isTexas: false }, { name: "Caldwell" });
   assert.equal(blocked.blockCheckout, true);
   assert.match(blocked.blockMessage, /12024 package information needs review/);
+});
+
+test("cart keeps its compact shipping line and desktop Delete action on one line", () => {
+  const cart = source("WoodsonShoppingCart.js");
+  const row = source("ShoppingCartRow.js");
+
+  assert.match(cart, /label: 'Shipping from'/);
+  assert.match(cart, /if \(note\.textContent\) panel\.appendChild\(note\)/);
+  assert.doesNotMatch(cart, /Estimated from .*using the current UPS Ground rate/);
+  assert.match(row, /\.cart-item-card \.delete-link\{[^}]*white-space:nowrap!important/);
+  assert.match(row, /\.cart-item-card \.sfl-placeholder \.sfl-button\{margin-left:0!important/);
 });
 
 test("checkout sends USPS state codes and distinguishes address failures from item failures", () => {

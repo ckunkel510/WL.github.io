@@ -185,9 +185,10 @@
 
       const note = document.createElement('div');
       note.className = 'wl-cart-shipping-note';
-      note.textContent = result.note || 'Final delivery charge is confirmed before payment.';
+      note.textContent = result.note || '';
 
-      panel.append(pickup, delivery, note);
+      panel.append(pickup, delivery);
+      if (note.textContent) panel.appendChild(note);
       if (result.blockCheckout) {
         const block = document.createElement('div');
         block.className = 'wl-cart-shipping-block';
@@ -240,7 +241,7 @@
     return key ? STORE_ORIGINS[key] : STORE_ORIGINS.caldwell;
   }
 
-  function estimateFromFulfillmentQuote(result, userAddress, origin) {
+  function estimateFromFulfillmentQuote(result) {
     const options = result?.options || {};
     const recommendation = result?.recommendation || {};
     const recommendedOption = recommendation.mode === 'ship'
@@ -257,14 +258,11 @@
           : null;
 
     if (option) {
-      const isUps = option === options.ups || option.mode === 'ship';
       const amount = Number(option.amount);
       return {
-        label: option.serviceName || (isUps ? 'UPS shipping' : 'Woodson Local Delivery'),
+        label: 'Shipping from',
         amount: Number.isFinite(amount) ? '$' + amount.toFixed(2) : 'Calculated at checkout',
-        note: isUps
-          ? 'Estimated from ' + origin.name + ' to ZIP ' + userAddress.zip + ' using the current UPS Ground rate. Final rate is confirmed before payment.'
-          : 'Current Woodson delivery estimate for ZIP ' + userAddress.zip + '. Final charge is confirmed before payment.'
+        note: ''
       };
     }
 
@@ -320,7 +318,7 @@
       error.shippingIssues = Array.isArray(result.shippingIssues) ? result.shippingIssues : [];
       throw error;
     }
-    return estimateFromFulfillmentQuote(result, userAddress, origin);
+    return estimateFromFulfillmentQuote(result);
   }
 
   function shippingIssueBlock(issues, fallbackItems) {
