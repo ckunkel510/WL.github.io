@@ -8,7 +8,7 @@
   const CART_SUBTOTAL_KEY = 'wl_cart_subtotal_v1';
   const CUT_SELECTION_KEY = 'wl_cut_to_ship_v1';
   const FULFILLMENT_QUOTE_URL = 'https://wl-upsrates.vercel.app/api/fulfillment-quote';
-  const SHIPPING_OFFER_VERSION = '20260917-custom-cuts-3';
+  const SHIPPING_OFFER_VERSION = '20260928-unified-quote-1';
   const SHIPPING_OFFER_SCRIPT_URL = 'https://ckunkel510.github.io/WL.github.io/UpsShippingOffer.js?v=' + SHIPPING_OFFER_VERSION;
   let checkoutBlockReason = '';
   const STORE_ORIGINS = {
@@ -235,7 +235,9 @@
     const key = Object.keys(STORE_ORIGINS).find(function (storeName) {
       return locationText.includes(storeName);
     });
-    return key ? STORE_ORIGINS[key] : null;
+    // Customers can reach the cart before choosing a pickup location. Caldwell
+    // is the established Woodson origin for unassigned online UPS checks.
+    return key ? STORE_ORIGINS[key] : STORE_ORIGINS.caldwell;
   }
 
   function estimateFromFulfillmentQuote(result, userAddress, origin) {

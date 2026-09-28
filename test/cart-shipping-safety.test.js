@@ -181,6 +181,10 @@ test("checkout sends USPS state codes and distinguishes address failures from it
 
 test("fulfillment quoting recognizes the selected store in the current public stores header", () => {
   const offer = source("UpsShippingOffer.js");
+  let links = [{
+    getAttribute: () => "https://www.woodsonlumber.com/stores",
+    textContent: "Caldwell. Open until 5:30 PM"
+  }];
   const selectedOrigin = extractedFunction(offer, "selectedOrigin", {
     text: (value) => String(value == null ? "" : value).replace(/\s+/g, " ").trim(),
     STORE_ORIGINS: {
@@ -189,18 +193,21 @@ test("fulfillment quoting recognizes the selected store in the current public st
     },
     storedCartData: () => null,
     document: {
-      querySelectorAll: () => [{
-        getAttribute: () => "https://www.woodsonlumber.com/stores",
-        textContent: "Caldwell. Open until 5:30 PM"
-      }]
+      querySelectorAll: () => links
     }
   });
 
+  assert.deepEqual(selectedOrigin(), { name: "Caldwell", postalCode: "77836" });
+  links = [];
   assert.deepEqual(selectedOrigin(), { name: "Caldwell", postalCode: "77836" });
 });
 
 test("cart quoting recognizes the selected store in the current public stores header", () => {
   const cart = source("WoodsonShoppingCart.js");
+  let links = [{
+    getAttribute: () => "https://www.woodsonlumber.com/stores",
+    textContent: "Caldwell. Open until 5:30 PM"
+  }];
   const getSelectedStoreOrigin = extractedFunction(cart, "getSelectedStoreOrigin", {
     text: (value) => String(value || "").replace(/\s+/g, " ").trim(),
     STORE_ORIGINS: {
@@ -208,13 +215,12 @@ test("cart quoting recognizes the selected store in the current public stores he
       caldwell: { name: "Caldwell", postalCode: "77836" }
     },
     document: {
-      querySelectorAll: () => [{
-        getAttribute: () => "https://www.woodsonlumber.com/stores",
-        textContent: "Caldwell. Open until 5:30 PM"
-      }]
+      querySelectorAll: () => links
     }
   });
 
+  assert.deepEqual(getSelectedStoreOrigin(), { name: "Caldwell", postalCode: "77836" });
+  links = [];
   assert.deepEqual(getSelectedStoreOrigin(), { name: "Caldwell", postalCode: "77836" });
 });
 
