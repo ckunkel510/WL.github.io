@@ -435,6 +435,8 @@ $(async function(){
       .wl-epallet-lock-note{margin-left:4px;color:#666;font-size:12px;line-height:1.3;}\
       .wl-clearance-stock-note{width:100%;margin-top:6px;color:#7a2100;font-size:12px;font-weight:700;line-height:1.35;}\
       .wl-clearance-stock-note[data-sold-out="1"]{padding:8px 10px;border:1px solid #d29a82;border-radius:6px;background:#fff3ee;}\
+      .cart-item-card .delete-link{display:inline-block;white-space:nowrap!important;word-break:normal!important;overflow-wrap:normal!important;margin-left:0!important;}\
+      .cart-item-card .sfl-placeholder .sfl-button{margin-left:0!important;}\
       @media (max-width:640px){\
         .cart-item-card .card-body>.d-flex.justify-content-between{display:grid!important;grid-template-columns:1fr;gap:10px;align-items:stretch!important;}\
         .cart-item-card .qty-section{width:100%;display:flex!important;flex-wrap:nowrap;justify-content:flex-start;align-items:center;}\
