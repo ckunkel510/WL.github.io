@@ -605,9 +605,6 @@
   async function getStockForCart(accountBranch) {
   console.log("[CartBranch] Checking stock availability across branches...");
 
-  const useActualColumn = !!accountBranch;
-  const columnIndex = useActualColumn ? 4 : 2;
-
   for (const item of cartItems) {
     console.log(`[CartBranch] Fetching stock for PID ${item.pid}...`);
 
@@ -623,6 +620,7 @@
         continue;
       }
 
+      const columnIndex = availableStockColumnIndex(table);
       const rows = table.querySelectorAll("tr");
       let accountBranchHasStock = false;
 
@@ -681,6 +679,17 @@
       }
     }
   }
+}
+
+function availableStockColumnIndex(table) {
+  const headers = Array.from(table.querySelectorAll("tr:first-child th, tr:first-child td"));
+  const availableIndex = headers.findIndex(header => {
+    const label = header.textContent.replace(/\s+/g, " ").trim().toLowerCase();
+    return label === "available" || label === "available stock";
+  });
+
+  // WebTrack's current stock table is Branch, Location, Available, Lead Time.
+  return availableIndex >= 0 ? availableIndex : 2;
 }
     } catch(e) {
       console.error('[CartBranch] scoring error', e);

@@ -64,6 +64,21 @@ test("cart preserves its clearance policy when the shared script runs on checkou
   assert.ok(clearIndex > noRowsIndex);
 });
 
+test("cart branch selection reads WebTrack's current Available stock column", () => {
+  const currentHeaders = ["Branch", "Location", "Available", "Lead Time"]
+    .map((textContent) => ({ textContent }));
+
+  for (const implementation of [source("ShoppingCartBranch.js"), source("wl-shoppingcart.bundle.js")]) {
+    const availableStockColumnIndex = extractedFunction(implementation, "availableStockColumnIndex");
+    const table = { querySelectorAll: () => currentHeaders };
+
+    assert.equal(availableStockColumnIndex(table), 2);
+    assert.doesNotMatch(implementation, /useActualColumn/);
+    assert.doesNotMatch(implementation, /accountBranch\s*\?\s*4\s*:\s*2/);
+    assert.match(implementation, /const columnIndex = availableStockColumnIndex\(table\)/);
+  }
+});
+
 test("checkout resolves branch shortages against companywide stock before continuing", () => {
   const checkout = source("Checkout2.js");
   const lookupIndex = checkout.indexOf("fetchCompanyAvailability(refs)");
