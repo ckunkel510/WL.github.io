@@ -208,22 +208,41 @@
     });
   }
 
+  function parseAccountAddressLines(rawLines) {
+    const lines = (Array.isArray(rawLines) ? rawLines : []).map(text).filter(Boolean);
+    const combined = lines.join(' ');
+    const zipMatch = combined.match(/\b\d{5}(?:-\d{4})?\b/);
+    if (!zipMatch) return null;
+
+    const localityIndex = lines.findIndex(function (line) {
+      return /\b(?:Texas|TX)\b/i.test(line);
+    });
+    const locality = localityIndex >= 0 ? lines[localityIndex] : '';
+    const cityMatch = locality.match(/^(.*?)(?:,\s*|\s+)(?:Texas|TX)\b/i);
+    const addressLine = localityIndex > 0 ? lines.slice(0, localityIndex) : [];
+    const isTexas = /\b(?:Texas|TX)\b/i.test(combined);
+
+    return {
+      addressLine: addressLine,
+      city: text(cityMatch?.[1] || ''),
+      state: isTexas ? 'TX' : '',
+      postalCode: zipMatch[0].slice(0, 5),
+      zip: zipMatch[0].slice(0, 5),
+      isTexas: isTexas
+    };
+  }
+
   async function getUserAddress() {
     try {
       const response = await fetch('/AccountInfo_R.aspx', { credentials: 'same-origin' });
       if (!response.ok) return null;
       const html = await response.text();
       const doc = new DOMParser().parseFromString(html, 'text/html');
-      const addressText = text(Array.from(doc.querySelectorAll('.accountInfoAddress li')).map(function (el) {
+      return parseAccountAddressLines(Array.from(doc.querySelectorAll('.accountInfoAddress li')).map(function (el) {
         return el.textContent;
-      }).join(' '));
-      const zip = addressText.match(/\b\d{5}(?:-\d{4})?\b/);
-      return zip ? {
-        zip: zip[0].slice(0, 5),
-        isTexas: /\b(?:Texas|TX)\b/i.test(addressText)
-      } : null;
+      }));
     } catch (error) {
-      console.warn('[WLCart] Could not read the saved delivery ZIP.', error);
+      console.warn('[WLCart] Could not read the saved delivery address.', error);
       return null;
     }
   }
@@ -282,9 +301,7 @@
     return {
       label: 'Delivery',
       amount: reason,
-      note: 'This order needs a manual freight review. Pickup is still available; contact Woodson for delivery help.',
-      blockCheckout: true,
-      blockMessage: 'This order needs a manual freight review. Contact Woodson for delivery help or choose pickup.'
+      note: 'Continue to checkout to choose pickup. Woodson delivery eligibility and pricing will be confirmed from the full delivery address.'
     };
   }
 
@@ -297,8 +314,10 @@
       body: JSON.stringify({
         shipFrom: origin,
         shipTo: {
-          postalCode: userAddress.zip,
-          state: userAddress.isTexas ? 'TX' : '',
+          addressLine: userAddress.addressLine || [],
+          city: userAddress.city || '',
+          postalCode: userAddress.postalCode || userAddress.zip,
+          state: userAddress.state || (userAddress.isTexas ? 'TX' : ''),
           country: 'US',
           residential: true
         },
