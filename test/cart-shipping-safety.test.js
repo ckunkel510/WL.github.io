@@ -167,6 +167,70 @@ test("cart uses the current unified fulfillment quote instead of the legacy dime
   }, { zip: "22030", isTexas: false }, { name: "Caldwell" });
   assert.equal(blocked.blockCheckout, true);
   assert.match(blocked.blockMessage, /12024 package information needs review/);
+
+  const manualDelivery = estimateFromFulfillmentQuote({
+    recommendation: { mode: "manual", label: "Freight quote required" },
+    options: {
+      ups: { available: false, reason: "not-easy-parcel" },
+      delivery: { available: false, reason: "address-not-geocoded" }
+    },
+    shippingIssues: []
+  });
+  assert.equal(manualDelivery.blockCheckout, undefined);
+  assert.match(manualDelivery.note, /Continue to checkout/);
+  assert.match(manualDelivery.note, /Woodson delivery eligibility and pricing/);
+});
+
+test("cart sends the complete saved WebTrack address for local-delivery quoting", async () => {
+  const cart = source("WoodsonShoppingCart.js");
+  const parseAccountAddressLines = extractedFunction(cart, "parseAccountAddressLines", {
+    text: (value) => String(value || "").replace(/\s+/g, " ").trim()
+  });
+
+  assert.deepEqual(parseAccountAddressLines([
+    "602 Carolyn St.",
+    "Brenham Texas",
+    "77833",
+    "United States"
+  ]), {
+    addressLine: ["602 Carolyn St."],
+    city: "Brenham",
+    state: "TX",
+    postalCode: "77833",
+    zip: "77833",
+    isTexas: true
+  });
+  assert.match(cart, /addressLine:\s*userAddress\.addressLine/);
+  assert.match(cart, /city:\s*userAddress\.city/);
+  assert.match(cart, /postalCode:\s*userAddress\.postalCode\s*\|\|\s*userAddress\.zip/);
+  assert.match(cart, /state:\s*userAddress\.state\s*\|\|/);
+
+  let requestBody = null;
+  const getFulfillmentEstimate = extractedFunction(cart, "getFulfillmentEstimate", {
+    getSelectedStoreOrigin: () => ({ name: "Caldwell", city: "Caldwell", state: "TX", postalCode: "77836" }),
+    FULFILLMENT_QUOTE_URL: "https://example.test/api/fulfillment-quote",
+    fetch: async (_url, options) => {
+      requestBody = JSON.parse(options.body);
+      return { ok: true, json: async () => ({ recommendation: {}, options: {}, shippingIssues: [] }) };
+    },
+    estimateFromFulfillmentQuote: () => ({ label: "Delivery", amount: "$25.00", note: "" })
+  });
+  const address = parseAccountAddressLines([
+    "602 Carolyn St.",
+    "Brenham Texas",
+    "77833",
+    "United States"
+  ]);
+  await getFulfillmentEstimate(address, [{ productId: "2595", productCode: "112122YPL", quantity: 1 }]);
+
+  assert.deepEqual(requestBody.shipTo, {
+    addressLine: ["602 Carolyn St."],
+    city: "Brenham",
+    postalCode: "77833",
+    state: "TX",
+    country: "US",
+    residential: true
+  });
 });
 
 test("cart keeps its compact shipping line and desktop Delete action on one line", () => {
