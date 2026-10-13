@@ -56,47 +56,40 @@ function baseBody() {
   };
 }
 
-test("prefers UPS for an easy parcel when it is within $10 of delivery", () => {
-  const result = recommendFulfillment({
-    ups: { available: true, amount: 33 },
-    delivery: { available: true, amount: 25 },
-    easyParcel: true,
-    threshold: 10
-  });
-  assert.equal(result.mode, "ship");
-  assert.equal(result.reason, "easy-parcel-within-threshold");
-});
-
-test("prefers Woodson when delivery saves more than $10", () => {
-  const result = recommendFulfillment({
-    ups: { available: true, amount: 36 },
-    delivery: { available: true, amount: 25 },
-    easyParcel: true,
-    threshold: 10
-  });
-  assert.equal(result.mode, "delivery");
-});
-
-test("prefers Woodson for bulky or unknown packages inside a delivery area", () => {
+test("prefers UPS when it is the lower-cost home fulfillment option", () => {
   const result = recommendFulfillment({
     ups: { available: true, amount: 20 },
-    delivery: { available: true, amount: 25 },
-    easyParcel: false,
-    threshold: 10
+    delivery: { available: true, amount: 25 }
   });
-  assert.equal(result.mode, "delivery");
-  assert.equal(result.reason, "bulky-or-unknown-parcel");
+  assert.equal(result.mode, "ship");
+  assert.equal(result.reason, "lowest-cost-home-fulfillment");
 });
 
-test("requires freight help instead of offering UPS for a bulky item outside delivery areas", () => {
+test("prefers Woodson when local delivery is the lower-cost home fulfillment option", () => {
+  const result = recommendFulfillment({
+    ups: { available: true, amount: 28 },
+    delivery: { available: true, amount: 25 }
+  });
+  assert.equal(result.mode, "delivery");
+  assert.equal(result.reason, "lowest-cost-home-fulfillment");
+});
+
+test("uses Woodson delivery as the deterministic equal-price tie-breaker", () => {
+  const result = recommendFulfillment({
+    ups: { available: true, amount: 25 },
+    delivery: { available: true, amount: 25 }
+  });
+  assert.equal(result.mode, "delivery");
+  assert.equal(result.reason, "equal-cost-local-delivery");
+});
+
+test("offers a positive UPS rate when local delivery is unavailable", () => {
   const result = recommendFulfillment({
     ups: { available: true, amount: 308.19 },
-    delivery: { available: false, reason: "outside-delivery-area" },
-    easyParcel: false,
-    threshold: 10
+    delivery: { available: false, reason: "outside-delivery-area" }
   });
-  assert.equal(result.mode, "manual");
-  assert.equal(result.reason, "bulky-outside-delivery-area");
+  assert.equal(result.mode, "ship");
+  assert.equal(result.reason, "ups-only");
 });
 
 test("identifies the conservative easy-parcel threshold", () => {
@@ -105,7 +98,7 @@ test("identifies the conservative easy-parcel threshold", () => {
   assert.equal(isEasyParcel([{ weight: 8 }]), false);
 });
 
-test("builds a unified UPS recommendation and stores only positive customer rates", async () => {
+test("stores both rates and recommends the cheaper Woodson delivery option", async () => {
   let stored = null;
   const result = await buildFulfillmentQuote(baseBody(), {
     requestRates: upsRate(28),
@@ -114,10 +107,36 @@ test("builds a unified UPS recommendation and stores only positive customer rate
     quoteWoodsonDelivery: async () => ({ available: true, mode: "delivery", amount: 25, currency: "USD", serviceCode: "03", serviceName: "Woodson Local Delivery", billingWeight: 8 }),
     storeFulfillmentClaim: async (claim) => { stored = claim; return { ok: true }; }
   });
-  assert.equal(result.recommendation.mode, "ship");
+  assert.equal(result.recommendation.mode, "delivery");
   assert.equal(result.options.ups.amount, 28);
-  assert.equal(stored.recommendation.mode, "ship");
+  assert.equal(stored.recommendation.mode, "delivery");
   assert.ok(stored.rates.every((rate) => rate.amount > 0));
+  assert.equal(stored.availableRates.ship[0].amount, 28);
+  assert.equal(stored.availableRates.delivery[0].amount, 25);
+});
+
+test("offers the carrier-rated 55-pound 30GFU roll alongside local delivery", async () => {
+  let ratedPackages = null;
+  let stored = null;
+  const result = await buildFulfillmentQuote(baseBody(), {
+    requestRates: async (input) => {
+      ratedPackages = input.packages;
+      return upsRate(32)();
+    },
+    getCatalogProducts: async () => catalog({ weight: 55, length: 30, width: 6, height: 6 }),
+    shippingPolicy: policy,
+    quoteWoodsonDelivery: async () => ({ available: true, mode: "delivery", amount: 25, currency: "USD", serviceCode: "03", serviceName: "Woodson Local Delivery", billingWeight: 55 }),
+    storeFulfillmentClaim: async (claim) => { stored = claim; return { ok: true }; }
+  });
+
+  assert.deepEqual(ratedPackages, [{ weight: 55.5, length: 31, width: 7, height: 7 }]);
+  assert.equal(result.packageProfile.easyParcel, false);
+  assert.equal(result.options.ups.available, true);
+  assert.equal(result.options.ups.amount, 32);
+  assert.equal(result.options.delivery.available, true);
+  assert.equal(result.recommendation.mode, "delivery");
+  assert.equal(stored.availableRates.ship[0].amount, 32);
+  assert.equal(stored.availableRates.delivery[0].amount, 25);
 });
 
 test("keeps the protected $9.95 customer offer instead of restoring the raw UPS rate", () => {
@@ -148,7 +167,7 @@ test("falls back to Woodson when UPS packing cannot handle a lumber-size item", 
   assert.equal(result.recommendation.amount, 25);
 });
 
-test("does not offer a carrier-rated 8-foot board as a UPS shipment", async () => {
+test("offers a carrier-rated 8-foot board when UPS returns a positive rate", async () => {
   const result = await buildFulfillmentQuote(baseBody(), {
     requestRates: upsRate(308.19),
     getCatalogProducts: async () => catalog({ weight: 10.67, length: 96, width: 4, height: 2 }),
@@ -156,10 +175,11 @@ test("does not offer a carrier-rated 8-foot board as a UPS shipment", async () =
     quoteWoodsonDelivery: async () => ({ available: false, reason: "outside-delivery-area" }),
     storeFulfillmentClaim: async () => ({ ok: true })
   });
-  assert.equal(result.options.ups.available, false);
-  assert.equal(result.options.ups.reason, "not-easy-parcel");
-  assert.equal(result.recommendation.mode, "manual");
-  assert.equal(result.recommendation.amount, null);
+  assert.equal(result.options.ups.available, true);
+  assert.equal(result.options.ups.amount, 308.19);
+  assert.equal(result.packageProfile.easyParcel, false);
+  assert.equal(result.recommendation.mode, "ship");
+  assert.equal(result.recommendation.amount, 308.19);
 });
 
 test("returns a manual freight result when neither automatic method is possible", async () => {
@@ -312,7 +332,7 @@ test("returns an easy UPS parcel and non-refundable fee after product 10496 rece
   assert.equal(stored.cutToShip.selections[0].cutSummary, "2 × 48 in., 2 × 24 in.");
 });
 
-test("does not let one custom-cut item bypass the bulky-item safeguard for the rest of a mixed cart", async () => {
+test("offers a carrier-rated mixed custom-cut cart without using profile labels as a veto", async () => {
   const body = baseBody();
   body.shipTo = { city: "Chicago", state: "IL", postalCode: "60601" };
   body.cart = [{
@@ -363,6 +383,7 @@ test("does not let one custom-cut item bypass the bulky-item safeguard for the r
 
   assert.equal(result.cutToShip.applied, true);
   assert.equal(result.cutToShip.customParcelEligible, false);
-  assert.equal(result.options.ups.available, false);
-  assert.equal(result.recommendation.mode, "manual");
+  assert.equal(result.options.ups.available, true);
+  assert.equal(result.packageProfile.easyParcel, false);
+  assert.equal(result.recommendation.mode, "ship");
 });
