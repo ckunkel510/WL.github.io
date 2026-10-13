@@ -132,18 +132,7 @@ function upsOption(rates) {
   };
 }
 
-function preferenceThreshold(env = process.env) {
-  const configured = Number(env.FULFILLMENT_UPS_PREFERENCE_DOLLARS);
-  return Number.isFinite(configured) && configured >= 0 ? configured : 10;
-}
-
-function recommendFulfillment({ ups, delivery, easyParcel, threshold = 10 }) {
-  if (ups?.available && !easyParcel) {
-    if (delivery?.available) {
-      return { mode: "delivery", label: "Woodson Local Delivery", amount: delivery.amount, reason: "bulky-or-unknown-parcel" };
-    }
-    return { mode: "manual", label: "Freight quote required", amount: null, reason: "bulky-outside-delivery-area" };
-  }
+function recommendFulfillment({ ups, delivery }) {
   if (ups?.available && !delivery?.available) {
     return { mode: "ship", label: "Ship via UPS", amount: ups.amount, reason: "ups-only" };
   }
@@ -153,19 +142,21 @@ function recommendFulfillment({ ups, delivery, easyParcel, threshold = 10 }) {
   if (!ups?.available && !delivery?.available) {
     return { mode: "manual", label: "Freight quote required", amount: null, reason: "no-automatic-method" };
   }
-  if (easyParcel && ups.amount <= delivery.amount + threshold) {
+  if (money(ups.amount) < money(delivery.amount)) {
     return {
       mode: "ship",
       label: "Ship via UPS",
       amount: ups.amount,
-      reason: ups.amount <= delivery.amount ? "lowest-cost-parcel" : "easy-parcel-within-threshold"
+      reason: "lowest-cost-home-fulfillment"
     };
   }
   return {
     mode: "delivery",
     label: "Woodson Local Delivery",
     amount: delivery.amount,
-    reason: easyParcel ? "delivery-saves-more-than-threshold" : "bulky-or-unknown-parcel"
+    reason: money(delivery.amount) < money(ups.amount)
+      ? "lowest-cost-home-fulfillment"
+      : "equal-cost-local-delivery"
   };
 }
 
@@ -242,15 +233,13 @@ async function buildFulfillmentQuote(body, dependencies = {}) {
   }, dependencies);
   const easyParcel = Boolean(ratedUps.available && isEasyParcel(packages));
   const customCutParcel = Boolean(ratedUps.available && cutToShip?.applied && cutToShip?.customParcelEligible);
-  const automaticParcel = easyParcel || customCutParcel;
-  const ups = ratedUps.available && !automaticParcel
-    ? { available: false, reason: "not-easy-parcel" }
-    : ratedUps;
+  // A successful positive UPS Ground rate is the availability decision. Package
+  // validation and carrier limits have already run before ratedUps is created;
+  // profile labels must not hide a carrier-rated option from the customer.
+  const ups = ratedUps;
   const recommendation = recommendFulfillment({
     ups,
-    delivery,
-    easyParcel: automaticParcel,
-    threshold: dependencies.threshold ?? preferenceThreshold()
+    delivery
   });
 
   const selectedRates = recommendation.mode === "ship"
