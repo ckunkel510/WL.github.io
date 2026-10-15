@@ -156,6 +156,23 @@
     document.head.appendChild(script);
   }
 
+  function loadBuyNowPilot() {
+    if (window.top !== window || window.location.origin !== WEBTRACK) return;
+    if (!document.querySelector('a[href*="SignOut=1"],a[href*="signout=1"]')) return;
+    if (document.querySelector('script[data-wl-buy-now-pilot]')) return;
+    // Loading alone grants no access: the module verifies AccountSettings.aspx
+    // and the current customer account before showing UI or changing the cart.
+    // This hash only avoids loading the pilot for other ordinary customers.
+    try {
+      if (localStorage.getItem('wl_user_id') !== 'b8f6961397f9c6a3b9cff27038c1d3ed309604ffe607b5dd0d365f5d53179ade') return;
+    } catch (_) { return; }
+    var script = document.createElement('script');
+    script.src = 'https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261015-ckunkel2-1';
+    script.async = true;
+    script.setAttribute('data-wl-buy-now-pilot', 'true');
+    document.head.appendChild(script);
+  }
+
   function loadTawkCommerceAssist() {
     if (window.WLTawkCommerceAssist || document.querySelector("script[data-wl-tawk-commerce-assist]")) return;
 
@@ -3305,6 +3322,9 @@
   loadContactManager();
 
   onReady(function () {
+    loadBuyNowPilot();
+    // The existing identity script may finish after DOM ready on a new sign-in.
+    window.setTimeout(loadBuyNowPilot, 1800);
     var firstRun = run();
     if (firstRun.complete) return;
 
