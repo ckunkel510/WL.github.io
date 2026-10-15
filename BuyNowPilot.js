@@ -6,7 +6,7 @@
   else core.boot(root).catch(function () { /* An unavailable pilot leaves native shopping alone. */ });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261015-ckunkel2-5';
+  var BUILD = '20261015-ckunkel2-6';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var USER = 'ckunkel2'; // No query string, storage value, or public rollout override.
   var PREFIX = 'wl_buy_now_pilot_v1:';
@@ -898,7 +898,8 @@
               haltFast('Check your address, billing, or pickup details.'); return;
             }
             delete page.documentElement.dataset.bnValidationWaiting;
-            var nextButton = page.getElementById('ctl00_PageBody_ContinueButton2') || page.getElementById('ctl00_PageBody_ContinueButton1'); if (!nextButton) return;
+            // The native proxy also confirms the fulfillment rate before posting.
+            var nextButton = page.querySelector('.wl-proxy-continue') || page.getElementById('ctl00_PageBody_ContinueButton2') || page.getElementById('ctl00_PageBody_ContinueButton1'); if (!nextButton || nextButton.disabled) return;
             page.documentElement.dataset.bnDetailsContinued = '1'; status('Calculating your total…'); nextButton.click();
           }
           return;

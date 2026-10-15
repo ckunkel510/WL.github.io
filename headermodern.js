@@ -167,7 +167,7 @@
       if (localStorage.getItem('wl_user_id') !== 'b8f6961397f9c6a3b9cff27038c1d3ed309604ffe607b5dd0d365f5d53179ade') return;
     } catch (_) { return; }
     var script = document.createElement('script');
-    script.src = 'https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261015-ckunkel2-5';
+    script.src = 'https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261015-ckunkel2-6';
     script.async = true;
     script.setAttribute('data-wl-buy-now-pilot', 'true');
     document.head.appendChild(script);
