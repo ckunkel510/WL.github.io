@@ -6,7 +6,7 @@
   else core.boot(root).catch(function () { /* An unavailable pilot leaves native shopping alone. */ });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261015-ckunkel2-4';
+  var BUILD = '20261015-ckunkel2-5';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var USER = 'ckunkel2'; // No query string, storage value, or public rollout override.
   var PREFIX = 'wl_buy_now_pilot_v1:';
@@ -890,7 +890,14 @@
           var reference = page.querySelector('input[id*="PurchaseOrder"],input[id*="CustomerReference"]'); if (reference && fast.reference !== undefined) setNative(child,reference,fast.reference);
           child.WLCheckout.refreshDateUI(); child.WLCheckout.refreshSectionSummaries?.(); updateFastOptions();
           if (!page.documentElement.dataset.bnDetailsContinued) {
-            if (!child.WLCheckout.validateBeforeFinalSubmit()) { haltFast('Check your address, billing, or pickup details.'); return; }
+            if (!child.WLCheckout.validateBeforeFinalSubmit()) {
+              // Native defaults and UpdatePanel handlers can settle after load.
+              // Retry validation briefly; never skip it or force a postback.
+              if (!page.documentElement.dataset.bnValidationWaiting) page.documentElement.dataset.bnValidationWaiting = String(Date.now());
+              if (Date.now()-Number(page.documentElement.dataset.bnValidationWaiting) < 3500) { status('Loading your defaults…'); return; }
+              haltFast('Check your address, billing, or pickup details.'); return;
+            }
+            delete page.documentElement.dataset.bnValidationWaiting;
             var nextButton = page.getElementById('ctl00_PageBody_ContinueButton2') || page.getElementById('ctl00_PageBody_ContinueButton1'); if (!nextButton) return;
             page.documentElement.dataset.bnDetailsContinued = '1'; status('Calculating your total…'); nextButton.click();
           }
