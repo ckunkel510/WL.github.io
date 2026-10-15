@@ -6,7 +6,7 @@
   else core.boot(root).catch(function () { /* An unavailable pilot leaves native shopping alone. */ });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261015-ckunkel2-14';
+  var BUILD = '20261015-ckunkel2-15';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var USER = 'ckunkel2'; // No query string, storage value, or public rollout override.
   var PREFIX = 'wl_buy_now_pilot_v1:';
@@ -998,6 +998,8 @@
           }
           if (manager?.get_isInAsyncPostBack?.()) return;
           var quote = quoteForCart(child.WLShippingOffer?.current?.(),active.purchase);
+          fast.methods = fulfillmentOptions(!pickupButton.disabled,fast.method==='pickup' ? quote : null);
+          updateFastOptions();
           if (fast.method!=='pickup') {
             if (!child.WLShippingOffer?.refresh) return;
             if (!detailsQuotes.has(page)) {
