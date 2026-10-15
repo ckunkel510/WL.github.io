@@ -145,3 +145,12 @@ test('native EmptyCartDetailPanel and currently-empty copy remain recoverable', 
   assert.equal(core.readableCart(page('Your cart is empty.'),0),true);
   assert.equal(core.readableCart(page('Unexpected checkout or sign-in content'),0),false);
 });
+test('pilot date entry accepts the native minimum calendar day without a timestamp comparison', () => {
+  assert.equal(core.dateChoice('2026-10-17','2026-10-17','2026-10-29'),true);
+  assert.equal(core.dateChoice('2026-10-19','2026-10-17','2026-10-29'),true);
+  assert.equal(core.dateChoice('2026-10-16','2026-10-17','2026-10-29'),false);
+  assert.equal(core.dateChoice('2026-10-18','2026-10-17','2026-10-29'),false);
+  assert.equal(core.dateChoice('2026-10-30','2026-10-17','2026-10-29'),false);
+  assert.equal(core.dateChoice('2026-02-31','',''),false);
+  assert.equal(core.dateChoice('not-a-date','',''),false);
+});

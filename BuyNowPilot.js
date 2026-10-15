@@ -6,7 +6,7 @@
   else core.boot(root).catch(function () { /* An unavailable pilot leaves native shopping alone. */ });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261015-ckunkel2-2';
+  var BUILD = '20261015-ckunkel2-3';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var USER = 'ckunkel2'; // No query string, storage value, or public rollout override.
   var PREFIX = 'wl_buy_now_pilot_v1:';
@@ -94,6 +94,12 @@
   function assertReview(review, expected) {
     var normalized = function (items) { return JSON.stringify(items.map(function (row) { return [text(row.code).toUpperCase(), Number(row.quantity), text(row.unit).toLowerCase()]; }).sort(function (a,b) { return JSON.stringify(a).localeCompare(JSON.stringify(b)); })); };
     if (!review.length || normalized(review) !== normalized(lines(expected))) throw new Error('The native order review differs from the Buy now basket. The order was not submitted.');
+  }
+  function dateChoice(value, min, max) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return false;
+    var parts = value.split('-').map(Number), date = new Date(parts[0], parts[1]-1, parts[2], 12);
+    if (date.getFullYear() !== parts[0] || date.getMonth() !== parts[1]-1 || date.getDate() !== parts[2] || date.getDay() === 0) return false;
+    return (!min || value >= min) && (!max || value <= max);
   }
   function marker(record) { return 'Website Buy Now | ' + record.id + ' | Additional cart items: ' + record.extraCount; }
   function savedChoice(options, preferred) {
@@ -482,6 +488,25 @@
       style.textContent = '#PageHeaderDiv,#PageFooterDiv,#siteHeaderContent,#savedForLater{display:none!important}body{padding:0!important}#MainLayoutRow{margin:8px auto!important}';
       page.head.appendChild(style);
       page.querySelectorAll('.shopping-cart-item input.riTextBox,.shopping-cart-item input[id*="_qty_"]:not([type="hidden"])').forEach(function (input) { input.readOnly = true; });
+      // Native date-change compares midnight against a time-bearing minimum,
+      // which alerts for its own valid minimum day. Keep date handling in this
+      // pilot iframe, validate calendar bounds, then use native refresh hooks.
+      page.addEventListener('change', function (event) {
+        var input = event.target;
+        if (!input || !['deliveryDate','pickupDate'].includes(input.id) || !input.value || !input.min) return;
+        event.stopImmediatePropagation();
+        if (!dateChoice(input.value, input.min, input.max)) {
+          input.value = '';
+          input.dispatchEvent(new child.Event('input', { bubbles: true }));
+          status('Choose an available Monday–Saturday date within the range shown in checkout.', true);
+          var extra = page.getElementById('specialInsExtra');
+          if (extra) extra.dispatchEvent(new child.Event('input', { bubbles: true }));
+          return;
+        }
+        input.dispatchEvent(new child.Event('input', { bubbles: true }));
+        child.WLCheckout?.refreshDateUI?.();
+        child.WLCheckout?.refreshSectionSummaries?.();
+      }, true);
       // Block escaping the dialog through internal navigation while its cart is isolated.
       page.addEventListener('click', function (event) {
         var cartAction = event.target.closest('[id*="_del_"],[id*="_refQty_"],[id*="EmptyCartButton"],.wl-cart-qty-btn,.refresh-cart-line-total');
@@ -685,5 +710,5 @@
       if (latest && latest.owner !== owner) { busy = true; clearFrame(); status('Buy now is active in another tab. Cart changes have stopped here.', true); }
     });
   }
-  return { boot: boot, build: BUILD, audience: USER, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart };
+  return { boot: boot, build: BUILD, audience: USER, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, dateChoice: dateChoice };
 });
