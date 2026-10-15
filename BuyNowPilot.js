@@ -917,6 +917,8 @@
         }
         var shippingContinue = page.getElementById('ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView');
         if (shippingContinue) {
+          // Pickup/local-delivery already have a native automatic continuation.
+          if (child.__wlPickupShippingAutoAdvance) return;
           var select = page.getElementById('ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList');
           if (select) {
             fast.shippingOptions = Array.from(select.options).filter(function (option) { return !option.disabled && /\$/.test(option.textContent); }).map(function (option) { return {value:option.value,label:text(option.textContent)}; });
