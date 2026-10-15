@@ -202,3 +202,20 @@ test('UPS confirmation uses authoritative quoted rates rather than a stale nativ
   assert.equal(core.quotedShipping('delivery',{rate:'$25.00'}),2500);
   assert.equal(core.quotedShipping('pickup',null),0);
 });
+
+
+test('pickup stays available while paid carrier quotes are pending, without inventing paid availability', () => {
+  const waiting=core.fulfillmentOptions(true,null);
+  assert.equal(waiting.pickup.available,true);
+  assert.equal(waiting.pickup.rate,'Free');
+  assert.equal(waiting.delivery.available,false);
+  assert.equal(waiting.ship.available,false);
+  assert.equal(waiting.ship.pending,true);
+  assert.equal(core.fulfillmentOptions(false,null).pickup.available,false);
+  const ready=core.fulfillmentOptions(true,{options:{delivery:{available:true,amount:25},ups:{available:false,reason:'Cannot ship'}}});
+  assert.equal(ready.delivery.rate,'$25.00');
+  assert.equal(ready.delivery.available,true);
+  assert.equal(ready.delivery.pending,false);
+  assert.equal(ready.ship.available,false);
+  assert.equal(ready.ship.reason,'Cannot ship');
+});
