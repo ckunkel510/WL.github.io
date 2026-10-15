@@ -6,7 +6,7 @@
   else core.boot(root).catch(function () { /* An unavailable pilot leaves native shopping alone. */ });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261015-ckunkel2-8';
+  var BUILD = '20261015-ckunkel2-9';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var USER = 'ckunkel2'; // No query string, storage value, or public rollout override.
   var PREFIX = 'wl_buy_now_pilot_v1:';
@@ -118,6 +118,13 @@
   function fulfillmentApplied(method, intent, pressed) {
     return ['pickup','delivery','ship'].includes(method) && intent === method && pressed === 'true';
   }
+  function fulfillmentOptions(pickupAvailable, quote) {
+    return {
+      pickup:{available:pickupAvailable,rate:'Free'},
+      delivery:{available:!!quote?.options?.delivery?.available,pending:!quote,rate:'$'+Number(quote?.options?.delivery?.amount||0).toFixed(2),reason:text(quote?.options?.delivery?.reason)},
+      ship:{available:!!quote?.options?.ups?.available,pending:!quote,rate:'$'+Number(quote?.options?.ups?.amount||0).toFixed(2),rates:quote?.options?.ups?.rates || [],reason:text(quote?.options?.ups?.reason)}
+    };
+  }
   function employeeZeroReview(user, totals, hasShippingRow) {
     // WebTrack's existing employee path can omit freight with a fully zero review.
     // Preserve it only for this verified account, never for a partial/positive total.
@@ -216,7 +223,7 @@
     var key = PREFIX + scope, preferenceKey = PREFIX + 'payment:' + scope;
     var blocked = null;
     var owner = win.crypto.randomUUID(), active = null, overlay = null, frame = null, releaseLock = null;
-    var previousFocus = null, previousOverflow = '', busy = false, submitting = false, cancelPending = false, frameObserver = null, frameTimer = null, framePulse = null, permittedFinal = null, fast = null;
+    var previousFocus = null, previousOverflow = '', busy = false, submitting = false, cancelPending = false, frameObserver = null, frameTimer = null, framePulse = null, frameReadyTimer = null, installedPage = null, permittedFinal = null, fast = null;
     var lockName = PREFIX + 'lock:' + scope;
     var model = { build: BUILD, audience: USER };
     win.WLBuyNowPilot = model;
@@ -257,6 +264,7 @@
       if (frameObserver) frameObserver.disconnect(); frameObserver = null;
       if (frameTimer) win.clearTimeout(frameTimer); frameTimer = null;
       if (framePulse) win.clearInterval(framePulse); framePulse = null;
+      if (frameReadyTimer) win.clearInterval(frameReadyTimer); frameReadyTimer = null; installedPage = null;
       if (frame) { frame.remove(); frame = null; }
     }
     function dismiss() {
@@ -365,7 +373,7 @@
       if (adjust) adjust(body.data);
       var action = new URL(body.form.getAttribute('action') || fallbackPath, ORIGIN + fallbackPath);
       if (action.origin !== ORIGIN || !/^\/(?:ShoppingCart|ProductDetail)\.aspx$/i.test(action.pathname)) throw new Error('An unexpected cart action was blocked.');
-      await fetchDocument(action.href, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }, body: body.data.toString() });
+      return fetchDocument(action.href, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' }, body: body.data.toString() });
     }
     async function product(id) {
       if (blocked && blocked.has(id)) throw new Error('This item is not eligible for online purchase.');
@@ -385,12 +393,12 @@
       if (Object.values(cuts).some(function (selection) { return selection && (String(selection.productId) === id || text(selection.productCode).toUpperCase() === code.toUpperCase()); })) throw new Error('Cut-to-ship selections need regular checkout during this pilot.');
       return { doc: page, add: add, quantity: quantity, name: name, code: code, unit: unit };
     }
-    async function preflight(items) {
+    async function preflight(items, known) {
       // Validate every original line before removing any line. Re-add must expose a native form.
       var index = 0;
       async function checkNext() {
         while (index < items.length) {
-        var item = items[index++], info = await product(item.pid);
+        var item = items[index++], info = known?.[item.pid] || await product(item.pid);
         if (info.name) item.name = info.name;
         if (info.code.toUpperCase() !== item.code.toUpperCase() || info.unit !== item.unit) throw new Error('A cart line differs from its standard product. Please use regular checkout.');
         var selectedUnit = info.doc.querySelector('select[id*="Per"],select[id*="UOM"],select[id*="Unit"]');
@@ -401,8 +409,8 @@
     }
     async function reconcile(wanted) {
       for (var count = 0; count < 180; count++) {
-        await checkIdentity();
-        var fresh = await cart(); assertExpected(fresh.items, active);
+        var checks = await Promise.all([checkIdentity(),cart()]);
+        var fresh = checks[1]; assertExpected(fresh.items, active);
         if (active.pending) { active.current = fresh.items; active.pending = null; save(); }
         var action = nextMutation(fresh.items, wanted);
         if (!action) { active.current = fresh.items; save(); return; }
@@ -410,13 +418,13 @@
         active.pending = { before: signature(fresh.items), after: signature(expected) }; save();
         if (action.kind === 'add') {
           var info = await product(action.pid);
-          await nativePost(info.doc, info.add, '/ProductDetail.aspx?pid=' + action.pid, function (data) { data.set(info.quantity.name, String(action.quantity)); });
+          var reply = await nativePost(info.doc, info.add, '/ProductDetail.aspx?pid=' + action.pid, function (data) { data.set(info.quantity.name, String(action.quantity)); });
         } else {
           var index = fresh.items.findIndex(function (item) { return item.pid === action.pid; }), row = fresh.rows[index];
           var control = action.kind === 'remove'
             ? row.querySelector('a[id*="_del_"],a[id*="Delete"],a[href*="Delete"]') || row.querySelector('a i.fas.fa-times')?.parentElement
             : row.querySelector('a.refresh-cart-line-total');
-          await nativePost(fresh.doc, control, '/ShoppingCart.aspx', function (data) {
+          reply = await nativePost(fresh.doc, control, '/ShoppingCart.aspx', function (data) {
             if (action.kind !== 'quantity') return;
             var input = row.querySelector('input.riTextBox,input[id*="_qty_"]:not([type="hidden"])');
             data.set(input.name, String(action.quantity));
@@ -428,9 +436,12 @@
             }
           });
         }
-        var after = await cart();
+        // Native cart POSTs often return the complete, updated basket already.
+        // Verify that response; fetch again only when it is a product/other page.
+        var after = reply.querySelector('#ctl00_PageBody_ShoppingCartDetailPanel,.ShoppingCartDetailPanel,#ctl00_PageBody_EmptyCartPanel,#ctl00_PageBody_EmptyCartDetailPanel') ? cartFromDocument(reply) : await cart();
         if (signature(after.items) !== signature(expected)) throw new Error('WebTrack did not confirm the requested cart change. Your recovery copy is retained.');
         active.current = after.items; active.pending = null; save();
+        if (signature(after.items) === signature(wanted)) return;
       }
       throw new Error('Cart recovery stopped after too many changes. Your backup is retained.');
     }
@@ -467,7 +478,11 @@
       overlay.querySelector('.bn-panel').setAttribute('aria-busy', value ? 'true' : 'false');
       if (fast) {
         fast.loading = !!value;
-        overlay.querySelectorAll('[data-bn-edit],[data-bn-method]').forEach(function (el) { el.disabled = !!value || el.dataset.available === 'false'; });
+        overlay.querySelectorAll('[data-bn-edit],[data-bn-method]').forEach(function (el) {
+          if (el.hasAttribute('data-bn-method')) el.disabled = submitting || !!fast.editor || !fast.methods[el.dataset.bnMethod]?.available;
+          else if (el.dataset.bnEdit === 'extras') el.disabled = submitting || !!fast.editor;
+          else el.disabled = !!value || el.dataset.available === 'false';
+        });
         var confirm = overlay.querySelector('[data-bn-confirm]');
         if (confirm) confirm.disabled = !!value || !fast.ready || !!fast.editor;
       }
@@ -509,7 +524,7 @@
         }
       }
       body.querySelectorAll('[data-bn-method]').forEach(function (el) {
-        el.addEventListener('click', function () { if (fast.loading || !fast.methods[el.dataset.bnMethod]?.available) return; fast.method = el.dataset.bnMethod; fast.date = ''; fast.shippingValue = ''; refreshFast().catch(showError); });
+        el.addEventListener('click', function () { if (submitting || fast.editor || fast.method === el.dataset.bnMethod || !fast.methods[el.dataset.bnMethod]?.available) return; fast.method = el.dataset.bnMethod; fast.date = ''; fast.shippingValue = ''; refreshFast().catch(showError); });
       });
       body.querySelectorAll('[data-bn-edit]').forEach(function (el) { el.addEventListener('click', function () { editFast(el.dataset.bnEdit); }); });
       overlay.querySelector('[data-bn-confirm]').addEventListener('click', function () {
@@ -526,8 +541,8 @@
       input.value = value || ''; wrap.appendChild(input); form.appendChild(wrap); return input;
     }
     function editFast(kind) {
-      if (!fast || fast.loading || submitting || busy) return;
-      var host = overlay.querySelector('[data-bn-editor]'); host.replaceChildren(); host.hidden = false; fast.editor = kind; loading(false);
+      if (!fast || submitting || kind !== 'extras' && (fast.loading || busy)) return;
+      var host = overlay.querySelector('[data-bn-editor]'); host.replaceChildren(); host.hidden = false; fast.editor = kind; loading(fast.loading);
       var titles = {address:fast.method === 'pickup' ? 'Pickup store' : 'Delivery address',timing:'Schedule',payment:'Payment',extras:'Add from your cart',notes:'Order details'};
       host.appendChild(node('h3', titles[kind]));
       var form = doc.createElement('form'), values = {}, action = null; host.appendChild(form);
@@ -612,19 +627,20 @@
     async function start(id, quantity) {
       if (!ENABLE_NEW_STARTS || overlay || busy) return;
       await withLock(async function () {
+        var opened = Date.now();
         shell('Buy now'); loading(true); status('Getting your options…'); busy = true;
         await Promise.all([checkIdentity(), purchaseRestrictions().then(function (ids) { blocked = ids; })]);
         if (record()) throw new Error('Restore your earlier Buy now cart first.');
         var details = await Promise.all([cart(),product(id)]), before = details[0], info = details[1];
         var primary = {pid:id,quantity:quantity,name:info.name,code:info.code,unit:info.unit};
-        await preflight(before.items.concat(before.items.some(function (item) { return item.pid === id; }) ? [] : [primary]));
+        await preflight(before.items.concat(before.items.some(function (item) { return item.pid === id; }) ? [] : [primary]),{[id]:info});
         var address = mainAddress(Array.from(account.querySelectorAll('.accountInfoAddress li')).map(function (el) { return el.textContent; }));
         if (address) {
           address.contactName = [text(settings.getElementById('ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput')?.value),text(settings.getElementById('ctl00_PageBody_ChangeUserDetailsControl_LastNameInput')?.value)].filter(Boolean).join(' ');
           address.email = text(settings.getElementById('ctl00_PageBody_ChangeUserDetailsControl_EmailAddressInput')?.value);
           address.phone = text(account.getElementById('ctl00_PageBody_TelephoneLink_TelephoneLink')?.textContent);
         }
-        fast = {original:before.items,primary:primary,selected:[],address:address,method:'',methods:{},date:'',window:'Afternoon',ready:false,payments:[],revision:0,driving:false,editor:'',started:Date.now()};
+        fast = {original:before.items,primary:primary,selected:[],address:address,method:'',methods:{},date:'',window:'Afternoon',ready:false,payments:[],revision:0,driving:false,editor:'',started:Date.now(),opened:opened};
         if (cancelPending) { busy = false; cancelPending = false; dismiss(); return; }
         renderFast(info,primary,before.items);
         var planned = plan(before.items,primary,[]), sessionBefore = {};
@@ -634,12 +650,17 @@
         seedSession(); active.phase = 'preparing'; save();
         await reconcile(planned.purchase); active.phase = 'checking_out'; save(); busy = false;
         if (cancelPending) { cancelPending = false; await cancel(); return; }
+        if (fast.refreshQueued) { fast.refreshQueued = false; await refreshFast(); return; }
         openFrame(overlay.querySelector('[data-bn-native-host]'));
       });
     }
     async function refreshFast() {
-      if (!fast || busy || submitting) return;
-      fast.ready = false; fast.review = null; fast.revision++; fast.started = Date.now(); fast.driving = false; fast.stopped = false; fast.securePayment = false;
+      if (!fast || submitting) return;
+      if (busy) { fast.refreshQueued = true; return; }
+      // New identity per revision makes old asynchronous driver work obsolete.
+      fast = Object.assign({},fast,{ready:false,review:null,revision:fast.revision+1,started:Date.now(),opened:Date.now(),driving:false,stopped:false,securePayment:false,refreshQueued:false});
+      overlay.querySelector('[data-bn-retry]')?.remove();
+      ['subtotal','shipping','tax','total'].forEach(function (key) { fastText('[data-bn-'+key+']','—'); });
       loading(true); status('Updating your order…'); fastText('[data-bn-confirm]','Updating…');
       clearFrame(); busy = true;
       try {
@@ -648,6 +669,7 @@
         active.purchase = planned.purchase; active.remaining = planned.remaining; active.extraCount = fast.selected.length; save();
         await reconcile(planned.purchase); active.phase = 'checking_out'; save(); seedSession(); busy = false;
         if (cancelPending) { cancelPending = false; await cancel(); return; }
+        if (fast.refreshQueued) { fast.refreshQueued = false; await refreshFast(); return; }
         fastText('[data-bn-extras]',fast.selected.length ? fast.selected.length+' cart item'+(fast.selected.length===1?'':'s')+' included' : 'Also in your cart ('+fast.original.length+')');
         openFrame(overlay.querySelector('[data-bn-native-host]'));
       } catch (error) { busy = false; throw error; }
@@ -657,6 +679,12 @@
       frame.setAttribute('aria-hidden','true'); frame.setAttribute('tabindex','-1');
       frame.addEventListener('load', function () { installFrame().catch(showError); });
       frame.src = '/ShoppingCart.aspx?wlCheckout=single'; body.appendChild(frame);
+      // Images/chat widgets must not hold up native forms that are already ready.
+      frameReadyTimer = win.setInterval(function () {
+        var page;
+        try { page = frame?.contentDocument; } catch (_) { return; }
+        if (page && page !== installedPage && page.body && page.readyState !== 'loading' && /\/ShoppingCart\.aspx$/i.test(new URL(page.URL).pathname)) installFrame().catch(showError);
+      },100);
     }
     async function installFrame() {
       if (!frame || !active) return;
@@ -665,6 +693,8 @@
       if (!page) {
         frame.classList.add('bn-frame-open'); frame.removeAttribute('aria-hidden'); frame.removeAttribute('tabindex'); loading(false); status('Complete the secure payment step below.'); return;
       }
+      if (page === installedPage) return;
+      installedPage = page;
       if (frameObserver) frameObserver.disconnect();
       if (framePulse) win.clearInterval(framePulse);
       var style = page.createElement('style');
@@ -723,13 +753,13 @@
       inspect();
     }
     async function inspectFrame(child, page) {
-      if (!frame || !active || active.phase === 'restored') return;
+      if (!frame || frame.contentDocument !== page || !active || active.phase === 'restored') return;
       var confirmation = page.getElementById('CartResponseMessage'), merchant = page.getElementById('ctl00_PageBody_SuccessfulPaymentResults_MerchantDetailsPanel');
       if (new URL(child.location.href).searchParams.get('success') === '1' && confirmation && merchant) {
         var order = text(confirmation.querySelector('strong')?.textContent).replace(/^(?:reserved\s+)?order(?:\s+(?:number|no\.?))?\s*[:#-]?\s*/i, '');
         if (!/^[a-z0-9][a-z0-9-]{2,63}$/i.test(order) || !['submitting', 'confirmed', 'restoring'].includes(active.phase)) throw new Error('Order confirmation needs review before restoring the cart.');
         if (busy) return;
-        busy = true; submitting = false; active.orderNumber = order; active.phase = 'confirmed'; active.current = []; active.pending = null; save();
+        busy = true; submitting = false; active.orderNumber = order; active.phase = 'confirmed'; active.current = []; active.pending = null; save(); clearFrame();
         status('Order ' + order + ' confirmed. Restoring items you left in your cart…');
         var fresh = await cart();
         if (fresh.items.length) throw new Error('The order is confirmed, but WebTrack has not returned an empty cart. Your recovery copy is retained.');
@@ -802,8 +832,8 @@
         var el = overlay.querySelector('[data-bn-method="'+entry[0]+'"]'); if (!el) return;
         el.setAttribute('aria-pressed',fast.method===entry[0]?'true':'false');
         el.dataset.available = entry[1].available ? 'true' : 'false';
-        el.disabled = fast.loading || !entry[1].available;
-        fastText('[data-bn-rate="'+entry[0]+'"]',entry[1].available ? entry[1].rate : 'Unavailable');
+        el.disabled = submitting || !!fast.editor || !entry[1].available;
+        fastText('[data-bn-rate="'+entry[0]+'"]',entry[1].available ? entry[1].rate : entry[1].pending ? 'Checking…' : 'Unavailable');
         el.title = entry[1].reason || '';
       });
       fastText('[data-bn-address-title]',fast.method === 'pickup' ? 'Pickup at' : 'Deliver to');
@@ -825,7 +855,7 @@
       }
     }
     async function driveFast(child,page) {
-      if (!fast || fast.driving || fast.stopped || busy || submitting || active.phase !== 'checking_out') return;
+      if (!fast || fast.driving || fast.stopped || fast.editor || busy || submitting || active.phase !== 'checking_out') return;
       if (Date.now()-fast.started > 120000) { haltFast('This is taking longer than expected. Retry or cancel.'); return; }
       fast.driving = true;
       var current = fast;
@@ -839,6 +869,8 @@
             return;
           }
           fast.review = reviewed; fast.ready = true; fast.securePayment = false;
+          overlay.querySelector('[data-bn-retry]')?.remove();
+          overlay.dataset.bnReadyMs = String(Date.now()-fast.opened);
           if (framePulse) { win.clearInterval(framePulse); framePulse = null; }
           ['subtotal','shipping','tax','total'].forEach(function (key) { fastText('[data-bn-'+key+']',reviewed.totals[key]); });
           if (reviewed.employeeZero) fastText('[data-bn-payment]','No payment due');
@@ -854,12 +886,11 @@
         var methodButton = page.getElementById('btnDelivered'), pickupButton = page.getElementById('btnPickup');
         if (methodButton && pickupButton) {
           if (!child.WLCheckout?.refreshDateUI || !child.WLCheckout?.validateBeforeFinalSubmit) return;
-          var quote = child.WLShippingOffer?.current?.(); if (!quote) return;
-          fast.methods = {
-            pickup:{available:!pickupButton.disabled,rate:'Free'},
-            delivery:{available:!!quote.options?.delivery?.available,rate:'$'+Number(quote.options?.delivery?.amount||0).toFixed(2),recommended:quote.recommendation?.mode==='delivery',reason:text(quote.options?.delivery?.reason)},
-            ship:{available:!!quote.options?.ups?.available,rate:'$'+Number(quote.options?.ups?.amount||0).toFixed(2),rates:quote.options?.ups?.rates || [],recommended:quote.recommendation?.mode==='ship',reason:text(quote.options?.ups?.reason)}
-          };
+          var quote = child.WLShippingOffer?.current?.();
+          fast.methods = fulfillmentOptions(!pickupButton.disabled,quote);
+          updateFastOptions();
+          // Pickup needs native stock/schedule validation, not a paid carrier quote.
+          if (!quote && fast.method !== 'pickup') return;
           if (!fast.method) fast.method = fast.methods[quote.recommendation?.mode]?.available ? quote.recommendation.mode : fast.methods.delivery.available ? 'delivery' : fast.methods.ship.available ? 'ship' : 'pickup';
           updateFastOptions();
           if (!fast.methods[fast.method]?.available) { haltFast('That option is unavailable. Choose another.'); return; }
@@ -1061,5 +1092,5 @@
       if (latest && latest.owner !== owner) { busy = true; clearFrame(); status('Buy now is active in another tab. Cart changes have stopped here.', true); }
     });
   }
-  return { boot: boot, build: BUILD, audience: USER, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, fulfillmentApplied: fulfillmentApplied, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview };
+  return { boot: boot, build: BUILD, audience: USER, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, fulfillmentApplied: fulfillmentApplied, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions };
 });
