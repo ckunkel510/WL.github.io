@@ -6,7 +6,7 @@
   else core.boot(root).catch(function () { /* An unavailable pilot leaves native shopping alone. */ });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261015-ckunkel2-3';
+  var BUILD = '20261015-ckunkel2-4';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var USER = 'ckunkel2'; // No query string, storage value, or public rollout override.
   var PREFIX = 'wl_buy_now_pilot_v1:';
@@ -101,6 +101,32 @@
     if (date.getFullYear() !== parts[0] || date.getMonth() !== parts[1]-1 || date.getDate() !== parts[2] || date.getDay() === 0) return false;
     return (!min || value >= min) && (!max || value <= max);
   }
+  function firstDate(min, max) {
+    var parts = String(min || '').split('-').map(Number);
+    if (parts.length !== 3) return '';
+    var date = new Date(parts[0], parts[1]-1, parts[2], 12);
+    for (var i = 0; i < 16; i++, date.setDate(date.getDate()+1)) {
+      var value = [date.getFullYear(), String(date.getMonth()+1).padStart(2,'0'), String(date.getDate()).padStart(2,'0')].join('-');
+      if (dateChoice(value, min, max)) return value;
+    }
+    return '';
+  }
+  function money(value) {
+    var match = text(value).match(/^\$?\s*(\d+(?:,\d{3})*)(?:\.(\d{2}))?$/);
+    return match ? Number(match[1].replace(/,/g,''))*100 + Number(match[2] || 0) : null;
+  }
+  function reviewTotals(summary) {
+    var result = {};
+    Array.from(summary.querySelectorAll('table tbody tr')).forEach(function (row) {
+      var label = text(row.children[0]?.textContent), value = text(row.querySelector('td.numeric')?.textContent);
+      if (/^Subtotal\b/i.test(label)) result.subtotal = value;
+      else if (/^Tax$/i.test(label)) result.tax = value;
+      else if (/^Total(?:\s+inc\s+Tax)?$/i.test(label)) result.total = value;
+      else if (/^(?:Delivery|Shipping)(?:\s|$)/i.test(label)) result.shipping = value;
+    });
+    if (['subtotal','tax','total'].some(function (key) { return money(result[key]) === null; })) throw new Error('The final total is still loading.');
+    return result;
+  }
   function marker(record) { return 'Website Buy Now | ' + record.id + ' | Additional cart items: ' + record.extraCount; }
   function savedChoice(options, preferred) {
     var available = options.filter(function (option) { return option.value && !/^(select|choose|please)\b/i.test(text(option.label)); });
@@ -172,7 +198,7 @@
     var key = PREFIX + scope, preferenceKey = PREFIX + 'payment:' + scope;
     var blocked = null;
     var owner = win.crypto.randomUUID(), active = null, overlay = null, frame = null, releaseLock = null;
-    var previousFocus = null, previousOverflow = '', busy = false, submitting = false, frameObserver = null, frameTimer = null, permittedFinal = null;
+    var previousFocus = null, previousOverflow = '', busy = false, submitting = false, cancelPending = false, frameObserver = null, frameTimer = null, framePulse = null, permittedFinal = null, fast = null;
     var lockName = PREFIX + 'lock:' + scope;
     var model = { build: BUILD, audience: USER };
     win.WLBuyNowPilot = model;
@@ -189,8 +215,8 @@
     }
 
     async function checkIdentity() {
-      var currentSettings = await authenticate();
-      var fresh = await fetchDocument('/AccountInfo_R.aspx');
+      var identity = await Promise.all([authenticate(), fetchDocument('/AccountInfo_R.aspx')]);
+      var currentSettings = identity[0], fresh = identity[1];
       var header = fresh.querySelector('.panelAccountInfo .listPageHeader,.accountInfoHeader');
       if (!header || await digest(USER + '|' + text(header.textContent)) !== scope) throw new Error('The customer account changed. Cart changes have stopped.');
       var expectedBranch = active ? active.branch : branch;
@@ -203,6 +229,7 @@
       if (!overlay) return;
       var el = overlay.querySelector('[data-bn-status]');
       el.textContent = message; el.classList.toggle('bn-error', !!error);
+      if (error) loading(false);
     }
     function button(label, handler, secondary) {
       var el = doc.createElement('button'); el.type = 'button'; el.className = 'bn-action' + (secondary ? ' bn-secondary' : ''); el.textContent = label;
@@ -211,6 +238,7 @@
     function clearFrame() {
       if (frameObserver) frameObserver.disconnect(); frameObserver = null;
       if (frameTimer) win.clearTimeout(frameTimer); frameTimer = null;
+      if (framePulse) win.clearInterval(framePulse); framePulse = null;
       if (frame) { frame.remove(); frame = null; }
     }
     function dismiss() {
@@ -219,7 +247,8 @@
       doc.body.style.overflow = previousOverflow;
       if (previousFocus && previousFocus.isConnected) previousFocus.focus();
       if (releaseLock) releaseLock(); releaseLock = null;
-      active = null; busy = false; submitting = false;
+      active = null; busy = false; submitting = false; cancelPending = false;
+      fast = null;
       if (blocked) addButtons();
       else purchaseRestrictions().then(function (ids) { blocked = ids; addButtons(); }).catch(function () {});
     }
@@ -230,16 +259,18 @@
       var panel = doc.createElement('section'); panel.className = 'bn-panel'; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-labelledby', 'bn-title');
       var head = doc.createElement('div'); head.className = 'bn-head';
       var heading = doc.createElement('h2'); heading.id = 'bn-title'; heading.textContent = title;
-      var label = doc.createElement('small'); label.textContent = 'Private pilot · ckunkel2';
+      var label = doc.createElement('small'); label.textContent = 'Private pilot';
       var copy = doc.createElement('div'); copy.append(heading, label);
       head.append(copy, button('Cancel', function () { cancel().catch(showError); }, true));
-      var message = doc.createElement('p'); message.dataset.bnStatus = ''; message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite');
+      var message = doc.createElement('div'); message.className = 'bn-progress'; message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite');
+      var spinner = doc.createElement('span'); spinner.className = 'bn-spinner'; spinner.setAttribute('aria-hidden','true');
+      var statusText = doc.createElement('span'); statusText.dataset.bnStatus = ''; message.append(spinner,statusText);
       var body = doc.createElement('div'); body.className = 'bn-body'; body.dataset.bnBody = '';
       panel.append(head, message, body); overlay.appendChild(panel); doc.body.appendChild(overlay); doc.body.style.overflow = 'hidden';
       overlay.addEventListener('keydown', function (event) {
         if (event.key === 'Escape') { event.preventDefault(); cancel().catch(showError); }
         if (event.key !== 'Tab') return;
-        var focusable = Array.from(panel.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select,iframe')).filter(function (el) { return !el.hidden && el.offsetParent; });
+        var focusable = Array.from(panel.querySelectorAll('button:not([disabled]),a[href],input:not([disabled]),select,iframe')).filter(function (el) { return !el.hidden && el.offsetParent && el.tabIndex >= 0 && el.getAttribute('aria-hidden') !== 'true'; });
         if (!focusable.length) return;
         var first = focusable[0], last = focusable[focusable.length - 1];
         if (event.shiftKey && doc.activeElement === first) { event.preventDefault(); last.focus(); }
@@ -248,6 +279,7 @@
       head.querySelector('button').focus();
     }
     function showError(error) {
+      if (fast) { fast.ready = false; fast.stopped = true; }
       status(error && error.message || 'Buy now stopped. Your recovery copy is retained.', true);
       busy = false;
       if (active && !['submitting', 'uncertain'].includes(active.phase)) showRestoreButton();
@@ -337,13 +369,17 @@
     }
     async function preflight(items) {
       // Validate every original line before removing any line. Re-add must expose a native form.
-      for (var i = 0; i < items.length; i++) {
-        var info = await product(items[i].pid);
-        if (info.name) items[i].name = info.name;
-        if (info.code.toUpperCase() !== items[i].code.toUpperCase() || info.unit !== items[i].unit) throw new Error('A cart line differs from its standard product. Please use regular checkout.');
+      var index = 0;
+      async function checkNext() {
+        while (index < items.length) {
+        var item = items[index++], info = await product(item.pid);
+        if (info.name) item.name = info.name;
+        if (info.code.toUpperCase() !== item.code.toUpperCase() || info.unit !== item.unit) throw new Error('A cart line differs from its standard product. Please use regular checkout.');
         var selectedUnit = info.doc.querySelector('select[id*="Per"],select[id*="UOM"],select[id*="Unit"]');
-        if (selectedUnit || (items[i].unit && !/^(ea|each|pc|pcs|bag|box|pack|pair|roll|set|gal|lb)$/i.test(items[i].unit))) throw new Error('This cart uses a unit that has not been proven restorable. Please use regular checkout.');
+        if (selectedUnit || (item.unit && !/^(ea|each|pc|pcs|bag|box|pack|pair|roll|set|gal|lb)$/i.test(item.unit))) throw new Error('This cart uses a unit that has not been proven restorable. Please use regular checkout.');
+        }
       }
+      await Promise.all(Array.from({length:Math.min(items.length,4)},checkNext));
     }
     async function reconcile(wanted) {
       for (var count = 0; count < 180; count++) {
@@ -392,11 +428,11 @@
       if (submitting || active && ['submitting', 'uncertain'].includes(active.phase)) {
         status('The order result must be checked before restoring the cart. Do not submit the order again.', true); return;
       }
-      if (busy) { status('Please wait for the current cart change to finish before cancelling.'); return; }
+      if (busy) { cancelPending = true; status('Finishing this change, then restoring your cart…'); return; }
       if (!active) { dismiss(); return; }
       busy = true; clearFrame();
       var wanted = recoveryTarget(active);
-      active.phase = 'restoring'; save(); status('Restoring and checking your saved cart…');
+      active.phase = 'restoring'; save(); loading(true); status('Restoring your cart…');
       await reconcile(wanted); restoreSession(); storage.removeItem(key);
       var purchased = !!active.orderNumber;
       dismiss();
@@ -407,72 +443,200 @@
       var el = doc.createElement('div'); el.className = 'bn-notice'; el.setAttribute('role', 'status'); el.textContent = message;
       el.appendChild(button('Dismiss', function () { el.remove(); }, true)); doc.body.appendChild(el);
     }
+    function loading(value) {
+      if (!overlay) return;
+      overlay.classList.toggle('bn-loading', !!value);
+      overlay.querySelector('.bn-panel').setAttribute('aria-busy', value ? 'true' : 'false');
+      if (fast) {
+        fast.loading = !!value;
+        overlay.querySelectorAll('[data-bn-edit],[data-bn-method]').forEach(function (el) { el.disabled = !!value || el.dataset.available === 'false'; });
+        var confirm = overlay.querySelector('[data-bn-confirm]');
+        if (confirm) confirm.disabled = !!value || !fast.ready || !!fast.editor;
+      }
+    }
+    function node(tag, copy, className) {
+      var el = doc.createElement(tag); if (copy) el.textContent = copy; if (className) el.className = className; return el;
+    }
+    function fastText(selector, copy) {
+      var el = overlay?.querySelector(selector); if (el && el.textContent !== copy) el.textContent = copy;
+    }
+    function renderFast(info, primary, before) {
+      var body = overlay.querySelector('[data-bn-body]');
+      body.innerHTML = '<div class="bn-product"><div data-bn-photo></div><div><h3 data-bn-product></h3><span data-bn-qty></span></div></div>' +
+        '<div class="bn-methods" role="group" aria-label="Fulfillment">' +
+        '<button type="button" data-bn-method="pickup"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 10h18M4 10v11h16V10M3 10l2-7h14l2 7M9 21v-7h6v7"/></svg><strong>Pickup</strong><small data-bn-rate="pickup">Checking…</small></button>' +
+        '<button type="button" data-bn-method="delivery"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 5h12v12H2zM14 9h4l4 5v3h-8M7 17a2 2 0 1 1-4 0 2 2 0 0 1 4 0zM21 17a2 2 0 1 1-4 0 2 2 0 0 1 4 0z"/></svg><strong>Delivery</strong><small data-bn-rate="delivery">Checking…</small></button>' +
+        '<button type="button" data-bn-method="ship"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 6 9-4 9 4v12l-9 4-9-4zM3 6l9 4 9-4M12 10v12M7 4l10 4"/></svg><strong>Ship</strong><small data-bn-rate="ship">Checking…</small></button></div>' +
+        '<div class="bn-options">' +
+        '<div class="bn-option"><span class="bn-option-icon">⌖</span><div><strong data-bn-address-title>Deliver to</strong><span data-bn-address>Account address</span></div><button type="button" data-bn-edit="address">Change</button></div>' +
+        '<div class="bn-option"><span class="bn-option-icon">◷</span><div><strong>When</strong><span data-bn-timing>Earliest available</span></div><button type="button" data-bn-edit="timing">Change</button></div>' +
+        '<div class="bn-option"><span class="bn-option-icon">▤</span><div><strong>Payment</strong><span data-bn-payment>Saved payment</span></div><button type="button" data-bn-edit="payment">Change</button></div></div>' +
+        '<button type="button" class="bn-extras" data-bn-edit="extras"><span data-bn-extras></span><span>＋</span></button>' +
+        '<button type="button" class="bn-more" data-bn-edit="notes">Order notes & billing</button>' +
+        '<div data-bn-editor hidden></div><div class="bn-totals"><div><span>Items</span><span data-bn-subtotal>—</span></div><div><span data-bn-shipping-label>Delivery</span><span data-bn-shipping>—</span></div><div><span>Tax</span><span data-bn-tax>—</span></div><div class="bn-grand"><strong>Order total</strong><strong data-bn-total>—</strong></div></div>' +
+        '<button type="button" class="bn-action bn-confirm" data-bn-confirm disabled>Preparing your order…</button>' +
+        '<p class="bn-terms">By placing your order, you agree to <a href="/TermsAndConditions.aspx" target="_blank" rel="noopener">Woodson’s terms</a>.</p><div data-bn-native-host></div>';
+      fastText('[data-bn-product]', info.name || primary.code);
+      overlay.querySelector('.bn-footer')?.remove();
+      var footer = node('div','','bn-footer');
+      ['.bn-totals','[data-bn-confirm]','.bn-terms'].forEach(function (selector) { footer.appendChild(body.querySelector(selector)); });
+      body.after(footer);
+      fastText('[data-bn-qty]', 'Qty ' + primary.quantity + ' · ' + primary.unit);
+      fastText('[data-bn-extras]', before.length ? 'Also in your cart (' + before.length + ')' : 'No other cart items');
+      var photo = info.doc.querySelector('img[id$="_ProductImage"],.product-image-wrapper img');
+      if (photo?.getAttribute('src')) {
+        var url = new URL(photo.getAttribute('src'), ORIGIN);
+        if (url.protocol === 'https:' || url.origin === ORIGIN) {
+          var img = doc.createElement('img'); img.src = url.href; img.alt = ''; overlay.querySelector('[data-bn-photo]').appendChild(img);
+        }
+      }
+      body.querySelectorAll('[data-bn-method]').forEach(function (el) {
+        el.addEventListener('click', function () { if (fast.loading || !fast.methods[el.dataset.bnMethod]?.available) return; fast.method = el.dataset.bnMethod; fast.date = ''; fast.shippingValue = ''; refreshFast().catch(showError); });
+      });
+      body.querySelectorAll('[data-bn-edit]').forEach(function (el) { el.addEventListener('click', function () { editFast(el.dataset.bnEdit); }); });
+      overlay.querySelector('[data-bn-confirm]').addEventListener('click', function () {
+        if (!fast?.ready || fast.loading || fast.editor || !frame?.contentDocument) return;
+        submitNative(frame.contentDocument.getElementById('ctl00_PageBody_CompleteCheckoutButton'), frame.contentDocument).catch(showError);
+      });
+      loading(true);
+    }
+    function field(form, label, value, type, options) {
+      var wrap = node('label', label), input = doc.createElement(options ? 'select' : type === 'textarea' ? 'textarea' : 'input');
+      if (!options && type !== 'textarea') input.type = type || 'text';
+      input.setAttribute('aria-label',label);
+      if (options) options.forEach(function (option) { var el = node('option', option.label); el.value = option.value; input.appendChild(el); });
+      input.value = value || ''; wrap.appendChild(input); form.appendChild(wrap); return input;
+    }
+    function editFast(kind) {
+      if (!fast || fast.loading || submitting || busy) return;
+      var host = overlay.querySelector('[data-bn-editor]'); host.replaceChildren(); host.hidden = false; fast.editor = kind; loading(false);
+      var titles = {address:fast.method === 'pickup' ? 'Pickup store' : 'Delivery address',timing:'Schedule',payment:'Payment',extras:'Add from your cart',notes:'Order details'};
+      host.appendChild(node('h3', titles[kind]));
+      var form = doc.createElement('form'), values = {}, action = null; host.appendChild(form);
+      if (kind === 'address' && fast.method === 'pickup') {
+        values.store = field(form, 'Pickup store', fast.store, 'text', fast.stores || []);
+      } else if (kind === 'address') {
+        var address = fast.address || {};
+        [['line1','Street'],['line2','Apt / suite'],['city','City'],['stateValue','State'],['zip','ZIP'],['contactName','Contact'],['phone','Phone'],['email','Email']].forEach(function (entry) {
+          values[entry[0]] = field(form, entry[1], address[entry[0]], entry[0] === 'email' ? 'email' : 'text');
+          if (['line1','city','stateValue','zip','contactName','phone','email'].includes(entry[0])) values[entry[0]].required = true;
+        });
+      } else if (kind === 'timing') {
+        values.date = field(form, fast.method === 'pickup' ? 'Pickup date' : 'Delivery date', fast.date, 'date');
+        values.date.min = fast.dateMin || ''; values.date.max = fast.dateMax || '';
+        if (fast.method === 'pickup') {
+          values.time = field(form, 'Pickup time', fast.pickupTime, 'text', fast.pickupTimes || []);
+          values.person = field(form, 'Pickup person', fast.pickupPerson || fast.address?.contactName);
+          values.person.required = true;
+        } else if (fast.method === 'delivery') {
+          values.window = field(form, 'Delivery window', fast.window, 'text', [{value:'Morning',label:'Morning'},{value:'Afternoon',label:'Afternoon'}]);
+        } else {
+          values.date.closest('label').hidden = true;
+          values.shipping = field(form, 'UPS service', fast.shippingValue, 'text', fast.shippingOptions || []);
+        }
+      } else if (kind === 'payment') {
+        values.payment = field(form, 'Saved payment', fast.paymentFingerprint, 'text', (fast.payments || []).map(function (option) { return {value:option.fingerprint,label:option.label}; }));
+        var rememberLabel = node('label', '', 'bn-check'); values.remember = doc.createElement('input'); values.remember.type = 'checkbox'; values.remember.checked = !!storage.getItem(preferenceKey); rememberLabel.append(values.remember, doc.createTextNode(' Remember on this browser')); form.appendChild(rememberLabel);
+        action = button('Add new payment', function () { fast.addPayment = true; closeEditor(); refreshFast().catch(showError); }, true); form.appendChild(action);
+      } else if (kind === 'extras') {
+        fast.original.forEach(function (item) {
+          var label = node('label', '', 'bn-check'), check = doc.createElement('input'); check.type = 'checkbox'; check.value = item.pid; check.checked = fast.selected.includes(item.pid);
+          label.append(check, doc.createTextNode((item.name || item.code) + ' · Qty ' + item.quantity)); form.appendChild(label);
+        });
+        if (!fast.original.length) form.appendChild(node('p','No other cart items.'));
+      } else if (kind === 'notes') {
+        values.reference = field(form, 'PO / reference', fast.reference);
+        values.notes = field(form, 'Order notes', fast.notes, 'textarea');
+        var billing = button('Change billing address', function () { editBilling(form); }, true); form.appendChild(billing);
+      }
+      var actions = node('div', '', 'bn-editor-actions'), saveButton = node('button','Apply','bn-action'); saveButton.type = 'submit';
+      actions.append(saveButton, button('Cancel', closeEditor, true)); form.appendChild(actions);
+      form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        if (!form.reportValidity()) return;
+        if (kind === 'address' && fast.method === 'pickup') fast.store = values.store.value;
+        else if (kind === 'address') {
+          fast.address = Object.assign({}, fast.address, Object.fromEntries(Object.entries(values).map(function (entry) { return [entry[0],text(entry[1].value)]; })));
+          fast.address.stateValue = fast.address.stateValue.toUpperCase(); fast.address.stateText = fast.address.stateValue;
+          fast.addressChanged = true; fast.method = ''; fast.date = '';
+        } else if (kind === 'timing') {
+          if (fast.method !== 'ship' && !dateChoice(values.date.value,values.date.min,values.date.max)) { status('Choose a Monday–Saturday date in the available range.',true); return; }
+          fast.date = values.date.value; if (values.time) fast.pickupTime = values.time.value; if (values.person) fast.pickupPerson = values.person.value; if (values.window) fast.window = values.window.value; if (values.shipping) fast.shippingValue = values.shipping.value;
+        } else if (kind === 'payment') {
+          fast.paymentFingerprint = values.payment.value;
+          if (values.remember.checked) storage.setItem(preferenceKey,fast.paymentFingerprint); else storage.removeItem(preferenceKey);
+        } else if (kind === 'extras') fast.selected = Array.from(form.querySelectorAll('input:checked')).map(function (el) { return el.value; });
+        else if (kind === 'notes') {
+          fast.reference = values.reference.value; fast.notes = values.notes.value;
+          if (fast.billingInputs) { fast.billing = {}; Object.entries(fast.billingInputs).forEach(function (entry) { fast.billing[entry[0]] = entry[1].value; }); }
+        }
+        closeEditor(); refreshFast().catch(showError);
+      });
+      form.querySelector('input,select,textarea')?.focus();
+    }
+    function editBilling(form) {
+      if (fast.billingInputs) return;
+      var address = fast.billing || fast.address || {}; fast.billingInputs = {};
+      form.appendChild(node('h4','Billing address'));
+      [['line1','Street'],['line2','Apt / suite'],['city','City'],['stateValue','State'],['zip','ZIP']].forEach(function (entry) { var input = field(form,entry[1],address[entry[0]]); input.required = entry[0] !== 'line2'; fast.billingInputs[entry[0]] = input; });
+    }
+    function closeEditor() {
+      if (!fast || !overlay) return;
+      fast.editor = ''; fast.billingInputs = null;
+      var host = overlay.querySelector('[data-bn-editor]'); host.hidden = true; host.replaceChildren(); loading(fast.loading);
+    }
+    var SESSION_KEYS = ['wl_fulfillment_intent','wl_fulfillment_method','wl_fulfillment_selection_source_v1','wl_confirmed_fulfillment_v1','wl_checkout_form_snapshot_v2','wl_checkout_single_page_preview','wl_shipping_selection_v1','wl_shipping_offer_v1','wl_checkout_date_state_v2','wl_checkout_auto_advance','wl_checkout_address_payload','wl_checkout_contact_payload','wl_returnStep','wl_pendingStep','wl_expect_nav','wl_billing_confirmed','wl_billing_seen','wl_billing_confirmed_delivered','wl_autocopy_done'];
+    function seedSession() {
+      SESSION_KEYS.forEach(function (name) { win.sessionStorage.removeItem(name); });
+      win.sessionStorage.setItem('wl_checkout_single_page_preview','1');
+      if (fast.address) win.sessionStorage.setItem('wl_checkout_address_payload', JSON.stringify(Object.assign({},fast.address,{ts:Date.now()})));
+    }
     async function start(id, quantity) {
       if (!ENABLE_NEW_STARTS || overlay || busy) return;
       await withLock(async function () {
-        shell('Buy now'); status('Checking this product and your current cart…'); busy = true;
-        await checkIdentity();
-        blocked = await purchaseRestrictions();
-        if (record()) throw new Error('An earlier Buy now needs cart recovery first. Reload this page to recover it.');
-        var before = await cart(), info = await product(id);
-        await preflight(before.items);
-        var primary = { pid: id, quantity: quantity, name: info.name, code: info.code, unit: info.unit };
-        await preflight([primary]);
-        // Read native metadata using an untouched cart only after preparation; no estimated price is a final total.
-        var body = overlay.querySelector('[data-bn-body]');
-        var summary = doc.createElement('p'); summary.textContent = (info.name || 'Selected product') + ' · Quantity ' + quantity; body.appendChild(summary);
-        var selection = doc.createElement('fieldset'), legend = doc.createElement('legend'); legend.textContent = before.items.length ? 'Also in your cart — include any in this order?' : 'Your cart is empty'; selection.appendChild(legend);
-        before.items.forEach(function (item) {
-          var label = doc.createElement('label'); label.className = 'bn-cart-line';
-          var check = doc.createElement('input'); check.type = 'checkbox'; check.value = item.pid;
-          label.append(check, doc.createTextNode((item.name || item.code) + ' · Qty ' + item.quantity)); selection.appendChild(label);
-        });
-        if (before.items.length > 1) selection.appendChild(button('Select all cart items', function () { selection.querySelectorAll('input').forEach(function (el) { el.checked = true; }); }, true));
-        body.appendChild(selection);
-        var hint = doc.createElement('p'); hint.className = 'bn-hint'; hint.textContent = 'Your saved address and payment options stay editable in secure checkout. WebTrack will show shipping, tax, and the final total before you place the order. Unselected cart items will be restored.'; body.appendChild(hint);
-        var defaultAddress = mainAddress(Array.from(account.querySelectorAll('.accountInfoAddress li')).map(function (el) { return el.textContent; }));
-        if (defaultAddress) {
-          var addressCopy = doc.createElement('p'); addressCopy.textContent = 'Main account address: ' + [defaultAddress.line1, defaultAddress.line2, defaultAddress.city, defaultAddress.stateValue, defaultAddress.zip].filter(Boolean).join(', ') + '. You can change it in checkout.'; body.appendChild(addressCopy);
+        shell('Buy now'); loading(true); status('Getting your options…'); busy = true;
+        await Promise.all([checkIdentity(), purchaseRestrictions().then(function (ids) { blocked = ids; })]);
+        if (record()) throw new Error('Restore your earlier Buy now cart first.');
+        var details = await Promise.all([cart(),product(id)]), before = details[0], info = details[1];
+        var primary = {pid:id,quantity:quantity,name:info.name,code:info.code,unit:info.unit};
+        await preflight(before.items.concat(before.items.some(function (item) { return item.pid === id; }) ? [] : [primary]));
+        var address = mainAddress(Array.from(account.querySelectorAll('.accountInfoAddress li')).map(function (el) { return el.textContent; }));
+        if (address) {
+          address.contactName = [text(settings.getElementById('ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput')?.value),text(settings.getElementById('ctl00_PageBody_ChangeUserDetailsControl_LastNameInput')?.value)].filter(Boolean).join(' ');
+          address.email = text(settings.getElementById('ctl00_PageBody_ChangeUserDetailsControl_EmailAddressInput')?.value);
+          address.phone = text(account.getElementById('ctl00_PageBody_TelephoneLink_TelephoneLink')?.textContent);
         }
-        var proceed = button('Continue to secure checkout', async function () {
-          if (busy) return;
-          busy = true; proceed.disabled = true;
-          try {
-            await checkIdentity();
-            var current = await cart();
-            if (signature(current.items) !== signature(before.items)) throw new Error('Your cart changed. Cancel and reopen Buy now.');
-            var selected = Array.from(selection.querySelectorAll('input:checked')).map(function (el) { return el.value; });
-            var planned = plan(before.items, primary, selected);
-            var sessionKeys = ['wl_fulfillment_intent', 'wl_fulfillment_method', 'wl_fulfillment_selection_source_v1', 'wl_confirmed_fulfillment_v1', 'wl_checkout_form_snapshot_v2', 'wl_checkout_single_page_preview', 'wl_shipping_selection_v1', 'wl_shipping_offer_v1', 'wl_checkout_date_state_v2', 'wl_checkout_auto_advance', 'wl_checkout_address_payload', 'wl_checkout_contact_payload'];
-            var sessionBefore = {}; sessionKeys.forEach(function (name) { sessionBefore[name] = win.sessionStorage.getItem(name); });
-            var draft = { version: 1, scope: scope, branch: branch, id: 'BN-' + win.crypto.randomUUID(), owner: owner, phase: 'backed_up', createdAt: Date.now(), original: planned.original, purchase: planned.purchase, remaining: planned.remaining, current: current.items, pending: null, extraCount: selected.length };
-            // Keep form/address state in this browser session, out of the durable cart record.
-            win.sessionStorage.setItem(PREFIX + 'session:' + draft.id, JSON.stringify(sessionBefore));
-            persist(storage, key, draft);
-            active = draft;
-            // Old shipping offers and dates belong to the old basket. Requote the isolated basket.
-            sessionKeys.forEach(function (name) { win.sessionStorage.removeItem(name); });
-            win.sessionStorage.setItem('wl_checkout_single_page_preview', '1');
-            var address = mainAddress(Array.from(account.querySelectorAll('.accountInfoAddress li')).map(function (el) { return el.textContent; }));
-            if (address) {
-              var first = text(settings.getElementById('ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput')?.value);
-              var last = text(settings.getElementById('ctl00_PageBody_ChangeUserDetailsControl_LastNameInput')?.value);
-              address.contactName = [first, last].filter(Boolean).join(' ');
-              address.email = text(settings.getElementById('ctl00_PageBody_ChangeUserDetailsControl_EmailAddressInput')?.value);
-              address.phone = text(account.getElementById('ctl00_PageBody_TelephoneLink_TelephoneLink')?.textContent);
-              address.ts = Date.now(); win.sessionStorage.setItem('wl_checkout_address_payload', JSON.stringify(address));
-            }
-            active.phase = 'preparing'; save(); status('Your cart is backed up. Preparing secure checkout…');
-            await reconcile(planned.purchase);
-            active.phase = 'checking_out'; save(); body.replaceChildren(); busy = false;
-            openFrame(body);
-          } catch (error) { showError(error); if (!active) proceed.disabled = false; }
-        });
-        body.appendChild(proceed); status('Choose any extra items, then continue. No order is placed until you confirm the final total.'); busy = false;
+        fast = {original:before.items,primary:primary,selected:[],address:address,method:'',methods:{},date:'',window:'Afternoon',ready:false,payments:[],revision:0,driving:false,editor:'',started:Date.now()};
+        if (cancelPending) { busy = false; cancelPending = false; dismiss(); return; }
+        renderFast(info,primary,before.items);
+        var planned = plan(before.items,primary,[]), sessionBefore = {};
+        SESSION_KEYS.forEach(function (name) { sessionBefore[name] = win.sessionStorage.getItem(name); });
+        var draft = {version:1,scope:scope,branch:branch,id:'BN-'+win.crypto.randomUUID(),owner:owner,phase:'backed_up',createdAt:Date.now(),original:planned.original,purchase:planned.purchase,remaining:planned.remaining,current:before.items,pending:null,extraCount:0};
+        win.sessionStorage.setItem(PREFIX+'session:'+draft.id,JSON.stringify(sessionBefore)); persist(storage,key,draft); active = draft;
+        seedSession(); active.phase = 'preparing'; save();
+        await reconcile(planned.purchase); active.phase = 'checking_out'; save(); busy = false;
+        if (cancelPending) { cancelPending = false; await cancel(); return; }
+        openFrame(overlay.querySelector('[data-bn-native-host]'));
       });
+    }
+    async function refreshFast() {
+      if (!fast || busy || submitting) return;
+      fast.ready = false; fast.review = null; fast.revision++; fast.started = Date.now(); fast.driving = false; fast.stopped = false; fast.securePayment = false;
+      loading(true); status('Updating your order…'); fastText('[data-bn-confirm]','Updating…');
+      clearFrame(); busy = true;
+      try {
+        await checkIdentity();
+        var planned = plan(fast.original,fast.primary,fast.selected);
+        active.purchase = planned.purchase; active.remaining = planned.remaining; active.extraCount = fast.selected.length; save();
+        await reconcile(planned.purchase); active.phase = 'checking_out'; save(); seedSession(); busy = false;
+        if (cancelPending) { cancelPending = false; await cancel(); return; }
+        fastText('[data-bn-extras]',fast.selected.length ? fast.selected.length+' cart item'+(fast.selected.length===1?'':'s')+' included' : 'Also in your cart ('+fast.original.length+')');
+        openFrame(overlay.querySelector('[data-bn-native-host]'));
+      } catch (error) { busy = false; throw error; }
     }
     function openFrame(body) {
       frame = doc.createElement('iframe'); frame.title = 'Secure WebTrack Buy now checkout'; frame.className = 'bn-frame'; frame.name = 'woodson-buy-now-checkout';
+      frame.setAttribute('aria-hidden','true'); frame.setAttribute('tabindex','-1');
       frame.addEventListener('load', function () { installFrame().catch(showError); });
       frame.src = '/ShoppingCart.aspx?wlCheckout=single'; body.appendChild(frame);
     }
@@ -481,9 +645,10 @@
       var child = frame.contentWindow, page;
       try { page = frame.contentDocument; if (child.location.origin !== ORIGIN) page = null; } catch (_) { page = null; }
       if (!page) {
-        status('Complete the secure payment step, then return here. Your cart recovery copy is retained.'); return;
+        frame.classList.add('bn-frame-open'); frame.removeAttribute('aria-hidden'); frame.removeAttribute('tabindex'); loading(false); status('Complete the secure payment step below.'); return;
       }
       if (frameObserver) frameObserver.disconnect();
+      if (framePulse) win.clearInterval(framePulse);
       var style = page.createElement('style');
       style.textContent = '#PageHeaderDiv,#PageFooterDiv,#siteHeaderContent,#savedForLater{display:none!important}body{padding:0!important}#MainLayoutRow{margin:8px auto!important}';
       page.head.appendChild(style);
@@ -536,6 +701,7 @@
         frameTimer = win.setTimeout(function () { scheduled = false; inspectFrame(child, page).catch(showError); }, 80);
       }
       frameObserver = new win.MutationObserver(inspect); frameObserver.observe(page.body, { childList: true, subtree: true });
+      framePulse = win.setInterval(inspect,300);
       inspect();
     }
     async function inspectFrame(child, page) {
@@ -551,7 +717,7 @@
         if (fresh.items.length) throw new Error('The order is confirmed, but WebTrack has not returned an empty cart. Your recovery copy is retained.');
         active.phase = 'restoring'; save(); await reconcile(active.remaining); restoreSession(); storage.removeItem(key); active.phase = 'restored';
         status('Order ' + order + ' is confirmed. Your remaining cart items are restored.'); busy = false;
-        var done = button('Continue shopping', dismiss); overlay.querySelector('[data-bn-body]').prepend(done); return;
+        loading(false); overlay.querySelector('.bn-footer')?.remove(); var done = button('Continue shopping', dismiss); overlay.querySelector('[data-bn-body]').replaceChildren(node('div','✓','bn-success'),node('h3','Order confirmed'),done); return;
       }
       if (submitting) {
         status('Waiting for WebTrack to confirm the order. Do not submit again or close this window.'); return;
@@ -568,62 +734,213 @@
         } else if (!instructions.value.includes(active.id)) instructions.value = [instructions.value, note].filter(Boolean).join(' | ');
         instructions.dataset.bnNativeNote = '1';
       }
-      var complete = page.getElementById('ctl00_PageBody_CompleteCheckoutButton');
-      if (complete) { status('Review the address, payment, shipping, tax, and final total below. Complete Order places this Buy now order.'); return; }
-      var cards = page.getElementById('ctl00_PageBody_ddlCardsOnFile');
-      if (cards && cards.options.length) { await paymentPicker(child, page, cards); return; }
-      var checkout = page.getElementById('ctl00_PageBody_PlaceOrderButton');
-      if (checkout && page.querySelector('.shopping-cart-item') && !page.documentElement.dataset.bnCheckoutOpened) {
-        page.documentElement.dataset.bnCheckoutOpened = '1';
-        status('Opening WebTrack checkout for your selected items…'); checkout.click(); return;
-      }
-      status('Confirm your saved address and delivery details below. Shipping and tax will be calculated by WebTrack.');
+      await driveFast(child,page);
     }
-    async function paymentPicker(child, page, cards) {
-      if (page.getElementById('bn-payment-choice')) return;
-      var options = await Promise.all(Array.from(cards.options).map(async function (option) {
-        return { value: option.value, label: text(option.textContent), fingerprint: await digest(scope + '|' + text(option.textContent)) };
-      }));
-      var preferred = storage.getItem(preferenceKey), selected = savedChoice(options, preferred);
-      if (!selected) { status('Add a payment method using WebTrack below, then review the order.'); return; }
-      var section = page.createElement('section'); section.id = 'bn-payment-choice'; section.style.cssText = 'padding:16px;border:1px solid #d7c3c6;border-radius:8px;margin:12px;background:#fff';
-      var label = page.createElement('label'); label.textContent = 'Buy now payment '; label.htmlFor = 'bn-payment-method'; var select = page.createElement('select'); select.id = 'bn-payment-method';
-      options.filter(function (option) { return option.value; }).forEach(function (option) { var el = page.createElement('option'); el.value = option.value; el.textContent = option.label; select.appendChild(el); }); select.value = selected.value; label.appendChild(select);
-      var rememberLabel = page.createElement('label'); rememberLabel.style.cssText = 'display:block;margin:12px 0';
-      var remember = page.createElement('input'); remember.type = 'checkbox'; remember.checked = !!preferred;
-      rememberLabel.append(remember, page.createTextNode(' Remember this payment for Buy now on this browser'));
-      var review = page.createElement('button'); review.type = 'button'; review.textContent = 'Use this payment and review order'; review.className = 'epi-button';
-      review.addEventListener('click', async function () {
-        review.disabled = true;
-        try {
-          await checkIdentity();
-          var option = options.find(function (item) { return item.value === select.value; });
-          if (!option || !Array.from(cards.options).some(function (item) { return item.value === option.value && text(item.textContent) === option.label; })) throw new Error('The saved payment list changed. Choose it again in WebTrack.');
-          if (remember.checked) storage.setItem(preferenceKey, option.fingerprint); else storage.removeItem(preferenceKey);
-          var stored = page.getElementById('ctl00_PageBody_rbStoredCard');
-          if (!stored) throw new Error('WebTrack saved-payment controls are unavailable.');
-          stored.checked = true; cards.value = option.value; cards.dispatchEvent(new child.Event('change', { bubbles: true }));
-          var next = page.getElementById('ctl00_PageBody_btnContinue_CardOnFileView');
-          if (!next) throw new Error('WebTrack payment continuation is unavailable.'); next.click();
-        } catch (error) { review.disabled = false; showError(error); }
+    function setNative(child, element, value) {
+      if (!element || element.value === String(value == null ? '' : value)) return;
+      element.value = value == null ? '' : String(value);
+      element.dispatchEvent(new child.Event('input',{bubbles:true}));
+      element.dispatchEvent(new child.Event('change',{bubbles:true}));
+    }
+    function nativeAddress(child, page, prefix, address) {
+      if (!address) return;
+      var base = 'ctl00_PageBody_'+prefix+'_';
+      [['AddressLine1','line1'],['AddressLine2','line2'],['AddressLine3','line3'],['City','city'],['Postcode','zip']].forEach(function (entry) { setNative(child,page.getElementById(base+entry[0]),address[entry[1]] || ''); });
+      var state = page.querySelector('[id^="'+base+'"][id$="CountyList"]');
+      if (state) {
+        var option = Array.from(state.options).find(function (el) { return el.value.toUpperCase() === text(address.stateValue).toUpperCase() || text(el.textContent).toUpperCase() === text(address.stateText || address.stateValue).toUpperCase(); });
+        if (option) setNative(child,state,option.value);
+      }
+    }
+    function readNativeReview(page) {
+      var summary = page.getElementById('summary');
+      if (!summary || !text(summary.textContent).includes(active.id)) throw new Error('Order details are still loading.');
+      var grid = page.getElementById('ctl00_PageBody_ShoppingCartSummaryTableControl_BasketLinesGrid_ctl00');
+      var rows = Array.from(grid ? grid.querySelectorAll('tr.rgRow,tr.rgAltRow') : []).map(function (row) {
+        var cells = row.querySelectorAll('td'); return {code:text(cells[0]?.textContent),quantity:Number(text(cells[3]?.textContent).replace(/,/g,'')),unit:text(cells[4]?.textContent)};
       });
-      var hint = page.createElement('p'); hint.textContent = 'You can also choose another method or add a new card using WebTrack below. This step does not place the order.';
-      var add = page.createElement('button'); add.type = 'button'; add.textContent = 'Add new payment'; add.className = 'epi-button';
-      add.addEventListener('click', function () {
-        var newCard = page.getElementById('ctl00_PageBody_rbCreditCard');
-        var next = page.getElementById('ctl00_PageBody_btnContinue_CardOnFileView');
-        if (!newCard || !next) { showError(new Error('Use the native new-payment option below.')); return; }
-        newCard.checked = true; newCard.dispatchEvent(new child.Event('change', { bubbles: true })); next.click();
+      assertReview(rows,active.current);
+      var totals = reviewTotals(summary), shippingRow = page.getElementById('ctl00_PageBody_ShoppingCartSummaryTableControl_DeliverySummaryRow');
+      if (shippingRow) totals.shipping = text(shippingRow.querySelector('td.numeric')?.textContent);
+      if (!totals.shipping && fast.method === 'pickup') totals.shipping = '$0.00';
+      if (money(totals.shipping) === null) throw new Error('The shipping total is still loading.');
+      var nativeMethod = text(page.getElementById('ctl00_PageBody_ShoppingCartSummaryTableControl_SaleType')?.textContent);
+      if (!nativeMethod) {
+        var label = Array.from(summary.querySelectorAll('.row .font-weight-bold')).find(function (el) { return /Shipping Method/i.test(el.textContent); });
+        nativeMethod = text(label?.parentElement?.querySelector('.col')?.textContent);
+      }
+      if (nativeMethod && ((fast.method === 'pickup') !== /^pickup/i.test(nativeMethod))) throw new Error('The fulfillment choice did not match. Change it and try again.');
+      if (fast.method !== 'pickup' && !(money(totals.shipping) > 0)) throw new Error('WebTrack did not confirm the delivery charge.');
+      var expectedShipping = fast.method === 'pickup' ? 0 : fast.method === 'delivery' ? money(fast.methods.delivery?.rate) : null;
+      if (fast.method === 'ship') {
+        var service = (fast.shippingOptions || []).find(function (option) { return option.value === fast.shippingValue; });
+        var quoted = service?.label.match(/\$\s*[\d,]+\.\d{2}/); if (quoted) expectedShipping = money(quoted[0]);
+      }
+      if (expectedShipping !== null && money(totals.shipping) !== expectedShipping) throw new Error('The delivery charge changed. Refresh your options before ordering.');
+      if (fast.method !== 'ship' && fast.date && !text(summary.textContent).includes(fast.date)) throw new Error('WebTrack did not confirm your requested date.');
+      return {totals:totals,signature:JSON.stringify([signature(active.current),totals,fast.method,fast.paymentFingerprint || '',fast.revision])};
+    }
+    function updateFastOptions() {
+      Object.entries(fast.methods).forEach(function (entry) {
+        var el = overlay.querySelector('[data-bn-method="'+entry[0]+'"]'); if (!el) return;
+        el.setAttribute('aria-pressed',fast.method===entry[0]?'true':'false');
+        el.dataset.available = entry[1].available ? 'true' : 'false';
+        el.disabled = fast.loading || !entry[1].available;
+        fastText('[data-bn-rate="'+entry[0]+'"]',entry[1].available ? entry[1].rate+(entry[1].recommended?' · Best':'') : 'Unavailable');
+        el.title = entry[1].reason || '';
       });
-      hint.textContent = 'Selecting payment opens final order review. Your payment details stay with WebTrack.';
-      section.append(label, rememberLabel, review, add, hint);
-      (cards.closest('.mainContents') || cards.parentElement).prepend(section);
-      var pickerStyle = page.createElement('style'); pickerStyle.textContent = '.wl-card-picker{display:none!important}#bn-payment-choice select{max-width:100%;padding:8px}#bn-payment-choice button{margin:6px 8px 6px 0}'; page.head.appendChild(pickerStyle);
-      status('Your saved payment is selected below. Change it or add a new method, then review the final total.');
+      fastText('[data-bn-address-title]',fast.method === 'pickup' ? 'Pickup at' : 'Deliver to');
+      var store = (fast.stores || []).find(function (option) { return option.value === fast.store; });
+      fastText('[data-bn-address]',fast.method==='pickup' ? (store?.label.split(' - ')[0] || 'Account store') : fast.addressChanged ? 'Selected address' : 'Account address');
+      fastText('[data-bn-shipping-label]',fast.method==='pickup'?'Pickup':fast.method==='ship'?'Shipping':'Delivery');
+      if (fast.method === 'ship') {
+        var service = (fast.shippingOptions || []).find(function (option) { return option.value === fast.shippingValue; });
+        fastText('[data-bn-timing]', service ? service.label : 'UPS Ground');
+      } else if (fast.date) {
+        var parts = fast.date.split('-').map(Number), date = new Date(parts[0],parts[1]-1,parts[2],12);
+        fastText('[data-bn-timing]',date.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})+' · '+(fast.method==='pickup' ? fast.pickupTime || 'First available' : fast.window));
+      }
+    }
+    function haltFast(message) {
+      fast.stopped = true; fast.ready = false; loading(false); status(message,true); fastText('[data-bn-confirm]','Update your options'); updateFastOptions();
+      if (!overlay.querySelector('[data-bn-retry]')) {
+        var retry = button('Try again',function () { retry.remove(); refreshFast().catch(showError); },true); retry.dataset.bnRetry = ''; overlay.querySelector('[data-bn-native-host]').before(retry);
+      }
+    }
+    async function driveFast(child,page) {
+      if (!fast || fast.driving || fast.stopped || busy || submitting || active.phase !== 'checking_out') return;
+      if (Date.now()-fast.started > 65000) { haltFast('This is taking longer than expected. Retry or cancel.'); return; }
+      fast.driving = true;
+      var current = fast;
+      try {
+        var complete = page.getElementById('ctl00_PageBody_CompleteCheckoutButton');
+        if (complete) {
+          var reviewed;
+          try { reviewed = readNativeReview(page); } catch (error) {
+            if (!page.documentElement.dataset.bnReviewWaiting) page.documentElement.dataset.bnReviewWaiting = String(Date.now());
+            if (Date.now()-Number(page.documentElement.dataset.bnReviewWaiting) > 4000) haltFast(error.message);
+            return;
+          }
+          fast.review = reviewed; fast.ready = true; fast.securePayment = false;
+          if (framePulse) { win.clearInterval(framePulse); framePulse = null; }
+          ['subtotal','shipping','tax','total'].forEach(function (key) { fastText('[data-bn-'+key+']',reviewed.totals[key]); });
+          fastText('[data-bn-confirm]','Place order · '+reviewed.totals.total); loading(false); status('Ready to order'); updateFastOptions();
+          frame.classList.remove('bn-frame-open'); frame.setAttribute('aria-hidden','true'); frame.setAttribute('tabindex','-1');
+          return;
+        }
+        var checkout = page.getElementById('ctl00_PageBody_PlaceOrderButton');
+        if (checkout && page.querySelector('.shopping-cart-item')) {
+          if (!page.documentElement.dataset.bnCheckoutOpened) { page.documentElement.dataset.bnCheckoutOpened = '1'; status('Loading your defaults…'); checkout.click(); }
+          return;
+        }
+        var methodButton = page.getElementById('btnDelivered'), pickupButton = page.getElementById('btnPickup');
+        if (methodButton && pickupButton) {
+          if (!child.WLCheckout?.refreshDateUI || !child.WLCheckout?.validateBeforeFinalSubmit) return;
+          var quote = child.WLShippingOffer?.current?.(); if (!quote) return;
+          fast.methods = {
+            pickup:{available:!pickupButton.disabled,rate:'Free'},
+            delivery:{available:!!quote.options?.delivery?.available,rate:'$'+Number(quote.options?.delivery?.amount||0).toFixed(2),recommended:quote.recommendation?.mode==='delivery',reason:text(quote.options?.delivery?.reason)},
+            ship:{available:!!quote.options?.ups?.available,rate:'$'+Number(quote.options?.ups?.amount||0).toFixed(2),recommended:quote.recommendation?.mode==='ship',reason:text(quote.options?.ups?.reason)}
+          };
+          if (!fast.method) fast.method = fast.methods[quote.recommendation?.mode]?.available ? quote.recommendation.mode : fast.methods.delivery.available ? 'delivery' : fast.methods.ship.available ? 'ship' : 'pickup';
+          updateFastOptions();
+          if (!fast.methods[fast.method]?.available) { haltFast('That option is unavailable. Choose another.'); return; }
+          if (page.documentElement.dataset.bnMethod !== fast.method) {
+            page.documentElement.dataset.bnMethod = fast.method;
+            page.getElementById(fast.method==='pickup'?'btnPickup':fast.method==='ship'?'btnShip':'btnDelivered').click();
+            return;
+          }
+          var manager = child.Sys?.WebForms?.PageRequestManager?.getInstance?.(); if (manager?.get_isInAsyncPostBack?.()) return;
+          if (page.documentElement.dataset.bnDetailsContinued && Array.from(page.querySelectorAll('.validation-summary-errors,.alert-danger,.wl-field-invalid')).some(function (el) { return el.offsetParent && text(el.textContent || el.getAttribute('aria-label')); })) { haltFast('Check your address, billing, or pickup details.'); return; }
+          if (!page.documentElement.dataset.bnFieldsApplied) {
+            page.documentElement.dataset.bnFieldsApplied = '1';
+            if (fast.addressChanged) nativeAddress(child,page,'DeliveryAddress',fast.address);
+            if (fast.billing) nativeAddress(child,page,'InvoiceAddress',fast.billing);
+          }
+          var branchField = page.getElementById('ctl00_PageBody_BranchDropDownList');
+          if (branchField) {
+            fast.stores = Array.from(branchField.options).filter(function (option) { return option.value && !/^\[?select/i.test(text(option.textContent)); }).map(function (option) { return {value:option.value,label:text(option.textContent)}; });
+            if (fast.store && branchField.value !== fast.store && fast.method==='pickup') { setNative(child,branchField,fast.store); return; }
+            fast.store = branchField.value;
+          }
+          var dateInput = page.getElementById(fast.method==='pickup'?'pickupDate':'deliveryDate'); if (!dateInput?.min) return;
+          fast.dateMin = dateInput.min; fast.dateMax = dateInput.max;
+          var chosenDate = fast.date || firstDate(dateInput.min,dateInput.max);
+          if (!dateChoice(chosenDate,dateInput.min,dateInput.max)) { haltFast('Choose an available date.'); return; }
+          setNative(child,dateInput,chosenDate); fast.date = chosenDate;
+          child.WLCheckout.refreshDateUI();
+          if (fast.method === 'pickup') {
+            var time = page.getElementById('pickupTime');
+            fast.pickupTimes = Array.from(time?.options || []).filter(function (option) { return !!option.value; }).map(function (option) { return {value:option.value,label:text(option.textContent)}; });
+            if (!fast.pickupTimes.length) {
+              var parts = chosenDate.split('-').map(Number), next = new Date(parts[0],parts[1]-1,parts[2]+1,12);
+              var nextValue = [next.getFullYear(),String(next.getMonth()+1).padStart(2,'0'),String(next.getDate()).padStart(2,'0')].join('-');
+              fast.date = firstDate(nextValue,dateInput.max); fast.pickupTime = ''; if (!fast.date) haltFast('Choose another pickup date.'); return;
+            }
+            if (fast.pickupTime && !fast.pickupTimes.some(function (option) { return option.value===fast.pickupTime; })) fast.pickupTime = '';
+            fast.pickupTime = fast.pickupTime || fast.pickupTimes[0].value; setNative(child,time,fast.pickupTime);
+            var person = page.getElementById('pickupPerson'); fast.pickupPerson = fast.pickupPerson || person?.value || fast.address?.contactName || '';
+            setNative(child,person,fast.pickupPerson);
+          } else {
+            var windowInput = page.querySelector('input[name="deliveryTime"][value="'+fast.window+'"]');
+            if (windowInput && !windowInput.checked) { windowInput.checked = true; windowInput.dispatchEvent(new child.Event('change',{bubbles:true})); }
+          }
+          var instructions = page.getElementById('specialInsExtra');
+          setNative(child,instructions,[fast.notes,marker(active)].filter(Boolean).join('\n'));
+          var reference = page.querySelector('input[id*="PurchaseOrder"],input[id*="CustomerReference"]'); if (reference && fast.reference !== undefined) setNative(child,reference,fast.reference);
+          child.WLCheckout.refreshDateUI(); child.WLCheckout.refreshSectionSummaries?.(); updateFastOptions();
+          if (!page.documentElement.dataset.bnDetailsContinued) {
+            if (!child.WLCheckout.validateBeforeFinalSubmit()) { haltFast('Check your address, billing, or pickup details.'); return; }
+            var nextButton = page.getElementById('ctl00_PageBody_ContinueButton2') || page.getElementById('ctl00_PageBody_ContinueButton1'); if (!nextButton) return;
+            page.documentElement.dataset.bnDetailsContinued = '1'; status('Calculating your total…'); nextButton.click();
+          }
+          return;
+        }
+        var cards = page.getElementById('ctl00_PageBody_ddlCardsOnFile');
+        if (cards) {
+          if (page.documentElement.dataset.bnPaymentContinued) return;
+          var options = await Promise.all(Array.from(cards.options).map(async function (option) { return {value:option.value,label:text(option.textContent),fingerprint:await digest(scope+'|'+text(option.textContent))}; }));
+          if (fast !== current || !frame || frame.contentDocument !== page) return;
+          options = options.filter(function (option) { return option.value && !/^(select|choose|please)\b/i.test(option.label); }); fast.payments = options;
+          var selected = savedChoice(options,fast.paymentFingerprint || storage.getItem(preferenceKey));
+          if (!selected || fast.addPayment) {
+            if (!fast.addPayment && !selected) { haltFast('Add a payment method to continue.'); return; }
+            var newCard = page.getElementById('ctl00_PageBody_rbCreditCard'), next = page.getElementById('ctl00_PageBody_btnContinue_CardOnFileView');
+            if (!newCard || !next) { haltFast('New payment is unavailable.'); return; }
+            fast.addPayment = false; fast.securePayment = true; page.documentElement.dataset.bnPaymentContinued = '1'; newCard.checked = true; newCard.dispatchEvent(new child.Event('change',{bubbles:true})); next.click(); return;
+          }
+          fast.paymentFingerprint = selected.fingerprint; fastText('[data-bn-payment]', '•••• '+(selected.label.match(/\b\d{4}\b/)?.[0] || 'Saved payment'));
+          var stored = page.getElementById('ctl00_PageBody_rbStoredCard'), paymentContinue = page.getElementById('ctl00_PageBody_btnContinue_CardOnFileView');
+          if (!stored || !paymentContinue) { haltFast('Choose another payment method.'); return; }
+          await checkIdentity(); if (fast !== current || !frame || frame.contentDocument !== page) return;
+          page.documentElement.dataset.bnPaymentContinued = '1'; stored.checked = true; cards.value = selected.value; cards.dispatchEvent(new child.Event('change',{bubbles:true})); status('Getting the final total…'); paymentContinue.click(); return;
+        }
+        var shippingContinue = page.getElementById('ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView');
+        if (shippingContinue) {
+          var select = page.getElementById('ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList');
+          if (select) {
+            fast.shippingOptions = Array.from(select.options).filter(function (option) { return !option.disabled && /\$/.test(option.textContent); }).map(function (option) { return {value:option.value,label:text(option.textContent)}; });
+            if (!fast.shippingOptions.length && fast.method!=='pickup') return;
+            if (fast.method === 'ship' && fast.shippingValue && !fast.shippingOptions.some(function (option) { return option.value===fast.shippingValue; })) { haltFast('The shipping options changed. Choose again.'); return; }
+            var choice = fast.shippingValue || fast.shippingOptions[0]?.value;
+            if (choice && select.value !== choice) { setNative(child,select,choice); fast.shippingValue = choice; return; }
+            fast.shippingValue = choice || '';
+          }
+          updateFastOptions();
+          if (!page.documentElement.dataset.bnShippingContinued) { page.documentElement.dataset.bnShippingContinued = '1'; status('Getting the final total…'); shippingContinue.click(); }
+          return;
+        }
+        if (fast.securePayment) {
+          frame.classList.add('bn-frame-open'); frame.removeAttribute('aria-hidden'); frame.removeAttribute('tabindex'); loading(false); status('Add your payment securely below.'); return;
+        }
+      } finally { if (fast === current) fast.driving = false; }
     }
     async function submitNative(control, page) {
       if (submitting || busy || !active || active.phase !== 'checking_out') return;
+      if (fast && (!fast.ready || fast.loading || fast.editor || !fast.review)) return;
+      var approvedReview = fast?.review?.signature;
       busy = true;
+      if (fast) { fast.ready = false; loading(true); }
       try {
         await checkIdentity();
         var fresh = await cart();
@@ -638,10 +955,12 @@
           return {code:text(cells[0]?.textContent),quantity:Number(text(cells[3]?.textContent).replace(/,/g,'')),unit:text(cells[4]?.textContent)};
         });
         assertReview(reviewed, active.current);
+        if (fast && readNativeReview(page).signature !== approvedReview) throw new Error('The final total changed. Review your updated order before placing it.');
         if (!frame || frame.contentDocument !== page) throw new Error('The checkout screen changed. Review the order again before confirming.');
         if (!page.getElementById('ctl00_PageBody_CompleteCheckoutButton')) throw new Error('WebTrack final review is unavailable.');
+        if (cancelPending) { cancelPending = false; busy = false; await cancel(); return; }
         active.phase = 'submitting'; save(); submitting = true; busy = false;
-        status('Submitting once through WebTrack. Waiting for its order confirmation…');
+        status('Placing your order…');
         var nativeFinal = page.getElementById('ctl00_PageBody_CompleteCheckoutButton');
         permittedFinal = nativeFinal;
         try { nativeFinal.click(); } finally { permittedFinal = null; }
@@ -685,7 +1004,7 @@
     }
     function installStyles() {
       var style = doc.createElement('style'); style.id = 'wl-buy-now-styles';
-      style.textContent = '#wl-buy-now{position:fixed;inset:0;z-index:2147483000;background:#0008;display:flex;align-items:center;justify-content:center;padding:16px;font:15px/1.5 system-ui;color:#252525}#wl-buy-now *{box-sizing:border-box}.bn-panel{display:flex;flex-direction:column;width:min(100%,1000px);max-height:94vh;background:#fff;border-radius:12px;box-shadow:0 16px 60px #0005;overflow:hidden}.bn-head{display:flex;gap:16px;align-items:center;justify-content:space-between;border-bottom:1px solid #ddd;padding:16px 20px}.bn-head h2{font:700 23px/1.2 system-ui;margin:0 0 4px}.bn-head small{color:#6b0016}.bn-body{padding:16px 20px;overflow:auto;min-height:0}.bn-panel [data-bn-status]{padding:12px 20px;margin:0;background:#f5f2ef}.bn-panel .bn-error{background:#fff0ed;color:#8c2216}.bn-action{border:1px solid #6b0016;background:#6b0016;color:white;border-radius:6px;padding:11px 16px;font:600 15px/1.4 system-ui;cursor:pointer;min-height:44px}.bn-action:disabled{opacity:.55;cursor:wait}.bn-secondary{background:white;color:#6b0016}.wl-buy-now-button{margin:6px;white-space:nowrap}.bn-cart-line{display:flex;align-items:center;gap:12px;padding:12px;border-bottom:1px solid #ddd}.bn-cart-line input{width:20px;height:20px;flex:none}.bn-body fieldset{border:1px solid #ddd;border-radius:8px;padding:12px}.bn-body legend{font-size:16px;font-weight:650;padding:0 6px}.bn-hint{color:#555}.bn-frame{width:100%;height:64vh;border:0;display:block}.bn-notice{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:white;border:1px solid #6b0016;box-shadow:0 4px 20px #0003;padding:12px;z-index:2147482999;max-width:calc(100% - 24px);font:15px/1.5 system-ui}.bn-notice button{margin-left:12px}@media(max-width:600px){#wl-buy-now{padding:0;align-items:stretch}.bn-panel{max-height:100dvh;height:100dvh;border-radius:0}.bn-head,.bn-body{padding:12px}.bn-panel [data-bn-status]{padding:10px 12px}.bn-frame{height:calc(100dvh - 180px)}.bn-head h2{font-size:21px}}';
+      style.textContent = "#wl-buy-now{position:fixed;inset:0;z-index:2147483000;background:#16101591;display:flex;align-items:center;justify-content:center;padding:20px;font:14px/1.4 system-ui,-apple-system,sans-serif;color:#25282b;backdrop-filter:blur(3px)}\n#wl-buy-now *{box-sizing:border-box}#wl-buy-now [hidden]{display:none!important}.bn-panel{display:flex;flex-direction:column;width:min(100%,500px);max-height:94dvh;background:#fff;border-radius:18px;box-shadow:0 22px 80px #0005;overflow:hidden;position:relative}.bn-head{display:flex;align-items:center;justify-content:space-between;padding:19px 22px 13px}.bn-head h2{font:750 24px/1.15 system-ui;margin:0 0 3px}.bn-head small{font-size:11px;color:#7d6a6d}.bn-head .bn-action{border:0;padding:7px 0 7px 14px;color:#71666a;background:transparent;min-height:38px;font-size:13px}.bn-progress{display:flex;gap:9px;align-items:center;padding:10px 22px;background:#f6f3f0;color:#68575a;font-size:12px;min-height:36px}.bn-progress .bn-error{color:#9b241e}.bn-spinner{width:14px;height:14px;flex:none;border:2px solid #dcc5ca;border-top-color:#6b0016;border-radius:50%;display:none}.bn-loading .bn-spinner{display:block;animation:bn-spin .8s linear infinite}.bn-body{padding:20px 22px 14px;overflow:auto;min-height:0}.bn-product{display:flex;gap:14px;align-items:center;margin-bottom:18px}.bn-product h3{font-size:15px;line-height:1.4;margin:0 0 6px;font-weight:650}.bn-product span{font-size:12px;color:#777}.bn-product [data-bn-photo]{width:56px;height:62px;border-radius:8px;background:#f5f4f1;flex:none;display:grid;place-items:center}.bn-product img{width:52px;height:58px;object-fit:contain}.bn-methods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:17px}.bn-methods button{border:1px solid #dedbd9;border-radius:11px;background:#fff;padding:12px 5px 11px;display:flex;flex-direction:column;align-items:center;gap:5px;color:#4e4648;cursor:pointer;min-height:105px;font:inherit}.bn-methods svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.bn-methods strong{font-size:13px}.bn-methods small{font-size:10px;line-height:1.3}.bn-methods [aria-pressed=true]{background:#fcf5f6;border:2px solid #6b0016;padding:11px 4px 10px;color:#6b0016}.bn-methods [data-available=false]{opacity:.45}.bn-methods button:disabled{cursor:default}.bn-loading .bn-methods small{opacity:.55}.bn-options{border:1px solid #e6e2df;border-radius:11px;overflow:hidden}.bn-option{display:flex;gap:11px;align-items:center;padding:12px 13px}.bn-option+.bn-option{border-top:1px solid #eeeae7}.bn-option-icon{font-size:22px;color:#907b80;width:23px;text-align:center;flex:none}.bn-option>div{display:grid;gap:3px;min-width:0;flex:1}.bn-option strong{font-size:12px;font-weight:650}.bn-option div>span{font-size:12px;color:#777;overflow-wrap:anywhere}.bn-option button,.bn-more{color:#6b0016;background:none;border:0;font:600 12px system-ui;cursor:pointer;padding:8px 0 8px 8px;min-height:36px}.bn-option button:disabled,.bn-more:disabled{opacity:.45;cursor:default}.bn-extras{display:flex;justify-content:space-between;align-items:center;width:100%;padding:12px 13px;margin-top:12px;background:#f8f6f3;border:1px dashed #dacdd0;border-radius:9px;color:#6b0016;font:600 12px system-ui;text-align:left;cursor:pointer;min-height:44px}.bn-extras:disabled{opacity:.6;cursor:default}.bn-more{font-weight:400;padding-left:0;margin:3px 0 0}.bn-totals{border-top:1px solid #e9e4e1;margin-top:7px;padding-top:12px;display:grid;gap:6px;font-size:12px;color:#6c6768}.bn-totals>div{display:flex;justify-content:space-between;gap:12px}.bn-totals .bn-grand{font-size:17px;color:#25282b;padding-top:9px;margin-top:4px;border-top:1px solid #eee9e7}.bn-action{border:1px solid #6b0016;background:#6b0016;color:white;border-radius:8px;padding:11px 16px;font:650 14px/1.4 system-ui;cursor:pointer;min-height:44px}.bn-action:disabled{opacity:.5;cursor:wait}.bn-secondary{background:white;color:#6b0016}.bn-confirm{width:100%;margin-top:14px;min-height:47px;font-size:15px}.bn-terms{font-size:10px;color:#888;text-align:center;margin:10px 0 0}.bn-terms a{color:inherit;text-decoration:underline}.wl-buy-now-button{margin:6px;white-space:nowrap}.bn-frame{position:fixed!important;left:-12000px!important;top:0!important;width:1000px!important;height:800px!important;opacity:0;pointer-events:none;border:0}.bn-frame.bn-frame-open{position:relative!important;left:auto!important;top:auto!important;width:100%!important;height:60dvh!important;opacity:1;pointer-events:auto;margin-top:16px}.bn-success{font-size:48px;color:#297048;text-align:center}.bn-body:has(.bn-success){text-align:center;padding:30px}.bn-notice{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:white;border:1px solid #6b0016;box-shadow:0 4px 20px #0003;padding:12px;z-index:2147482999;max-width:calc(100% - 24px);font:14px/1.5 system-ui}.bn-notice button{margin-left:12px}.bn-panel [data-bn-editor]{border:1px solid #decdd1;border-radius:10px;padding:15px;margin:8px 0 14px;background:#fdfbfa}.bn-panel [data-bn-editor] h3{font-size:16px;margin:0 0 12px}.bn-panel [data-bn-editor] label{display:grid;gap:5px;font-size:12px;margin:10px 0}.bn-panel [data-bn-editor] input,.bn-panel [data-bn-editor] select,.bn-panel [data-bn-editor] textarea{width:100%;min-width:0;padding:10px;border:1px solid #c9c1c1;border-radius:6px;background:#fff;font:14px system-ui}.bn-panel [data-bn-editor] .bn-check{display:flex;gap:10px;align-items:center}.bn-panel [data-bn-editor] .bn-check input{width:19px;height:19px;flex:none}.bn-editor-actions{display:flex;gap:8px;margin-top:14px}.bn-loading .bn-totals [data-bn-total]{color:#a59a9d}.bn-panel button:focus-visible,.bn-panel input:focus-visible,.bn-panel select:focus-visible{outline:3px solid #9c5565;outline-offset:2px}@keyframes bn-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.bn-loading .bn-spinner{animation:none;border-top-width:4px}}@media(max-width:540px){#wl-buy-now{padding:0;align-items:flex-end}.bn-panel{max-height:100dvh;width:100%;border-radius:18px 18px 0 0}.bn-head{padding:16px 18px 12px}.bn-body{padding:16px 18px 13px}.bn-progress{padding-left:18px}.bn-product{margin-bottom:15px}.bn-methods{gap:7px}.bn-methods button{min-height:100px}.bn-terms{margin-bottom:env(safe-area-inset-bottom,0)}}\n.bn-footer{padding:13px 22px 15px;border-top:1px solid #e9e4e1;background:#fff;flex:none}.bn-footer .bn-totals{margin:0;border:0;padding:0;gap:4px}.bn-footer .bn-grand{padding-top:7px;margin-top:3px}.bn-footer .bn-confirm{margin-top:11px}.bn-footer .bn-terms{margin-top:8px}.bn-product{margin-bottom:14px}.bn-methods{margin-bottom:14px}.bn-methods button{min-height:89px;padding-top:8px;padding-bottom:8px}.bn-methods [aria-pressed=true]{padding-top:7px;padding-bottom:7px}.bn-option{padding:9px 12px}.bn-option div>span{line-height:1.25}.bn-more{min-height:32px;padding-top:6px;padding-bottom:6px}.bn-progress:has(.bn-error){background:#fff0ed}.bn-panel:not([aria-busy=true]) .bn-spinner{display:block;border:0;width:14px;height:14px}.bn-panel:not([aria-busy=true]) .bn-spinner:after{content:'✓';color:#3c7753;font-size:15px}.bn-panel:has(.bn-error) .bn-spinner:after{content:'!';color:#a03028}.bn-body:has([data-bn-editor]:not([hidden]))~.bn-footer .bn-terms{display:none}@media(max-width:540px){.bn-footer{padding:12px 18px max(12px,env(safe-area-inset-bottom,0))}.bn-body{padding-bottom:8px}.bn-methods button{min-height:86px}}\n";
       doc.head.appendChild(style);
     }
     installStyles();
@@ -710,5 +1029,5 @@
       if (latest && latest.owner !== owner) { busy = true; clearFrame(); status('Buy now is active in another tab. Cart changes have stopped here.', true); }
     });
   }
-  return { boot: boot, build: BUILD, audience: USER, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, dateChoice: dateChoice };
+  return { boot: boot, build: BUILD, audience: USER, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals };
 });
