@@ -826,7 +826,7 @@
     }
     async function driveFast(child,page) {
       if (!fast || fast.driving || fast.stopped || busy || submitting || active.phase !== 'checking_out') return;
-      if (Date.now()-fast.started > 65000) { haltFast('This is taking longer than expected. Retry or cancel.'); return; }
+      if (Date.now()-fast.started > 120000) { haltFast('This is taking longer than expected. Retry or cancel.'); return; }
       fast.driving = true;
       var current = fast;
       try {
