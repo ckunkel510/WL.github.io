@@ -68,6 +68,14 @@
     }
   }
 
+  function isBuyNowFrame() {
+    try {
+      return window.parent !== window && window.name === "woodson-buy-now-checkout" &&
+        window.parent.location.origin === window.location.origin &&
+        window.parent.document.querySelector("#wl-buy-now iframe.bn-frame")?.contentWindow === window;
+    } catch (_) { return false; }
+  }
+
   function isSmoothAccountExperience() {
     if (!/AccountInfo_R\.aspx/i.test(window.location.pathname || "")) return false;
     try {
@@ -122,6 +130,9 @@
   }
 
   installCheckoutSubmitRescue();
+  // The parent panel supplies navigation; hidden checkout pages need only the
+  // native submit rescue, not repeated menus, store/account lookups or chat.
+  if (isBuyNowFrame()) { document.documentElement.dataset.wlBuyNowHeader = "parent"; return; }
 
   function loadAnalytics() {
     if (window.WLAnalytics || document.querySelector("script[data-wl-analytics]")) return;
@@ -167,7 +178,7 @@
       if (localStorage.getItem('wl_user_id') !== 'b8f6961397f9c6a3b9cff27038c1d3ed309604ffe607b5dd0d365f5d53179ade') return;
     } catch (_) { return; }
     var script = document.createElement('script');
-    script.src = 'https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261015-ckunkel2-9';
+    script.src = 'https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261015-ckunkel2-10';
     script.async = true;
     script.setAttribute('data-wl-buy-now-pilot', 'true');
     document.head.appendChild(script);
