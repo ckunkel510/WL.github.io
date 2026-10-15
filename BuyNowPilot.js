@@ -6,7 +6,7 @@
   else core.boot(root).catch(function () { /* An unavailable pilot leaves native shopping alone. */ });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261015-ckunkel2-10';
+  var BUILD = '20261015-ckunkel2-11';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var USER = 'ckunkel2'; // No query string, storage value, or public rollout override.
   var PREFIX = 'wl_buy_now_pilot_v1:';
@@ -127,6 +127,20 @@
     var paid = page.querySelector('button[aria-label="Choose delivery or shipping"][aria-pressed="true"]');
     return pickup && !paid ? 'pickup' : '';
   }
+  function contactDefaults(settings, account) {
+    var value = function (id) { return text(settings.getElementById(id)?.value); };
+    return {firstName:value('ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput'),lastName:value('ctl00_PageBody_ChangeUserDetailsControl_LastNameInput'),email:value('ctl00_PageBody_ChangeUserDetailsControl_EmailAddressInput').replace(/^\([^)]*\)\s*/,''),phone:text(account.getElementById('ctl00_PageBody_TelephoneLink_TelephoneLink')?.textContent)};
+  }
+  function applyContactDefaults(page, contact, address) {
+    var chosen = address?.contactName ? text(address.contactName).split(' ') : null;
+    var delivery = {firstName:chosen ? chosen[0] : contact.firstName,lastName:chosen ? chosen.slice(1).join(' ') : contact.lastName,email:address?.email || contact.email,phone:address?.phone || contact.phone};
+    [['DeliveryAddress',delivery],['InvoiceAddress',contact]].forEach(function (entry) {
+      [['ContactFirstNameTextBox','firstName'],['ContactLastNameTextBox','lastName'],['EmailAddressTextBox','email'],['ContactTelephoneTextBox','phone']].forEach(function (field) {
+        var el = page.getElementById('ctl00_PageBody_'+entry[0]+'_'+field[0]), value = entry[1][field[1]];
+        if (el && value && !(entry[0]==='InvoiceAddress' && field[1]==='phone' && el.value)) el.value = value;
+      });
+    });
+  }
   function fulfillmentOptions(pickupAvailable, quote) {
     return {
       pickup:{available:pickupAvailable,rate:'Free'},
@@ -203,15 +217,21 @@
     if (doc.readyState === 'loading') await new Promise(function (resolve) { doc.addEventListener('DOMContentLoaded', resolve, { once: true }); });
     if (!signedIn(doc)) return;
     var storage = win.localStorage;
+    var timings = null;
     async function fetchDocument(path, options) {
       var url = new URL(path, win.location.href);
       if (url.origin !== ORIGIN) throw new Error('An unexpected checkout destination was blocked.');
+      var measurement = timings, began = Date.now();
+      var category = options?.method === 'POST' ? 'cartWrite' : /AccountSettings/i.test(url.pathname) ? 'identity' : /AccountInfo/i.test(url.pathname) ? 'account' : /ProductDetail/i.test(url.pathname) ? 'product' : /ShoppingCart/i.test(url.pathname) ? 'cartRead' : 'other';
       var controller = new win.AbortController(), timeout = win.setTimeout(function () { controller.abort(); }, 20000);
       try {
         var response = await win.fetch(url.href, Object.assign({ credentials: 'same-origin', cache: 'no-store', signal: controller.signal }, options || {}));
         if (!response.ok || new URL(response.url || url.href).origin !== ORIGIN) throw new Error('WebTrack could not confirm the request.');
         return new win.DOMParser().parseFromString(await response.text(), 'text/html');
-      } finally { win.clearTimeout(timeout); }
+      } finally {
+        win.clearTimeout(timeout);
+        if (measurement) { var metric = measurement.requests[category] || (measurement.requests[category] = {count:0,ms:0}); metric.count++; metric.ms += Date.now()-began; }
+      }
     }
     async function authenticate() {
       var settings = await fetchDocument('/AccountSettings.aspx');
@@ -301,7 +321,9 @@
       var spinner = doc.createElement('span'); spinner.className = 'bn-spinner'; spinner.setAttribute('aria-hidden','true');
       var statusText = doc.createElement('span'); statusText.dataset.bnStatus = ''; message.append(spinner,statusText);
       var body = doc.createElement('div'); body.className = 'bn-body'; body.dataset.bnBody = '';
-      panel.append(head, message, body); overlay.appendChild(panel); doc.body.appendChild(overlay); doc.body.style.overflow = 'hidden';
+      var stages = node('ol','','bn-stages'); stages.setAttribute('aria-label','Checkout progress');
+      ['Items','Options','Payment','Review'].forEach(function (copy,index) { var step = node('li'); step.dataset.bnStep = String(index); step.append(node('span',String(index+1),'bn-step-dot'),node('span',copy)); stages.appendChild(step); });
+      panel.append(head, message, stages, body); overlay.appendChild(panel); doc.body.appendChild(overlay); doc.body.style.overflow = 'hidden'; setStage(0);
       overlay.addEventListener('keydown', function (event) {
         if (event.key === 'Escape') { event.preventDefault(); cancel().catch(showError); }
         if (event.key !== 'Tab') return;
@@ -312,6 +334,22 @@
         else if (!event.shiftKey && doc.activeElement === last) { event.preventDefault(); first.focus(); }
       });
       head.querySelector('button').focus();
+    }
+    function setStage(index) {
+      if (!overlay) return;
+      if (timings && timings.stages[index] === undefined) timings.stages[index] = Date.now()-timings.started;
+      overlay.querySelectorAll('[data-bn-step]').forEach(function (el,step) {
+        el.dataset.state = step<index ? 'done' : step===index ? 'current' : 'next';
+        if (step===index) el.setAttribute('aria-current','step'); else el.removeAttribute('aria-current');
+        el.querySelector('.bn-step-dot').textContent = step<index ? '✓' : String(step+1);
+      });
+    }
+    function showPreview(preview, quantity) {
+      var body = overlay.querySelector('[data-bn-body]'), row = node('div','','bn-product'), photo = node('div'), copy = node('div'); photo.dataset.bnPhoto = '';
+      if (preview?.photo) { var url = new URL(preview.photo,ORIGIN); if (url.protocol==='https:' || url.origin===ORIGIN) { var img = doc.createElement('img'); img.src=url.href; img.alt=''; photo.appendChild(img); } }
+      copy.append(node('h3',preview?.name || 'Your item'),node('span','Qty '+quantity)); row.append(photo,copy);
+      var skeleton = node('div','','bn-skeletons'); skeleton.setAttribute('aria-hidden','true'); for (var i=0;i<5;i++) skeleton.appendChild(node('span'));
+      body.replaceChildren(row,skeleton);
     }
     function showError(error) {
       if (fast) { fast.ready = false; fast.stopped = true; }
@@ -416,7 +454,7 @@
       }
       await Promise.all(Array.from({length:Math.min(items.length,4)},checkNext));
     }
-    async function reconcile(wanted, revise) {
+    async function reconcile(wanted, revise, preparedProducts) {
       for (var count = 0; count < 180; count++) {
         if (revise) wanted = revise(wanted);
         var checks = await Promise.all([checkIdentity(),cart()]);
@@ -428,7 +466,10 @@
         var expected = afterMutation(fresh.items, wanted, action);
         active.pending = { before: signature(fresh.items), after: signature(expected) }; save();
         if (action.kind === 'add') {
-          var info = await product(action.pid);
+          // The initial primary form is already preflighted. Use it once, after
+          // fresh identity/cart checks, rather than requesting the same page again.
+          var info = preparedProducts?.[action.pid];
+          if (info) delete preparedProducts[action.pid]; else info = await product(action.pid);
           var reply = await nativePost(info.doc, info.add, '/ProductDetail.aspx?pid=' + action.pid, function (data) { data.set(info.quantity.name, String(action.quantity)); });
         } else {
           var index = fresh.items.findIndex(function (item) { return item.pid === action.pid; }), row = fresh.rows[index];
@@ -649,11 +690,12 @@
       fastText('[data-bn-extras]',fast.selected.length ? fast.selected.length+' cart item'+(fast.selected.length===1?'':'s')+' included' : 'Also in your cart ('+fast.original.length+')');
       return planned.purchase;
     }
-    async function start(id, quantity) {
+    async function start(id, quantity, preview) {
       if (!ENABLE_NEW_STARTS || overlay || busy) return;
       await withLock(async function () {
         var opened = Date.now();
-        shell('Buy now'); loading(true); status('Getting your options…'); busy = true;
+        timings = {started:opened,requests:{},stages:{}};
+        shell('Quick buy'); showPreview(preview,quantity); loading(true); status('Preparing your items…'); busy = true;
         await Promise.all([checkIdentity(), purchaseRestrictions().then(function (ids) { blocked = ids; })]);
         if (record()) throw new Error('Restore your earlier Buy now cart first.');
         var details = await Promise.all([cart(),product(id)]), before = details[0], info = details[1];
@@ -673,7 +715,7 @@
         var draft = {version:1,scope:scope,branch:branch,id:'BN-'+win.crypto.randomUUID(),owner:owner,phase:'backed_up',createdAt:Date.now(),original:planned.original,purchase:planned.purchase,remaining:planned.remaining,current:before.items,pending:null,extraCount:0};
         win.sessionStorage.setItem(PREFIX+'session:'+draft.id,JSON.stringify(sessionBefore)); persist(storage,key,draft); active = draft;
         seedSession(); active.phase = 'preparing'; save();
-        await reconcile(planned.purchase,revisePurchase); active.phase = 'checking_out'; save(); seedSession(); busy = false;
+        await reconcile(planned.purchase,revisePurchase,{[id]:info}); active.phase = 'checking_out'; save(); seedSession(); busy = false;
         if (cancelPending) { cancelPending = false; await cancel(); return; }
         if (fast.refreshQueued) { fast.refreshQueued = false; await refreshFast(); return; }
         openFrame(overlay.querySelector('[data-bn-native-host]'));
@@ -684,12 +726,13 @@
       if (busy) { fast.refreshQueued = true; return; }
       // New identity per revision makes old asynchronous driver work obsolete.
       fast = Object.assign({},fast,{ready:false,review:null,revision:fast.revision+1,started:Date.now(),opened:Date.now(),driving:false,stopped:false,securePayment:false,refreshQueued:false});
+      timings = {started:fast.opened,requests:{},stages:{}}; setStage(0);
       overlay.querySelector('[data-bn-retry]')?.remove();
       ['subtotal','shipping','tax','total'].forEach(function (key) { fastText('[data-bn-'+key+']','—'); });
       loading(true); status('Updating your order…'); fastText('[data-bn-confirm]','Updating…');
       clearFrame(); busy = true;
       try {
-        await checkIdentity();
+        // reconcile always refreshes identity/context before any cart write.
         var planned = plan(fast.original,fast.primary,fast.selected);
         active.purchase = planned.purchase; active.remaining = planned.remaining; active.extraCount = fast.selected.length; save();
         await reconcile(planned.purchase,revisePurchase); active.phase = 'checking_out'; save(); seedSession(); busy = false;
@@ -887,6 +930,7 @@
       try {
         var complete = page.getElementById('ctl00_PageBody_CompleteCheckoutButton');
         if (complete) {
+          setStage(3);
           var reviewed;
           try { reviewed = readNativeReview(page); } catch (error) {
             if (!page.documentElement.dataset.bnReviewWaiting) page.documentElement.dataset.bnReviewWaiting = String(Date.now());
@@ -896,6 +940,7 @@
           fast.review = reviewed; fast.ready = true; fast.securePayment = false;
           overlay.querySelector('[data-bn-retry]')?.remove();
           overlay.dataset.bnReadyMs = String(Date.now()-fast.opened);
+          setStage(4); overlay.dataset.bnTimings = JSON.stringify({elapsed:Date.now()-timings.started,requests:timings.requests,stages:timings.stages});
           if (framePulse) { win.clearInterval(framePulse); framePulse = null; }
           ['subtotal','shipping','tax','total'].forEach(function (key) { fastText('[data-bn-'+key+']',reviewed.totals[key]); });
           if (reviewed.employeeZero) fastText('[data-bn-payment]','No payment due');
@@ -910,6 +955,7 @@
         }
         var methodButton = page.getElementById('btnDelivered'), pickupButton = page.getElementById('btnPickup');
         if (methodButton && pickupButton) {
+          setStage(1);
           if (!child.WLCheckout?.refreshDateUI || !child.WLCheckout?.validateBeforeFinalSubmit) return;
           var quote = child.WLShippingOffer?.current?.();
           fast.methods = fulfillmentOptions(!pickupButton.disabled,quote);
@@ -934,6 +980,8 @@
             page.documentElement.dataset.bnFieldsApplied = '1';
             if (fast.addressChanged) nativeAddress(child,page,'DeliveryAddress',fast.address);
             if (fast.billing) nativeAddress(child,page,'InvoiceAddress',fast.billing);
+            applyContactDefaults(page,contactDefaults(settings,account),fast.addressChanged ? fast.address : null);
+            child.WLCheckout?.hydrateBlankInvoiceFromDelivery?.();
           }
           var branchField = page.getElementById('ctl00_PageBody_BranchDropDownList');
           if (branchField) {
@@ -984,6 +1032,7 @@
         }
         var cards = page.getElementById('ctl00_PageBody_ddlCardsOnFile');
         if (cards) {
+          setStage(2);
           if (page.documentElement.dataset.bnPaymentContinued) return;
           var options = await Promise.all(Array.from(cards.options).map(async function (option) { return {value:option.value,label:text(option.textContent),fingerprint:await digest(scope+'|'+text(option.textContent))}; }));
           if (fast !== current || !frame || frame.contentDocument !== page) return;
@@ -1063,18 +1112,22 @@
       if (/\/ProductDetail\.aspx$/i.test(win.location.pathname)) {
         var id = new URL(win.location.href).searchParams.get('pid');
         var qty = doc.querySelector('input[id$="_qty_' + id + '"]');
-        return id && qty ? { pid: id, quantity: Number(qty.value) || 1 } : null;
+        return id && qty ? { pid: id, quantity: Number(qty.value) || 1,preview:{name:text(doc.querySelector('#wl-product-title,.productDescriptionOnThisPageFull,h1')?.textContent),photo:doc.querySelector('[id$="_ProductImage"]')?.getAttribute('src')} } : null;
       }
       var parent = control.parentElement;
       for (var depth = 0; parent && depth < 7; depth++, parent = parent.parentElement) {
         var quantities = parent.querySelectorAll('input[id*="_qty_"]:not([type="hidden"]),input[id$="_ProductQuantity"]:not([type="hidden"])');
         if (quantities.length !== 1) continue;
         var match = quantities[0].id.match(/_qty_(\d+)/);
-        if (match) return { pid: match[1], quantity: Number(quantities[0].value) || 1 };
+        if (match) return { pid: match[1], quantity: Number(quantities[0].value) || 1,preview:previewFrom(parent,match[1]) };
         var products = new Set(Array.from(parent.querySelectorAll('a[href]')).map(function (link) { return pidOf(link.getAttribute('href')); }).filter(Boolean));
-        if (products.size === 1) return { pid: Array.from(products)[0], quantity: Number(quantities[0].value) || 1 };
+        if (products.size === 1) { var id = Array.from(products)[0]; return { pid:id,quantity:Number(quantities[0].value) || 1,preview:previewFrom(parent,id) }; }
       }
       return null;
+    }
+    function previewFrom(root,id) {
+      var link = Array.from(root.querySelectorAll('a[href]')).find(function (el) { return pidOf(el.getAttribute('href'))===id && text(el.textContent); });
+      return {name:text(link?.textContent),photo:root.querySelector('img')?.getAttribute('src')};
     }
     function addButtons() {
       if (!ENABLE_NEW_STARTS || !blocked || !/\/(?:ProductDetail|Products)\.aspx$/i.test(win.location.pathname)) return;
@@ -1082,17 +1135,38 @@
         var product = locateProduct(control);
         if (control.dataset.bnAttached || control.disabled || control.classList.contains('disabled') || control.getAttribute('aria-disabled') === 'true' || !product || blocked.has(product.pid) || PALLET_PRODUCTS.has(product.pid)) return;
         control.dataset.bnAttached = '1';
-        var buy = button('Buy now', function () {
+        control.classList.add('wl-pilot-add-cart');
+        var buy = button('Quick buy', function () {
           var item = locateProduct(control);
           if (!item || !Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.quantity > 9999) { notice('Choose a whole-number quantity before using Buy now.'); return; }
-          start(item.pid, item.quantity).catch(function (error) { if (overlay) showError(error); else notice(error.message); });
+          buy.disabled = true;
+          start(item.pid, item.quantity,item.preview).catch(function (error) { if (overlay) showError(error); else notice(error.message); }).finally(function () { buy.disabled = false; });
         });
+        buy.setAttribute('aria-label','Quick buy');
+        buy.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m13 2-9 12h7l-1 8 10-13h-7z"/></svg><span>Quick buy</span><span class="wl-quick-arrow" aria-hidden="true">↗</span>';
         buy.classList.add('wl-buy-now-button'); control.insertAdjacentElement('afterend', buy);
+        if (/\/ProductDetail\.aspx$/i.test(win.location.pathname) && control.parentElement.tagName==='DIV' && Array.from(control.parentElement.children).every(function (el) { return el===control || el===buy; })) control.parentElement.classList.add('wl-pilot-actions');
       });
     }
     function installStyles() {
       var style = doc.createElement('style'); style.id = 'wl-buy-now-styles';
       style.textContent = "#wl-buy-now{position:fixed;inset:0;z-index:2147483000;background:#16101591;display:flex;align-items:center;justify-content:center;padding:20px;font:14px/1.4 system-ui,-apple-system,sans-serif;color:#25282b;backdrop-filter:blur(3px)}\n#wl-buy-now *{box-sizing:border-box}#wl-buy-now [hidden]{display:none!important}.bn-panel{display:flex;flex-direction:column;width:min(100%,500px);max-height:94dvh;background:#fff;border-radius:18px;box-shadow:0 22px 80px #0005;overflow:hidden;position:relative}.bn-head{display:flex;align-items:center;justify-content:space-between;padding:19px 22px 13px}.bn-head h2{font:750 24px/1.15 system-ui;margin:0 0 3px}.bn-head small{font-size:11px;color:#7d6a6d}.bn-head .bn-action{border:0;padding:7px 0 7px 14px;color:#71666a;background:transparent;min-height:38px;font-size:13px}.bn-progress{display:flex;gap:9px;align-items:center;padding:10px 22px;background:#f6f3f0;color:#68575a;font-size:12px;min-height:36px}.bn-progress .bn-error{color:#9b241e}.bn-spinner{width:14px;height:14px;flex:none;border:2px solid #dcc5ca;border-top-color:#6b0016;border-radius:50%;display:none}.bn-loading .bn-spinner{display:block;animation:bn-spin .8s linear infinite}.bn-body{padding:20px 22px 14px;overflow:auto;min-height:0}.bn-product{display:flex;gap:14px;align-items:center;margin-bottom:18px}.bn-product h3{font-size:15px;line-height:1.4;margin:0 0 6px;font-weight:650}.bn-product span{font-size:12px;color:#777}.bn-product [data-bn-photo]{width:56px;height:62px;border-radius:8px;background:#f5f4f1;flex:none;display:grid;place-items:center}.bn-product img{width:52px;height:58px;object-fit:contain}.bn-methods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:17px}.bn-methods button{border:1px solid #dedbd9;border-radius:11px;background:#fff;padding:12px 5px 11px;display:flex;flex-direction:column;align-items:center;gap:5px;color:#4e4648;cursor:pointer;min-height:105px;font:inherit}.bn-methods svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.bn-methods strong{font-size:13px}.bn-methods small{font-size:10px;line-height:1.3}.bn-methods [aria-pressed=true]{background:#fcf5f6;border:2px solid #6b0016;padding:11px 4px 10px;color:#6b0016}.bn-methods [data-available=false]{opacity:.45}.bn-methods button:disabled{cursor:default}.bn-loading .bn-methods small{opacity:.55}.bn-options{border:1px solid #e6e2df;border-radius:11px;overflow:hidden}.bn-option{display:flex;gap:11px;align-items:center;padding:12px 13px}.bn-option+.bn-option{border-top:1px solid #eeeae7}.bn-option-icon{font-size:22px;color:#907b80;width:23px;text-align:center;flex:none}.bn-option>div{display:grid;gap:3px;min-width:0;flex:1}.bn-option strong{font-size:12px;font-weight:650}.bn-option div>span{font-size:12px;color:#777;overflow-wrap:anywhere}.bn-option button,.bn-more{color:#6b0016;background:none;border:0;font:600 12px system-ui;cursor:pointer;padding:8px 0 8px 8px;min-height:36px}.bn-option button:disabled,.bn-more:disabled{opacity:.45;cursor:default}.bn-extras{display:flex;justify-content:space-between;align-items:center;width:100%;padding:12px 13px;margin-top:12px;background:#f8f6f3;border:1px dashed #dacdd0;border-radius:9px;color:#6b0016;font:600 12px system-ui;text-align:left;cursor:pointer;min-height:44px}.bn-extras:disabled{opacity:.6;cursor:default}.bn-more{font-weight:400;padding-left:0;margin:3px 0 0}.bn-totals{border-top:1px solid #e9e4e1;margin-top:7px;padding-top:12px;display:grid;gap:6px;font-size:12px;color:#6c6768}.bn-totals>div{display:flex;justify-content:space-between;gap:12px}.bn-totals .bn-grand{font-size:17px;color:#25282b;padding-top:9px;margin-top:4px;border-top:1px solid #eee9e7}.bn-action{border:1px solid #6b0016;background:#6b0016;color:white;border-radius:8px;padding:11px 16px;font:650 14px/1.4 system-ui;cursor:pointer;min-height:44px}.bn-action:disabled{opacity:.5;cursor:wait}.bn-secondary{background:white;color:#6b0016}.bn-confirm{width:100%;margin-top:14px;min-height:47px;font-size:15px}.bn-terms{font-size:10px;color:#888;text-align:center;margin:10px 0 0}.bn-terms a{color:inherit;text-decoration:underline}.wl-buy-now-button{margin:6px;white-space:nowrap}.bn-frame{position:fixed!important;left:-12000px!important;top:0!important;width:1000px!important;height:800px!important;opacity:0;pointer-events:none;border:0}.bn-frame.bn-frame-open{position:relative!important;left:auto!important;top:auto!important;width:100%!important;height:60dvh!important;opacity:1;pointer-events:auto;margin-top:16px}.bn-success{font-size:48px;color:#297048;text-align:center}.bn-body:has(.bn-success){text-align:center;padding:30px}.bn-notice{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:white;border:1px solid #6b0016;box-shadow:0 4px 20px #0003;padding:12px;z-index:2147482999;max-width:calc(100% - 24px);font:14px/1.5 system-ui}.bn-notice button{margin-left:12px}.bn-panel [data-bn-editor]{border:1px solid #decdd1;border-radius:10px;padding:15px;margin:8px 0 14px;background:#fdfbfa}.bn-panel [data-bn-editor] h3{font-size:16px;margin:0 0 12px}.bn-panel [data-bn-editor] label{display:grid;gap:5px;font-size:12px;margin:10px 0}.bn-panel [data-bn-editor] input,.bn-panel [data-bn-editor] select,.bn-panel [data-bn-editor] textarea{width:100%;min-width:0;padding:10px;border:1px solid #c9c1c1;border-radius:6px;background:#fff;font:14px system-ui}.bn-panel [data-bn-editor] .bn-check{display:flex;gap:10px;align-items:center}.bn-panel [data-bn-editor] .bn-check input{width:19px;height:19px;flex:none}.bn-editor-actions{display:flex;gap:8px;margin-top:14px}.bn-loading .bn-totals [data-bn-total]{color:#a59a9d}.bn-panel button:focus-visible,.bn-panel input:focus-visible,.bn-panel select:focus-visible{outline:3px solid #9c5565;outline-offset:2px}@keyframes bn-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.bn-loading .bn-spinner{animation:none;border-top-width:4px}}@media(max-width:540px){#wl-buy-now{padding:0;align-items:flex-end}.bn-panel{max-height:100dvh;width:100%;border-radius:18px 18px 0 0}.bn-head{padding:16px 18px 12px}.bn-body{padding:16px 18px 13px}.bn-progress{padding-left:18px}.bn-product{margin-bottom:15px}.bn-methods{gap:7px}.bn-methods button{min-height:100px}.bn-terms{margin-bottom:env(safe-area-inset-bottom,0)}}\n.bn-footer{padding:13px 22px 15px;border-top:1px solid #e9e4e1;background:#fff;flex:none}.bn-footer .bn-totals{margin:0;border:0;padding:0;gap:4px}.bn-footer .bn-grand{padding-top:7px;margin-top:3px}.bn-footer .bn-confirm{margin-top:11px}.bn-footer .bn-terms{margin-top:8px}.bn-product{margin-bottom:14px}.bn-methods{margin-bottom:14px}.bn-methods button{min-height:89px;padding-top:8px;padding-bottom:8px}.bn-methods [aria-pressed=true]{padding-top:7px;padding-bottom:7px}.bn-option{padding:9px 12px}.bn-option div>span{line-height:1.25}.bn-more{min-height:32px;padding-top:6px;padding-bottom:6px}.bn-progress:has(.bn-error){background:#fff0ed}.bn-panel:not([aria-busy=true]) .bn-spinner{display:block;border:0;width:14px;height:14px}.bn-panel:not([aria-busy=true]) .bn-spinner:after{content:'✓';color:#3c7753;font-size:15px}.bn-panel:has(.bn-error) .bn-spinner:after{content:'!';color:#a03028}.bn-body:has([data-bn-editor]:not([hidden]))~.bn-footer .bn-terms{display:none}@media(max-width:540px){.bn-footer{padding:12px 18px max(12px,env(safe-area-inset-bottom,0))}.bn-body{padding-bottom:8px}.bn-methods button{min-height:86px}}\n";
+      style.textContent += `
+.wl-pilot-add-cart{background:#fff0cf!important;color:#60182b!important;border:1px solid #dfc99d!important;border-radius:12px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;min-height:48px!important;padding:11px 12px!important;font:700 14px/1.2 system-ui!important;text-decoration:none!important;box-shadow:0 2px 0 #b89b6825;transition:background .2s,transform .2s!important;width:100%;white-space:nowrap}
+.wl-pilot-add-cart:hover{background:#ffe6ac!important;transform:translateY(-1px)}
+.wl-buy-now-button,#wl-buy-now .bn-confirm{background:linear-gradient(115deg,#ffc65a,#ff9b35 65%,#f58728)!important;color:#3d230d!important;border:1px solid #df7a21!important;border-radius:12px!important;box-shadow:0 4px 0 #aa5c2026,0 7px 18px #e9862933;position:relative;overflow:hidden;isolation:isolate;transition:transform .2s,box-shadow .2s}
+.wl-buy-now-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:48px;padding:11px 12px;font:800 14px/1.2 system-ui;margin:8px 0;width:100%;white-space:nowrap;cursor:pointer}
+.wl-buy-now-button svg{width:18px;height:20px;fill:currentColor;flex:none}.wl-buy-now-button>span,.wl-buy-now-button>svg{position:relative;z-index:1}.wl-quick-arrow{font-size:20px;line-height:1;transition:transform .2s}
+.wl-buy-now-button:after{content:'';position:absolute;inset:-60% auto -60% -65%;width:35%;background:linear-gradient(90deg,transparent,#fff9,transparent);transform:skewX(-20deg);animation:wl-quick-glint 7s ease-in-out infinite 1s;pointer-events:none;z-index:0}
+.wl-buy-now-button:hover{transform:translateY(-2px);box-shadow:0 5px 0 #aa5c2026,0 10px 25px #e9862950}.wl-buy-now-button:hover .wl-quick-arrow{transform:translate(2px,-2px)}.wl-buy-now-button:active,.wl-pilot-add-cart:active{transform:translateY(1px)}
+.wl-buy-now-button:focus-visible,.wl-pilot-add-cart:focus-visible{outline:3px solid #6b0016!important;outline-offset:3px}.wl-buy-now-button:disabled{opacity:.65;cursor:wait}
+.wl-pilot-actions{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(min(100%,140px),1fr));gap:10px}.wl-pilot-actions>*{width:100%;min-width:0;margin:0!important}
+.bn-stages{list-style:none;display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin:0;padding:12px 22px 9px;border-bottom:1px solid #f0eae3;font-size:10px;color:#8b8580;flex:none}.bn-stages li{display:flex;align-items:center;gap:5px;position:relative;white-space:nowrap}.bn-step-dot{width:19px;height:19px;display:grid;place-items:center;border-radius:50%;background:#f0ede8;color:#9c948c;font-size:10px;flex:none}.bn-stages [data-state=current]{color:#6c3c12;font-weight:700}.bn-stages [data-state=current] .bn-step-dot{background:#ffbc51;color:#4c2b10;box-shadow:0 0 0 3px #ffb74725;animation:wl-step-pulse 1.5s ease-in-out infinite}.bn-stages [data-state=done] .bn-step-dot{background:#e8f1e8;color:#3d7046}.bn-stages [data-state=done]{color:#55735a}
+.bn-skeletons{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;padding-bottom:12px}.bn-skeletons span{height:85px;border-radius:11px;background:linear-gradient(100deg,#f3f0eb 20%,#fff9ec 45%,#f3f0eb 70%);background-size:220% 100%;animation:wl-skeleton 1.8s ease-in-out infinite}.bn-skeletons span:nth-child(n+4){grid-column:1/-1;height:48px}
+@keyframes wl-quick-glint{0%{left:-65%;opacity:0}2%{opacity:1}14%{left:140%;opacity:0}100%{left:140%;opacity:0}}@keyframes wl-step-pulse{50%{box-shadow:0 0 0 5px #ffb74712}}@keyframes wl-skeleton{to{background-position:-120% 0}}
+@media(max-width:540px){.bn-stages{padding:10px 18px 8px;gap:3px}.bn-stages li{gap:4px}.wl-pilot-actions{gap:8px}}
+@media(prefers-reduced-motion:reduce){.wl-buy-now-button:after,.bn-stages [data-state=current] .bn-step-dot,.bn-skeletons span{animation:none!important}.wl-buy-now-button,.wl-pilot-add-cart,.wl-quick-arrow{transition:none!important}.wl-buy-now-button:after{display:none}}
+`;
       doc.head.appendChild(style);
     }
     installStyles();
@@ -1117,5 +1191,5 @@
       if (latest && latest.owner !== owner) { busy = true; clearFrame(); status('Buy now is active in another tab. Cart changes have stopped here.', true); }
     });
   }
-  return { boot: boot, build: BUILD, audience: USER, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, fulfillmentApplied: fulfillmentApplied, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod };
+  return { boot: boot, build: BUILD, audience: USER, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, fulfillmentApplied: fulfillmentApplied, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults };
 });

@@ -2927,7 +2927,7 @@ document.addEventListener("click", function (ev) {
     // -------------------------------------------------------------------------
     // J) AJAX fetch user info (DON’T trigger WebForms change)
     // -------------------------------------------------------------------------
-    if ($) {
+    if ($ && !isBuyNowFrame()) {
       $.get("https://webtrack.woodsonlumber.com/AccountSettings.aspx", (data) => {
         const $acc = $(data);
         const fn = ($acc.find("#ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput").val() || "").trim();
