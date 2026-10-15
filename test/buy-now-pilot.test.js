@@ -287,3 +287,28 @@ test('pickup review must confirm the exact selected native store',()=>{
   assert.throws(()=>core.assertPickupStore('', 'Caldwell - 702 W Buck St'),/pickup store/);
   assert.throws(()=>core.assertPickupStore('Caldwell - 702 W Buck St',undefined),/pickup store/);
 });
+
+test('paid defaults wait for a fresh details quote after an already-running cart quote',async()=>{
+  let finishOld,calls=0;
+  const old=new Promise(resolve=>{finishOld=resolve});
+  const early={cartSignature:'85:0001363:1:',options:{ups:{available:true,amount:80.44},delivery:{available:false}}};
+  const complete={cartSignature:'85:0001363:1:',options:{ups:{available:true,amount:80.44},delivery:{available:true,amount:25}}};
+  const pending=core.refreshDetailsQuote(()=>++calls===1?old:Promise.resolve(complete),()=>true);
+  assert.equal(calls,1);
+  finishOld(early);
+  const actual=await pending;
+  assert.equal(calls,2);
+  assert.equal(actual,complete);
+  assert.equal(core.cheapestHomeMethod(actual),'delivery');
+});
+test('obsolete checkout details stop before requesting another quote',async()=>{
+  let calls=0;
+  assert.equal(await core.refreshDetailsQuote(async()=>{calls++;return{}},()=>false),null);
+  assert.equal(calls,1);
+});
+test('a quote that finishes after a customer changes the order is discarded',async()=>{
+  let calls=0,current=true;
+  const result=await core.refreshDetailsQuote(async()=>{if(++calls===2)current=false;return{}},()=>current);
+  assert.equal(result,null);
+  assert.equal(calls,2);
+});
