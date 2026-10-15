@@ -154,3 +154,23 @@ test('pilot date entry accepts the native minimum calendar day without a timesta
   assert.equal(core.dateChoice('2026-02-31','',''),false);
   assert.equal(core.dateChoice('not-a-date','',''),false);
 });
+
+test('fast checkout chooses the earliest valid calendar day and stays within pickup bounds', () => {
+  assert.equal(core.firstDate('2026-10-18','2026-10-29'),'2026-10-19');
+  assert.equal(core.firstDate('2026-10-17','2026-10-29'),'2026-10-17');
+  assert.equal(core.firstDate('2026-10-18','2026-10-18'),'');
+  assert.equal(core.firstDate('', ''),'');
+});
+test('final monetary values require a complete amount and preserve valid zero employee prices', () => {
+  assert.equal(core.money('$1,234.50'),123450);
+  assert.equal(core.money('$0.00'),0);
+  assert.equal(core.money('25.00'),2500);
+  for (const value of ['',undefined,'Loading','$25.5','$25.00 $1.00','-$2.00']) assert.equal(core.money(value),null);
+});
+test('compact confirmation reads native totals and refuses incomplete or estimated totals', () => {
+  const page = rows => ({querySelectorAll:()=>rows.map(([label,value])=>({children:[{textContent:label}],querySelector:()=>({textContent:value})}))});
+  const rows = [['Subtotal (without Tax)','$0.00'],['Delivery','$25.00'],['Tax','$2.06'],['Total inc Tax','$27.06']];
+  assert.deepEqual(core.reviewTotals(page(rows)),{subtotal:'$0.00',shipping:'$25.00',tax:'$2.06',total:'$27.06'});
+  assert.throws(()=>core.reviewTotals(page(rows.slice(0,-1))),/still loading/);
+  assert.throws(()=>core.reviewTotals(page([...rows.slice(0,-1),['Total inc Tax','Checking…']])));
+});
