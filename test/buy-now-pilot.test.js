@@ -219,3 +219,18 @@ test('pickup stays available while paid carrier quotes are pending, without inve
   assert.equal(ready.ship.available,false);
   assert.equal(ready.ship.reason,'Cannot ship');
 });
+
+
+test('preparation adds its product before removing extras while recovery retains conservative removal order', () => {
+  assert.deepEqual(core.nextMutation([mulch],[fish],true),{kind:'add',pid:'85',quantity:1});
+  assert.deepEqual(core.nextMutation([mulch],[fish]),{kind:'remove',pid:'22663',quantity:0});
+  assert.deepEqual(core.nextMutation([mulch,fish],[fish],true),{kind:'remove',pid:'22663',quantity:0});
+  assert.equal(core.nextMutation([mulch,fish],[fish,mulch],true),null);
+});
+test('Buy now honors pickup selected on the product but still recommends the best paid mode for delivery/ship', () => {
+  const page=(pickup,paid)=>({querySelector:selector=>selector.includes('Choose pickup')?pickup:paid});
+  assert.equal(core.productMethod(page({},null)),'pickup');
+  assert.equal(core.productMethod(page(null,{})),'');
+  assert.equal(core.productMethod(page(null,null)),'');
+  assert.equal(core.productMethod(page({},{})),'');
+});

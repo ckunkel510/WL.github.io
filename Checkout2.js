@@ -11,6 +11,14 @@
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
   const UPS_SHIPPING_ENABLED = true;
 
+  function isBuyNowFrame() {
+    try {
+      return window.parent !== window && window.name === "woodson-buy-now-checkout" &&
+        window.parent.location.origin === window.location.origin &&
+        window.parent.document.querySelector("#wl-buy-now iframe.bn-frame")?.contentWindow === window;
+    } catch (_) { return false; }
+  }
+
   function suppressQuoteCheckoutPath() {
     if (!/ShoppingCart\.aspx/i.test(window.location.pathname || "")) return;
 
@@ -4985,6 +4993,9 @@ document.addEventListener("click", function (ev) {
     })();
 
     (function addSavedAddressActions() {
+      // Buy Now has its own address editor. Avoid loading a second address
+      // picker and its native postback in the hidden checkout document.
+      if (isBuyNowFrame()) { document.documentElement.dataset.wlBuyNowAddressPicker = "parent"; return; }
       if (!singlePageCheckout || document.getElementById("wl-checkout-address-tools")) return;
       const pane = wizard.querySelector('.checkout-step[data-step="3"]');
       if (!pane) return;
