@@ -212,7 +212,7 @@
       if (noStock) {
         setStockMessage(
           card,
-          "0 in stock at " + context.branch + ". Ship to your store for free pickup at checkout.",
+          "0 in stock at " + context.branch + ". Check nearby stores for availability.",
           "pickup"
         );
         return;

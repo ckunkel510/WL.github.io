@@ -37,7 +37,7 @@
   function cartHasNativeSigninOption() {
     const cell = document.getElementById('ctl00_PageBody_OptionalSigninButton');
     if (!cell) return false;
-    return !!cell.querySelector('a[href*="Signin.aspx"], a[href*="Login"], input[value*="Sign In"], button');
+    return !!cell.querySelector('a[href*="signin.aspx" i], a[href*="login" i], input[value*="Sign In"], button');
   }
 
   function isSignedInCartContext() {
@@ -223,6 +223,7 @@
       .gc-hidden{display:none!important;}
       .gc-note{font-size:12px;color:#666;margin-top:6px;line-height:1.35;}
       .gc-error{background:#fff4f4;border:1px solid #f0caca;color:#8a1f1f;padding:10px;border-radius:10px;margin:10px 0;display:none;}
+      .gc-error .gc-btn{display:flex;width:fit-content;margin-top:8px;}
       #gc_below_proceed,#wl_guest_actions_mount{display:flex;flex-wrap:wrap;gap:10px;margin-top:10px;align-items:center;}
       #gc_below_proceed .epi-button,#wl_guest_actions_mount .epi-button{display:inline-flex;align-items:center;justify-content:center;}
       @media (max-width:640px){
@@ -276,6 +277,7 @@
     } catch {}
     if (back) back.style.setProperty('display', 'none', 'important');
     if (modal) modal.style.setProperty('display', 'none', 'important');
+    document.getElementById('wl-checkout-transition')?.remove();
     unlockCartQuantityInputs();
   }
 
@@ -324,7 +326,7 @@
       <div class="gc-card" role="dialog" aria-modal="true" aria-labelledby="gc_title">
         <div class="gc-head" id="gc_title">Checkout as Guest</div>
         <div class="gc-sub">Enter the basics once and we’ll move you into checkout. You can still choose pickup, Woodson delivery, or UPS shipping on the next screen.</div>
-        <div class="gc-error" id="gc_error"></div>
+        <div class="gc-error" id="gc_error" role="alert"></div>
 
         <div class="gc-row">
           <div class="gc-field"><label for="gc_email">Email</label><input id="gc_email" type="email" autocomplete="section-guest email" autocapitalize="none" spellcheck="false" required></div>
@@ -400,7 +402,7 @@
     if (clone) return clone;
 
     const td = getSignInCell();
-    const origA = td ? td.querySelector('a[href*="Signin.aspx"], a[href*="Login"]') : null;
+    const origA = td ? td.querySelector('a[href*="signin.aspx" i], a[href*="login" i]') : null;
     if (!origA) return null;
 
     td.style.display = 'none';
@@ -463,11 +465,28 @@
     });
   }
 
-  function showError(msg) {
+  function showError(msg, offerSignIn) {
+    document.getElementById('wl-checkout-transition')?.remove();
     const box = $('#gc_error');
     if (!box) return alert(msg);
     box.textContent = msg;
+    if (offerSignIn) {
+      const nativeSignIn = getSignInCell()?.querySelector('a[href*="signin.aspx" i], a[href*="login" i]');
+      if (nativeSignIn) {
+        const link = document.createElement('a');
+        link.href = nativeSignIn.href;
+        link.className = 'gc-btn';
+        link.textContent = 'Sign In';
+        link.addEventListener('click', () => {
+          clearGuestState();
+          setCheckoutMode('signed_in');
+          closeModal();
+        });
+        box.appendChild(link);
+      }
+    }
     box.style.display = 'block';
+    try { box.scrollIntoView({ block: 'nearest' }); } catch {}
   }
 
   function validateEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean(email)); }
@@ -583,9 +602,12 @@
       closeModal();
     } catch (e) {
       ERR('Account creation error:', e);
+      clearGuestState();
+      setCheckoutMode('');
       showError(e && e.userMessage
         ? e.userMessage
-        : 'We could not start guest checkout. Please try again, or use Sign In if this email already has an account.');
+        : 'We could not start guest checkout. Please try again, or use Sign In if this email already has an account.',
+        e && e.code === 'email-exists');
     } finally {
       if (submit) { submit.disabled = false; submit.textContent = 'Continue'; }
     }
@@ -619,9 +641,10 @@
         else resolve();
       };
 
-      const fail = (message, internalMessage) => {
+      const fail = (message, internalMessage, code) => {
         const error = new Error(internalMessage || message);
         error.userMessage = message;
+        if (code) error.code = code;
         finish(error);
       };
 
@@ -668,7 +691,7 @@
           if (submitted) {
             const signupError = visibleSignupError(doc, win).toLowerCase();
             if (/already|exist|registered|in use|duplicate/.test(signupError)) {
-              fail('An account already uses this email. Please use Sign In or reset the password.', signupError);
+              fail('An account already uses this email. Sign in to continue with your account or reset your password.', signupError, 'email-exists');
             } else {
               fail('WebTrack could not create the guest checkout. Please review your information and try again.', signupError || 'Signup remained on the signup page after submission.');
             }

@@ -8,7 +8,7 @@
   const CART_SUBTOTAL_KEY = 'wl_cart_subtotal_v1';
   const CUT_SELECTION_KEY = 'wl_cut_to_ship_v1';
   const FULFILLMENT_QUOTE_URL = 'https://wl-upsrates.vercel.app/api/fulfillment-quote';
-  const SHIPPING_OFFER_VERSION = '20260928-unified-quote-1';
+  const SHIPPING_OFFER_VERSION = '20261015-checkout-recovery-1';
   const SHIPPING_OFFER_SCRIPT_URL = 'https://ckunkel510.github.io/WL.github.io/UpsShippingOffer.js?v=' + SHIPPING_OFFER_VERSION;
   let checkoutBlockReason = '';
   const STORE_ORIGINS = {
@@ -414,6 +414,9 @@
         <p>Loading your saved pickup or delivery details and payment options...</p>
       </div>`;
     document.body.appendChild(overlay);
+    // Native validation or a canceled navigation can leave us on the cart.
+    // Never let a cosmetic handoff screen permanently trap the shopper.
+    window.setTimeout(function () { overlay.remove(); }, 25000);
   }
 
   function validateCustomizationHandoff() {
@@ -497,8 +500,13 @@
           sessionStorage.removeItem(AUTO_ADVANCE_KEY);
         } catch {}
       }
-      showCheckoutTransition();
+      // Opening the guest form is not a native handoff. Preserve the safety
+      // checks and draft reset, but leave the cart usable if the form is canceled.
+      if (target.id !== 'gc_guest_btn') showCheckoutTransition();
     }, true);
+    window.addEventListener('pageshow', function () {
+      document.getElementById('wl-checkout-transition')?.remove();
+    });
   }
 
   ready(async function () {
