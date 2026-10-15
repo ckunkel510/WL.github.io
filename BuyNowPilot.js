@@ -6,7 +6,7 @@
   else core.boot(root).catch(function () { /* An unavailable pilot leaves native shopping alone. */ });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261015-ckunkel2-1';
+  var BUILD = '20261015-ckunkel2-2';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var USER = 'ckunkel2'; // No query string, storage value, or public rollout override.
   var PREFIX = 'wl_buy_now_pilot_v1:';
@@ -21,6 +21,9 @@
   function targetOf(value) {
     var m = String(value || '').match(/(?:__doPostBack|WebForm_PostBackOptions)\(\s*['"]([^'"]+)['"]/i);
     return m ? m[1] : '';
+  }
+  function readableCart(page, rowCount) {
+    return rowCount > 0 || !!page.querySelector('#ctl00_PageBody_ShoppingCartDetailPanel,.ShoppingCartDetailPanel,#ctl00_PageBody_EmptyCartPanel,#ctl00_PageBody_EmptyCartDetailPanel') || /cart\s+is\s+(?:currently\s+)?empty|no\s+items\s+in\s+(?:your\s+)?(?:shopping\s+)?cart/i.test(page.body.textContent);
   }
   function signedIn(doc) { return !!doc.querySelector('a[href*="SignOut=1"],a[href*="signout=1"]'); }
   function loginFromDocument(doc) {
@@ -101,12 +104,14 @@
   function mainAddress(rawLines) {
     var values = (rawLines || []).map(text).filter(Boolean);
     for (var i = 1; i < values.length; i++) {
-      var locality = values[i].match(/^(.+?)[,\s]+(Texas|[A-Z]{2})\s*,?\s*(\d{5}(?:-\d{4})?)$/i);
+      var locality = values[i].match(/^(.+?)[,\s]+(Texas|[A-Z]{2})(?:\s*,?\s*(\d{5}(?:-\d{4})?))?$/i);
       if (!locality) continue;
+      var zip = locality[3] || (values[i + 1] || '').match(/^\d{5}(?:-\d{4})?$/)?.[0];
+      if (!zip) continue;
       var street = values.slice(0, i), start = street.findIndex(function (value) { return /^\d+\b|^P\.?\s*O\.?\s*Box\b/i.test(value); });
       if (start < 0 || street.length - start > 3) return null;
       street = street.slice(start);
-      return {line1:street[0],line2:street[1]||'',line3:street[2]||'',city:text(locality[1]).replace(/,$/,''),stateValue:/^Texas$/i.test(locality[2])?'TX':locality[2].toUpperCase(),stateText:locality[2],zip:locality[3],countryValue:'USA',countryText:'United States'};
+      return {line1:street[0],line2:street[1]||'',line3:street[2]||'',city:text(locality[1]).replace(/,$/,''),stateValue:/^Texas$/i.test(locality[2])?'TX':locality[2].toUpperCase(),stateText:locality[2],zip:zip,countryValue:'USA',countryText:'United States'};
     }
     return null;
   }
@@ -261,7 +266,7 @@
       var rows = Array.from(page.querySelectorAll('.shopping-cart-item')).filter(function (row) {
         return !!row.querySelector('input.riTextBox,input[id*="_qty_"]:not([type="hidden"]),a[href*="pid="]');
       });
-      if (!rows.length && !page.querySelector('#ctl00_PageBody_ShoppingCartDetailPanel,.ShoppingCartDetailPanel,#ctl00_PageBody_EmptyCartPanel') && !/cart\s+is\s+empty|no\s+items\s+in\s+(?:your\s+)?(?:shopping\s+)?cart/i.test(page.body.textContent)) {
+      if (!readableCart(page, rows.length)) {
         throw new Error('WebTrack did not return a readable cart. No further cart changes were made.');
       }
       var parsed = rows.map(function (row) {
@@ -680,5 +685,5 @@
       if (latest && latest.owner !== owner) { busy = true; clearFrame(); status('Buy now is active in another tab. Cart changes have stopped here.', true); }
     });
   }
-  return { boot: boot, build: BUILD, audience: USER, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress };
+  return { boot: boot, build: BUILD, audience: USER, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart };
 });
