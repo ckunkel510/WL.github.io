@@ -6,7 +6,7 @@
   else core.boot(root).catch(function () { /* An unavailable pilot leaves native shopping alone. */ });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261015-ckunkel2-6';
+  var BUILD = '20261015-ckunkel2-7';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var USER = 'ckunkel2'; // No query string, storage value, or public rollout override.
   var PREFIX = 'wl_buy_now_pilot_v1:';
@@ -114,6 +114,18 @@
   function money(value) {
     var match = text(value).match(/^\$?\s*(\d+(?:,\d{3})*)(?:\.(\d{2}))?$/);
     return match ? Number(match[1].replace(/,/g,''))*100 + Number(match[2] || 0) : null;
+  }
+  function fulfillmentApplied(method, intent, pressed) {
+    return ['pickup','delivery','ship'].includes(method) && intent === method && pressed === 'true';
+  }
+  function quotedShipping(method, option, service, first) {
+    if (method === 'pickup') return 0;
+    if (!option || money(option.rate) === null) throw new Error('The fulfillment quote is unavailable.');
+    if (method === 'delivery' || first || !service || /ground/i.test(service.label)) return money(option.rate);
+    var clean = function (value) { return text(value).toLowerCase().replace(/\bups\b/g,'').replace(/[^a-z0-9]/g,''); };
+    var rate = (option.rates || []).find(function (row) { return String(row.serviceCode) === service.value || clean(service.label).includes(clean(row.serviceName)) && !!clean(row.serviceName); });
+    if (!rate || !(Number(rate.amount) > 0)) throw new Error('This shipping speed needs regular checkout.');
+    return Math.round(Number(rate.amount)*100);
   }
   function reviewTotals(summary) {
     var result = {};
@@ -771,12 +783,9 @@
       }
       if (nativeMethod && ((fast.method === 'pickup') !== /^pickup/i.test(nativeMethod))) throw new Error('The fulfillment choice did not match. Change it and try again.');
       if (fast.method !== 'pickup' && !(money(totals.shipping) > 0)) throw new Error('WebTrack did not confirm the delivery charge.');
-      var expectedShipping = fast.method === 'pickup' ? 0 : fast.method === 'delivery' ? money(fast.methods.delivery?.rate) : null;
-      if (fast.method === 'ship') {
-        var service = (fast.shippingOptions || []).find(function (option) { return option.value === fast.shippingValue; });
-        var quoted = service?.label.match(/\$\s*[\d,]+\.\d{2}/); if (quoted) expectedShipping = money(quoted[0]);
-      }
-      if (expectedShipping !== null && money(totals.shipping) !== expectedShipping) throw new Error('The delivery charge changed. Refresh your options before ordering.');
+      var service = (fast.shippingOptions || []).find(function (option) { return option.value === fast.shippingValue; });
+      var expectedShipping = quotedShipping(fast.method, fast.methods[fast.method], service, service && service === fast.shippingOptions[0]);
+      if (money(totals.shipping) !== expectedShipping) throw new Error('The delivery charge changed. Refresh your options before ordering.');
       if (fast.method !== 'ship' && fast.date && !text(summary.textContent).includes(fast.date)) throw new Error('WebTrack did not confirm your requested date.');
       return {totals:totals,signature:JSON.stringify([signature(active.current),totals,fast.method,fast.paymentFingerprint || '',fast.revision])};
     }
@@ -840,7 +849,7 @@
           fast.methods = {
             pickup:{available:!pickupButton.disabled,rate:'Free'},
             delivery:{available:!!quote.options?.delivery?.available,rate:'$'+Number(quote.options?.delivery?.amount||0).toFixed(2),recommended:quote.recommendation?.mode==='delivery',reason:text(quote.options?.delivery?.reason)},
-            ship:{available:!!quote.options?.ups?.available,rate:'$'+Number(quote.options?.ups?.amount||0).toFixed(2),recommended:quote.recommendation?.mode==='ship',reason:text(quote.options?.ups?.reason)}
+            ship:{available:!!quote.options?.ups?.available,rate:'$'+Number(quote.options?.ups?.amount||0).toFixed(2),rates:quote.options?.ups?.rates || [],recommended:quote.recommendation?.mode==='ship',reason:text(quote.options?.ups?.reason)}
           };
           if (!fast.method) fast.method = fast.methods[quote.recommendation?.mode]?.available ? quote.recommendation.mode : fast.methods.delivery.available ? 'delivery' : fast.methods.ship.available ? 'ship' : 'pickup';
           updateFastOptions();
@@ -850,6 +859,10 @@
             page.getElementById(fast.method==='pickup'?'btnPickup':fast.method==='ship'?'btnShip':'btnDelivered').click();
             return;
           }
+          // Native method clicks await rate reservation before applying the UI.
+          // Do not validate/continue using the previous delivery/UPS intent.
+          var appliedButton = page.getElementById(fast.method==='pickup'?'btnPickup':fast.method==='ship'?'btnShip':'btnDelivered');
+          if (!fulfillmentApplied(fast.method,child.sessionStorage.getItem('wl_fulfillment_intent'),appliedButton?.getAttribute('aria-pressed'))) return;
           var manager = child.Sys?.WebForms?.PageRequestManager?.getInstance?.(); if (manager?.get_isInAsyncPostBack?.()) return;
           if (page.documentElement.dataset.bnDetailsContinued && Array.from(page.querySelectorAll('.validation-summary-errors,.alert-danger,.wl-field-invalid')).some(function (el) { return el.offsetParent && text(el.textContent || el.getAttribute('aria-label')); })) { haltFast('Check your address, billing, or pickup details.'); return; }
           if (!page.documentElement.dataset.bnFieldsApplied) {
@@ -1039,5 +1052,5 @@
       if (latest && latest.owner !== owner) { busy = true; clearFrame(); status('Buy now is active in another tab. Cart changes have stopped here.', true); }
     });
   }
-  return { boot: boot, build: BUILD, audience: USER, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals };
+  return { boot: boot, build: BUILD, audience: USER, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, fulfillmentApplied: fulfillmentApplied, quotedShipping: quotedShipping };
 });

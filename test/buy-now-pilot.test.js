@@ -174,3 +174,19 @@ test('compact confirmation reads native totals and refuses incomplete or estimat
   assert.throws(()=>core.reviewTotals(page(rows.slice(0,-1))),/still loading/);
   assert.throws(()=>core.reviewTotals(page([...rows.slice(0,-1),['Total inc Tax','Checking…']])));
 });
+
+test('background checkout waits until the native async fulfillment selection is applied', () => {
+  assert.equal(core.fulfillmentApplied('ship','delivery','true'),false);
+  assert.equal(core.fulfillmentApplied('ship','ship','false'),false);
+  assert.equal(core.fulfillmentApplied('ship','ship','true'),true);
+  assert.equal(core.fulfillmentApplied('pickup','pickup','true'),true);
+});
+test('UPS confirmation uses authoritative quoted rates rather than a stale native delivery price', () => {
+  const ups={rate:'$80.44',rates:[{serviceCode:'03',serviceName:'UPS Ground',amount:80.44},{serviceCode:'01',serviceName:'UPS Next Day',amount:124.50}]};
+  assert.equal(core.quotedShipping('ship',ups,{value:'-1',label:'UPS Ground ($25.00)'},true),8044);
+  assert.notEqual(core.money('$25.00'),core.quotedShipping('ship',ups,{value:'-1',label:'UPS Ground ($25.00)'},true));
+  assert.equal(core.quotedShipping('ship',ups,{value:'01',label:'UPS Next Day ($124.50)'},false),12450);
+  assert.throws(()=>core.quotedShipping('ship',ups,{value:'unknown',label:'Unknown service ($25.00)'},false));
+  assert.equal(core.quotedShipping('delivery',{rate:'$25.00'}),2500);
+  assert.equal(core.quotedShipping('pickup',null),0);
+});
