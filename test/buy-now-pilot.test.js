@@ -131,9 +131,17 @@ test('main account address is parsed conservatively without mistaking the accoun
   assert.deepEqual(core.mainAddress(['Fixture Customer','702 W Buck St','Suite 2','Caldwell, Texas 77836']),{line1:'702 W Buck St',line2:'Suite 2',line3:'',city:'Caldwell',stateValue:'TX',stateText:'Texas',zip:'77836',countryValue:'USA',countryText:'United States'});
   assert.equal(core.mainAddress(['Customer Name','TX 77836']),null);
   assert.equal(core.mainAddress(['Missing street','Caldwell TX 77836']),null);
+  assert.deepEqual(core.mainAddress(['702 W Buck St','Caldwell Texas','77836','United States']),{line1:'702 W Buck St',line2:'',line3:'',city:'Caldwell',stateValue:'TX',stateText:'Texas',zip:'77836',countryValue:'USA',countryText:'United States'});
 });
 test('native WebForms action targets are parsed without evaluating JavaScript', () => {
   assert.equal(core.targetOf("javascript:__doPostBack('ctl00$PageBody$Delete','')"),'ctl00$PageBody$Delete');
   assert.equal(core.targetOf('javascript:WebForm_DoPostBackWithOptions(new WebForm_PostBackOptions("native$Add", "", true))'),'native$Add');
   assert.equal(core.targetOf('javascript:alert(1)'), '');
+});
+test('native EmptyCartDetailPanel and currently-empty copy remain recoverable', () => {
+  const page=(copy,hasPanel=false)=>({body:{textContent:copy},querySelector:selector=>hasPanel&&selector.includes('#ctl00_PageBody_EmptyCartDetailPanel')?{}:null});
+  assert.equal(core.readableCart(page('Your cart is currently empty.'),0),true);
+  assert.equal(core.readableCart(page('Translated copy',true),0),true);
+  assert.equal(core.readableCart(page('Your cart is empty.'),0),true);
+  assert.equal(core.readableCart(page('Unexpected checkout or sign-in content'),0),false);
 });
