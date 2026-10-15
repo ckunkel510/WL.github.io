@@ -279,3 +279,11 @@ test('Quick buy chooses the cheaper valid home method independently of a prior s
   assert.equal(core.cheapestHomeMethod(quote(available(25),available(NaN))),'delivery');
   assert.equal(core.cheapestHomeMethod(quote(available(0),available(-1))),'pickup');
 });
+
+test('pickup review must confirm the exact selected native store',()=>{
+  assert.doesNotThrow(()=>core.assertPickupStore('Caldwell - 702 W Buck St','Caldwell - 702 W Buck St'));
+  assert.doesNotThrow(()=>core.assertPickupStore(' Caldwell - 702 W Buck St\n','Caldwell - 702 W Buck St'));
+  assert.throws(()=>core.assertPickupStore('Groesbeck - Store address','Caldwell - 702 W Buck St'),/pickup store/);
+  assert.throws(()=>core.assertPickupStore('', 'Caldwell - 702 W Buck St'),/pickup store/);
+  assert.throws(()=>core.assertPickupStore('Caldwell - 702 W Buck St',undefined),/pickup store/);
+});

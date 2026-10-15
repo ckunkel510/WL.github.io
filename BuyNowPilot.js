@@ -6,7 +6,7 @@
   else core.boot(root).catch(function () { /* An unavailable pilot leaves native shopping alone. */ });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261015-ckunkel2-12';
+  var BUILD = '20261015-ckunkel2-13';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var USER = 'ckunkel2'; // No query string, storage value, or public rollout override.
   var PREFIX = 'wl_buy_now_pilot_v1:';
@@ -158,6 +158,9 @@
     var valid = function (option) { return option?.available && Number.isFinite(Number(option.amount)) && Number(option.amount)>0; };
     if (valid(delivery) && (!valid(ups) || Number(delivery.amount)<=Number(ups.amount))) return 'delivery';
     return valid(ups) ? 'ship' : 'pickup';
+  }
+  function assertPickupStore(nativeLabel, expectedLabel) {
+    if (!text(expectedLabel) || text(nativeLabel)!==text(expectedLabel)) throw new Error('WebTrack did not confirm your pickup store. Change it and try again.');
   }
   function employeeZeroReview(user, totals, hasShippingRow) {
     // WebTrack's existing employee path can omit freight with a fully zero review.
@@ -721,7 +724,7 @@
           address.email = text(settings.getElementById('ctl00_PageBody_ChangeUserDetailsControl_EmailAddressInput')?.value);
           address.phone = text(account.getElementById('ctl00_PageBody_TelephoneLink_TelephoneLink')?.textContent);
         }
-        fast = {original:before.items,primary:primary,selected:[],address:address,method:productMethod(doc),methods:{},date:'',window:'Afternoon',ready:false,payments:[],revision:0,driving:false,editor:'',started:Date.now(),opened:opened};
+        fast = {original:before.items,primary:primary,selected:[],address:address,method:productMethod(doc),store:branch,methods:{},date:'',window:'Afternoon',ready:false,payments:[],revision:0,driving:false,editor:'',started:Date.now(),opened:opened};
         if (cancelPending) { busy = false; cancelPending = false; dismiss(); return; }
         renderFast(info,primary,before.items);
         var planned = plan(before.items,primary,[]), sessionBefore = {};
@@ -902,6 +905,10 @@
         nativeMethod = text(label?.parentElement?.querySelector('.col')?.textContent);
       }
       if (nativeMethod && ((fast.method === 'pickup') !== /^pickup/i.test(nativeMethod))) throw new Error('The fulfillment choice did not match. Change it and try again.');
+      if (fast.method==='pickup') {
+        var store = (fast.stores || []).find(function (option) { return option.value===fast.store; });
+        assertPickupStore(page.getElementById('ctl00_PageBody_ShoppingCartSummaryTableControl_BranchRow')?.querySelector('.col')?.textContent,store?.label);
+      }
       if (!employeeZero && fast.method !== 'pickup' && !(money(totals.shipping) > 0)) throw new Error('WebTrack did not confirm the delivery charge.');
       var service = (fast.shippingOptions || []).find(function (option) { return option.value === fast.shippingValue; });
       var expectedShipping = quotedShipping(fast.method, fast.methods[fast.method], service, service && service === fast.shippingOptions[0]);
@@ -1000,8 +1007,11 @@
           var branchField = page.getElementById('ctl00_PageBody_BranchDropDownList');
           if (branchField) {
             fast.stores = Array.from(branchField.options).filter(function (option) { return option.value && !/^\[?select/i.test(text(option.textContent)); }).map(function (option) { return {value:option.value,label:text(option.textContent)}; });
-            if (fast.store && branchField.value !== fast.store && fast.method==='pickup') { setNative(child,branchField,fast.store); return; }
-            fast.store = branchField.value;
+            if (fast.method==='pickup') {
+              if (fast.store && !fast.stores.some(function (option) { return option.value===fast.store; })) { haltFast('Choose an available pickup store.'); return; }
+              if (fast.store && branchField.value !== fast.store) { setNative(child,branchField,fast.store); return; }
+              fast.store = branchField.value;
+            }
           }
           var dateInput = page.getElementById(fast.method==='pickup'?'pickupDate':'deliveryDate'); if (!dateInput?.min) return;
           fast.dateMin = dateInput.min; fast.dateMax = dateInput.max;
@@ -1205,5 +1215,5 @@
       if (latest && latest.owner !== owner) { busy = true; clearFrame(); status('Buy now is active in another tab. Cart changes have stopped here.', true); }
     });
   }
-  return { boot: boot, build: BUILD, audience: USER, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, fulfillmentApplied: fulfillmentApplied, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod };
+  return { boot: boot, build: BUILD, audience: USER, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, fulfillmentApplied: fulfillmentApplied, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore };
 });
