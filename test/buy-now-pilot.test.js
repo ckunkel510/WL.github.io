@@ -181,6 +181,18 @@ test('background checkout waits until the native async fulfillment selection is 
   assert.equal(core.fulfillmentApplied('ship','ship','true'),true);
   assert.equal(core.fulfillmentApplied('pickup','pickup','true'),true);
 });
+test('the known employee zero review requires the verified employee and complete native zero totals', () => {
+  const zero={subtotal:'$0.00',tax:'$0.00',total:'$0.00'};
+  assert.equal(core.employeeZeroReview('ckunkel2',zero,false),true);
+  for (const user of ['',undefined,'ckunkel3','customer']) assert.equal(core.employeeZeroReview(user,zero,false),false);
+  assert.equal(core.employeeZeroReview('ckunkel2',zero,true),false);
+  assert.equal(core.employeeZeroReview('ckunkel2',{...zero,shipping:'$0.00'},false),false);
+  for (const key of ['subtotal','tax','total']) {
+    assert.equal(core.employeeZeroReview('ckunkel2',{...zero,[key]:'$1.00'},false),false);
+    assert.equal(core.employeeZeroReview('ckunkel2',{...zero,[key]:''},false),false);
+  }
+  assert.equal(core.employeeZeroReview('ckunkel2',{subtotal:'$0.00',shipping:'$25.00',tax:'$2.06',total:'$27.06'},true),false);
+});
 test('UPS confirmation uses authoritative quoted rates rather than a stale native delivery price', () => {
   const ups={rate:'$80.44',rates:[{serviceCode:'03',serviceName:'UPS Ground',amount:80.44},{serviceCode:'01',serviceName:'UPS Next Day',amount:124.50}]};
   assert.equal(core.quotedShipping('ship',ups,{value:'-1',label:'UPS Ground ($25.00)'},true),8044);
