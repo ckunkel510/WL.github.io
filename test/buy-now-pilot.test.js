@@ -257,3 +257,25 @@ test('verified account contact defaults replace duplicate hidden-page lookups wi
   assert.equal(fields.ctl00_PageBody_InvoiceAddress_ContactFirstNameTextBox.value,'Fixture');
   assert.doesNotThrow(()=>core.applyContactDefaults({getElementById:()=>null},contact,null));
 });
+
+test('Quick buy accepts a fulfillment quote only for the exact current basket',()=>{
+  const quote={cartSignature:'85:0001363:1:'};
+  assert.equal(core.quoteForCart(quote,[fish]),quote);
+  assert.equal(core.quoteForCart(quote,[drink]),null);
+  assert.equal(core.quoteForCart(quote,[{...fish,quantity:2}]),null);
+  assert.equal(core.quoteForCart({cartSignature:'85:0001363:1:cut:12:accepted'},[fish]),null);
+  assert.equal(core.quoteForCart({},[fish]),null);
+  assert.equal(core.quoteForCart(null,[fish]),null);
+  assert.equal(core.quoteForCart({cartSignature:'22663:BMG:3:|85:0001363:1:'},[fish,mulch]).cartSignature,'22663:BMG:3:|85:0001363:1:');
+});
+test('Quick buy chooses the cheaper valid home method independently of a prior selection',()=>{
+  const quote=(delivery,ups)=>({recommendation:{mode:'ship'},options:{delivery,ups}});
+  const available=amount=>({available:true,amount});
+  assert.equal(core.cheapestHomeMethod(quote(available(25),available(80.44))),'delivery');
+  assert.equal(core.cheapestHomeMethod(quote(available(25),available(9.95))),'ship');
+  assert.equal(core.cheapestHomeMethod(quote(available(25),available(25))),'delivery');
+  assert.equal(core.cheapestHomeMethod(quote({available:false},available(80.44))),'ship');
+  assert.equal(core.cheapestHomeMethod(quote(available(25),{available:false})),'delivery');
+  assert.equal(core.cheapestHomeMethod(quote(available(25),available(NaN))),'delivery');
+  assert.equal(core.cheapestHomeMethod(quote(available(0),available(-1))),'pickup');
+});
