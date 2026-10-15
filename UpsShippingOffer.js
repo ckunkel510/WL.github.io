@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var BUILD_VERSION = "20260928-unified-quote-1";
+  var BUILD_VERSION = "20261015-checkout-recovery-1";
   var RATE_URL = "https://wl-upsrates.vercel.app/api/fulfillment-quote";
   var APPROVAL_URL = "https://wl-upsrates.vercel.app/api/customization-approval";
   var CUT_POLICY_URL = "https://ckunkel510.github.io/WL.github.io/data/cut-to-ship-products.json?v=20260917-2";
@@ -473,7 +473,8 @@
       if (!response.ok) throw new Error(result.error || "UPS shipping offer could not be prepared.");
       var payload = writeOffer(result, zip, items, false);
       var selected = rememberedSelection();
-      var selectedOption = selected && result.options && result.options[selected.mode];
+      // Checkout calls the mode "ship"; the quote exposes that option as "ups".
+      var selectedOption = selected && result.options && result.options[selected.mode === "ship" ? "ups" : selected.mode];
       if (selectedOption && selectedOption.available && result.recommendation && result.recommendation.mode !== selected.mode) {
         await selectOffer(selected.mode);
         payload = currentOffer() || payload;
