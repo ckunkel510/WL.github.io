@@ -234,3 +234,26 @@ test('Buy now honors pickup selected on the product but still recommends the bes
   assert.equal(core.productMethod(page(null,null)),'');
   assert.equal(core.productMethod(page({},{})),'');
 });
+
+test('verified account contact defaults replace duplicate hidden-page lookups without WebForms change events',()=>{
+  const vals={FirstNameInput:'Fixture',LastNameInput:'Customer',EmailAddressInput:'(Primary) fixture@example.test'};
+  const settings={getElementById:id=>({value:vals[id.split('_').pop()]})};
+  const account={getElementById:()=>({textContent:'555-0100'})};
+  const contact=core.contactDefaults(settings,account);
+  assert.deepEqual(contact,{firstName:'Fixture',lastName:'Customer',email:'fixture@example.test',phone:'555-0100'});
+  const fields={};
+  for(const block of ['DeliveryAddress','InvoiceAddress']) for(const name of ['ContactFirstNameTextBox','ContactLastNameTextBox','EmailAddressTextBox','ContactTelephoneTextBox']) fields['ctl00_PageBody_'+block+'_'+name]={value:'',dispatchEvent(){throw new Error('Must not trigger a postback')}};
+  fields.ctl00_PageBody_InvoiceAddress_ContactTelephoneTextBox.value='Existing billing phone';
+  const page={getElementById:id=>fields[id]};
+  core.applyContactDefaults(page,contact,null);
+  assert.equal(fields.ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox.value,'Fixture');
+  assert.equal(fields.ctl00_PageBody_DeliveryAddress_ContactTelephoneTextBox.value,'555-0100');
+  assert.equal(fields.ctl00_PageBody_InvoiceAddress_EmailAddressTextBox.value,'fixture@example.test');
+  assert.equal(fields.ctl00_PageBody_InvoiceAddress_ContactTelephoneTextBox.value,'Existing billing phone');
+  core.applyContactDefaults(page,contact,{contactName:'Other Pickup Person',phone:'555-0200',email:'other@example.test'});
+  assert.equal(fields.ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox.value,'Other');
+  assert.equal(fields.ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox.value,'Pickup Person');
+  assert.equal(fields.ctl00_PageBody_DeliveryAddress_EmailAddressTextBox.value,'other@example.test');
+  assert.equal(fields.ctl00_PageBody_InvoiceAddress_ContactFirstNameTextBox.value,'Fixture');
+  assert.doesNotThrow(()=>core.applyContactDefaults({getElementById:()=>null},contact,null));
+});
