@@ -6,7 +6,7 @@
   else core.boot(root).catch(function () { /* An unavailable pilot leaves native shopping alone. */ });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261015-ckunkel2-11';
+  var BUILD = '20261015-ckunkel2-12';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var USER = 'ckunkel2'; // No query string, storage value, or public rollout override.
   var PREFIX = 'wl_buy_now_pilot_v1:';
@@ -147,6 +147,17 @@
       delivery:{available:!!quote?.options?.delivery?.available,pending:!quote,rate:'$'+Number(quote?.options?.delivery?.amount||0).toFixed(2),reason:text(quote?.options?.delivery?.reason)},
       ship:{available:!!quote?.options?.ups?.available,pending:!quote,rate:'$'+Number(quote?.options?.ups?.amount||0).toFixed(2),rates:quote?.options?.ups?.rates || [],reason:text(quote?.options?.ups?.reason)}
     };
+  }
+  function quoteForCart(quote, items) {
+    // A late quote from the previous basket must never choose this order's mode.
+    var expected = lines(items).map(function (item) { return [item.pid,item.code.replace(/\s+/g,'').toUpperCase(),item.quantity,''].join(':'); }).sort().join('|');
+    return quote && expected && quote.cartSignature === expected ? quote : null;
+  }
+  function cheapestHomeMethod(quote) {
+    var options = quote?.options, delivery = options?.delivery, ups = options?.ups;
+    var valid = function (option) { return option?.available && Number.isFinite(Number(option.amount)) && Number(option.amount)>0; };
+    if (valid(delivery) && (!valid(ups) || Number(delivery.amount)<=Number(ups.amount))) return 'delivery';
+    return valid(ups) ? 'ship' : 'pickup';
   }
   function employeeZeroReview(user, totals, hasShippingRow) {
     // WebTrack's existing employee path can omit freight with a fully zero review.
@@ -696,9 +707,12 @@
         var opened = Date.now();
         timings = {started:opened,requests:{},stages:{}};
         shell('Quick buy'); showPreview(preview,quantity); loading(true); status('Preparing your items…'); busy = true;
-        await Promise.all([checkIdentity(), purchaseRestrictions().then(function (ids) { blocked = ids; })]);
         if (record()) throw new Error('Restore your earlier Buy now cart first.');
-        var details = await Promise.all([cart(),product(id)]), before = details[0], info = details[1];
+        // These are read-only preflights. All must succeed before saving a draft
+        // or changing the basket; reconcile still checks fresh identity/cart.
+        var details = await Promise.all([cart(),product(id),checkIdentity(),purchaseRestrictions().then(function (ids) { blocked = ids; })]);
+        if (blocked.has(id)) throw new Error('This item is not eligible for online purchase.');
+        var before = details[0], info = details[1];
         var primary = {pid:id,quantity:quantity,name:info.name,code:info.code,unit:info.unit};
         await preflight(before.items.concat(before.items.some(function (item) { return item.pid === id; }) ? [] : [primary]),{[id]:info});
         var address = mainAddress(Array.from(account.querySelectorAll('.accountInfoAddress li')).map(function (el) { return el.textContent; }));
@@ -957,12 +971,12 @@
         if (methodButton && pickupButton) {
           setStage(1);
           if (!child.WLCheckout?.refreshDateUI || !child.WLCheckout?.validateBeforeFinalSubmit) return;
-          var quote = child.WLShippingOffer?.current?.();
+          var quote = quoteForCart(child.WLShippingOffer?.current?.(),active.purchase);
           fast.methods = fulfillmentOptions(!pickupButton.disabled,quote);
           updateFastOptions();
           // Pickup needs native stock/schedule validation, not a paid carrier quote.
           if (!quote && fast.method !== 'pickup') return;
-          if (!fast.method) fast.method = fast.methods[quote.recommendation?.mode]?.available ? quote.recommendation.mode : fast.methods.delivery.available ? 'delivery' : fast.methods.ship.available ? 'ship' : 'pickup';
+          if (!fast.method) fast.method = cheapestHomeMethod(quote);
           updateFastOptions();
           if (!fast.methods[fast.method]?.available) { haltFast('That option is unavailable. Choose another.'); return; }
           if (page.documentElement.dataset.bnMethod !== fast.method) {
@@ -1191,5 +1205,5 @@
       if (latest && latest.owner !== owner) { busy = true; clearFrame(); status('Buy now is active in another tab. Cart changes have stopped here.', true); }
     });
   }
-  return { boot: boot, build: BUILD, audience: USER, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, fulfillmentApplied: fulfillmentApplied, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults };
+  return { boot: boot, build: BUILD, audience: USER, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, fulfillmentApplied: fulfillmentApplied, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod };
 });
