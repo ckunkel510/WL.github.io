@@ -1,4 +1,4 @@
-/* Light product-detail preview. Existing WebTrack controls own every purchase action. */
+/* Light product-detail experience. Existing WebTrack controls own every purchase action. */
 (function (root, factory) {
   'use strict';
   var core = factory();
@@ -6,35 +6,11 @@
   else core.boot(root).catch(function () { /* Retain the existing product page. */ });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261016-pdp-light-2';
+  var BUILD = '20261016-pdp-light-3';
   var ORIGIN = 'https://webtrack.woodsonlumber.com';
   var ASSETS = 'https://ckunkel510.github.io/WL.github.io/';
   var SCOPE = 'data-wl-pdp-preview';
   function text(value) { return String(value || '').replace(/\s+/g, ' ').trim(); }
-  function signedIn(doc) { return !!doc.querySelector('a[href*="SignOut=1"],a[href*="signout=1"]'); }
-  function pilotAccount(doc) {
-    if (!signedIn(doc)) return false;
-    var names = Array.from(doc.querySelectorAll('.formPageHeader')).map(function (node) {
-      var match = text(node.textContent).match(/^Change (?:password|details) for user\s+['"]([^'"]+)['"]$/i);
-      return match ? match[1].toLowerCase() : '';
-    }).filter(Boolean);
-    return names.length > 0 && names.every(function (name) { return name === 'ckunkel2'; });
-  }
-  async function verifyAccount(win) {
-    if (!signedIn(win.document)) return false;
-    var controller = new win.AbortController();
-    var timer = win.setTimeout(function () { controller.abort(); }, 8000);
-    try {
-      var response = await win.fetch('/AccountSettings.aspx', {
-        credentials: 'same-origin', cache: 'no-store', signal: controller.signal
-      });
-      var url = new URL(response.url, win.location.origin);
-      if (!response.ok || url.origin !== ORIGIN || !/^\/AccountSettings\.aspx$/i.test(url.pathname)) return false;
-      var page = new win.DOMParser().parseFromString(await response.text(), 'text/html');
-      return signedIn(win.document) && pilotAccount(page);
-    } catch (_) { return false; }
-    finally { win.clearTimeout(timer); }
-  }
   function ratingSummary(section) {
     var count = section.querySelectorAll('.wl-review-item').length;
     var stars = section.querySelector('.wl-review-summary .wl-review-stars');
@@ -51,7 +27,6 @@
     if (!win || win.top !== win || win.location.origin !== ORIGIN || !/^\/ProductDetail\.aspx$/i.test(win.location.pathname) || win.WLPdpExperience) return;
     var doc = win.document;
     if (doc.readyState === 'loading') await new Promise(function (resolve) { doc.addEventListener('DOMContentLoaded', resolve, { once: true }); });
-    if (!await verifyAccount(win)) return;
     var link = doc.createElement('link');
     link.rel = 'stylesheet'; link.href = ASSETS + 'ProductDetailPilot.css?v=' + BUILD;
     var loaded = await new Promise(function (resolve) {
@@ -60,9 +35,9 @@
       link.onerror = function () { win.clearTimeout(timer); resolve(false); };
       doc.head.appendChild(link);
     });
-    if (!loaded || !signedIn(doc)) { link.remove(); return; }
+    if (!loaded) { link.remove(); return; }
     var moves = new Map(), attributes = new Map(), copies = new Map(), generated = new Set(), listeners = [];
-    var revoked = false, scheduled = false, checking = false, observer, observedSidebar;
+    var revoked = false, scheduled = false, observer, observedSidebar;
     var sidebarResize = win.ResizeObserver ? new win.ResizeObserver(schedule) : null;
     function listen(node, name, handler) { node.addEventListener(name, handler); listeners.push([node, name, handler]); }
     function make(tag, className, copy) {
@@ -101,8 +76,7 @@
     }
     var galleryBound = new WeakSet();
     function reconcile() {
-      if (revoked || checking) return;
-      if (!signedIn(doc)) { revoke(); return; }
+      if (revoked) return;
       var page = doc.getElementById('product-page'), heading = doc.querySelector('.wl-pdp-heading');
       var sidebar = doc.getElementById('product-sidebar'), box = sidebar?.querySelector('.wl-pdp-buybox');
       if (!page || !heading || !box) return;
@@ -178,24 +152,16 @@
       });
     }
     function schedule() {
-      if (scheduled || revoked || checking) return;
+      if (scheduled || revoked) return;
       scheduled = true;
       win.requestAnimationFrame(function () { scheduled = false; reconcile(); });
-    }
-    async function recheck() {
-      if (revoked || checking) return;
-      checking = true;
-      doc.documentElement.removeAttribute(SCOPE);
-      var allowed = await verifyAccount(win); checking = false;
-      if (!allowed) revoke(); else reconcile();
     }
     observer = new win.MutationObserver(schedule);
     observer.observe(doc.getElementById('MainLayoutRow') || doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'aria-label', 'open'] });
     listen(win, 'resize', schedule);
-    listen(win, 'focus', recheck);
-    listen(win, 'pageshow', function (event) { if (event.persisted) recheck(); });
-    win.WLPdpExperience = { build: BUILD, audience: 'ckunkel2', revoke: revoke };
+    listen(win, 'pageshow', function (event) { if (event.persisted) schedule(); });
+    win.WLPdpExperience = { build: BUILD, audience: 'public', revoke: revoke };
     reconcile();
   }
-  return { boot: boot, pilotAccount: pilotAccount, verifyAccount: verifyAccount, ratingSummary: ratingSummary, stickyFits: stickyFits, build: BUILD };
+  return { boot: boot, ratingSummary: ratingSummary, stickyFits: stickyFits, build: BUILD };
 });
