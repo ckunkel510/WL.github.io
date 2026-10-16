@@ -127,6 +127,42 @@ test('saved payment resolves against fresh options and falls back to the first v
 test('native order notes carry a flow reference and extras count', () => {
   assert.equal(core.marker(recovery({extraCount:2})),'Website Buy Now | BN-test-1 | Additional cart items: 2');
 });
+test('natural cart checkout has its own reference without classifying the order as Buy Now',()=>{
+  assert.equal(core.marker({cartCheckout:true,id:'CC-test-1'}),'Website Compact Checkout | CC-test-1');
+});
+test('compact cart checkout waits for the existing clearance-policy renderer before continuing',()=>{
+  const page=(script,ready)=>({querySelector:()=>script?{}:null,getElementById:()=>ready?{}:null});
+  assert.equal(core.cartPolicyReady(page(true,false)),false);
+  assert.equal(core.cartPolicyReady(page(true,true)),true);
+  assert.equal(core.cartPolicyReady(page(false,false)),true);
+});
+test('cart checkout keeps matching cut orders on the standard path and ignores unrelated old cut selections',()=>{
+  assert.equal(core.hasCustomCuts([mulch,drink],{}),false);
+  assert.equal(core.hasCustomCuts([mulch,drink],{selected:{productId:'85',productCode:'0001363'}}),false);
+  assert.equal(core.hasCustomCuts([mulch,drink],{selected:{productId:22663}}),true);
+  assert.equal(core.hasCustomCuts([mulch,drink],{selected:{productCode:' bmg '}}),true);
+});
+test('cart checkout persists only submission status and never a cart restoration snapshot',()=>{
+  for (const phase of ['checking_out','preparing','backed_up','restoring']) assert.equal(core.cartOrderReceipt({phase}),null);
+  const source={...recovery(),id:'CC-test-1',cartCheckout:true,phase:'submitting',createdAt:1000,updatedAt:1100,address:{line1:'Example'},payment:'secret'};
+  const receipt=core.cartOrderReceipt(source);
+  assert.deepEqual(receipt,{version:1,id:'CC-test-1',phase:'submitting',createdAt:1000,updatedAt:1100,orderNumber:''});
+  for(const key of ['original','purchase','remaining','current','address','payment']) assert.equal(key in receipt,false);
+  assert.equal(core.cartOrderReceipt({...source,phase:'confirmed',orderNumber:'TEST-200'}).orderNumber,'TEST-200');
+});
+test('an interrupted cart order remains distinguishable from a confirmed order after reload',()=>{
+  const storage=memory(),key='cart-order';
+  assert.equal(core.readCartOrderReceipt(storage,key),null);
+  for(const phase of ['submitting','uncertain','confirmed']) {
+    const receipt=core.cartOrderReceipt({id:'CC-test-1',phase,createdAt:1000,updatedAt:1100,orderNumber:phase==='confirmed'?'TEST-200':''});
+    core.persist(storage,key,receipt);
+    assert.deepEqual(core.readCartOrderReceipt(storage,key),receipt);
+  }
+  for(const value of ['broken','null',JSON.stringify({version:1,id:'BN-other',phase:'confirmed'}),JSON.stringify({version:1,id:'CC-test-1',phase:'checking_out'})]) {
+    storage.setItem(key,value);
+    assert.throws(()=>core.readCartOrderReceipt(storage,key),/status needs review/);
+  }
+});
 test('main account address is parsed conservatively without mistaking the account name for a street', () => {
   assert.deepEqual(core.mainAddress(['Fixture Customer','702 W Buck St','Suite 2','Caldwell, Texas 77836']),{line1:'702 W Buck St',line2:'Suite 2',line3:'',city:'Caldwell',stateValue:'TX',stateText:'Texas',zip:'77836',countryValue:'USA',countryText:'United States'});
   assert.equal(core.mainAddress(['Customer Name','TX 77836']),null);
