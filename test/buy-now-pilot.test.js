@@ -16,6 +16,41 @@ function memory() {
   return {getItem:key=>values.get(key)||null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};
 }
 
+test('postal state abbreviations resolve the numeric options used by native WebTrack',()=>{
+  const options=[{value:'0',textContent:'[Select State]'},{value:'56',textContent:'Texas'},{value:'12',textContent:'California'},{value:'99',textContent:'District of Columbia'}];
+  for(const address of [{stateValue:'TX',stateText:'TX'},{stateValue:'tx'},{stateValue:'56',stateText:'Texas'},{stateValue:'Texas'}]) {
+    assert.equal(core.nativeStateOption(options,address),options[1]);
+  }
+  assert.equal(core.nativeStateOption(options,{stateValue:'CA'}),options[2]);
+  assert.equal(core.nativeStateOption(options,{stateValue:'DC'}),options[3]);
+  assert.equal(core.nativeStateOption(options,{stateValue:'ZZ'}),undefined);
+  assert.equal(core.nativeStateOption(options,{}),undefined);
+  assert.equal(core.nativeStateOption([{value:'TX',textContent:'Texas'}],{stateValue:'TX'}).value,'TX');
+});
+
+test('guest delivery and billing fill numeric native states and dispatch normal field events',()=>{
+  const source=fs.readFileSync(require.resolve('../BuyNowPilot'),'utf8');
+  const nativeSource=source.slice(source.indexOf('    function setNative('),source.indexOf('    function readNativeReview('));
+  const fields=new Map(),events=[];
+  for(const prefix of ['DeliveryAddress','InvoiceAddress']) {
+    for(const name of ['AddressLine1','AddressLine2','AddressLine3','City','Postcode','CountySelector_CountyList']) {
+      const id='ctl00_PageBody_'+prefix+'_'+name;
+      fields.set(id,{id,value:name.includes('County')?'0':'',options:[{value:'0',textContent:'[Select State]'},{value:'56',textContent:'Texas'}],dispatchEvent:e=>events.push([id,e.type])});
+    }
+  }
+  const page={getElementById:id=>fields.get(id),querySelector:selector=>fields.get(selector.includes('InvoiceAddress')?'ctl00_PageBody_InvoiceAddress_CountySelector_CountyList':'ctl00_PageBody_DeliveryAddress_CountySelector_CountyList')};
+  const context=require('node:vm').createContext({nativeStateOption:core.nativeStateOption});
+  require('node:vm').runInContext(nativeSource,context);
+  const address={line1:'702 W Buck St',city:'Caldwell',zip:'77836',stateValue:'TX',stateText:'TX'};
+  const child={Event:class{constructor(type){this.type=type;}}};
+  context.nativeAddress(child,page,'DeliveryAddress',address);context.nativeAddress(child,page,'InvoiceAddress',address);
+  for(const prefix of ['DeliveryAddress','InvoiceAddress']) {
+    const id='ctl00_PageBody_'+prefix+'_CountySelector_CountyList';
+    assert.equal(fields.get(id).value,'56');
+    assert.deepEqual(events.filter(e=>e[0]===id).map(e=>e[1]),['input','change']);
+  }
+});
+
 test('compact checkout accepts all verified signed-in customers', () => assert.equal(core.audience,'signed-in'));
 test('identity comes from consistent server headings and requires native sign-out', () => {
   const page = (names,authenticated=true) => ({querySelector:()=>authenticated?{}:null,querySelectorAll:()=>names.map(name=>({textContent:name}))});

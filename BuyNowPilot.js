@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261016-compact-checkout-20';
+  var BUILD = '20261016-compact-checkout-21';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -23,6 +23,18 @@
   var PALLET_PRODUCTS = new Set('23297,22444,23379,24896,25273,25274,26446,26481,94106,12383,24315,24319,122893,25102,4741,12101,21194,23008,23049,20366,20368,21126,12100,2996,3003,21193,26060,133832,25415,2999,4743,21475,4742,25076,25094,23825,23826,23827,113992,113994,23828'.split(','));
 
   function text(value) { return String(value == null ? '' : value).replace(/\s+/g, ' ').trim(); }
+  var STATE_NAMES = {
+    AL:'Alabama',AK:'Alaska',AZ:'Arizona',AR:'Arkansas',CA:'California',CO:'Colorado',CT:'Connecticut',DC:'District of Columbia',DE:'Delaware',FL:'Florida',GA:'Georgia',HI:'Hawaii',IA:'Iowa',ID:'Idaho',IL:'Illinois',IN:'Indiana',KS:'Kansas',KY:'Kentucky',LA:'Louisiana',MA:'Massachusetts',MD:'Maryland',ME:'Maine',MI:'Michigan',MN:'Minnesota',MO:'Missouri',MS:'Mississippi',MT:'Montana',NC:'North Carolina',ND:'North Dakota',NE:'Nebraska',NH:'New Hampshire',NJ:'New Jersey',NM:'New Mexico',NV:'Nevada',NY:'New York',OH:'Ohio',OK:'Oklahoma',OR:'Oregon',PA:'Pennsylvania',RI:'Rhode Island',SC:'South Carolina',SD:'South Dakota',TN:'Tennessee',TX:'Texas',UT:'Utah',VA:'Virginia',VT:'Vermont',WA:'Washington',WI:'Wisconsin',WV:'West Virginia',WY:'Wyoming',AB:'Alberta',BC:'British Columbia',MB:'Manitoba',NB:'New Brunswick',NL:'Newfoundland and Labrador',NS:'Nova Scotia',NT:'Northwest Territories',NU:'Nunavut',ON:'Ontario',PE:'Prince Edward Island',QC:'Quebec',SK:'Saskatchewan',YT:'Yukon Territory'
+  };
+  function nativeStateOption(options, address) {
+    var value=text(address.stateValue).toUpperCase(), label=text(address.stateText).toUpperCase();
+    var names=new Set([value,label,STATE_NAMES[value]?.toUpperCase(),STATE_NAMES[label]?.toUpperCase()].filter(Boolean));
+    // Native WebTrack uses numeric state IDs (Texas is 56). Resolve the label
+    // rather than posting a postal abbreviation as if it were a native ID.
+    return Array.from(options).find(function (option) {
+      return (value && text(option.value).toUpperCase()===value) || names.has(text(option.textContent).toUpperCase());
+    });
+  }
   function pidOf(value) { var m = String(value || '').match(/[?&]pid=(\d+)(?:&|$)/i); return m ? m[1] : ''; }
   function targetOf(value) {
     var m = String(value || '').match(/(?:__doPostBack|WebForm_PostBackOptions)\(\s*['"]([^'"]+)['"]/i);
@@ -1077,7 +1089,7 @@
       [['AddressLine1','line1'],['AddressLine2','line2'],['AddressLine3','line3'],['City','city'],['Postcode','zip']].forEach(function (entry) { setNative(child,page.getElementById(base+entry[0]),address[entry[1]] || ''); });
       var state = page.querySelector('[id^="'+base+'"][id$="CountyList"]');
       if (state) {
-        var option = Array.from(state.options).find(function (el) { return el.value.toUpperCase() === text(address.stateValue).toUpperCase() || text(el.textContent).toUpperCase() === text(address.stateText || address.stateValue).toUpperCase(); });
+        var option = nativeStateOption(state.options,address);
         if (option) setNative(child,state,option.value);
       }
     }
@@ -1469,5 +1481,5 @@
       if (latest && latest.owner !== owner) { busy = true; clearFrame(); status('Buy now is active in another tab. Cart changes have stopped here.', true); }
     });
   }
-  return { boot: boot, build: BUILD, audience: AUDIENCE, accountScopeInput:accountScopeInput, guestContext:guestContext, guestStartPending:guestStartPending, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, cartOrderReceipt: cartOrderReceipt, readCartOrderReceipt: readCartOrderReceipt, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, cartPolicyReady: cartPolicyReady, hasCustomCuts: hasCustomCuts, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
+  return { boot: boot, build: BUILD, audience: AUDIENCE, nativeStateOption:nativeStateOption, accountScopeInput:accountScopeInput, guestContext:guestContext, guestStartPending:guestStartPending, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, cartOrderReceipt: cartOrderReceipt, readCartOrderReceipt: readCartOrderReceipt, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, cartPolicyReady: cartPolicyReady, hasCustomCuts: hasCustomCuts, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
 });
