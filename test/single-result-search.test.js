@@ -229,3 +229,9 @@ test('personal-data-shaped text stays on the normal native search path',async()=
   const h=directHarness({term:'person@example.com'});await h.api.installDirectSearch();
   assert.equal(await h.submit(),false);assert.equal(h.navigations.length,0);
 });
+
+
+test('direct product URLs omit the native return link to the skipped search',()=>{
+  const h=harness({links:['ProductDetail.aspx?pid=6698&pg=0&returnUrl=%7e%2fProducts.aspx%3fsearchText%3d24082ypl']});
+  assert.equal(h.api.singleResultDestination(h.panel),'https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=6698&pg=0');
+});

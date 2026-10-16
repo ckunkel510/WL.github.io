@@ -3,7 +3,7 @@
 
   if (window.WLSmartSearch) return;
 
-  var BUILD = "20261016-2";
+  var BUILD = "20261016-3";
   var API_URL = "https://wl-upsrates.vercel.app/api/smart-search-suggestions?v=" + BUILD;
   var RESULTS_PANEL_ID = "ctl00_PageBody_ProductGroupStandardPanel";
   var ATTRIBUTION_KEY = "wl_product_discovery_attribution_v1";
@@ -93,6 +93,9 @@
         if (url.origin !== window.location.origin || !/^\/ProductDetail\.aspx$/i.test(url.pathname) ||
             url.username || url.password || !/^\d{1,20}$/.test(pid || "")) { invalid = true; return; }
         url.hash = "";
+        // Browser Back returns to the source page; do not create a native
+        // return link to the intermediate search that we intentionally skip.
+        url.searchParams.delete("returnUrl");
         if (!destinations[pid]) destinations[pid] = url.href;
       } catch (_) { invalid = true; }
     });
