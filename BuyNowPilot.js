@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261016-compact-checkout-27';
+  var BUILD = '20261016-compact-checkout-28';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -327,7 +327,17 @@
     if (doc.readyState === 'loading') await new Promise(function (resolve) { doc.addEventListener('DOMContentLoaded', resolve, { once: true }); });
     if (!signedIn(doc)) return;
     var storage = win.localStorage;
-    var timings = null;
+    var timings = null, measuredPayment = null;
+    function measureCheckout(stage, page, reviewed, orderNumber) {
+      // Measurement is optional and can never block payment/cart recovery.
+      try {
+        if (!active || !win.WLAnalytics?.checkout || stage==='cancel' && active.orderNumber) return;
+        var paymentType=reviewed?.employeeZero?'no_payment_due':fast?.paymentFingerprint?'stored_card':fast?.securePayment?'new_card':'webtrack';
+        if (stage==='review') measuredPayment={id:active.id,revision:fast?.revision,type:paymentType};
+        if (measuredPayment?.id===active.id && measuredPayment.revision===fast?.revision) paymentType=measuredPayment.type;
+        win.WLAnalytics.checkout(stage,{id:active.id,flow:active.cartCheckout?'compact_cart':'quick_buy',customerType:active.guestCheckout?'guest':'signed_in',items:active.purchase || active.current,method:fast?.method,paymentType:paymentType,totals:reviewed?.totals,includedCartItems:active.extraCount || 0,orderNumber:orderNumber},page);
+      } catch (_) {}
+    }
     async function fetchDocument(path, options) {
       var url = new URL(path, win.location.href);
       if (url.origin !== ORIGIN) throw new Error('An unexpected checkout destination was blocked.');
@@ -494,6 +504,7 @@
       body.replaceChildren(row,skeleton);
     }
     function showError(error) {
+      measureCheckout('error');
       if (fast) { fast.ready = false; fast.stopped = true; }
       status(error && error.message || 'Buy now stopped. Your recovery copy is retained.', true);
       busy = false;
@@ -660,12 +671,12 @@
       }
       if (busy) { cancelPending = true; status(cartEntry ? 'Returning to your cart…' : 'Finishing this change, then restoring your cart…'); return; }
       if (!active) { dismiss(); return; }
-      if (active.cartCheckout) { dismiss(); win.location.reload(); return; }
+      if (active.cartCheckout) { measureCheckout('cancel'); dismiss(); win.location.reload(); return; }
       busy = true; clearFrame();
       var wanted = recoveryTarget(active);
       active.phase = 'restoring'; save(); loading(true); status('Restoring your cart…');
       await reconcile(wanted); restoreSession(); storage.removeItem(key);
-      var purchased = !!active.orderNumber;
+      var purchased = !!active.orderNumber; if (!purchased) measureCheckout('cancel');
       dismiss();
       if (/\/ShoppingCart\.aspx$/i.test(win.location.pathname)) win.location.reload();
       else notice(purchased ? 'Your remaining cart items are restored.' : 'Buy now cancelled. Your original cart is restored.');
@@ -875,6 +886,7 @@
         var opened = Date.now();
         timings = {started:opened,requests:{},stages:{}};
         shell('Quick buy'); showPreview(preview,quantity); loading(true); status('Preparing your items…'); busy = true;
+        try { win.WLAnalytics?.track('quick_buy_open',{checkout_flow:'quick_buy',customer_type:'signed_in',ecommerce:{currency:'USD',items:[{item_id:String(id),quantity:Number(quantity)}]}}); } catch (_) {}
         if (record()) throw new Error('Restore your earlier Buy now cart first.');
         assertNoPendingCartOrder();
         // These are read-only preflights. All must succeed before saving a draft
@@ -894,7 +906,7 @@
         var draft = {version:1,scope:scope,branch:branch,id:'BN-'+win.crypto.randomUUID(),owner:owner,phase:'backed_up',createdAt:Date.now(),original:planned.original,purchase:planned.purchase,remaining:planned.remaining,current:before.items,pending:null,extraCount:0};
         win.sessionStorage.setItem(PREFIX+'session:'+draft.id,JSON.stringify(sessionBefore)); persist(storage,key,draft); active = draft;
         seedSession(); active.phase = 'preparing'; save();
-        await reconcile(planned.purchase,revisePurchase,{[id]:info}); active.phase = 'checking_out'; save(); seedSession(); busy = false;
+        await reconcile(planned.purchase,revisePurchase,{[id]:info}); active.phase = 'checking_out'; save(); seedSession(); busy = false; measureCheckout('begin');
         if (cancelPending) { cancelPending = false; await cancel(); return; }
         if (fast.refreshQueued) { fast.refreshQueued = false; await refreshFast(); return; }
         openFrame(overlay.querySelector('[data-bn-native-host]'));
@@ -924,7 +936,7 @@
         fast={cartCheckout:true,original:[],primary:null,selected:[],address:accountAddress(),billing:guest ? Object.assign({},guest.billing) : null,method:method,store:branch,methods:{pickup:{pending:true},delivery:{pending:true},ship:{pending:true}},date:'',window:'Afternoon',ready:false,payments:[],revision:0,driving:false,editor:'',started:Date.now(),opened:opened};
         active={cartCheckout:true,guestCheckout:!!guest,scope:scope,branch:branch,id:'CC-'+win.crypto.randomUUID(),owner:owner,phase:'checking_out',createdAt:opened,purchase:before.items,current:before.items};
         renderFast({name:'Your cart',doc:doc},before.items[0],before.items); updateFastOptions(); setStage(0);
-        seedSession(); busy=false; loading(true);
+        seedSession(); busy=false; loading(true); measureCheckout('begin');
         openFrame(overlay.querySelector('[data-bn-native-host]'));
       });
     }
@@ -960,7 +972,7 @@
         // reconcile always refreshes identity/context before any cart write.
         var planned = plan(fast.original,fast.primary,fast.selected);
         active.purchase = planned.purchase; active.remaining = planned.remaining; active.extraCount = fast.selected.length; save();
-        await reconcile(planned.purchase,revisePurchase); active.phase = 'checking_out'; save(); seedSession(); busy = false;
+        await reconcile(planned.purchase,revisePurchase); active.phase = 'checking_out'; save(); seedSession(); busy = false; measureCheckout('begin');
         if (cancelPending) { cancelPending = false; await cancel(); return; }
         if (fast.refreshQueued) { fast.refreshQueued = false; await refreshFast(); return; }
         fastText('[data-bn-extras]',fast.selected.length ? fast.selected.length+' cart item'+(fast.selected.length===1?'':'s')+' included' : 'Also in your cart ('+fast.original.length+')');
@@ -1050,8 +1062,11 @@
       var confirmation = page.getElementById('CartResponseMessage'), merchant = page.getElementById('ctl00_PageBody_SuccessfulPaymentResults_MerchantDetailsPanel');
       if (new URL(child.location.href).searchParams.get('success') === '1' && confirmation && merchant) {
         var order = text(confirmation.querySelector('strong')?.textContent).replace(/^(?:reserved\s+)?order(?:\s+(?:number|no\.?))?\s*[:#-]?\s*/i, '');
+        // A late native success still counts; recovery/submission safeguards stay in force.
+        if (/^[a-z0-9][a-z0-9-]{2,63}$/i.test(order) && active.phase==='uncertain') measureCheckout('purchase',page,null,order);
         if (!/^[a-z0-9][a-z0-9-]{2,63}$/i.test(order) || !['submitting', 'confirmed', 'restoring'].includes(active.phase)) throw new Error('Order confirmation needs review before restoring the cart.');
         if (busy) return;
+        measureCheckout('purchase',page,null,order);
         busy = true; submitting = false; active.orderNumber = order; active.phase = 'confirmed'; active.current = []; active.pending = null; save(); clearFrame();
         if (active.cartCheckout) {
           // WebTrack already purchased the natural cart. Never restore a copy.
@@ -1175,6 +1190,7 @@
             if (Date.now()-Number(page.documentElement.dataset.bnReviewWaiting) > 4000) haltFast(error.message);
             return;
           }
+          measureCheckout('review',page,reviewed); measureCheckout('shipping',page,reviewed); measureCheckout('payment',page,reviewed);
           fast.review = reviewed; fast.ready = true; fast.securePayment = false;
           overlay.querySelector('[data-bn-retry]')?.remove();
           overlay.dataset.bnReadyMs = String(Date.now()-fast.opened);
@@ -1301,6 +1317,7 @@
             delete page.documentElement.dataset.bnValidationWaiting;
             // The native proxy also confirms the fulfillment rate before posting.
             var nextButton = page.querySelector('.wl-proxy-continue') || page.getElementById('ctl00_PageBody_ContinueButton2') || page.getElementById('ctl00_PageBody_ContinueButton1'); if (!nextButton || nextButton.disabled) return;
+            measureCheckout('shipping',page);
             page.documentElement.dataset.bnDetailsContinued = '1'; status('Calculating your total…'); nextButton.click();
           }
           return;
@@ -1380,6 +1397,7 @@
         if (!frame || frame.contentDocument !== page) throw new Error('The checkout screen changed. Review the order again before confirming.');
         if (!page.getElementById('ctl00_PageBody_CompleteCheckoutButton')) throw new Error('WebTrack final review is unavailable.');
         if (cancelPending) { cancelPending = false; busy = false; await cancel(); return; }
+        measureCheckout('submit',page,fast?.review);
         active.phase = 'submitting'; save(); submitting = true; busy = false;
         status('Placing your order…');
         var nativeFinal = page.getElementById('ctl00_PageBody_CompleteCheckoutButton');
