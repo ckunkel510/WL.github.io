@@ -3,7 +3,7 @@
 
   if (window.WLAnalytics) return;
 
-  var VERSION = "1.8.1";
+  var VERSION = "1.8.2";
   var EVENT_NAME = "wl_analytics_event";
   var GA_MEASUREMENT_ID = "G-4ZLV1YB6GY";
   var META_PIXEL_ID = "188974749776655";
@@ -63,6 +63,8 @@
     purchase: true,
     share_product: true,
     generate_lead: true,
+    quote_request_click: true,
+    contact_click: true,
     pdp_fulfillment_view: true,
     pdp_fulfillment_ready: true,
     pdp_fulfillment_select: true,
@@ -383,6 +385,12 @@
   }
 
   function pushEvent(name, parameters) {
+    // Compatibility with a cached PDP sidebar: opening a quote form is intent,
+    // not proof that the customer submitted a lead.
+    if (name === "generate_lead" && parameters?.lead_source === "pdp_quote_request") {
+      name = "quote_request_click";
+      parameters = Object.assign({}, parameters, { lead_stage: "intent" });
+    }
     if (!ALLOWED_EVENTS[name] || (name === "purchase" && !confirmedPurchase)) return false;
 
     var enriched = Object.assign({}, experimentContext(), recommendationContext(name, parameters));
@@ -896,6 +904,15 @@
     if (details && (!review || review.key!==details.id || !sameCheckoutItems(review.items,details.items))) return false;
     if (!details && review?.key!=="native") review=null;
     var params={ecommerce:Object.assign({transaction_id:transactionId,currency:"USD",items:review?.items || []},review?.amounts || {})};
+    // Merchant Center uses the native numeric PID as its offer ID (US / en).
+    // Attach cart data only when every final unit price and quantity reconciles
+    // with the verified merchandise subtotal. Never substitute catalog prices.
+    if (review && review.items.length<=100 && review.items.every(function (item) { return Number.isInteger(item.quantity) && item.quantity>0 && typeof item.price==="number" && validMoney(item.price)!==null; }) && Math.abs(valueForItems(review.items)-review.amounts.value)<0.02) {
+      params.aw_merchant_id=453662576;
+      params.aw_feed_label="US";
+      params.aw_feed_language="en";
+      params.ecommerce.items=review.items.map(function (item) { return Object.assign({},item,{id:item.item_id}); });
+    }
     if (details) {
       params.checkout_flow=details.flow; params.checkout_stage="confirmed"; params.customer_type=details.customerType; params.included_cart_items=Math.max(0,Math.floor(Number(details.includedCartItems)||0));
       if (["pickup","delivery","ship"].includes(details.method)) { params.shipping_tier=details.method; params.fulfillment_method=details.method; }
@@ -992,10 +1009,28 @@
     return itemFromRoot(productCardFor(target) || document, 0);
   }
 
+  function trackCommercialIntent(target) {
+    if (!target.matches?.("a[href]")) return;
+    var href=target.getAttribute("href") || "", url;
+    try { url=new URL(href,window.location.href || "https://webtrack.woodsonlumber.com/"); } catch (_) { return; }
+    if (url.protocol==="https:" && url.hostname==="woodsonwholesaleinc.formstack.com" && /^\/forms\/request_a_quote\/?$/.test(url.pathname)) {
+      // The PDP sidebar owns its quote click, including its product context.
+      if (pageType()!=="product_detail") pushEvent("quote_request_click",{lead_source:"catalog_quote_request",lead_stage:"intent",destination_type:"quote_form"});
+      return;
+    }
+    if (url.protocol!=="tel:") return;
+    var stores={"9798367933":"Brenham","9798223765":"Bryan","9795679805":"Caldwell","9797732238":"Lexington","2547292865":"Groesbeck","2545629351":"Mexia","9033224638":"Buffalo"};
+    var number=href.replace(/^tel:/i,"").replace(/[^\d]/g,"");
+    if (number.length===11 && number[0]==="1") number=number.slice(1);
+    if (!stores[number]) return; // Never track customer-contact phone links.
+    pushEvent("contact_click",{interaction_type:"phone",store_branch:stores[number],lead_stage:"intent"});
+  }
+
   function handleClick(event) {
     var target = event.target && event.target.closest ? event.target.closest("a, button, input") : null;
     if (!target) return;
     trackNavigation(target);
+    trackCommercialIntent(target);
     if (/SignOut=1/i.test(target.getAttribute("href") || "")) {
       currentReview=null;
       [CART_STORAGE_KEY,CHECKOUT_STORAGE_KEY,REVIEW_STORAGE_KEY,PENDING_CART_KEY,PENDING_ADD_STORAGE_KEY].forEach(function (key) { safeStorage(window.sessionStorage,"remove",key); });

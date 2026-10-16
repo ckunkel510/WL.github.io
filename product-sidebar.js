@@ -1762,7 +1762,7 @@ $(document).ready(async function () {
     wlTrack("pdp_price_sign_in", { price_gate: "login_required" });
   });
   $(document).on("click.wlPdpQuoteTracking", ".wl-quote-product a, a[href*='request_a_quote']", function () {
-    wlTrack("generate_lead", { lead_source: "pdp_quote_request" });
+    wlTrack("quote_request_click", { lead_source: "pdp_quote_request", lead_stage: "intent" });
   });
 
   $sidebar.append($shippingLink);

@@ -44,6 +44,16 @@
     "gclid","gbraid","wbraid","msclkid"
   ]);
 
+  // These values belong to Google's/advertisers' attribution protocols. In
+  // particular, a valid _gl linker can exceed the generic 300-character limit.
+  // Leave them byte-for-byte intact so the Google tag can consume them.
+  const ATTRIBUTION_PARAMS = new Set([
+    "_gl", "_ga", "gclid", "gclsrc", "dclid", "gbraid", "wbraid",
+    "msclkid", "fbclid", "srsltid", "gad_source", "gad_campaignid",
+    "utm_source", "utm_medium", "utm_campaign", "utm_id", "utm_term",
+    "utm_content", "utm_source_platform", "utm_creative_format", "utm_marketing_tactic"
+  ]);
+
   // If true, strip suspiciously huge parameter VALUES even if name doesn't match.
   // This is a "safety valve" for garbage tokens.
   const STRIP_HUGE_VALUES = true;
@@ -178,6 +188,8 @@
         urlObj.searchParams.delete(key);
         continue;
       }
+
+      if (ATTRIBUTION_PARAMS.has(lower(key))) continue;
 
       // Strip huge suspicious values (safety valve)
       if (STRIP_HUGE_VALUES && val.length >= HUGE_VALUE_THRESHOLD) {
