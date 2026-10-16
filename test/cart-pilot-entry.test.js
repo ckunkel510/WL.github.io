@@ -106,6 +106,6 @@ test('Ink cart loader is independent of sign-in and excludes frames, other pages
     const document={querySelector:()=>mode==='duplicate'?{}:null,createElement:()=>({setAttribute(){}}),head:{appendChild:s=>scripts.push(s)}};
     const context=vm.createContext({window:win,document,WEBTRACK:'https://webtrack.woodsonlumber.com'});vm.runInContext(cartLoaderSource,context);context.loadCartDesign();
     assert.equal(scripts.length,['signed-in','guest','anonymous'].includes(mode)?1:0,mode);
-    if(scripts.length)assert.match(scripts[0].src,/ink-cart-5/);
+    if(scripts.length)assert.match(scripts[0].src,/ink-cart-6/);
   }
 });

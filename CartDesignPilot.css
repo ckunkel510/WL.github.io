@@ -61,6 +61,11 @@ html:not(.wl-cart-studio) .cs-only{display:none!important}
 .wl-cart-studio #ctl00_PageBody_PlaceOrderButton:hover,.wl-cart-studio .cs-checkout:hover{transform:translateY(-2px);box-shadow:0 9px 22px #6b001638!important}
 .wl-cart-studio #ctl00_PageBody_PlaceOrderButton[aria-disabled=true],.wl-cart-studio .cs-checkout:disabled{opacity:.5;cursor:wait}
 .wl-cart-studio #ctl00_PageBody_PlaceOrderButton:focus-visible,.wl-cart-studio .cs-checkout:focus-visible{outline:3px solid #789dbd;outline-offset:4px}
+/* Guest controls keep their existing handlers, with secondary visual weight. */
+.wl-cart-studio .cs-summary #gc_below_proceed,.wl-cart-studio .cs-summary #wl_guest_actions_mount{display:flex!important;flex-direction:column;align-items:stretch!important;gap:8px!important;margin:12px 0 0!important;width:100%}
+.wl-cart-studio .cs-summary #gc_below_proceed .epi-button,.wl-cart-studio .cs-summary #wl_guest_actions_mount .epi-button{width:100%!important;min-height:42px;margin:0!important;padding:11px 14px!important;border:0!important;border-radius:11px!important;background:var(--cs-soft)!important;color:#36536d!important;box-shadow:none!important;font:600 12px/1.4 system-ui!important;text-align:center;text-decoration:none!important}
+.wl-cart-studio .cs-summary #gc_below_proceed #gc_signin_btn{background:transparent!important;color:var(--cs-muted)!important}
+.wl-cart-studio .cs-summary #gc_below_proceed .epi-button:focus-visible{outline:3px solid #789dbd;outline-offset:3px}
 .wl-cart-studio .cs-summary-note{font-size:10px!important;color:var(--cs-muted)!important;line-height:1.45;margin:17px 0 0!important;text-align:center}
 .wl-cart-studio #ctl00_PageBody_EmptyCartButton{font-size:11px!important;background:transparent!important;color:var(--cs-muted)!important;border:0!important;box-shadow:none!important;padding:12px 4px!important;justify-self:start;margin:0!important;text-decoration:underline;text-underline-offset:3px}
 .wl-cart-studio .cs-saved{grid-column:1;grid-row:3;margin:12px 0 0!important;padding:24px!important;border:0!important;border-radius:var(--cs-radius)!important;background:#ffffff88!important;box-shadow:none!important;min-width:0}
