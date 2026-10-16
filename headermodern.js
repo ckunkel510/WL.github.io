@@ -202,6 +202,16 @@
     script.addEventListener('error', finish, { once: true });
   }
 
+  function loadCartDesign() {
+    if (window.top !== window || window.location.origin !== WEBTRACK || !/^\/ShoppingCart\.aspx$/i.test(window.location.pathname)) return;
+    if (window.WLCartStudio || document.querySelector('script[data-wl-cart-studio]')) return;
+    var script = document.createElement('script');
+    script.src = 'https://ckunkel510.github.io/WL.github.io/CartDesignPilot.js?v=20261016-ink-cart-5';
+    script.async = true;
+    script.setAttribute('data-wl-cart-studio', 'true');
+    document.head.appendChild(script);
+  }
+
   function loadBuyNowPilot() {
     if (window.top !== window || window.location.origin !== WEBTRACK) return;
     if (!document.querySelector('a[href*="SignOut=1"],a[href*="signout=1"]')) return;
@@ -214,7 +224,7 @@
     }
     // UI and account-scoped state require fresh native sign-in/account checks.
     var script = document.createElement('script');
-    script.src = 'https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261016-compact-checkout-26';
+    script.src = 'https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261016-compact-checkout-27';
     script.async = true;
     script.setAttribute('data-wl-buy-now-pilot', 'true');
     deferCartCheckoutUntilPilotReady(script);
@@ -3370,6 +3380,7 @@
   loadContactManager();
 
   onReady(function () {
+    loadCartDesign();
     loadBuyNowPilot();
     // The existing identity script may finish after DOM ready on a new sign-in.
     window.setTimeout(loadBuyNowPilot, 1800);

@@ -1,4 +1,4 @@
-/* Private cart design preview. Native cart controls remain the action owners. */
+/* Woodson Ink cart. Native cart controls remain the action owners. */
 (function (root, factory) {
   'use strict';
   var core=factory();
@@ -6,19 +6,14 @@
   else core.boot(root).catch(function () { /* Keep the existing cart if unavailable. */ });
 })(typeof window==='object' ? window : null,function () {
   'use strict';
-  var BUILD='20261016-cart-studio-4';
+  var BUILD='20261016-ink-cart-5';
   var ORIGIN='https://webtrack.woodsonlumber.com';
   var ASSETS='https://ckunkel510.github.io/WL.github.io/';
-  var THEMES=['canvas','slate','ink','original'];
-  var PREFERENCE='wl_cart_studio_theme_v1:ckunkel2';
   var REVEAL=164;
   function text(value) { return String(value || '').replace(/\s+/g,' ').trim(); }
-  function nativeUser(doc) {
-    if (!doc.querySelector('a[href*="SignOut=1"],a[href*="signout=1"]')) return '';
-    var values=Array.from(doc.querySelectorAll('.formPageHeader')).map(function (node) {
-      return text(node.textContent).match(/^Change (?:details|password) for user\s+['"]([^'"]+)['"]$/i)?.[1]?.toLowerCase();
-    }).filter(Boolean);
-    return values.length && new Set(values).size===1 ? values[0] : '';
+  function naturalCart(doc) {
+    if (doc.querySelector('#ctl00_PageBody_CompleteCheckoutButton,#ctl00_PageBody_SuccessfulPaymentResults_MerchantDetailsPanel,#btnPickup')) return false;
+    return !!doc.getElementById('ctl00_PageBody_ShoppingCartDetailPanel') || /your cart is currently empty/i.test(doc.querySelector('.mainContents')?.textContent || '');
   }
   function gestureAxis(dx,dy) {
     if (Math.max(Math.abs(dx),Math.abs(dy))<10) return '';
@@ -37,35 +32,11 @@
     if (!win || win.top!==win || win.location.origin!==ORIGIN || !/^\/ShoppingCart\.aspx$/i.test(win.location.pathname) || win.WLCartStudio) return;
     var doc=win.document;
     if (doc.readyState==='loading') await new Promise(function (resolve) { doc.addEventListener('DOMContentLoaded',resolve,{once:true}); });
-    if (!doc.querySelector('a[href*="SignOut=1"],a[href*="signout=1"]') || !naturalCart()) return;
-    async function verify() {
-      var controller=new win.AbortController(),timer=win.setTimeout(function () { controller.abort(); },10000);
-      try {
-        var response=await win.fetch('/AccountSettings.aspx',{credentials:'same-origin',cache:'no-store',signal:controller.signal});
-        if (!response.ok || new URL(response.url || '/AccountSettings.aspx',ORIGIN).origin!==ORIGIN) return false;
-        return nativeUser(new win.DOMParser().parseFromString(await response.text(),'text/html'))==='ckunkel2';
-      } finally { win.clearTimeout(timer); }
-    }
-    if (!await verify()) return;
-    function naturalCart() {
-      if (doc.querySelector('#ctl00_PageBody_CompleteCheckoutButton,#ctl00_PageBody_SuccessfulPaymentResults_MerchantDetailsPanel,#btnPickup')) return false;
-      return !!doc.getElementById('ctl00_PageBody_ShoppingCartDetailPanel') || /your cart is currently empty/i.test(doc.querySelector('.mainContents')?.textContent || '');
-    }
+    if (!naturalCart(doc)) return;
     var shell=doc.querySelector('.mainContents');
     if (!shell || !await loadStyles()) return;
-    var theme='canvas';
-    try { var saved=win.localStorage.getItem(PREFERENCE); if (THEMES.includes(saved)) theme=saved; } catch (_) {}
-    var rows=new Map(),openRow=null,scheduled=false,pending=false,lastCheck=Date.now(),revoked=false;
-    var toolbar=doc.createElement('div'); toolbar.className='cs-design-bar'; toolbar.setAttribute('aria-label','Private cart design preview');
-    var label=doc.createElement('span'); label.className='cs-design-label'; label.textContent='Cart studio';
-    var privateLabel=doc.createElement('small'); privateLabel.textContent='ckunkel2 preview'; label.appendChild(privateLabel); toolbar.appendChild(label);
-    var options=doc.createElement('div'); options.className='cs-design-choices'; options.setAttribute('role','group'); options.setAttribute('aria-label','Cart design'); toolbar.appendChild(options);
-    THEMES.forEach(function (value) {
-      var button=makeButton(value.charAt(0).toUpperCase()+value.slice(1),function () { selectTheme(value); });
-      button.dataset.csTheme=value; options.appendChild(button);
-    });
-    shell.prepend(toolbar);
-    var live=doc.createElement('div'); live.className='cs-announcement'; live.setAttribute('role','status'); live.setAttribute('aria-live','polite'); toolbar.appendChild(live);
+    var rows=new Map(),openRow=null,scheduled=false,pending=false,revoked=false;
+    var live=doc.createElement('div'); live.className='cs-announcement cs-only'; live.setAttribute('role','status'); live.setAttribute('aria-live','polite'); doc.body.appendChild(live);
     var dock=doc.createElement('div'); dock.className='cs-mobile-dock cs-only'; dock.setAttribute('aria-label','Cart checkout');
     dock.innerHTML='<div><span>Subtotal</span><strong data-cs-dock-total></strong></div>';
     var dockButton=makeButton('Checkout',function () {
@@ -78,18 +49,9 @@
     if (win.IntersectionObserver) intersection=new win.IntersectionObserver(function (entries) {
       dock.dataset.mainVisible=entries[0]?.isIntersecting ? 'true' : 'false';
     },{threshold:0.25});
-    function blocked() { return revoked || theme==='original' || pending || !!doc.getElementById('wl-buy-now'); }
+    function blocked() { return revoked || pending || !!doc.getElementById('wl-buy-now'); }
     function makeButton(copy,handler) {
       var button=doc.createElement('button'); button.type='button'; button.textContent=copy; button.addEventListener('click',handler); return button;
-    }
-    function selectTheme(value) {
-      if (revoked || !THEMES.includes(value)) return;
-      closeRow(); theme=value;
-      try { win.localStorage.setItem(PREFERENCE,value); } catch (_) {}
-      doc.documentElement.classList.toggle('wl-cart-studio',theme!=='original');
-      doc.documentElement.dataset.wlCartStudioTheme=theme;
-      options.querySelectorAll('button').forEach(function (button) { button.setAttribute('aria-pressed',String(button.dataset.csTheme===theme)); });
-      decorate();
     }
     function announce(copy) { live.textContent=copy; }
     function closeRow() { if (openRow) setOpen(openRow,false); }
@@ -107,10 +69,10 @@
       pending=true; record.actions.setAttribute('aria-busy','true');
       try {
         var done=await delegateAction(record.row,selector,async function () {
-          var allowed=await verify(); if (!allowed) revoke(); return allowed;
+          return naturalCart(doc) && shell.isConnected;
         },function () { return revoked || !!doc.getElementById('wl-buy-now'); });
         if (done) { announce(label); closeRow(); }
-      } catch (_) { announce('WebTrack could not confirm your session. Please refresh before changing the cart.'); }
+      } catch (_) { announce('This item could not be updated. Please refresh and try again.'); }
       finally { pending=false; record.actions.removeAttribute('aria-busy'); }
     }
     function decorateRow(row,card) {
@@ -152,6 +114,7 @@
     }
     function decorate() {
       if (revoked) return;
+      if (!naturalCart(doc)) { revoke(); return; }
       var panel=doc.getElementById('ctl00_PageBody_ShoppingCartDetailPanel');
       shell.classList.add('cs-shell'); panel?.classList.add('cs-cart-panel');
       var header=panel?.querySelector('.cart-header'),lines=panel?.querySelector('.shopping-cart-details'),summary=panel?.querySelector('.custom-subtotal-wrapper');
@@ -161,7 +124,7 @@
         var total=doc.createElement('div'); total.className='cs-subtotal cs-only'; total.setAttribute('aria-hidden','true'); total.innerHTML='<span>Subtotal</span><strong data-cs-summary-total></strong>'; title.after(total);
         var note=doc.createElement('p'); note.className='cs-summary-note cs-only'; note.textContent='Delivery and tax confirmed at checkout.'; summary.appendChild(note);
       }
-      if (header && !header.querySelector('.cs-swipe-hint')) {
+      if (header && panel.querySelector('.shopping-cart-item') && !header.querySelector('.cs-swipe-hint')) {
         var hint=doc.createElement('span'); hint.className='cs-swipe-hint cs-only'; hint.textContent='Swipe left for item actions'; header.appendChild(hint);
       }
       panel?.querySelectorAll(':scope > div').forEach(function (node) {
@@ -171,19 +134,20 @@
       var emptyTarget=lines || (!panel ? shell : null);
       if (emptyTarget && !emptyTarget.querySelector('.shopping-cart-item') && /your cart is currently empty/i.test(emptyTarget.textContent) && !emptyTarget.querySelector('.cs-empty')) {
         Array.from(emptyTarget.childNodes).forEach(function (node) {
-          if (node.nodeType===1 && node!==toolbar && node.id!=='savedForLater') node.classList.add('cs-native-empty');
+          if (node.nodeType===1 && node.id!=='savedForLater') node.classList.add('cs-native-empty');
           else if (node.nodeType===3 && /your cart is currently empty/i.test(node.textContent)) { var nativeText=doc.createElement('span'); nativeText.className='cs-native-empty'; node.before(nativeText); nativeText.appendChild(node); }
         });
         var empty=doc.createElement('div'); empty.className='cs-empty cs-only'; empty.innerHTML='<span aria-hidden="true">＋</span><h2>Your cart is empty</h2><p>Find what you need for your next project.</p><a href="/Products.aspx">Explore products <span aria-hidden="true">→</span></a>'; emptyTarget.appendChild(empty);
       }
-      rows.forEach(function (record) { if (!record.row.isConnected || !record.card.isConnected || theme==='original') cleanupRow(record); });
-      if (theme!=='original') panel?.querySelectorAll('.shopping-cart-item').forEach(function (row) { var card=row.querySelector('.cart-item-card'); if (card && row.querySelector('.delete-link')) decorateRow(row,card); });
+      rows.forEach(function (record) { if (!record.row.isConnected || !record.card.isConnected) cleanupRow(record); });
+      panel?.querySelectorAll('.shopping-cart-item').forEach(function (row) { var card=row.querySelector('.cart-item-card'); if (card && row.querySelector('.delete-link')) decorateRow(row,card); });
       rows.forEach(function (record) {
-        record.actions.querySelector('.cs-swipe-save').disabled=!record.row.querySelector('.sfl-button') || !!record.row.querySelector('.sfl-button')?.disabled;
+        var nativeSave=record.row.querySelector('.sfl-button'),save=record.actions.querySelector('.cs-swipe-save');
+        save.hidden=!nativeSave; save.disabled=!nativeSave || !!nativeSave.disabled;
       });
       var checkout=doc.getElementById('ctl00_PageBody_PlaceOrderButton');
       if (checkout!==observedCheckout) { intersection?.disconnect(); observedCheckout=checkout; if (checkout) intersection?.observe(checkout); }
-      dock.hidden=theme==='original' || !checkout;
+      dock.hidden=!checkout;
       dockButton.disabled=!checkout || checkout.disabled || checkout.getAttribute('aria-disabled')==='true';
       var subtotal=text(summary?.querySelector('.SubtotalWrapper')?.textContent).match(/\$\s*[\d,]+\.\d{2}/)?.[0] || '';
       var amount=dock.querySelector('[data-cs-dock-total]'); if (amount.textContent!==subtotal) amount.textContent=subtotal;
@@ -193,16 +157,13 @@
     function revoke() {
       if (revoked) return; revoked=true; closeRow(); observer.disconnect(); intersection?.disconnect(); rows.forEach(cleanupRow);
       doc.documentElement.classList.remove('wl-cart-studio'); delete doc.documentElement.dataset.wlCartStudioTheme; delete doc.documentElement.dataset.wlCartStudioBuild;
-      shell.querySelectorAll('.cs-only').forEach(function (node) { node.remove(); }); toolbar.remove(); dock.remove();
+      shell.querySelectorAll('.cs-only').forEach(function (node) { node.remove(); }); live.remove(); dock.remove();
     }
     var observer=new win.MutationObserver(schedule); observer.observe(doc.body,{childList:true,subtree:true,characterData:true});
     doc.addEventListener('pointerdown',function (event) { if (openRow && !openRow.row.contains(event.target)) closeRow(); },true);
     doc.addEventListener('keydown',function (event) { if (event.key==='Escape') closeRow(); });
-    win.addEventListener('focus',async function () {
-      if (revoked || Date.now()-lastCheck<15000) return; lastCheck=Date.now();
-      try { if (!await verify()) revoke(); } catch (_) { revoke(); }
-    });
-    doc.documentElement.dataset.wlCartStudioBuild=BUILD; win.WLCartStudio={build:BUILD}; selectTheme(theme);
+    doc.documentElement.dataset.wlCartStudioBuild=BUILD; win.WLCartStudio={build:BUILD};
+    doc.documentElement.dataset.wlCartStudioTheme='ink'; doc.documentElement.classList.add('wl-cart-studio'); decorate();
     async function loadStyles() {
       return new Promise(function (resolve) {
         var link=doc.createElement('link'),settled=false,timer=win.setTimeout(function () { finish(false); },10000);
@@ -211,5 +172,5 @@
       });
     }
   }
-  return {boot:boot,build:BUILD,nativeUser:nativeUser,gestureAxis:gestureAxis,swipeOffset:swipeOffset,revealAfterDrag:revealAfterDrag,delegateAction:delegateAction};
+  return {boot:boot,build:BUILD,naturalCart:naturalCart,gestureAxis:gestureAxis,swipeOffset:swipeOffset,revealAfterDrag:revealAfterDrag,delegateAction:delegateAction};
 });
