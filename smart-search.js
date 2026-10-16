@@ -3,7 +3,7 @@
 
   if (window.WLSmartSearch) return;
 
-  var BUILD = "20260909-2";
+  var BUILD = "20261016-1";
   var API_URL = "https://wl-upsrates.vercel.app/api/smart-search-suggestions?v=" + BUILD;
   var RESULTS_PANEL_ID = "ctl00_PageBody_ProductGroupStandardPanel";
   var ATTRIBUTION_KEY = "wl_product_discovery_attribution_v1";
@@ -66,6 +66,78 @@
     var totalMatch = resultText.match(/\(of\s+([\d,]+)\)/i);
     if (totalMatch) total = Number(totalMatch[1].replace(/,/g, "")) || productIds.length;
     return { count: productIds.length, total: total, productIds: productIds };
+  }
+
+  // Private trial: never trust cached account IDs, editable fields, or query flags.
+  var SINGLE_RESULT_ACCOUNT = "ckunkel2";
+
+  function singleResultDestination(panel) {
+    var totals = Array.prototype.slice.call(panel.querySelectorAll(".paging-control")).map(function (node) {
+      var label = cleanText(node.textContent, 500);
+      var match = label.match(/\b([\d,]+)\s+items?\s+found\b/i) || label.match(/\(of\s+([\d,]+)\)/i);
+      return match ? Number(match[1].replace(/,/g, "")) : null;
+    }).filter(function (total) { return total !== null; });
+    // Require WebTrack's total, not the number of cards on the current page.
+    if (!totals.length || totals.some(function (total) { return total !== 1; })) return "";
+    var destinations = Object.create(null);
+    var invalid = false;
+    Array.prototype.slice.call(panel.querySelectorAll("a[href*='ProductDetail.aspx']")).forEach(function (link) {
+      if (link.closest("[data-wl-self-tracked-product-list]") || !isVisible(link)) return;
+      try {
+        var url = new URL(link.getAttribute("href"), window.location.href);
+        var pid = url.searchParams.get("pid");
+        if (url.origin !== window.location.origin || !/^\/ProductDetail\.aspx$/i.test(url.pathname) ||
+            url.username || url.password || !/^\d{1,20}$/.test(pid || "")) { invalid = true; return; }
+        url.hash = "";
+        if (!destinations[pid]) destinations[pid] = url.href;
+      } catch (_) { invalid = true; }
+    });
+    var ids = Object.keys(destinations);
+    return !invalid && ids.length === 1 ? destinations[ids[0]] : "";
+  }
+
+  function signedIn(page) {
+    return !!page.querySelector("a[href*='SignOut=1'],a[href*='signout=1']");
+  }
+
+  function pilotAccount(page) {
+    if (!signedIn(page)) return false;
+    var names = Array.prototype.slice.call(page.querySelectorAll(".formPageHeader")).map(function (node) {
+      var match = cleanText(node.textContent, 200).match(/^Change (?:password|details) for user\s+['"]([^'"]+)['"]$/i);
+      return match ? match[1].toLowerCase() : "";
+    }).filter(Boolean);
+    return names.length > 0 && names.every(function (name) { return name === SINGLE_RESULT_ACCOUNT; });
+  }
+
+  async function redirectSingleResult(panel) {
+    var destination = singleResultDestination(panel);
+    if (!destination || !signedIn(document) || window.top !== window || typeof window.AbortController !== "function") return false;
+    var initialUrl = window.location.href;
+    var interacted = false;
+    function interaction() { interacted = true; }
+    // Leave an already edited result/search page alone if identity takes time.
+    ["pointerdown", "keydown", "input"].forEach(function (name) { document.addEventListener(name, interaction, true); });
+    var controller = new window.AbortController();
+    var timeout = window.setTimeout(function () { controller.abort(); }, 4000);
+    try {
+      var settingsUrl = new URL("/AccountSettings.aspx", window.location.href);
+      var response = await window.fetch(settingsUrl.href, {
+        method: "GET", credentials: "same-origin", cache: "no-store", signal: controller.signal
+      });
+      var finalUrl = new URL(response.url || settingsUrl.href);
+      if (!response.ok || finalUrl.origin !== settingsUrl.origin || finalUrl.pathname.toLowerCase() !== "/accountsettings.aspx") return false;
+      var settings = new window.DOMParser().parseFromString(await response.text(), "text/html");
+      if (!pilotAccount(settings) || interacted || window.location.href !== initialUrl || !signedIn(document) ||
+          document.getElementById(RESULTS_PANEL_ID) !== panel || singleResultDestination(panel) !== destination) return false;
+      // Replace the intermediate search entry so Back cannot bounce to the product.
+      window.location.replace(destination);
+      return true;
+    } catch (_) {
+      return false; // Native results and existing recovery remain usable.
+    } finally {
+      window.clearTimeout(timeout);
+      ["pointerdown", "keydown", "input"].forEach(function (name) { document.removeEventListener(name, interaction, true); });
+    }
   }
 
   function analyticsReady() {
@@ -509,12 +581,13 @@
     });
   }
 
-  function enhance() {
+  async function enhance() {
     if (enhancementStarted || !/\/Products\.aspx$/i.test(window.location.pathname || "")) return;
     var term = searchTerm();
     var panel = document.getElementById(RESULTS_PANEL_ID);
     if (!term || !panel) return;
     enhancementStarted = true;
+    if (await redirectSingleResult(panel)) return;
     var nativeState = nativeSearchState(panel);
     if (nativeState.count === 0) renderLoading(panel, term);
     requestSuggestions(term, nativeState).then(function (payload) {
