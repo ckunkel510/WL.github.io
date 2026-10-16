@@ -2,7 +2,7 @@
 
 The natural ShoppingCart.aspx cart has three switchable designs for **ckunkel2 only**: Canvas (warm), Slate (cool), and Ink (navy). Original restores the prior layout without changing cart contents. The theme preference is browser-local.
 
-BuyNowPilot build `20261016-compact-checkout-23` loads CartDesignPilot build `20261016-cart-studio-1` only after its native account check identifies ckunkel2. The design module independently verifies the account from a fresh, uncached AccountSettings.aspx response before loading CSS or adding UI. Guests, other accounts, frames, and checkout/review pages do not get the private design. This is a presentation pilot, not an authorization boundary for orders or account data.
+BuyNowPilot build `20261016-compact-checkout-24` loads CartDesignPilot build `20261016-cart-studio-2` only after its native account check identifies ckunkel2. The design module independently verifies the account from a fresh, uncached AccountSettings.aspx response before loading CSS or adding UI. Guests, other accounts, frames, and checkout/review pages do not get the private design. This is a presentation pilot, not an authorization boundary for orders or account data.
 
 The design keeps the existing cart nodes and native quantity, checkout, Save for Later, Delete, and Empty Cart handlers. The mobile checkout bar clicks the existing Proceed to checkout control. A mobile swipe reveals Save and Remove; it never mutates the cart by itself. Those two actions reverify ckunkel2 and delegate once to the existing native control. Vertical scrolling and interactive quantity controls are excluded from the swipe gesture. Keyboard users can open the same actions with the item menu and dismiss with Escape.
 

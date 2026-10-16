@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261016-compact-checkout-23';
+  var BUILD = '20261016-compact-checkout-24';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -46,7 +46,7 @@
   function loadPrivateCartDesign(win,user) {
     if (user!=='ckunkel2' || win.top!==win || !/^\/ShoppingCart\.aspx$/i.test(win.location.pathname) || win.document.querySelector('script[data-wl-cart-studio]')) return;
     var script=win.document.createElement('script');
-    script.src='https://ckunkel510.github.io/WL.github.io/CartDesignPilot.js?v=20261016-cart-studio-1';
+    script.src='https://ckunkel510.github.io/WL.github.io/CartDesignPilot.js?v=20261016-cart-studio-2';
     script.async=true; script.setAttribute('data-wl-cart-studio','true'); win.document.head.appendChild(script);
   }
   function pidOf(value) { var m = String(value || '').match(/[?&]pid=(\d+)(?:&|$)/i); return m ? m[1] : ''; }

@@ -12,6 +12,11 @@ html:not(.wl-cart-studio) .cs-only{display:none!important}
 .wl-cart-studio[data-wl-cart-studio-theme=ink]{--cs-canvas:#1e3449;--cs-soft:#edf3f7;--cs-ink:#1e3449;--cs-muted:#697d8c;--cs-line:#e1e8ed;--cs-shadow:0 14px 40px #071a2c30;--cs-radius:24px}
 .wl-cart-studio body{background:var(--cs-canvas)!important}
 .wl-cart-studio #MainLayoutRow,.wl-cart-studio .MainLayoutRow{background:transparent!important}
+.wl-cart-studio #MainLayoutRow{width:100%!important;max-width:1240px;margin:0 auto!important}
+.wl-cart-studio #MainLayoutRow>.container-fluid{width:100%!important;padding:0!important;margin:0!important}
+.wl-cart-studio #MainLayoutRow>.container-fluid>.row{margin:0!important;padding:0!important}
+.wl-cart-studio #MainLayoutRow>.container-fluid>.row>.col{padding:0!important;min-width:0}
+.wl-cart-studio #MainLayoutRow>.container-fluid>.row>.navigation-menu:not(:has(a,button,input,select)){display:none!important}
 .wl-cart-studio .cs-shell{display:grid!important;grid-template-columns:minmax(0,1fr) minmax(290px,340px);align-items:start;column-gap:32px;row-gap:22px;max-width:1240px;margin:0 auto!important;padding:18px 28px 64px!important;background:transparent!important;border:0!important;color:var(--cs-ink);font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 .wl-cart-studio .cs-cart-panel{display:contents!important}
 .wl-cart-studio .cs-native-chrome{display:none!important}
