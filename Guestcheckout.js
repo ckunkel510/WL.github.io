@@ -260,6 +260,10 @@
     document.head.appendChild(style);
   }
 
+  function guestMetric(eventName) {
+    try { window.WLAnalytics?.track(eventName,{customer_type:'guest'}); } catch (_) {}
+  }
+
   function showModal() {
     injectStyles();
     if (!document.getElementById('gc_modal')) buildModal();
@@ -267,6 +271,7 @@
 
     const back = $('#gc_backdrop');
     const modal = $('#gc_modal');
+    if (!modal || modal.style.display !== 'flex') guestMetric('guest_checkout_start');
     if (back) back.style.setProperty('display', 'block', 'important');
     if (modal) {
       modal.style.setProperty('display', 'flex', 'important');
@@ -387,7 +392,7 @@
     $('#gc_bill_same').addEventListener('change', (e) => {
       $('#gc_bill_block').classList.toggle('gc-hidden', e.target.checked);
     });
-    $('#gc_cancel').addEventListener('click', closeModal);
+    $('#gc_cancel').addEventListener('click', function () { guestMetric('checkout_cancel'); closeModal(); });
     backdrop.addEventListener('click', closeModal);
     $('#gc_submit').addEventListener('click', onSubmitGuest);
   }
@@ -601,19 +606,21 @@
   async function onSubmitGuest() {
     const submit = $('#gc_submit');
     const payload = collectGuestPayload();
-    if (payload.error) return showError(payload.error);
+    if (payload.error) { guestMetric('guest_checkout_error'); return showError(payload.error); }
 
     saveGuest(payload);
     if (submit) { submit.disabled = true; submit.textContent = 'Continuing…'; }
 
     try {
       await createAccountInBackground(payload);
+      guestMetric('guest_details_complete');
       // Signup is finished. Do not retain its generated credential in the draft.
       delete payload.password;
       saveGuest(payload);
       continueCheckoutAndHookBilling();
       closeModal();
     } catch (e) {
+      guestMetric('guest_checkout_error');
       ERR('Account creation error:', e);
       clearGuestState();
       setCheckoutMode('');
