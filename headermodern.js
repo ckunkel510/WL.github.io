@@ -206,14 +206,15 @@
     if (window.top !== window || window.location.origin !== WEBTRACK) return;
     if (!document.querySelector('a[href*="SignOut=1"],a[href*="signout=1"]')) return;
     if (document.querySelector('script[data-wl-buy-now-pilot]')) return;
-    // Loading alone grants no access: the module verifies AccountSettings.aspx
-    // and the current customer account before showing UI or changing the cart.
-    // This hash only avoids loading the pilot for other ordinary customers.
-    try {
-      if (localStorage.getItem('wl_user_id') !== 'b8f6961397f9c6a3b9cff27038c1d3ed309604ffe607b5dd0d365f5d53179ade') return;
-    } catch (_) { return; }
+    // Avoid extra account reads on unrelated pages. A durable Quick buy journal
+    // still loads recovery there; the module independently verifies its owner.
+    if (!/\/(?:ProductDetail|Products|ShoppingCart)\.aspx$/i.test(window.location.pathname)) {
+      try { if (!Object.keys(localStorage).some(function (key) { return /^wl_buy_now_pilot_v1:[a-f0-9]{64}$/.test(key); })) return; }
+      catch (_) { return; }
+    }
+    // UI and account-scoped state require fresh native sign-in/account checks.
     var script = document.createElement('script');
-    script.src = 'https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261016-ckunkel2-19';
+    script.src = 'https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261016-compact-checkout-20';
     script.async = true;
     script.setAttribute('data-wl-buy-now-pilot', 'true');
     deferCartCheckoutUntilPilotReady(script);
