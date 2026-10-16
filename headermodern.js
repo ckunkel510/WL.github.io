@@ -167,6 +167,41 @@
     document.head.appendChild(script);
   }
 
+  function deferCartCheckoutUntilPilotReady(script) {
+    if (!/\/ShoppingCart\.aspx$/i.test(window.location.pathname) || !window.navigator.locks) return;
+    var pending = null, previousBusy = null, settled = false;
+    var timeout = window.setTimeout(finish, 65000);
+    function finish() {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      window.removeEventListener('click', hold, true);
+      window.removeEventListener('wl-buy-now-pilot-settled', finish);
+      if (!pending) return;
+      if (previousBusy === null) pending.removeAttribute('aria-busy');
+      else pending.setAttribute('aria-busy', previousBusy);
+      // An existing Quick buy recovery panel must finish before native checkout.
+      if (document.getElementById('wl-buy-now')) return;
+      var control = document.getElementById('ctl00_PageBody_PlaceOrderButton');
+      if (control && !control.disabled && control.getAttribute('aria-disabled') !== 'true') control.click();
+    }
+    function hold(event) {
+      var control = event.target?.closest?.('#ctl00_PageBody_PlaceOrderButton');
+      if (settled || !control || control.disabled || control.getAttribute('aria-disabled') === 'true' ||
+          document.documentElement.dataset.wlCompactCartCheckout || !document.querySelector('.shopping-cart-item')) return;
+      event.preventDefault(); event.stopImmediatePropagation();
+      if (pending) return;
+      pending = control;
+      previousBusy = control.getAttribute('aria-busy');
+      control.setAttribute('aria-busy', 'true');
+    }
+    // Installed before the async script request; a fast click is replayed once
+    // after fresh account checks, through the pilot's own handler or native route.
+    window.addEventListener('click', hold, true);
+    window.addEventListener('wl-buy-now-pilot-settled', finish);
+    script.addEventListener('error', finish, { once: true });
+  }
+
   function loadBuyNowPilot() {
     if (window.top !== window || window.location.origin !== WEBTRACK) return;
     if (!document.querySelector('a[href*="SignOut=1"],a[href*="signout=1"]')) return;
@@ -178,9 +213,10 @@
       if (localStorage.getItem('wl_user_id') !== 'b8f6961397f9c6a3b9cff27038c1d3ed309604ffe607b5dd0d365f5d53179ade') return;
     } catch (_) { return; }
     var script = document.createElement('script');
-    script.src = 'https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261016-ckunkel2-18';
+    script.src = 'https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261016-ckunkel2-19';
     script.async = true;
     script.setAttribute('data-wl-buy-now-pilot', 'true');
+    deferCartCheckoutUntilPilotReady(script);
     document.head.appendChild(script);
   }
 
