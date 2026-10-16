@@ -82,6 +82,27 @@ test("opening guest checkout retains safety checks without starting a native han
   assert.equal(env.elements.has("wl-checkout-transition"), false);
 });
 
+test('anonymous primary checkout opens the guest form only after cart safety checks',()=>{
+  const env=environment();let opened=0;
+  env.context.WLGuestCheckout={open(){opened++;}};
+  load('WoodsonShoppingCart.js',env,'window.bindHandoff = bindCheckoutHandoff;');
+  env.context.bindHandoff('cart-guest');
+  assert.equal(click(env,'ctl00_PageBody_PlaceOrderButton').defaultPrevented,true);
+  assert.equal(opened,1);assert.equal(env.elements.has('wl-checkout-transition'),false);
+  env.document.querySelector=selector=>selector.includes('data-sold-out')?env.element():null;
+  click(env,'ctl00_PageBody_PlaceOrderButton');assert.equal(opened,1);
+});
+
+test('signed-in primary checkout keeps its native or compact handler',()=>{
+  const env=environment();let opened=0;
+  env.context.WLGuestCheckout={open(){opened++;}};
+  env.document.querySelectorAll=selector=>selector==='a'?[{textContent:'Sign Out'}]:[];
+  load('WoodsonShoppingCart.js',env,'window.bindHandoff = bindCheckoutHandoff;');
+  env.context.bindHandoff('cart-signed-in');
+  assert.equal(click(env,'ctl00_PageBody_PlaceOrderButton').defaultPrevented,undefined);
+  assert.equal(opened,0);assert.equal(env.elements.has('wl-checkout-transition'),true);
+});
+
 test("native checkout keeps its loading screen but recovers after failed navigation or browser Back", () => {
   const env = environment();
   load("WoodsonShoppingCart.js", env, "window.bindHandoff = bindCheckoutHandoff;");

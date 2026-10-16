@@ -500,6 +500,14 @@
           sessionStorage.removeItem(AUTO_ADVANCE_KEY);
         } catch {}
       }
+      // The primary button follows the same guest entry after the cart safety
+      // checks above, instead of sending an anonymous shopper to Sign In.
+      if (target.id !== 'gc_guest_btn' && !isSignedIn() && typeof window.WLGuestCheckout?.open === 'function') {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        window.WLGuestCheckout.open();
+        return;
+      }
       // Opening the guest form is not a native handoff. Preserve the safety
       // checks and draft reset, but leave the cart usable if the form is canceled.
       if (target.id !== 'gc_guest_btn') showCheckoutTransition();
