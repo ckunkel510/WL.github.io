@@ -6,7 +6,7 @@
   else core.boot(root).catch(function () { /* Keep the existing cart if unavailable. */ });
 })(typeof window==='object' ? window : null,function () {
   'use strict';
-  var BUILD='20261016-ink-cart-5';
+  var BUILD='20261016-ink-cart-6';
   var ORIGIN='https://webtrack.woodsonlumber.com';
   var ASSETS='https://ckunkel510.github.io/WL.github.io/';
   var REVEAL=164;
