@@ -130,3 +130,19 @@ test('browse event sign-in state comes from native navigation and cannot contain
  const f=setup();f.api.track('navigation_click',{sign_in_state:'forged',destination_path:'/ShoppingCart.aspx'});assert.equal(f.events.find(e=>e.event_name==='navigation_click').sign_in_state,'signed_out');
  f.doc.querySelector=selector=>selector.includes('SignOut=1')?{}:null;f.api.track('view_cart',{});assert.equal(f.events.find(e=>e.event_name==='view_cart').sign_in_state,'signed_in');
 });
+
+test('confirmed purchase supplies Merchant cart data with matching native offer IDs and final prices',()=>{
+ const f=setup(),d=details();f.api.checkout('review',d,page());f.api.checkout('purchase',{...d,orderNumber:'W123456'},page());
+ const p=purchases(f)[0];assert.equal(p.aw_merchant_id,453662576);assert.equal(p.aw_feed_label,'US');assert.equal(p.aw_feed_language,'en');assert.equal(p.ecommerce.items[0].id,p.ecommerce.items[0].item_id);
+ const ga=f.events.find(e=>e[0]==='event'&&e[1]==='purchase')[2];assert.equal(ga.aw_merchant_id,453662576);assert.equal(ga.items[0].id,'85');assert.equal(ga.items[0].price,2);assert.equal(ga.items[0].quantity,3);assert.equal(ga.value,6);
+});
+test('unknown prices, fractional units and unmatched employee totals omit optional Merchant cart metadata',()=>{
+ for(const items of [[{pid:'85',name:'Item',quantity:3}],[{pid:'85',name:'Item',quantity:1.5,price:4}],[{pid:'85',name:'Item',quantity:3,price:9}]]){
+ const f=setup(),d=details({items});f.api.checkout('review',d,page());f.api.checkout('purchase',{...d,orderNumber:'W123456'},page());
+ assert.equal(purchases(f)[0].aw_merchant_id,undefined);assert.equal(purchases(f)[0].ecommerce.value,6);
+ }
+});
+test('cached PDP quote clicks remain intent and cannot produce generated leads or purchase revenue',()=>{
+ const f=setup();f.api.track('generate_lead',{lead_source:'pdp_quote_request',product_id:'85'});
+ assert.equal(f.events.filter(e=>e.event_name==='generate_lead').length,0);const p=f.events.find(e=>e.event_name==='quote_request_click');assert.equal(p.lead_stage,'intent');assert.equal(p.product_id,'85');assert.equal(p.ecommerce,undefined);
+});
