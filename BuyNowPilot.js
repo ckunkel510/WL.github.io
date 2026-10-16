@@ -3,10 +3,12 @@
   'use strict';
   var core = factory();
   if (typeof module === 'object' && module.exports) module.exports = core;
-  else core.boot(root).catch(function () { /* An unavailable pilot leaves native shopping alone. */ });
+  else core.boot(root).catch(function () { /* An unavailable pilot leaves native shopping alone. */ }).finally(function () {
+    root.dispatchEvent(new root.Event('wl-buy-now-pilot-settled'));
+  });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261016-ckunkel2-18';
+  var BUILD = '20261016-ckunkel2-19';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true; // Same server-confirmed ckunkel2 audience.
   var USER = 'ckunkel2'; // No query string, storage value, or public rollout override.
@@ -1273,6 +1275,10 @@
         if (fast.securePayment) {
           frame.classList.add('bn-frame-open'); frame.removeAttribute('aria-hidden'); frame.removeAttribute('tabindex'); loading(false); status('Add your payment securely below.'); return;
         }
+      } catch (error) {
+        // A replaced frame can still reject a slow carrier request. Only the
+        // active revision may report an error or change the current panel.
+        if (fast === current && frame?.contentDocument === page) throw error;
       } finally { if (fast === current) fast.driving = false; }
     }
     async function submitNative(control, page) {
