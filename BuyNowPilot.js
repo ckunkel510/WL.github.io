@@ -6,8 +6,9 @@
   else core.boot(root).catch(function () { /* An unavailable pilot leaves native shopping alone. */ });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261016-ckunkel2-16';
+  var BUILD = '20261016-ckunkel2-18';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
+  var ENABLE_CART_CHECKOUT = true; // Same server-confirmed ckunkel2 audience.
   var USER = 'ckunkel2'; // No query string, storage value, or public rollout override.
   var PREFIX = 'wl_buy_now_pilot_v1:';
   var ORIGIN = 'https://webtrack.woodsonlumber.com';
@@ -24,6 +25,14 @@
   }
   function readableCart(page, rowCount) {
     return rowCount > 0 || !!page.querySelector('#ctl00_PageBody_ShoppingCartDetailPanel,.ShoppingCartDetailPanel,#ctl00_PageBody_EmptyCartPanel,#ctl00_PageBody_EmptyCartDetailPanel') || /cart\s+is\s+(?:currently\s+)?empty|no\s+items\s+in\s+(?:your\s+)?(?:shopping\s+)?cart/i.test(page.body.textContent);
+  }
+  function cartPolicyReady(page) {
+    return !page.querySelector('script[src*="ShoppingCartRow.js"]') || !!page.getElementById('wl-cart-qty-stepper-styles');
+  }
+  function hasCustomCuts(items, selections) {
+    return Object.values(selections || {}).some(function (selection) {
+      return selection && items.some(function (item) { return String(selection.productId)===String(item.pid) || text(selection.productCode).toUpperCase()===text(item.code).toUpperCase(); });
+    });
   }
   function signedIn(doc) { return !!doc.querySelector('a[href*="SignOut=1"],a[href*="signout=1"]'); }
   function loginFromDocument(doc) {
@@ -122,6 +131,19 @@
   function fulfillmentApplied(method, intent, pressed) {
     return ['pickup','delivery','ship'].includes(method) && intent === method && pressed === 'true';
   }
+  function requestNativeMethod(page, method, now) {
+    var id = {pickup:'btnPickup',delivery:'btnDelivered',ship:'btnShip'}[method];
+    var control = id && page.getElementById(id);
+    // WebTrack enables these controls after its quote/UpdatePanel has settled.
+    // A disabled button silently ignores click(); never record that as a request.
+    if (!control || control.disabled || control.getAttribute('aria-disabled') === 'true') return false;
+    if (!control.dataset.bnRequestedAt) {
+      control.dataset.bnRequestedAt = String(now);
+      page.documentElement.dataset.bnMethod = method;
+      control.click();
+    }
+    return true;
+  }
   function productMethod(page) {
     var pickup = page.querySelector('button[aria-label="Choose pickup"][aria-pressed="true"]');
     var paid = page.querySelector('button[aria-label="Choose delivery or shipping"][aria-pressed="true"]');
@@ -197,7 +219,20 @@
     if (['subtotal','tax','total'].some(function (key) { return money(result[key]) === null; })) throw new Error('The final total is still loading.');
     return result;
   }
-  function marker(record) { return 'Website Buy Now | ' + record.id + ' | Additional cart items: ' + record.extraCount; }
+  function marker(record) { return record.cartCheckout ? 'Website Compact Checkout | ' + record.id : 'Website Buy Now | ' + record.id + ' | Additional cart items: ' + record.extraCount; }
+  function cartOrderReceipt(record) {
+    // A submission guard, never a cart backup. No items, addresses or payment data.
+    if (!['submitting','uncertain','confirmed'].includes(record.phase)) return null;
+    return {version:1,id:record.id,phase:record.phase,createdAt:record.createdAt,updatedAt:record.updatedAt,orderNumber:record.orderNumber || ''};
+  }
+  function readCartOrderReceipt(storage, key) {
+    var raw = storage.getItem(key);
+    if (!raw) return null;
+    var value;
+    try { value = JSON.parse(raw); } catch (_) { throw new Error('The previous checkout status needs review. Open order history before trying again.'); }
+    if (!value || value.version!==1 || !/^CC-[a-z0-9-]+$/i.test(value.id || '') || !['submitting','uncertain','confirmed'].includes(value.phase)) throw new Error('The previous checkout status needs review. Open order history before trying again.');
+    return cartOrderReceipt(value);
+  }
   function savedChoice(options, preferred) {
     var available = options.filter(function (option) { return option.value && !/^(select|choose|please)\b/i.test(text(option.label)); });
     var matches = preferred ? available.filter(function (option) { return option.fingerprint === preferred; }) : [];
@@ -271,10 +306,10 @@
     if (!accountHeader || !text(accountHeader.textContent)) throw new Error('The current customer account could not be verified.');
     var scope = await digest(USER + '|' + text(accountHeader.textContent));
     var branch = text(settings.getElementById('ctl00_PageBody_ChangeUserDetailsControl_ddBranch')?.value);
-    var key = PREFIX + scope, preferenceKey = PREFIX + 'payment:' + scope;
+    var key = PREFIX + scope, preferenceKey = PREFIX + 'payment:' + scope, cartOrderKey = PREFIX + 'cart-order:' + scope;
     var blocked = null;
     var owner = win.crypto.randomUUID(), active = null, overlay = null, frame = null, releaseLock = null;
-    var previousFocus = null, previousOverflow = '', busy = false, submitting = false, cancelPending = false, frameObserver = null, frameTimer = null, framePulse = null, frameReadyTimer = null, installedPage = null, permittedFinal = null, fast = null;
+    var previousFocus = null, previousOverflow = '', busy = false, submitting = false, cancelPending = false, frameObserver = null, frameTimer = null, framePulse = null, frameReadyTimer = null, installedPage = null, permittedFinal = null, fast = null, cartEntry = false, bypassCartEntry = false;
     var lockName = PREFIX + 'lock:' + scope;
     var model = { build: BUILD, audience: USER };
     win.WLBuyNowPilot = model;
@@ -301,7 +336,18 @@
       if (text(currentSettings.getElementById('ctl00_PageBody_ChangeUserDetailsControl_ddBranch')?.value) !== expectedBranch) throw new Error('Your account branch changed. Return to the original branch before recovering this cart.');
       settings = currentSettings; account = fresh;
     }
-    function save() { active.updatedAt = Date.now(); persist(storage, key, active); }
+    function save() {
+      active.updatedAt = Date.now();
+      if (active.cartCheckout) {
+        var receipt = cartOrderReceipt(active);
+        if (receipt) persist(storage,cartOrderKey,receipt);
+      } else persist(storage, key, active);
+    }
+    function assertNoPendingCartOrder() {
+      var receipt = readCartOrderReceipt(storage,cartOrderKey);
+      if (receipt && receipt.phase!=='confirmed') throw new Error('A previous order is not yet confirmed. Check order history before another checkout.');
+      if (receipt) storage.removeItem(cartOrderKey);
+    }
     function record() { var value = readRecord(storage, key); if (value && value.scope !== scope) throw new Error('The recovery account does not match.'); return value; }
     function status(message, error) {
       if (!overlay) return;
@@ -328,6 +374,7 @@
       if (releaseLock) releaseLock(); releaseLock = null;
       active = null; busy = false; submitting = false; cancelPending = false;
       fast = null;
+      cartEntry = false;
       if (blocked) addButtons();
       else purchaseRestrictions().then(function (ids) { blocked = ids; addButtons(); }).catch(function () {});
     }
@@ -335,12 +382,13 @@
       if (overlay) return;
       previousFocus = doc.activeElement; previousOverflow = doc.body.style.overflow;
       overlay = doc.createElement('div'); overlay.id = 'wl-buy-now';
+      overlay.dataset.bnFlow=cartEntry ? 'cart' : 'quick-buy';
       var panel = doc.createElement('section'); panel.className = 'bn-panel'; panel.setAttribute('role', 'dialog'); panel.setAttribute('aria-modal', 'true'); panel.setAttribute('aria-labelledby', 'bn-title');
       var head = doc.createElement('div'); head.className = 'bn-head';
       var heading = doc.createElement('h2'); heading.id = 'bn-title'; heading.textContent = title;
       var label = doc.createElement('small'); label.textContent = 'Private pilot';
       var copy = doc.createElement('div'); copy.append(heading, label);
-      head.append(copy, button('Cancel', function () { cancel().catch(showError); }, true));
+      head.append(copy, button(cartEntry ? 'Back to cart' : 'Cancel', function () { cancel().catch(showError); }, true));
       var message = doc.createElement('div'); message.className = 'bn-progress'; message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite');
       var spinner = doc.createElement('span'); spinner.className = 'bn-spinner'; spinner.setAttribute('aria-hidden','true');
       var statusText = doc.createElement('span'); statusText.dataset.bnStatus = ''; message.append(spinner,statusText);
@@ -358,10 +406,14 @@
         else if (!event.shiftKey && doc.activeElement === last) { event.preventDefault(); first.focus(); }
       });
       head.querySelector('button').focus();
+      if (cartEntry) {
+        var fallback = button('Use standard checkout',standardCheckout,true); fallback.classList.add('bn-standard'); fallback.dataset.bnStandard=''; fallback.disabled=true; body.after(fallback);
+      }
     }
     function setStage(index) {
       if (!overlay) return;
       if (timings && timings.stages[index] === undefined) timings.stages[index] = Date.now()-timings.started;
+      if (index < 4) fastText('[data-bn-confirm]',['Checking items…','Checking options…','Loading payment…','Checking final total…'][index]);
       overlay.querySelectorAll('[data-bn-step]').forEach(function (el,step) {
         el.dataset.state = step<index ? 'done' : step===index ? 'current' : 'next';
         if (step===index) el.setAttribute('aria-current','step'); else el.removeAttribute('aria-current');
@@ -371,7 +423,7 @@
     function showPreview(preview, quantity) {
       var body = overlay.querySelector('[data-bn-body]'), row = node('div','','bn-product'), photo = node('div'), copy = node('div'); photo.dataset.bnPhoto = '';
       if (preview?.photo) { var url = new URL(preview.photo,ORIGIN); if (url.protocol==='https:' || url.origin===ORIGIN) { var img = doc.createElement('img'); img.src=url.href; img.alt=''; photo.appendChild(img); } }
-      copy.append(node('h3',preview?.name || 'Your item'),node('span','Qty '+quantity)); row.append(photo,copy);
+      copy.append(node('h3',preview?.name || 'Your item'),node('span',cartEntry ? 'All cart items' : 'Qty '+quantity)); row.append(photo,copy);
       var skeleton = node('div','','bn-skeletons'); skeleton.setAttribute('aria-hidden','true'); for (var i=0;i<5;i++) skeleton.appendChild(node('span'));
       body.replaceChildren(row,skeleton);
     }
@@ -379,11 +431,17 @@
       if (fast) { fast.ready = false; fast.stopped = true; }
       status(error && error.message || 'Buy now stopped. Your recovery copy is retained.', true);
       busy = false;
-      if (active && !['submitting', 'uncertain'].includes(active.phase)) showRestoreButton();
+      if (active && !active.cartCheckout && !['submitting', 'uncertain'].includes(active.phase)) showRestoreButton();
+      var receipt;
+      try { receipt=readCartOrderReceipt(storage,cartOrderKey); } catch (_) { receipt={}; }
+      if (overlay && receipt && receipt.phase!=='confirmed' && !overlay.querySelector('[data-bn-history]')) {
+        var history=doc.createElement('a'); history.href='/AccountInfo_R.aspx'; history.target='_blank'; history.rel='noopener'; history.textContent='Open account and order history'; history.dataset.bnHistory=''; overlay.querySelector('[data-bn-body]').appendChild(history);
+      }
+      if (cartEntry && overlay && !receipt) { var fallback=overlay.querySelector('[data-bn-standard]'); if (fallback) fallback.disabled=false; }
     }
     function showRestoreButton() {
       if (!overlay || overlay.querySelector('[data-bn-restore]')) return;
-      var restore = button('Restore my cart', function () { cancel().catch(showError); }, true);
+      var restore = button(active?.cartCheckout ? 'Back to cart' : 'Restore my cart', function () { cancel().catch(showError); }, true);
       restore.dataset.bnRestore = ''; overlay.querySelector('[data-bn-body]').appendChild(restore);
     }
     async function withLock(work) {
@@ -405,10 +463,10 @@
         throw new Error('WebTrack did not return a readable cart. No further cart changes were made.');
       }
       var parsed = rows.map(function (row) {
-        var link = Array.from(row.querySelectorAll('a[href]')).find(function (el) { return pidOf(el.getAttribute('href')); });
+        var link = row.querySelector('.cart-item-card h6 a[href*="pid="]') || Array.from(row.querySelectorAll('a[href]')).find(function (el) { return pidOf(el.getAttribute('href')) && text(el.textContent); }) || Array.from(row.querySelectorAll('a[href]')).find(function (el) { return pidOf(el.getAttribute('href')); });
         var quantity = row.querySelector('input.riTextBox,input[id*="_qty_"]:not([type="hidden"])');
-        var code = row.querySelector('.portalGridLink') || link;
-        var unitNode = row.querySelector('[data-title="Per"],[data-title="UOM"],.productPer,.unit-of-measure');
+        var code = row.querySelector('.portalGridLink,.cart-item-card h6 a') || link;
+        var unitNode = row.querySelector('[data-title="Per"],[data-title="UOM"],.productPer,.unit-of-measure,.wl-qty-unit');
         var unitParent = quantity && quantity.closest('.float-right');
         var directUnit = unitParent ? text(Array.from(unitParent.childNodes).filter(function (node) { return node.nodeType === 3; }).map(function (node) { return node.textContent; }).join(' ')) : '';
         var unitMatch = text(row.textContent).match(/\b(?:Per|UOM|Unit)\s*:\s*([a-z][a-z0-9/.-]*)\b/i);
@@ -416,7 +474,7 @@
         if (!link || !quantity || configured || /customized special order|cut to ship|configured product/i.test(row.textContent)) throw new Error('This cart contains a line that needs regular checkout during the pilot.');
         var unit = text(unitNode ? unitNode.textContent : directUnit || unitMatch && unitMatch[1]);
         if (!unit) throw new Error('The cart unit could not be verified. Please use regular checkout.');
-        return { pid: pidOf(link.getAttribute('href')), code: text(code.textContent), quantity: Number(quantity.value), unit: unit, name: text(row.querySelector('.description,.ProductDescription')?.textContent || code.textContent) };
+        return { pid: pidOf(link.getAttribute('href')), code: text(code.textContent), quantity: Number(quantity.value), unit: unit, name: text(row.querySelector('.description,.ProductDescription,.cart-item-card p.small')?.textContent || code.textContent) };
       });
       return { doc: page, items: lines(parsed), rows: rows };
     }
@@ -461,7 +519,7 @@
       if (!code || !unit || /epallet|e-pallet|wdoor/i.test(code)) throw new Error('The native product code or unit could not be verified for Buy now.');
       var cuts;
       try { cuts = JSON.parse(win.sessionStorage.getItem('wl_cut_to_ship_v1') || '{}'); } catch (_) { throw new Error('Saved cut selections need regular checkout.'); }
-      if (Object.values(cuts).some(function (selection) { return selection && (String(selection.productId) === id || text(selection.productCode).toUpperCase() === code.toUpperCase()); })) throw new Error('Cut-to-ship selections need regular checkout during this pilot.');
+      if (hasCustomCuts([{pid:id,code:code}],cuts)) throw new Error('Cut-to-ship selections need regular checkout during this pilot.');
       return { doc: page, add: add, quantity: quantity, name: name, code: code, unit: unit };
     }
     async function preflight(items, known) {
@@ -534,8 +592,9 @@
       if (submitting || active && ['submitting', 'uncertain'].includes(active.phase)) {
         status('The order result must be checked before restoring the cart. Do not submit the order again.', true); return;
       }
-      if (busy) { cancelPending = true; status('Finishing this change, then restoring your cart…'); return; }
+      if (busy) { cancelPending = true; status(cartEntry ? 'Returning to your cart…' : 'Finishing this change, then restoring your cart…'); return; }
       if (!active) { dismiss(); return; }
+      if (active.cartCheckout) { dismiss(); win.location.reload(); return; }
       busy = true; clearFrame();
       var wanted = recoveryTarget(active);
       active.phase = 'restoring'; save(); loading(true); status('Restoring your cart…');
@@ -545,6 +604,13 @@
       if (/\/ShoppingCart\.aspx$/i.test(win.location.pathname)) win.location.reload();
       else notice(purchased ? 'Your remaining cart items are restored.' : 'Buy now cancelled. Your original cart is restored.');
     }
+    function standardCheckout() {
+      if (!cartEntry || submitting || busy || active && ['submitting','uncertain','confirmed'].includes(active.phase)) return;
+      try { assertNoPendingCartOrder(); } catch (error) { showError(error); return; }
+      dismiss();
+      var native=doc.getElementById('ctl00_PageBody_PlaceOrderButton');
+      if (native && !native.disabled) { bypassCartEntry=true; try { native.click(); } finally { bypassCartEntry=false; } }
+    }
     function notice(message) {
       var el = doc.createElement('div'); el.className = 'bn-notice'; el.setAttribute('role', 'status'); el.textContent = message;
       el.appendChild(button('Dismiss', function () { el.remove(); }, true)); doc.body.appendChild(el);
@@ -552,9 +618,11 @@
     function loading(value) {
       if (!overlay) return;
       overlay.classList.toggle('bn-loading', !!value);
+      overlay.classList.toggle('bn-ready',!value && !!fast?.ready);
       overlay.querySelector('.bn-panel').setAttribute('aria-busy', value ? 'true' : 'false');
       if (fast) {
         fast.loading = !!value;
+        var standard=overlay.querySelector('[data-bn-standard]'); if (standard) standard.disabled=submitting || busy || active && ['submitting','uncertain','confirmed'].includes(active.phase);
         overlay.querySelectorAll('[data-bn-edit],[data-bn-method]').forEach(function (el) {
           if (el.hasAttribute('data-bn-method')) el.disabled = submitting || !!fast.editor || !(fast.methods[el.dataset.bnMethod]?.available || fast.methods[el.dataset.bnMethod]?.pending);
           else if (el.dataset.bnEdit === 'extras') el.disabled = submitting || !!fast.editor;
@@ -593,6 +661,15 @@
       body.after(footer);
       fastText('[data-bn-qty]', 'Qty ' + primary.quantity + ' · ' + primary.unit);
       fastText('[data-bn-extras]', before.length ? 'Also in your cart (' + before.length + ')' : 'No other cart items');
+      if (fast.cartCheckout) {
+        fastText('[data-bn-product]','Your cart');
+        fastText('[data-bn-qty]',before.length+' product'+(before.length===1?'':'s')+' · '+before.reduce(function (count,item) { return count+item.quantity; },0)+' items');
+        body.querySelector('[data-bn-edit="extras"]').remove();
+        var contents=node('details','','bn-cart-items'), summary=node('summary','View items · '+before.length+' product'+(before.length===1?'':'s')+' · '+before.reduce(function (count,item) { return count+item.quantity; },0)+' items'); contents.appendChild(summary);
+        before.forEach(function (item) { var line=node('div','','bn-cart-line'); line.append(node('span',item.name || item.code),node('strong','Qty '+item.quantity+' · '+item.unit)); contents.appendChild(line); });
+        body.querySelector('.bn-product').after(contents);
+        body.querySelector('.bn-product').hidden=true;
+      }
       var photo = info.doc.querySelector('img[id$="_ProductImage"],.product-image-wrapper img');
       if (photo?.getAttribute('src')) {
         var url = new URL(photo.getAttribute('src'), ORIGIN);
@@ -601,7 +678,7 @@
         }
       }
       body.querySelectorAll('[data-bn-method]').forEach(function (el) {
-        el.addEventListener('click', function () { var option = fast.methods[el.dataset.bnMethod]; if (submitting || fast.editor || fast.method === el.dataset.bnMethod || !(option?.available || option?.pending)) return; fast.method = el.dataset.bnMethod; fast.date = ''; fast.shippingValue = ''; refreshFast().catch(showError); });
+        el.addEventListener('click', function () { var option = fast.methods[el.dataset.bnMethod]; if (submitting || fast.editor || fast.method === el.dataset.bnMethod || !(option?.available || option?.pending)) return; fast.method = el.dataset.bnMethod; fast.date = ''; fast.shippingValue = ''; updateFastOptions(); refreshFast().catch(showError); });
       });
       body.querySelectorAll('[data-bn-edit]').forEach(function (el) { el.addEventListener('click', function () { editFast(el.dataset.bnEdit); }); });
       overlay.querySelector('[data-bn-confirm]').addEventListener('click', function () {
@@ -714,6 +791,15 @@
       fastText('[data-bn-extras]',fast.selected.length ? fast.selected.length+' cart item'+(fast.selected.length===1?'':'s')+' included' : 'Also in your cart ('+fast.original.length+')');
       return planned.purchase;
     }
+    function accountAddress() {
+      var address = mainAddress(Array.from(account.querySelectorAll('.accountInfoAddress li')).map(function (el) { return el.textContent; }));
+      if (address) {
+        address.contactName = [text(settings.getElementById('ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput')?.value),text(settings.getElementById('ctl00_PageBody_ChangeUserDetailsControl_LastNameInput')?.value)].filter(Boolean).join(' ');
+        address.email = text(settings.getElementById('ctl00_PageBody_ChangeUserDetailsControl_EmailAddressInput')?.value);
+        address.phone = text(account.getElementById('ctl00_PageBody_TelephoneLink_TelephoneLink')?.textContent);
+      }
+      return address;
+    }
     async function start(id, quantity, preview) {
       if (!ENABLE_NEW_STARTS || overlay || busy) return;
       await withLock(async function () {
@@ -721,6 +807,7 @@
         timings = {started:opened,requests:{},stages:{}};
         shell('Quick buy'); showPreview(preview,quantity); loading(true); status('Preparing your items…'); busy = true;
         if (record()) throw new Error('Restore your earlier Buy now cart first.');
+        assertNoPendingCartOrder();
         // These are read-only preflights. All must succeed before saving a draft
         // or changing the basket; reconcile still checks fresh identity/cart.
         var details = await Promise.all([cart(),product(id),checkIdentity(),purchaseRestrictions().then(function (ids) { blocked = ids; })]);
@@ -728,15 +815,11 @@
         var before = details[0], info = details[1];
         var primary = {pid:id,quantity:quantity,name:info.name,code:info.code,unit:info.unit};
         await preflight(before.items.concat(before.items.some(function (item) { return item.pid === id; }) ? [] : [primary]),{[id]:info});
-        var address = mainAddress(Array.from(account.querySelectorAll('.accountInfoAddress li')).map(function (el) { return el.textContent; }));
-        if (address) {
-          address.contactName = [text(settings.getElementById('ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput')?.value),text(settings.getElementById('ctl00_PageBody_ChangeUserDetailsControl_LastNameInput')?.value)].filter(Boolean).join(' ');
-          address.email = text(settings.getElementById('ctl00_PageBody_ChangeUserDetailsControl_EmailAddressInput')?.value);
-          address.phone = text(account.getElementById('ctl00_PageBody_TelephoneLink_TelephoneLink')?.textContent);
-        }
-        fast = {original:before.items,primary:primary,selected:[],address:address,method:productMethod(doc),store:branch,methods:{},date:'',window:'Afternoon',ready:false,payments:[],revision:0,driving:false,editor:'',started:Date.now(),opened:opened};
+        var address = accountAddress();
+        fast = {original:before.items,primary:primary,selected:[],address:address,method:productMethod(doc),store:branch,methods:{pickup:{pending:true,reason:'Availability is confirmed in checkout.'},delivery:{pending:true},ship:{pending:true}},date:'',window:'Afternoon',ready:false,payments:[],revision:0,driving:false,editor:'',started:Date.now(),opened:opened};
         if (cancelPending) { busy = false; cancelPending = false; dismiss(); return; }
         renderFast(info,primary,before.items);
+        updateFastOptions();
         var planned = plan(before.items,primary,[]), sessionBefore = {};
         SESSION_KEYS.forEach(function (name) { sessionBefore[name] = win.sessionStorage.getItem(name); });
         var draft = {version:1,scope:scope,branch:branch,id:'BN-'+win.crypto.randomUUID(),owner:owner,phase:'backed_up',createdAt:Date.now(),original:planned.original,purchase:planned.purchase,remaining:planned.remaining,current:before.items,pending:null,extraCount:0};
@@ -747,6 +830,44 @@
         if (fast.refreshQueued) { fast.refreshQueued = false; await refreshFast(); return; }
         openFrame(overlay.querySelector('[data-bn-native-host]'));
       });
+    }
+    async function startCart() {
+      if (!ENABLE_CART_CHECKOUT || overlay || busy) return;
+      await withLock(async function () {
+        cartEntry=true; busy=true;
+        var opened=Date.now(); timings={started:opened,requests:{},stages:{}};
+        shell('Checkout'); showPreview({name:'Your cart'},'—'); loading(true); status('Checking your cart…');
+        if (record()) throw new Error('Finish or restore your earlier Quick buy cart before checkout.');
+        assertNoPendingCartOrder();
+        var visible=cartFromDocument(doc);
+        // Read/compare only. Cart checkout never adds, removes or restores lines.
+        var checks=await Promise.all([cart(),checkIdentity(),purchaseRestrictions()]);
+        var before=checks[0]; blocked=checks[2];
+        if (!before.items.length) throw new Error('Your cart is empty.');
+        var cuts;
+        try { cuts=JSON.parse(win.sessionStorage.getItem('wl_cut_to_ship_v1') || '{}'); } catch (_) { throw new Error('Saved cut selections need standard checkout.'); }
+        if (hasCustomCuts(before.items,cuts)) throw new Error('Custom cutting needs standard checkout during this pilot.');
+        if (signature(before.items)!==signature(visible.items)) throw new Error('Update your cart quantities or refresh the cart before checkout.');
+        if (before.items.some(function (item) { return blocked.has(item.pid); })) throw new Error('This cart needs standard checkout. Review its product restrictions first.');
+        if (cancelPending) { dismiss(); return; }
+        var method=win.sessionStorage.getItem('wl_fulfillment_intent');
+        if (win.sessionStorage.getItem('wl_fulfillment_selection_source_v1')!=='user' || !['pickup','delivery','ship'].includes(method)) method='';
+        fast={cartCheckout:true,original:[],primary:null,selected:[],address:accountAddress(),method:method,store:branch,methods:{pickup:{pending:true},delivery:{pending:true},ship:{pending:true}},date:'',window:'Afternoon',ready:false,payments:[],revision:0,driving:false,editor:'',started:Date.now(),opened:opened};
+        active={cartCheckout:true,scope:scope,branch:branch,id:'CC-'+win.crypto.randomUUID(),owner:owner,phase:'checking_out',createdAt:opened,purchase:before.items,current:before.items};
+        renderFast({name:'Your cart',doc:doc},before.items[0],before.items); updateFastOptions(); setStage(0);
+        seedSession(); busy=false; loading(true);
+        openFrame(overlay.querySelector('[data-bn-native-host]'));
+      });
+    }
+    function bindCartEntry() {
+      if (!ENABLE_CART_CHECKOUT || !win.navigator.locks || !/\/ShoppingCart\.aspx$/i.test(win.location.pathname)) return;
+      doc.documentElement.dataset.wlCompactCartCheckout=BUILD;
+      win.addEventListener('click',function (event) {
+        var control=event.target?.closest?.('#ctl00_PageBody_PlaceOrderButton');
+        if (bypassCartEntry || !control || control.disabled || control.getAttribute('aria-disabled')==='true' || !doc.querySelector('.shopping-cart-item')) return;
+        event.preventDefault(); event.stopImmediatePropagation();
+        startCart().catch(function (error) { if (overlay) showError(error); else notice(error.message); });
+      },true);
     }
     async function refreshFast() {
       if (!fast || submitting) return;
@@ -759,6 +880,14 @@
       loading(true); status('Updating your order…'); fastText('[data-bn-confirm]','Updating…');
       clearFrame(); busy = true;
       try {
+        if (active.cartCheckout) {
+          var checks=await Promise.all([checkIdentity(),cart()]);
+          if (signature(checks[1].items)!==signature(active.current)) throw new Error('Your cart changed. Return to the cart and review it before checkout.');
+          active.phase='checking_out'; seedSession(); busy=false;
+          if (cancelPending) { cancelPending=false; await cancel(); return; }
+          if (fast.refreshQueued) { fast.refreshQueued=false; await refreshFast(); return; }
+          loading(true); openFrame(overlay.querySelector('[data-bn-native-host]')); return;
+        }
         // reconcile always refreshes identity/context before any cart write.
         var planned = plan(fast.original,fast.primary,fast.selected);
         active.purchase = planned.purchase; active.remaining = planned.remaining; active.extraCount = fast.selected.length; save();
@@ -770,7 +899,7 @@
       } catch (error) { busy = false; throw error; }
     }
     function openFrame(body) {
-      frame = doc.createElement('iframe'); frame.title = 'Secure WebTrack Buy now checkout'; frame.className = 'bn-frame'; frame.name = 'woodson-buy-now-checkout';
+      frame = doc.createElement('iframe'); frame.title = 'Secure WebTrack checkout'; frame.className = 'bn-frame'; frame.name = 'woodson-buy-now-checkout';
       frame.setAttribute('aria-hidden','true'); frame.setAttribute('tabindex','-1');
       frame.addEventListener('load', function () { installFrame().catch(showError); });
       frame.src = '/ShoppingCart.aspx?wlCheckout=single'; body.appendChild(frame);
@@ -855,6 +984,14 @@
         if (!/^[a-z0-9][a-z0-9-]{2,63}$/i.test(order) || !['submitting', 'confirmed', 'restoring'].includes(active.phase)) throw new Error('Order confirmation needs review before restoring the cart.');
         if (busy) return;
         busy = true; submitting = false; active.orderNumber = order; active.phase = 'confirmed'; active.current = []; active.pending = null; save(); clearFrame();
+        if (active.cartCheckout) {
+          // WebTrack already purchased the natural cart. Never restore a copy.
+          busy=false; loading(false); status('Order '+order+' confirmed.');
+          overlay.querySelector('.bn-footer')?.remove(); overlay.querySelector('[data-bn-standard]')?.remove();
+          var done=button('Continue shopping',function () { dismiss(); win.location.href='/Default.aspx'; });
+          overlay.querySelector('[data-bn-body]').replaceChildren(node('div','✓','bn-success'),node('h3','Order '+order+' confirmed'),done);
+          return;
+        }
         status('Order ' + order + ' confirmed. Restoring items you left in your cart…');
         var fresh = await cart();
         if (fresh.items.length) throw new Error('The order is confirmed, but WebTrack has not returned an empty cart. Your recovery copy is retained.');
@@ -932,7 +1069,7 @@
         el.setAttribute('aria-pressed',fast.method===entry[0]?'true':'false');
         el.dataset.available = entry[1].available || entry[1].pending ? 'true' : 'false';
         el.disabled = submitting || !!fast.editor || !(entry[1].available || entry[1].pending);
-        fastText('[data-bn-rate="'+entry[0]+'"]',entry[1].available ? entry[1].rate : entry[1].pending ? 'Get rate' : 'Unavailable');
+        fastText('[data-bn-rate="'+entry[0]+'"]',entry[1].available ? entry[1].rate : entry[1].pending ? (entry[0]==='pickup' ? 'Check availability' : 'Get rate') : 'Unavailable');
         el.title = entry[1].reason || '';
       });
       fastText('[data-bn-address-title]',fast.method === 'pickup' ? 'Pickup at' : 'Deliver to');
@@ -981,6 +1118,11 @@
         }
         var checkout = page.getElementById('ctl00_PageBody_PlaceOrderButton');
         if (checkout && page.querySelector('.shopping-cart-item')) {
+          if (active.cartCheckout) {
+            if (!cartPolicyReady(page)) { status('Checking item availability…'); return; }
+            var block=page.querySelector('.wl-cart-shipping-block,.wl-clearance-stock-note[data-sold-out="1"]');
+            if (block && text(block.textContent)) { haltFast(text(block.textContent)); return; }
+          }
           if (!page.documentElement.dataset.bnCheckoutOpened) { page.documentElement.dataset.bnCheckoutOpened = '1'; status('Loading your defaults…'); checkout.click(); }
           return;
         }
@@ -997,7 +1139,9 @@
             child.WLCheckout?.hydrateBlankInvoiceFromDelivery?.();
           }
           if (manager?.get_isInAsyncPostBack?.()) return;
-          var quote = quoteForCart(child.WLShippingOffer?.current?.(),active.purchase);
+          // Pickup doesn't require paid rates. A cart-page quote can still lack
+          // the completed address, so keep paid choices pending until requested.
+          var quote = fast.method==='pickup' ? null : quoteForCart(child.WLShippingOffer?.current?.(),active.purchase);
           fast.methods = fulfillmentOptions(!pickupButton.disabled,fast.method==='pickup' ? quote : null);
           updateFastOptions();
           if (fast.method!=='pickup') {
@@ -1024,15 +1168,18 @@
           if (!fast.method) fast.method = cheapestHomeMethod(quote);
           updateFastOptions();
           if (!fast.methods[fast.method]?.available) { haltFast('That option is unavailable. Choose another.'); return; }
-          if (page.documentElement.dataset.bnMethod !== fast.method) {
-            page.documentElement.dataset.bnMethod = fast.method;
-            page.getElementById(fast.method==='pickup'?'btnPickup':fast.method==='ship'?'btnShip':'btnDelivered').click();
+          var appliedButton = page.getElementById(fast.method==='pickup'?'btnPickup':fast.method==='ship'?'btnShip':'btnDelivered');
+          if (!appliedButton?.dataset.bnRequestedAt) {
+            status('Confirming your choice…');
+            requestNativeMethod(page,fast.method,Date.now());
             return;
           }
           // Native method clicks await rate reservation before applying the UI.
           // Do not validate/continue using the previous delivery/UPS intent.
-          var appliedButton = page.getElementById(fast.method==='pickup'?'btnPickup':fast.method==='ship'?'btnShip':'btnDelivered');
-          if (!fulfillmentApplied(fast.method,child.sessionStorage.getItem('wl_fulfillment_intent'),appliedButton?.getAttribute('aria-pressed'))) return;
+          if (!fulfillmentApplied(fast.method,child.sessionStorage.getItem('wl_fulfillment_intent'),appliedButton?.getAttribute('aria-pressed'))) {
+            if (Date.now()-Number(appliedButton.dataset.bnRequestedAt)>15000) haltFast('WebTrack could not confirm that option. Retry or choose Pickup.');
+            return;
+          }
           if (manager?.get_isInAsyncPostBack?.()) return;
           if (page.documentElement.dataset.bnDetailsContinued && Array.from(page.querySelectorAll('.validation-summary-errors,.alert-danger,.wl-field-invalid')).some(function (el) { return el.offsetParent && text(el.textContent || el.getAttribute('aria-label')); })) { haltFast('Check your address, billing, or pickup details.'); return; }
           var branchField = page.getElementById('ctl00_PageBody_BranchDropDownList');
@@ -1107,6 +1254,7 @@
         }
         var shippingContinue = page.getElementById('ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView');
         if (shippingContinue) {
+          setStage(2); status('Loading payment…');
           // Pickup/local-delivery already have a native automatic continuation.
           if (child.__wlPickupShippingAutoAdvance) return;
           var select = page.getElementById('ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList');
@@ -1140,7 +1288,7 @@
         blocked = await purchaseRestrictions();
         if (active.current.some(function (item) { return blocked.has(item.pid); })) throw new Error('A product is no longer eligible for online purchase. The order was not submitted.');
         var summary = page.getElementById('summary');
-        if (!summary || !text(summary.textContent).includes(active.id)) throw new Error('WebTrack did not retain the Buy now order note. The order was not submitted.');
+        if (!summary || !text(summary.textContent).includes(active.id)) throw new Error('WebTrack did not retain the checkout reference. The order was not submitted.');
         var grid = page.getElementById('ctl00_PageBody_ShoppingCartSummaryTableControl_BasketLinesGrid_ctl00');
         var reviewed = Array.from(grid ? grid.querySelectorAll('tr.rgRow,tr.rgAltRow') : []).map(function (row) {
           var cells = row.querySelectorAll('td');
@@ -1159,7 +1307,9 @@
         // A lost response is never retried or treated as a failed order.
         win.setTimeout(function () {
           if (!active || active.phase !== 'submitting') return;
-          active.phase = 'uncertain'; save(); status('WebTrack has not confirmed the result. Check your order history before trying again. Your cart backup is retained.', true);
+          active.phase = 'uncertain'; save();
+          if (active.cartCheckout) showError(new Error('WebTrack has not confirmed the result. Check order history before trying again.'));
+          else status('WebTrack has not confirmed the result. Check your order history before trying again. Your cart backup is retained.', true);
         }, 45000);
       } catch (error) { busy = false; throw error; }
     }
@@ -1216,11 +1366,18 @@
 .wl-buy-now-button:hover{transform:translateY(-2px);box-shadow:inset 0 1px 0 #ffffff65,inset 0 -1px 0 #150d243b,0 4px 0 #26324f24,0 10px 25px #223e5b40}.wl-buy-now-button:hover .wl-quick-arrow{transform:translate(2px,-2px)}.wl-buy-now-button:active,.wl-pilot-add-cart:active{transform:translateY(1px)}
 .wl-buy-now-button:focus-visible,.wl-pilot-add-cart:focus-visible{outline:3px solid #6b0016!important;outline-offset:3px}.wl-buy-now-button:disabled{opacity:.65;cursor:wait}
 .wl-pilot-actions{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(min(100%,140px),1fr));gap:10px}.wl-pilot-actions>*{width:100%;min-width:0;margin:0!important}
+.bn-progress{position:relative;overflow:hidden}.bn-loading .bn-progress:after{content:'';position:absolute;left:0;bottom:0;width:40%;height:2px;background:linear-gradient(90deg,transparent,#6b0016,#668eaf,transparent);animation:wl-checkout-activity 1.8s ease-in-out infinite}
+@keyframes wl-checkout-activity{from{transform:translateX(-110%)}to{transform:translateX(360%)}}
+.bn-standard{border:0;background:transparent;color:#6b0016;font-size:11px;min-height:34px;padding:6px 20px;margin:0;flex:none}.bn-standard:disabled{opacity:.4;cursor:wait}.bn-cart-items{border:1px solid #e6e2df;border-radius:9px;margin:0 0 14px;padding:10px 12px;font-size:12px}.bn-cart-items summary{cursor:pointer;color:#6b0016;font-weight:650;min-height:24px}.bn-cart-line{display:flex;justify-content:space-between;gap:12px;padding:9px 0;border-top:1px solid #eee}.bn-cart-line span{min-width:0;overflow-wrap:anywhere}.bn-cart-line strong{white-space:nowrap;font-size:11px}
+#wl-buy-now[data-bn-flow=cart] .bn-head{padding:14px 20px 10px}#wl-buy-now[data-bn-flow=cart] .bn-body{padding:14px 20px 10px}#wl-buy-now[data-bn-flow=cart] .bn-cart-items{margin-bottom:10px}#wl-buy-now[data-bn-flow=cart] .bn-methods{margin-bottom:10px}#wl-buy-now[data-bn-flow=cart] .bn-methods button{min-height:76px}#wl-buy-now[data-bn-flow=cart] .bn-option{padding:7px 10px}
+#wl-buy-now[data-bn-flow=cart].bn-ready .bn-stages{display:none}#wl-buy-now[data-bn-flow=cart] .bn-totals{grid-template-columns:repeat(3,minmax(0,1fr))}#wl-buy-now[data-bn-flow=cart] .bn-totals>div:not(.bn-grand){display:grid;gap:2px;font-size:11px}#wl-buy-now[data-bn-flow=cart] .bn-grand{grid-column:1/-1}
+#wl-buy-now[data-bn-flow=cart].bn-ready .bn-progress{position:absolute;width:1px;height:1px;padding:0;margin:-1px;border:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}#wl-buy-now[data-bn-flow=cart] .bn-cart-items{padding:6px 10px}#wl-buy-now[data-bn-flow=cart] .bn-body{padding-top:12px;padding-bottom:8px}
+#wl-buy-now[data-bn-flow=cart] .bn-more{min-height:28px;margin:0;padding:4px 0}
 .bn-stages{list-style:none;display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin:0;padding:12px 22px 9px;border-bottom:1px solid #f0eae3;font-size:10px;color:#8b8580;flex:none}.bn-stages li{display:flex;align-items:center;gap:5px;position:relative;white-space:nowrap}.bn-step-dot{width:19px;height:19px;display:grid;place-items:center;border-radius:50%;background:#f0ede8;color:#9c948c;font-size:10px;flex:none}.bn-stages [data-state=current]{color:#294764;font-weight:700}.bn-stages [data-state=current] .bn-step-dot{background:#d7e4f0;color:#294764;box-shadow:0 0 0 3px #41617f22;animation:wl-step-pulse 1.5s ease-in-out infinite}.bn-stages [data-state=done] .bn-step-dot{background:#e8f1e8;color:#3d7046}.bn-stages [data-state=done]{color:#55735a}
 .bn-skeletons{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;padding-bottom:12px}.bn-skeletons span{height:85px;border-radius:11px;background:linear-gradient(100deg,#eff2f6 20%,#f9fbfd 45%,#eff2f6 70%);background-size:220% 100%;animation:wl-skeleton 1.8s ease-in-out infinite}.bn-skeletons span:nth-child(n+4){grid-column:1/-1;height:48px}
 @keyframes wl-quick-glint{0%{left:-65%;opacity:0}2%{opacity:1}14%{left:140%;opacity:0}100%{left:140%;opacity:0}}@keyframes wl-step-pulse{50%{box-shadow:0 0 0 5px #41617f12}}@keyframes wl-skeleton{to{background-position:-120% 0}}
 @media(max-width:540px){.bn-stages{padding:10px 18px 8px;gap:3px}.bn-stages li{gap:4px}.wl-pilot-actions{gap:8px}}
-@media(prefers-reduced-motion:reduce){.wl-buy-now-button:after,.bn-stages [data-state=current] .bn-step-dot,.bn-skeletons span{animation:none!important}.wl-buy-now-button,.wl-pilot-add-cart,.wl-quick-arrow{transition:none!important}.wl-buy-now-button:after{display:none}}
+@media(prefers-reduced-motion:reduce){.wl-buy-now-button:after,.bn-stages [data-state=current] .bn-step-dot,.bn-skeletons span{animation:none!important}.wl-buy-now-button,.wl-pilot-add-cart,.wl-quick-arrow{transition:none!important}.wl-buy-now-button:after,.bn-loading .bn-progress:after{display:none}}
 `;
       doc.head.appendChild(style);
     }
@@ -1237,6 +1394,7 @@
     } else {
       blocked = await purchaseRestrictions();
       addButtons();
+      bindCartEntry();
       var observer = new win.MutationObserver(addButtons); observer.observe(doc.body, { childList: true, subtree: true });
     }
     win.addEventListener('storage', function (event) {
@@ -1246,5 +1404,5 @@
       if (latest && latest.owner !== owner) { busy = true; clearFrame(); status('Buy now is active in another tab. Cart changes have stopped here.', true); }
     });
   }
-  return { boot: boot, build: BUILD, audience: USER, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, fulfillmentApplied: fulfillmentApplied, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
+  return { boot: boot, build: BUILD, audience: USER, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, cartOrderReceipt: cartOrderReceipt, readCartOrderReceipt: readCartOrderReceipt, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, cartPolicyReady: cartPolicyReady, hasCustomCuts: hasCustomCuts, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
 });

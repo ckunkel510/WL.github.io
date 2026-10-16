@@ -127,6 +127,42 @@ test('saved payment resolves against fresh options and falls back to the first v
 test('native order notes carry a flow reference and extras count', () => {
   assert.equal(core.marker(recovery({extraCount:2})),'Website Buy Now | BN-test-1 | Additional cart items: 2');
 });
+test('natural cart checkout has its own reference without classifying the order as Buy Now',()=>{
+  assert.equal(core.marker({cartCheckout:true,id:'CC-test-1'}),'Website Compact Checkout | CC-test-1');
+});
+test('compact cart checkout waits for the existing clearance-policy renderer before continuing',()=>{
+  const page=(script,ready)=>({querySelector:()=>script?{}:null,getElementById:()=>ready?{}:null});
+  assert.equal(core.cartPolicyReady(page(true,false)),false);
+  assert.equal(core.cartPolicyReady(page(true,true)),true);
+  assert.equal(core.cartPolicyReady(page(false,false)),true);
+});
+test('cart checkout keeps matching cut orders on the standard path and ignores unrelated old cut selections',()=>{
+  assert.equal(core.hasCustomCuts([mulch,drink],{}),false);
+  assert.equal(core.hasCustomCuts([mulch,drink],{selected:{productId:'85',productCode:'0001363'}}),false);
+  assert.equal(core.hasCustomCuts([mulch,drink],{selected:{productId:22663}}),true);
+  assert.equal(core.hasCustomCuts([mulch,drink],{selected:{productCode:' bmg '}}),true);
+});
+test('cart checkout persists only submission status and never a cart restoration snapshot',()=>{
+  for (const phase of ['checking_out','preparing','backed_up','restoring']) assert.equal(core.cartOrderReceipt({phase}),null);
+  const source={...recovery(),id:'CC-test-1',cartCheckout:true,phase:'submitting',createdAt:1000,updatedAt:1100,address:{line1:'Example'},payment:'secret'};
+  const receipt=core.cartOrderReceipt(source);
+  assert.deepEqual(receipt,{version:1,id:'CC-test-1',phase:'submitting',createdAt:1000,updatedAt:1100,orderNumber:''});
+  for(const key of ['original','purchase','remaining','current','address','payment']) assert.equal(key in receipt,false);
+  assert.equal(core.cartOrderReceipt({...source,phase:'confirmed',orderNumber:'TEST-200'}).orderNumber,'TEST-200');
+});
+test('an interrupted cart order remains distinguishable from a confirmed order after reload',()=>{
+  const storage=memory(),key='cart-order';
+  assert.equal(core.readCartOrderReceipt(storage,key),null);
+  for(const phase of ['submitting','uncertain','confirmed']) {
+    const receipt=core.cartOrderReceipt({id:'CC-test-1',phase,createdAt:1000,updatedAt:1100,orderNumber:phase==='confirmed'?'TEST-200':''});
+    core.persist(storage,key,receipt);
+    assert.deepEqual(core.readCartOrderReceipt(storage,key),receipt);
+  }
+  for(const value of ['broken','null',JSON.stringify({version:1,id:'BN-other',phase:'confirmed'}),JSON.stringify({version:1,id:'CC-test-1',phase:'checking_out'})]) {
+    storage.setItem(key,value);
+    assert.throws(()=>core.readCartOrderReceipt(storage,key),/status needs review/);
+  }
+});
 test('main account address is parsed conservatively without mistaking the account name for a street', () => {
   assert.deepEqual(core.mainAddress(['Fixture Customer','702 W Buck St','Suite 2','Caldwell, Texas 77836']),{line1:'702 W Buck St',line2:'Suite 2',line3:'',city:'Caldwell',stateValue:'TX',stateText:'Texas',zip:'77836',countryValue:'USA',countryText:'United States'});
   assert.equal(core.mainAddress(['Customer Name','TX 77836']),null);
@@ -278,6 +314,36 @@ test('Quick buy chooses the cheaper valid home method independently of a prior s
   assert.equal(core.cheapestHomeMethod(quote(available(25),{available:false})),'delivery');
   assert.equal(core.cheapestHomeMethod(quote(available(25),available(NaN))),'delivery');
   assert.equal(core.cheapestHomeMethod(quote(available(0),available(-1))),'pickup');
+});
+
+test('a temporarily disabled native fulfillment control is selected only after it becomes usable',()=>{
+  let clicks=0;
+  const control={disabled:true,dataset:{},getAttribute:()=>null,click(){clicks++;}};
+  const page={documentElement:{dataset:{}},getElementById:id=>id==='btnShip'?control:null};
+  assert.equal(core.requestNativeMethod(page,'ship',1000),false);
+  assert.equal(clicks,0);
+  assert.equal(page.documentElement.dataset.bnMethod,undefined);
+  control.disabled=false;
+  assert.equal(core.requestNativeMethod(page,'ship',2200),true);
+  assert.equal(clicks,1);
+  assert.equal(page.documentElement.dataset.bnMethod,'ship');
+  assert.equal(control.dataset.bnRequestedAt,'2200');
+  core.requestNativeMethod(page,'ship',2500);
+  assert.equal(clicks,1,'an asynchronous reservation must not receive duplicate clicks');
+});
+
+test('missing and aria-disabled controls stay pending, and an UpdatePanel replacement can receive its own request',()=>{
+  let clicks=0,control=null;
+  const page={documentElement:{dataset:{}},getElementById:()=>control};
+  assert.equal(core.requestNativeMethod(page,'delivery',1000),false);
+  control={dataset:{},disabled:false,getAttribute:()=> 'true',click(){clicks++;}};
+  assert.equal(core.requestNativeMethod(page,'delivery',1100),false);
+  control.getAttribute=()=> 'false';
+  core.requestNativeMethod(page,'delivery',1200);
+  control={...control,dataset:{}};
+  core.requestNativeMethod(page,'delivery',1500);
+  assert.equal(clicks,2);
+  assert.equal(control.dataset.bnRequestedAt,'1500');
 });
 
 test('pickup review must confirm the exact selected native store',()=>{
