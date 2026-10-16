@@ -33,6 +33,7 @@ GA4 now has event-scoped `Checkout Flow` → `checkout_flow` and `Customer Type`
 
 ## Validation
 
+- GTM draft preview: Google Tag - Base and Conversion Linker each fired once; the product event still targeted G-4ZLV1YB6GY and its configuration no longer contained `user_id`. The draft remains unpublished.
 - 378 automated tests pass, including confirmation proof, amount consistency, stale/different reviews, cart edits, zero totals, transport/storage failures, accepted payment category, late confirmation safeguards, privacy, and duplicate prevention.
 - Live signed-in cart reached compact final review and returned to cart without an order. Current live basket was preserved, including the user's current quantities. Tag Assistant confirmed the existing funnel gap.
 - Isolated browser fixture: signed-in compact checkout and guest information → secure payment → review → simulated confirmation. No real account, payment, or order was used.
