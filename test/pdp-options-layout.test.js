@@ -35,7 +35,7 @@ test("product options publish state, cache safely, and expose analytics hooks", 
 
 test("analytics runtime accepts PDP option events", () => {
   const analytics = read("wl-site.js");
-  assert.match(analytics, /var VERSION = "1\.8\.0"/);
+  assert.match(analytics, /var VERSION = "1\.8\.1"/);
   assert.match(analytics, /pdp_option_view: true/);
   assert.match(analytics, /pdp_option_select: true/);
 });

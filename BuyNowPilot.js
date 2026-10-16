@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261016-compact-checkout-28';
+  var BUILD = '20261016-compact-checkout-29';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -335,7 +335,7 @@
         var paymentType=reviewed?.employeeZero?'no_payment_due':fast?.paymentFingerprint?'stored_card':fast?.securePayment?'new_card':'webtrack';
         if (stage==='review') measuredPayment={id:active.id,revision:fast?.revision,type:paymentType};
         if (measuredPayment?.id===active.id && measuredPayment.revision===fast?.revision) paymentType=measuredPayment.type;
-        win.WLAnalytics.checkout(stage,{id:active.id,flow:active.cartCheckout?'compact_cart':'quick_buy',customerType:active.guestCheckout?'guest':'signed_in',items:active.purchase || active.current,method:fast?.method,paymentType:paymentType,totals:reviewed?.totals,includedCartItems:active.extraCount || 0,orderNumber:orderNumber},page);
+        win.WLAnalytics.checkout(stage,{id:active.id,flow:active.cartCheckout?'compact_cart':'quick_buy',customerType:active.guestCheckout?'guest':'signed_in',items:active.purchase || active.current,method:fast?.method,paymentType:paymentType,totals:reviewed?.totals,readyMs:stage==='review'&&fast?Date.now()-fast.opened:undefined,includedCartItems:active.extraCount || 0,orderNumber:orderNumber},page);
       } catch (_) {}
     }
     async function fetchDocument(path, options) {
