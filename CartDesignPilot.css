@@ -3,6 +3,7 @@
 html:not(.wl-cart-studio) .cs-only{display:none!important}
 .wl-cart-studio{--cs-canvas:#1e3449;--cs-card:#fff;--cs-soft:#edf3f7;--cs-ink:#1e3449;--cs-muted:#697d8c;--cs-line:#e1e8ed;--cs-accent:#6b0016;--cs-shadow:0 14px 40px #071a2c30;--cs-radius:24px;--cs-shell-top:0px;background:var(--cs-canvas)!important}
 .wl-cart-studio body{background:var(--cs-canvas)!important}
+.wl-cart-studio #brandingLogo{background:#fff!important}
 .wl-cart-studio #MainLayoutRow,.wl-cart-studio .MainLayoutRow{background:transparent!important}
 .wl-cart-studio #MainLayoutRow{width:100%!important;max-width:1240px;margin:0 auto!important}
 .wl-cart-studio #MainLayoutRow>.container-fluid{width:100%!important;padding:0!important;margin:0!important}

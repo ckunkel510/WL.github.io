@@ -206,7 +206,7 @@
     if (window.top !== window || window.location.origin !== WEBTRACK || !/^\/ShoppingCart\.aspx$/i.test(window.location.pathname)) return;
     if (window.WLCartStudio || document.querySelector('script[data-wl-cart-studio]')) return;
     var script = document.createElement('script');
-    script.src = 'https://ckunkel510.github.io/WL.github.io/CartDesignPilot.js?v=20261016-ink-cart-6';
+    script.src = 'https://ckunkel510.github.io/WL.github.io/CartDesignPilot.js?v=20261016-ink-cart-7';
     script.async = true;
     script.setAttribute('data-wl-cart-studio', 'true');
     document.head.appendChild(script);
