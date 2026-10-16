@@ -175,7 +175,7 @@ test("Products.aspx client preserves native order, links corrections, and sparse
   const analytics = fs.readFileSync(path.join(root, "wl-site.js"), "utf8");
   const vercel = fs.readFileSync(path.join(root, "vercel.json"), "utf8");
 
-  assert.match(header, /smart-search\.js\?v=20261016-1/);
+  assert.match(header, /smart-search\.js\?v=20261016-2/);
   assert.match(header, /\/Products\\\.aspx\$/);
   assert.match(client, /#productlistcards a\[href\*='ProductDetail\.aspx'\]/);
   assert.match(client, /We found possible matches/);
