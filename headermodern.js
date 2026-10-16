@@ -12,7 +12,7 @@
   // Keep the hosted filename neutral. Common privacy filters block filenames
   // associated with analytics, tracking, events, or commerce before execution.
   var ANALYTICS_URL = "https://ckunkel510.github.io/WL.github.io/wl-site.js?v=20261016-3";
-  var SMART_SEARCH_URL = "https://ckunkel510.github.io/WL.github.io/smart-search.js?v=20260909-2";
+  var SMART_SEARCH_URL = "https://ckunkel510.github.io/WL.github.io/smart-search.js?v=20261016-1";
   var ADDRESS_MANAGER_URL = "https://ckunkel510.github.io/WL.github.io/AddressManagement.js?v=20260707-2";
   var CONTACT_MANAGER_URL = "https://ckunkel510.github.io/WL.github.io/ContactManagement.js?v=20260707-3";
   var TAWK_COMMERCE_ASSIST_URL = "https://ckunkel510.github.io/WL.github.io/wl-chat.js?v=20260924-1";
