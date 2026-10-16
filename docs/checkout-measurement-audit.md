@@ -11,7 +11,8 @@ Status: runtime patch prepared for release approval. GTM has one saved, unpublis
 - Tag Assistant showed product and cart events reaching G-4ZLV1YB6GY. Live compact checkout reached final review without emitting its checkout stages. The parent previously had no analytics bridge and the child intentionally skipped the custom analytics runtime.
 - The base GTM Google tag read an old local-storage user identifier on an anonymous product page. The saved draft removes that configuration parameter; it preserves ordinary GA4 cookie/session measurement and all triggers.
 - Google Ads account 890-813-3301 is linked to GA4 property 286493964. Auto-tagging is enabled. The existing primary purchase action imports `purchase`, uses GA4 value/currency, counts every conversion, and has a 90-day click window. Its last attributed conversion was May 6, 2026. This is an Ads attribution observation, not an order count.
-- The Ads secondary actions `Shopping Cart` and `Add to cart (Google Analytics event Cart clicked)` show Misconfigured. Their old event definitions need replacement with standard events as secondary observation actions. Do not make them primary sales goals.
+- All 22 enabled Ads conversion actions were reviewed. There is one primary purchase action; the other lead/local actions are separate goals.
+- The Ads secondary actions `Shopping Cart` and `Add to cart (Google Analytics event Cart clicked)` show Misconfigured. `Product Page View` is also a misconfigured secondary action. Their old event definitions need replacement with standard events as secondary observation actions. Do not make them primary sales goals.
 - Obsolete Universal Analytics `Click Specials (Default Google Ads Profile)` and `Android installs (all other apps)` remain account-default primaries. Review campaign goal usage before making them secondary. Existing phone lead campaigns must retain their legitimate goals.
 - Account URL suffix is populated with Google ValueTrack UTMs; it is not a literal broken template. Landing-page reports also showed duplicate UTM keys. Review the campaign/product final URLs before removing either source. No URLs, budgets, bids, campaign goals or Ads conversion settings were changed.
 - Combined Google tag destinations include the main website, WebTrack, and Ads. Domain configuration currently has no explicit conditions. Default cookie settings can cover these related subdomains; the empty list alone does not prove lost attribution. The combined tag has a placement warning, while the WebTrack GTM container reports Good quality. Native/Wix tag placement remains a separate follow-up.
@@ -26,6 +27,8 @@ Status: runtime patch prepared for release approval. GTM has one saved, unpublis
 - Transaction IDs are deduplicated in memory and session/local storage, including confirmation reloads. GA4 receives the transaction ID as its server-side deduplication key. Browser-side measurement cannot guarantee delivery when the user blocks tags or leaves before confirmation.
 - Measurements whitelist flow, audience, fulfillment, payment category, item IDs/quantities, totals and included-cart count. No address, email, username, card/token, account scope, free-form notes, or internal checkout journal ID is forwarded. This does not certify unrelated account-payment URL parameters or third-party automatic tags.
 - Analytics errors cannot block cart recovery or native submission. The patch adds no checkout network requests or new libraries.
+
+Tag Assistant preview also reports that no default consent state is configured. No consent settings were changed; a consent-mode implementation must follow the actual site privacy choices.
 
 ## Event parameters and reporting
 
