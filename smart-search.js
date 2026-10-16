@@ -3,7 +3,7 @@
 
   if (window.WLSmartSearch) return;
 
-  var BUILD = "20261016-1";
+  var BUILD = "20261016-2";
   var API_URL = "https://wl-upsrates.vercel.app/api/smart-search-suggestions?v=" + BUILD;
   var RESULTS_PANEL_ID = "ctl00_PageBody_ProductGroupStandardPanel";
   var ATTRIBUTION_KEY = "wl_product_discovery_attribution_v1";
@@ -23,12 +23,16 @@
     return String(value == null ? "" : value).replace(/\s+/g, " ").trim().slice(0, limit || 200);
   }
 
-  function searchTerm() {
-    var term = cleanText(new URLSearchParams(window.location.search || "").get("searchText"), 160);
+  function cleanSearchTerm(value) {
+    var term = cleanText(value, 160);
     if (term.length < 2) return "";
     if (/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i.test(term)) return "";
     if (/(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}/.test(term)) return "";
     return term;
+  }
+
+  function searchTerm() {
+    return cleanSearchTerm(new URLSearchParams(window.location.search || "").get("searchText"));
   }
 
   function isVisible(element) {
@@ -71,7 +75,7 @@
   // Private trial: never trust cached account IDs, editable fields, or query flags.
   var SINGLE_RESULT_ACCOUNT = "ckunkel2";
 
-  function singleResultDestination(panel) {
+  function singleResultDestination(panel, inert) {
     var totals = Array.prototype.slice.call(panel.querySelectorAll(".paging-control")).map(function (node) {
       var label = cleanText(node.textContent, 500);
       var match = label.match(/\b([\d,]+)\s+items?\s+found\b/i) || label.match(/\(of\s+([\d,]+)\)/i);
@@ -82,7 +86,7 @@
     var destinations = Object.create(null);
     var invalid = false;
     Array.prototype.slice.call(panel.querySelectorAll("a[href*='ProductDetail.aspx']")).forEach(function (link) {
-      if (link.closest("[data-wl-self-tracked-product-list]") || !isVisible(link)) return;
+      if (link.closest("[data-wl-self-tracked-product-list]") || (!inert && !isVisible(link))) return;
       try {
         var url = new URL(link.getAttribute("href"), window.location.href);
         var pid = url.searchParams.get("pid");
@@ -109,7 +113,89 @@
     return names.length > 0 && names.every(function (name) { return name === SINGLE_RESULT_ACCOUNT; });
   }
 
-  async function redirectSingleResult(panel) {
+  async function readPilotAccount(signal) {
+    var settingsUrl = new URL("/AccountSettings.aspx", window.location.href);
+    var response = await window.fetch(settingsUrl.href, {
+      method: "GET", credentials: "same-origin", cache: "no-store", signal: signal
+    });
+    var finalUrl = new URL(response.url || settingsUrl.href);
+    if (!response.ok || finalUrl.origin !== settingsUrl.origin || finalUrl.pathname.toLowerCase() !== "/accountsettings.aspx") return false;
+    return pilotAccount(new window.DOMParser().parseFromString(await response.text(), "text/html"));
+  }
+
+  function installDirectSearch() {
+    var input = document.getElementById("ctl00_PageHeader_GlobalSearchControl_RadSearchBox1_Input");
+    var box = document.getElementById("ctl00_PageHeader_GlobalSearchControl_RadSearchBox1");
+    if (!input || !box || !signedIn(document) || window.top !== window || typeof window.AbortController !== "function") return null;
+    var eligible = false, active = null;
+    var warmController = new window.AbortController();
+    var warmTimeout = window.setTimeout(function () { warmController.abort(); }, 4000);
+    // This page's fresh check is only an eligibility hint for future searches.
+    // Every intercepted search independently verifies the account again.
+    var accountCheck = readPilotAccount(warmController.signal).catch(function () { return false; }).then(function (allowed) {
+      window.clearTimeout(warmTimeout);
+      eligible = allowed;
+      return allowed;
+    });
+    function cancel() {
+      if (!active) return;
+      active.controller.abort();
+      window.clearTimeout(active.timeout);
+      if (active.previousBusy === null) input.removeAttribute("aria-busy");
+      else input.setAttribute("aria-busy", active.previousBusy);
+      active = null;
+    }
+    function submit(event) {
+      if (!eligible || !signedIn(document) || event.defaultPrevented || event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return;
+      var isEnter = event.type === "keydown" && event.target === input && event.key === "Enter";
+      var button = event.type === "click" && event.target.closest && event.target.closest(".rsbButtonSearch");
+      if (!isEnter && !(button && box.contains(button) && !event.button)) return;
+      var term = cleanSearchTerm(input.value);
+      if (!term) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (active && active.term === term) return;
+      cancel();
+      var sourceUrl = window.location.href;
+      var resultsUrl = canonicalSearchUrl(term);
+      var request = { term: term, controller: new window.AbortController(), previousBusy: input.getAttribute("aria-busy") };
+      request.timeout = window.setTimeout(function () { request.controller.abort(); }, 8000);
+      active = request;
+      input.setAttribute("aria-busy", "true");
+      // Inspect inert native HTML: no result-page scripts, quote CTA or Quick buy
+      // controls are executed while deciding which page to open.
+      Promise.all([
+        readPilotAccount(request.controller.signal),
+        window.fetch(resultsUrl, { method: "GET", credentials: "same-origin", cache: "no-store", signal: request.controller.signal }).then(async function (response) {
+          var finalUrl = new URL(response.url || resultsUrl, window.location.href);
+          if (!response.ok || finalUrl.origin !== window.location.origin || !/^\/Products\.aspx$/i.test(finalUrl.pathname)) throw new Error("Search unavailable");
+          return new window.DOMParser().parseFromString(await response.text(), "text/html");
+        })
+      ]).then(function (values) {
+        if (active !== request || sourceUrl !== window.location.href || cleanText(input.value, 160) !== term) return;
+        var panel = values[1].getElementById(RESULTS_PANEL_ID);
+        var destination = values[0] && signedIn(values[1]) && panel ? singleResultDestination(panel, true) : "";
+        cancel();
+        if (destination && analyticsReady()) track("search", { search_term: term });
+        window.location.assign(destination || resultsUrl);
+      }).catch(function () {
+        if (active !== request || sourceUrl !== window.location.href || cleanText(input.value, 160) !== term) return;
+        cancel();
+        window.location.assign(resultsUrl);
+      });
+    }
+    document.addEventListener("keydown", submit, true);
+    document.addEventListener("click", submit, true);
+    input.addEventListener("input", cancel);
+    input.addEventListener("blur", cancel);
+    document.addEventListener("pointerdown", function (event) {
+      if (active && !box.contains(event.target)) cancel();
+    }, true);
+    window.addEventListener("pagehide", cancel);
+    return accountCheck;
+  }
+
+  async function redirectSingleResult(panel, accountCheck) {
     var destination = singleResultDestination(panel);
     if (!destination || !signedIn(document) || window.top !== window || typeof window.AbortController !== "function") return false;
     var initialUrl = window.location.href;
@@ -120,14 +206,8 @@
     var controller = new window.AbortController();
     var timeout = window.setTimeout(function () { controller.abort(); }, 4000);
     try {
-      var settingsUrl = new URL("/AccountSettings.aspx", window.location.href);
-      var response = await window.fetch(settingsUrl.href, {
-        method: "GET", credentials: "same-origin", cache: "no-store", signal: controller.signal
-      });
-      var finalUrl = new URL(response.url || settingsUrl.href);
-      if (!response.ok || finalUrl.origin !== settingsUrl.origin || finalUrl.pathname.toLowerCase() !== "/accountsettings.aspx") return false;
-      var settings = new window.DOMParser().parseFromString(await response.text(), "text/html");
-      if (!pilotAccount(settings) || interacted || window.location.href !== initialUrl || !signedIn(document) ||
+      var allowed = await (accountCheck || readPilotAccount(controller.signal));
+      if (!allowed || interacted || window.location.href !== initialUrl || !signedIn(document) ||
           document.getElementById(RESULTS_PANEL_ID) !== panel || singleResultDestination(panel) !== destination) return false;
       // Replace the intermediate search entry so Back cannot bounce to the product.
       window.location.replace(destination);
@@ -581,13 +661,13 @@
     });
   }
 
-  async function enhance() {
+  async function enhance(accountCheck) {
     if (enhancementStarted || !/\/Products\.aspx$/i.test(window.location.pathname || "")) return;
     var term = searchTerm();
     var panel = document.getElementById(RESULTS_PANEL_ID);
     if (!term || !panel) return;
     enhancementStarted = true;
-    if (await redirectSingleResult(panel)) return;
+    if (await redirectSingleResult(panel, accountCheck)) return;
     var nativeState = nativeSearchState(panel);
     if (nativeState.count === 0) renderLoading(panel, term);
     requestSuggestions(term, nativeState).then(function (payload) {
@@ -611,12 +691,13 @@
     });
   }
 
-  function waitForResultsPanel() {
+  function waitForResultsPanel(accountCheck) {
+    if (!/\/Products\.aspx$/i.test(window.location.pathname || "") || !searchTerm()) return;
     var started = Date.now();
     (function check() {
       var panel = document.getElementById(RESULTS_PANEL_ID);
       var nativeCards = panel && panel.querySelector("#productlistcards");
-      if (panel && (nativeCards || (document.readyState === "complete" && Date.now() - started >= 750))) return enhance();
+      if (panel && (nativeCards || (document.readyState === "complete" && Date.now() - started >= 750))) return enhance(accountCheck);
       if (Date.now() - started < MAX_WAIT_MS) window.setTimeout(check, 250);
     })();
   }
@@ -627,5 +708,5 @@
     nativeSearchState: nativeSearchState
   };
 
-  ready(waitForResultsPanel);
+  ready(function () { waitForResultsPanel(installDirectSearch()); });
 })(window, document);
