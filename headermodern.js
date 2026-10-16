@@ -220,7 +220,7 @@
     if (window.WLPdpExperience || document.querySelector('script[data-wl-pdp-preview-loader]')) return;
     // The preview module verifies the native current login before any layout/CSS.
     var script = document.createElement('script');
-    script.src = 'https://ckunkel510.github.io/WL.github.io/ProductDetailPilot.js?v=20261016-pdp-light-1';
+    script.src = 'https://ckunkel510.github.io/WL.github.io/ProductDetailPilot.js?v=20261016-pdp-light-2';
     script.async = true;
     script.setAttribute('data-wl-pdp-preview-loader', 'true');
     document.head.appendChild(script);

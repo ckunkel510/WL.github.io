@@ -38,3 +38,12 @@ test('review summary requires actual review entries and a valid loaded rating',(
   assert.equal(core.ratingSummary(section(1,5)).label,'5.0 · 1 review');
   for(const [count,rating] of [[0,4],[1,null],[1,0],[1,6],[1,'unavailable']])assert.equal(core.ratingSummary(section(count,rating)),null);
 });
+
+test('sticky presentation is enabled only when the whole purchase panel fits below the toolbar',()=>{
+  assert.equal(core.stickyFits(632,902),true);
+  assert.equal(core.stickyFits(632,720),true);
+  assert.equal(core.stickyFits(632,700),false);
+  assert.equal(core.stickyFits(850,902),false);
+  assert.equal(core.stickyFits(0,902),false);
+  assert.equal(core.stickyFits(632,704),true);
+});

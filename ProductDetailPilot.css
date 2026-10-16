@@ -61,9 +61,9 @@ html[data-wl-pdp-preview] .productQtySegment input.productQtyInput { flex: 1 1 0
 html[data-wl-pdp-preview] .wl-pdp-action-row > .mb-1 { display: contents !important; }
 html[data-wl-pdp-preview] #ctl00_PageBody_productDetail_ctl00_AddProductButton { grid-column: 2; grid-row: 2; display: inline-flex !important; justify-content: center; align-items: center; width: 100% !important; min-width: 0 !important; min-height: 48px !important; padding: 10px 12px !important; border: 1px solid #6b0016 !important; border-radius: 10px !important; background: #6b0016 !important; background-image: none !important; color: #fff !important; box-shadow: 0 3px 8px #6b001612 !important; font: 750 14px/1.2 system-ui !important; text-shadow: none !important; white-space: normal !important; }
 html[data-wl-pdp-preview] #ctl00_PageBody_productDetail_ctl00_AddProductButton:hover { background: #500010 !important; }
-html[data-wl-pdp-preview] .wl-pdp-action-row .wl-buy-now-button { grid-column: 1 / -1; grid-row: 3; display: flex !important; justify-content: center; align-items: center; gap: 8px; width: 100% !important; min-height: 46px !important; margin: 3px 0 0 !important; padding: 10px 14px !important; border: 1px solid #dac6cb !important; border-radius: 10px !important; background: #fcf5f6 !important; background-image: none !important; color: #6b0016 !important; text-shadow: none !important; box-shadow: none !important; transform: none !important; }
-html[data-wl-pdp-preview] .wl-buy-now-button:after { display: none !important; }
-html[data-wl-pdp-preview] .wl-pdp-action-row .wl-buy-now-button:hover { background: #f7eaed !important; }
+html[data-wl-pdp-preview] .wl-pdp-sidebar-rail { display: contents; }
+/* Keep the existing colorful Quick buy treatment; only place it in this grid. */
+html[data-wl-pdp-preview] .wl-pdp-action-row .wl-buy-now-button { grid-column: 1 / -1; grid-row: 3; width: 100% !important; margin: 3px 0 0 !important; }
 html[data-wl-pdp-preview] .wl-pdp-tools { order: 5; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
 html[data-wl-pdp-preview] .wl-pdp-tools > div { min-width: 0; margin: 0 !important; }
 html[data-wl-pdp-preview] #ctl00_PageBody_productDetail_ctl00_QuickList_QuickListLink,
@@ -89,7 +89,22 @@ html[data-wl-pdp-preview] .wl-product-content__specifications { border-radius: 1
 html[data-wl-pdp-preview] #review-product-button { border-radius: 9px; }
 html[data-wl-pdp-preview] :is(#share-product-button, .wl-product-thumbnail, .wl-pdp-rating, #product-sidebar a, #product-sidebar button, #product-sidebar summary):focus-visible { outline: 3px solid #9c5966 !important; outline-offset: 3px; }
 @media (min-width: 1100px) {
-  html[data-wl-pdp-preview] #product-sidebar { position: sticky; top: 175px; }
+  /* Description/reviews reserve a separate column. The sidebar's grid area
+     ends before the full-width recommendation shelves, which bounds sticky. */
+  html[data-wl-pdp-preview] #product-page,
+  html[data-wl-pdp-preview] #product-page.wl-has-product-options { row-gap: 0 !important; }
+  html[data-wl-pdp-preview] #product-main { display: contents !important; }
+  html[data-wl-pdp-preview] #product-image-wrapper,
+  html[data-wl-pdp-preview] #product-options-column { margin-bottom: 24px !important; }
+  html[data-wl-pdp-preview] .wl-pdp-sidebar-rail { display: block !important; grid-column: 2; grid-row: 1 / 6; align-self: stretch; min-width: 0; position: relative; }
+  html[data-wl-pdp-preview] #product-page.wl-has-product-options .wl-pdp-sidebar-rail { grid-row: 2 / 6; }
+  html[data-wl-pdp-preview] #product-sidebar { position: static; }
+  html[data-wl-pdp-preview] #product-sidebar[data-wl-pdp-sticky-fit="true"] { position: sticky; top: 56px; }
+  html[data-wl-pdp-preview] #product-widget,
+  html[data-wl-pdp-preview] #ctl00_PageBody_productDetail_productDescription { grid-column: 1; grid-row: 3; }
+  html[data-wl-pdp-preview] #pdp-complete-project-slot { grid-column: 1; grid-row: 4; }
+  html[data-wl-pdp-preview] #customer-reviews { grid-column: 1; grid-row: 5; }
+  html[data-wl-pdp-preview] #pdp-similar-products-slot { grid-column: 1 / -1; grid-row: 6; }
 }
 @media (min-width: 761px) and (max-width: 1023px) {
   html[data-wl-pdp-preview] #product-page,

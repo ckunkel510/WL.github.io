@@ -6,7 +6,7 @@
   else core.boot(root).catch(function () { /* Retain the existing product page. */ });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261016-pdp-light-1';
+  var BUILD = '20261016-pdp-light-2';
   var ORIGIN = 'https://webtrack.woodsonlumber.com';
   var ASSETS = 'https://ckunkel510.github.io/WL.github.io/';
   var SCOPE = 'data-wl-pdp-preview';
@@ -43,6 +43,10 @@
       ? { count: count, value: value, label: value.toFixed(1) + ' · ' + count + ' review' + (count === 1 ? '' : 's') }
       : null;
   }
+  function stickyFits(height, viewportHeight) {
+    // A tall purchase panel scrolls normally so every action remains reachable.
+    return height > 0 && height + 56 + 16 <= viewportHeight;
+  }
   async function boot(win) {
     if (!win || win.top !== win || win.location.origin !== ORIGIN || !/^\/ProductDetail\.aspx$/i.test(win.location.pathname) || win.WLPdpExperience) return;
     var doc = win.document;
@@ -58,7 +62,8 @@
     });
     if (!loaded || !signedIn(doc)) { link.remove(); return; }
     var moves = new Map(), attributes = new Map(), copies = new Map(), generated = new Set(), listeners = [];
-    var revoked = false, scheduled = false, checking = false, observer;
+    var revoked = false, scheduled = false, checking = false, observer, observedSidebar;
+    var sidebarResize = win.ResizeObserver ? new win.ResizeObserver(schedule) : null;
     function listen(node, name, handler) { node.addEventListener(name, handler); listeners.push([node, name, handler]); }
     function make(tag, className, copy) {
       var node = doc.createElement(tag); node.className = className;
@@ -86,7 +91,7 @@
     }
     function revoke() {
       if (revoked) return;
-      revoked = true; observer?.disconnect(); doc.documentElement.removeAttribute(SCOPE);
+      revoked = true; observer?.disconnect(); sidebarResize?.disconnect(); doc.documentElement.removeAttribute(SCOPE);
       listeners.forEach(function (entry) { entry[0].removeEventListener(entry[1], entry[2]); });
       // Restore moved controls before removing their presentation-only wrappers.
       Array.from(moves.entries()).reverse().forEach(function (entry) { if (entry[1].parentNode) entry[1].replaceWith(entry[0]); });
@@ -102,6 +107,13 @@
       var sidebar = doc.getElementById('product-sidebar'), box = sidebar?.querySelector('.wl-pdp-buybox');
       if (!page || !heading || !box) return;
       doc.documentElement.setAttribute(SCOPE, BUILD);
+      var rail = page.querySelector(':scope > .wl-pdp-sidebar-rail');
+      if (!rail) { rail = make('div', 'wl-pdp-sidebar-rail'); rail.style.display = 'contents'; sidebar.before(rail); }
+      move(sidebar, rail);
+      if (sidebar !== observedSidebar) {
+        sidebarResize?.disconnect(); sidebarResize?.observe(sidebar); observedSidebar = sidebar;
+      }
+      attr(sidebar, 'data-wl-pdp-sticky-fit', String(stickyFits(sidebar.getBoundingClientRect().height, win.innerHeight)));
       var share = doc.getElementById('share-product-button');
       if (share) {
         move(share, heading); attr(share, 'type', 'button'); attr(share, 'aria-label', 'Share this product');
@@ -178,11 +190,12 @@
       if (!allowed) revoke(); else reconcile();
     }
     observer = new win.MutationObserver(schedule);
-    observer.observe(doc.getElementById('MainLayoutRow') || doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'aria-label'] });
+    observer.observe(doc.getElementById('MainLayoutRow') || doc.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['src', 'aria-label', 'open'] });
+    listen(win, 'resize', schedule);
     listen(win, 'focus', recheck);
     listen(win, 'pageshow', function (event) { if (event.persisted) recheck(); });
     win.WLPdpExperience = { build: BUILD, audience: 'ckunkel2', revoke: revoke };
     reconcile();
   }
-  return { boot: boot, pilotAccount: pilotAccount, verifyAccount: verifyAccount, ratingSummary: ratingSummary, build: BUILD };
+  return { boot: boot, pilotAccount: pilotAccount, verifyAccount: verifyAccount, ratingSummary: ratingSummary, stickyFits: stickyFits, build: BUILD };
 });
