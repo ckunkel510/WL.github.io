@@ -214,13 +214,12 @@
     document.head.appendChild(script);
   }
 
-  function loadProductDetailPreview() {
+  function loadProductDetailExperience() {
     if (window.top !== window || window.location.origin !== WEBTRACK || !/^\/ProductDetail\.aspx$/i.test(window.location.pathname)) return;
-    if (!document.querySelector('a[href*="SignOut=1"],a[href*="signout=1"]')) return;
     if (window.WLPdpExperience || document.querySelector('script[data-wl-pdp-preview-loader]')) return;
-    // The preview module verifies the native current login before any layout/CSS.
+    // Public presentation only; existing native controls keep their access rules.
     var script = document.createElement('script');
-    script.src = 'https://ckunkel510.github.io/WL.github.io/ProductDetailPilot.js?v=20261016-pdp-light-2';
+    script.src = 'https://ckunkel510.github.io/WL.github.io/ProductDetailPilot.js?v=20261016-pdp-light-3';
     script.async = true;
     script.setAttribute('data-wl-pdp-preview-loader', 'true');
     document.head.appendChild(script);
@@ -3397,7 +3396,7 @@
     loadSmartSearch();
     loadCartDesign();
     loadBuyNowPilot();
-    loadProductDetailPreview();
+    loadProductDetailExperience();
     // The existing identity script may finish after DOM ready on a new sign-in.
     window.setTimeout(loadBuyNowPilot, 1800);
     var firstRun = run();
