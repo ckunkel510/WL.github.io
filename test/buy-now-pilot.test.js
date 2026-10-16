@@ -52,6 +52,28 @@ test('guest delivery and billing fill numeric native states and dispatch normal 
 });
 
 test('compact checkout accepts all verified signed-in customers', () => assert.equal(core.audience,'signed-in'));
+test('delivery summaries show complete selected addresses without contact or billing details',()=>{
+  const address={line1:'702 W Buck St',line2:'Suite 2',line3:'Building A',city:'Caldwell',stateValue:'TX',stateText:'Texas',zip:'77836',contactName:'Private contact',phone:'5550100',email:'private@example.invalid'};
+  assert.equal(core.deliveryAddressSummary(address),'702 W Buck St, Suite 2, Building A, Caldwell, TX 77836');
+  assert.equal(core.deliveryAddressSummary({...address,line2:'',line3:'',stateValue:'56'}),'702 W Buck St, Caldwell, Texas 77836');
+  assert.equal(core.deliveryAddressSummary(null),'Choose an address');
+  assert.equal(core.deliveryAddressSummary({city:'Caldwell'}),'Choose an address');
+});
+test('guest, signed-in and edited delivery/shipping summaries show the selected destination',()=>{
+  const source=fs.readFileSync(require.resolve('../BuyNowPilot'),'utf8');
+  const updateSource=source.slice(source.indexOf('    function updateFastOptions('),source.indexOf('    function haltFast('));
+  const address={line1:'702 W Buck St',city:'Caldwell',stateValue:'TX',zip:'77836'};
+  for(const guest of [true,false])for(const method of ['delivery','ship'])for(const changed of [false,true]) {
+    const rendered={},selected={...address,line1:changed?'100 Test St':address.line1};
+    const context=require('node:vm').createContext({guest,submitting:false,deliveryAddressSummary:core.deliveryAddressSummary,fast:{methods:{},method,address:selected,addressChanged:changed,ready:true},fastText:(selector,value)=>{rendered[selector]=value;}});
+    require('node:vm').runInContext(updateSource,context);context.updateFastOptions();
+    assert.equal(rendered['[data-bn-address-title]'],'Deliver to');
+    assert.equal(rendered['[data-bn-address]'],(changed?'100 Test St':'702 W Buck St')+', Caldwell, TX 77836');
+  }
+  const rendered={},context=require('node:vm').createContext({guest:true,submitting:false,deliveryAddressSummary:core.deliveryAddressSummary,fast:{methods:{},method:'pickup',address,store:'C',stores:[{value:'C',label:'Caldwell - Store address'}],ready:true},fastText:(selector,value)=>{rendered[selector]=value;}});
+  require('node:vm').runInContext(updateSource,context);context.updateFastOptions();
+  assert.equal(rendered['[data-bn-address-title]'],'Pickup at');assert.equal(rendered['[data-bn-address]'],'Caldwell');
+});
 test('identity comes from consistent server headings and requires native sign-out', () => {
   const page = (names,authenticated=true) => ({querySelector:()=>authenticated?{}:null,querySelectorAll:()=>names.map(name=>({textContent:name}))});
   assert.equal(core.loginFromDocument(page(["Change details for user 'ckunkel2'","Change password for user 'ckunkel2'"])),'ckunkel2');
