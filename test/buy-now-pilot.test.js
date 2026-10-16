@@ -16,7 +16,7 @@ function memory() {
   return {getItem:key=>values.get(key)||null,setItem:(key,value)=>values.set(key,value),removeItem:key=>values.delete(key)};
 }
 
-test('pilot audience is exactly ckunkel2', () => assert.equal(core.audience,'ckunkel2'));
+test('compact checkout accepts all verified signed-in customers', () => assert.equal(core.audience,'signed-in'));
 test('identity comes from consistent server headings and requires native sign-out', () => {
   const page = (names,authenticated=true) => ({querySelector:()=>authenticated?{}:null,querySelectorAll:()=>names.map(name=>({textContent:name}))});
   assert.equal(core.loginFromDocument(page(["Change details for user 'ckunkel2'","Change password for user 'ckunkel2'"])),'ckunkel2');
@@ -31,12 +31,18 @@ test('a guest with a stale pilot storage value performs no lookup and renders no
   win.localStorage.setItem('wl_user_id','b8f6961397f9c6a3b9cff27038c1d3ed309604ffe607b5dd0d365f5d53179ade');
   await core.boot(win); assert.equal(lookups,0); assert.equal(renders,0);
 });
-test('another signed-in user cannot enable the pilot with stale local identity storage', async () => {
-  let lookups=0,renders=0;
-  const settings={querySelector:()=>({}),querySelectorAll:()=>[{textContent:"Change details for user 'ckunkel3'"}]};
-  const win={location:{origin:'https://webtrack.woodsonlumber.com',href:'https://webtrack.woodsonlumber.com/Products.aspx'},document:{readyState:'complete',querySelector:()=>({}),createElement(){renders++;}},localStorage:memory(),AbortController,setTimeout,clearTimeout,DOMParser:class{parseFromString(){return settings;}},fetch:async()=>{lookups++;return {ok:true,url:'https://webtrack.woodsonlumber.com/AccountSettings.aspx',text:async()=>''};}};win.top=win;
-  win.localStorage.setItem('wl_user_id','b8f6961397f9c6a3b9cff27038c1d3ed309604ffe607b5dd0d365f5d53179ade');
-  await assert.rejects(core.boot(win),/only for the ckunkel2 pilot/); assert.equal(lookups,1); assert.equal(renders,0);
+test('another signed-in customer boots from fresh native identity without a client allowlist', async () => {
+  const lookups=[]; let renders=0;
+  const settings={querySelector:()=>({}),querySelectorAll:()=>[{textContent:"Change details for user 'ckunkel3'"}],getElementById:()=>({value:'C'})};
+  const account={querySelector:()=>({textContent:'Customer account 300'}),getElementById:()=>null};
+  const doc={readyState:'complete',documentElement:{dataset:{}},body:{},head:{appendChild(){}},querySelector:()=>({}),querySelectorAll:()=>[],createElement(){renders++;return {};}};
+  const win={location:{origin:'https://webtrack.woodsonlumber.com',href:'https://webtrack.woodsonlumber.com/Products.aspx',pathname:'/Products.aspx'},document:doc,sessionStorage:memory(),localStorage:memory(),navigator:{},crypto:require('node:crypto').webcrypto,TextEncoder,MutationObserver:class{observe(){}},addEventListener(){},AbortController,setTimeout,clearTimeout,DOMParser:class{parseFromString(value){return value==='settings'?settings:account;}},fetch:async(url)=>{lookups.push(url);return {ok:true,url,text:async()=>url.includes('AccountSettings')?'settings':'account',json:async()=>({blockedProductIds:[]})};}};win.top=win;
+  // The old pilot hint is deliberately irrelevant to current authorization.
+  win.localStorage.setItem('wl_user_id','not-a-pilot');
+  await core.boot(win);
+  assert.equal(lookups.length,3); assert.ok(renders>0);
+  assert.equal(doc.documentElement.dataset.wlCompactCheckoutMode,'signed-in');
+  assert.equal(win.WLBuyNowPilot.audience,'signed-in');
 });
 test('Buy now alone preserves all original cart lines after success', () => {
   const result = core.plan([mulch,drink],fish,[]);
@@ -377,4 +383,50 @@ test('a quote that finishes after a customer changes the order is discarded',asy
   const result=await core.refreshDetailsQuote(async()=>{if(++calls===2)current=false;return{}},()=>current);
   assert.equal(result,null);
   assert.equal(calls,2);
+});
+
+test('account scopes isolate logins and customer accounts while preserving the old recovery namespace',()=>{
+  assert.equal(core.accountScopeInput('ckunkel2','Customer 10'),'ckunkel2|Customer 10');
+  assert.notEqual(core.accountScopeInput('ckunkel2','Customer 10'),core.accountScopeInput('ckunkel3','Customer 10'));
+  assert.notEqual(core.accountScopeInput('ckunkel2','Customer 10'),core.accountScopeInput('ckunkel2','Customer 20'));
+  assert.throws(()=>core.accountScopeInput('','Customer 10'),/could not be verified/);
+});
+function guestSession(overrides={}) {
+  const session=memory();session.setItem('wl_checkout_mode','guest');
+  session.setItem('wl_guest_checkout_payload',JSON.stringify({email:'guest@example.invalid',fname:'Guest',lname:'Test',phone:'9795550100',d_addr1:'702 W Buck St',d_city:'Caldwell',d_state:'TX',d_zip:'77836',billSame:false,i_addr1:'100 Test St',i_city:'Bryan',i_state2:'TX',i_zip:'77801',password:'must-not-leak',...overrides}));
+  return session;
+}
+test('guest defaults require an exact fresh login match and retain separate billing without credentials',()=>{
+  const session=guestSession(); const guest=core.guestContext(session,'guest@example.invalid');
+  assert.equal(guest.address.line1,'702 W Buck St'); assert.equal(guest.billing.line1,'100 Test St');
+  assert.equal(guest.contact.firstName,'Guest'); assert.equal(JSON.stringify(guest).includes('must-not-leak'),false);
+  assert.equal(core.guestContext(session,'other@example.invalid'),null);
+  session.setItem('wl_checkout_mode','signed_in'); assert.equal(core.guestContext(session,'guest@example.invalid'),null);
+});
+test('invalid or incomplete guest contact and addresses cannot hydrate checkout',()=>{
+  for(const bad of [{phone:'123'},{d_zip:'bad'},{d_addr1:''},{i_city:''},{fname:''}]) assert.equal(core.guestContext(guestSession(bad),'guest@example.invalid'),null);
+  const session=guestSession();session.setItem('wl_guest_checkout_payload','{bad');assert.equal(core.guestContext(session,'guest@example.invalid'),null);
+});
+test('guest auto-entry is bounded and its marker contains no customer details',()=>{
+  const session=memory(),key='wl_compact_guest_start_v1';
+  assert.equal(core.guestStartPending(session,1000),false);
+  session.setItem(key,JSON.stringify({version:1,createdAt:1000}));
+  assert.equal(core.guestStartPending(session,1001),true);
+  assert.equal(core.guestStartPending(session,301000),false);
+  assert.equal(core.guestStartPending(session,999),false);
+  session.setItem(key,'{bad');assert.equal(core.guestStartPending(session,1001),false);
+});
+test('guest compact checkout has a staff-visible flow reference without customer details',()=>{
+  assert.equal(core.marker({cartCheckout:true,guestCheckout:true,id:'CC-guest-1'}),'Website Guest Compact Checkout | CC-guest-1');
+});
+
+test('disabled saved payments and native no-card placeholders do not become defaults',()=>{
+  assert.equal(core.savedChoice([{value:'0',label:'No stored cards'},{value:'1',label:'1111 Test',disabled:true},{value:'2',label:'2222 Test'}],null).value,'2');
+  assert.equal(core.savedChoice([{value:'none',label:'None'}],null),null);
+});
+test('guest contact hydration uses the entered phone while account hydration preserves an existing billing phone',()=>{
+  const phone={value:'existing'};const page={getElementById:id=>id==='ctl00_PageBody_InvoiceAddress_ContactTelephoneTextBox'?phone:null};
+  const contact={firstName:'Guest',lastName:'Test',email:'guest@example.invalid',phone:'9795550100'};
+  core.applyContactDefaults(page,contact,null);assert.equal(phone.value,'existing');
+  core.applyContactDefaults(page,contact,null,true);assert.equal(phone.value,'9795550100');
 });

@@ -78,3 +78,23 @@ test('a timed-out carrier request from a replaced frame cannot corrupt a ready p
 test('a carrier timeout on the current checkout still reports the actionable error',async()=>{
   await assert.rejects(quoteTimeout(false),/Delivery rates are taking longer/);
 });
+
+const loaderSource=header.slice(header.indexOf('  function deferCartCheckoutUntilPilotReady('),header.indexOf('  function loadTawkCommerceAssist('));
+function loaderFixture({signedIn=true,pathname='/Products.aspx',storage={}}={}) {
+  const scripts=[];
+  const win={location:{origin:'https://webtrack.woodsonlumber.com',pathname},navigator:{},setTimeout(){},addEventListener(){}};win.top=win;
+  const document={querySelector:selector=>selector.includes('SignOut=1')?(signedIn?{}:null):null,createElement:()=>({setAttribute(){}}),head:{appendChild:node=>scripts.push(node)}};
+  const context=vm.createContext({window:win,document,localStorage:storage,WEBTRACK:win.location.origin});vm.runInContext(loaderSource,context);context.loadBuyNowPilot();return scripts;
+}
+test('the product loader no longer requires the former pilot user hint',()=>{
+  assert.equal(loaderFixture().length,1);
+  assert.match(loaderFixture()[0].src,/compact-checkout-20/);
+});
+test('anonymous shopping never loads Quick buy even with stale pilot storage',()=>{
+  assert.equal(loaderFixture({signedIn:false,storage:{wl_user_id:'old-pilot'}}).length,0);
+});
+test('unrelated account pages avoid bootstrap reads unless a recovery journal exists',()=>{
+  assert.equal(loaderFixture({pathname:'/AccountInfo_R.aspx'}).length,0);
+  assert.equal(loaderFixture({pathname:'/AccountInfo_R.aspx',storage:{['wl_buy_now_pilot_v1:'+'a'.repeat(64)]:'backup'}}).length,1);
+  assert.equal(loaderFixture({pathname:'/AccountInfo_R.aspx',storage:{['wl_buy_now_pilot_v1:payment:'+'a'.repeat(64)]:'preference'}}).length,0);
+});

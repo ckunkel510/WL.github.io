@@ -15,18 +15,28 @@
   const KEY = 'wl_guest_checkout_payload';
   const AUTOFILL_KEY = 'wl_guest_checkout_needs_autofill';
   const MODE_KEY = 'wl_checkout_mode';
+  const COMPACT_START_KEY = 'wl_compact_guest_start_v1';
   const CHECKOUT_SNAPSHOT_KEY = 'wl_checkout_form_snapshot_v2';
   const DATE_STATE_KEY = 'wl_checkout_date_state_v2';
 
   function getCheckoutMode() { try { return sessionStorage.getItem(MODE_KEY) || ''; } catch { return ''; } }
   function setCheckoutMode(mode) { try { sessionStorage.setItem(MODE_KEY, mode); } catch {} }
+  function isCompactCheckoutFrame() {
+    try {
+      return window.parent!==window && window.name==='woodson-buy-now-checkout' &&
+        window.parent.location.origin===location.origin &&
+        window.parent.document.querySelector('#wl-buy-now iframe.bn-frame')?.contentWindow===window;
+    } catch { return false; }
+  }
 
   function clearGuestState() {
     try { sessionStorage.removeItem(KEY); } catch {}
     try { sessionStorage.removeItem(AUTOFILL_KEY); } catch {}
+    try { sessionStorage.removeItem(COMPACT_START_KEY); } catch {}
   }
 
   function resetCheckoutDraftStateForGuest() {
+    ['wl_fulfillment_intent','wl_fulfillment_method','wl_fulfillment_selection_source_v1','wl_confirmed_fulfillment_v1','wl_shipping_selection_v1','wl_shipping_offer_v1','wl_checkout_address_payload','wl_checkout_contact_payload'].forEach((key) => { try { sessionStorage.removeItem(key); } catch {} });
     try { sessionStorage.removeItem(CHECKOUT_SNAPSHOT_KEY); } catch {}
     try { sessionStorage.removeItem(DATE_STATE_KEY); } catch {}
     try { sessionStorage.removeItem('wl_billing_confirmed'); } catch {}
@@ -598,6 +608,9 @@
 
     try {
       await createAccountInBackground(payload);
+      // Signup is finished. Do not retain its generated credential in the draft.
+      delete payload.password;
+      saveGuest(payload);
       continueCheckoutAndHookBilling();
       closeModal();
     } catch (e) {
@@ -773,17 +786,56 @@
 
   function continueCheckoutAndHookBilling() {
     setCheckoutMode('guest');
-    try { sessionStorage.setItem(AUTOFILL_KEY, '1'); } catch {}
-    installBillingObserver();
-
-    const proceedBtn = getProceedBtn();
-    if (proceedBtn) {
-      LOG('Clicking Proceed to checkout…');
-      runNativeButton(proceedBtn);
+    try {
+      sessionStorage.setItem(AUTOFILL_KEY, '1');
+      sessionStorage.setItem(COMPACT_START_KEY, JSON.stringify({ version: 1, createdAt: Date.now() }));
+      // Refresh the main page after signup so its native sign-in state matches
+      // the newly confirmed temporary session. No cart lines are copied/changed.
+      window.location.assign('/ShoppingCart.aspx');
+    } catch {
+      installBillingObserver();
+      const proceedBtn = getProceedBtn();
+      if (proceedBtn) runNativeButton(proceedBtn);
     }
   }
 
+  function awaitCompactGuestCheckout() {
+    const pending = () => {
+      try {
+        const value=JSON.parse(sessionStorage.getItem(COMPACT_START_KEY) || 'null');
+        const age=Date.now()-value?.createdAt;
+        return value?.version===1 && Number.isFinite(value.createdAt) && age>=0 && age<300000;
+      } catch { return false; }
+    };
+    if (!IS_CART_PAGE) return;
+    if (!pending()) { try { sessionStorage.removeItem(COMPACT_START_KEY); } catch {} return; }
+    let settled = false;
+    const fallback = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      window.removeEventListener('wl-buy-now-pilot-settled', fallback);
+      // The compact engine consumes this marker only after matching the fresh
+      // server login to this guest. Back/cancel never automatically restarts it.
+      if (!pending()) return;
+      sessionStorage.removeItem(COMPACT_START_KEY);
+      if (getCheckoutMode() !== 'guest' || !loadGuest().email) return;
+      if (!document.querySelector('a[href*="SignOut=1"],a[href*="signout=1"]')) {
+        showError('Your guest session could not be confirmed. Please sign in to continue.');
+        return;
+      }
+      const proceed = getProceedBtn();
+      if (proceed) runNativeButton(proceed);
+    };
+    const timeout = setTimeout(fallback, 65000);
+    window.addEventListener('wl-buy-now-pilot-settled', fallback);
+    if (document.documentElement.dataset.wlCompactCheckoutSettled === '1') fallback();
+  }
+
   function applyGuestToCheckout() {
+    // The compact parent verifies the current account before hydrating its
+    // owned frame. Legacy autofill must not race or overwrite edited defaults.
+    if (isCompactCheckoutFrame()) return false;
     const payload = loadGuest();
     if (!payload || !payload.email) return false;
 
@@ -883,13 +935,14 @@
     const wantsAutofill = (() => { try { return sessionStorage.getItem(AUTOFILL_KEY) === '1'; } catch { return false; } })();
     // Never apply an old guest payload just because the shopper is on checkout.
     // It should only hydrate the page when this checkout was explicitly started as Guest Checkout.
-    if (payload && payload.email && wantsAutofill && getCheckoutMode() === 'guest') {
+    if (payload && payload.email && wantsAutofill && getCheckoutMode() === 'guest' && !isCompactCheckoutFrame()) {
       installBillingObserver();
     }
 
     window.WLGuestCheckout = window.WLGuestCheckout || {};
     window.WLGuestCheckout.open = showModal;
     window.WLGuestCheckout.apply = applyGuestToCheckout;
+    awaitCompactGuestCheckout();
     LOG('Ready.');
   }
 
