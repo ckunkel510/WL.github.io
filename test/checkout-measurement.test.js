@@ -20,8 +20,10 @@ test('compact and Quick buy each emit one proven purchase with actual quantities
   const f=setup(),d=details({flow,customerType});
   assert.equal(f.api.checkout('begin',d),true);assert.equal(purchases(f).length,0);
   assert.equal(f.api.checkout('review',d,page()),true);
+  f.session.setItem('wl_analytics_pending_cart_v1','unfinished-action');
   const confirmation=page();assert.equal(f.api.checkout('purchase',{...d,orderNumber:'W123456'},confirmation),true);
   assert.equal(f.api.checkout('purchase',{...d,orderNumber:'W123456'},confirmation),false);
+  assert.equal(f.session.getItem('wl_analytics_pending_cart_v1'),null);
   const p=purchases(f)[0];assert.equal(p.ecommerce.value,6);assert.equal(p.ecommerce.tax,.5);assert.equal(p.ecommerce.shipping,25);assert.equal(p.ecommerce.items[0].quantity,3);assert.equal(p.ecommerce.transaction_id,'W123456');
   assert.equal(p.checkout_flow,flow);assert.equal(p.customer_type,customerType);assert.equal(p.fulfillment_method,'delivery');assert.equal(p.payment_type,'stored_card');assert.equal(p.page_type,'order_confirmation');
   const ga=f.events.filter(e=>e[0]==='event'&&e[1]==='purchase');assert.equal(ga.length,1);assert.equal(ga[0][2].transaction_id,'W123456');assert.equal(ga[0][2].value,6);
@@ -118,4 +120,13 @@ test('late native confirmation records measurement without relaxing uncertain-or
   vm.runInContext(inspect,context);await assert.rejects(context.inspectFrame({location:{href:'https://example.test/ShoppingCart.aspx?success=1'}},native),/confirmation needs review/);
   assert.equal(calls.length,phase==='uncertain'?1:0);assert.equal(context.active.phase,phase);
  }
+});
+
+test('checkout review records bounded loading time without changing purchase amounts',()=>{
+ for(const [readyMs,expected] of [[1234.4,1234],[-1,undefined],[NaN,undefined],[1800001,undefined]]){
+ const f=setup(),d=details({readyMs});f.api.checkout('review',d,page());const event=f.events.find(e=>e.event_name==='checkout_review');assert.equal(event.checkout_ready_ms,expected);assert.equal(event.ecommerce.value,6);}
+});
+test('browse event sign-in state comes from native navigation and cannot contain an account identifier',()=>{
+ const f=setup();f.api.track('navigation_click',{sign_in_state:'forged',destination_path:'/ShoppingCart.aspx'});assert.equal(f.events.find(e=>e.event_name==='navigation_click').sign_in_state,'signed_out');
+ f.doc.querySelector=selector=>selector.includes('SignOut=1')?{}:null;f.api.track('view_cart',{});assert.equal(f.events.find(e=>e.event_name==='view_cart').sign_in_state,'signed_in');
 });
