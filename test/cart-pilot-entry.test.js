@@ -88,7 +88,7 @@ function loaderFixture({signedIn=true,pathname='/Products.aspx',storage={}}={}) 
 }
 test('the product loader no longer requires the former pilot user hint',()=>{
   assert.equal(loaderFixture().length,1);
-  assert.match(loaderFixture()[0].src,/compact-checkout-26/);
+  assert.match(loaderFixture()[0].src,/compact-checkout-27/);
 });
 test('anonymous shopping never loads Quick buy even with stale pilot storage',()=>{
   assert.equal(loaderFixture({signedIn:false,storage:{wl_user_id:'old-pilot'}}).length,0);
@@ -97,4 +97,15 @@ test('unrelated account pages avoid bootstrap reads unless a recovery journal ex
   assert.equal(loaderFixture({pathname:'/AccountInfo_R.aspx'}).length,0);
   assert.equal(loaderFixture({pathname:'/AccountInfo_R.aspx',storage:{['wl_buy_now_pilot_v1:'+'a'.repeat(64)]:'backup'}}).length,1);
   assert.equal(loaderFixture({pathname:'/AccountInfo_R.aspx',storage:{['wl_buy_now_pilot_v1:payment:'+'a'.repeat(64)]:'preference'}}).length,0);
+});
+
+const cartLoaderSource=header.slice(header.indexOf('  function loadCartDesign('),header.indexOf('  function loadBuyNowPilot('));
+test('Ink cart loader is independent of sign-in and excludes frames, other pages, duplicate loads and other origins',()=>{
+  for(const mode of ['signed-in','guest','anonymous','frame','product','duplicate','other-origin']) {
+    const scripts=[],win={location:{origin:mode==='other-origin'?'https://example.invalid':'https://webtrack.woodsonlumber.com',pathname:mode==='product'?'/Products.aspx':'/ShoppingCart.aspx'}};win.top=mode==='frame'?{}:win;
+    const document={querySelector:()=>mode==='duplicate'?{}:null,createElement:()=>({setAttribute(){}}),head:{appendChild:s=>scripts.push(s)}};
+    const context=vm.createContext({window:win,document,WEBTRACK:'https://webtrack.woodsonlumber.com'});vm.runInContext(cartLoaderSource,context);context.loadCartDesign();
+    assert.equal(scripts.length,['signed-in','guest','anonymous'].includes(mode)?1:0,mode);
+    if(scripts.length)assert.match(scripts[0].src,/ink-cart-5/);
+  }
 });
