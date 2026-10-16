@@ -6,7 +6,7 @@
   else core.boot(root).catch(function () { /* Keep the existing cart if unavailable. */ });
 })(typeof window==='object' ? window : null,function () {
   'use strict';
-  var BUILD='20261016-ink-cart-6';
+  var BUILD='20261016-ink-cart-7';
   var ORIGIN='https://webtrack.woodsonlumber.com';
   var ASSETS='https://ckunkel510.github.io/WL.github.io/';
   var REVEAL=164;
@@ -21,6 +21,7 @@
   }
   function swipeOffset(start,dx) { return Math.min(0,Math.max(-REVEAL,start+dx)); }
   function revealAfterDrag(offset) { return offset<=-58; }
+  function checkoutVisible(entry) { return !!entry?.isIntersecting && entry.intersectionRatio>=0.99; }
   async function delegateAction(row,selector,verify,blocked) {
     var control=row?.querySelector(selector);
     if (!row?.isConnected || !control || control.disabled || control.getAttribute('aria-disabled')==='true' || blocked()) return false;
@@ -47,8 +48,8 @@
     dockButton.className='cs-checkout'; dockButton.setAttribute('aria-label','Proceed to checkout'); dock.appendChild(dockButton); doc.body.appendChild(dock);
     var intersection=null,observedCheckout=null;
     if (win.IntersectionObserver) intersection=new win.IntersectionObserver(function (entries) {
-      dock.dataset.mainVisible=entries[0]?.isIntersecting ? 'true' : 'false';
-    },{threshold:0.25});
+      dock.dataset.mainVisible=checkoutVisible(entries[0]) ? 'true' : 'false';
+    },{threshold:0.99});
     function blocked() { return revoked || pending || !!doc.getElementById('wl-buy-now'); }
     function makeButton(copy,handler) {
       var button=doc.createElement('button'); button.type='button'; button.textContent=copy; button.addEventListener('click',handler); return button;
@@ -172,5 +173,5 @@
       });
     }
   }
-  return {boot:boot,build:BUILD,naturalCart:naturalCart,gestureAxis:gestureAxis,swipeOffset:swipeOffset,revealAfterDrag:revealAfterDrag,delegateAction:delegateAction};
+  return {boot:boot,build:BUILD,naturalCart:naturalCart,checkoutVisible:checkoutVisible,gestureAxis:gestureAxis,swipeOffset:swipeOffset,revealAfterDrag:revealAfterDrag,delegateAction:delegateAction};
 });

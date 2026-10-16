@@ -48,3 +48,10 @@ test('changed page state, disabled actions, replaced rows and checkout overlays 
     assert.equal(await core.delegateAction(f.row,'.delete-link',verify,()=>mode==='overlay'),false);assert.equal(f.clicks(),0);
   }
 });
+
+test('mobile checkout stays available while the main action is only partly visible',()=>{
+  for(const ratio of [0,0.25,0.45,0.98])assert.equal(core.checkoutVisible({isIntersecting:true,intersectionRatio:ratio}),false);
+  assert.equal(core.checkoutVisible({isIntersecting:true,intersectionRatio:1}),true);
+  assert.equal(core.checkoutVisible({isIntersecting:false,intersectionRatio:1}),false);
+  assert.equal(core.checkoutVisible(undefined),false);
+});
