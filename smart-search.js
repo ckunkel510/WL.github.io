@@ -3,7 +3,7 @@
 
   if (window.WLSmartSearch) return;
 
-  var BUILD = "20261016-3";
+  var BUILD = "20261016-4";
   var API_URL = "https://wl-upsrates.vercel.app/api/smart-search-suggestions?v=" + BUILD;
   var RESULTS_PANEL_ID = "ctl00_PageBody_ProductGroupStandardPanel";
   var ATTRIBUTION_KEY = "wl_product_discovery_attribution_v1";
@@ -72,9 +72,6 @@
     return { count: productIds.length, total: total, productIds: productIds };
   }
 
-  // Private trial: never trust cached account IDs, editable fields, or query flags.
-  var SINGLE_RESULT_ACCOUNT = "ckunkel2";
-
   function singleResultDestination(panel, inert) {
     var totals = Array.prototype.slice.call(panel.querySelectorAll(".paging-control")).map(function (node) {
       var label = cleanText(node.textContent, 500);
@@ -103,43 +100,11 @@
     return !invalid && ids.length === 1 ? destinations[ids[0]] : "";
   }
 
-  function signedIn(page) {
-    return !!page.querySelector("a[href*='SignOut=1'],a[href*='signout=1']");
-  }
-
-  function pilotAccount(page) {
-    if (!signedIn(page)) return false;
-    var names = Array.prototype.slice.call(page.querySelectorAll(".formPageHeader")).map(function (node) {
-      var match = cleanText(node.textContent, 200).match(/^Change (?:password|details) for user\s+['"]([^'"]+)['"]$/i);
-      return match ? match[1].toLowerCase() : "";
-    }).filter(Boolean);
-    return names.length > 0 && names.every(function (name) { return name === SINGLE_RESULT_ACCOUNT; });
-  }
-
-  async function readPilotAccount(signal) {
-    var settingsUrl = new URL("/AccountSettings.aspx", window.location.href);
-    var response = await window.fetch(settingsUrl.href, {
-      method: "GET", credentials: "same-origin", cache: "no-store", signal: signal
-    });
-    var finalUrl = new URL(response.url || settingsUrl.href);
-    if (!response.ok || finalUrl.origin !== settingsUrl.origin || finalUrl.pathname.toLowerCase() !== "/accountsettings.aspx") return false;
-    return pilotAccount(new window.DOMParser().parseFromString(await response.text(), "text/html"));
-  }
-
   function installDirectSearch() {
     var input = document.getElementById("ctl00_PageHeader_GlobalSearchControl_RadSearchBox1_Input");
     var box = document.getElementById("ctl00_PageHeader_GlobalSearchControl_RadSearchBox1");
-    if (!input || !box || !signedIn(document) || window.top !== window || typeof window.AbortController !== "function") return null;
-    var eligible = false, active = null;
-    var warmController = new window.AbortController();
-    var warmTimeout = window.setTimeout(function () { warmController.abort(); }, 4000);
-    // This page's fresh check is only an eligibility hint for future searches.
-    // Every intercepted search independently verifies the account again.
-    var accountCheck = readPilotAccount(warmController.signal).catch(function () { return false; }).then(function (allowed) {
-      window.clearTimeout(warmTimeout);
-      eligible = allowed;
-      return allowed;
-    });
+    if (!input || !box || window.top !== window || typeof window.AbortController !== "function") return false;
+    var active = null;
     function cancel() {
       if (!active) return;
       active.controller.abort();
@@ -149,7 +114,7 @@
       active = null;
     }
     function submit(event) {
-      if (!eligible || !signedIn(document) || event.defaultPrevented || event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return;
+      if (event.defaultPrevented || event.isComposing || event.ctrlKey || event.altKey || event.metaKey) return;
       var isEnter = event.type === "keydown" && event.target === input && event.key === "Enter";
       var button = event.type === "click" && event.target.closest && event.target.closest(".rsbButtonSearch");
       if (!isEnter && !(button && box.contains(button) && !event.button)) return;
@@ -167,17 +132,14 @@
       input.setAttribute("aria-busy", "true");
       // Inspect inert native HTML: no result-page scripts, quote CTA or Quick buy
       // controls are executed while deciding which page to open.
-      Promise.all([
-        readPilotAccount(request.controller.signal),
-        window.fetch(resultsUrl, { method: "GET", credentials: "same-origin", cache: "no-store", signal: request.controller.signal }).then(async function (response) {
-          var finalUrl = new URL(response.url || resultsUrl, window.location.href);
-          if (!response.ok || finalUrl.origin !== window.location.origin || !/^\/Products\.aspx$/i.test(finalUrl.pathname)) throw new Error("Search unavailable");
-          return new window.DOMParser().parseFromString(await response.text(), "text/html");
-        })
-      ]).then(function (values) {
+      window.fetch(resultsUrl, { method: "GET", credentials: "same-origin", cache: "no-store", signal: request.controller.signal }).then(async function (response) {
+        var finalUrl = new URL(response.url || resultsUrl, window.location.href);
+        if (!response.ok || finalUrl.origin !== window.location.origin || !/^\/Products\.aspx$/i.test(finalUrl.pathname)) throw new Error("Search unavailable");
+        return new window.DOMParser().parseFromString(await response.text(), "text/html");
+      }).then(function (page) {
         if (active !== request || sourceUrl !== window.location.href || cleanText(input.value, 160) !== term) return;
-        var panel = values[1].getElementById(RESULTS_PANEL_ID);
-        var destination = values[0] && signedIn(values[1]) && panel ? singleResultDestination(panel, true) : "";
+        var panel = page.getElementById(RESULTS_PANEL_ID);
+        var destination = panel ? singleResultDestination(panel, true) : "";
         cancel();
         if (destination && analyticsReady()) track("search", { search_term: term });
         window.location.assign(destination || resultsUrl);
@@ -195,32 +157,16 @@
       if (active && !box.contains(event.target)) cancel();
     }, true);
     window.addEventListener("pagehide", cancel);
-    return accountCheck;
+    return true;
   }
 
-  async function redirectSingleResult(panel, accountCheck) {
+  function redirectSingleResult(panel) {
+    if (window.top !== window) return false;
     var destination = singleResultDestination(panel);
-    if (!destination || !signedIn(document) || window.top !== window || typeof window.AbortController !== "function") return false;
-    var initialUrl = window.location.href;
-    var interacted = false;
-    function interaction() { interacted = true; }
-    // Leave an already edited result/search page alone if identity takes time.
-    ["pointerdown", "keydown", "input"].forEach(function (name) { document.addEventListener(name, interaction, true); });
-    var controller = new window.AbortController();
-    var timeout = window.setTimeout(function () { controller.abort(); }, 4000);
-    try {
-      var allowed = await (accountCheck || readPilotAccount(controller.signal));
-      if (!allowed || interacted || window.location.href !== initialUrl || !signedIn(document) ||
-          document.getElementById(RESULTS_PANEL_ID) !== panel || singleResultDestination(panel) !== destination) return false;
-      // Replace the intermediate search entry so Back cannot bounce to the product.
-      window.location.replace(destination);
-      return true;
-    } catch (_) {
-      return false; // Native results and existing recovery remain usable.
-    } finally {
-      window.clearTimeout(timeout);
-      ["pointerdown", "keydown", "input"].forEach(function (name) { document.removeEventListener(name, interaction, true); });
-    }
+    if (!destination) return false;
+    // Replace the intermediate search entry so Back cannot bounce to the product.
+    window.location.replace(destination);
+    return true;
   }
 
   function analyticsReady() {
@@ -664,13 +610,13 @@
     });
   }
 
-  async function enhance(accountCheck) {
+  function enhance() {
     if (enhancementStarted || !/\/Products\.aspx$/i.test(window.location.pathname || "")) return;
     var term = searchTerm();
     var panel = document.getElementById(RESULTS_PANEL_ID);
     if (!term || !panel) return;
     enhancementStarted = true;
-    if (await redirectSingleResult(panel, accountCheck)) return;
+    if (redirectSingleResult(panel)) return;
     var nativeState = nativeSearchState(panel);
     if (nativeState.count === 0) renderLoading(panel, term);
     requestSuggestions(term, nativeState).then(function (payload) {
@@ -694,13 +640,13 @@
     });
   }
 
-  function waitForResultsPanel(accountCheck) {
+  function waitForResultsPanel() {
     if (!/\/Products\.aspx$/i.test(window.location.pathname || "") || !searchTerm()) return;
     var started = Date.now();
     (function check() {
       var panel = document.getElementById(RESULTS_PANEL_ID);
       var nativeCards = panel && panel.querySelector("#productlistcards");
-      if (panel && (nativeCards || (document.readyState === "complete" && Date.now() - started >= 750))) return enhance(accountCheck);
+      if (panel && (nativeCards || (document.readyState === "complete" && Date.now() - started >= 750))) return enhance();
       if (Date.now() - started < MAX_WAIT_MS) window.setTimeout(check, 250);
     })();
   }
@@ -711,5 +657,5 @@
     nativeSearchState: nativeSearchState
   };
 
-  ready(function () { waitForResultsPanel(installDirectSearch()); });
+  ready(function () { installDirectSearch(); waitForResultsPanel(); });
 })(window, document);

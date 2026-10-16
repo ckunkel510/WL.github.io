@@ -6,16 +6,12 @@ const path = require('node:path');
 const vm = require('node:vm');
 const source = fs.readFileSync(path.join(__dirname, '../smart-search.js'), 'utf8').replace(
   'nativeSearchState: nativeSearchState',
-  'nativeSearchState: nativeSearchState, singleResultDestination, pilotAccount, redirectSingleResult, installDirectSearch'
+  'nativeSearchState: nativeSearchState, singleResultDestination, redirectSingleResult, installDirectSearch'
 );
 
 function harness(options = {}) {
   const origin = 'https://webtrack.woodsonlumber.com';
   const navigations = [], requests = [], listeners = new Map();
-  const settings = {
-    querySelector: () => options.settingsSignedOut ? null : {},
-    querySelectorAll: () => (options.names || ['ckunkel2', 'ckunkel2']).map(name => ({textContent: `Change details for user '${name}'`}))
-  };
   let labels = options.labels || ['1 item found', '1 item found'];
   const links = (options.links || ['ProductDetail.aspx?pid=6698&pg=0', 'ProductDetail.aspx?pid=6698&pg=0#customer-reviews']).map(value => ({
     getAttribute: () => typeof value === 'string' ? value : value.href,
@@ -38,13 +34,9 @@ function harness(options = {}) {
     location: {origin, href: origin + '/Products.aspx?searchText=24082ypl', replace: value => navigations.push(value)},
     getComputedStyle: () => ({display:'block',visibility:'visible'}),
     AbortController, setTimeout, clearTimeout,
-    DOMParser: class { parseFromString() { return settings; } },
     fetch: async (url, config) => {
       requests.push({url, config});
-      if (options.interact) listeners.get('input')();
-      if (options.changeResults) labels = ['Results 1-48 (of 64)'];
-      if (options.fail) throw new Error('Unavailable');
-      return {ok: true, url: options.responseUrl || url, text: async () => '<html>Native settings</html>'};
+      throw new Error('A result-page redirect must not request account data');
     }
   };
   window.top = options.frame ? {} : window;
@@ -52,16 +44,11 @@ function harness(options = {}) {
   return {api: window.WLSmartSearch, panel, requests, navigations, listeners};
 }
 
-test('single native product opens once after fresh ckunkel2 verification', async () => {
-  const h = harness();
-  assert.equal(await h.api.redirectSingleResult(h.panel), true);
-  assert.deepEqual(h.navigations, ['https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=6698&pg=0']);
-  assert.equal(h.requests.length, 1);
-  assert.equal(h.requests[0].url, 'https://webtrack.woodsonlumber.com/AccountSettings.aspx');
-  assert.equal(h.requests[0].config.method, 'GET');
-  assert.equal(h.requests[0].config.credentials, 'same-origin');
-  assert.equal(h.requests[0].config.cache, 'no-store');
-  assert.equal(h.listeners.has('input'), false);
+for (const visitor of ['ckunkel2', 'another signed-in account', 'guest']) test('one native match opens for '+visitor+' without account lookups', async () => {
+  const h=harness({signedOut:visitor==='guest'});
+  assert.equal(await h.api.redirectSingleResult(h.panel),true);
+  assert.deepEqual(h.navigations,['https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=6698&pg=0']);
+  assert.equal(h.requests.length,0);
 });
 
 test('image/title/review duplicate links and recommendation cards do not inflate native count', () => {
@@ -77,29 +64,13 @@ for (const [label, options] of [
   ['two native products despite a stale one-result label', {links:['ProductDetail.aspx?pid=6698','ProductDetail.aspx?pid=85']}],
   ['external destination', {links:['https://example.com/ProductDetail.aspx?pid=6698']}],
   ['malformed product ID', {links:['ProductDetail.aspx?pid=wrong']}],
-  ['signed-out visitors', {signedOut:true}],
+  ['zero native matches', {labels:['0 items found'],links:[]}],
   ['embedded pages', {frame:true}]
 ]) test(label + ' stays on results without an identity request', async () => {
   const h = harness(options);
   assert.equal(await h.api.redirectSingleResult(h.panel), false);
   assert.equal(h.navigations.length, 0);
   assert.equal(h.requests.length, 0);
-});
-
-for (const [label, options] of [
-  ['another account', {names:['ckunkel3']}],
-  ['conflicting account headings', {names:['ckunkel2','ckunkel3']}],
-  ['missing account headings', {names:[]}],
-  ['expired settings session', {settingsSignedOut:true}],
-  ['redirect to sign-in', {responseUrl:'https://webtrack.woodsonlumber.com/SignIn.aspx'}],
-  ['identity request failure', {fail:true}],
-  ['user begins typing during identity request', {interact:true}],
-  ['result total changes during identity request', {changeResults:true}]
-]) test(label + ' leaves results usable', async () => {
-  const h = harness(options);
-  assert.equal(await h.api.redirectSingleResult(h.panel), false);
-  assert.equal(h.navigations.length, 0);
-  assert.equal(h.listeners.has('input'), false);
 });
 
 test('native Results 1-1 (of 1) format is accepted', async () => {
@@ -121,21 +92,15 @@ function directHarness(options = {}) {
   };
   const button = {};
   const box = {contains: node => node === input || node === button};
-  const header = name => ({textContent: `Change password for user '${name}'`});
-  let accountReads = 0;
-  const settings = () => ({
-    querySelector: () => (options.expire && accountReads > 1) ? null : {},
-    querySelectorAll: () => [header(options.changedAccount && accountReads > 1 ? 'ckunkel3' : (options.user || 'ckunkel2'))]
-  });
   const panel = {
-    querySelectorAll: selector => selector === '.paging-control' ? [{textContent: options.multiple ? 'Results 1-48 (of 64)' : '1 item found'}] : [{
+    querySelectorAll: selector => selector === '.paging-control' ? [{textContent: options.multiple ? 'Results 1-48 (of 64)' : options.empty ? '0 items found' : '1 item found'}] : options.empty ? [] : [{
       getAttribute: () => 'ProductDetail.aspx?pid=6698&pg=0',
       closest: () => null,
       // Detached response HTML has no rendered dimensions.
       getBoundingClientRect: () => ({width:0,height:0})
     }]
   };
-  const resultPage = {querySelector: () => (options.expire ? null : {}), getElementById: () => panel};
+  const resultPage = {querySelector: () => (options.guest ? null : {}), getElementById: () => panel};
   const document = {
     readyState: 'loading',
     querySelector: () => options.guest ? null : {},
@@ -145,17 +110,14 @@ function directHarness(options = {}) {
   const window = {
     location: {origin,href:origin+'/ProductDetail.aspx?pid=85',assign:url=>navigations.push(url)},
     AbortController,setTimeout,clearTimeout,addEventListener:(name,fn)=>events.set(name,fn),
-    DOMParser: class {parseFromString(html) { return html === 'settings' ? settings() : resultPage; }},
+    DOMParser: class {parseFromString() { return resultPage; }},
     WLAnalytics: {track:(name,parameters)=>tracked.push({name,parameters})},
     fetch: async (url, config) => {
       requests.push({url,config});
-      if (url.includes('AccountSettings')) {
-        accountReads++;
-        return {ok:true,url,text:async()=> 'settings'};
-      }
+      assert.ok(!url.includes('AccountSettings'),'public search does not read account settings');
       if (options.pending) await new Promise(resolve => {resolveResults=resolve;});
       if (options.failResults) throw new Error('Native search unavailable');
-      return {ok:true,url:new URL(url,origin).href,text:async()=> 'results'};
+      return {ok:true,url:options.responseUrl || new URL(url,origin).href,text:async()=> 'results'};
     }
   };
   window.top=window;
@@ -171,12 +133,12 @@ function directHarness(options = {}) {
   return {api,navigations,requests,tracked,attributes,events,inputEvents,input,submit,resolve:()=>resolveResults?.()};
 }
 
-test('verified private search opens directly from source page without rendering result HTML', async () => {
+test('public search opens directly from source page without rendering result HTML', async () => {
   const h=directHarness();
   await h.api.installDirectSearch();
   assert.equal(await h.submit(),true);
   assert.deepEqual(h.navigations,['https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=6698&pg=0']);
-  assert.equal(h.requests.filter(r=>r.url.includes('AccountSettings')).length,2,'warm identity never authorizes navigation by itself');
+  assert.equal(h.requests.filter(r=>r.url.includes('AccountSettings')).length,0);
   assert.equal(h.requests.filter(r=>r.url.includes('Products.aspx')).length,1);
   assert.equal(h.tracked.length,1);
   assert.equal(h.tracked[0].name,'search');
@@ -195,16 +157,17 @@ test('multiple matches open normal results without duplicating the search analyt
   assert.equal(h.tracked.length,0);
 });
 
-for(const options of [{changedAccount:true},{expire:true},{failResults:true}])test('direct route falls back safely: '+JSON.stringify(options),async()=>{
+for(const options of [{empty:true},{responseUrl:'https://webtrack.woodsonlumber.com/SignIn.aspx'},{failResults:true}])test('direct route falls back safely: '+JSON.stringify(options),async()=>{
   const h=directHarness(options);await h.api.installDirectSearch();await h.submit();
   assert.match(h.navigations[0],/^\/Products\.aspx/);
   assert.equal(h.tracked.length,0);
 });
 
-for(const options of [{user:'ckunkel3'},{guest:true}])test('direct route never intercepts '+JSON.stringify(options),async()=>{
-  const h=directHarness(options);await h.api.installDirectSearch();
-  assert.equal(await h.submit(),false);assert.equal(h.navigations.length,0);
-  assert.equal(h.requests.some(r=>r.url.includes('Products.aspx')),false);
+for(const options of [{user:'ckunkel2'},{user:'ckunkel3'},{guest:true}])test('direct route works for '+JSON.stringify(options),async()=>{
+  const h=directHarness(options);assert.equal(await h.api.installDirectSearch(),true);
+  assert.equal(await h.submit(),true);assert.equal(h.navigations.length,1);
+  assert.match(h.navigations[0],/ProductDetail/);
+  assert.equal(h.requests.length,1);
 });
 
 test('editing the query while a direct search is pending cancels its navigation',async()=>{
