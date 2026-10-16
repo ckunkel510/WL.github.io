@@ -280,6 +280,36 @@ test('Quick buy chooses the cheaper valid home method independently of a prior s
   assert.equal(core.cheapestHomeMethod(quote(available(0),available(-1))),'pickup');
 });
 
+test('a temporarily disabled native fulfillment control is selected only after it becomes usable',()=>{
+  let clicks=0;
+  const control={disabled:true,dataset:{},getAttribute:()=>null,click(){clicks++;}};
+  const page={documentElement:{dataset:{}},getElementById:id=>id==='btnShip'?control:null};
+  assert.equal(core.requestNativeMethod(page,'ship',1000),false);
+  assert.equal(clicks,0);
+  assert.equal(page.documentElement.dataset.bnMethod,undefined);
+  control.disabled=false;
+  assert.equal(core.requestNativeMethod(page,'ship',2200),true);
+  assert.equal(clicks,1);
+  assert.equal(page.documentElement.dataset.bnMethod,'ship');
+  assert.equal(control.dataset.bnRequestedAt,'2200');
+  core.requestNativeMethod(page,'ship',2500);
+  assert.equal(clicks,1,'an asynchronous reservation must not receive duplicate clicks');
+});
+
+test('missing and aria-disabled controls stay pending, and an UpdatePanel replacement can receive its own request',()=>{
+  let clicks=0,control=null;
+  const page={documentElement:{dataset:{}},getElementById:()=>control};
+  assert.equal(core.requestNativeMethod(page,'delivery',1000),false);
+  control={dataset:{},disabled:false,getAttribute:()=> 'true',click(){clicks++;}};
+  assert.equal(core.requestNativeMethod(page,'delivery',1100),false);
+  control.getAttribute=()=> 'false';
+  core.requestNativeMethod(page,'delivery',1200);
+  control={...control,dataset:{}};
+  core.requestNativeMethod(page,'delivery',1500);
+  assert.equal(clicks,2);
+  assert.equal(control.dataset.bnRequestedAt,'1500');
+});
+
 test('pickup review must confirm the exact selected native store',()=>{
   assert.doesNotThrow(()=>core.assertPickupStore('Caldwell - 702 W Buck St','Caldwell - 702 W Buck St'));
   assert.doesNotThrow(()=>core.assertPickupStore(' Caldwell - 702 W Buck St\n','Caldwell - 702 W Buck St'));

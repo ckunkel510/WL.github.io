@@ -6,7 +6,7 @@
   else core.boot(root).catch(function () { /* An unavailable pilot leaves native shopping alone. */ });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261016-ckunkel2-16';
+  var BUILD = '20261016-ckunkel2-17';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var USER = 'ckunkel2'; // No query string, storage value, or public rollout override.
   var PREFIX = 'wl_buy_now_pilot_v1:';
@@ -121,6 +121,19 @@
   }
   function fulfillmentApplied(method, intent, pressed) {
     return ['pickup','delivery','ship'].includes(method) && intent === method && pressed === 'true';
+  }
+  function requestNativeMethod(page, method, now) {
+    var id = {pickup:'btnPickup',delivery:'btnDelivered',ship:'btnShip'}[method];
+    var control = id && page.getElementById(id);
+    // WebTrack enables these controls after its quote/UpdatePanel has settled.
+    // A disabled button silently ignores click(); never record that as a request.
+    if (!control || control.disabled || control.getAttribute('aria-disabled') === 'true') return false;
+    if (!control.dataset.bnRequestedAt) {
+      control.dataset.bnRequestedAt = String(now);
+      page.documentElement.dataset.bnMethod = method;
+      control.click();
+    }
+    return true;
   }
   function productMethod(page) {
     var pickup = page.querySelector('button[aria-label="Choose pickup"][aria-pressed="true"]');
@@ -362,6 +375,7 @@
     function setStage(index) {
       if (!overlay) return;
       if (timings && timings.stages[index] === undefined) timings.stages[index] = Date.now()-timings.started;
+      if (index < 4) fastText('[data-bn-confirm]',['Checking items…','Checking options…','Loading payment…','Checking final total…'][index]);
       overlay.querySelectorAll('[data-bn-step]').forEach(function (el,step) {
         el.dataset.state = step<index ? 'done' : step===index ? 'current' : 'next';
         if (step===index) el.setAttribute('aria-current','step'); else el.removeAttribute('aria-current');
@@ -601,7 +615,7 @@
         }
       }
       body.querySelectorAll('[data-bn-method]').forEach(function (el) {
-        el.addEventListener('click', function () { var option = fast.methods[el.dataset.bnMethod]; if (submitting || fast.editor || fast.method === el.dataset.bnMethod || !(option?.available || option?.pending)) return; fast.method = el.dataset.bnMethod; fast.date = ''; fast.shippingValue = ''; refreshFast().catch(showError); });
+        el.addEventListener('click', function () { var option = fast.methods[el.dataset.bnMethod]; if (submitting || fast.editor || fast.method === el.dataset.bnMethod || !(option?.available || option?.pending)) return; fast.method = el.dataset.bnMethod; fast.date = ''; fast.shippingValue = ''; updateFastOptions(); refreshFast().catch(showError); });
       });
       body.querySelectorAll('[data-bn-edit]').forEach(function (el) { el.addEventListener('click', function () { editFast(el.dataset.bnEdit); }); });
       overlay.querySelector('[data-bn-confirm]').addEventListener('click', function () {
@@ -734,9 +748,10 @@
           address.email = text(settings.getElementById('ctl00_PageBody_ChangeUserDetailsControl_EmailAddressInput')?.value);
           address.phone = text(account.getElementById('ctl00_PageBody_TelephoneLink_TelephoneLink')?.textContent);
         }
-        fast = {original:before.items,primary:primary,selected:[],address:address,method:productMethod(doc),store:branch,methods:{},date:'',window:'Afternoon',ready:false,payments:[],revision:0,driving:false,editor:'',started:Date.now(),opened:opened};
+        fast = {original:before.items,primary:primary,selected:[],address:address,method:productMethod(doc),store:branch,methods:{pickup:{pending:true,reason:'Availability is confirmed in checkout.'},delivery:{pending:true},ship:{pending:true}},date:'',window:'Afternoon',ready:false,payments:[],revision:0,driving:false,editor:'',started:Date.now(),opened:opened};
         if (cancelPending) { busy = false; cancelPending = false; dismiss(); return; }
         renderFast(info,primary,before.items);
+        updateFastOptions();
         var planned = plan(before.items,primary,[]), sessionBefore = {};
         SESSION_KEYS.forEach(function (name) { sessionBefore[name] = win.sessionStorage.getItem(name); });
         var draft = {version:1,scope:scope,branch:branch,id:'BN-'+win.crypto.randomUUID(),owner:owner,phase:'backed_up',createdAt:Date.now(),original:planned.original,purchase:planned.purchase,remaining:planned.remaining,current:before.items,pending:null,extraCount:0};
@@ -932,7 +947,7 @@
         el.setAttribute('aria-pressed',fast.method===entry[0]?'true':'false');
         el.dataset.available = entry[1].available || entry[1].pending ? 'true' : 'false';
         el.disabled = submitting || !!fast.editor || !(entry[1].available || entry[1].pending);
-        fastText('[data-bn-rate="'+entry[0]+'"]',entry[1].available ? entry[1].rate : entry[1].pending ? 'Get rate' : 'Unavailable');
+        fastText('[data-bn-rate="'+entry[0]+'"]',entry[1].available ? entry[1].rate : entry[1].pending ? (entry[0]==='pickup' ? 'Check availability' : 'Get rate') : 'Unavailable');
         el.title = entry[1].reason || '';
       });
       fastText('[data-bn-address-title]',fast.method === 'pickup' ? 'Pickup at' : 'Deliver to');
@@ -1024,15 +1039,18 @@
           if (!fast.method) fast.method = cheapestHomeMethod(quote);
           updateFastOptions();
           if (!fast.methods[fast.method]?.available) { haltFast('That option is unavailable. Choose another.'); return; }
-          if (page.documentElement.dataset.bnMethod !== fast.method) {
-            page.documentElement.dataset.bnMethod = fast.method;
-            page.getElementById(fast.method==='pickup'?'btnPickup':fast.method==='ship'?'btnShip':'btnDelivered').click();
+          var appliedButton = page.getElementById(fast.method==='pickup'?'btnPickup':fast.method==='ship'?'btnShip':'btnDelivered');
+          if (!appliedButton?.dataset.bnRequestedAt) {
+            status('Confirming your choice…');
+            requestNativeMethod(page,fast.method,Date.now());
             return;
           }
           // Native method clicks await rate reservation before applying the UI.
           // Do not validate/continue using the previous delivery/UPS intent.
-          var appliedButton = page.getElementById(fast.method==='pickup'?'btnPickup':fast.method==='ship'?'btnShip':'btnDelivered');
-          if (!fulfillmentApplied(fast.method,child.sessionStorage.getItem('wl_fulfillment_intent'),appliedButton?.getAttribute('aria-pressed'))) return;
+          if (!fulfillmentApplied(fast.method,child.sessionStorage.getItem('wl_fulfillment_intent'),appliedButton?.getAttribute('aria-pressed'))) {
+            if (Date.now()-Number(appliedButton.dataset.bnRequestedAt)>15000) haltFast('WebTrack could not confirm that option. Retry or choose Pickup.');
+            return;
+          }
           if (manager?.get_isInAsyncPostBack?.()) return;
           if (page.documentElement.dataset.bnDetailsContinued && Array.from(page.querySelectorAll('.validation-summary-errors,.alert-danger,.wl-field-invalid')).some(function (el) { return el.offsetParent && text(el.textContent || el.getAttribute('aria-label')); })) { haltFast('Check your address, billing, or pickup details.'); return; }
           var branchField = page.getElementById('ctl00_PageBody_BranchDropDownList');
@@ -1107,6 +1125,7 @@
         }
         var shippingContinue = page.getElementById('ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView');
         if (shippingContinue) {
+          setStage(2); status('Loading payment…');
           // Pickup/local-delivery already have a native automatic continuation.
           if (child.__wlPickupShippingAutoAdvance) return;
           var select = page.getElementById('ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList');
@@ -1216,11 +1235,13 @@
 .wl-buy-now-button:hover{transform:translateY(-2px);box-shadow:inset 0 1px 0 #ffffff65,inset 0 -1px 0 #150d243b,0 4px 0 #26324f24,0 10px 25px #223e5b40}.wl-buy-now-button:hover .wl-quick-arrow{transform:translate(2px,-2px)}.wl-buy-now-button:active,.wl-pilot-add-cart:active{transform:translateY(1px)}
 .wl-buy-now-button:focus-visible,.wl-pilot-add-cart:focus-visible{outline:3px solid #6b0016!important;outline-offset:3px}.wl-buy-now-button:disabled{opacity:.65;cursor:wait}
 .wl-pilot-actions{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(min(100%,140px),1fr));gap:10px}.wl-pilot-actions>*{width:100%;min-width:0;margin:0!important}
+.bn-progress{position:relative;overflow:hidden}.bn-loading .bn-progress:after{content:'';position:absolute;left:0;bottom:0;width:40%;height:2px;background:linear-gradient(90deg,transparent,#6b0016,#668eaf,transparent);animation:wl-checkout-activity 1.8s ease-in-out infinite}
+@keyframes wl-checkout-activity{from{transform:translateX(-110%)}to{transform:translateX(360%)}}
 .bn-stages{list-style:none;display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin:0;padding:12px 22px 9px;border-bottom:1px solid #f0eae3;font-size:10px;color:#8b8580;flex:none}.bn-stages li{display:flex;align-items:center;gap:5px;position:relative;white-space:nowrap}.bn-step-dot{width:19px;height:19px;display:grid;place-items:center;border-radius:50%;background:#f0ede8;color:#9c948c;font-size:10px;flex:none}.bn-stages [data-state=current]{color:#294764;font-weight:700}.bn-stages [data-state=current] .bn-step-dot{background:#d7e4f0;color:#294764;box-shadow:0 0 0 3px #41617f22;animation:wl-step-pulse 1.5s ease-in-out infinite}.bn-stages [data-state=done] .bn-step-dot{background:#e8f1e8;color:#3d7046}.bn-stages [data-state=done]{color:#55735a}
 .bn-skeletons{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;padding-bottom:12px}.bn-skeletons span{height:85px;border-radius:11px;background:linear-gradient(100deg,#eff2f6 20%,#f9fbfd 45%,#eff2f6 70%);background-size:220% 100%;animation:wl-skeleton 1.8s ease-in-out infinite}.bn-skeletons span:nth-child(n+4){grid-column:1/-1;height:48px}
 @keyframes wl-quick-glint{0%{left:-65%;opacity:0}2%{opacity:1}14%{left:140%;opacity:0}100%{left:140%;opacity:0}}@keyframes wl-step-pulse{50%{box-shadow:0 0 0 5px #41617f12}}@keyframes wl-skeleton{to{background-position:-120% 0}}
 @media(max-width:540px){.bn-stages{padding:10px 18px 8px;gap:3px}.bn-stages li{gap:4px}.wl-pilot-actions{gap:8px}}
-@media(prefers-reduced-motion:reduce){.wl-buy-now-button:after,.bn-stages [data-state=current] .bn-step-dot,.bn-skeletons span{animation:none!important}.wl-buy-now-button,.wl-pilot-add-cart,.wl-quick-arrow{transition:none!important}.wl-buy-now-button:after{display:none}}
+@media(prefers-reduced-motion:reduce){.wl-buy-now-button:after,.bn-stages [data-state=current] .bn-step-dot,.bn-skeletons span{animation:none!important}.wl-buy-now-button,.wl-pilot-add-cart,.wl-quick-arrow{transition:none!important}.wl-buy-now-button:after,.bn-loading .bn-progress:after{display:none}}
 `;
       doc.head.appendChild(style);
     }
@@ -1246,5 +1267,5 @@
       if (latest && latest.owner !== owner) { busy = true; clearFrame(); status('Buy now is active in another tab. Cart changes have stopped here.', true); }
     });
   }
-  return { boot: boot, build: BUILD, audience: USER, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, fulfillmentApplied: fulfillmentApplied, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
+  return { boot: boot, build: BUILD, audience: USER, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
 });
