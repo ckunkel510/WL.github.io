@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261020-compact-checkout-30';
+  var BUILD = '20261020-compact-checkout-31';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -600,7 +600,7 @@
         var unitMatch = text(row.textContent).match(/\b(?:Per|UOM|Unit)\s*:\s*([a-z][a-z0-9/.-]*)\b/i);
         var configured = Array.from(row.querySelectorAll('input[id$="_txtSpecialProductCode"],input[id$="_txtSpecialProductDescription"]')).some(function (el) { return text(el.value); });
         if (!link || !quantity || configured || /customized special order|cut to ship|configured product/i.test(row.textContent)) throw new Error('This cart contains a line that needs regular checkout with compact checkout.');
-        var unit = text(unitNode ? unitNode.textContent : directUnit || unitMatch && unitMatch[1]);
+        var unit = text(row.getAttribute('data-wl-cart-unit') || (unitNode ? unitNode.textContent : directUnit || unitMatch && unitMatch[1]));
         if (!unit) throw new Error('The cart unit could not be verified. Please use regular checkout.');
         return { pid: pidOf(link.getAttribute('href')), code: text(code.textContent), quantity: Number(quantity.value), unit: unit, name: text(row.querySelector('.description,.ProductDescription,.cart-item-card p.small')?.textContent || code.textContent) };
       });
@@ -1667,9 +1667,13 @@
 #wl-buy-now .bn-editor-actions{flex:none;display:flex;gap:10px;margin:0;padding:13px 22px;border-top:1px solid #e5e9ee;background:#fff}
 #wl-buy-now .bn-editor-actions .bn-action{flex:1}
 #wl-buy-now .bn-editor-error{color:#9b241e;font-weight:600}#wl-buy-now .bn-editor-error:empty{display:none}
-#wl-buy-now .bn-panel.bn-editing>:not(.bn-head):not(.bn-editor-workspace){display:none!important}
-#wl-buy-now .bn-native-workspace{display:none;flex-direction:column;flex:1 1 auto;min-height:0;overflow:hidden}
-#wl-buy-now .bn-panel.bn-secure-payment:not(.bn-editing)>.bn-native-workspace{display:flex}
+#wl-buy-now .bn-panel.bn-editing>:not(.bn-head):not(.bn-editor-workspace):not(.bn-native-workspace){display:none!important}
+/* Keep the offscreen native document laid out: WebForms validation and stock
+   warnings use visibility measurements while checkout prepares in the background. */
+#wl-buy-now .bn-native-workspace{display:flex;flex-direction:column;flex:none;height:0;min-height:0;overflow:hidden}
+#wl-buy-now .bn-native-workspace>.bn-workspace-head{display:none}
+#wl-buy-now .bn-panel.bn-secure-payment:not(.bn-editing)>.bn-native-workspace{flex:1 1 auto;height:auto}
+#wl-buy-now .bn-panel.bn-secure-payment:not(.bn-editing)>.bn-native-workspace>.bn-workspace-head{display:flex}
 #wl-buy-now .bn-panel.bn-secure-payment:not(.bn-editing)>:not(.bn-head):not(.bn-native-workspace){display:none!important}
 #wl-buy-now .bn-frame.bn-frame-open{flex:1 1 auto;min-height:240px;height:100%!important;max-height:100%;margin:0;display:block}
 #wl-buy-now .bn-panel.bn-secure-payment{height:min(780px,calc(100dvh - 32px))}
