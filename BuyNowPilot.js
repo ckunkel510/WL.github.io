@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261020-compact-checkout-31';
+  var BUILD = '20261020-compact-checkout-32';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -1452,7 +1452,10 @@
           if (fast.method==='pickup') {
             updatePickupReadiness();
             if (fast.pickupReadiness?.checking) { status('Checking stock at your pickup store…'); return; }
-            dateInput.min=[dateInput.min,fast.pickupReadiness.min].sort().pop(); fast.dateMin=dateInput.min;
+            // Keep the original native floor separate from our store-stock floor.
+            // An in-place switch to an in-stock store can then offer earlier dates.
+            if (!dateInput.dataset.bnNativePickupMin) dateInput.dataset.bnNativePickupMin=dateInput.min;
+            dateInput.min=[dateInput.dataset.bnNativePickupMin,fast.pickupReadiness.min].sort().pop(); fast.dateMin=dateInput.min;
           }
           var chosenDate = fast.date && fast.date>=dateInput.min ? fast.date : firstDate(dateInput.min,dateInput.max);
           if (!dateChoice(chosenDate,dateInput.min,dateInput.max)) { haltFast('Choose an available date.'); return; }

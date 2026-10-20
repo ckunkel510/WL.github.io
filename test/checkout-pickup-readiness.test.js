@@ -51,3 +51,16 @@ test('inventory parser uses labeled branch/available cells and rejects partial, 
  assert.equal(core.stockFromDocument(stockPage(rows.concat([['Caldwell','2']]))).verified,false);
  assert.equal(core.stockFromDocument(stockPage(rows.map(r=>r[0]==='Caldwell'?['Caldwell','NA']:r))).verified,false);
 });
+test('reusing native details for an in-stock store removes the previous transfer floor while retaining native bounds',()=>{
+ const fs=require('node:fs'),vm=require('node:vm'),source=fs.readFileSync(require.resolve('../BuyNowPilot'),'utf8');
+ const start=source.indexOf('          var dateInput = page.getElementById('),end=source.indexOf('          var chosenDate =',start);
+ for(const nativeMin of ['2026-10-20','2026-10-22']) {
+  const input={min:nativeMin,max:'2026-11-03',dataset:{}},fast={method:'pickup',pickupReadiness:{min:'2026-10-23'}};
+  const context=vm.createContext({page:{getElementById:()=>input},fast,updatePickupReadiness(){},status(){throw Error('Unexpected wait');}});
+  vm.runInContext('(function(){'+source.slice(start,end)+'})()',context);
+  assert.equal(input.min,'2026-10-23');
+  fast.pickupReadiness.min='2026-10-21';
+  vm.runInContext('(function(){'+source.slice(start,end)+'})()',context);
+  assert.equal(input.min,nativeMin==='2026-10-22'?'2026-10-22':'2026-10-21');assert.equal(fast.dateMin,input.min);
+ }
+});
