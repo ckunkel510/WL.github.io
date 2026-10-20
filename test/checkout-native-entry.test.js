@@ -56,3 +56,17 @@ test('cart and Quick buy both wait for cart policy and block a shortage before n
   vm.runInContext(driver,context);await context.driveFast({},page);assert.equal(entries,0);assert.equal(halt,ready?'Clearance quantity unavailable':'');
  }
 });
+
+test('native navigation waits for document load as well as WebForms initialization',()=>{
+ const f=fixture();f.child.document={readyState:'loading'};assert.equal(core.continueNativeCart(f.child,f.control),false);
+ f.child.document.readyState='interactive';assert.equal(core.continueNativeCart(f.child,f.control),false);assert.equal(f.calls.length,0);
+ f.child.document.readyState='complete';assert.equal(core.continueNativeCart(f.child,f.control),true);assert.equal(f.calls.length,1);
+});
+
+test('native controls wait while an UpdatePanel request is in flight',()=>{
+ const f=fixture();f.child.document={readyState:'complete'};
+ f.child.Sys.WebForms={PageRequestManager:{getInstance:()=>({get_isInAsyncPostBack:()=>true})}};
+ assert.equal(core.continueNativeCart(f.child,f.control),false);assert.equal(f.calls.length,0);
+ f.child.Sys.WebForms.PageRequestManager.getInstance=()=>({get_isInAsyncPostBack:()=>false});
+ assert.equal(core.continueNativeCart(f.child,f.control),true);assert.equal(f.calls.length,1);
+});

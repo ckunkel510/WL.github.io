@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261020-compact-checkout-36';
+  var BUILD = '20261020-compact-checkout-37';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -49,6 +49,10 @@
     return m ? m[1] : '';
   }
   function nativeFormsReady(child) {
+    var page=child.document;
+    if (page && page.readyState!=='complete') return false;
+    var manager=child.Sys?.WebForms?.PageRequestManager?.getInstance?.();
+    if (manager?.get_isInAsyncPostBack?.()) return false;
     var application=child.Sys?.Application;
     return !application?.get_isInitialized || application.get_isInitialized();
   }
@@ -1175,7 +1179,8 @@
       frame = doc.createElement('iframe'); frame.title = 'Secure WebTrack checkout'; frame.className = 'bn-frame'; frame.name = 'woodson-buy-now-checkout'; frame.loading = 'eager';
       frame.setAttribute('aria-hidden','true'); frame.setAttribute('tabindex','-1');
       frame.addEventListener('load', function () { installFrame().catch(showError); });
-      frame.src = '/ShoppingCart.aspx?wlCheckout=single'; body.appendChild(frame);
+      // A fresh native document is required for current WebForms state/cart.
+      frame.src = '/ShoppingCart.aspx?wlCheckout=single&wlRun='+win.crypto.randomUUID(); body.appendChild(frame);
       // Images/chat widgets must not hold up native forms that are already ready.
       frameReadyTimer = win.setInterval(function () {
         var page;
