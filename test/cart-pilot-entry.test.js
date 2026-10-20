@@ -88,7 +88,7 @@ function loaderFixture({signedIn=true,pathname='/Products.aspx',storage={}}={}) 
 }
 test('the product loader no longer requires the former pilot user hint',()=>{
   assert.equal(loaderFixture().length,1);
-  assert.match(loaderFixture()[0].src,/compact-checkout-29/);
+  assert.match(loaderFixture()[0].src,/compact-checkout-30/);
 });
 test('anonymous shopping never loads Quick buy even with stale pilot storage',()=>{
   assert.equal(loaderFixture({signedIn:false,storage:{wl_user_id:'old-pilot'}}).length,0);
