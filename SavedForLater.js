@@ -1,6 +1,9 @@
 
 (function runSavedForLaterWhenReady() {
 function startSavedForLater() {
+try {
+  if (window.parent!==window && window.name==='woodson-buy-now-checkout' && window.parent.location.origin===window.location.origin && window.parent.document.querySelector('#wl-buy-now iframe.bn-frame')?.contentWindow===window) return;
+} catch (_) {}
 (function() {
 
   if (!/ShoppingCart\.aspx/i.test(location.pathname)) {

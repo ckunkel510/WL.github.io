@@ -30,3 +30,20 @@ test('ordinary native controls retain their normal click when no WebForms JavaSc
  const f=fixture();f.control.getAttribute=name=>name==='href'?'javascript:__doPostBack("checkout", "")':null;
  assert.equal(core.continueNativeCart(f.child,f.control),true);assert.equal(f.clicks(),1);assert.equal(f.calls.length,0);
 });
+test('native-frame presentation suppression requires the exact owned same-origin checkout frame',()=>{
+ const fs=require('node:fs'),vm=require('node:vm'),source=fs.readFileSync(require.resolve('../ShoppingCartRow.js'),'utf8');
+ for(const mode of ['owned','top','other-name','other-frame','other-origin']) {
+  const win={name:mode==='other-name'?'other':'woodson-buy-now-checkout',location:{origin:'https://webtrack.woodsonlumber.com'}};
+  win.parent=mode==='top'?win:{location:{origin:mode==='other-origin'?'https://example.test':win.location.origin},document:{querySelector:()=>({contentWindow:mode==='other-frame'?{}:win})}};
+  const context=vm.createContext({window:win});vm.runInContext(source.slice(source.indexOf('function wlCartIsOwnedCheckoutFrame('),source.indexOf('$(async function')),context);
+  assert.equal(context.wlCartIsOwnedCheckoutFrame(),mode==='owned');
+ }
+});
+test('native-frame cart still blocks clearance shortages and unverified inventory',()=>{
+ const fs=require('node:fs'),vm=require('node:vm'),source=fs.readFileSync(require.resolve('../ShoppingCartRow.js'),'utf8'),context=vm.createContext({});
+ vm.runInContext(source.slice(source.indexOf('function wlCartClearanceShortage('),source.indexOf('$(async function')),context);
+ const item={isClearance:true,inventoryVerified:true,maxQuantity:5};
+ assert.equal(context.wlCartClearanceShortage(item,5),false);assert.equal(context.wlCartClearanceShortage(item,6),true);
+ assert.equal(context.wlCartClearanceShortage({...item,inventoryVerified:false},1),true);assert.equal(context.wlCartClearanceShortage({...item,maxQuantity:0},1),true);
+ assert.equal(context.wlCartClearanceShortage({isClearance:false},10),false);assert.equal(context.wlCartClearanceShortage(null,10),false);
+});
