@@ -64,7 +64,7 @@ const driverSource=pilot.slice(pilot.indexOf('    async function driveFast('),pi
 async function quoteTimeout(replace) {
   const page={documentElement:{dataset:{bnFieldsApplied:'1'}},getElementById:id=>['btnDelivered','btnPickup'].includes(id)?{}:null};
   const initial={method:'delivery',started:Date.now(),driving:false}; let timeout;
-  const context=vm.createContext({fast:initial,frame:{contentDocument:page},busy:false,submitting:false,active:{phase:'checking_out',purchase:[]},setStage(){},quoteForCart:()=>null,fulfillmentOptions:()=>({}),updateFastOptions(){},status(){},detailsQuotes:new WeakMap(),refreshDetailsQuote:core.refreshDetailsQuote,
+  const context=vm.createContext({nativeFormsReady:core.nativeFormsReady,fast:initial,frame:{contentDocument:page},busy:false,submitting:false,active:{phase:'checking_out',purchase:[]},setStage(){},quoteForCart:()=>null,fulfillmentOptions:()=>({}),updateFastOptions(){},status(){},detailsQuotes:new WeakMap(),refreshDetailsQuote:core.refreshDetailsQuote,
     win:{setTimeout:fn=>{timeout=fn;return 1;},clearTimeout(){}}});
   vm.runInContext(driverSource,context);
   const promise=context.driveFast({WLCheckout:{refreshDateUI(){},validateBeforeFinalSubmit(){}},WLShippingOffer:{current:()=>null,refresh:()=>new Promise(()=>{})}},page);
