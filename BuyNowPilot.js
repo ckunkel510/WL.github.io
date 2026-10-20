@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261020-compact-checkout-33';
+  var BUILD = '20261020-compact-checkout-34';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -52,6 +52,9 @@
     var application=child.Sys?.Application;
     return !application?.get_isInitialized || application.get_isInitialized();
   }
+  function relayControl(name) {
+    return /^ctl00\$PageBody\$(?:PlaceOrderButton|ContinueButton[12]|YesButton|btnContinue_DeliveryAndPromotionCodesView|btnContinue_CardOnFileView)$/.test(name || '');
+  }
   function continueNativeCart(child, control) {
     if (!nativeFormsReady(child) || !control || control.disabled || control.getAttribute('aria-disabled')==='true') return false;
     var href=control.getAttribute('href') || '';
@@ -62,6 +65,7 @@
       var target=targetOf(href);
       if (target!=='ctl00$PageBody$PlaceOrderButton') throw new Error('The native checkout entry could not be verified.');
       child.WebForm_DoPostBackWithOptions(new child.WebForm_PostBackOptions(target,'',true,'','',false,true));
+      if (control.dataset) { control.dataset.bnNativeValidation=child.Page_IsValid===false?'invalid':'accepted'; control.dataset.bnNativeBlocked=String(!!child.Page_BlockSubmit); }
       if (child.Page_IsValid===false) throw new Error('WebTrack needs a cart quantity checked. Return to the cart and review your items.');
     } else control.click();
     return true;
@@ -509,6 +513,7 @@
       if (framePulse) win.clearInterval(framePulse); framePulse = null;
       if (frameReadyTimer) win.clearInterval(frameReadyTimer); frameReadyTimer = null; installedPage = null;
       if (frame) { frame.remove(); frame = null; }
+      overlay?.querySelectorAll('form[data-bn-native-relay]').forEach(function (form) { form.remove(); });
       overlay?.querySelector('.bn-panel')?.classList.remove('bn-secure-payment');
     }
     function dismiss() {
@@ -1179,6 +1184,7 @@
         paymentWorkspace(true); loading(false); status('Complete the secure payment step.'); return;
       }
       if (page === installedPage) return;
+      overlay?.querySelectorAll('form[data-bn-native-relay]').forEach(function (form) { form.remove(); });
       installedPage = page;
       if (frameObserver) frameObserver.disconnect();
       if (framePulse) win.clearInterval(framePulse);
@@ -1227,6 +1233,31 @@
       page.addEventListener('submit', function (event) {
         if (page.getElementById('ctl00_PageBody_CompleteCheckoutButton') && !submitting) { event.preventDefault(); status('Use Complete Order after reviewing the final total.'); }
       }, true);
+      var nativeForm=page.querySelector('form');
+      if (nativeForm) {
+        var originalSubmitMethod=nativeForm.submit;
+        var originalSubmit=function () { if (typeof originalSubmitMethod==='function') originalSubmitMethod.call(nativeForm); else child.HTMLFormElement.prototype.submit.call(nativeForm); };
+        function relay(submitter) {
+          // Relay only an already-validated intermediate native POST. Keep the
+          // final order and hosted payment forms on their original native path.
+          if (submitting || active?.phase!=='checking_out' || frame?.contentDocument!==page || page.getElementById('ctl00_PageBody_CompleteCheckoutButton')) return false;
+          var body=formBody(page), name=submitter?.name || body.data.get('__EVENTTARGET');
+          if (!relayControl(name)) return false;
+          if (page.documentElement.dataset.bnNativeRelay) return true;
+          var action=new URL(nativeForm.getAttribute('action') || child.location.href,child.location.href);
+          if (action.origin!==ORIGIN || !/^\/ShoppingCart\.aspx$/i.test(action.pathname)) throw new Error('The native checkout form destination could not be verified.');
+          if (submitter?.name) body.data.set(submitter.name,submitter.value || '');
+          var post=doc.createElement('form'); post.method='POST'; post.action=action.href; post.target=frame.name; post.hidden=true; post.dataset.bnNativeRelay='';
+          body.data.forEach(function (value,key) { var input=doc.createElement('input'); input.type='hidden'; input.name=key; input.value=value; post.appendChild(input); });
+          overlay.appendChild(post); page.documentElement.dataset.bnNativeRelay='1';
+          win.HTMLFormElement.prototype.submit.call(post);
+          return true;
+        }
+        nativeForm.submit=function () { if (!relay(null)) originalSubmit(); };
+        nativeForm.addEventListener('submit',function (event) {
+          if (!event.defaultPrevented && relay(event.submitter)) event.preventDefault();
+        });
+      }
       var scheduled = false;
       function inspect() {
         if (scheduled || !frame) return;
@@ -1734,5 +1765,5 @@
       if (latest && latest.owner !== owner) { busy = true; clearFrame(); status('Buy now is active in another tab. Cart changes have stopped here.', true); }
     });
   }
-  return { nativeFormsReady:nativeFormsReady, continueNativeCart:continueNativeCart, pickupStoreName:pickupStoreName, centralCalendar:centralCalendar, calendarAfter:calendarAfter, pickupTimeChoices:pickupTimeChoices, stockFromDocument:stockFromDocument, pickupReadiness:pickupReadiness, boot: boot, build: BUILD, audience: AUDIENCE, deliveryAddressSummary:deliveryAddressSummary, nativeStateOption:nativeStateOption, accountScopeInput:accountScopeInput, guestContext:guestContext, guestStartPending:guestStartPending, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, cartOrderReceipt: cartOrderReceipt, readCartOrderReceipt: readCartOrderReceipt, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, cartPolicyReady: cartPolicyReady, hasCustomCuts: hasCustomCuts, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
+  return { relayControl:relayControl, nativeFormsReady:nativeFormsReady, continueNativeCart:continueNativeCart, pickupStoreName:pickupStoreName, centralCalendar:centralCalendar, calendarAfter:calendarAfter, pickupTimeChoices:pickupTimeChoices, stockFromDocument:stockFromDocument, pickupReadiness:pickupReadiness, boot: boot, build: BUILD, audience: AUDIENCE, deliveryAddressSummary:deliveryAddressSummary, nativeStateOption:nativeStateOption, accountScopeInput:accountScopeInput, guestContext:guestContext, guestStartPending:guestStartPending, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, cartOrderReceipt: cartOrderReceipt, readCartOrderReceipt: readCartOrderReceipt, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, cartPolicyReady: cartPolicyReady, hasCustomCuts: hasCustomCuts, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
 });
