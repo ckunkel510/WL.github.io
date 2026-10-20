@@ -1,4 +1,10 @@
 
+function wlCartIsOwnedCheckoutFrame() {
+  try { return window.parent!==window && window.name==='woodson-buy-now-checkout' && window.parent.location.origin===window.location.origin && window.parent.document.querySelector('#wl-buy-now iframe.bn-frame')?.contentWindow===window; } catch (_) { return false; }
+}
+function wlCartClearanceShortage(item, quantity) {
+  return !!item && item.isClearance===true && (item.inventoryVerified===false || quantity>Math.max(0,Number(item.maxQuantity)||0));
+}
 $(async function(){
   var WL_EPALLET_PID = "23297";
   var WL_EPALLET_ADD_URL = "/ProductDetail.aspx?pid=" + WL_EPALLET_PID;
@@ -426,6 +432,18 @@ $(async function(){
     if (code) wlCartQtyByCode[code] = (wlCartQtyByCode[code] || 0) + qty;
   });
 
+  if (wlCartIsOwnedCheckoutFrame()) {
+    // The shopper sees the parent panel. Keep native Telerik fields connected
+    // and validate policy without rebuilding hidden quantity/subtotal controls.
+    (wlCartPolicy.items || []).forEach(function (item) {
+      var quantity=wlCartQtyById[wlEpalletText(item.productId)] || wlCartQtyByCode[wlEpalletText(item.productCode).replace(/\s+/g,'').toUpperCase()] || 0;
+      if (!wlCartClearanceShortage(item,quantity)) return;
+      var note=document.createElement('p'); note.className='wl-clearance-stock-note'; note.dataset.soldOut='1';
+      note.textContent='A clearance quantity is unavailable companywide. Return to the cart and reduce or remove it before checkout.'; document.body.appendChild(note);
+    });
+    var ready=document.createElement('style'); ready.id='wl-cart-qty-stepper-styles'; document.head.appendChild(ready);
+    return;
+  }
   if (!document.getElementById('wl-cart-qty-stepper-styles')) {
     $('<style id="wl-cart-qty-stepper-styles">\
       .qty-section{gap:8px;min-height:40px;}\
@@ -753,6 +771,7 @@ $(async function(){
 
 
 $(function(){
+  if (wlCartIsOwnedCheckoutFrame()) return;
   // 1) Grab and clone the original subtotal panel, then hide it
   var $origSub = $('.SubtotalWrapper');
   var $cloneSub = $origSub.clone();
@@ -786,6 +805,7 @@ $(function(){
 
 
 $(function(){
+  if (wlCartIsOwnedCheckoutFrame()) return;
   // Detach the “Empty Cart” button
   var $emptyBtn = $('#ctl00_PageBody_EmptyCartButton').detach();
 
@@ -795,6 +815,7 @@ $(function(){
 
 
 $(function(){
+  if (wlCartIsOwnedCheckoutFrame()) return;
   // Hide the top/bottom “Shop for More”, “Place Order”, and “Empty Cart” buttons
   $('#ctl00_PageBody_ShopForMoreButton, \
     #ctl00_PageBody_PlaceOrderButtonTop, \
@@ -806,6 +827,7 @@ $(function(){
 
 
 $(function(){
+  if (wlCartIsOwnedCheckoutFrame()) return;
   // 1) Detach the existing title span
   var $oldTitle = $('#ctl00_PageBody_ShoppingCartTitle_HeaderText').detach();
 

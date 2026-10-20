@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261020-compact-checkout-32';
+  var BUILD = '20261020-compact-checkout-33';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -47,6 +47,24 @@
   function targetOf(value) {
     var m = String(value || '').match(/(?:__doPostBack|WebForm_PostBackOptions)\(\s*['"]([^'"]+)['"]/i);
     return m ? m[1] : '';
+  }
+  function nativeFormsReady(child) {
+    var application=child.Sys?.Application;
+    return !application?.get_isInitialized || application.get_isInitialized();
+  }
+  function continueNativeCart(child, control) {
+    if (!nativeFormsReady(child) || !control || control.disabled || control.getAttribute('aria-disabled')==='true') return false;
+    var href=control.getAttribute('href') || '';
+    if (/WebForm_DoPostBackWithOptions/.test(href)) {
+      // Use the same validated native postback as the cart link. JavaScript URL
+      // activation in an offscreen iframe can otherwise leave the cart unchanged.
+      if (typeof child.WebForm_DoPostBackWithOptions!=='function' || typeof child.WebForm_PostBackOptions!=='function') return false;
+      var target=targetOf(href);
+      if (target!=='ctl00$PageBody$PlaceOrderButton') throw new Error('The native checkout entry could not be verified.');
+      child.WebForm_DoPostBackWithOptions(new child.WebForm_PostBackOptions(target,'',true,'','',false,true));
+      if (child.Page_IsValid===false) throw new Error('WebTrack needs a cart quantity checked. Return to the cart and review your items.');
+    } else control.click();
+    return true;
   }
   function readableCart(page, rowCount) {
     return rowCount > 0 || !!page.querySelector('#ctl00_PageBody_ShoppingCartDetailPanel,.ShoppingCartDetailPanel,#ctl00_PageBody_EmptyCartPanel,#ctl00_PageBody_EmptyCartDetailPanel') || /cart\s+is\s+(?:currently\s+)?empty|no\s+items\s+in\s+(?:your\s+)?(?:shopping\s+)?cart/i.test(page.body.textContent);
@@ -1348,6 +1366,8 @@
       fast.driving = true;
       var current = fast;
       try {
+        var initialized=nativeFormsReady(child); page.documentElement.dataset.bnNativeInitialized=initialized?'1':'0';
+        if (!initialized) { status('Loading secure checkout controls…'); return; }
         var complete = page.getElementById('ctl00_PageBody_CompleteCheckoutButton');
         if (complete) {
           setStage(3);
@@ -1371,12 +1391,10 @@
         }
         var checkout = page.getElementById('ctl00_PageBody_PlaceOrderButton');
         if (checkout && page.querySelector('.shopping-cart-item')) {
-          if (active.cartCheckout) {
-            if (!cartPolicyReady(page)) { status('Checking item availability…'); return; }
-            var block=page.querySelector('.wl-cart-shipping-block,.wl-clearance-stock-note[data-sold-out="1"]');
-            if (block && text(block.textContent)) { haltFast(text(block.textContent)); return; }
-          }
-          if (!page.documentElement.dataset.bnCheckoutOpened) { page.documentElement.dataset.bnCheckoutOpened = '1'; status('Loading your defaults…'); checkout.click(); }
+          if (!cartPolicyReady(page)) { status('Checking item availability…'); return; }
+          var block=page.querySelector('.wl-cart-shipping-block,.wl-clearance-stock-note[data-sold-out="1"]');
+          if (block && text(block.textContent)) { haltFast(text(block.textContent)); return; }
+          if (!page.documentElement.dataset.bnCheckoutOpened && continueNativeCart(child,checkout)) { page.documentElement.dataset.bnCheckoutOpened = '1'; status('Loading your defaults…'); }
           return;
         }
         var methodButton = page.getElementById('btnDelivered'), pickupButton = page.getElementById('btnPickup');
@@ -1716,5 +1734,5 @@
       if (latest && latest.owner !== owner) { busy = true; clearFrame(); status('Buy now is active in another tab. Cart changes have stopped here.', true); }
     });
   }
-  return { pickupStoreName:pickupStoreName, centralCalendar:centralCalendar, calendarAfter:calendarAfter, pickupTimeChoices:pickupTimeChoices, stockFromDocument:stockFromDocument, pickupReadiness:pickupReadiness, boot: boot, build: BUILD, audience: AUDIENCE, deliveryAddressSummary:deliveryAddressSummary, nativeStateOption:nativeStateOption, accountScopeInput:accountScopeInput, guestContext:guestContext, guestStartPending:guestStartPending, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, cartOrderReceipt: cartOrderReceipt, readCartOrderReceipt: readCartOrderReceipt, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, cartPolicyReady: cartPolicyReady, hasCustomCuts: hasCustomCuts, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
+  return { nativeFormsReady:nativeFormsReady, continueNativeCart:continueNativeCart, pickupStoreName:pickupStoreName, centralCalendar:centralCalendar, calendarAfter:calendarAfter, pickupTimeChoices:pickupTimeChoices, stockFromDocument:stockFromDocument, pickupReadiness:pickupReadiness, boot: boot, build: BUILD, audience: AUDIENCE, deliveryAddressSummary:deliveryAddressSummary, nativeStateOption:nativeStateOption, accountScopeInput:accountScopeInput, guestContext:guestContext, guestStartPending:guestStartPending, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, cartOrderReceipt: cartOrderReceipt, readCartOrderReceipt: readCartOrderReceipt, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, cartPolicyReady: cartPolicyReady, hasCustomCuts: hasCustomCuts, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
 });
