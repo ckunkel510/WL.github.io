@@ -60,6 +60,14 @@ $(async function(){
     return String(value == null ? "" : value).replace(/\s+/g, " ").trim();
   }
 
+  function wlCartLineUnit(row) {
+    var explicit = row.querySelector('[data-title="Per"],[data-title="UOM"],.productPer,.unit-of-measure');
+    if (explicit) return wlEpalletText(explicit.textContent);
+    var input = row.querySelector('input.riTextBox,input[id*="_qty_"]:not([type="hidden"])');
+    var wrap = input && input.closest('.float-right');
+    return wrap ? wlEpalletText(Array.from(wrap.childNodes).filter(function (node) { return node.nodeType === 3; }).map(function (node) { return node.textContent; }).join(' ')) : '';
+  }
+
   function wlEpalletNumber(value) {
     var num = Number(String(value == null ? "" : value).replace(/,/g, ""));
     return Number.isFinite(num) ? num : 0;
@@ -473,6 +481,11 @@ $(async function(){
     // product. Skip those so we do not create ghost cards like "ea / Delete".
     if (!code || !href || !$origQtyWrap.length) return;
 
+    // Preserve WebTrack's unit before replacing the original quantity layout.
+    // Checkout compares this with a fresh native cart; bags and boards are not ea.
+    var lineUnit = wlCartLineUnit(this);
+    $item.attr('data-wl-cart-unit', lineUnit);
+
     // 1) Remove legacy update rows & validators
     $item.find('[style*="display: table-row"]').remove();
     $item.find('span[id$="_QuantityValidator"]').remove();
@@ -580,7 +593,7 @@ $(async function(){
       $qtySection.append(
         '<span class="wl-qty-label">Qty</span>',
         '<span class="wl-qty-locked">' + lockedQty + '</span>',
-        '<span class="wl-qty-unit">ea</span>',
+        $('<span>', { 'class': 'wl-qty-unit', text: lineUnit }),
         '<span class="wl-epallet-lock-note">Auto-managed</span>'
       );
     } else if ($input.length) {
@@ -687,7 +700,7 @@ $(async function(){
       $increase.on('click', function(){ changeQty(1); });
       $select.on('change', function(){ applyQty($(this).val()); });
       $stepper.append($decrease, $select, $increase);
-      $qtySection.append('<span class="wl-qty-label">Qty</span>', $stepper, '<span class="wl-qty-unit">ea</span>');
+      $qtySection.append('<span class="wl-qty-label">Qty</span>', $stepper, $('<span>', { 'class': 'wl-qty-unit', text: lineUnit }));
       if (companyClearanceQty !== null) {
         var inventoryVerified = clearancePolicy.inventoryVerified !== false;
         var soldOut = companyClearanceQty < 1 || !inventoryVerified;
