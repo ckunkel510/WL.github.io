@@ -47,3 +47,12 @@ test('native-frame cart still blocks clearance shortages and unverified inventor
  assert.equal(context.wlCartClearanceShortage({...item,inventoryVerified:false},1),true);assert.equal(context.wlCartClearanceShortage({...item,maxQuantity:0},1),true);
  assert.equal(context.wlCartClearanceShortage({isClearance:false},10),false);assert.equal(context.wlCartClearanceShortage(null,10),false);
 });
+test('cart and Quick buy both wait for cart policy and block a shortage before native entry',async()=>{
+ const fs=require('node:fs'),vm=require('node:vm'),source=fs.readFileSync(require.resolve('../BuyNowPilot'),'utf8');
+ const driver=source.slice(source.indexOf('    async function driveFast('),source.indexOf('    async function submitNative('));
+ for(const cartCheckout of [true,false])for(const ready of [false,true]) {
+  let entries=0,halt='';const page={documentElement:{dataset:{}},getElementById:id=>id==='ctl00_PageBody_PlaceOrderButton'?{}:null,querySelector:selector=>selector==='.shopping-cart-item'?{}:{textContent:'Clearance quantity unavailable'}};
+  const context=vm.createContext({fast:{started:Date.now()},busy:false,submitting:false,active:{phase:'checking_out',cartCheckout},nativeFormsReady:()=>true,cartPolicyReady:()=>ready,status(){},haltFast:message=>{halt=message;},text:String,continueNativeCart(){entries++;}});
+  vm.runInContext(driver,context);await context.driveFast({},page);assert.equal(entries,0);assert.equal(halt,ready?'Clearance quantity unavailable':'');
+ }
+});

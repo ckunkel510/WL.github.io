@@ -1391,11 +1391,9 @@
         }
         var checkout = page.getElementById('ctl00_PageBody_PlaceOrderButton');
         if (checkout && page.querySelector('.shopping-cart-item')) {
-          if (active.cartCheckout) {
-            if (!cartPolicyReady(page)) { status('Checking item availability…'); return; }
-            var block=page.querySelector('.wl-cart-shipping-block,.wl-clearance-stock-note[data-sold-out="1"]');
-            if (block && text(block.textContent)) { haltFast(text(block.textContent)); return; }
-          }
+          if (!cartPolicyReady(page)) { status('Checking item availability…'); return; }
+          var block=page.querySelector('.wl-cart-shipping-block,.wl-clearance-stock-note[data-sold-out="1"]');
+          if (block && text(block.textContent)) { haltFast(text(block.textContent)); return; }
           if (!page.documentElement.dataset.bnCheckoutOpened && continueNativeCart(child,checkout)) { page.documentElement.dataset.bnCheckoutOpened = '1'; status('Loading your defaults…'); }
           return;
         }
