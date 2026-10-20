@@ -88,7 +88,7 @@ function loaderFixture({signedIn=true,pathname='/Products.aspx',storage={}}={}) 
 }
 test('the product loader no longer requires the former pilot user hint',()=>{
   assert.equal(loaderFixture().length,1);
-  assert.match(loaderFixture()[0].src,/compact-checkout-30/);
+  assert.equal(loaderFixture()[0].src,'https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v='+core.build);
 });
 test('anonymous shopping never loads Quick buy even with stale pilot storage',()=>{
   assert.equal(loaderFixture({signedIn:false,storage:{wl_user_id:'old-pilot'}}).length,0);
