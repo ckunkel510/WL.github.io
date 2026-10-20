@@ -65,12 +65,12 @@ test('guest, signed-in and edited delivery/shipping summaries show the selected 
   const address={line1:'702 W Buck St',city:'Caldwell',stateValue:'TX',zip:'77836'};
   for(const guest of [true,false])for(const method of ['delivery','ship'])for(const changed of [false,true]) {
     const rendered={},selected={...address,line1:changed?'100 Test St':address.line1};
-    const context=require('node:vm').createContext({guest,submitting:false,deliveryAddressSummary:core.deliveryAddressSummary,fast:{methods:{},method,address:selected,addressChanged:changed,ready:true},fastText:(selector,value)=>{rendered[selector]=value;}});
+    const context=require('node:vm').createContext({overlay:null,guest,submitting:false,deliveryAddressSummary:core.deliveryAddressSummary,fast:{methods:{},method,address:selected,addressChanged:changed,ready:true},fastText:(selector,value)=>{rendered[selector]=value;}});
     require('node:vm').runInContext(updateSource,context);context.updateFastOptions();
     assert.equal(rendered['[data-bn-address-title]'],'Deliver to');
     assert.equal(rendered['[data-bn-address]'],(changed?'100 Test St':'702 W Buck St')+', Caldwell, TX 77836');
   }
-  const rendered={},context=require('node:vm').createContext({guest:true,submitting:false,deliveryAddressSummary:core.deliveryAddressSummary,fast:{methods:{},method:'pickup',address,store:'C',stores:[{value:'C',label:'Caldwell - Store address'}],ready:true},fastText:(selector,value)=>{rendered[selector]=value;}});
+  const rendered={},context=require('node:vm').createContext({overlay:null,guest:true,submitting:false,deliveryAddressSummary:core.deliveryAddressSummary,fast:{methods:{},method:'pickup',address,store:'C',stores:[{value:'C',label:'Caldwell - Store address'}],ready:true},fastText:(selector,value)=>{rendered[selector]=value;}});
   require('node:vm').runInContext(updateSource,context);context.updateFastOptions();
   assert.equal(rendered['[data-bn-address-title]'],'Pickup at');assert.equal(rendered['[data-bn-address]'],'Caldwell');
 });

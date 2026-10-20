@@ -237,7 +237,7 @@
     }
     // UI and account-scoped state require fresh native sign-in/account checks.
     var script = document.createElement('script');
-    script.src = 'https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261016-compact-checkout-29';
+    script.src = 'https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261020-compact-checkout-30';
     script.async = true;
     script.setAttribute('data-wl-buy-now-pilot', 'true');
     deferCartCheckoutUntilPilotReady(script);
