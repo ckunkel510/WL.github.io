@@ -28,3 +28,10 @@ test('loading timeout does not abandon an open editor or secure payment, while a
   vm.runInContext(driver,context);await context.driveFast({},page);assert.equal(halted,mode==='stalled');
  }
 });
+
+test('a native navigation with a temporarily detached document does not stop the active checkout',async()=>{
+ const driver=source.slice(source.indexOf('    async function driveFast('),source.indexOf('    async function submitNative('));
+ const fast={started:Date.now(),driving:false};
+ const context=vm.createContext({fast,busy:false,submitting:false,active:{phase:'checking_out'}});
+ vm.runInContext(driver,context);await context.driveFast({}, {documentElement:null});assert.equal(fast.driving,false);assert.equal(fast.stopped,undefined);
+});

@@ -6,7 +6,7 @@
   else core.boot(root).catch(function () { /* Keep the existing cart if unavailable. */ });
 })(typeof window==='object' ? window : null,function () {
   'use strict';
-  var BUILD='20261016-ink-cart-7';
+  var BUILD='20261020-ink-cart-8';
   var ORIGIN='https://webtrack.woodsonlumber.com';
   var ASSETS='https://ckunkel510.github.io/WL.github.io/';
   var REVEAL=164;
@@ -132,6 +132,7 @@
         if (node.querySelector('#ctl00_PageBody_PlaceOrderButtonTop,#ctl00_PageBody_ShopForMoreButton')) node.classList.add('cs-native-chrome');
       });
       doc.getElementById('savedForLater')?.classList.add('cs-saved');
+      shell.classList.toggle('cs-empty-cart',!panel?.querySelector('.shopping-cart-item'));
       var emptyTarget=lines || (!panel ? shell : null);
       if (emptyTarget && !emptyTarget.querySelector('.shopping-cart-item') && /your cart is currently empty/i.test(emptyTarget.textContent) && !emptyTarget.querySelector('.cs-empty')) {
         Array.from(emptyTarget.childNodes).forEach(function (node) {

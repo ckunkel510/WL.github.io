@@ -208,7 +208,7 @@
     if (window.top !== window || window.location.origin !== WEBTRACK || !/^\/ShoppingCart\.aspx$/i.test(window.location.pathname)) return;
     if (window.WLCartStudio || document.querySelector('script[data-wl-cart-studio]')) return;
     var script = document.createElement('script');
-    script.src = 'https://ckunkel510.github.io/WL.github.io/CartDesignPilot.js?v=20261016-ink-cart-7';
+    script.src = 'https://ckunkel510.github.io/WL.github.io/CartDesignPilot.js?v=20261020-ink-cart-8';
     script.async = true;
     script.setAttribute('data-wl-cart-studio', 'true');
     document.head.appendChild(script);
@@ -237,7 +237,7 @@
     }
     // UI and account-scoped state require fresh native sign-in/account checks.
     var script = document.createElement('script');
-    script.src = 'https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261020-compact-checkout-35';
+    script.src = 'https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261020-compact-checkout-36';
     script.async = true;
     script.setAttribute('data-wl-buy-now-pilot', 'true');
     deferCartCheckoutUntilPilotReady(script);

@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261020-compact-checkout-35';
+  var BUILD = '20261020-compact-checkout-36';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -513,7 +513,6 @@
       if (framePulse) win.clearInterval(framePulse); framePulse = null;
       if (frameReadyTimer) win.clearInterval(frameReadyTimer); frameReadyTimer = null; installedPage = null;
       if (frame) { frame.remove(); frame = null; }
-      overlay?.querySelectorAll('form[data-bn-native-relay]').forEach(function (form) { form.remove(); });
       overlay?.querySelector('.bn-panel')?.classList.remove('bn-secure-payment');
     }
     function dismiss() {
@@ -1192,8 +1191,7 @@
       if (!page) {
         paymentWorkspace(true); loading(false); status('Complete the secure payment step.'); return;
       }
-      if (page === installedPage) return;
-      overlay?.querySelectorAll('form[data-bn-native-relay]').forEach(function (form) { form.remove(); });
+      if (!page.documentElement || !page.body || page.readyState==='loading' || page === installedPage) return;
       installedPage = page;
       if (frameObserver) frameObserver.disconnect();
       if (framePulse) win.clearInterval(framePulse);
@@ -1246,26 +1244,33 @@
       if (nativeForm) {
         var originalSubmitMethod=nativeForm.submit;
         var originalSubmit=function () { if (typeof originalSubmitMethod==='function') originalSubmitMethod.call(nativeForm); else child.HTMLFormElement.prototype.submit.call(nativeForm); };
-        function relay(submitter) {
-          // Relay only an already-validated intermediate native POST. Keep the
+        function relay() {
+          // Handle only an already-validated intermediate native POST. Keep the
           // final order and hosted payment forms on their original native path.
           if (submitting || active?.phase!=='checking_out' || frame?.contentDocument!==page || page.getElementById('ctl00_PageBody_CompleteCheckoutButton')) return false;
-          var body=formBody(page), name=submitter?.name || body.data.get('__EVENTTARGET');
+          var name=nativeForm.elements.namedItem('__EVENTTARGET')?.value;
           if (!relayControl(name)) return false;
           if (page.documentElement.dataset.bnNativeRelay) return true;
           var action=new URL(nativeForm.getAttribute('action') || child.location.href,child.location.href);
           if (action.origin!==ORIGIN || !/^\/ShoppingCart\.aspx$/i.test(action.pathname)) throw new Error('The native checkout form destination could not be verified.');
-          if (submitter?.name) body.data.set(submitter.name,submitter.value || '');
-          var post=doc.createElement('form'); post.method='POST'; post.action=action.href; post.target=frame.name; post.hidden=true; post.dataset.bnNativeRelay='';
-          body.data.forEach(function (value,key) { var input=doc.createElement('input'); input.type='hidden'; input.name=key; input.value=value; post.appendChild(input); });
-          overlay.appendChild(post); page.documentElement.dataset.bnNativeRelay='1';
-          win.HTMLFormElement.prototype.submit.call(post);
+          // Native validation has already run. Submit the original form in its
+          // own browsing context: copying it to a targeted parent form can leave
+          // WebTrack's frame on the cart without starting the next document.
+          // The next task also lets WebForms finish its event/state updates.
+          if (nativeForm.target && nativeForm.target!=='_self') throw new Error('The native checkout form target could not be verified.');
+          page.documentElement.dataset.bnNativeRelay='1';
+          win.setTimeout(function () {
+            if (submitting || active?.phase!=='checking_out' || frame?.contentDocument!==page || page.getElementById('ctl00_PageBody_CompleteCheckoutButton')) return;
+            var root=page.documentElement; if (!root) return;
+            try { root.dataset.bnNativePost='started'; child.HTMLFormElement.prototype.submit.call(nativeForm); root.dataset.bnNativePost='returned'; }
+            catch (error) { delete root.dataset.bnNativeRelay; showError(error); }
+          },0);
           return true;
         }
         nativeForm.submit=function () { if (!relay(null)) originalSubmit(); };
-        nativeForm.addEventListener('submit',function (event) {
-          if (!event.defaultPrevented && relay(event.submitter)) event.preventDefault();
-        });
+        // Ordinary submit buttons retain WebTrack's own submit event, validation,
+        // submitter value and AJAX behavior. Only the programmatic WebForms
+        // form.submit path above needs the deferred native submission.
       }
       var scheduled = false;
       function inspect() {
@@ -1278,7 +1283,7 @@
       inspect();
     }
     async function inspectFrame(child, page) {
-      if (!frame || frame.contentDocument !== page || !active || active.phase === 'restored') return;
+      if (!frame || frame.contentDocument !== page || !page.documentElement || !active || active.phase === 'restored') return;
       var confirmation = page.getElementById('CartResponseMessage'), merchant = page.getElementById('ctl00_PageBody_SuccessfulPaymentResults_MerchantDetailsPanel');
       if (new URL(child.location.href).searchParams.get('success') === '1' && confirmation && merchant) {
         var order = text(confirmation.querySelector('strong')?.textContent).replace(/^(?:reserved\s+)?order(?:\s+(?:number|no\.?))?\s*[:#-]?\s*/i, '');
@@ -1401,7 +1406,7 @@
       }
     }
     async function driveFast(child,page) {
-      if (!fast || fast.driving || fast.stopped || busy || submitting || active.phase !== 'checking_out') return;
+      if (!fast || fast.driving || fast.stopped || busy || submitting || !page.documentElement || active.phase !== 'checking_out') return;
       if (fast.editor || fast.securePayment) fast.started=Date.now();
       if (Date.now()-fast.started > 120000) { haltFast('This is taking longer than expected. Retry or cancel.'); return; }
       fast.driving = true;

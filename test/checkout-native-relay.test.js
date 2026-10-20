@@ -1,33 +1,33 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const core=require('../BuyNowPilot'),source=fs.readFileSync(require.resolve('../BuyNowPilot'),'utf8');
-const start=source.indexOf('        function relay(submitter)'),end=source.indexOf('        nativeForm.submit=',start);
-function fixture({target='ctl00$PageBody$PlaceOrderButton',action='./ShoppingCart.aspx?wlCheckout=single',final=false,submitting=false,phase='checking_out'}={}) {
- const posts=[],forms=[],data=new URLSearchParams([['__EVENTTARGET',target],['__VIEWSTATE','native-state'],['nativeQuantity','2']]);
- const page={documentElement:{dataset:{}},getElementById:()=>final?{}:null};
- const context=vm.createContext({submitting,active:{phase},frame:{contentDocument:page,name:'woodson-buy-now-checkout'},page,
-  formBody:()=>({data:new URLSearchParams(data)}),nativeForm:{getAttribute:()=>action},child:{location:{href:'https://webtrack.woodsonlumber.com/ShoppingCart.aspx?wlCheckout=single'}},
+const start=source.indexOf('        function relay()'),end=source.indexOf('        nativeForm.submit=',start);
+function fixture({target='ctl00$PageBody$PlaceOrderButton',action='./ShoppingCart.aspx?wlCheckout=single',formTarget='',final=false,submitting=false,phase='checking_out'}={}) {
+ const posts=[],tasks=[],data=new URLSearchParams([['__EVENTTARGET',target],['__VIEWSTATE','native-state']]);
+ const nativeForm={target:formTarget,elements:{namedItem:()=>({value:target})},children:[],getAttribute:()=>action,appendChild(child){this.children.push(child);}};
+ const page={documentElement:{dataset:{}},getElementById:()=>final?{}:null,createElement:tag=>({tag})};
+ const context=vm.createContext({submitting,active:{phase},frame:{contentDocument:page},page,nativeForm,
+  formBody:()=>({data:new URLSearchParams(data)}),child:{location:{href:'https://webtrack.woodsonlumber.com/ShoppingCart.aspx?wlCheckout=single'},HTMLFormElement:{prototype:{submit(){posts.push(this);}}}},
   ORIGIN:'https://webtrack.woodsonlumber.com',URL,relayControl:core.relayControl,
-  doc:{createElement:tag=>({tag,children:[],dataset:{},appendChild(child){this.children.push(child);}})},overlay:{appendChild:form=>forms.push(form)},
-  win:{HTMLFormElement:{prototype:{submit(){posts.push(this);}}}}});
- vm.runInContext(source.slice(start,end),context);return {context,posts,forms,page};
+  win:{setTimeout(fn){tasks.push(fn);}},showError(error){throw error;}});
+ vm.runInContext(source.slice(start,end),context);return {context,posts,tasks,page,nativeForm,flush(){while(tasks.length)tasks.shift()();}};
 }
-test('intermediate native POST retains WebForms state and targets only its owned iframe once',()=>{
- const f=fixture();assert.equal(f.context.relay(null),true);assert.equal(f.posts.length,1);
- const post=f.posts[0];assert.equal(post.method,'POST');assert.equal(post.action,'https://webtrack.woodsonlumber.com/ShoppingCart.aspx?wlCheckout=single');assert.equal(post.target,'woodson-buy-now-checkout');
- assert.deepEqual(Object.fromEntries(post.children.map(x=>[x.name,x.value])),{__EVENTTARGET:'ctl00$PageBody$PlaceOrderButton',__VIEWSTATE:'native-state',nativeQuantity:'2'});
- assert.equal(f.context.relay(null),true);assert.equal(f.posts.length,1);
+test('validated intermediate navigation submits the original native form once in its own frame after WebForms completes',()=>{
+ const f=fixture();assert.equal(f.context.relay(null),true);assert.equal(f.posts.length,0);assert.equal(f.tasks.length,1);
+ assert.equal(f.context.relay(null),true);assert.equal(f.tasks.length,1);f.flush();assert.deepEqual(f.posts,[f.nativeForm]);
 });
-test('native submit-button payload is included and final/unsupported actions cannot be relayed',()=>{
- const f=fixture({target:''});assert.equal(f.context.relay({name:'ctl00$PageBody$btnContinue_CardOnFileView',value:'Continue'}),true);
- assert.equal(f.posts[0].children.find(x=>x.name==='ctl00$PageBody$btnContinue_CardOnFileView').value,'Continue');
- for(const options of [{final:true},{submitting:true},{phase:'submitting'},{target:'ctl00$PageBody$CompleteCheckoutButton'},{target:'unexpected'}]) {
-  const blocked=fixture(options);assert.equal(blocked.context.relay(null),false);assert.equal(blocked.posts.length,0);
+test('final and unsupported actions stay on their native path, and ordinary submit events are not canceled',()=>{
+ for(const options of [{final:true},{submitting:true},{phase:'submitting'},{target:'ctl00$PageBody$CompleteCheckoutButton'},{target:'unexpected'},{target:''}]) {
+  const blocked=fixture(options);assert.equal(blocked.context.relay(),false);blocked.flush();assert.equal(blocked.posts.length,0);
  }
+ assert.doesNotMatch(source.slice(start,source.indexOf('      var scheduled = false;',start)),/nativeForm\.addEventListener\('submit'/);
 });
-test('native relay rejects other destinations and stale frames without transmitting form contents',()=>{
- for(const action of ['https://example.test/ShoppingCart.aspx','/AccountInfo_R.aspx']) {
-  const f=fixture({action});assert.throws(()=>f.context.relay(null),/destination could not be verified/);assert.equal(f.forms.length,0);assert.equal(f.posts.length,0);
+test('foreign destinations, targets, stale frames and cancellation before the deferred task cannot submit',()=>{
+ for(const options of [{action:'https://example.test/ShoppingCart.aspx'},{action:'/AccountInfo_R.aspx'},{formTarget:'_top'}]) {
+  const f=fixture(options);assert.throws(()=>f.context.relay(null),/could not be verified/);f.flush();assert.equal(f.posts.length,0);
  }
- const stale=fixture();stale.context.frame.contentDocument={};assert.equal(stale.context.relay(null),false);assert.equal(stale.posts.length,0);
+ const stale=fixture();stale.context.frame.contentDocument={};assert.equal(stale.context.relay(null),false);stale.flush();assert.equal(stale.posts.length,0);
+ for(const invalidate of [f=>{f.context.frame=null;},f=>{f.context.active.phase='restoring';},f=>{f.context.submitting=true;}]) {
+  const f=fixture();f.context.relay(null);invalidate(f);f.flush();assert.equal(f.posts.length,0);
+ }
 });
