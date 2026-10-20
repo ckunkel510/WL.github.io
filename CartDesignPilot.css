@@ -119,3 +119,6 @@ html:not(.wl-cart-studio) .cs-only{display:none!important}
 @media(max-width:740px){.wl-cart-studio:has(.cs-mobile-dock:not([hidden]):not([data-main-visible=true])) iframe[title="Chat widget"]:is([height="60px"],[height="85px"]){translate:0 calc(-100px - env(safe-area-inset-bottom))!important}}
 @media(max-width:360px){.wl-cart-studio .cs-shell{padding-left:12px!important;padding-right:12px!important}.wl-cart-studio .cart-item-card .card-body{padding:15px!important}.wl-cart-studio .sflRow{grid-template-columns:52px minmax(0,1fr)!important}.wl-cart-studio .sflActions{grid-column:1/-1;grid-row:4}.wl-cart-studio .sflBtn{max-width:none}}
 @media(prefers-reduced-motion:reduce){.wl-cart-studio .cart-item-card,.wl-cart-studio #ctl00_PageBody_PlaceOrderButton,.wl-cart-studio .cs-checkout{transition:none!important}}
+
+/* Saved items remain part of the empty cart, with the same responsive width. */
+.wl-cart-studio .cs-empty-cart>.cs-saved{grid-column:1/-1;grid-row:auto}

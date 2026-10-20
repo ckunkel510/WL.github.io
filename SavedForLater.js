@@ -12,9 +12,9 @@ try {
   }
 
   function hasCartDetailView(root = document) {
-    return !!root.querySelector(
-      "#ctl00_PageBody_ShoppingCartDetailPanel, .ShoppingCartDetailPanel, .shopping-cart-details"
-    );
+    if (root.querySelector('#ctl00_PageBody_CheckoutTitle_HeaderText,#ctl00_PageBody_CompleteCheckoutButton,#ctl00_PageBody_SuccessfulPaymentResults_MerchantDetailsPanel,#btnPickup')) return false;
+    if (root.querySelector('#ctl00_PageBody_ShoppingCartDetailPanel,.ShoppingCartDetailPanel,.shopping-cart-details,#ctl00_PageBody_EmptyCartPanel,#ctl00_PageBody_EmptyCartDetailPanel')) return true;
+    return /your cart is (?:currently )?empty/i.test(root.querySelector('.mainContents')?.textContent || '');
   }
 
   if (!hasCartDetailView()) {
@@ -119,11 +119,12 @@ try {
   const insertAnchor =
     document.querySelector("#ctl00_PageBody_ShoppingCartDetailPanel") ||
     document.querySelector(".ShoppingCartDetailPanel") ||
-    document.querySelector(".shopping-cart-details") ||
-    document.querySelector(".mainContents");
+    document.querySelector(".shopping-cart-details");
 if (insertAnchor && insertAnchor.parentNode) {
   insertAnchor.parentNode.insertBefore(container, insertAnchor.nextSibling);
   console.log("[SFL] Injected after cart content anchor");
+} else if (document.querySelector(".mainContents")) {
+  document.querySelector(".mainContents").appendChild(container);
 } else {
   console.warn("[SFL] .mainContents not found, appending to body");
   document.body.appendChild(container);

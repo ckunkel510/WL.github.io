@@ -116,7 +116,7 @@ test('bridge keeps the accepted payment category through submit and confirmation
 test('late native confirmation records measurement without relaxing uncertain-order recovery',async()=>{
  const pilot=fs.readFileSync(require.resolve('../BuyNowPilot.js'),'utf8'),inspect=pilot.slice(pilot.indexOf('    async function inspectFrame('),pilot.indexOf('    function setNative('));
  for(const phase of ['checking_out','uncertain']){
-  const native=page(),calls=[],context=vm.createContext({frame:{contentDocument:native},active:{phase},URL,text:v=>v,busy:false,measureCheckout:(...args)=>calls.push(args)});
+  const native=Object.assign(page(),{documentElement:{dataset:{}}}),calls=[],context=vm.createContext({frame:{contentDocument:native},active:{phase},URL,text:v=>v,busy:false,measureCheckout:(...args)=>calls.push(args)});
   vm.runInContext(inspect,context);await assert.rejects(context.inspectFrame({location:{href:'https://example.test/ShoppingCart.aspx?success=1'}},native),/confirmation needs review/);
   assert.equal(calls.length,phase==='uncertain'?1:0);assert.equal(context.active.phase,phase);
  }

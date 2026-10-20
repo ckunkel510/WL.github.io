@@ -47,7 +47,14 @@ test("saved for later does not create account-only quicklists for guest carts", 
   });
 
   assert.equal(hasCartDetailView({ querySelector: () => null }), false);
-  assert.equal(hasCartDetailView({ querySelector: () => ({}) }), true);
+  const cartRoot = (state) => ({ querySelector: (selector) => {
+    if (selector.includes('CheckoutTitle')) return state === 'checkout' || state === 'receipt' ? {} : null;
+    if (selector.includes('ShoppingCartDetailPanel')) return state === 'cart' || state === 'emptyPanel' ? {} : null;
+    if (selector === '.mainContents') return { textContent: state === 'empty' ? 'Your cart is currently empty.' : '' };
+    return null;
+  } });
+  for (const state of ['cart', 'emptyPanel', 'empty']) assert.equal(hasCartDetailView(cartRoot(state)), true);
+  for (const state of ['checkout', 'receipt', 'other']) assert.equal(hasCartDetailView(cartRoot(state)), false);
   assert.equal(hasSignedInAccount(root("SignIn.aspx")), false);
   assert.equal(hasSignedInAccount(root("SignIn.aspx?SignOut=1")), true);
   assert.match(savedForLater, /Skipping Saved For Later outside the cart detail view/);
