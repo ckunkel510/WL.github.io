@@ -1165,7 +1165,7 @@
       if (frameObserver) frameObserver.disconnect();
       if (framePulse) win.clearInterval(framePulse);
       var style = page.createElement('style');
-      style.textContent = '#PageHeaderDiv,#PageFooterDiv,#siteHeaderContent,#savedForLater{display:none!important}body{padding:0!important}#MainLayoutRow{margin:8px auto!important}';
+      style.textContent = '#PageHeaderDiv,#PageFooterDiv,#siteHeaderContent,#savedForLater,nav[aria-label="Account and cart"]{display:none!important}body{padding:0!important}#MainLayoutRow{margin:8px auto!important}';
       page.head.appendChild(style);
       page.querySelectorAll('.shopping-cart-item input.riTextBox,.shopping-cart-item input[id*="_qty_"]:not([type="hidden"])').forEach(function (input) { input.readOnly = true; });
       // Native date-change compares midnight against a time-bearing minimum,
