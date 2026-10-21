@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261020-compact-checkout-37';
+  var BUILD = '20261021-total-before-payment-38';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -346,6 +346,15 @@
     });
     if (['subtotal','tax','total'].some(function (key) { return money(result[key]) === null; })) throw new Error('The final total is still loading.');
     return result;
+  }
+  function paymentTotals(page, method, expectedShipping) {
+    // Read native tax and totals; never estimate tax or use a cart-page subtotal.
+    var totals = reviewTotals(page);
+    if (!totals.shipping && method === 'pickup') totals.shipping = '$0.00';
+    var shipping = money(totals.shipping);
+    if (shipping === null || shipping !== expectedShipping) throw new Error('The delivery total is still being confirmed.');
+    if (Math.abs(money(totals.subtotal) + shipping + money(totals.tax) - money(totals.total)) > 1) throw new Error('The order total is still being confirmed.');
+    return totals;
   }
   function marker(record) { return record.cartCheckout ? (record.guestCheckout ? 'Website Guest Compact Checkout | ' : 'Website Compact Checkout | ') + record.id : 'Website Buy Now | ' + record.id + ' | Additional cart items: ' + record.extraCount; }
   function cartOrderReceipt(record) {
@@ -784,7 +793,7 @@
           else el.disabled = submitting || !!fast.editor || !editableFast(el.dataset.bnEdit);
         });
         var confirm = overlay.querySelector('[data-bn-confirm]');
-        if (confirm) confirm.disabled = !!value || !fast.ready || !!fast.editor;
+        if (confirm) confirm.disabled = !!value || !(fast.ready || fast.paymentQuote) || !!fast.editor;
       }
     }
     function node(tag, copy, className) {
@@ -841,6 +850,7 @@
       });
       body.querySelectorAll('[data-bn-edit]').forEach(function (el) { el.addEventListener('click', function () { editFast(el.dataset.bnEdit); }); });
       overlay.querySelector('[data-bn-confirm]').addEventListener('click', function () {
+        if (fast?.paymentQuote && !fast.loading && !fast.editor) { acceptPaymentTotal().catch(showError); return; }
         if (!fast?.ready || fast.loading || fast.editor || !frame?.contentDocument) return;
         submitNative(frame.contentDocument.getElementById('ctl00_PageBody_CompleteCheckoutButton'), frame.contentDocument).catch(showError);
       });
@@ -881,6 +891,55 @@
       frame.classList.toggle('bn-frame-open',!!open);
       if (open) { frame.removeAttribute('aria-hidden'); frame.removeAttribute('tabindex'); }
       else { frame.setAttribute('aria-hidden','true'); frame.setAttribute('tabindex','-1'); }
+    }
+    function paymentPricingScope() {
+      return JSON.stringify([fast.revision,signature(active.current),fast.method,fast.shippingValue || '']);
+    }
+    function cachePaymentTotal(page) {
+      try {
+        var service=(fast.shippingOptions || []).find(function (option) { return option.value===fast.shippingValue; });
+        var expected=quotedShipping(fast.method,fast.methods[fast.method],service,service && service===fast.shippingOptions[0]);
+        fast.paymentPricing={scope:paymentPricingScope(),totals:paymentTotals(page,fast.method,expected)};
+      } catch (_) { fast.paymentPricing=null; }
+    }
+    function readPaymentTotal(page) {
+      // WebTrack removes the summary when it opens hosted payment. Retain only
+      // the native shipping-step totals for this exact basket/options revision.
+      if (page.getElementById('ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView') || page.querySelector('table.summaryTotals')) cachePaymentTotal(page);
+      var pricing=fast.paymentPricing;
+      if (!pricing || pricing.scope!==paymentPricingScope()) throw new Error('The order total is still being confirmed.');
+      return {totals:pricing.totals,signature:JSON.stringify([pricing.scope,pricing.totals])};
+    }
+    function paymentTotalGate(page) {
+      // A customer without a saved card sees the native priced order before the
+      // secure card form. This state never enables final order submission.
+      var quote;
+      try { quote=readPaymentTotal(page); } catch (error) {
+        fast.paymentQuote=null; paymentWorkspace(false); loading(true); status('Confirming shipping and tax…');
+        if (!page.documentElement.dataset.bnTotalWaiting) page.documentElement.dataset.bnTotalWaiting=String(Date.now());
+        if (Date.now()-Number(page.documentElement.dataset.bnTotalWaiting)>5000) haltFast('Your total could not be confirmed before payment. Please use standard checkout.');
+        return false;
+      }
+      delete page.documentElement.dataset.bnTotalWaiting;
+      if (fast.paymentApproval===quote.signature) return true;
+      fast.paymentQuote=quote; fast.ready=false; paymentWorkspace(false);
+      ['subtotal','shipping','tax','total'].forEach(function (key) { fastText('[data-bn-'+key+']',quote.totals[key]); });
+      fastText('[data-bn-payment]','Add after reviewing total');
+      fastText('[data-bn-confirm]','Continue to payment · '+quote.totals.total);
+      loading(false); status('Review your total, then add payment securely.');
+      return false;
+    }
+    async function acceptPaymentTotal() {
+      var current=fast, page=frame?.contentDocument, quote=fast?.paymentQuote;
+      if (!quote || !page || !nativeFormsReady(frame.contentWindow) || busy || submitting) return;
+      loading(true);
+      await checkIdentity();
+      if (fast!==current || frame?.contentDocument!==page || fast.editor || fast.paymentQuote!==quote) return;
+      var fresh=readPaymentTotal(page);
+      if (fresh.signature!==quote.signature) { fast.paymentApproval=null; paymentTotalGate(page); status('Your total changed. Review it before continuing.'); return; }
+      fast.paymentApproval=fresh.signature; fast.paymentQuote=null;
+      loading(true); status('Opening secure payment…');
+      await driveFast(frame.contentWindow,page);
     }
     function pickupNotice(policy) {
       if (!policy) return 'Choose a pickup store to check availability.';
@@ -1143,7 +1202,7 @@
       if (reuse && previousMethod) reuse=fulfillmentApplied(previousMethod,frame.contentWindow.sessionStorage.getItem('wl_fulfillment_intent'),detailPage.getElementById({pickup:'btnPickup',delivery:'btnDelivered',ship:'btnShip'}[previousMethod])?.getAttribute('aria-pressed'));
       if (reuse && !active.cartCheckout) reuse=signature(plan(fast.original,fast.primary,fast.selected).purchase)===signature(active.purchase);
       // New identity per revision makes old asynchronous driver work obsolete.
-      fast = Object.assign({},fast,{ready:false,review:null,revision:fast.revision+1,started:Date.now(),opened:Date.now(),driving:false,stopped:false,securePayment:false,paymentOptionsOpen:false,refreshQueued:false});
+      fast = Object.assign({},fast,{ready:false,review:null,revision:fast.revision+1,started:Date.now(),opened:Date.now(),driving:false,stopped:false,securePayment:false,paymentQuote:null,paymentApproval:null,paymentPricing:null,paymentOptionsOpen:false,refreshQueued:false});
       timings = {started:fast.opened,requests:{},stages:{}}; setStage(0); updateFastOptions();
       overlay.querySelector('[data-bn-retry]')?.remove();
       ['subtotal','shipping','tax','total'].forEach(function (key) { fastText('[data-bn-'+key+']','—'); });
@@ -1194,6 +1253,7 @@
       var child = frame.contentWindow, page;
       try { page = frame.contentDocument; if (child.location.origin !== ORIGIN) page = null; } catch (_) { page = null; }
       if (!page) {
+        if (!fast?.paymentApproval) { haltFast('The total could not be confirmed before payment. Please use standard checkout.'); return; }
         paymentWorkspace(true); loading(false); status('Complete the secure payment step.'); return;
       }
       if (!page.documentElement || !page.body || page.readyState==='loading' || page === installedPage) return;
@@ -1236,6 +1296,11 @@
           event.preventDefault(); event.stopImmediatePropagation(); status('Finish checkout here, or use Cancel to restore your original cart.');
         }
       }, true);
+      // Read totals synchronously before WebTrack's own shipping auto-continue
+      // replaces this document, even when it advances before the next poll.
+      page.addEventListener('click', function (event) {
+        if (fast && event.target.closest('#ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView')) cachePaymentTotal(page);
+      },true);
       page.addEventListener('click', function (event) {
         var final = event.target.closest(FINAL);
         if (!final || permittedFinal === final) return;
@@ -1412,7 +1477,7 @@
     }
     async function driveFast(child,page) {
       if (!fast || fast.driving || fast.stopped || busy || submitting || !page.documentElement || active.phase !== 'checking_out') return;
-      if (fast.editor || fast.securePayment) fast.started=Date.now();
+      if (fast.editor || fast.securePayment || fast.paymentQuote) fast.started=Date.now();
       if (Date.now()-fast.started > 120000) { haltFast('This is taking longer than expected. Retry or cancel.'); return; }
       fast.driving = true;
       var current = fast;
@@ -1429,7 +1494,7 @@
             return;
           }
           measureCheckout('review',page,reviewed); measureCheckout('shipping',page,reviewed); measureCheckout('payment',page,reviewed);
-          fast.review = reviewed; fast.ready = true; fast.securePayment = false;
+          fast.review = reviewed; fast.ready = true; fast.securePayment = false; fast.paymentQuote=null;
           overlay.querySelector('[data-bn-retry]')?.remove();
           overlay.dataset.bnReadyMs = String(Date.now()-fast.opened);
           setStage(4); overlay.dataset.bnTimings = JSON.stringify({elapsed:Date.now()-timings.started,requests:timings.requests,stages:timings.stages});
@@ -1584,6 +1649,7 @@
           if (!selected || fast.addPayment) {
             var newCard = page.getElementById('ctl00_PageBody_rbCreditCard'), next = page.getElementById('ctl00_PageBody_btnContinue_CardOnFileView');
             if (!newCard || newCard.disabled || !next) { haltFast('New payment is unavailable. Please use standard checkout.'); return; }
+            if (!paymentTotalGate(page)) return;
             await checkIdentity(); if (fast!==current || !frame || frame.contentDocument!==page) return;
             fast.addPayment = false; fast.paymentFingerprint=''; fast.securePayment = true; fastText('[data-bn-payment]','New payment'); page.documentElement.dataset.bnPaymentContinued = '1'; newCard.checked = true; newCard.dispatchEvent(new child.Event('change',{bubbles:true})); next.click(); return;
           }
@@ -1596,6 +1662,8 @@
         var shippingContinue = page.getElementById('ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView');
         if (shippingContinue) {
           setStage(2); status('Loading payment…');
+          // Capture the native monetary breakdown before its automatic handoff.
+          cachePaymentTotal(page);
           // Pickup/local-delivery already have a native automatic continuation.
           if (child.__wlPickupShippingAutoAdvance) return;
           var select = page.getElementById('ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList');
@@ -1608,11 +1676,12 @@
             fast.shippingValue = choice || '';
           }
           updateFastOptions();
-          if (!page.documentElement.dataset.bnShippingContinued) { page.documentElement.dataset.bnShippingContinued = '1'; status('Getting the final total…'); shippingContinue.click(); }
+          if (!page.documentElement.dataset.bnShippingContinued) { page.documentElement.dataset.bnShippingContinued = '1'; cachePaymentTotal(page); status('Getting the final total…'); shippingContinue.click(); }
           return;
         }
         // WebTrack can skip the saved-card selector when no card is on file.
         if (fast.securePayment || page.querySelector('iframe[src^="https://sce.toogo.io/hp/"]') || page.getElementById('ctl00_PageBody_CardOnFileViewTitle_HeaderText')) {
+          if (!paymentTotalGate(page)) return;
           fast.securePayment=true; fastText('[data-bn-payment]','Secure payment');
           if (!fast.editor && !fast.paymentOptionsOpen) paymentWorkspace(true); loading(false); status('Add your payment securely.'); return;
         }
@@ -1786,5 +1855,5 @@
       if (latest && latest.owner !== owner) { busy = true; clearFrame(); status('Buy now is active in another tab. Cart changes have stopped here.', true); }
     });
   }
-  return { relayControl:relayControl, nativeFormsReady:nativeFormsReady, continueNativeCart:continueNativeCart, pickupStoreName:pickupStoreName, centralCalendar:centralCalendar, calendarAfter:calendarAfter, pickupTimeChoices:pickupTimeChoices, stockFromDocument:stockFromDocument, pickupReadiness:pickupReadiness, boot: boot, build: BUILD, audience: AUDIENCE, deliveryAddressSummary:deliveryAddressSummary, nativeStateOption:nativeStateOption, accountScopeInput:accountScopeInput, guestContext:guestContext, guestStartPending:guestStartPending, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, cartOrderReceipt: cartOrderReceipt, readCartOrderReceipt: readCartOrderReceipt, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, cartPolicyReady: cartPolicyReady, hasCustomCuts: hasCustomCuts, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
+  return { relayControl:relayControl, nativeFormsReady:nativeFormsReady, continueNativeCart:continueNativeCart, pickupStoreName:pickupStoreName, centralCalendar:centralCalendar, calendarAfter:calendarAfter, pickupTimeChoices:pickupTimeChoices, stockFromDocument:stockFromDocument, pickupReadiness:pickupReadiness, boot: boot, build: BUILD, audience: AUDIENCE, deliveryAddressSummary:deliveryAddressSummary, nativeStateOption:nativeStateOption, accountScopeInput:accountScopeInput, guestContext:guestContext, guestStartPending:guestStartPending, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, cartOrderReceipt: cartOrderReceipt, readCartOrderReceipt: readCartOrderReceipt, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, cartPolicyReady: cartPolicyReady, hasCustomCuts: hasCustomCuts, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, paymentTotals: paymentTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
 });
