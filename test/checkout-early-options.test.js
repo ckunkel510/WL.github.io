@@ -21,10 +21,10 @@ test('early edits during preflight remain queued without bypassing the busy guar
 });
 test('loading timeout does not abandon an open editor or secure payment, while a stalled ordinary load remains bounded',async()=>{
  const driver=source.slice(source.indexOf('    async function driveFast('),source.indexOf('    async function submitNative('));
- for(const mode of ['editor','payment','stalled']) {
+ for(const mode of ['editor','payment','total','stalled']) {
   let halted=false;const page={documentElement:{dataset:{}},getElementById:()=>null,querySelector:()=>null};
-  const fast={started:Date.now()-130000,editor:mode==='editor'?'address':'',securePayment:mode==='payment'};
-  const context=vm.createContext({fast,busy:false,submitting:false,active:{phase:'checking_out'},nativeFormsReady:()=>true,haltFast(){halted=true;},setStage(){},fastText(){},loading(){},status(){},paymentWorkspace(){}});
+  const fast={started:Date.now()-130000,editor:mode==='editor'?'address':'',securePayment:mode==='payment',paymentQuote:mode==='total'?{}:null};
+  const context=vm.createContext({fast,busy:false,submitting:false,active:{phase:'checking_out'},nativeFormsReady:()=>true,haltFast(){halted=true;},setStage(){},fastText(){},loading(){},status(){},paymentWorkspace(){},paymentTotalGate:()=>true});
   vm.runInContext(driver,context);await context.driveFast({},page);assert.equal(halted,mode==='stalled');
  }
 });
