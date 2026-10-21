@@ -41,3 +41,10 @@ test('native stored-card selection preserves automatic review; new-card selectio
   vm.runInContext(driver,context);await context.driveFast({Event:class{}},native);assert.equal(next,hasCard?1:0);assert.equal(gates,hasCard?0:1);
  }
 });
+
+test('background quote refresh during identity verification does not swallow payment continuation or double-open it',async()=>{
+ const f=gateFixture();let release;f.context.checkIdentity=()=>new Promise(resolve=>{release=resolve;});
+ f.context.paymentTotalGate(f.native);const first=f.context.acceptPaymentTotal();assert.equal(f.fast.paymentAuthorizing,true);
+ f.context.paymentTotalGate(f.native);await f.context.acceptPaymentTotal();assert.equal(f.opened(),0);
+ release();await first;assert.equal(f.opened(),1);assert.equal(f.fast.paymentAuthorizing,false);assert.equal(f.fast.ready,false);
+});
