@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261021-total-before-payment-38';
+  var BUILD = '20261021-total-before-payment-39';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -931,15 +931,17 @@
     }
     async function acceptPaymentTotal() {
       var current=fast, page=frame?.contentDocument, quote=fast?.paymentQuote;
-      if (!quote || !page || !nativeFormsReady(frame.contentWindow) || busy || submitting) return;
-      loading(true);
-      await checkIdentity();
-      if (fast!==current || frame?.contentDocument!==page || fast.editor || fast.paymentQuote!==quote) return;
-      var fresh=readPaymentTotal(page);
-      if (fresh.signature!==quote.signature) { fast.paymentApproval=null; paymentTotalGate(page); status('Your total changed. Review it before continuing.'); return; }
-      fast.paymentApproval=fresh.signature; fast.paymentQuote=null;
-      loading(true); status('Opening secure payment…');
-      await driveFast(frame.contentWindow,page);
+      if (!quote || !page || !nativeFormsReady(frame.contentWindow) || busy || submitting || fast.paymentAuthorizing) return;
+      fast.paymentAuthorizing=true; loading(true);
+      try {
+        await checkIdentity();
+        if (fast!==current || frame?.contentDocument!==page || fast.editor || fast.paymentQuote?.signature!==quote.signature) return;
+        var fresh=readPaymentTotal(page);
+        if (fresh.signature!==quote.signature) { fast.paymentApproval=null; paymentTotalGate(page); status('Your total changed. Review it before continuing.'); return; }
+        fast.paymentApproval=fresh.signature; fast.paymentQuote=null;
+        status('Opening secure payment…');
+      } finally { current.paymentAuthorizing=false; }
+      if (fast===current && fast.paymentApproval===quote.signature) await driveFast(frame.contentWindow,page);
     }
     function pickupNotice(policy) {
       if (!policy) return 'Choose a pickup store to check availability.';
@@ -1202,7 +1204,7 @@
       if (reuse && previousMethod) reuse=fulfillmentApplied(previousMethod,frame.contentWindow.sessionStorage.getItem('wl_fulfillment_intent'),detailPage.getElementById({pickup:'btnPickup',delivery:'btnDelivered',ship:'btnShip'}[previousMethod])?.getAttribute('aria-pressed'));
       if (reuse && !active.cartCheckout) reuse=signature(plan(fast.original,fast.primary,fast.selected).purchase)===signature(active.purchase);
       // New identity per revision makes old asynchronous driver work obsolete.
-      fast = Object.assign({},fast,{ready:false,review:null,revision:fast.revision+1,started:Date.now(),opened:Date.now(),driving:false,stopped:false,securePayment:false,paymentQuote:null,paymentApproval:null,paymentPricing:null,paymentOptionsOpen:false,refreshQueued:false});
+      fast = Object.assign({},fast,{ready:false,review:null,revision:fast.revision+1,started:Date.now(),opened:Date.now(),driving:false,stopped:false,securePayment:false,paymentQuote:null,paymentApproval:null,paymentAuthorizing:false,paymentPricing:null,paymentOptionsOpen:false,refreshQueued:false});
       timings = {started:fast.opened,requests:{},stages:{}}; setStage(0); updateFastOptions();
       overlay.querySelector('[data-bn-retry]')?.remove();
       ['subtotal','shipping','tax','total'].forEach(function (key) { fastText('[data-bn-'+key+']','—'); });
@@ -1476,7 +1478,7 @@
       }
     }
     async function driveFast(child,page) {
-      if (!fast || fast.driving || fast.stopped || busy || submitting || !page.documentElement || active.phase !== 'checking_out') return;
+      if (!fast || fast.driving || fast.paymentAuthorizing || fast.stopped || busy || submitting || !page.documentElement || active.phase !== 'checking_out') return;
       if (fast.editor || fast.securePayment || fast.paymentQuote) fast.started=Date.now();
       if (Date.now()-fast.started > 120000) { haltFast('This is taking longer than expected. Retry or cancel.'); return; }
       fast.driving = true;
