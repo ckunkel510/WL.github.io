@@ -2,6 +2,9 @@
   "use strict";
 
   const STYLE_ID = "wl-modern-product-cards";
+  // Deer Corn uses the signed-in store pricing flow on ProductDetail (PID 22984).
+  // Match the PID boundary, never the search text or position in the results.
+  const REGIONAL_PRICE_CARD = '#productlistcards > fieldset.CardSet:has(a:is([href*="?pid=22984&" i],[href$="?pid=22984" i],[href*="&pid=22984&" i],[href$="&pid=22984" i]))';
   const REVIEW_CACHE_KEY = "wl_product_review_summary_v1";
   const REVIEW_CACHE_MS = 15 * 60 * 1000;
   const PRODUCT_PAGE_SIZE = 48;
@@ -17,6 +20,37 @@
     const style = document.createElement("style");
     style.id = STYLE_ID;
     style.textContent = `
+      /* Installed in the head: also covers cards added later, before enhancement. */
+      ${REGIONAL_PRICE_CARD} #PriceRow td > :not(.wl-product-price-link),
+      ${REGIONAL_PRICE_CARD} .wl-bulk-pricing-row,
+      ${REGIONAL_PRICE_CARD} .wl-savings-flag {
+        display: none !important;
+      }
+      #productlistcards .wl-product-price-link {
+        display: inline-flex !important;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        min-height: 44px;
+        max-width: 100%;
+        padding: 9px 12px;
+        border: 1px solid #6b0005;
+        border-radius: 6px;
+        background: #fff;
+        color: #6b0005 !important;
+        font-size: 14px;
+        font-weight: 750;
+        line-height: 1.3;
+        text-align: center;
+        text-decoration: none !important;
+      }
+      #productlistcards .wl-product-price-link:hover {
+        background: #fff4f4;
+      }
+      #productlistcards .wl-product-price-link:focus-visible {
+        outline: 3px solid #6b0005;
+        outline-offset: 3px;
+      }
       #productlistcards.Cards {
         display: grid !important;
         grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -1067,7 +1101,31 @@
     }, true);
   }
 
+  function enhanceRegionalPrice(card) {
+    if (!/\/products\.aspx$/i.test(window.location.pathname)) return;
+    const productLink = card.querySelector("#ProductImageRow a[href*='ProductDetail.aspx']") ||
+      card.querySelector("#ProductDescriptionRow a[href*='ProductDetail.aspx']");
+    if (!productLink) return;
+    let destination;
+    try { destination = new URL(productLink.href, window.location.href); } catch (_) { return; }
+    if (destination.origin !== window.location.origin ||
+        !/^\/ProductDetail\.aspx$/i.test(destination.pathname) ||
+        destination.searchParams.get("pid") !== "22984") return;
+    const priceCell = card.querySelector("#PriceRow td");
+    if (!priceCell || priceCell.querySelector(".wl-product-price-link")) return;
+
+    const link = document.createElement("a");
+    link.className = "wl-product-price-link";
+    link.href = destination.href;
+    link.target = "_top";
+    link.textContent = "View product for price";
+    link.setAttribute("aria-label", "View Deer Corn product for price");
+    // Remove the native amount/unit so late bulk or savings readers cannot reuse it.
+    priceCell.replaceChildren(link);
+  }
+
   function enhanceCard(card) {
+    enhanceRegionalPrice(card);
     card.classList.add("wl-product-card");
 
     const actions = card.querySelector(":scope > .mx-2");
@@ -1362,6 +1420,8 @@
 
     const observer = new MutationObserver(function (mutations) {
       mutations.forEach(function (mutation) {
+        const changedCard = mutation.target.closest?.("#productlistcards > fieldset.CardSet");
+        if (changedCard) enhanceRegionalPrice(changedCard);
         mutation.addedNodes.forEach(function (node) {
           if (node.nodeType !== 1) return;
           if (node.matches && node.matches("#productlistcards > fieldset.CardSet")) {
