@@ -34,11 +34,18 @@ test('clicks, review, payment entry, errors and cancellation never create a purc
  assert.equal(purchases(f).length,0);assert.equal(f.api.track('purchase',{ecommerce:{transaction_id:'fake',value:900}}),false);
  assert.equal(f.api.checkout('purchase',{...d,orderNumber:'W123456'},page()),false); // Cancel removed this review.
 });
-test('missing native success, declined response, mismatched order and missing merchant fail closed',()=>{
- for(const invalid of [{success:false},{merchant:false},{order:'error',message:'Order failed'},{message:'Payment declined'},{order:'W999999'}]){
+test('missing native success, declined response, mismatched order and ambiguous charge responses fail closed',()=>{
+ for(const invalid of [{success:false},{merchant:false,message:'Order number W123456'},{order:'error',message:'Order failed'},{message:'Payment declined'},{order:'W999999'}]){
   const f=setup(),d=details();f.api.checkout('review',d,page());
   assert.equal(f.api.checkout('purchase',{...d,orderNumber:'W123456'},page(invalid)),false);assert.equal(purchases(f).length,0);
  }
+});
+test('a positive native charge confirmation records one purchase without requiring a card receipt',()=>{
+ const f=setup(),d=details();f.api.checkout('review',d,page());
+ const confirmation=page({merchant:false});
+ assert.equal(f.api.checkout('purchase',{...d,orderNumber:'W123456'},confirmation),true);
+ assert.equal(f.api.checkout('purchase',{...d,orderNumber:'W123456'},confirmation),false);
+ assert.equal(purchases(f).length,1);assert.equal(purchases(f)[0].ecommerce.transaction_id,'W123456');
 });
 test('a different or stale review cannot supply purchase values',()=>{
  for(const mode of ['missing','other','stale','invalid']){
@@ -116,8 +123,8 @@ test('bridge keeps the accepted payment category through submit and confirmation
 test('late native confirmation records measurement without relaxing uncertain-order recovery',async()=>{
  const pilot=fs.readFileSync(require.resolve('../BuyNowPilot.js'),'utf8'),inspect=pilot.slice(pilot.indexOf('    async function inspectFrame('),pilot.indexOf('    function setNative('));
  for(const phase of ['checking_out','uncertain']){
-  const native=Object.assign(page(),{documentElement:{dataset:{}}}),calls=[],context=vm.createContext({frame:{contentDocument:native},active:{phase},URL,text:v=>v,busy:false,measureCheckout:(...args)=>calls.push(args)});
-  vm.runInContext(inspect,context);await assert.rejects(context.inspectFrame({location:{href:'https://example.test/ShoppingCart.aspx?success=1'}},native),/confirmation needs review/);
+  const native=Object.assign(page(),{documentElement:{dataset:{}}}),calls=[],context=vm.createContext({frame:{contentDocument:native},active:{phase},URL,nativeOrderNumber:require('../BuyNowPilot').nativeOrderNumber,text:v=>v,busy:false,measureCheckout:(...args)=>calls.push(args)});
+  vm.runInContext(inspect,context);await assert.rejects(context.inspectFrame({location:{href:'https://webtrack.woodsonlumber.com/ShoppingCart.aspx?success=1'}},native),/confirmation needs review/);
   assert.equal(calls.length,phase==='uncertain'?1:0);assert.equal(context.active.phase,phase);
  }
 });
