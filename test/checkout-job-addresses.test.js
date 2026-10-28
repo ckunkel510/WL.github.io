@@ -26,3 +26,15 @@ test('final native review must show selected sales address and separate main inv
  assert.throws(()=>core.assertSalesReview(review({...address,city:'Bryan'},billing),address,billing),/sales/);
  assert.throws(()=>core.assertSalesReview({getElementById:()=>null},address,billing),/sales/);
 });
+function pagedGrid(start,size,total=137){const doc=grid(Array.from({length:Math.min(size,total-start)},(_,i)=>({id:String(start+i+1),code:'JOB'+(start+i+1),ref:'Site '+(start+i+1)})));doc.querySelectorAll=()=>[0,...(start+size<total?[start+size]:[]),...(start===0&&size===12?[0]:[])].map((offset,i)=>({getAttribute:()=>'/AddressList_R.aspx?pageIndex='+offset+'&groupIndex=0&itemsPerPage='+(size===12&&i===2?48:size)}));return doc;}
+test('the picker follows native pagination and loads all 137 saved jobs rather than only the first native page',async()=>{
+ const reads=[],verified=[];
+ const entries=await core.allSalesAddresses(async path=>{reads.push(path);const u=new URL(path,'https://webtrack.woodsonlumber.com');return pagedGrid(Number(u.searchParams.get('pageIndex')||0),Number(u.searchParams.get('itemsPerPage')||12));},async()=>verified.push(true));
+ assert.equal(entries.length,137);assert.equal(entries[136].code,'JOB137');assert.equal(core.matchingSalesAddresses(entries,'Site 137').length,1);
+ assert.deepEqual(reads,['/AddressList_R.aspx','/AddressList_R.aspx?pageIndex=0&groupIndex=0&itemsPerPage=48','/AddressList_R.aspx?pageIndex=48&groupIndex=0&itemsPerPage=48','/AddressList_R.aspx?pageIndex=96&groupIndex=0&itemsPerPage=48']);assert.equal(verified.length,4);
+});
+test('address paging remains on native read-only list links and stops if account verification fails',async()=>{
+ const page={querySelectorAll:()=>['https://example.test/AddressList_R.aspx?pageIndex=48','/ShoppingCart.aspx?pageIndex=48','?pageIndex=-1','?pageIndex=48&itemsPerPage=999','?pageIndex=24&itemsPerPage=12'].map(href=>({getAttribute:()=>href}))};
+ assert.equal(core.salesAddressPage(page,'/AddressList_R.aspx',false),'/AddressList_R.aspx?pageIndex=24&itemsPerPage=12');
+ let reads=0;await assert.rejects(core.allSalesAddresses(async()=>{reads++;return pagedGrid(0,48);},async()=>{throw Error('Account changed');}),/Account changed/);assert.equal(reads,1);
+});
