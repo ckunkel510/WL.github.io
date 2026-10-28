@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261028-charge-validation-40';
+  var BUILD = '20261028-charge-confirmation-41';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -375,6 +375,23 @@
     return totals;
   }
   function marker(record) { return record.cartCheckout ? (record.guestCheckout ? 'Website Guest Compact Checkout | ' : 'Website Compact Checkout | ') + record.id : 'Website Buy Now | ' + record.id + ' | Additional cart items: ' + record.extraCount; }
+  function nativeOrderNumber(page, href) {
+    var url;
+    try { url=new URL(href,ORIGIN); } catch (_) { return ''; }
+    if (url.origin!==ORIGIN || !/^\/ShoppingCart\.aspx$/i.test(url.pathname) || url.searchParams.get('success')!=='1') return '';
+    var response=page.getElementById('CartResponseMessage');
+    if (!response) return '';
+    var message=text(response.textContent);
+    if (/\b(?:failed|declined|unsuccessful|error|cancelled|canceled)\b|\bno\s+(?:reserved\s+)?order\b|\bnot\s+(?:(?:been|yet|successfully)\s+)*(?:placed|confirmed|created|submitted|processed)\b|\b(?:unable|could not|cannot)\b/i.test(message)) return '';
+    var order=text(response.querySelector('strong')?.textContent).replace(/^(?:reserved\s+)?order(?:\s+(?:number|no\.?))?\s*[:#-]?\s*/i,'');
+    if (!order) order=message.match(/(?:order|confirmation)\s*(?:number|no\.?|#)\s*[:#]?\s*([A-Z0-9-]+)/i)?.[1] || '';
+    if (!/^[a-z0-9][a-z0-9-]{2,63}$/i.test(order) || !/\d/.test(order) || url.searchParams.has('ref') && text(url.searchParams.get('ref'))!==order) return '';
+    var merchant=page.getElementById('ctl00_PageBody_SuccessfulPaymentResults_MerchantDetailsPanel');
+    // Charge orders have no card-payment receipt. Require the native success
+    // message and order number instead; a URL or an empty basket is not proof.
+    if (!text(merchant?.textContent) && !/\b(?:thank\s+you|confirmed|placed|created|submitted)\b/i.test(message)) return '';
+    return order;
+  }
   function cartOrderReceipt(record) {
     // A submission guard, never a cart backup. No items, addresses or payment data.
     if (!['submitting','uncertain','confirmed'].includes(record.phase)) return null;
@@ -1374,12 +1391,11 @@
     }
     async function inspectFrame(child, page) {
       if (!frame || frame.contentDocument !== page || !page.documentElement || !active || active.phase === 'restored') return;
-      var confirmation = page.getElementById('CartResponseMessage'), merchant = page.getElementById('ctl00_PageBody_SuccessfulPaymentResults_MerchantDetailsPanel');
-      if (new URL(child.location.href).searchParams.get('success') === '1' && confirmation && merchant) {
-        var order = text(confirmation.querySelector('strong')?.textContent).replace(/^(?:reserved\s+)?order(?:\s+(?:number|no\.?))?\s*[:#-]?\s*/i, '');
+      var order=nativeOrderNumber(page,child.location.href);
+      if (order) {
         // A late native success still counts; recovery/submission safeguards stay in force.
-        if (/^[a-z0-9][a-z0-9-]{2,63}$/i.test(order) && active.phase==='uncertain') measureCheckout('purchase',page,null,order);
-        if (!/^[a-z0-9][a-z0-9-]{2,63}$/i.test(order) || !['submitting', 'confirmed', 'restoring'].includes(active.phase)) throw new Error('Order confirmation needs review before restoring the cart.');
+        if (active.phase==='uncertain' && !active.cartCheckout) measureCheckout('purchase',page,null,order);
+        if (!['submitting', 'confirmed', 'restoring'].includes(active.phase) && !(active.cartCheckout && active.phase==='uncertain')) throw new Error('Order confirmation needs review before restoring the cart.');
         if (busy) return;
         measureCheckout('purchase',page,null,order);
         busy = true; submitting = false; active.orderNumber = order; active.phase = 'confirmed'; active.current = []; active.pending = null; save(); clearFrame();
@@ -1876,5 +1892,5 @@
       if (latest && latest.owner !== owner) { busy = true; clearFrame(); status('Buy now is active in another tab. Cart changes have stopped here.', true); }
     });
   }
-  return { relayControl:relayControl, nativeFormsReady:nativeFormsReady, continueNativeCart:continueNativeCart, pickupStoreName:pickupStoreName, centralCalendar:centralCalendar, calendarAfter:calendarAfter, pickupTimeChoices:pickupTimeChoices, stockFromDocument:stockFromDocument, pickupReadiness:pickupReadiness, boot: boot, build: BUILD, audience: AUDIENCE, deliveryAddressSummary:deliveryAddressSummary, nativeStateOption:nativeStateOption, accountScopeInput:accountScopeInput, guestContext:guestContext, guestStartPending:guestStartPending, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, cartOrderReceipt: cartOrderReceipt, readCartOrderReceipt: readCartOrderReceipt, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, cartPolicyReady: cartPolicyReady, hasCustomCuts: hasCustomCuts, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, paymentTotals: paymentTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, hydrateMatchingAddressState: hydrateMatchingAddressState, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
+  return { relayControl:relayControl, nativeFormsReady:nativeFormsReady, continueNativeCart:continueNativeCart, pickupStoreName:pickupStoreName, centralCalendar:centralCalendar, calendarAfter:calendarAfter, pickupTimeChoices:pickupTimeChoices, stockFromDocument:stockFromDocument, pickupReadiness:pickupReadiness, boot: boot, build: BUILD, audience: AUDIENCE, deliveryAddressSummary:deliveryAddressSummary, nativeStateOption:nativeStateOption, accountScopeInput:accountScopeInput, guestContext:guestContext, guestStartPending:guestStartPending, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, nativeOrderNumber: nativeOrderNumber, cartOrderReceipt: cartOrderReceipt, readCartOrderReceipt: readCartOrderReceipt, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, cartPolicyReady: cartPolicyReady, hasCustomCuts: hasCustomCuts, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, paymentTotals: paymentTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, hydrateMatchingAddressState: hydrateMatchingAddressState, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
 });

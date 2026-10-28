@@ -3,7 +3,7 @@
 
   if (window.WLAnalytics) return;
 
-  var VERSION = "1.8.2";
+  var VERSION = "1.8.3";
   var EVENT_NAME = "wl_analytics_event";
   var GA_MEASUREMENT_ID = "G-4ZLV1YB6GY";
   var META_PIXEL_ID = "188974749776655";
@@ -160,10 +160,13 @@
     if (!/(?:^|[?&])success=1(?:&|$)/i.test(search || "")) return "";
     var response = page.getElementById("CartResponseMessage");
     var merchant = page.getElementById("ctl00_PageBody_SuccessfulPaymentResults_MerchantDetailsPanel");
-    if (!response || !merchant || !text(merchant) || /(?:failed|declined|unsuccessful|error)/i.test(text(response))) return "";
+    if (!response || /\b(?:failed|declined|unsuccessful|error|cancelled|canceled)\b|\bno\s+(?:reserved\s+)?order\b|\bnot\s+(?:(?:been|yet|successfully)\s+)*(?:placed|confirmed|created|submitted|processed)\b|\b(?:unable|could not|cannot)\b/i.test(text(response))) return "";
+    if (!text(merchant) && !/\b(?:thank\s+you|confirmed|placed|created|submitted)\b/i.test(text(response))) return "";
     var strong = response.querySelector("strong");
     var value = text(strong).replace(/^(?:reserved\s+)?order(?:\s+(?:number|no\.?))?\s*[:#-]?\s*/i, "");
     if (!value) value = text(response).match(/(?:order|confirmation)\s*(?:number|no\.?|#)\s*[:#]?\s*([A-Z0-9-]+)/i)?.[1] || "";
+    var ref = (search || "").match(/(?:^|[?&])ref=([^&]*)/i);
+    if (ref) { try { if (decodeURIComponent(ref[1].replace(/\+/g," "))!==value) return ""; } catch (_) { return ""; } }
     return /^[A-Z0-9][A-Z0-9-]{2,63}$/i.test(value) && /\d/.test(value) ? value : "";
   }
 
