@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261021-total-before-payment-39';
+  var BUILD = '20261028-charge-validation-40';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -281,15 +281,33 @@
     var value = function (id) { return text(settings.getElementById(id)?.value); };
     return {firstName:value('ctl00_PageBody_ChangeUserDetailsControl_FirstNameInput'),lastName:value('ctl00_PageBody_ChangeUserDetailsControl_LastNameInput'),email:value('ctl00_PageBody_ChangeUserDetailsControl_EmailAddressInput').replace(/^\([^)]*\)\s*/,''),phone:text(account.getElementById('ctl00_PageBody_TelephoneLink_TelephoneLink')?.textContent)};
   }
-  function applyContactDefaults(page, contact, address, forceInvoicePhone) {
+  function applyContactDefaults(page, contact, address, forceInvoiceContact) {
     var chosen = address?.contactName ? text(address.contactName).split(' ') : null;
     var delivery = {firstName:chosen ? chosen[0] : contact.firstName,lastName:chosen ? chosen.slice(1).join(' ') : contact.lastName,email:address?.email || contact.email,phone:address?.phone || contact.phone};
     [['DeliveryAddress',delivery],['InvoiceAddress',contact]].forEach(function (entry) {
       [['ContactFirstNameTextBox','firstName'],['ContactLastNameTextBox','lastName'],['EmailAddressTextBox','email'],['ContactTelephoneTextBox','phone']].forEach(function (field) {
         var el = page.getElementById('ctl00_PageBody_'+entry[0]+'_'+field[0]), value = entry[1][field[1]];
-        if (el && value && !(entry[0]==='InvoiceAddress' && field[1]==='phone' && el.value && !forceInvoicePhone)) el.value = value;
+        if (el && value && !(entry[0]==='InvoiceAddress' && ['phone','email'].includes(field[1]) && el.value && !forceInvoiceContact)) el.value = value;
       });
     });
+  }
+  function hydrateMatchingAddressState(page, prefix, address) {
+    if (!address) return false;
+    var base='ctl00_PageBody_'+prefix+'_', state=page.getElementById(base+'CountySelector_CountyList');
+    if (!state || !['','0','00'].includes(text(state.value))) return false;
+    var country=page.getElementById(base+'CountrySelector'+(prefix==='InvoiceAddress'?'1':''));
+    if (text(country?.value)!=='USA' || text(address.countryValue)!=='USA') return false;
+    var normalize=function (value) { return text(value).toUpperCase(); };
+    // Only repair the state of the exact saved address. A different billing
+    // destination must never inherit the delivery/account state or a store default.
+    var fields=[['AddressLine1','line1'],['AddressLine2','line2'],['AddressLine3','line3'],['City','city'],['Postcode','zip']];
+    if (!address.line1 || !address.city || !address.zip || !fields.every(function (entry) {
+      return normalize(page.getElementById(base+entry[0])?.value)===normalize(address[entry[1]]);
+    })) return false;
+    var option=nativeStateOption(state.options,address);
+    if (!option || ['','0','00'].includes(text(option.value))) return false;
+    state.value=option.value;
+    return true;
   }
   function fulfillmentOptions(pickupAvailable, quote) {
     return {
@@ -1527,6 +1545,7 @@
             if (fast.address && (guest || fast.addressChanged || fast.method!=='pickup')) nativeAddress(child,page,'DeliveryAddress',fast.address);
             if (fast.billing) nativeAddress(child,page,'InvoiceAddress',fast.billing);
             applyContactDefaults(page,guest ? guest.contact : contactDefaults(settings,account),fast.addressChanged ? fast.address : null,!!guest);
+            hydrateMatchingAddressState(page,'InvoiceAddress',fast.billing || accountAddress());
             if (guest) win.sessionStorage.removeItem('wl_guest_checkout_needs_autofill');
             child.WLCheckout?.hydrateBlankInvoiceFromDelivery?.();
           }
@@ -1857,5 +1876,5 @@
       if (latest && latest.owner !== owner) { busy = true; clearFrame(); status('Buy now is active in another tab. Cart changes have stopped here.', true); }
     });
   }
-  return { relayControl:relayControl, nativeFormsReady:nativeFormsReady, continueNativeCart:continueNativeCart, pickupStoreName:pickupStoreName, centralCalendar:centralCalendar, calendarAfter:calendarAfter, pickupTimeChoices:pickupTimeChoices, stockFromDocument:stockFromDocument, pickupReadiness:pickupReadiness, boot: boot, build: BUILD, audience: AUDIENCE, deliveryAddressSummary:deliveryAddressSummary, nativeStateOption:nativeStateOption, accountScopeInput:accountScopeInput, guestContext:guestContext, guestStartPending:guestStartPending, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, cartOrderReceipt: cartOrderReceipt, readCartOrderReceipt: readCartOrderReceipt, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, cartPolicyReady: cartPolicyReady, hasCustomCuts: hasCustomCuts, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, paymentTotals: paymentTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
+  return { relayControl:relayControl, nativeFormsReady:nativeFormsReady, continueNativeCart:continueNativeCart, pickupStoreName:pickupStoreName, centralCalendar:centralCalendar, calendarAfter:calendarAfter, pickupTimeChoices:pickupTimeChoices, stockFromDocument:stockFromDocument, pickupReadiness:pickupReadiness, boot: boot, build: BUILD, audience: AUDIENCE, deliveryAddressSummary:deliveryAddressSummary, nativeStateOption:nativeStateOption, accountScopeInput:accountScopeInput, guestContext:guestContext, guestStartPending:guestStartPending, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, cartOrderReceipt: cartOrderReceipt, readCartOrderReceipt: readCartOrderReceipt, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, cartPolicyReady: cartPolicyReady, hasCustomCuts: hasCustomCuts, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, paymentTotals: paymentTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, hydrateMatchingAddressState: hydrateMatchingAddressState, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
 });
