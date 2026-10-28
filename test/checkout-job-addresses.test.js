@@ -38,3 +38,15 @@ test('address paging remains on native read-only list links and stops if account
  assert.equal(core.salesAddressPage(page,'/AddressList_R.aspx',false),'/AddressList_R.aspx?pageIndex=24&itemsPerPage=12');
  let reads=0;await assert.rejects(core.allSalesAddresses(async()=>{reads++;return pagedGrid(0,48);},async()=>{throw Error('Account changed');}),/Account changed/);assert.equal(reads,1);
 });
+test('a native detail-page failure can use only a complete unambiguous address already returned by the authorized list',()=>{
+ const entry={code:'JOB47',summary:'100 Job Street, Caldwell, Texas, 77836, United States',jobReference:'Site 47',phone:'9795550100',contactName:'Site Contact'};
+ const full=core.savedSalesDetails({getElementById:()=>null},entry);assert.equal(full.line1,'100 Job Street');assert.equal(full.stateValue,'TX');assert.equal(full.zip,'77836');assert.equal(full.jobReference,'Site 47');assert.equal(full.phone,entry.phone);
+ const canada=core.listedSalesDetails({...entry,summary:'100 Main St, Ottawa, Ontario, K1A 0B1, Canada'});assert.equal(canada.countryValue,'CAN');assert.equal(canada.stateValue,'ON');
+});
+test('list fallback never guesses missing fields, splits ambiguous street lines, accepts invalid regions or masks a mismatched native record',()=>{
+ const entry={code:'JOB47',summary:'100 Job Street, Caldwell, TX, 77836, United States'};
+ for(const summary of ['100 Job Street, United States','100 Job Street, Caldwell, 77836, United States','100 Job Street, Building A, Caldwell, TX, 77836, United States','100 Job Street, Caldwell, ZZ, 77836, United States','100 Job Street, Caldwell, TX, 778360, United States','100 Job Street, Ottawa, Ontario, 77836, United States','100 Job Street, Caldwell, TX, 77836, Canada']){
+  assert.equal(core.listedSalesDetails({...entry,summary}),null);assert.throws(()=>core.savedSalesDetails({getElementById:()=>null},{...entry,summary}),/incomplete/);
+ }
+ assert.throws(()=>core.savedSalesDetails(detail({addressCode:'other'}),entry),/verified/);
+});
