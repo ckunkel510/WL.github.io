@@ -1526,8 +1526,7 @@
       }
 
       if (requireEmail && email) {
-        const e = val(email).replace(/^\([^)]*\)\s*/, "");
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)) add(email, "Valid email address");
+        if (!validateEmail(val(email))) add(email, "Valid email address");
       }
 
       if (country && (!String(country.value || "").trim() || String(country.value || "").trim() === "00" || wlIsPlaceholderText(wlSelectedText(country)))) {
@@ -1697,7 +1696,11 @@ function validateZip(zip) {
     }
     function validateEmail(email) {
       const e = norm(email).replace(/^\([^)]*\)\s*/, "");
-      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e);
+      // WebTrack's native invoice validator accepts semicolon-separated recipients.
+      // Validate every recipient and preserve the account's existing billing list.
+      const recipients = e.replace(/;\s*$/, "").split(";").map((value) => value.trim());
+      const single = /^[a-zA-Z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-zA-Z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,9}$/;
+      return recipients.every((value) => single.test(value));
     }
 
     function validateAddressBlock(prefix, stepNum, requireEmail) {
