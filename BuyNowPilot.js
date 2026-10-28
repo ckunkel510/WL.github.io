@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261028-charge-jobs-42';
+  var BUILD = '20261028-charge-jobs-43';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -59,6 +59,33 @@
   }
   function salesAddressLabel(entry) {
     return [entry.isMain?'Main account':entry.isJob?'Job':'Saved address',entry.code,entry.jobReference?'Job ref: '+entry.jobReference:'',entry.summary].filter(Boolean).join(' · ');
+  }
+  function salesAddressPage(page,path,largerPage) {
+    var current=new URL(path,ORIGIN), index=Number(current.searchParams.get('pageIndex') || 0), size=Number(current.searchParams.get('itemsPerPage') || 12);
+    var links=Array.from(page.querySelectorAll('a[href*="pageIndex="]')).map(function (link) {
+      var url=new URL(link.getAttribute('href'),current);
+      if (url.origin!==ORIGIN || url.pathname!=='/AddressList_R.aspx' || !/^\d+$/.test(url.searchParams.get('pageIndex') || '')) return null;
+      var offset=Number(url.searchParams.get('pageIndex')), count=Number(url.searchParams.get('itemsPerPage') || size);
+      if (offset>10000 || count<1 || count>48) return null;
+      return {path:url.pathname+url.search,index:offset,size:count};
+    }).filter(Boolean);
+    if (largerPage) return links.filter(function (link) { return link.index===0 && link.size>size; }).sort(function (a,b) { return b.size-a.size; })[0]?.path || '';
+    return links.filter(function (link) { return link.index>index && link.size===size; }).sort(function (a,b) { return a.index-b.index; })[0]?.path || '';
+  }
+  async function allSalesAddresses(read,verify,progress) {
+    var path='/AddressList_R.aspx', page=await read(path), larger=salesAddressPage(page,path,true);
+    if (larger) { await verify(); path=larger; page=await read(path); }
+    var entries=[], seen=new Set(), visited=new Set();
+    for (var count=0;count<100;count++) {
+      if (visited.has(path)) throw new Error('The saved-address pages repeated. Use standard checkout or try again.');
+      visited.add(path);
+      savedSalesAddresses(page).forEach(function (entry) { if (!seen.has(entry.id)) { seen.add(entry.id); entries.push(entry); } });
+      if (progress) progress(entries.length);
+      var next=salesAddressPage(page,path,false);
+      if (!next) { await verify(); return entries; }
+      await verify(); path=next; page=await read(path);
+    }
+    throw new Error('There are too many address pages to load here. Use standard checkout.');
   }
   function matchingSalesAddresses(entries,query) {
     var words=text(query).toLowerCase().split(' ').filter(Boolean);
@@ -1185,8 +1212,7 @@
       var notice=node('p','Loading saved addresses…'); notice.setAttribute('role','status'); fields.appendChild(notice);
       try {
         await checkIdentity();
-        var entries=savedSalesAddresses(await fetchDocument('/AddressList_R.aspx'));
-        await checkIdentity();
+        var entries=await allSalesAddresses(fetchDocument,checkIdentity,function (count) { if (live()) notice.textContent='Loading saved addresses… '+count+' found'; });
         if (!live()) return;
         // The fresh account main address is the default. Read full saved fields
         // only after an explicit choice; never infer a job from address text.
@@ -2000,5 +2026,5 @@
       if (latest && latest.owner !== owner) { busy = true; clearFrame(); status('Buy now is active in another tab. Cart changes have stopped here.', true); }
     });
   }
-  return { savedSalesAddresses:savedSalesAddresses, salesAddressLabel:salesAddressLabel, matchingSalesAddresses:matchingSalesAddresses, savedSalesDetails:savedSalesDetails, assertSalesReview:assertSalesReview, relayControl:relayControl, nativeFormsReady:nativeFormsReady, continueNativeCart:continueNativeCart, pickupStoreName:pickupStoreName, centralCalendar:centralCalendar, calendarAfter:calendarAfter, pickupTimeChoices:pickupTimeChoices, stockFromDocument:stockFromDocument, pickupReadiness:pickupReadiness, boot: boot, build: BUILD, audience: AUDIENCE, deliveryAddressSummary:deliveryAddressSummary, nativeStateOption:nativeStateOption, accountScopeInput:accountScopeInput, guestContext:guestContext, guestStartPending:guestStartPending, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, nativeOrderNumber: nativeOrderNumber, cartOrderReceipt: cartOrderReceipt, readCartOrderReceipt: readCartOrderReceipt, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, cartPolicyReady: cartPolicyReady, hasCustomCuts: hasCustomCuts, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, paymentTotals: paymentTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, hydrateMatchingAddressState: hydrateMatchingAddressState, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
+  return { salesAddressPage:salesAddressPage, allSalesAddresses:allSalesAddresses, savedSalesAddresses:savedSalesAddresses, salesAddressLabel:salesAddressLabel, matchingSalesAddresses:matchingSalesAddresses, savedSalesDetails:savedSalesDetails, assertSalesReview:assertSalesReview, relayControl:relayControl, nativeFormsReady:nativeFormsReady, continueNativeCart:continueNativeCart, pickupStoreName:pickupStoreName, centralCalendar:centralCalendar, calendarAfter:calendarAfter, pickupTimeChoices:pickupTimeChoices, stockFromDocument:stockFromDocument, pickupReadiness:pickupReadiness, boot: boot, build: BUILD, audience: AUDIENCE, deliveryAddressSummary:deliveryAddressSummary, nativeStateOption:nativeStateOption, accountScopeInput:accountScopeInput, guestContext:guestContext, guestStartPending:guestStartPending, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, nativeOrderNumber: nativeOrderNumber, cartOrderReceipt: cartOrderReceipt, readCartOrderReceipt: readCartOrderReceipt, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, cartPolicyReady: cartPolicyReady, hasCustomCuts: hasCustomCuts, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, paymentTotals: paymentTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, hydrateMatchingAddressState: hydrateMatchingAddressState, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
 });
