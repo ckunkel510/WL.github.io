@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261028-charge-jobs-43';
+  var BUILD = '20261028-native-handoff-44';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -1482,24 +1482,19 @@
           if (page.documentElement.dataset.bnNativeRelay) return true;
           var action=new URL(nativeForm.getAttribute('action') || child.location.href,child.location.href);
           if (action.origin!==ORIGIN || !/^\/ShoppingCart\.aspx$/i.test(action.pathname)) throw new Error('The native checkout form destination could not be verified.');
-          // Native validation has already run. Submit the original form in its
-          // own browsing context: copying it to a targeted parent form can leave
-          // WebTrack's frame on the cart without starting the next document.
-          // The next task also lets WebForms finish its event/state updates.
+          // Native validation has already run. Preserve the original submit
+          // method and its synchronous WebForms call stack. Deferring this call
+          // moves it outside the native postback's temporary form state.
           if (nativeForm.target && nativeForm.target!=='_self') throw new Error('The native checkout form target could not be verified.');
           page.documentElement.dataset.bnNativeRelay='1';
-          win.setTimeout(function () {
-            if (submitting || active?.phase!=='checking_out' || frame?.contentDocument!==page || page.getElementById('ctl00_PageBody_CompleteCheckoutButton')) return;
-            var root=page.documentElement; if (!root) return;
-            try { root.dataset.bnNativePost='started'; child.HTMLFormElement.prototype.submit.call(nativeForm); root.dataset.bnNativePost='returned'; }
-            catch (error) { delete root.dataset.bnNativeRelay; showError(error); }
-          },0);
+          try { page.documentElement.dataset.bnNativePost='started'; originalSubmit(); page.documentElement.dataset.bnNativePost='returned'; }
+          catch (error) { delete page.documentElement.dataset.bnNativeRelay; throw error; }
           return true;
         }
         nativeForm.submit=function () { if (!relay(null)) originalSubmit(); };
         // Ordinary submit buttons retain WebTrack's own submit event, validation,
         // submitter value and AJAX behavior. Only the programmatic WebForms
-        // form.submit path above needs the deferred native submission.
+        // form.submit path above needs this guarded native submission.
       }
       var scheduled = false;
       function inspect() {
