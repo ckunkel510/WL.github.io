@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261028-native-handoff-44';
+  var BUILD = '20261028-saved-address-45';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -54,7 +54,7 @@
       if (url.origin!==ORIGIN || url.pathname!=='/AddressDetails.aspx' || !/^[1-9]\d*$/.test(id || '') || seen.has(id)) return null;
       seen.add(id);
       var type=text(cells[1]?.querySelector('img')?.getAttribute('title') || cells[1]?.querySelector('img')?.getAttribute('alt'));
-      return {id:id,code:text(link.textContent),jobReference:text(cells[2]?.textContent),summary:text(cells[3]?.textContent),isJob:/job address/i.test(type),isMain:/default address/i.test(type) || /^MAIN$/i.test(text(link.textContent)),path:url.pathname+url.search};
+      return {id:id,code:text(link.textContent),jobReference:text(cells[2]?.textContent),summary:text(cells[3]?.textContent),phone:text(cells[7]?.textContent) || text(cells[4]?.textContent),contactName:text(cells[6]?.textContent),isJob:/job address/i.test(type),isMain:/default address/i.test(type) || /^MAIN$/i.test(text(link.textContent)),path:url.pathname+url.search};
     }).filter(Boolean);
   }
   function salesAddressLabel(entry) {
@@ -93,12 +93,29 @@
   }
   function savedSalesDetails(page,entry) {
     function value(name) { return text(page.getElementById('ctl00_PageBody_'+name)?.value); }
+    if (!page.getElementById('ctl00_PageBody_addressCode') && !page.getElementById('ctl00_PageBody_addressLine1')) {
+      // Some native job detail pages fail even though the authorized address
+      // list supplies a complete address. Accept only its unambiguous five-part
+      // street, city, state, postal code and country representation.
+      var listed=listedSalesDetails(entry);
+      if (listed) return listed;
+      throw new Error('WebTrack could not open this saved address, and its address list is incomplete. Use standard checkout or contact Woodson.');
+    }
     if (!value('addressLine1') || value('addressCode').toLowerCase()!==entry.code.toLowerCase()) throw new Error('The saved address could not be verified. Refresh the address list and try again.');
     var state=page.getElementById('ctl00_PageBody_state'), country=page.getElementById('ctl00_PageBody_CountrySelector');
     var address={line1:value('addressLine1'),line2:value('addressLine2'),line3:value('addressLine3'),city:value('city'),stateValue:value('state'),stateText:text(state?.selectedOptions?.[0]?.textContent) || value('state'),zip:value('zipCode'),countryValue:text(country?.value),countryText:text(country?.selectedOptions?.[0]?.textContent),contactName:value('contactName'),phone:value('contactTelephone') || value('telephone1'),email:value('email'),jobReference:page.getElementById('ctl00_PageBody_JobReference') ? value('JobReference') : entry.jobReference};
     var missing=[['line1','street'],['city','city'],['stateValue','state'],['zip','ZIP'],['countryValue','country']].filter(function (item) { return !address[item[0]] || address[item[0]]==='0'; }).map(function (item) { return item[1]; });
     if (missing.length) throw new Error('This saved address is missing '+missing.join(', ')+'. Update the saved address or use standard checkout.');
     return address;
+  }
+  function listedSalesDetails(entry) {
+    var parts=text(entry.summary).split(',').map(text);
+    if (parts.length!==5 || parts.some(function (part) { return !part; })) return null;
+    var country=/^(?:United States|USA|US)$/i.test(parts[4])?'USA':/^(?:Canada|CAN)$/i.test(parts[4])?'CAN':'';
+    var state=Object.keys(STATE_NAMES).find(function (code) { return code===parts[2].toUpperCase() || STATE_NAMES[code].toLowerCase()===parts[2].toLowerCase(); });
+    var canadian=/^(?:AB|BC|MB|NB|NL|NS|NT|NU|ON|PE|QC|SK|YT)$/.test(state || '');
+    if (!country || !state || (country==='CAN')!==canadian || !(country==='USA'?/^\d{5}(?:-\d{4})?$/:/^[ABCEGHJ-NPRSTVXY]\d[A-Z]\s?\d[A-Z]\d$/i).test(parts[3])) return null;
+    return {line1:parts[0],line2:'',line3:'',city:parts[1],stateValue:state,stateText:STATE_NAMES[state],zip:parts[3],countryValue:country,countryText:country==='USA'?'United States':'Canada',contactName:entry.contactName || '',phone:entry.phone || '',email:'',jobReference:entry.jobReference || ''};
   }
   function assertSalesReview(page,address,invoice) {
     function key(value) { return text(value).toLowerCase().replace(/[^a-z0-9]/g,''); }
@@ -2021,5 +2038,5 @@
       if (latest && latest.owner !== owner) { busy = true; clearFrame(); status('Buy now is active in another tab. Cart changes have stopped here.', true); }
     });
   }
-  return { salesAddressPage:salesAddressPage, allSalesAddresses:allSalesAddresses, savedSalesAddresses:savedSalesAddresses, salesAddressLabel:salesAddressLabel, matchingSalesAddresses:matchingSalesAddresses, savedSalesDetails:savedSalesDetails, assertSalesReview:assertSalesReview, relayControl:relayControl, nativeFormsReady:nativeFormsReady, continueNativeCart:continueNativeCart, pickupStoreName:pickupStoreName, centralCalendar:centralCalendar, calendarAfter:calendarAfter, pickupTimeChoices:pickupTimeChoices, stockFromDocument:stockFromDocument, pickupReadiness:pickupReadiness, boot: boot, build: BUILD, audience: AUDIENCE, deliveryAddressSummary:deliveryAddressSummary, nativeStateOption:nativeStateOption, accountScopeInput:accountScopeInput, guestContext:guestContext, guestStartPending:guestStartPending, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, nativeOrderNumber: nativeOrderNumber, cartOrderReceipt: cartOrderReceipt, readCartOrderReceipt: readCartOrderReceipt, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, cartPolicyReady: cartPolicyReady, hasCustomCuts: hasCustomCuts, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, paymentTotals: paymentTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, hydrateMatchingAddressState: hydrateMatchingAddressState, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
+  return { listedSalesDetails:listedSalesDetails, salesAddressPage:salesAddressPage, allSalesAddresses:allSalesAddresses, savedSalesAddresses:savedSalesAddresses, salesAddressLabel:salesAddressLabel, matchingSalesAddresses:matchingSalesAddresses, savedSalesDetails:savedSalesDetails, assertSalesReview:assertSalesReview, relayControl:relayControl, nativeFormsReady:nativeFormsReady, continueNativeCart:continueNativeCart, pickupStoreName:pickupStoreName, centralCalendar:centralCalendar, calendarAfter:calendarAfter, pickupTimeChoices:pickupTimeChoices, stockFromDocument:stockFromDocument, pickupReadiness:pickupReadiness, boot: boot, build: BUILD, audience: AUDIENCE, deliveryAddressSummary:deliveryAddressSummary, nativeStateOption:nativeStateOption, accountScopeInput:accountScopeInput, guestContext:guestContext, guestStartPending:guestStartPending, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, nativeOrderNumber: nativeOrderNumber, cartOrderReceipt: cartOrderReceipt, readCartOrderReceipt: readCartOrderReceipt, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, cartPolicyReady: cartPolicyReady, hasCustomCuts: hasCustomCuts, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, paymentTotals: paymentTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, hydrateMatchingAddressState: hydrateMatchingAddressState, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
 });
