@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261028-saved-address-45';
+  var BUILD = '20261028-visible-job-results-46';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -1236,25 +1236,35 @@
         var main={id:'main',code:'MAIN',isMain:true,summary:deliveryAddressSummary(accountAddress())};
         entries=entries.filter(function (entry) { return !entry.isMain; }); entries.unshift(main);
         var search=field(fields,'Search jobs or addresses','','search'); search.placeholder='Job name, code, reference, street or city';
-        var select=field(fields,'Sales / delivery address','','text',[]), preview=node('p'); select.required=true; fields.appendChild(preview);
+        var results=node('div','','bn-sales-results'), preview=node('p');
+        results.id='bn-sales-results'; search.setAttribute('aria-controls',results.id); search.autocomplete='off';
+        results.setAttribute('role','radiogroup'); results.setAttribute('aria-label','Matching sales addresses'); fields.appendChild(results); fields.appendChild(preview);
         var chosen=entries.find(function (entry) { return entry.id===current.salesSelection?.id; }) || (!current.addressChanged ? main : null);
+        var matches=[];
+        function updateSelection() {
+          var visible=matches.some(function (entry) { return entry.id===chosen?.id; });
+          preview.textContent=chosen ? (visible ? 'Selected: ' : 'Current order address: ')+salesAddressLabel(chosen)+(visible ? '' : '. Select a matching address above to change it.') : 'Select an address above for this order.';
+          apply.disabled=!visible;
+        }
         function render() {
-          var matches=matchingSalesAddresses(entries,search.value);
-          select.replaceChildren(); var blank=node('option','Choose an address'); blank.value=''; select.appendChild(blank);
-          matches.forEach(function (entry) { var option=node('option',salesAddressLabel(entry)); option.value=entry.id; select.appendChild(option); });
-          if (chosen && !matches.some(function (entry) { return entry.id===chosen.id; })) { var selected=node('option','Current selection · '+salesAddressLabel(chosen)); selected.value=chosen.id; select.appendChild(selected); }
-          select.value=chosen?.id || '';
+          matches=matchingSalesAddresses(entries,search.value); results.replaceChildren();
+          matches.forEach(function (entry) {
+            var label=node('label','','bn-sales-choice'), radio=doc.createElement('input'), copy=node('div');
+            radio.type='radio'; radio.name='bn-sales-choice'; radio.value=entry.id; radio.checked=entry.id===chosen?.id; radio.required=true;
+            copy.append(node('strong',[entry.isMain?'Main account':entry.isJob?'Job':'Saved address',entry.code,entry.jobReference?'Job ref: '+entry.jobReference:''].filter(Boolean).join(' · ')),node('span',entry.summary));
+            label.append(radio,copy); results.appendChild(label);
+            radio.addEventListener('change',function () { if (radio.checked) { chosen=entry; updateSelection(); } });
+          });
+          if (!matches.length) results.appendChild(node('p','No matching addresses. Try a job name, code, street or city.'));
           notice.textContent=matches.length+' matching address'+(matches.length===1?'':'es')+' · '+entries.length+' available';
-          preview.textContent=chosen ? 'Selected: '+salesAddressLabel(chosen) : 'Choose the address to use for this order.';
-          apply.disabled=!chosen;
+          updateSelection();
         }
         search.addEventListener('input',render);
-        select.addEventListener('change',function () { chosen=entries.find(function (entry) { return entry.id===select.value; }) || null; render(); });
         render(); search.focus();
         form.addEventListener('submit',async function (event) {
           event.preventDefault();
           if (!chosen || apply.disabled) return;
-          var selection=chosen; apply.disabled=true; search.disabled=true; select.disabled=true; error.textContent='';
+          var selection=chosen; apply.disabled=true; search.disabled=true; results.querySelectorAll('input').forEach(function (input) { input.disabled=true; }); error.textContent='';
           try {
             await checkIdentity();
             var address=selection.id==='main' ? accountAddress() : savedSalesDetails(await fetchDocument(selection.path),selection);
@@ -1265,7 +1275,7 @@
             if (!current.billingChanged) current.billing=accountAddress();
             if (current.method!=='pickup') { current.method=''; current.date=''; current.shippingValue=''; }
             closeEditor(); requestFastUpdate();
-          } catch (failure) { if (live()) { error.textContent=failure.message; apply.disabled=false; search.disabled=false; select.disabled=false; } }
+          } catch (failure) { if (live()) { error.textContent=failure.message; updateSelection(); search.disabled=false; results.querySelectorAll('input').forEach(function (input) { input.disabled=false; }); } }
         });
       } catch (failure) { if (live()) { notice.textContent=''; error.textContent=failure.message; } }
     }
@@ -1992,6 +2002,12 @@
 #wl-buy-now .bn-editor-actions{flex:none;display:flex;gap:10px;margin:0;padding:13px 22px;border-top:1px solid #e5e9ee;background:#fff}
 #wl-buy-now .bn-editor-actions .bn-action{flex:1}
 #wl-buy-now .bn-editor-error{color:#9b241e;font-weight:600}#wl-buy-now .bn-editor-error:empty{display:none}
+#wl-buy-now .bn-sales-results{display:grid;gap:8px;max-height:min(310px,42dvh);overflow:auto;overscroll-behavior:contain;padding:3px}
+#wl-buy-now .bn-sales-results .bn-sales-choice{display:flex;align-items:flex-start;gap:10px;padding:12px;margin:0;border:1px solid #d7dce2;border-radius:8px;cursor:pointer;background:#fff}
+#wl-buy-now .bn-sales-choice:has(input:checked){border-color:#6b0016;background:#fcf5f6}
+#wl-buy-now .bn-sales-choice input{width:18px;height:18px;min-height:18px;flex:none;padding:0;margin:2px 0;accent-color:#6b0016}
+#wl-buy-now .bn-sales-choice>div{display:grid;gap:4px;min-width:0;overflow-wrap:anywhere}
+#wl-buy-now .bn-sales-choice strong{font-size:13px}#wl-buy-now .bn-sales-choice span{font-size:12px;color:#565e67}
 #wl-buy-now .bn-panel.bn-editing>:not(.bn-head):not(.bn-editor-workspace):not(.bn-native-workspace){display:none!important}
 /* Keep the offscreen native document laid out: WebForms validation and stock
    warnings use visibility measurements while checkout prepares in the background. */
