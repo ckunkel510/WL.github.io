@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261030-checkout-recovery-54';
+  var BUILD = '20261030-checkout-recovery-55';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -1778,7 +1778,7 @@
       } else if (fast.date) {
         var parts = fast.date.split('-').map(Number), date = new Date(parts[0],parts[1]-1,parts[2],12);
         fastText('[data-bn-timing]',date.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})+' · '+(fast.method==='pickup' ? fast.pickupTime || 'First available' : fast.window));
-      }
+      } else fastText('[data-bn-timing]','Earliest available');
       if (overlay) loading(fast.loading);
     }
     function requestPickupPerson() {

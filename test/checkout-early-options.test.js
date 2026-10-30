@@ -41,3 +41,10 @@ test('a native navigation with a temporarily detached document does not stop the
  const context=vm.createContext({fast,busy:false,submitting:false,active:{phase:'checking_out'}});
  vm.runInContext(driver,context);await context.driveFast({}, {documentElement:null});assert.equal(fast.driving,false);assert.equal(fast.stopped,undefined);
 });
+
+test('switching back from UPS clears the old shipping-speed caption in the pickup or delivery draft',()=>{
+  const rendered={},context=vm.createContext({fast:{methods:{},method:'ship',date:'',ready:false},guest:false,overlay:null,submitting:false,fastText:(key,value)=>{rendered[key]=value;},deliveryAddressSummary:core.deliveryAddressSummary,pickupPersonName:core.pickupPersonName});
+  vm.runInContext(source.slice(source.indexOf('    function updateFastOptions('),source.indexOf('    function requestPickupPerson(')),context);
+  context.updateFastOptions();assert.equal(rendered['[data-bn-timing]'],'UPS Ground');
+  for(const method of ['pickup','delivery']) {context.fast.method=method;context.updateFastOptions();assert.equal(rendered['[data-bn-timing]'],'Earliest available');}
+});
