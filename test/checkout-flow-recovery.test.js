@@ -364,3 +364,82 @@ test('guest signup resumes from fresh matching login proof after a confirmation 
   await env.context.submitGuest();assert.equal(attempts,1);assert.equal(proofs,1);assert.equal(reloads,1);
   assert.equal('password' in JSON.parse(env.storage.get('wl_guest_checkout_payload')),false);
 });
+
+function fullPageGuestEnvironment(phase='ready') {
+  const env=environment();
+  env.context.location.pathname='/UserSignup.aspx'; env.context.parent=env.context;
+  const draft={email:'guest@example.invalid',fname:'Guest',lname:'Test',phone:'5555550100',contactName:'Guest Test',d_addr1:'1 Test St',d_city:'Test',d_state:'TX',d_zip:'77836'};
+  env.storage.set('wl_guest_checkout_payload',JSON.stringify(draft));
+  env.storage.set('wl_guest_cart_handoff_v1',JSON.stringify({version:1,createdAt:Date.now(),email:draft.email,items:[{pid:'85',quantity:1}]}));
+  env.storage.set('wl_guest_signup_recovery_v1',JSON.stringify({version:1,createdAt:Date.now(),email:draft.email,phase}));
+  const form=env.element(); form.insertBefore=(node)=>{form.children.unshift(node);env.elements.set(node.id,node);};
+  const names=['UserNameTextBox','EmailAddressTextBox','Password1TextBox','Password2TextBox','ContactTelephoneTextBox','FirstNameTextBox','LastNameTextBox','DeliveryAddressLine1TextBox','SignupButton'];
+  for(const name of names) {const node=env.element('ctl00_PageBody_'+name);node.closest=()=>form;node.getAttribute=()=>'';node.classList={remove(){}};}
+  let navigations=0,proofs=0;
+  env.context.location.assign=()=>{navigations++;};env.context.nativeProof=()=>{proofs++;};
+  load('Guestcheckout.js',env,'verifyGuestAccount=async()=>window.nativeProof();window.readRecovery=readFullPageGuestRecovery;window.resumeRecovery=resumeFullPageGuestRecovery;window.offerRecovery=offerFullPageGuestRecovery;window.stubBasket=fn=>{backupGuestCart=fn;};');
+  return {...env,draft,form,navigations:()=>navigations,proofs:()=>proofs};
+}
+
+test('full-page guest handoff expires and refuses mismatched draft or basket owners',()=>{
+  for(const change of [record=>record.createdAt=Date.now()-300001,record=>record.createdAt=Date.now()+30000,record=>record.phase='unknown',record=>record.email='other@example.invalid']) {
+    const env=fullPageGuestEnvironment(),record=JSON.parse(env.storage.get('wl_guest_signup_recovery_v1'));
+    change(record);env.storage.set('wl_guest_signup_recovery_v1',JSON.stringify(record));
+    assert.equal(env.context.readRecovery(),null);assert.equal(env.storage.has('wl_guest_signup_recovery_v1'),false);
+    assert.equal(env.navigations(),0);assert.equal(env.storage.has('wl_guest_cart_handoff_v1'),true);
+  }
+  const env=fullPageGuestEnvironment();env.storage.set('wl_guest_cart_handoff_v1',JSON.stringify({createdAt:Date.now(),email:'other@example.invalid',items:[{}]}));
+  assert.equal(env.context.readRecovery(),null);
+});
+
+test('full-page guest setup fills only its verified draft and waits for explicit native submission',async()=>{
+  const env=fullPageGuestEnvironment();
+  assert.equal(await env.context.resumeRecovery(),true);assert.equal(env.navigations(),0);assert.equal(env.proofs(),0);
+  const field=id=>env.elements.get('ctl00_PageBody_'+id);
+  assert.equal(field('EmailAddressTextBox').value,env.draft.email);
+  assert.equal(field('EmailAddressTextBox').readOnly,true);
+  assert.equal(field('Password1TextBox').type,'password');
+  assert.match(field('Password1TextBox').value,/\d/);assert.equal(field('Password1TextBox').value,field('Password2TextBox').value);
+  assert.equal(JSON.stringify([...env.storage.values()]).includes(field('Password1TextBox').value),false);
+  const button=field('SignupButton');assert.equal(button.textContent,'Continue to checkout');
+  env.context.Page_ClientValidate=()=>false;button.click({});assert.equal(env.context.readRecovery().phase,'ready');
+  env.context.Page_ClientValidate=()=>true;button.click({});assert.equal(env.context.readRecovery().phase,'submitted');
+  let blocked=false;button.click({preventDefault(){blocked=true;},stopImmediatePropagation(){}});assert.equal(blocked,true,'second submission is blocked');
+});
+
+test('full-page guest return verifies the native login before continuing and never posts signup on reload',async()=>{
+  const env=fullPageGuestEnvironment('submitted');
+  await env.context.resumeRecovery();assert.equal(env.proofs(),0);assert.equal(env.navigations(),0);
+  const returned=environment();returned.context.parent=returned.context;returned.context.location.pathname='/Default.aspx';
+  returned.storage.clear();for(const [key,value] of env.storage)returned.storage.set(key,value);
+  let proofs=0,nav=0;returned.context.location.assign=()=>nav++;returned.context.nativeProof=()=>{proofs++;};
+  load('Guestcheckout.js',returned,'verifyGuestAccount=async()=>window.nativeProof();window.resumeRecovery=resumeFullPageGuestRecovery;');
+  assert.equal(await returned.context.resumeRecovery(),true);assert.equal(proofs,1);assert.equal(nav,1);
+  assert.equal(returned.storage.has('wl_guest_signup_recovery_v1'),false);
+  assert.equal(returned.storage.get('wl_checkout_mode'),'guest');
+  assert.equal(returned.storage.has('wl_compact_guest_start_v1'),true);
+});
+
+test('full-page guest return retains the basket and does not navigate when native identity proof fails',async()=>{
+  const original=fullPageGuestEnvironment('submitted'),env=environment();
+  env.context.parent=env.context;env.context.location.pathname='/Default.aspx';
+  for(const [key,value] of original.storage)env.storage.set(key,value);
+  let nav=0;env.context.location.assign=()=>nav++;
+  env.document.body.prepend=node=>env.elements.set(node.id,node);
+  load('Guestcheckout.js',env,'verifyGuestAccount=async()=>{throw Error("identity mismatch")};window.resumeRecovery=resumeFullPageGuestRecovery;');
+  assert.equal(await env.context.resumeRecovery(),true);assert.equal(nav,0);
+  assert.equal(env.storage.has('wl_guest_signup_recovery_v1'),true);
+  assert.equal(env.storage.has('wl_guest_cart_handoff_v1'),true);
+  assert.equal(env.storage.has('wl_compact_guest_start_v1'),false);
+});
+
+test('standard guest setup rechecks the basket and stores only a short-lived owner marker',async()=>{
+  const env=fullPageGuestEnvironment();env.element('gc_error');env.storage.delete('wl_guest_signup_recovery_v1');let checks=0;
+  env.context.backupCheck=()=>checks++;
+  // Rebind the native read, keeping the production recovery button and storage behavior.
+  env.context.stubBasket(async()=>env.context.backupCheck());
+  env.context.offerRecovery();await env.elements.get('gc_full_page').click();
+  const marker=JSON.parse(env.storage.get('wl_guest_signup_recovery_v1'));
+  assert.equal(checks,1);assert.equal(env.navigations(),1);assert.equal(marker.phase,'ready');
+  assert.deepEqual(Object.keys(marker).sort(),['createdAt','email','phase','version']);
+});
