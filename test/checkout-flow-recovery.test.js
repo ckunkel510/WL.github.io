@@ -278,6 +278,21 @@ test('guest basket backup uses matching native rows and refuses a pending or con
   env.storage.delete('wl_guest_cart_handoff_v1');env.context.nativePage={querySelectorAll:()=>[guestRow(3)]};await assert.rejects(env.context.backupGuest('guest@example.invalid'));assert.equal(env.storage.has('wl_guest_cart_handoff_v1'),false);
   const invalid=guestRow();invalid.querySelectorAll=()=>[{value:'custom cut'}];env.document.querySelectorAll=()=>[invalid];await assert.rejects(env.context.backupGuest('guest@example.invalid'));assert.equal(env.storage.has('wl_guest_cart_handoff_v1'),false);
 });
+test('guest basket backup ignores empty WebTrack shell rows but rejects incomplete product rows',async()=>{
+  const env=environment(), shell={querySelector:()=>null};
+  env.document.querySelectorAll=()=>[shell,guestRow()];
+  load('Guestcheckout.js',env,'guestNativeDocument=async()=>window.nativePage;window.backupGuest=backupGuestCart;');
+  env.context.nativePage={querySelectorAll:()=>[shell,guestRow()]};
+  await env.context.backupGuest('guest@example.invalid');
+  const saved=JSON.parse(env.storage.get('wl_guest_cart_handoff_v1'));
+  assert.equal(saved.items.length,1);assert.equal(saved.items[0].quantity,2);
+  env.storage.delete('wl_guest_cart_handoff_v1');
+  const incomplete=guestRow();const original=incomplete.querySelector;
+  incomplete.querySelector=selector=>selector.startsWith('input.riTextBox')?null:original(selector);
+  env.document.querySelectorAll=()=>[shell,incomplete];
+  await assert.rejects(env.context.backupGuest('guest@example.invalid'),error=>error.code==='guest_cart_unsupported');
+  assert.equal(env.storage.has('wl_guest_cart_handoff_v1'),false);
+});
 test('guest signup success requires fresh native login proof matching the supplied email',async()=>{
   const env=environment();load('Guestcheckout.js',env,'guestNativeDocument=async()=>window.nativePage;window.verifyGuest=verifyGuestAccount;');
   function identity(login,signedIn=true){return {querySelector:()=>signedIn?{}:null,querySelectorAll:()=>[{textContent:`Change details for user '${login}'`}]};}

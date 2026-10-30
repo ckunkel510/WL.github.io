@@ -21,6 +21,12 @@ After release, verify all new build markers on a fresh page (native checkout, gu
 
 Native WebTrack separately references Checkout2.js, Guestcheckout.js and headermodern.js; the header loads BuyNowPilot.js and wl-site.js. Update the five runtime files together and allow GitHub Pages/cache propagation before live verification. Runtime changes are held for release approval under AGENTS.md.
 
+### Approved rollout corrections
+
+PRs #107 and #108 are published. Live staff-manager testing reached native charge review with the original quantities and subtotal; no order was submitted. GA4 Realtime received analytics version 1.8.4 and staff-assisted context. Event-scoped Checkout Context, Commerce Error Code and Guest Validation Fields definitions are registered.
+
+A subsequent guest preflight exposed an empty WebTrack placeholder carrying the same class as product rows. Guest parser build `20261030-guest-cart-recovery-2` ignores only rows with neither a quantity input nor a product link. Incomplete real product rows still stop before account creation. A regression check covers both states. This correction is part of the user-approved rollout and requires fresh live guest verification.
+
 ## Rollback
 
 Revert this release commit and restore the previous script version URLs. Do not delete recovery backups or pending order receipts while an order result is uncertain. A rollback can leave a tab-local guest cart backup that the previous runtime cannot restore automatically; keep it for investigation before asking the shopper to rebuild that basket.

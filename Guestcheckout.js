@@ -7,7 +7,7 @@
   // Guest checkout needs to show controls on the cart page, but it also needs to
   // run on the checkout page so saved guest data can be applied after WebForms navigates.
   if (!IS_CART_PAGE && !IS_CHECKOUT_PAGE) return;
-  document.documentElement?.setAttribute?.('data-wl-guest-checkout-build','20261030-guest-cart-recovery-1');
+  document.documentElement?.setAttribute?.('data-wl-guest-checkout-build','20261030-guest-cart-recovery-2');
 
   const LOG = (...a) => console.log('[GuestCheckout]', ...a);
   const ERR = (...a) => console.error('[GuestCheckout]', ...a);
@@ -658,7 +658,10 @@
   }
 
   function guestCartItems(page) {
-    const rows = Array.from(page.querySelectorAll('.shopping-cart-item'));
+    // WebTrack also emits an empty row with this class. Keep every actual item,
+    // including malformed items, so validation below still fails closed.
+    const rows = Array.from(page.querySelectorAll('.shopping-cart-item')).filter(row =>
+      row.querySelector('input.riTextBox,input[id*="_qty_"]:not([type="hidden"])') || row.querySelector('a[href*="pid="]'));
     return rows.map(row => {
       const link = row.querySelector('a[href*="pid="]');
       const pid = (link?.getAttribute('href') || '').match(/[?&]pid=(\d+)/i)?.[1];
