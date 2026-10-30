@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261030-checkout-recovery-50';
+  var BUILD = '20261030-checkout-recovery-51';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -35,6 +35,17 @@
     return Array.from(options).find(function (option) {
       return (value && text(option.value).toUpperCase()===value) || names.has(text(option.textContent).toUpperCase());
     });
+  }
+  function pickupPersonName(options, nativeValue) {
+    return text(options?.pickupPerson) || text(nativeValue) || text(options?.address?.contactName);
+  }
+  function applyPickupSelection(options, store, person) {
+    var name=text(person);
+    if (!name) throw new Error('Enter the name of the person picking up this order.');
+    if (!(options.stores || []).some(function (entry) { return entry.value===store; })) throw new Error('Choose an available pickup store.');
+    var storeChanged=options.store!==store;
+    options.store=store; options.pickupPerson=name;
+    if (storeChanged) { options.date=''; options.pickupTime=''; }
   }
   function deliveryAddressSummary(address) {
     if (!text(address?.line1)) return 'Choose an address';
@@ -985,7 +996,7 @@
         '<button type="button" data-bn-method="ship"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 6 9-4 9 4v12l-9 4-9-4zM3 6l9 4 9-4M12 10v12M7 4l10 4"/></svg><strong>Ship</strong><small data-bn-rate="ship">Checking…</small></button></div>' +
         '<div class="bn-options">' +
         (guest ? '' : '<div class="bn-option"><span class="bn-option-icon" aria-hidden="true">⌂</span><div><strong>Sales address / job</strong><span data-bn-sales>Main account</span><span data-bn-invoice>Invoice: main account</span></div><button type="button" data-bn-edit="sales" aria-label="Change sales address or job">Change</button></div>') +
-        '<div class="bn-option"><span class="bn-option-icon">⌖</span><div><strong data-bn-address-title>Deliver to</strong><span data-bn-address>Choose an address</span></div><button type="button" data-bn-edit="address">Change</button></div>' +
+        '<div class="bn-option"><span class="bn-option-icon">⌖</span><div><strong data-bn-address-title>Deliver to</strong><span data-bn-address>Choose an address</span><span data-bn-pickup-person hidden></span></div><button type="button" data-bn-edit="address">Change</button></div>' +
         '<div class="bn-option"><span class="bn-option-icon">◷</span><div><strong data-bn-timing-title>When</strong><span data-bn-timing>Earliest available</span></div><button type="button" data-bn-edit="timing">Change</button></div>' +
         '<div class="bn-option"><span class="bn-option-icon">▤</span><div><strong>Payment</strong><span data-bn-payment>Saved payment</span></div><button type="button" data-bn-edit="payment">Change</button></div></div>' +
         '<button type="button" class="bn-extras" data-bn-edit="extras"><span data-bn-extras></span><span>＋</span></button>' +
@@ -1182,7 +1193,7 @@
     function editFast(kind) {
       if (!fast || submitting || fast.editor || !editableFast(kind)) return;
       var host = overlay.querySelector('[data-bn-editor]'); host.replaceChildren(); host.hidden = false; fast.editor = kind; fast.editorTrigger=doc.activeElement; overlay.querySelector('.bn-panel').classList.add('bn-editing'); loading(fast.loading);
-      var titles = {sales:'Sales address / job',address:fast.method === 'pickup' ? 'Pickup store' : 'Delivery address',timing:'Schedule',payment:'Payment',extras:'Add from your cart',notes:'Order details'};
+      var titles = {sales:'Sales address / job',address:fast.method === 'pickup' ? 'Pickup store & person' : 'Delivery address',timing:'Schedule',payment:'Payment',extras:'Add from your cart',notes:'Order details'};
       var heading=node('div','','bn-workspace-head'); heading.append(node('h3',titles[kind]),button('Back to order',closeEditor,true)); host.appendChild(heading);
       var form = doc.createElement('form'), values = {}, action = null; form.className='bn-editor-form'; host.appendChild(form);
       var fields=node('div','','bn-editor-fields'); form.appendChild(fields);
@@ -1191,6 +1202,10 @@
         fields.appendChild(node('p','Choose the sales / delivery address for this order, including pickup orders. Invoices use the main account billing address.'));
       } else if (kind === 'address' && fast.method === 'pickup') {
         values.store = field(fields, 'Pickup store', fast.store, 'text', fast.stores || []);
+        values.store.required=true;
+        values.person = field(fields, 'Pickup person', pickupPersonName(fast));
+        values.person.required=true; values.person.autocomplete='name';
+        fields.appendChild(node('p','Enter the name of the person who will collect this order.'));
       } else if (kind === 'address') {
         var address = fast.address || {};
         [['line1','Street'],['line2','Apt / suite'],['city','City'],['stateValue','State'],['zip','ZIP'],['contactName','Contact'],['phone','Phone'],['email','Email']].forEach(function (entry) {
@@ -1207,7 +1222,7 @@
         }
         if (fast.method === 'pickup') {
           values.time = field(fields, 'Pickup time', fast.pickupTime || pickupTimeChoices(values.date.value,new Date())[0]?.value, 'text', pickupTimeChoices(values.date.value,new Date()));
-          values.person = field(fields, 'Pickup person', fast.pickupPerson || fast.address?.contactName);
+          values.person = field(fields, 'Pickup person', pickupPersonName(fast));
           values.person.required = true;
         } else if (fast.method === 'delivery') {
           values.window = field(fields, 'Delivery window', fast.window, 'text', [{value:'Morning',label:'Morning'},{value:'Afternoon',label:'Afternoon'}]);
@@ -1239,8 +1254,13 @@
       form.addEventListener('submit', function (event) {
         event.preventDefault();
         if (kind==='sales') return; // The picker verifies the saved record before applying it.
+        if (values.person && !text(values.person.value)) { error.textContent='Enter the name of the person picking up this order.'; values.person.focus(); return; }
         if (!form.reportValidity()) return;
-        if (kind === 'address' && fast.method === 'pickup') { fast.store = values.store.value; fast.date=''; fast.pickupTime=''; updatePickupReadiness(); }
+        if (kind === 'address' && fast.method === 'pickup') {
+          try { applyPickupSelection(fast,values.store.value,values.person.value); }
+          catch (failure) { error.textContent=failure.message; return; }
+          updatePickupReadiness();
+        }
         else if (kind === 'address') {
           fast.address = Object.assign({}, fast.address, Object.fromEntries(Object.entries(values).map(function (entry) { return [entry[0],text(entry[1].value)]; })));
           fast.address.stateValue = fast.address.stateValue.toUpperCase(); fast.address.stateText = fast.address.stateValue;
@@ -1252,7 +1272,7 @@
           values.date.min=minimum;
           if (fast.method !== 'ship' && !dateChoice(values.date.value,minimum,values.date.max)) { error.textContent=fast.method==='pickup' ? pickupNotice(fast.pickupReadiness)+' Choose a date on or after '+minimum+'.' : 'Choose a Monday–Saturday date in the available range.'; values.date.focus(); return; }
           if (fast.method==='pickup' && !pickupTimeChoices(values.date.value,new Date()).some(function (option) { return option.value===values.time.value; })) { error.textContent='Choose an available pickup time at least two hours from now.'; return; }
-          fast.date = values.date.value; if (values.time) fast.pickupTime = values.time.value; if (values.person) fast.pickupPerson = values.person.value; if (values.window) fast.window = values.window.value; if (values.shipping) fast.shippingValue = values.shipping.value;
+          fast.date = values.date.value; if (values.time) fast.pickupTime = values.time.value; if (values.person) fast.pickupPerson = text(values.person.value); if (values.window) fast.window = values.window.value; if (values.shipping) fast.shippingValue = values.shipping.value;
         } else if (kind === 'payment') {
           fast.paymentFingerprint = values.payment.value;
           if (!guest && values.remember.checked) storage.setItem(preferenceKey,fast.paymentFingerprint); else storage.removeItem(preferenceKey);
@@ -1345,7 +1365,7 @@
         win.sessionStorage.setItem('wl_fulfillment_selection_source_v1','user');
       }
       var salesNote=fast.salesSelection && fast.salesSelection.id!=='main' ? 'Sales / job address: '+fast.salesSelection.code+(fast.salesSelection.jobReference ? ' | Job ref: '+fast.salesSelection.jobReference : '') : '';
-      win.sessionStorage.setItem('wl_checkout_date_state_v2',JSON.stringify({ts:Date.now(),pickupDate:fast.method==='pickup'?fast.date || '':'',pickupTime:fast.pickupTime || '',pickupPerson:fast.pickupPerson || '',deliveryDate:fast.method!=='pickup'?fast.date || '':'',deliveryTime:fast.window || '',extra:[fast.notes,salesNote].filter(Boolean).join('\n')}));
+      win.sessionStorage.setItem('wl_checkout_date_state_v2',JSON.stringify({ts:Date.now(),pickupDate:fast.method==='pickup'?fast.date || '':'',pickupTime:fast.pickupTime || '',pickupPerson:pickupPersonName(fast),deliveryDate:fast.method!=='pickup'?fast.date || '':'',deliveryTime:fast.window || '',extra:[fast.notes,salesNote].filter(Boolean).join('\n')}));
       if (fast.address) {
         var billing=fast.billing ? Object.assign({},fast.billing,{stateText:STATE_NAMES[text(fast.billing.stateValue).toUpperCase()] || fast.billing.stateText}) : null;
         var pickupBranchValue=nativeHandoff && fast.method==='pickup' && (fast.stores || []).some(function (store) { return store.value===fast.store; }) ? fast.store : '';
@@ -1717,6 +1737,9 @@
       fastText('[data-bn-invoice]',fast.billingChanged ? 'Invoice: custom billing address' : 'Invoice: main account');
       var store = (fast.stores || []).find(function (option) { return option.value === fast.store; });
       fastText('[data-bn-address]',fast.method==='pickup' ? (store?.label.split(' - ')[0] || (guest ? 'Pickup store' : 'Account store')) : deliveryAddressSummary(fast.address));
+      var personSummary=overlay?.querySelector('[data-bn-pickup-person]');
+      if (personSummary) { personSummary.hidden=fast.method!=='pickup'; personSummary.textContent=pickupPersonName(fast) ? 'Pickup person: '+pickupPersonName(fast) : 'Pickup person required'; }
+      overlay?.querySelector('[data-bn-edit="address"]')?.setAttribute('aria-label',fast.method==='pickup' ? 'Change pickup store or person' : 'Change delivery address');
       if (overlay) { overlay.querySelectorAll('[data-bn-pickup-notice],[data-bn-pickup-items]').forEach(function (el) { el.hidden=fast.method!=='pickup'; }); }
       if (guest && !fast.ready && !fast.securePayment) fastText('[data-bn-payment]','Enter securely');
       fastText('[data-bn-timing-title]',fast.method==='pickup' ? 'Pickup request' : 'When');
@@ -1729,6 +1752,15 @@
         fastText('[data-bn-timing]',date.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})+' · '+(fast.method==='pickup' ? fast.pickupTime || 'First available' : fast.window));
       }
       if (overlay) loading(fast.loading);
+    }
+    function requestPickupPerson() {
+      updateFastOptions(); status('Enter the name of the person picking up this order.',true);
+      if (fast.editor) return;
+      editFast('address');
+      var input=overlay.querySelector('[data-bn-editor] input[aria-label="Pickup person"]');
+      var error=overlay.querySelector('[data-bn-editor] .bn-editor-error');
+      if (error) error.textContent='Enter the name of the person picking up this order.';
+      input?.focus();
     }
     function haltFast(message, errorCode) {
       if (!fast.stopped) measureCheckout('error',null,null,null,errorCode || 'checkout_unavailable');
@@ -1870,7 +1902,8 @@
             }
             if (fast.pickupTime && !fast.pickupTimes.some(function (option) { return option.value===fast.pickupTime; })) fast.pickupTime = '';
             fast.pickupTime = fast.pickupTime || fast.pickupTimes[0].value; setNative(child,time,fast.pickupTime);
-            var person = page.getElementById('pickupPerson'); fast.pickupPerson = fast.pickupPerson || person?.value || fast.address?.contactName || '';
+            var person = page.getElementById('pickupPerson'); fast.pickupPerson = pickupPersonName(fast,person?.value);
+            if (!fast.pickupPerson) { requestPickupPerson(); return; }
             setNative(child,person,fast.pickupPerson);
           } else {
             var windowInput = page.querySelector('input[name="deliveryTime"][value="'+fast.window+'"]');
@@ -2142,5 +2175,5 @@
       if (latest && latest.owner !== owner) { busy = true; clearFrame(); status('Buy now is active in another tab. Cart changes have stopped here.', true); }
     });
   }
-  return { guestCartHandoff:guestCartHandoff, listedSalesDetails:listedSalesDetails, salesAddressPage:salesAddressPage, allSalesAddresses:allSalesAddresses, savedSalesAddresses:savedSalesAddresses, salesAddressLabel:salesAddressLabel, matchingSalesAddresses:matchingSalesAddresses, savedSalesDetails:savedSalesDetails, assertSalesReview:assertSalesReview, relayControl:relayControl, nativeFormsReady:nativeFormsReady, continueNativeCart:continueNativeCart, pickupStoreName:pickupStoreName, centralCalendar:centralCalendar, calendarAfter:calendarAfter, pickupTimeChoices:pickupTimeChoices, stockFromDocument:stockFromDocument, pickupReadiness:pickupReadiness, boot: boot, build: BUILD, audience: AUDIENCE, deliveryAddressSummary:deliveryAddressSummary, nativeStateOption:nativeStateOption, accountScopeInput:accountScopeInput, guestContext:guestContext, guestStartPending:guestStartPending, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, nativeOrderNumber: nativeOrderNumber, cartOrderReceipt: cartOrderReceipt, readCartOrderReceipt: readCartOrderReceipt, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, cartPolicyReady: cartPolicyReady, hasCustomCuts: hasCustomCuts, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, paymentTotals: paymentTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, hydrateMatchingAddressState: hydrateMatchingAddressState, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
+  return { pickupPersonName:pickupPersonName, applyPickupSelection:applyPickupSelection, guestCartHandoff:guestCartHandoff, listedSalesDetails:listedSalesDetails, salesAddressPage:salesAddressPage, allSalesAddresses:allSalesAddresses, savedSalesAddresses:savedSalesAddresses, salesAddressLabel:salesAddressLabel, matchingSalesAddresses:matchingSalesAddresses, savedSalesDetails:savedSalesDetails, assertSalesReview:assertSalesReview, relayControl:relayControl, nativeFormsReady:nativeFormsReady, continueNativeCart:continueNativeCart, pickupStoreName:pickupStoreName, centralCalendar:centralCalendar, calendarAfter:calendarAfter, pickupTimeChoices:pickupTimeChoices, stockFromDocument:stockFromDocument, pickupReadiness:pickupReadiness, boot: boot, build: BUILD, audience: AUDIENCE, deliveryAddressSummary:deliveryAddressSummary, nativeStateOption:nativeStateOption, accountScopeInput:accountScopeInput, guestContext:guestContext, guestStartPending:guestStartPending, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, nativeOrderNumber: nativeOrderNumber, cartOrderReceipt: cartOrderReceipt, readCartOrderReceipt: readCartOrderReceipt, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, cartPolicyReady: cartPolicyReady, hasCustomCuts: hasCustomCuts, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, paymentTotals: paymentTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, hydrateMatchingAddressState: hydrateMatchingAddressState, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
 });
