@@ -56,7 +56,7 @@ function handoff(options={}) {
   const calls=[],context=vm.createContext({active:{current:basket,phase:options.phase||'checking_out'},fast:{},cartEntry:true,submitting:false,busy:false,bypassCartEntry:false,
     clearFrame(){calls.push('clear-frame');},loading(){},status(){},assertNoPendingCartOrder(){if(options.pending)throw Error('Uncertain order');},
     checkIdentity:async()=>{if(options.identityFailure)throw Error('Customer changed');calls.push('verify-identity');},cart:async()=>({items:options.changedCart?[]:basket}),signature:core.signature,
-    doc:{getElementById:()=>({click(){calls.push('native-click-and-draft-reset');}})},seedSession(){calls.push('seed-current-options');},dismiss(){calls.push('dismiss');},showError(error){calls.push(error.message);}
+    doc:{getElementById:()=>({click(){calls.push('native-click-and-draft-reset');}})},seedSession(nativeHandoff){assert.equal(nativeHandoff,true);calls.push('seed-current-options');},dismiss(){calls.push('dismiss');},showError(error){calls.push(error.message);}
   });vm.runInContext(section('    async function standardCheckout()','    function notice('),context);
   return {calls,run:()=>context.standardCheckout()};
 }
@@ -81,9 +81,11 @@ test('a blank entry offers recovery after twelve seconds but never restarts a la
 test('native handoff preserves job, billing recipients, fulfillment, timing and order notes',()=>{
   const data=new Map(),address={line1:'Job street',city:'Caldwell',stateValue:'TX',zip:'77836',email:'job@example.invalid'},billing={line1:'Invoice street',city:'Brenham',stateValue:'TX',zip:'77833',email:'login@example.invalid'};
   const context=vm.createContext({fast:{method:'pickup',address,billing,date:'2026-11-04',pickupTime:'08:00',pickupPerson:'Test contact',reference:'PO-TEST',notes:'Keep dry',salesSelection:{id:'04',code:'04',jobReference:'Reina'}},guest:null,STATE_NAMES:{TX:'Texas'},SESSION_KEYS:[],text:v=>String(v||'').trim(),win:{sessionStorage:{setItem:(k,v)=>data.set(k,v),removeItem:k=>data.delete(k)}}});
-  vm.runInContext(section('    function seedSession()','    function revisePurchase('),context);context.seedSession();
+  vm.runInContext(section('    function seedSession(','    function revisePurchase('),context);context.seedSession();
   assert.equal(data.get('wl_fulfillment_intent'),'pickup');const date=JSON.parse(data.get('wl_checkout_date_state_v2'));assert.equal(date.pickupDate,'2026-11-04');assert.equal(date.pickupPerson,'Test contact');assert.ok(date.extra.includes('Job ref: Reina'));
   const payload=JSON.parse(data.get('wl_checkout_address_payload'));assert.equal(payload.stateText,'Texas');assert.equal(payload.billing.stateText,'Texas');assert.equal(payload.preserveInvoiceContact,true);
+  context.SESSION_KEYS=['wl_fulfillment_intent','wl_fulfillment_method','wl_fulfillment_selection_source_v1'];context.seedSession(true);
+  assert.equal(data.has('wl_fulfillment_intent'),false);assert.equal(data.has('wl_fulfillment_method'),false);assert.equal(data.has('wl_fulfillment_selection_source_v1'),false);assert.equal(JSON.parse(data.get('wl_checkout_date_state_v2')).pickupPerson,'Test contact');
   const checkout=fs.readFileSync(require.resolve('../Checkout2'),'utf8'),fields={};
   for(const prefix of ['DeliveryAddress','InvoiceAddress'])for(const field of ['AddressLine1','AddressLine2','AddressLine3','City','Postcode','ContactTelephoneTextBox','EmailAddressTextBox','ContactFirstNameTextBox','ContactLastNameTextBox'])fields['ctl00_PageBody_'+prefix+'_'+field]={value:''};
   fields.ctl00_PageBody_InvoiceAddress_EmailAddressTextBox.value='billing@example.invalid; accounts@example.invalid';fields.ctl00_PageBody_PurchaseOrderNumberTextBox={value:''};
