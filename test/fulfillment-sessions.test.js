@@ -119,3 +119,22 @@ test('a postal-only cart estimate cannot revoke a complete-address delivery rese
   assert.equal((await findFulfillmentClaim(route)).recommendation.mode, 'delivery');
   assert.equal((await findFulfillmentClaim(route)).rates[0].amount, 25);
 });
+
+test('handoff diagnostics expose only recognized public origin store labels', () => {
+  const { publicOriginBranch } = require('../api/fulfillment-sessions');
+  assert.equal(publicOriginBranch({shipFrom:{postalCode:'77801'}}),'bryan');
+  assert.equal(publicOriginBranch({shipFrom:{postalCode:'77833'}}),'brenham');
+  assert.equal(publicOriginBranch({shipFrom:{postalCode:'90210',addressLine:['private customer address']}}),'unmapped');
+  assert.equal(publicOriginBranch({shipTo:{postalCode:'77833'}}),'unmapped');
+});
+
+test('a postal-only background estimate cannot remove delivery before native selection', async () => {
+  const complete={...route,shipTo:{postalCode:'77834',state:'TX',city:'Brenham',addressLine:['123 Test St']}};
+  await storeFulfillmentClaim({...quote(),...complete});
+  await storeFulfillmentClaim(quote(0));
+  const selected=await selectFulfillmentClaim({...complete,mode:'delivery'});
+  assert.equal(selected.ok,true);
+  const bridge=await findFulfillmentClaim({...route,packages:[{weight:12}]});
+  assert.equal(bridge.recommendation.mode,'delivery');
+  assert.equal(bridge.rates[0].amount,25);
+});

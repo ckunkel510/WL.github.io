@@ -6,7 +6,7 @@ const { getCatalogProducts } = require("./shipping-catalog");
 const { availableCutToShipOptions } = require("./cut-to-ship");
 const { applyShippingMinimumToRates } = require("./shipping-policy");
 const { RequestError, requestRates } = require("./ups-rates")._internal;
-const { selectFulfillmentClaim, storeFulfillmentClaim } = require("./fulfillment-sessions");
+const { selectFulfillmentClaim, storeFulfillmentClaim, publicOriginBranch } = require("./fulfillment-sessions");
 const { quoteWoodsonDelivery } = require("./woodson-delivery");
 
 const DEFAULT_ORIGINS = [
@@ -312,6 +312,7 @@ async function handler(req, res) {
     const body = req.body && typeof req.body === "object" ? req.body : JSON.parse(req.body || "{}");
     if (body.action === "select") {
       const selected = await selectFulfillmentClaim(body);
+      console.log("[fulfillment-quote]", JSON.stringify({ event: "selection-result", mode: body.mode === 'delivery' ? 'delivery' : body.mode === 'ship' ? 'ship' : 'invalid', originBranch: publicOriginBranch(body), saved: selected.ok === true }));
       if (!selected.ok) throw new RequestError(409, "That fulfillment method is no longer available. Please refresh the quote.");
       return sendJson(res, 200, selected);
     }
@@ -319,6 +320,7 @@ async function handler(req, res) {
     console.log("[fulfillment-quote]", JSON.stringify({
       event: "quote-complete",
       quoteId: result.quoteId,
+      originBranch: publicOriginBranch(body),
       destinationState: cleanText(body.shipTo?.state || body.shipTo?.StateProvinceCode, 24),
       productCodes: (Array.isArray(body.cart) ? body.cart : []).map((item) => cleanText(item?.productCode || item?.code, 40)).filter(Boolean),
       recommendation: result.recommendation?.mode || "manual",
