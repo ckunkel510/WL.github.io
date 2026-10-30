@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261030-checkout-recovery-47';
+  var BUILD = '20261030-checkout-recovery-48';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -943,7 +943,7 @@
         // Native cart listeners reset old wizard drafts during this click. Seed
         // the verified current selection afterwards, before the next page loads.
         bypassCartEntry=true;
-        try { native.click(); seedSession(); } finally { bypassCartEntry=false; }
+        try { native.click(); seedSession(true); } finally { bypassCartEntry=false; }
         dismiss();
       } catch (error) { busy=false; showError(error); }
     }
@@ -1334,10 +1334,12 @@
       } catch (failure) { if (live()) { notice.textContent=''; error.textContent=failure.message; } }
     }
 
-    function seedSession() {
+    function seedSession(nativeHandoff) {
       SESSION_KEYS.forEach(function (name) { win.sessionStorage.removeItem(name); });
       win.sessionStorage.setItem('wl_checkout_single_page_preview','1');
-      if (['pickup','delivery','ship'].includes(fast.method)) {
+      // A remembered intent only styles the native choice; it does not activate
+      // WebTrack's radio/postback. Recovery must reopen that explicit choice.
+      if (!nativeHandoff && ['pickup','delivery','ship'].includes(fast.method)) {
         win.sessionStorage.setItem('wl_fulfillment_intent',fast.method);
         win.sessionStorage.setItem('wl_fulfillment_method',fast.method);
         win.sessionStorage.setItem('wl_fulfillment_selection_source_v1','user');
