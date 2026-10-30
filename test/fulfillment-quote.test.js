@@ -400,11 +400,36 @@ test('native carrier reservation uses the configured shipper while local deliver
     quoteWoodsonDelivery:async input=>{deliveryOrigin=input.shipFrom;return {available:true,mode:'delivery',amount:25,currency:'USD',serviceCode:'03',serviceName:'Woodson Local Delivery',billingWeight:8};}
   });
   assert.equal(ratedOrigin.postalCode,'77833');assert.equal(deliveryOrigin.postalCode,'77801');
-  const req={method:'POST',url:'/api/fulfillment-quote',headers:{origin:'https://webtrack.woodsonlumber.com'},socket:{remoteAddress:'native-origin-test'},body:{action:'select',mode:'delivery',shipFrom:body.shipFrom,shipTo:body.shipTo,totalWeight:8}};
+  const req={method:'POST',url:'/api/fulfillment-quote',headers:{origin:'https://webtrack.woodsonlumber.com'},socket:{remoteAddress:'native-origin-test'},body:{action:'select',mode:'delivery',shipFrom:body.shipFrom,carrierOrigin,shipTo:body.shipTo,totalWeight:8}};
   let result;const res={setHeader(){},end(raw){result=JSON.parse(raw);}};
   await require('../api/fulfillment-quote')(req,res);
   assert.equal(res.statusCode,200);assert.equal(result.ok,true);
   const native=await claims.findFulfillmentClaim({shipFrom:carrierOrigin,shipTo:body.shipTo,packages:[{weight:8}]});
   assert.equal(native.recommendation.mode,'delivery');assert.equal(native.rates[0].amount,25);
   assert.equal(await claims.findFulfillmentClaim({shipFrom:body.shipFrom,shipTo:body.shipTo,totalWeight:8}),null);
+});
+
+test('carrier origins follow the account trading branch and reject unknown stores', () => {
+  const {carrierOriginFor}=require('../api/fulfillment-quote')._test;
+  const operational={postalCode:'77801'};
+  assert.equal(carrierOriginFor({shipFrom:operational,carrierOrigin:{postalCode:'77836'}}).postalCode,'77836');
+  assert.equal(carrierOriginFor({shipFrom:operational,carrierOrigin:{postalCode:'77833'}}).postalCode,'77833');
+  assert.equal(carrierOriginFor({shipFrom:operational,carrierOrigin:{postalCode:'77801'}}).postalCode,'77803');
+  assert.equal(carrierOriginFor({shipFrom:{postalCode:'77836'}}).postalCode,'77836');
+  assert.throws(()=>carrierOriginFor({shipFrom:operational,carrierOrigin:{postalCode:'90210'}}),/valid Woodson carrier origin/);
+});
+
+test('Caldwell UPS selection is consumable only by the matching native route', async () => {
+  const claims=require('../api/fulfillment-sessions');claims.resetMemoryClaims();
+  const body={...baseBody(),shipFrom:{name:'Caldwell',postalCode:'77836'}};
+  await buildFulfillmentQuote(body,{
+    requestRates:upsRate(12.50),getCatalogProducts:async()=>catalog(),shippingPolicy:policy,
+    quoteWoodsonDelivery:async()=>({available:false})
+  });
+  const req={method:'POST',headers:{origin:'https://webtrack.woodsonlumber.com'},socket:{remoteAddress:'caldwell-origin-test'},body:{action:'select',mode:'ship',shipFrom:body.shipFrom,carrierOrigin:body.shipFrom,shipTo:body.shipTo,totalWeight:8}};
+  const res={setHeader(){},end(){}};await require('../api/fulfillment-quote')(req,res);
+  assert.equal(res.statusCode,200);
+  const native=await claims.findFulfillmentClaim({shipFrom:body.shipFrom,shipTo:body.shipTo,totalWeight:8});
+  assert.equal(native.recommendation.mode,'ship');assert.equal(native.recommendation.reason,'customer-selected');
+  assert.equal(await claims.findFulfillmentClaim({shipFrom:{postalCode:'77833'},shipTo:body.shipTo,totalWeight:8}),null);
 });

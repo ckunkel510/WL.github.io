@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var BUILD_VERSION = "20261030-checkout-quote-context-3";
+  var BUILD_VERSION = "20261030-checkout-quote-context-4";
   var RATE_URL = "https://wl-upsrates.vercel.app/api/fulfillment-quote";
   var APPROVAL_URL = "https://wl-upsrates.vercel.app/api/customization-approval";
   var CUT_POLICY_URL = "https://ckunkel510.github.io/WL.github.io/data/cut-to-ship-products.json?v=20260917-2";
@@ -23,6 +23,7 @@
   var MISSING_CONTEXT_MAX_RETRIES = 10;
   var cutPolicyPromise = null;
   var webTrackUserIdPromise = null;
+  var carrierOriginPromise = null;
 
   if (!/ShoppingCart\.aspx|Checkout|PlaceOrder/i.test(window.location.pathname || "")) return;
   if (window.WLShippingOffer && window.WLShippingOffer.version === BUILD_VERSION) return;
@@ -338,9 +339,8 @@
   }
 
   function selectedOrigin() {
-    // Native checkout can use the selected customer's branch while the header
-    // still shows the employee's browsing store. Reserve the route WebTrack will
-    // actually send to the carrier bridge, including the branch's own ZIP.
+    // Operational branch controls local delivery; the trading branch used by
+    // the native UPS bridge is resolved separately from account settings.
     var branch = document.getElementById("ctl00_PageBody_BranchDropDownList");
     var selected = branch && branch.options && branch.options[branch.selectedIndex];
     var branchLabel = text(selected && selected.textContent);
@@ -360,6 +360,24 @@
     // Customers can reach the cart before choosing a pickup location. Caldwell
     // is the established Woodson origin for unassigned online UPS checks.
     return origin || (storedCartData() && storedCartData().origin) || STORE_ORIGINS.caldwell;
+  }
+
+  function carrierOriginFromSettings(page) {
+    var branch = page.getElementById('ctl00_PageBody_ChangeUserDetailsControl_ddBranch');
+    var label = text(branch && branch.options && branch.options[branch.selectedIndex] && branch.options[branch.selectedIndex].textContent).toLowerCase();
+    var key = Object.keys(STORE_ORIGINS).find(function (name) { return label === name; });
+    return key ? Object.assign({}, STORE_ORIGINS[key]) : null;
+  }
+
+  function accountCarrierOrigin() {
+    if (!carrierOriginPromise) {
+      carrierOriginPromise = fetch('/AccountSettings.aspx', { credentials: 'same-origin', cache: 'no-store' })
+        .then(function (response) { if (!response.ok) throw new Error('Account branch unavailable.'); return response.text(); })
+        .then(function (html) { return carrierOriginFromSettings(new DOMParser().parseFromString(html, 'text/html')); })
+        .catch(function () { return null; })
+        .then(function (origin) { if (!origin) carrierOriginPromise = null; return origin; });
+    }
+    return carrierOriginPromise;
   }
 
   function checkoutZip() {
@@ -431,11 +449,12 @@
     ]);
   }
 
-  function writeOffer(result, zip, items, shouldNotify, address, origin) {
+  function writeOffer(result, zip, items, shouldNotify, address, origin, carrierOrigin) {
     var payload = {
       zip: zip,
       addressKey: addressQuoteKey(address, zip),
       originPostalCode: origin.postalCode,
+      carrierOrigin: carrierOrigin,
       cartSignature: items.map(function (item) {
         return [item.productId, item.productCode, item.quantity, cutSelectionSignature(item.cutToShip)].join(":");
       }).sort().join("|"),
@@ -470,6 +489,11 @@
     activeRequest = (async function () {
       var items = cartItems();
       var origin = selectedOrigin();
+      var carrierOrigin = await accountCarrierOrigin();
+      // Anonymous cart estimates can use their browsing store. A native
+      // checkout must resolve its trading branch rather than guess a route.
+      if (!carrierOrigin && document.getElementById('ctl00_PageBody_DeliveryAddress_Postcode')) return null;
+      carrierOrigin = carrierOrigin || origin;
       rememberCart(items, origin);
       var address = checkoutAddress();
       var zip = address.postalCode || await savedZip();
@@ -484,6 +508,7 @@
       address.postalCode = zip;
       var requestBody = {
         shipFrom: origin,
+        carrierOrigin: carrierOrigin,
         shipTo: address,
         cart: items
       };
@@ -501,7 +526,7 @@
         scheduleRefresh(100);
         return null;
       }
-      var payload = writeOffer(result, zip, items, false, address, origin);
+      var payload = writeOffer(result, zip, items, false, address, origin, carrierOrigin);
       var selected = rememberedSelection();
       // Checkout calls the mode "ship"; the quote exposes that option as "ups".
       var selectedOption = selected && result.options && result.options[selected.mode === "ship" ? "ups" : selected.mode];
@@ -835,6 +860,7 @@
         action: "select",
         mode: mode,
         shipFrom: origin,
+        carrierOrigin: offer.carrierOrigin,
         shipTo: address,
         totalWeight: offer.packageProfile && offer.packageProfile.totalWeight
       })

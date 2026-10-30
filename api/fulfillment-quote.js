@@ -15,9 +15,21 @@ const DEFAULT_ORIGINS = [
   "http://127.0.0.1:3000"
 ];
 const rateBuckets = new Map();
-// WebTrack's authenticated legacy UPS request uses this configured shipper
-// origin, independently of the customer's operational/pickup branch.
-const WEBTRACK_CARRIER_ORIGIN = { name: 'Brenham', city: 'Brenham', state: 'TX', postalCode: '77833', country: 'US' };
+// The native carrier uses the sign-in's trading branch, which may differ from
+// the order's operational branch. Accept only public Woodson store origins.
+const CARRIER_ORIGINS = {
+  '77833': ['Brenham', '77833'], '77801': ['Bryan', '77803'], '77803': ['Bryan', '77803'],
+  '77836': ['Caldwell', '77836'], '78947': ['Lexington', '78947'],
+  '75831': ['Buffalo', '75831'], '76667': ['Mexia', '76667'], '76642': ['Groesbeck', '76642']
+};
+
+function carrierOriginFor(body) {
+  const source = body.carrierOrigin || body.shipFrom;
+  const postal = String(source?.postalCode || '').match(/^\d{5}/)?.[0];
+  const store = CARRIER_ORIGINS[postal];
+  if (!store) throw new RequestError(400, 'A valid Woodson carrier origin is required.');
+  return { name: store[0], city: store[0], state: 'TX', postalCode: store[1], country: 'US' };
+}
 
 function cleanText(value, maxLength = 120) {
   return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, maxLength);
@@ -314,19 +326,20 @@ async function handler(req, res) {
   try {
     enforceRateLimit(req);
     const body = req.body && typeof req.body === "object" ? req.body : JSON.parse(req.body || "{}");
+    const carrierOrigin = carrierOriginFor(body);
     if (body.action === "select") {
-      const carrierSelection = { ...body, shipFrom: WEBTRACK_CARRIER_ORIGIN };
+      const carrierSelection = { ...body, shipFrom: carrierOrigin };
       const selected = await selectFulfillmentClaim(carrierSelection);
       console.log("[fulfillment-quote]", JSON.stringify({ event: "selection-result", mode: body.mode === 'delivery' ? 'delivery' : body.mode === 'ship' ? 'ship' : 'invalid', originBranch: publicOriginBranch(carrierSelection), saved: selected.ok === true }));
       if (!selected.ok) throw new RequestError(409, "That fulfillment method is no longer available. Please refresh the quote.");
       return sendJson(res, 200, selected);
     }
-    const result = await buildFulfillmentQuote(body, { carrierOrigin: WEBTRACK_CARRIER_ORIGIN });
+    const result = await buildFulfillmentQuote(body, { carrierOrigin });
     console.log("[fulfillment-quote]", JSON.stringify({
       event: "quote-complete",
       quoteId: result.quoteId,
       originBranch: publicOriginBranch(body),
-      carrierOriginBranch: publicOriginBranch({ shipFrom: WEBTRACK_CARRIER_ORIGIN }),
+      carrierOriginBranch: publicOriginBranch({ shipFrom: carrierOrigin }),
       destinationState: cleanText(body.shipTo?.state || body.shipTo?.StateProvinceCode, 24),
       productCodes: (Array.isArray(body.cart) ? body.cart : []).map((item) => cleanText(item?.productCode || item?.code, 40)).filter(Boolean),
       recommendation: result.recommendation?.mode || "manual",
@@ -348,6 +361,7 @@ async function handler(req, res) {
 
 module.exports = handler;
 module.exports._test = {
+  carrierOriginFor,
   buildFulfillmentQuote,
   isEasyParcel,
   packageWeight,

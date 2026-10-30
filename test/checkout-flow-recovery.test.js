@@ -54,6 +54,13 @@ function environment() {
 }
 
 function load(file, env, exports = "") {
+  if (file === 'UpsShippingOffer.js') {
+    const originalFetch = env.context.fetch;
+    env.context.fetch = (url, options) => url === '/AccountSettings.aspx'
+      ? Promise.resolve({ ok: true, text: async () => env.carrierBranch || 'Caldwell' })
+      : originalFetch(url, options);
+    env.context.DOMParser = class { parseFromString(label) { return { getElementById: () => ({ options: [{ textContent: label }], selectedIndex: 0 }) }; } };
+  }
   const source = fs.readFileSync(path.join(__dirname, "..", file), "utf8");
   vm.runInContext(source.replace(/\}\)\(\);\s*$/, `${exports}\n})();`), env.context, { filename: file });
 }
@@ -465,6 +472,24 @@ test("native customer branch overrides the browsing store when reserving fulfill
   }
 });
 
+test('native quoting separates the sign-in carrier branch from the operational branch', async () => {
+  for (const [accountBranch, carrierPostal] of [['Caldwell','77836'],['Brenham','77833'],['Bryan','77803']]) {
+    const env=environment();env.carrierBranch=accountBranch;
+    env.context.location.pathname='/Checkout.aspx';
+    const branch=env.element('ctl00_PageBody_BranchDropDownList');
+    branch.options=[{textContent:'Bryan - 105 W Pease St, Bryan, Texas, 77801, United States'}];branch.selectedIndex=0;
+    env.element('ctl00_PageBody_DeliveryAddress_Postcode').value='77833';
+    env.storage.set('wl_shipping_offer_cart_v1',JSON.stringify({items:[{productId:'85',productCode:'ITEM',quantity:1}],ts:Date.now()}));
+    const requests=[];
+    env.context.fetch=async(url,options)=>{requests.push(JSON.parse(options.body));return {ok:true,json:async()=>({ok:true,options:{},packageProfile:{totalWeight:1}})};};
+    load('UpsShippingOffer.js',env);await env.context.WLShippingOffer.refresh();
+    assert.equal(requests[0].shipFrom.postalCode,'77801');
+    assert.equal(requests[0].carrierOrigin.postalCode,carrierPostal);
+    await env.context.WLShippingOffer.select('ship');
+    assert.equal(requests[1].carrierOrigin.postalCode,carrierPostal);
+  }
+});
+
 test('a postal-only response finishing after checkout address hydration is discarded', async () => {
   const env=environment();
   env.element('ctl00_PageBody_DeliveryAddress_Postcode').value='77833';
@@ -473,6 +498,7 @@ test('a postal-only response finishing after checkout address hydration is disca
   env.context.fetch=()=>new Promise(resolve=>{finish=resolve;});
   load('UpsShippingOffer.js',env);
   const pending=env.context.WLShippingOffer.refresh();
+  while (!finish) await Promise.resolve();
   env.element('ctl00_PageBody_DeliveryAddress_AddressLine1').value='123 Test St';
   env.element('ctl00_PageBody_DeliveryAddress_City').value='Brenham';
   env.element('ctl00_PageBody_DeliveryAddress_CountySelector_CountyList').selectedOptions=[{textContent:'Texas'}];

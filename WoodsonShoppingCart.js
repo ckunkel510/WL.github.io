@@ -8,7 +8,7 @@
   const CART_SUBTOTAL_KEY = 'wl_cart_subtotal_v1';
   const CUT_SELECTION_KEY = 'wl_cut_to_ship_v1';
   const FULFILLMENT_QUOTE_URL = 'https://wl-upsrates.vercel.app/api/fulfillment-quote';
-  const SHIPPING_OFFER_VERSION = '20261030-checkout-quote-context-3';
+  const SHIPPING_OFFER_VERSION = '20261030-checkout-quote-context-4';
   const SHIPPING_OFFER_SCRIPT_URL = 'https://ckunkel510.github.io/WL.github.io/UpsShippingOffer.js?v=' + SHIPPING_OFFER_VERSION;
   let checkoutBlockReason = '';
   const STORE_ORIGINS = {
