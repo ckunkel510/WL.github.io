@@ -9,14 +9,14 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261030-checkout-recovery-49';
+  var BUILD = '20261030-checkout-recovery-50';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
   var GUEST_START_KEY = 'wl_compact_guest_start_v1';
   var GUEST_CART_KEY = 'wl_guest_cart_handoff_v1';
   var PREFIX = 'wl_buy_now_pilot_v1:';
-  var SESSION_KEYS = ['wl_fulfillment_intent','wl_fulfillment_method','wl_fulfillment_selection_source_v1','wl_confirmed_fulfillment_v1','wl_checkout_form_snapshot_v2','wl_checkout_single_page_preview','wl_shipping_selection_v1','wl_shipping_offer_v1','wl_checkout_date_state_v2','wl_checkout_auto_advance','wl_checkout_address_payload','wl_checkout_contact_payload','wl_returnStep','wl_pendingStep','wl_expect_nav','wl_billing_confirmed','wl_billing_seen','wl_billing_confirmed_delivered','wl_autocopy_done'];
+  var SESSION_KEYS = ['wl_fulfillment_intent','wl_fulfillment_method','wl_fulfillment_selection_source_v1','wl_confirmed_fulfillment_v1','wl_checkout_form_snapshot_v2','wl_checkout_single_page_preview','wl_shipping_selection_v1','wl_shipping_offer_v1','wl_checkout_date_state_v2','wl_checkout_auto_advance','wl_checkout_address_payload','wl_checkout_contact_payload','wl_pickup_branch_handoff_v1','wl_returnStep','wl_pendingStep','wl_expect_nav','wl_billing_confirmed','wl_billing_seen','wl_billing_confirmed_delivered','wl_autocopy_done'];
   var ORIGIN = 'https://webtrack.woodsonlumber.com';
   var BLOCKLIST_URL = 'https://ckunkel510.github.io/WL.github.io/blocked-products.json';
   var FINAL = '#ctl00_PageBody_CompleteCheckoutButton,#wl-complete,#wl-sticky-complete';

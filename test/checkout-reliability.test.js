@@ -91,12 +91,12 @@ test('native handoff preserves job, billing recipients, fulfillment, timing and 
   for(const prefix of ['DeliveryAddress','InvoiceAddress'])for(const field of ['AddressLine1','AddressLine2','AddressLine3','City','Postcode','ContactTelephoneTextBox','EmailAddressTextBox','ContactFirstNameTextBox','ContactLastNameTextBox'])fields['ctl00_PageBody_'+prefix+'_'+field]={value:''};
   fields.ctl00_PageBody_InvoiceAddress_EmailAddressTextBox.value='billing@example.invalid; accounts@example.invalid';fields.ctl00_PageBody_PurchaseOrderNumberTextBox={value:''};
   let branchChanges=0;fields.ctl00_PageBody_BranchDropDownList={value:'5',options:[{value:'3'},{value:'5'}],dispatchEvent(event){assert.equal(event.type,'change');assert.equal(fields.ctl00_PageBody_DeliveryAddress_AddressLine1.value,'Job street');branchChanges++;}};
-  const applied=vm.createContext({Event:class{constructor(type){this.type=type;}},document:{getElementById:id=>fields[id]||null},cleanText:v=>String(v||'').trim(),splitDisplayName:()=>({first:'Test',last:'Contact'}),setCheckoutValueIfPresent:(el,value)=>{if(!el||value===undefined)return false;el.value=value;return true;},setCheckoutSelect(){},sessionStorage:{setItem(){}},window:{}});
+  const applied=vm.createContext({PICKUP_BRANCH_HANDOFF_KEY:'wl_pickup_branch_handoff_v1',document:{getElementById:id=>fields[id]||null},cleanText:v=>String(v||'').trim(),splitDisplayName:()=>({first:'Test',last:'Contact'}),setCheckoutValueIfPresent:(el,value)=>{if(!el||value===undefined)return false;el.value=value;return true;},setCheckoutSelect(){},sessionStorage:{setItem:(key,value)=>data.set(key,value)},window:{}});
   vm.runInContext(checkout.slice(checkout.indexOf('  function applyCheckoutAddressPayload('),checkout.indexOf('  function consumeCheckoutReturnPayloads(')),applied);applied.applyCheckoutAddressPayload(nativePayload);
   assert.equal(fields.ctl00_PageBody_DeliveryAddress_AddressLine1.value,'Job street');assert.equal(fields.ctl00_PageBody_InvoiceAddress_AddressLine1.value,'Invoice street');assert.equal(fields.ctl00_PageBody_InvoiceAddress_EmailAddressTextBox.value,'billing@example.invalid; accounts@example.invalid');assert.equal(fields.ctl00_PageBody_PurchaseOrderNumberTextBox.value,'PO-TEST');
-  assert.equal(fields.ctl00_PageBody_BranchDropDownList.value,'3');assert.equal(branchChanges,1);
-  applied.applyCheckoutAddressPayload(nativePayload);assert.equal(branchChanges,1,'same branch does not repeat the native postback');
-  applied.applyCheckoutAddressPayload({...nativePayload,pickupBranchValue:'99'});assert.equal(fields.ctl00_PageBody_BranchDropDownList.value,'3');assert.equal(branchChanges,1,'unavailable values never enter the native selector');
+  assert.equal(fields.ctl00_PageBody_BranchDropDownList.value,'5');assert.equal(branchChanges,0,'handoff never posts a branch before native Pickup is chosen');
+  assert.equal(JSON.parse(data.get('wl_pickup_branch_handoff_v1')).value,'3');
+  applied.applyCheckoutAddressPayload({...nativePayload,pickupBranchValue:'99'});assert.equal(fields.ctl00_PageBody_BranchDropDownList.value,'5');assert.equal(branchChanges,0,'unavailable values never enter the native selector');
 });
 
 test('standard handoff seeds only a validated pickup branch and clears it for delivery',()=>{
@@ -105,4 +105,33 @@ test('standard handoff seeds only a validated pickup branch and clears it for de
   context.seedSession(true);assert.equal(JSON.parse(data.get('wl_checkout_address_payload')).pickupBranchValue,'3');
   context.fast.method='delivery';context.seedSession(true);assert.equal(JSON.parse(data.get('wl_checkout_address_payload')).pickupBranchValue,'');
   context.fast.method='pickup';context.fast.store='missing';context.seedSession(true);assert.equal(JSON.parse(data.get('wl_checkout_address_payload')).pickupBranchValue,'');
+});
+
+function branchConfirmation() {
+  const data=new Map(),key='wl_pickup_branch_handoff_v1',attributes=new Map();let pickup=true;
+  const checkout=fs.readFileSync(require.resolve('../Checkout2'),'utf8');
+  const context=vm.createContext({PICKUP_BRANCH_HANDOFF_KEY:key,cleanText:value=>String(value||'').trim(),norm:value=>String(value||'').trim(),getPickupSelected:()=>pickup,readSessionJson:key=>JSON.parse(data.get(key)||'null'),removeSessionKey:key=>data.delete(key),document:{documentElement:{setAttribute:(k,v)=>attributes.set(k,v)}}});
+  vm.runInContext(checkout.slice(checkout.indexOf('  function readPickupBranchHandoff('),checkout.indexOf('  function applyCheckoutContactPayload(')),context);
+  vm.runInContext(checkout.slice(checkout.indexOf('    function isBranchChosen('),checkout.indexOf('    // --------------------------------------------------',checkout.indexOf('    function isBranchChosen('))),context);
+  const select={tagName:'SELECT',value:'5',selectedIndex:2,options:[{value:'1',textContent:'Brenham'},{value:'3',textContent:'Caldwell'},{value:'5',textContent:'Groesbeck'}]};
+  data.set(key,JSON.stringify({version:1,ts:Date.now(),value:'1'}));
+  return {context,data,key,select,attributes,setPickup:value=>{pickup=value;}};
+}
+
+test('pickup recovery keeps the requested store through native default resets until an explicit store choice',()=>{
+  const f=branchConfirmation();assert.equal(f.context.preparePickupBranchChoice(f.select).value,'1');assert.equal(f.select.value,'');
+  f.select.value='3';assert.equal(f.context.preparePickupBranchChoice(f.select).value,'1');assert.equal(f.select.value,'','a native fulfillment reset must not silently become the chosen store');
+  f.select.value='1';assert.equal(f.context.confirmPickupBranchChoice(f.select),true);assert.equal(f.data.has(f.key),false);
+  assert.equal(f.context.preparePickupBranchChoice(f.select),null);assert.equal(f.select.value,'1');assert.equal(f.attributes.get('data-wl-pickup-branch-handoff'),'confirmed');
+});
+
+test('pickup recovery never confirms an invalid store and does not change delivery or expired state',()=>{
+  const f=branchConfirmation();f.select.value='missing';assert.equal(f.context.confirmPickupBranchChoice(f.select),false);assert.equal(f.data.has(f.key),true);
+  f.select.value='5';f.setPickup(false);assert.equal(f.context.preparePickupBranchChoice(f.select),null);assert.equal(f.select.value,'5');
+  for(const ts of [Date.now()-300001,Date.now()+10000]) {f.data.set(f.key,JSON.stringify({version:1,ts,value:'1'}));assert.equal(f.context.readPickupBranchHandoff(),null);assert.equal(f.data.has(f.key),false);}
+});
+
+test('pickup completion rejects a valid native default while recovery store confirmation is pending',()=>{
+  const f=branchConfirmation();assert.equal(f.context.isBranchChosen(f.select),false);
+  f.select.value='1';f.select.selectedIndex=0;f.context.confirmPickupBranchChoice(f.select);assert.equal(f.context.isBranchChosen(f.select),true);
 });
