@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var BUILD_VERSION = "20261015-checkout-recovery-1";
+  var BUILD_VERSION = "20261030-native-quote-origin-2";
   var RATE_URL = "https://wl-upsrates.vercel.app/api/fulfillment-quote";
   var APPROVAL_URL = "https://wl-upsrates.vercel.app/api/customization-approval";
   var CUT_POLICY_URL = "https://ckunkel510.github.io/WL.github.io/data/cut-to-ship-products.json?v=20260917-2";
@@ -338,6 +338,19 @@
   }
 
   function selectedOrigin() {
+    // Native checkout can use the selected customer's branch while the header
+    // still shows the employee's browsing store. Reserve the route WebTrack will
+    // actually send to the carrier bridge, including the branch's own ZIP.
+    var branch = document.getElementById("ctl00_PageBody_BranchDropDownList");
+    var selected = branch && branch.options && branch.options[branch.selectedIndex];
+    var branchLabel = text(selected && selected.textContent);
+    var branchKey = Object.keys(STORE_ORIGINS).find(function (name) {
+      return branchLabel.toLowerCase().indexOf(name + " -") === 0;
+    });
+    if (branchKey) {
+      var postalCode = branchLabel.match(/\b(\d{5})(?:-\d{4})?\s*,?\s*(?:United States|USA|US)?\s*$/i);
+      return Object.assign({}, STORE_ORIGINS[branchKey], postalCode ? { postalCode: postalCode[1] } : {});
+    }
     var locationText = text(Array.prototype.filter.call(document.querySelectorAll("a[href]"), function (link) {
       var href = String(link.getAttribute("href") || "").toLowerCase();
       return href.indexOf("storelocations") !== -1 || /woodsonlumber\.com\/stores(?:[/?#]|$)/.test(href);
@@ -834,7 +847,7 @@
     if (event.target && /(?:DeliveryAddress|Postcode|PostalCode|ZipCode|gc_del_zip)/i.test(event.target.id || "")) scheduleRefresh(450);
   }, true);
   document.addEventListener("change", function (event) {
-    if (event.target && /(?:DeliveryAddress|Postcode|PostalCode|ZipCode|gc_del_zip|wl-qty-select)/i.test(event.target.id || event.target.className || "")) scheduleRefresh(100);
+    if (event.target && /(?:BranchDropDownList|DeliveryAddress|Postcode|PostalCode|ZipCode|gc_del_zip|wl-qty-select)/i.test(event.target.id || event.target.className || "")) scheduleRefresh(100);
     var quantityChanged = event.target && event.target.matches &&
       event.target.matches("select.wl-qty-select, input[id*='_qty_']:not([id$='_ClientState'])");
     if (quantityChanged) {

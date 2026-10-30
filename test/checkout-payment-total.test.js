@@ -11,6 +11,7 @@ test('before-card totals use native tax and confirmed delivery, shipping, or fre
 test('missing tax, wrong delivery and inconsistent totals cannot become a payment quote',()=>{
  for(const rows of [delivered().filter(r=>r[0]!=='Tax'),delivered().filter(r=>r[0]!=='Delivery'),delivered().map(r=>r[0]==='Tax'?[r[0],'Checking…']:r),delivered().map(r=>r[0].startsWith('Total')?[r[0],'$35.00']:r)])assert.throws(()=>core.paymentTotals(page(rows),'delivery',2500));
  assert.throws(()=>core.paymentTotals(page(delivered()),'ship',8000));
+ for(const option of [{rate:'$0.00'}, {rate:'$25.00',pending:true}, {rate:'$25.00',available:false}]) assert.throws(()=>core.quotedShipping('ship',option));
 });
 function gateFixture(){
  let rows=delivered(),opened=0,identity=0,workspace=false,loading=true;const rendered={};
@@ -47,4 +48,17 @@ test('background quote refresh during identity verification does not swallow pay
  f.context.paymentTotalGate(f.native);const first=f.context.acceptPaymentTotal();assert.equal(f.fast.paymentAuthorizing,true);
  f.context.paymentTotalGate(f.native);await f.context.acceptPaymentTotal();assert.equal(f.opened(),0);
  release();await first;assert.equal(f.opened(),1);assert.equal(f.fast.paymentAuthorizing,false);assert.equal(f.fast.ready,false);
+});
+
+
+test('an intermediate native shipping continuation is blocked until the quoted charge and tax match',()=>{
+ const listenerStart=source.indexOf("      page.addEventListener('click', function (event) {\n        if (fast && event.target.closest('#ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView'))");
+ const listenerEnd=source.indexOf("      page.addEventListener('click'",listenerStart+20);
+ for(const valid of [true,false]) {
+  let listener,prevented=0,halted=0;
+  const context=vm.createContext({page:{addEventListener:(name,fn)=>{listener=fn;}},fast:{},cachePaymentTotal:()=>valid,haltFast:()=>{halted++;}});
+  vm.runInContext(source.slice(listenerStart,listenerEnd),context);
+  listener({target:{closest:()=>({})},preventDefault(){prevented++;},stopImmediatePropagation(){prevented++;}});
+  assert.equal(halted,valid?0:1);assert.equal(prevented,valid?0:2);
+ }
 });

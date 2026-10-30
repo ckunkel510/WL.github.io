@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261030-checkout-recovery-55';
+  var BUILD = '20261030-checkout-recovery-56';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -465,7 +465,7 @@
   }
   function quotedShipping(method, option, service, first) {
     if (method === 'pickup') return 0;
-    if (!option || money(option.rate) === null) throw new Error('The fulfillment quote is unavailable.');
+    if (!option || option.pending || option.available===false || !(money(option.rate)>0)) throw new Error('The fulfillment quote is unavailable.');
     if (method === 'delivery' || first || !service || /ground/i.test(service.label)) return money(option.rate);
     var clean = function (value) { return text(value).toLowerCase().replace(/\bups\b/g,'').replace(/[^a-z0-9]/g,''); };
     var rate = (option.rates || []).find(function (row) { return String(row.serviceCode) === service.value || clean(service.label).includes(clean(row.serviceName)) && !!clean(row.serviceName); });
@@ -1111,6 +1111,7 @@
         var expected=quotedShipping(fast.method,fast.methods[fast.method],service,service && service===fast.shippingOptions[0]);
         fast.paymentPricing={scope:paymentPricingScope(),totals:paymentTotals(page,fast.method,expected)};
       } catch (_) { fast.paymentPricing=null; }
+      return !!fast.paymentPricing;
     }
     function readPaymentTotal(page) {
       // WebTrack removes the summary when it opens hosted payment. Retain only
@@ -1606,7 +1607,12 @@
       // Read totals synchronously before WebTrack's own shipping auto-continue
       // replaces this document, even when it advances before the next poll.
       page.addEventListener('click', function (event) {
-        if (fast && event.target.closest('#ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView')) cachePaymentTotal(page);
+        if (fast && event.target.closest('#ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView')) {
+          if (!cachePaymentTotal(page)) {
+            event.preventDefault(); event.stopImmediatePropagation();
+            haltFast('WebTrack did not confirm shipping and tax. Retry or choose Pickup.','shipping_total_unconfirmed');
+          }
+        }
       },true);
       page.addEventListener('click', function (event) {
         var final = event.target.closest(FINAL);
@@ -1858,8 +1864,10 @@
           // Pickup doesn't require paid rates. A cart-page quote can still lack
           // the completed address, so keep paid choices pending until requested.
           var quote = fast.method==='pickup' ? null : quoteForCart(child.WLShippingOffer?.current?.(),active.purchase);
-          fast.methods = fulfillmentOptions(!pickupButton.disabled,fast.method==='pickup' ? quote : null);
-          updateFastOptions();
+          if (!detailsQuotes.has(page)) {
+            fast.methods = fulfillmentOptions(!pickupButton.disabled,fast.method==='pickup' ? quote : null);
+            updateFastOptions();
+          }
           if (fast.method!=='pickup') {
             if (!child.WLShippingOffer?.refresh) return;
             if (!detailsQuotes.has(page)) {
