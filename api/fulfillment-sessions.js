@@ -93,10 +93,11 @@ function sweepMemory() {
   }
 }
 
-async function storeFulfillmentClaim(input) {
+async function storeFulfillmentClaim(input, selected = false) {
   const route = normalizeRoute(input);
   const totalWeight = claimWeight(input);
-  const keys = [exactKey(route, totalWeight), bucketKey(route, totalWeight), postalKey(route)].filter(Boolean);
+  const keys = [exactKey(route, totalWeight), bucketKey(route, totalWeight), postalKey(route)]
+    .filter(Boolean).map((key) => selected ? key.replace("wl:fulfillment-quote:", "wl:fulfillment-selected:") : key);
   if (!keys.length) return { ok: false, reason: "missing-route" };
   const now = Date.now();
   const recommendation = input?.recommendation && typeof input.recommendation === "object"
@@ -112,6 +113,7 @@ async function storeFulfillmentClaim(input) {
   }
   const claim = {
     route,
+    destinationComplete: Boolean(input.shipTo?.state && input.shipTo?.city && input.shipTo?.addressLine?.length),
     totalWeight,
     recommendation,
     rates,
@@ -133,7 +135,7 @@ async function storeFulfillmentClaim(input) {
 async function selectFulfillmentClaim(input) {
   const mode = cleanText(input?.mode, 12).toLowerCase();
   if (!['ship', 'delivery'].includes(mode)) return { ok: false, reason: "invalid-mode" };
-  const candidate = await findFulfillmentClaim(input);
+  const candidate = await findFulfillmentClaim(input, false);
   const rates = positiveRates(candidate?.availableRates?.[mode]);
   if (!candidate || !rates.length) return { ok: false, reason: "method-unavailable" };
   const amount = Number(rates.find((rate) => String(rate.serviceCode || "") === "03")?.amount || rates[0].amount);
@@ -151,28 +153,42 @@ async function selectFulfillmentClaim(input) {
     recommendation,
     rates,
     availableRates: candidate.availableRates
-  });
+  }, true);
   return { ...stored, recommendation };
 }
 
-async function findFulfillmentClaim(input) {
+async function findFulfillmentClaim(input, preferSelected = true) {
   const route = normalizeRoute(input);
   const totalWeight = claimWeight(input);
   const keys = [exactKey(route, totalWeight), bucketKey(route, totalWeight), postalKey(route)].filter(Boolean);
   const redis = getRedis();
-  if (redis) {
-    for (const key of keys) {
-      const candidate = await redis.get(key);
+  sweepMemory();
+  async function readClaim(candidates) {
+    for (const key of candidates) {
+      const candidate = redis ? await redis.get(key) : memoryClaims.get(key);
       if (claimMatches(candidate, input)) return candidate;
     }
     return null;
   }
-  sweepMemory();
-  for (const key of keys) {
-    const candidate = memoryClaims.get(key);
-    if (claimMatches(candidate, input)) return candidate;
+  const automatic = await readClaim(keys);
+  if (preferSelected) {
+    // Quote calculation may finish after a customer reserves an alternate mode.
+    // Keep that choice in separate keys so late recommendations cannot replace
+    // it. Retain the same route/weight checks and fifteen-minute expiry.
+    const selected = await readClaim(keys.map((key) => key.replace("wl:fulfillment-quote:", "wl:fulfillment-selected:")));
+    if (selected) {
+      // Cart-page estimates can have only a postal code. They must not revoke
+      // a delivery reservation made with the complete native checkout address.
+      const latest = automatic && automatic.createdAt >= selected.createdAt &&
+        (!selected.destinationComplete || automatic.destinationComplete) ? automatic : selected;
+      const mode = selected.recommendation.mode;
+      const rates = positiveRates(latest.availableRates?.[mode]);
+      if (!rates.length) return null;
+      const amount = Number(rates.find((rate) => String(rate.serviceCode || "") === "03")?.amount || rates[0].amount);
+      return { ...latest, rates, recommendation: { ...selected.recommendation, amount } };
+    }
   }
-  return null;
+  return automatic;
 }
 
 function resetMemoryClaims() {

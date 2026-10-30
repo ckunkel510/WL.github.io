@@ -65,3 +65,57 @@ test("replaces the recommendation with the customer's valid alternate choice", a
   assert.equal(found.rates[0].serviceName, "Woodson Local Delivery");
   assert.equal(found.rates[0].amount, 25);
 });
+
+const route = { shipFrom: { postalCode: '77833' }, shipTo: { postalCode: '77834' }, totalWeight: 12 };
+function quote(deliveryAmount = 25) {
+  const ship = [{ serviceCode: '03', serviceName: 'UPS Ground', amount: 11.33 }];
+  const delivery = deliveryAmount ? [{ serviceCode: '03', serviceName: 'Woodson Local Delivery', amount: deliveryAmount }] : [];
+  return { ...route, recommendation: { mode: 'ship', amount: 11.33 }, rates: ship, availableRates: { ship, delivery } };
+}
+
+test('a late automatic recommendation cannot replace the reserved delivery or UPS choice', async () => {
+  for (const mode of ['delivery', 'ship']) {
+    resetMemoryClaims();
+    await storeFulfillmentClaim(quote());
+    await selectFulfillmentClaim({ ...route, mode });
+    // Models an older cart/iframe request completing after selection.
+    const late = quote();
+    if (mode === 'ship') { late.recommendation = { mode: 'delivery', amount: 25 }; late.rates = late.availableRates.delivery; }
+    await storeFulfillmentClaim(late);
+    const native = await findFulfillmentClaim(route);
+    assert.equal(native.recommendation.mode, mode);
+    assert.equal(native.rates[0].amount, mode === 'ship' ? 11.33 : 25);
+  }
+});
+
+test('a refreshed quote updates the selected mode price and cannot restore an unavailable mode', async () => {
+  await storeFulfillmentClaim(quote());
+  await selectFulfillmentClaim({ ...route, mode: 'delivery' });
+  await storeFulfillmentClaim(quote(30));
+  assert.equal((await findFulfillmentClaim(route)).rates[0].amount, 30);
+  await storeFulfillmentClaim(quote(0));
+  assert.equal(await findFulfillmentClaim(route), null);
+  assert.equal((await selectFulfillmentClaim({ ...route, mode: 'ship' })).ok, true);
+  assert.equal((await findFulfillmentClaim(route)).recommendation.mode, 'ship');
+});
+
+test('reserved choices retain route, weight and expiry boundaries', async () => {
+  const clock = Date.now; let now = clock(); Date.now = () => now;
+  try {
+    await storeFulfillmentClaim(quote());
+    await selectFulfillmentClaim({ ...route, mode: 'delivery' });
+    assert.equal(await findFulfillmentClaim({ ...route, shipTo: { postalCode: '77836' } }), null);
+    assert.equal(await findFulfillmentClaim({ ...route, totalWeight: 120 }), null);
+    now += 15 * 60 * 1000 + 1;
+    assert.equal(await findFulfillmentClaim(route), null);
+  } finally { Date.now = clock; }
+});
+
+test('a postal-only cart estimate cannot revoke a complete-address delivery reservation', async () => {
+  const complete = { ...route, shipTo: { postalCode: '77834', state: 'TX', city: 'Brenham', addressLine: ['123 Test St'] } };
+  await storeFulfillmentClaim({ ...quote(), ...complete });
+  await selectFulfillmentClaim({ ...complete, mode: 'delivery' });
+  await storeFulfillmentClaim(quote(0));
+  assert.equal((await findFulfillmentClaim(route)).recommendation.mode, 'delivery');
+  assert.equal((await findFulfillmentClaim(route)).rates[0].amount, 25);
+});
