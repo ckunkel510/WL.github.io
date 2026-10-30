@@ -80,7 +80,7 @@ test('a blank entry offers recovery after twelve seconds but never restarts a la
 });
 test('native handoff preserves job, billing recipients, fulfillment, timing and order notes',()=>{
   const data=new Map(),address={line1:'Job street',city:'Caldwell',stateValue:'TX',zip:'77836',email:'job@example.invalid'},billing={line1:'Invoice street',city:'Brenham',stateValue:'TX',zip:'77833',email:'login@example.invalid'};
-  const context=vm.createContext({fast:{method:'pickup',store:'3',stores:[{value:'3',label:'Caldwell'}],address,billing,date:'2026-11-04',pickupTime:'08:00',pickupPerson:'Test contact',reference:'PO-TEST',notes:'Keep dry',salesSelection:{id:'04',code:'04',jobReference:'Reina'}},guest:null,STATE_NAMES:{TX:'Texas'},SESSION_KEYS:[],text:v=>String(v||'').trim(),win:{sessionStorage:{setItem:(k,v)=>data.set(k,v),removeItem:k=>data.delete(k)}}});
+  const context=vm.createContext({fast:{method:'pickup',store:'3',stores:[{value:'3',label:'Caldwell'}],address,billing,date:'2026-11-04',pickupTime:'08:00',pickupPerson:'Test contact',reference:'PO-TEST',notes:'Keep dry',salesSelection:{id:'04',code:'04',jobReference:'Reina'}},guest:null,pickupPersonName:core.pickupPersonName,STATE_NAMES:{TX:'Texas'},SESSION_KEYS:[],text:v=>String(v||'').trim(),win:{sessionStorage:{setItem:(k,v)=>data.set(k,v),removeItem:k=>data.delete(k)}}});
   vm.runInContext(section('    function seedSession(','    function revisePurchase('),context);context.seedSession();
   assert.equal(data.get('wl_fulfillment_intent'),'pickup');const date=JSON.parse(data.get('wl_checkout_date_state_v2'));assert.equal(date.pickupDate,'2026-11-04');assert.equal(date.pickupPerson,'Test contact');assert.ok(date.extra.includes('Job ref: Reina'));
   const payload=JSON.parse(data.get('wl_checkout_address_payload'));assert.equal(payload.stateText,'Texas');assert.equal(payload.billing.stateText,'Texas');assert.equal(payload.preserveInvoiceContact,true);
@@ -100,7 +100,7 @@ test('native handoff preserves job, billing recipients, fulfillment, timing and 
 });
 
 test('standard handoff seeds only a validated pickup branch and clears it for delivery',()=>{
-  const data=new Map(),context=vm.createContext({fast:{method:'pickup',store:'3',stores:[{value:'3'}],address:{line1:'Test street'}},guest:null,STATE_NAMES:{},SESSION_KEYS:[],text:v=>String(v||'').trim(),win:{sessionStorage:{setItem:(k,v)=>data.set(k,v),removeItem:k=>data.delete(k)}}});
+  const data=new Map(),context=vm.createContext({fast:{method:'pickup',store:'3',stores:[{value:'3'}],address:{line1:'Test street'}},guest:null,pickupPersonName:core.pickupPersonName,STATE_NAMES:{},SESSION_KEYS:[],text:v=>String(v||'').trim(),win:{sessionStorage:{setItem:(k,v)=>data.set(k,v),removeItem:k=>data.delete(k)}}});
   vm.runInContext(section('    function seedSession(','    function revisePurchase('),context);
   context.seedSession(true);assert.equal(JSON.parse(data.get('wl_checkout_address_payload')).pickupBranchValue,'3');
   context.fast.method='delivery';context.seedSession(true);assert.equal(JSON.parse(data.get('wl_checkout_address_payload')).pickupBranchValue,'');
