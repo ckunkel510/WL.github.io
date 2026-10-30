@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20261030-native-checkout-recovery-4";
+  window.WL_CHECKOUT_BUILD = "20261030-native-checkout-recovery-5";
   document.documentElement?.setAttribute?.('data-wl-checkout-build',window.WL_CHECKOUT_BUILD);
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
@@ -784,6 +784,12 @@
   function applyCheckoutAddressPayload(payload) {
     if (!payload) return false;
     let applied = false;
+    const branch = document.getElementById("ctl00_PageBody_BranchDropDownList");
+    const branchOption = payload.pickupBranchValue && Array.from(branch?.options || []).find(option => cleanText(option.value)===cleanText(payload.pickupBranchValue));
+    const branchChanged = !!branchOption && branch.value!==branchOption.value;
+    // Select only a real native option. Set it before other change handlers can
+    // serialize the form, then refresh through the native branch event last.
+    if (branchChanged) { branch.value=branchOption.value; applied=true; }
     applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_DeliveryAddress_AddressLine1"), payload.line1, true) || applied;
     applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_DeliveryAddress_AddressLine2"), payload.line2, true) || applied;
     applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_DeliveryAddress_AddressLine3"), payload.line3, true) || applied;
@@ -814,6 +820,7 @@
       applied = true;
     }
     if (payload.checkoutReference !== undefined) applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_PurchaseOrderNumberTextBox"),payload.checkoutReference,true) || applied;
+    if (branchChanged) { try { branch.dispatchEvent(new Event("change",{bubbles:true})); } catch {} }
 
     try { sessionStorage.setItem("wl_returnStep", "3"); } catch {}
     try { window.WLCheckout?.refreshSectionSummaries?.(); } catch {}

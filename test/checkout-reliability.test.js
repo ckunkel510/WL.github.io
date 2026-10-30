@@ -80,16 +80,29 @@ test('a blank entry offers recovery after twelve seconds but never restarts a la
 });
 test('native handoff preserves job, billing recipients, fulfillment, timing and order notes',()=>{
   const data=new Map(),address={line1:'Job street',city:'Caldwell',stateValue:'TX',zip:'77836',email:'job@example.invalid'},billing={line1:'Invoice street',city:'Brenham',stateValue:'TX',zip:'77833',email:'login@example.invalid'};
-  const context=vm.createContext({fast:{method:'pickup',address,billing,date:'2026-11-04',pickupTime:'08:00',pickupPerson:'Test contact',reference:'PO-TEST',notes:'Keep dry',salesSelection:{id:'04',code:'04',jobReference:'Reina'}},guest:null,STATE_NAMES:{TX:'Texas'},SESSION_KEYS:[],text:v=>String(v||'').trim(),win:{sessionStorage:{setItem:(k,v)=>data.set(k,v),removeItem:k=>data.delete(k)}}});
+  const context=vm.createContext({fast:{method:'pickup',store:'3',stores:[{value:'3',label:'Caldwell'}],address,billing,date:'2026-11-04',pickupTime:'08:00',pickupPerson:'Test contact',reference:'PO-TEST',notes:'Keep dry',salesSelection:{id:'04',code:'04',jobReference:'Reina'}},guest:null,STATE_NAMES:{TX:'Texas'},SESSION_KEYS:[],text:v=>String(v||'').trim(),win:{sessionStorage:{setItem:(k,v)=>data.set(k,v),removeItem:k=>data.delete(k)}}});
   vm.runInContext(section('    function seedSession(','    function revisePurchase('),context);context.seedSession();
   assert.equal(data.get('wl_fulfillment_intent'),'pickup');const date=JSON.parse(data.get('wl_checkout_date_state_v2'));assert.equal(date.pickupDate,'2026-11-04');assert.equal(date.pickupPerson,'Test contact');assert.ok(date.extra.includes('Job ref: Reina'));
   const payload=JSON.parse(data.get('wl_checkout_address_payload'));assert.equal(payload.stateText,'Texas');assert.equal(payload.billing.stateText,'Texas');assert.equal(payload.preserveInvoiceContact,true);
   context.SESSION_KEYS=['wl_fulfillment_intent','wl_fulfillment_method','wl_fulfillment_selection_source_v1'];context.seedSession(true);
   assert.equal(data.has('wl_fulfillment_intent'),false);assert.equal(data.has('wl_fulfillment_method'),false);assert.equal(data.has('wl_fulfillment_selection_source_v1'),false);assert.equal(JSON.parse(data.get('wl_checkout_date_state_v2')).pickupPerson,'Test contact');
+  const nativePayload=JSON.parse(data.get('wl_checkout_address_payload'));assert.equal(nativePayload.pickupBranchValue,'3');assert.equal(payload.pickupBranchValue,'');
   const checkout=fs.readFileSync(require.resolve('../Checkout2'),'utf8'),fields={};
   for(const prefix of ['DeliveryAddress','InvoiceAddress'])for(const field of ['AddressLine1','AddressLine2','AddressLine3','City','Postcode','ContactTelephoneTextBox','EmailAddressTextBox','ContactFirstNameTextBox','ContactLastNameTextBox'])fields['ctl00_PageBody_'+prefix+'_'+field]={value:''};
   fields.ctl00_PageBody_InvoiceAddress_EmailAddressTextBox.value='billing@example.invalid; accounts@example.invalid';fields.ctl00_PageBody_PurchaseOrderNumberTextBox={value:''};
-  const applied=vm.createContext({document:{getElementById:id=>fields[id]||null},cleanText:v=>String(v||'').trim(),splitDisplayName:()=>({first:'Test',last:'Contact'}),setCheckoutValueIfPresent:(el,value)=>{if(!el||value===undefined)return false;el.value=value;return true;},setCheckoutSelect(){},sessionStorage:{setItem(){}},window:{}});
-  vm.runInContext(checkout.slice(checkout.indexOf('  function applyCheckoutAddressPayload('),checkout.indexOf('  function consumeCheckoutReturnPayloads(')),applied);applied.applyCheckoutAddressPayload(payload);
+  let branchChanges=0;fields.ctl00_PageBody_BranchDropDownList={value:'5',options:[{value:'3'},{value:'5'}],dispatchEvent(event){assert.equal(event.type,'change');assert.equal(fields.ctl00_PageBody_DeliveryAddress_AddressLine1.value,'Job street');branchChanges++;}};
+  const applied=vm.createContext({Event:class{constructor(type){this.type=type;}},document:{getElementById:id=>fields[id]||null},cleanText:v=>String(v||'').trim(),splitDisplayName:()=>({first:'Test',last:'Contact'}),setCheckoutValueIfPresent:(el,value)=>{if(!el||value===undefined)return false;el.value=value;return true;},setCheckoutSelect(){},sessionStorage:{setItem(){}},window:{}});
+  vm.runInContext(checkout.slice(checkout.indexOf('  function applyCheckoutAddressPayload('),checkout.indexOf('  function consumeCheckoutReturnPayloads(')),applied);applied.applyCheckoutAddressPayload(nativePayload);
   assert.equal(fields.ctl00_PageBody_DeliveryAddress_AddressLine1.value,'Job street');assert.equal(fields.ctl00_PageBody_InvoiceAddress_AddressLine1.value,'Invoice street');assert.equal(fields.ctl00_PageBody_InvoiceAddress_EmailAddressTextBox.value,'billing@example.invalid; accounts@example.invalid');assert.equal(fields.ctl00_PageBody_PurchaseOrderNumberTextBox.value,'PO-TEST');
+  assert.equal(fields.ctl00_PageBody_BranchDropDownList.value,'3');assert.equal(branchChanges,1);
+  applied.applyCheckoutAddressPayload(nativePayload);assert.equal(branchChanges,1,'same branch does not repeat the native postback');
+  applied.applyCheckoutAddressPayload({...nativePayload,pickupBranchValue:'99'});assert.equal(fields.ctl00_PageBody_BranchDropDownList.value,'3');assert.equal(branchChanges,1,'unavailable values never enter the native selector');
+});
+
+test('standard handoff seeds only a validated pickup branch and clears it for delivery',()=>{
+  const data=new Map(),context=vm.createContext({fast:{method:'pickup',store:'3',stores:[{value:'3'}],address:{line1:'Test street'}},guest:null,STATE_NAMES:{},SESSION_KEYS:[],text:v=>String(v||'').trim(),win:{sessionStorage:{setItem:(k,v)=>data.set(k,v),removeItem:k=>data.delete(k)}}});
+  vm.runInContext(section('    function seedSession(','    function revisePurchase('),context);
+  context.seedSession(true);assert.equal(JSON.parse(data.get('wl_checkout_address_payload')).pickupBranchValue,'3');
+  context.fast.method='delivery';context.seedSession(true);assert.equal(JSON.parse(data.get('wl_checkout_address_payload')).pickupBranchValue,'');
+  context.fast.method='pickup';context.fast.store='missing';context.seedSession(true);assert.equal(JSON.parse(data.get('wl_checkout_address_payload')).pickupBranchValue,'');
 });
