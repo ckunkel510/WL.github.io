@@ -122,7 +122,8 @@ test('a postal-only cart estimate cannot revoke a complete-address delivery rese
 
 test('handoff diagnostics expose only recognized public origin store labels', () => {
   const { publicOriginBranch } = require('../api/fulfillment-sessions');
-  assert.equal(publicOriginBranch({shipFrom:{postalCode:'77801'}}),'bryan');
+  assert.equal(publicOriginBranch({shipFrom:{postalCode:'77801'}}),'bryan-77801');
+  assert.equal(publicOriginBranch({shipFrom:{postalCode:'77803'}}),'bryan-77803');
   assert.equal(publicOriginBranch({shipFrom:{postalCode:'77833'}}),'brenham');
   assert.equal(publicOriginBranch({shipFrom:{postalCode:'90210',addressLine:['private customer address']}}),'unmapped');
   assert.equal(publicOriginBranch({shipTo:{postalCode:'77833'}}),'unmapped');

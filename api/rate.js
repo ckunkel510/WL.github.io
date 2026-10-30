@@ -442,14 +442,18 @@ async function handler(req, res) {
   if (req.method !== "POST") return sendXml(res, 405, errorXml(new RequestError(405, "POST is required.")));
 
   let isSoap = false;
+  let originBranch = 'unmapped', routeMatchedIgnoringWeight = false;
   try {
     const raw = await readBody(req);
     isSoap = /<\s*(?:[\w.-]+:)?Envelope\b/i.test(raw) || Boolean(req.headers.soapaction);
     const { access, rating } = parseLegacyXml(raw);
     authenticate(access);
     const translated = toOAuthRequest(rating);
+    originBranch = publicOriginBranch(translated.body);
     const fulfillmentClaim = await findFulfillmentClaim(translated.body);
     if (!fulfillmentClaim) {
+      // Diagnostic only. This candidate can never supply a returned rate.
+      routeMatchedIgnoringWeight = Boolean(await findFulfillmentClaim({ ...translated.body, totalWeight: 0, productWeight: 0, packages: [] }));
       throw new RequestError(409, "A current positive fulfillment quote is required before checkout can continue.");
     }
     let result = fulfillmentResult(fulfillmentClaim);
@@ -477,6 +481,8 @@ async function handler(req, res) {
   } catch (error) {
     console.error("[legacy-rate]", JSON.stringify({
       event: "rate-failed",
+      originBranch,
+      routeMatchedIgnoringWeight,
       error: error instanceof Error ? error.message : "UPS rating is temporarily unavailable."
     }));
     return sendXml(res, 200, isSoap ? soapErrorXml(error) : errorXml(error));
