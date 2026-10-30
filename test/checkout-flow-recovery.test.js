@@ -299,3 +299,68 @@ test('guest signup success requires fresh native login proof matching the suppli
   env.context.nativePage=identity('guest@example.invalid');await env.context.verifyGuest('guest@example.invalid');
   for(const page of [identity('another-login'),identity('guest@example.invalid',false),{querySelector:()=>null,querySelectorAll:()=>[]}]) {env.context.nativePage=page;await assert.rejects(env.context.verifyGuest('guest@example.invalid'),error=>error.code==='guest_signup_unconfirmed');}
 });
+
+function signupFrameEnvironment() {
+  const env=environment(), intervals=[], attributes=new Map();let posts=0;
+  env.document.documentElement={setAttribute:(name,value)=>attributes.set(name,value)};
+  env.context.setInterval=fn=>{intervals.push(fn);return intervals.length;};
+  env.context.clearInterval=id=>{intervals[id-1]=null;};
+  const fields=new Map(['UserNameTextBox','EmailAddressTextBox','Password1TextBox','Password2TextBox','ContactTelephoneTextBox','SignupButton'].map(name=>['ctl00_PageBody_'+name,env.element()]));
+  const button=fields.get('ctl00_PageBody_SignupButton');
+  button.classList={remove(){}};button.getAttribute=()=> 'javascript:WebForm_DoPostBackWithOptions(...)';
+  const page={URL:'https://webtrack.woodsonlumber.com/UserSignup.aspx',readyState:'loading',getElementById:id=>fields.get(id)||null,querySelector:()=>({}),querySelectorAll:()=>[]};
+  const nativeWindow={location:{pathname:'/UserSignup.aspx'},document:page,getComputedStyle:()=>({display:'block',visibility:'visible'})};
+  const frame=env.element();frame.contentDocument=page;frame.contentWindow=nativeWindow;
+  env.document.createElement=tag=>tag==='iframe'?frame:env.element();
+  env.context.nativePost=()=>{posts++;return true;};
+  load('Guestcheckout.js',env,'runNativeButton=()=>window.nativePost();window.createGuest=createAccountInBackground;window.guestPassword=randTempPassword;');
+  return {...env,frame,page,nativeWindow,intervals,attributes,posts:()=>posts,payload:{email:'guest@example.invalid',password:'Temporary-12345',phone:'5555550100',fname:'Guest',lname:'Test',contactName:'Guest Test'},ready(){page.readyState='interactive';nativeWindow.WebForm_DoPostBackWithOptions=()=>{};nativeWindow.WebForm_PostBackOptions=()=>{};}};
+}
+
+test('guest signup progresses from DOM readiness without window.load and posts only once',async()=>{
+  const env=signupFrameEnvironment(), done=env.context.createGuest(env.payload);
+  env.intervals[0]();assert.equal(env.posts(),0);
+  env.page.readyState='interactive';env.intervals[0]();assert.equal(env.posts(),0,'native WebForms hooks must be ready');
+  env.ready();env.intervals[0]();assert.equal(env.posts(),1);
+  env.intervals[0]();env.frame.onload();assert.equal(env.posts(),1,'same document is never resubmitted');
+  env.frame.contentDocument={...env.page,URL:'https://webtrack.woodsonlumber.com/Default.aspx'};
+  env.nativeWindow.location.pathname='/Default.aspx';env.intervals[0]();await done;
+  assert.equal(env.intervals[0],null);assert.equal(env.elements.has('gc_signup_iframe'),false);
+  assert.equal(env.attributes.get('data-wl-guest-signup-state'),'confirmation_pending');
+});
+
+test('guest signup ignores the initial blank frame and reports a pre-submit form timeout',async()=>{
+  const env=signupFrameEnvironment();env.ready();env.page.URL='about:blank';
+  const done=env.context.createGuest(env.payload);env.intervals[0]();assert.equal(env.posts(),0);
+  env.timers.at(-1)();await assert.rejects(done,error=>error.code==='guest_signup_form_timeout');
+  assert.equal(env.intervals[0],null);assert.equal(env.elements.has('gc_signup_iframe'),false);
+});
+
+test('guest signup confirmation timeout never repeats an uncertain postback',async()=>{
+  const env=signupFrameEnvironment();env.ready();const done=env.context.createGuest(env.payload);
+  env.intervals[0]();env.intervals[0]();env.timers.at(-1)();
+  await assert.rejects(done,error=>error.code==='guest_signup_confirmation_timeout');
+  assert.equal(env.posts(),1);assert.equal(env.intervals[0],null);
+});
+
+test('guest signup waits for a new response document before reading duplicate-email validation',async()=>{
+  const env=signupFrameEnvironment();env.ready();const done=env.context.createGuest(env.payload);
+  env.intervals[0]();
+  env.frame.contentDocument={...env.page,querySelectorAll:()=>[{textContent:'An account already exists.'}]};
+  env.intervals[0]();await assert.rejects(done,error=>error.code==='email-exists');assert.equal(env.posts(),1);
+});
+
+test('guest generated passwords always satisfy native length, uppercase, digit and symbol rules',()=>{
+  const env=signupFrameEnvironment();env.context.crypto={getRandomValues:values=>{values[0]=0;return values;}};
+  const password=env.context.guestPassword(18);assert.equal(password.length,18);
+  assert.match(password,/[A-Z]/);assert.match(password,/[a-z]/);assert.match(password,/\d/);assert.match(password,/[^A-Za-z0-9]/);
+});
+
+test('guest signup resumes from fresh matching login proof after a confirmation timeout',async()=>{
+  const env=environment();let attempts=0,proofs=0,reloads=0;
+  env.context.createAttempt=()=>{attempts++;throw Object.assign(new Error('Unconfirmed response'),{code:'guest_signup_confirmation_timeout'});};
+  env.context.nativeProof=()=>{proofs++;};env.context.location.assign=()=>{reloads++;};
+  load('Guestcheckout.js',env,`collectGuestPayload=()=>({email:'guest@example.invalid',password:'temporary-only',fname:'Guest',lname:'Test'});backupGuestCart=()=>{};createAccountInBackground=async()=>window.createAttempt();verifyGuestAccount=async()=>window.nativeProof();window.submitGuest=onSubmitGuest;`);
+  await env.context.submitGuest();assert.equal(attempts,1);assert.equal(proofs,1);assert.equal(reloads,1);
+  assert.equal('password' in JSON.parse(env.storage.get('wl_guest_checkout_payload')),false);
+});

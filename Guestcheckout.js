@@ -7,7 +7,7 @@
   // Guest checkout needs to show controls on the cart page, but it also needs to
   // run on the checkout page so saved guest data can be applied after WebForms navigates.
   if (!IS_CART_PAGE && !IS_CHECKOUT_PAGE) return;
-  document.documentElement?.setAttribute?.('data-wl-guest-checkout-build','20261030-guest-cart-recovery-2');
+  document.documentElement?.setAttribute?.('data-wl-guest-checkout-build','20261030-guest-cart-recovery-3');
 
   const LOG = (...a) => console.log('[GuestCheckout]', ...a);
   const ERR = (...a) => console.error('[GuestCheckout]', ...a);
@@ -156,10 +156,17 @@
   }
 
   function randTempPassword(len = 16) {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%';
-    let s = '';
-    for (let i = 0; i < len; i += 1) s += chars[Math.floor(Math.random() * chars.length)];
-    return s;
+    const groups = ['ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz','0123456789','!@#$%'];
+    const chars = groups.join('');
+    const random = max => {
+      if (window.crypto?.getRandomValues) return window.crypto.getRandomValues(new Uint32Array(1))[0] % max;
+      return Math.floor(Math.random() * max);
+    };
+    // Always satisfy the native signup rules, including a digit and symbol.
+    const result = groups.map(group => group[random(group.length)]);
+    while (result.length < Math.max(12,len)) result.push(chars[random(chars.length)]);
+    for (let i=result.length-1;i>0;i--) { const j=random(i+1); [result[i],result[j]]=[result[j],result[i]]; }
+    return result.join('');
   }
 
   function saveGuest(payload) {
@@ -623,8 +630,16 @@
     try {
       await backupGuestCart(payload.email);
       failureCode='guest_signup_failed';
-      await createAccountInBackground(payload);
-      await verifyGuestAccount(payload.email);
+      let accountConfirmed=false;
+      try { await createAccountInBackground(payload); }
+      catch (error) {
+        // A slow response may have created the account. Read fresh native proof
+        // before reporting failure; never repeat the signup postback here.
+        if (error.code!=='guest_signup_confirmation_timeout') throw error;
+        try { await verifyGuestAccount(payload.email); accountConfirmed=true; }
+        catch (_) { throw error; }
+      }
+      if (!accountConfirmed) await verifyGuestAccount(payload.email);
       guestMetric('guest_details_complete');
       // Signup is finished. Do not retain its generated credential in the draft.
       delete payload.password;
@@ -632,7 +647,7 @@
       continueCheckoutAndHookBilling();
       closeModal();
     } catch (e) {
-      const reason=['guest_cart_unsupported','guest_cart_unavailable','guest_signup_unconfirmed','guest_signup_timeout','email-exists'].includes(e.code)?e.code:failureCode;
+      const reason=['guest_cart_unsupported','guest_cart_unavailable','guest_signup_unconfirmed','guest_signup_timeout','guest_signup_form_timeout','guest_signup_confirmation_timeout','email-exists'].includes(e.code)?e.code:failureCode;
       guestMetric('guest_checkout_error',reason);
       ERR('Guest checkout could not start.',reason);
       // Retain the basket backup if signup may have changed the server session.
@@ -700,23 +715,27 @@
       try { document.getElementById('gc_signup_iframe')?.remove(); } catch {}
       const frame = document.createElement('iframe');
       frame.id = 'gc_signup_iframe';
-      frame.style.display = 'none';
-      frame.style.pointerEvents = 'none';
+      frame.loading = 'eager';
+      frame.style.cssText = 'position:fixed;left:0;top:0;width:1000px;height:800px;opacity:0;pointer-events:none;z-index:-1;border:0';
       frame.tabIndex = -1;
       frame.title = 'Guest checkout setup';
       frame.setAttribute('aria-hidden', 'true');
       frame.setAttribute('inert', '');
       document.body.appendChild(frame);
 
-      let attempts = 0;
       let submitted = false;
       let settled = false;
-      const maxAttempts = 20;
+      let submittedDocument = null;
+      let probe;
+      const phase = state => document.documentElement?.setAttribute?.('data-wl-guest-signup-state',state);
+      phase('loading_form');
 
       const finish = (error) => {
         if (settled) return;
         settled = true;
         clearTimeout(timeout);
+        clearInterval(probe);
+        phase(error ? 'failed' : 'confirmation_pending');
         frame.onload = null;
         try { frame.remove(); } catch {}
         if (error) reject(error);
@@ -750,7 +769,8 @@
       };
 
       const timeout = setTimeout(() => {
-        fail('WebTrack took too long to start guest checkout. Please try again.', 'Signup confirmation timed out.','guest_signup_timeout');
+        if (submitted) fail('WebTrack has not confirmed the guest account yet. Your cart backup is retained. Refresh the cart to check sign-in before trying again.', 'Signup confirmation timed out.','guest_signup_confirmation_timeout');
+        else fail('The guest signup form did not finish loading. Your cart is preserved. Please try again.', 'Signup form timed out.','guest_signup_form_timeout');
       }, 25000);
 
       frame.onload = () => {
@@ -758,19 +778,20 @@
         try {
           const win = frame.contentWindow;
           const doc = frame.contentDocument || win.document;
-          if (!doc) throw new Error('No iframe document');
+          // DOM readiness is sufficient; chat/images can hold window.load open.
+          if (!doc || doc.URL==='about:blank' || doc.readyState==='loading') return;
+          if (submitted && doc===submittedDocument) return;
 
           if (!/UserSignup\.aspx/i.test(win.location.pathname)) {
             if (submitted) {
-              LOG('Guest account creation confirmed.');
+              LOG('Guest signup response received.');
               finish();
-            } else {
-              win.location.href = SIGNUP_PATH;
             }
             return;
           }
 
           if (submitted) {
+            phase('signup_response');
             const signupError = visibleSignupError(doc, win).toLowerCase();
             if (/already|exist|registered|in use|duplicate/.test(signupError)) {
               fail('An account already uses this email. Sign in to continue with your account or reset your password.', signupError, 'email-exists');
@@ -787,13 +808,13 @@
           const Phone = byId('ctl00_PageBody_ContactTelephoneTextBox', doc);
 
           if (!Email1 || !Email2 || !Pass1 || !Pass2 || !Phone) {
-            attempts += 1;
-            if (attempts > maxAttempts) throw new Error('Signup fields did not load.');
-            setTimeout(() => {
-              if (!settled && typeof frame.onload === 'function') frame.onload();
-            }, 250);
+            phase('waiting_native_form');
             return;
           }
+          const btn = byId('ctl00_PageBody_SignupButton', doc);
+          if (!btn || !doc.querySelector('form')) return;
+          if (/^javascript:/i.test(btn.getAttribute('href') || '') &&
+              (typeof win.WebForm_DoPostBackWithOptions!=='function' || typeof win.WebForm_PostBackOptions!=='function')) return;
 
           [Email1, Email2, Pass1, Pass2].forEach(inp => {
             try {
@@ -833,14 +854,13 @@
           setId('ctl00_PageBody_InvoicePostalCodeTextBox', payload.i_zip, doc);
           setId('ctl00_PageBody_InvoiceCountryTextBox', 'USA', doc);
 
-          const btn = byId('ctl00_PageBody_SignupButton', doc);
-          if (!btn) throw new Error('Signup button not found.');
-
           btn.classList.remove('disabled');
           btn.removeAttribute('aria-disabled');
           btn.style.pointerEvents = 'auto';
           btn.style.opacity = '1';
           submitted = true;
+          submittedDocument = doc;
+          phase('submitted');
           if (!runNativeButton(btn)) {
             fail('WebTrack could not submit guest checkout. Please try again.', 'Signup button could not be activated.');
           }
@@ -850,6 +870,7 @@
       };
 
       frame.src = SIGNUP_PATH;
+      probe = setInterval(() => { if (!settled && typeof frame.onload==='function') frame.onload(); },250);
     });
   }
 
