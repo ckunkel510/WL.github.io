@@ -464,3 +464,39 @@ test("native customer branch overrides the browsing store when reserving fulfill
     assert.equal(JSON.parse(env.storage.get("wl_shipping_offer_cart_v1")).origin.postalCode,expected);
   }
 });
+
+test('a postal-only response finishing after checkout address hydration is discarded', async () => {
+  const env=environment();
+  env.element('ctl00_PageBody_DeliveryAddress_Postcode').value='77833';
+  env.storage.set('wl_shipping_offer_cart_v1',JSON.stringify({items:[{productId:'85',productCode:'ITEM',quantity:1}],ts:Date.now()}));
+  let finish;
+  env.context.fetch=()=>new Promise(resolve=>{finish=resolve;});
+  load('UpsShippingOffer.js',env);
+  const pending=env.context.WLShippingOffer.refresh();
+  env.element('ctl00_PageBody_DeliveryAddress_AddressLine1').value='123 Test St';
+  env.element('ctl00_PageBody_DeliveryAddress_City').value='Brenham';
+  env.element('ctl00_PageBody_DeliveryAddress_CountySelector_CountyList').selectedOptions=[{textContent:'Texas'}];
+  finish({ok:true,json:async()=>({options:{ups:{available:true,amount:11.33},delivery:{available:false}}})});
+  assert.equal(await pending,null);
+  assert.equal(env.storage.has('wl_shipping_offer_v1'),false);
+  assert.equal(env.context.WLShippingOffer.current(),null);
+});
+
+test('native checkout ignores another page quote with a different address or branch', async () => {
+  const env=environment();
+  env.element('ctl00_PageBody_DeliveryAddress_Postcode').value='77833';
+  env.element('ctl00_PageBody_DeliveryAddress_AddressLine1').value='123 Test St';
+  env.element('ctl00_PageBody_DeliveryAddress_City').value='Brenham';
+  env.element('ctl00_PageBody_DeliveryAddress_CountySelector_CountyList').selectedOptions=[{textContent:'Texas'}];
+  env.storage.set('wl_shipping_offer_cart_v1',JSON.stringify({items:[{productId:'85',productCode:'ITEM',quantity:1}],ts:Date.now()}));
+  env.context.fetch=async()=>({ok:true,json:async()=>({options:{ups:{available:true,amount:11.33},delivery:{available:true,amount:25}}})});
+  load('UpsShippingOffer.js',env);await env.context.WLShippingOffer.refresh();
+  const complete=env.context.WLShippingOffer.current();assert.equal(complete.options.delivery.amount,25);
+  env.storage.set('wl_shipping_offer_v1',JSON.stringify({...complete,addressKey:'postal-only-cart-estimate'}));
+  assert.equal(env.context.WLShippingOffer.current(),null);
+  env.storage.set('wl_shipping_offer_v1',JSON.stringify({...complete,originPostalCode:'77801'}));
+  assert.equal(env.context.WLShippingOffer.current(),null);
+  env.storage.set('wl_shipping_offer_v1',JSON.stringify(complete));
+  env.element('ctl00_PageBody_DeliveryAddress_AddressLine1').value='456 Other St';
+  assert.equal(env.context.WLShippingOffer.current(),null);
+});

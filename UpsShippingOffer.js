@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var BUILD_VERSION = "20261030-native-quote-origin-2";
+  var BUILD_VERSION = "20261030-checkout-quote-context-3";
   var RATE_URL = "https://wl-upsrates.vercel.app/api/fulfillment-quote";
   var APPROVAL_URL = "https://wl-upsrates.vercel.app/api/customization-approval";
   var CUT_POLICY_URL = "https://ckunkel510.github.io/WL.github.io/data/cut-to-ship-products.json?v=20260917-2";
@@ -423,9 +423,19 @@
     try { document.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: payload })); } catch (error) {}
   }
 
-  function writeOffer(result, zip, items, shouldNotify) {
+  function addressQuoteKey(address, fallbackZip) {
+    return JSON.stringify([
+      (address.addressLine || []).map(function (line) { return text(line).toLowerCase(); }),
+      text(address.city).toLowerCase(), text(address.state).toUpperCase(),
+      text(address.postalCode || fallbackZip), text(address.country).toUpperCase()
+    ]);
+  }
+
+  function writeOffer(result, zip, items, shouldNotify, address, origin) {
     var payload = {
       zip: zip,
+      addressKey: addressQuoteKey(address, zip),
+      originPostalCode: origin.postalCode,
       cartSignature: items.map(function (item) {
         return [item.productId, item.productCode, item.quantity, cutSelectionSignature(item.cutToShip)].join(":");
       }).sort().join("|"),
@@ -484,7 +494,14 @@
       });
       var result = await response.json().catch(function () { return {}; });
       if (!response.ok) throw new Error(result.error || "UPS shipping offer could not be prepared.");
-      var payload = writeOffer(result, zip, items, false);
+      // A cart estimate or an earlier address request may finish after native
+      // checkout receives its complete address/branch. Do not publish that old
+      // result into shared session state or let it change the chosen method.
+      if (addressQuoteKey(checkoutAddress(), zip) !== addressQuoteKey(address, zip) || selectedOrigin().postalCode !== origin.postalCode) {
+        scheduleRefresh(100);
+        return null;
+      }
+      var payload = writeOffer(result, zip, items, false, address, origin);
       var selected = rememberedSelection();
       // Checkout calls the mode "ship"; the quote exposes that option as "ups".
       var selectedOption = selected && result.options && result.options[selected.mode === "ship" ? "ups" : selected.mode];
@@ -795,7 +812,10 @@
       var stored = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || "null");
       var currentZip = checkoutZip();
       var sameZip = !currentZip || !stored || stored.zip === currentZip;
-      return stored && sameZip && Date.now() - Number(stored.ts || 0) < 15 * 60 * 1000 ? stored : null;
+      var nativeAddress = document.getElementById("ctl00_PageBody_DeliveryAddress_Postcode");
+      var sameAddress = !nativeAddress || stored && stored.addressKey === addressQuoteKey(checkoutAddress(), currentZip);
+      var sameOrigin = !nativeAddress || stored && stored.originPostalCode === selectedOrigin().postalCode;
+      return stored && sameZip && sameAddress && sameOrigin && Date.now() - Number(stored.ts || 0) < 15 * 60 * 1000 ? stored : null;
     } catch (error) {
       return null;
     }
