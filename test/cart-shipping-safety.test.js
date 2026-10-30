@@ -293,6 +293,7 @@ test("fulfillment quoting recognizes the selected store in the current public st
     },
     storedCartData: () => null,
     document: {
+      getElementById: () => null,
       querySelectorAll: () => links
     }
   });

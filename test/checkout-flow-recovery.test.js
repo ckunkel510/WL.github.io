@@ -443,3 +443,24 @@ test('standard guest setup rechecks the basket and stores only a short-lived own
   assert.equal(checks,1);assert.equal(env.navigations(),1);assert.equal(marker.phase,'ready');
   assert.deepEqual(Object.keys(marker).sort(),['createdAt','email','phase','version']);
 });
+
+
+test("native customer branch overrides the browsing store when reserving fulfillment", async () => {
+  for (const [label, expected] of [
+    ["Brenham - 301 Clinton St, PO BOX 118, Brenham, Texas, 77833, United States", "77833"],
+    ["Bryan - 105 W Pease St, PO BOX 3950, Bryan, Texas, 77801, United States", "77801"]
+  ]) {
+    const env = environment();
+    env.context.location.pathname = "/Checkout.aspx";
+    const branch=env.element("ctl00_PageBody_BranchDropDownList");
+    branch.options=[{textContent:label}]; branch.selectedIndex=0;
+    env.element("ctl00_PageBody_DeliveryAddress_Postcode").value="77833";
+    env.storage.set("wl_shipping_offer_cart_v1",JSON.stringify({items:[{productId:"85",productCode:"ITEM",quantity:1}],origin:{postalCode:"77836"},ts:Date.now()}));
+    const requests=[];
+    env.context.fetch=async(url,options)=>{requests.push(JSON.parse(options.body));return {ok:true,json:async()=>({options:{},packageProfile:{totalWeight:1}})};};
+    load("UpsShippingOffer.js",env);
+    await env.context.WLShippingOffer.refresh();
+    assert.equal(requests[0].shipFrom.postalCode,expected);
+    assert.equal(JSON.parse(env.storage.get("wl_shipping_offer_cart_v1")).origin.postalCode,expected);
+  }
+});
