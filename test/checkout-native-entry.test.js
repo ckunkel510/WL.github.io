@@ -52,7 +52,7 @@ test('cart and Quick buy both wait for cart policy and block a shortage before n
  const driver=source.slice(source.indexOf('    async function driveFast('),source.indexOf('    async function submitNative('));
  for(const cartCheckout of [true,false])for(const ready of [false,true]) {
   let entries=0,halt='';const page={documentElement:{dataset:{}},getElementById:id=>id==='ctl00_PageBody_PlaceOrderButton'?{}:null,querySelector:selector=>selector==='.shopping-cart-item'?{}:{textContent:'Clearance quantity unavailable'}};
-  const context=vm.createContext({fast:{started:Date.now()},busy:false,submitting:false,active:{phase:'checking_out',cartCheckout},nativeFormsReady:()=>true,cartPolicyReady:()=>ready,status(){},haltFast:message=>{halt=message;},text:String,continueNativeCart(){entries++;}});
+  const context=vm.createContext({fast:{started:Date.now()},busy:false,submitting:false,active:{phase:'checking_out',cartCheckout,current:[]},nativeCartSignature:core.nativeCartSignature,cartFromDocument:()=>({items:[]}),nativeFormsReady:()=>true,cartPolicyReady:()=>ready,status(){},haltFast:message=>{halt=message;},text:String,continueNativeCart(){entries++;}});
   vm.runInContext(driver,context);await context.driveFast({},page);assert.equal(entries,0);assert.equal(halt,ready?'Clearance quantity unavailable':'');
  }
 });
