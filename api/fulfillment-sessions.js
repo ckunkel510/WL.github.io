@@ -36,6 +36,14 @@ function normalizeRoute(input) {
   };
 }
 
+function publicOriginBranch(input) {
+  // Only public Woodson store labels may appear in diagnostics. Never emit
+  // arbitrary postal codes, customer destinations or address fields.
+  return ({ '77833': 'brenham', '77801': 'bryan', '77803': 'bryan',
+    '77836': 'caldwell', '78947': 'lexington', '75831': 'buffalo',
+    '76667': 'mexia', '76642': 'groesbeck' })[normalizeRoute(input).shipFromPostalCode] || 'unmapped';
+}
+
 function claimWeight(input) {
   return positive(input?.totalWeight) || positive(input?.productWeight) || packageWeight(input?.packages);
 }
@@ -200,6 +208,7 @@ module.exports = {
   claimMatches,
   findFulfillmentClaim,
   normalizeRoute,
+  publicOriginBranch,
   packageWeight,
   resetMemoryClaims,
   selectFulfillmentClaim,

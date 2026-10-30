@@ -6,7 +6,7 @@ const zipcodes = require("zipcodes");
 const { RequestError } = require("./ups-rates")._internal;
 const { applyGroundPromotion, cartHasEligibleProduct, promoCodeMatches } = require("./shipping-promotions");
 const { findPromoClaim, storePromoClaim } = require("./shipping-promo-sessions");
-const { findFulfillmentClaim } = require("./fulfillment-sessions");
+const { findFulfillmentClaim, publicOriginBranch } = require("./fulfillment-sessions");
 const { applyShippingMinimumToRates } = require("./shipping-policy");
 
 const parser = new XMLParser({
@@ -467,6 +467,8 @@ async function handler(req, res) {
       event: "positive-rate-returned",
       destinationState: text(translated.body.shipTo?.state).slice(0, 24),
       fulfillmentClaimFound: true,
+      originBranch: publicOriginBranch(translated.body),
+      customerSelected: fulfillmentClaim.recommendation?.reason === 'customer-selected',
       fulfillmentMode: fulfillmentClaim?.recommendation?.mode || "carrier-rate",
       rateCount: result.rates.length,
       minimumAmount: Math.min(...result.rates.map((rate) => Number(rate.amount)))
