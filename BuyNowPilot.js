@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261030-checkout-recovery-51';
+  var BUILD = '20261030-checkout-recovery-52';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -24,6 +24,15 @@
   var PALLET_PRODUCTS = new Set('23297,22444,23379,24896,25273,25274,26446,26481,94106,12383,24315,24319,122893,25102,4741,12101,21194,23008,23049,20366,20368,21126,12100,2996,3003,21193,26060,133832,25415,2999,4743,21475,4742,25076,25094,23825,23826,23827,113992,113994,23828'.split(','));
 
   function text(value) { return String(value == null ? '' : value).replace(/\s+/g, ' ').trim(); }
+  function hasPalletCart(page) {
+    // These lines remain owned by the native pallet synchronizer. Detect them
+    // before the compact parser, which intentionally rejects pallet mutations.
+    return Array.from(page.querySelectorAll('.shopping-cart-item')).some(function (row) {
+      return Array.from(row.querySelectorAll('a[href]')).some(function (link) {
+        return PALLET_PRODUCTS.has(pidOf(link.getAttribute('href'))) || /^(?:e[\s-]?)?pallets?$/i.test(text(link.textContent));
+      });
+    });
+  }
   var STATE_NAMES = {
     AL:'Alabama',AK:'Alaska',AZ:'Arizona',AR:'Arkansas',CA:'California',CO:'Colorado',CT:'Connecticut',DC:'District of Columbia',DE:'Delaware',FL:'Florida',GA:'Georgia',HI:'Hawaii',IA:'Iowa',ID:'Idaho',IL:'Illinois',IN:'Indiana',KS:'Kansas',KY:'Kentucky',LA:'Louisiana',MA:'Massachusetts',MD:'Maryland',ME:'Maine',MI:'Michigan',MN:'Minnesota',MO:'Missouri',MS:'Mississippi',MT:'Montana',NC:'North Carolina',ND:'North Dakota',NE:'Nebraska',NH:'New Hampshire',NJ:'New Jersey',NM:'New Mexico',NV:'Nevada',NY:'New York',OH:'Ohio',OK:'Oklahoma',OR:'Oregon',PA:'Pennsylvania',RI:'Rhode Island',SC:'South Carolina',SD:'South Dakota',TN:'Tennessee',TX:'Texas',UT:'Utah',VA:'Virginia',VT:'Vermont',WA:'Washington',WI:'Wisconsin',WV:'West Virginia',WY:'Wyoming',AB:'Alberta',BC:'British Columbia',MB:'Manitoba',NB:'New Brunswick',NL:'Newfoundland and Labrador',NS:'Nova Scotia',NT:'Northwest Territories',NU:'Nunavut',ON:'Ontario',PE:'Prince Edward Island',QC:'Quebec',SK:'Saskatchewan',YT:'Yukon Territory'
   };
@@ -1425,6 +1434,23 @@
       if (!ENABLE_CART_CHECKOUT || overlay || busy) return;
       await withLock(async function () {
         cartEntry=true; busy=true;
+        if (hasPalletCart(doc)) {
+          try {
+            if (record()) throw new Error('Finish or restore your earlier Quick buy cart before checkout.');
+            assertNoPendingCartOrder();
+            await checkIdentity();
+            var native=doc.getElementById('ctl00_PageBody_PlaceOrderButton');
+            if (!native || native.disabled || native.getAttribute('aria-disabled')==='true') throw new Error('Checkout is unavailable. Return to the cart and try again.');
+            // Preserve native validation, fulfillment and pallet handling. No
+            // compact frame, cart rewrite or compact session seed is needed.
+            bypassCartEntry=true;
+            try { native.click(); } finally { bypassCartEntry=false; }
+          } finally {
+            busy=false; cartEntry=false;
+            if (releaseLock) releaseLock(); releaseLock=null;
+          }
+          return;
+        }
         var opened=Date.now(); timings={started:opened,requests:{},stages:{}};
         shell('Checkout'); showPreview({name:'Your cart'},'—'); loading(true); status('Checking your cart…');
         if (record()) throw new Error('Finish or restore your earlier Quick buy cart before checkout.');
