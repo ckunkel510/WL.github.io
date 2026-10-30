@@ -15,6 +15,9 @@ const DEFAULT_ORIGINS = [
   "http://127.0.0.1:3000"
 ];
 const rateBuckets = new Map();
+// WebTrack's authenticated legacy UPS request uses this configured shipper
+// origin, independently of the customer's operational/pickup branch.
+const WEBTRACK_CARRIER_ORIGIN = { name: 'Brenham', city: 'Brenham', state: 'TX', postalCode: '77833', country: 'US' };
 
 function cleanText(value, maxLength = 120) {
   return String(value ?? "").replace(/\s+/g, " ").trim().slice(0, maxLength);
@@ -161,6 +164,7 @@ function recommendFulfillment({ ups, delivery }) {
 }
 
 async function buildFulfillmentQuote(body, dependencies = {}) {
+  const carrierOrigin = dependencies.carrierOrigin || body.shipFrom;
   const cart = Array.isArray(body?.cart) ? body.cart : Array.isArray(body?.items) ? body.items : [];
   const suppliedPackages = Array.isArray(body?.packages) ? body.packages : [];
   const rateRequest = dependencies.requestRates || requestRates;
@@ -179,7 +183,7 @@ async function buildFulfillmentQuote(body, dependencies = {}) {
         ...(dependencies.getCatalogProducts ? { getCatalogProducts: dependencies.getCatalogProducts } : {})
       };
       if (dependencies.shippingPolicy) automaticOptions.policy = dependencies.shippingPolicy;
-      const automatic = await (dependencies.buildAutomaticShippingQuote || buildAutomaticShippingQuote)(body, automaticOptions);
+      const automatic = await (dependencies.buildAutomaticShippingQuote || buildAutomaticShippingQuote)({ ...body, shipFrom: carrierOrigin }, automaticOptions);
       packages = automatic.claim?.packages || [];
       totalWeight = positive(automatic.claim?.productWeight) || totalWeight;
       rates = offeredRates(automatic);
@@ -197,7 +201,7 @@ async function buildFulfillmentQuote(body, dependencies = {}) {
     totalWeight = totalWeight || packageWeight(suppliedPackages);
     try {
       const rated = applyShippingMinimumToRates(
-        await rateRequest({ shipFrom: body.shipFrom, shipTo: body.shipTo, packages: suppliedPackages })
+        await rateRequest({ shipFrom: carrierOrigin, shipTo: body.shipTo, packages: suppliedPackages })
       );
       rates = (Array.isArray(rated?.rates) ? rated.rates : [])
         .map((rate) => ({ ...rate, amount: money(rate.amount) }))
@@ -255,7 +259,7 @@ async function buildFulfillmentQuote(body, dependencies = {}) {
       : [];
   const claim = selectedRates.length
     ? await (dependencies.storeFulfillmentClaim || storeFulfillmentClaim)({
-        shipFrom: body.shipFrom,
+        shipFrom: carrierOrigin,
         shipTo: body.shipTo,
         totalWeight,
         packages,
@@ -311,16 +315,18 @@ async function handler(req, res) {
     enforceRateLimit(req);
     const body = req.body && typeof req.body === "object" ? req.body : JSON.parse(req.body || "{}");
     if (body.action === "select") {
-      const selected = await selectFulfillmentClaim(body);
-      console.log("[fulfillment-quote]", JSON.stringify({ event: "selection-result", mode: body.mode === 'delivery' ? 'delivery' : body.mode === 'ship' ? 'ship' : 'invalid', originBranch: publicOriginBranch(body), saved: selected.ok === true }));
+      const carrierSelection = { ...body, shipFrom: WEBTRACK_CARRIER_ORIGIN };
+      const selected = await selectFulfillmentClaim(carrierSelection);
+      console.log("[fulfillment-quote]", JSON.stringify({ event: "selection-result", mode: body.mode === 'delivery' ? 'delivery' : body.mode === 'ship' ? 'ship' : 'invalid', originBranch: publicOriginBranch(carrierSelection), saved: selected.ok === true }));
       if (!selected.ok) throw new RequestError(409, "That fulfillment method is no longer available. Please refresh the quote.");
       return sendJson(res, 200, selected);
     }
-    const result = await buildFulfillmentQuote(body);
+    const result = await buildFulfillmentQuote(body, { carrierOrigin: WEBTRACK_CARRIER_ORIGIN });
     console.log("[fulfillment-quote]", JSON.stringify({
       event: "quote-complete",
       quoteId: result.quoteId,
       originBranch: publicOriginBranch(body),
+      carrierOriginBranch: publicOriginBranch({ shipFrom: WEBTRACK_CARRIER_ORIGIN }),
       destinationState: cleanText(body.shipTo?.state || body.shipTo?.StateProvinceCode, 24),
       productCodes: (Array.isArray(body.cart) ? body.cart : []).map((item) => cleanText(item?.productCode || item?.code, 40)).filter(Boolean),
       recommendation: result.recommendation?.mode || "manual",
