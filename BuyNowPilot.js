@@ -9,11 +9,12 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261028-visible-job-results-46';
+  var BUILD = '20261030-checkout-recovery-47';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
   var GUEST_START_KEY = 'wl_compact_guest_start_v1';
+  var GUEST_CART_KEY = 'wl_guest_cart_handoff_v1';
   var PREFIX = 'wl_buy_now_pilot_v1:';
   var SESSION_KEYS = ['wl_fulfillment_intent','wl_fulfillment_method','wl_fulfillment_selection_source_v1','wl_confirmed_fulfillment_v1','wl_checkout_form_snapshot_v2','wl_checkout_single_page_preview','wl_shipping_selection_v1','wl_shipping_offer_v1','wl_checkout_date_state_v2','wl_checkout_auto_advance','wl_checkout_address_payload','wl_checkout_contact_payload','wl_returnStep','wl_pendingStep','wl_expect_nav','wl_billing_confirmed','wl_billing_seen','wl_billing_confirmed_delivered','wl_autocopy_done'];
   var ORIGIN = 'https://webtrack.woodsonlumber.com';
@@ -134,6 +135,7 @@
   }
   function nativeFormsReady(child) {
     var page=child.document;
+    if (!page || page.URL==='about:blank' || page.querySelector && !page.querySelector('form')) return false;
     if (page && page.readyState!=='complete') return false;
     var manager=child.Sys?.WebForms?.PageRequestManager?.getInstance?.();
     if (manager?.get_isInAsyncPostBack?.()) return false;
@@ -206,6 +208,19 @@
       var value=JSON.parse(session.getItem(GUEST_START_KEY) || 'null');
       return !!value && value.version===1 && Number.isFinite(value.createdAt) && now>=value.createdAt && now-value.createdAt<300000;
     } catch (_) { return false; }
+  }
+  function guestCartHandoff(session, user, now) {
+    var raw=session.getItem(GUEST_CART_KEY);
+    if (!raw) return null;
+    var value;
+    try { value=JSON.parse(raw); } catch (_) { throw new Error('The guest cart backup could not be read. No cart changes were made.'); }
+    if (text(value?.email).toLowerCase()!==user) return null;
+    if (value?.version!==1 || !Number.isFinite(value.createdAt) || now<value.createdAt || now-value.createdAt>3600000) throw new Error('The guest cart backup has expired. No cart changes were made.');
+    value.items=lines(value.items);
+    if (!value.items.length) throw new Error('The guest cart backup is empty. No cart changes were made.');
+    if (value.current) value.current=lines(value.current);
+    if (value.pending && (typeof value.pending.before!=='string' || typeof value.pending.after!=='string')) throw new Error('The guest cart recovery needs review.');
+    return value;
   }
   function lines(value) {
     if (!Array.isArray(value) || value.length > 60) throw new Error('This cart needs regular checkout.');
@@ -531,14 +546,14 @@
     if (!signedIn(doc)) return;
     var storage = win.localStorage;
     var timings = null, measuredPayment = null;
-    function measureCheckout(stage, page, reviewed, orderNumber) {
+    function measureCheckout(stage, page, reviewed, orderNumber, errorCode) {
       // Measurement is optional and can never block payment/cart recovery.
       try {
         if (!active || !win.WLAnalytics?.checkout || stage==='cancel' && active.orderNumber) return;
         var paymentType=reviewed?.employeeZero?'no_payment_due':fast?.paymentFingerprint?'stored_card':fast?.securePayment?'new_card':'webtrack';
         if (stage==='review') measuredPayment={id:active.id,revision:fast?.revision,type:paymentType};
         if (measuredPayment?.id===active.id && measuredPayment.revision===fast?.revision) paymentType=measuredPayment.type;
-        win.WLAnalytics.checkout(stage,{id:active.id,flow:active.cartCheckout?'compact_cart':'quick_buy',customerType:active.guestCheckout?'guest':'signed_in',items:active.purchase || active.current,method:fast?.method,paymentType:paymentType,totals:reviewed?.totals,readyMs:stage==='review'&&fast?Date.now()-fast.opened:undefined,includedCartItems:active.extraCount || 0,orderNumber:orderNumber},page);
+        win.WLAnalytics.checkout(stage,{id:active.id,flow:active.cartCheckout?'compact_cart':'quick_buy',customerType:active.guestCheckout?'guest':'signed_in',items:active.purchase || active.current,method:fast?.method,paymentType:paymentType,totals:reviewed?.totals,readyMs:stage==='review'&&fast?Date.now()-fast.opened:undefined,includedCartItems:active.extraCount || 0,orderNumber:orderNumber,errorCode:errorCode},page);
       } catch (_) {}
     }
     async function fetchDocument(path, options, timeoutMs) {
@@ -618,6 +633,10 @@
     }
     function save() {
       active.updatedAt = Date.now();
+      if (active.guestRestoration) {
+        win.sessionStorage.setItem(GUEST_CART_KEY,JSON.stringify({version:1,createdAt:active.createdAt,email:user,scope:scope,items:active.purchase,current:active.current,pending:active.pending}));
+        return;
+      }
       if (active.cartCheckout) {
         var receipt = cartOrderReceipt(active);
         if (receipt) persist(storage,cartOrderKey,receipt);
@@ -756,7 +775,7 @@
         if (!link || !quantity || configured || /customized special order|cut to ship|configured product/i.test(row.textContent)) throw new Error('This cart contains a line that needs regular checkout with compact checkout.');
         var unit = text(row.getAttribute('data-wl-cart-unit') || (unitNode ? unitNode.textContent : directUnit || unitMatch && unitMatch[1]));
         if (!unit) throw new Error('The cart unit could not be verified. Please use regular checkout.');
-        return { pid: pidOf(link.getAttribute('href')), code: text(code.textContent), quantity: Number(quantity.value), unit: unit, name: text(row.querySelector('.description,.ProductDescription,.cart-item-card p.small')?.textContent || code.textContent) };
+        return { pid: pidOf(link.getAttribute('href')), code: text(code.textContent), quantity: Number(quantity.value), unit: unit, name: text(row.querySelector('[data-title="Description"],.description,.ProductDescription,.cart-item-card p.small,.cart-item-card p.text-secondary')?.textContent || link.parentElement?.nextElementSibling?.textContent || code.textContent) };
       });
       return { doc: page, items: lines(parsed), rows: rows };
     }
@@ -862,6 +881,31 @@
       }
       throw new Error('Cart recovery stopped after too many changes. Your backup is retained.');
     }
+    async function restoreGuestCart() {
+      var backup=guestCartHandoff(win.sessionStorage,user,Date.now());
+      if (!backup) return false;
+      busy=true; cartEntry=true; shell('Restoring your guest cart'); loading(true); status('Confirming your cart after guest setup…');
+      var changed=false;
+      await win.navigator.locks.request(lockName,{ifAvailable:true},async function (lock) {
+        if (!lock) throw new Error('Guest cart recovery is active in another tab. Finish there first.');
+        assertNoPendingCartOrder();
+        if (record()) throw new Error('Recover the earlier Quick buy cart before restoring this guest cart.');
+        var checks=await Promise.all([checkIdentity(),cart()]), before=checks[1];
+        if (signature(before.items)===signature(backup.items)) { win.sessionStorage.removeItem(GUEST_CART_KEY); return; }
+        if (backup.scope && backup.scope!==scope) throw new Error('The guest cart account changed. Your existing cart has not been changed.');
+        if (!backup.current && before.items.length) throw new Error('Your signed-in cart differs from the guest cart. Both have been retained; review the cart before continuing.');
+        // An interrupted add can resume only from its exact recorded state.
+        active={guestRestoration:true,cartCheckout:true,scope:scope,branch:branch,createdAt:backup.createdAt,purchase:backup.items,current:backup.current || [],pending:backup.pending || null,phase:'preparing'};
+        assertExpected(before.items,active);
+        await preflight(backup.items);
+        save(); await reconcile(backup.items);
+        win.sessionStorage.removeItem(GUEST_CART_KEY); changed=true;
+      });
+      active=null;
+      dismiss();
+      if (changed) { win.location.reload(); return true; }
+      return false;
+    }
     function restoreSession() {
       var sessionKey = PREFIX + 'session:' + active.id;
       var before = JSON.parse(win.sessionStorage.getItem(sessionKey) || '{}');
@@ -887,16 +931,26 @@
       if (/\/ShoppingCart\.aspx$/i.test(win.location.pathname)) win.location.reload();
       else notice(purchased ? 'Your remaining cart items are restored.' : 'Buy now cancelled. Your original cart is restored.');
     }
-    function standardCheckout() {
+    async function standardCheckout() {
       if (!cartEntry || submitting || busy || active && ['submitting','uncertain','confirmed'].includes(active.phase)) return;
-      try { assertNoPendingCartOrder(); } catch (error) { showError(error); return; }
-      dismiss();
-      var native=doc.getElementById('ctl00_PageBody_PlaceOrderButton');
-      if (native && !native.disabled) { bypassCartEntry=true; try { native.click(); } finally { bypassCartEntry=false; } }
+      busy=true; clearFrame(); loading(true); status('Opening checkout…');
+      try {
+        assertNoPendingCartOrder();
+        var checks=await Promise.all([checkIdentity(),cart()]);
+        if (active && signature(checks[1].items)!==signature(active.current)) throw new Error('Your cart changed. Return to the cart and review your items.');
+        var native=doc.getElementById('ctl00_PageBody_PlaceOrderButton');
+        if (!native || native.disabled) throw new Error('Checkout is unavailable. Return to the cart and try again.');
+        // Native cart listeners reset old wizard drafts during this click. Seed
+        // the verified current selection afterwards, before the next page loads.
+        bypassCartEntry=true;
+        try { native.click(); seedSession(); } finally { bypassCartEntry=false; }
+        dismiss();
+      } catch (error) { busy=false; showError(error); }
     }
     function notice(message) {
       var el = doc.createElement('div'); el.className = 'bn-notice'; el.setAttribute('role', 'status'); el.textContent = message;
       el.appendChild(button('Dismiss', function () { el.remove(); }, true)); doc.body.appendChild(el);
+      return el;
     }
     function loading(value) {
       if (!overlay) return;
@@ -1283,12 +1337,17 @@
     function seedSession() {
       SESSION_KEYS.forEach(function (name) { win.sessionStorage.removeItem(name); });
       win.sessionStorage.setItem('wl_checkout_single_page_preview','1');
-      if (fast.method === 'pickup') {
-        win.sessionStorage.setItem('wl_fulfillment_intent','pickup');
-        win.sessionStorage.setItem('wl_fulfillment_method','pickup');
+      if (['pickup','delivery','ship'].includes(fast.method)) {
+        win.sessionStorage.setItem('wl_fulfillment_intent',fast.method);
+        win.sessionStorage.setItem('wl_fulfillment_method',fast.method);
         win.sessionStorage.setItem('wl_fulfillment_selection_source_v1','user');
       }
-      if (fast.address) win.sessionStorage.setItem('wl_checkout_address_payload', JSON.stringify(Object.assign({},fast.address,{ts:Date.now()})));
+      var salesNote=fast.salesSelection && fast.salesSelection.id!=='main' ? 'Sales / job address: '+fast.salesSelection.code+(fast.salesSelection.jobReference ? ' | Job ref: '+fast.salesSelection.jobReference : '') : '';
+      win.sessionStorage.setItem('wl_checkout_date_state_v2',JSON.stringify({ts:Date.now(),pickupDate:fast.method==='pickup'?fast.date || '':'',pickupTime:fast.pickupTime || '',pickupPerson:fast.pickupPerson || '',deliveryDate:fast.method!=='pickup'?fast.date || '':'',deliveryTime:fast.window || '',extra:[fast.notes,salesNote].filter(Boolean).join('\n')}));
+      if (fast.address) {
+        var billing=fast.billing ? Object.assign({},fast.billing,{stateText:STATE_NAMES[text(fast.billing.stateValue).toUpperCase()] || fast.billing.stateText}) : null;
+        win.sessionStorage.setItem('wl_checkout_address_payload', JSON.stringify(Object.assign({},fast.address,{stateText:STATE_NAMES[text(fast.address.stateValue).toUpperCase()] || fast.address.stateText,ts:Date.now(),billing:billing,preserveInvoiceContact:!guest,checkoutReference:fast.reference})));
+      }
     }
     function revisePurchase(wanted) {
       if (!fast.refreshQueued) return wanted;
@@ -1421,6 +1480,7 @@
       } catch (error) { busy = false; throw error; }
     }
     function openFrame(body) {
+      var opened=Date.now(), nativeEntered=false;
       frame = doc.createElement('iframe'); frame.title = 'Secure WebTrack checkout'; frame.className = 'bn-frame'; frame.name = 'woodson-buy-now-checkout'; frame.loading = 'eager';
       frame.setAttribute('aria-hidden','true'); frame.setAttribute('tabindex','-1');
       frame.addEventListener('load', function () { installFrame().catch(showError); });
@@ -1430,8 +1490,18 @@
       frameReadyTimer = win.setInterval(function () {
         var page;
         try { page = frame?.contentDocument; } catch (_) { return; }
+        if (page?.querySelector('form')) nativeEntered=true;
+        if (overlay) {
+          overlay.dataset.bnNativeEntryState=nativeEntered?'form_loaded':!page?'unavailable':page.readyState==='loading'?'loading':'empty';
+          overlay.dataset.bnNativeEntryMs=String(Math.floor((Date.now()-opened)/1000)*1000);
+          overlay.dataset.bnNativeEntryGuard=busy?'preflight':submitting?'submitting':fast?.stopped?'stopped':fast?.securePayment || fast?.paymentAuthorizing?'payment':active?.phase || 'inactive';
+        }
         if (page && page !== installedPage && page.body && page.readyState !== 'loading' && /\/ShoppingCart\.aspx$/i.test(new URL(page.URL).pathname)) installFrame().catch(showError);
-        else if (page?.URL==='about:blank' && fast && active?.phase==='checking_out') driveFast(frame.contentWindow,page).catch(showError);
+        if (!nativeEntered && page && !page.querySelector('form') && fast && !fast.stopped && !fast.securePayment && !fast.paymentAuthorizing && !submitting && active?.phase==='checking_out' && !busy && Date.now()-opened>12000) {
+          haltFast('Secure checkout did not open. Continue with standard checkout to review your order.','native_entry_unavailable');
+          var fallback=overlay?.querySelector('[data-bn-standard]');
+          if (fallback) { fallback.textContent='Continue with standard checkout'; fallback.classList.add('bn-recovery'); }
+        }
       },100);
     }
     async function installFrame() {
@@ -1657,7 +1727,8 @@
       }
       if (overlay) loading(fast.loading);
     }
-    function haltFast(message) {
+    function haltFast(message, errorCode) {
+      if (!fast.stopped) measureCheckout('error',null,null,null,errorCode || 'checkout_unavailable');
       fast.stopped = true; fast.ready = false; loading(false); status(message,true); fastText('[data-bn-confirm]','Update your options'); updateFastOptions();
       if (!overlay.querySelector('[data-bn-retry]')) {
         var retry = button('Try again',function () { retry.remove(); refreshFast().catch(showError); },true); retry.dataset.bnRetry = ''; overlay.querySelector('[data-bn-native-host]').before(retry);
@@ -1666,7 +1737,7 @@
     async function driveFast(child,page) {
       if (!fast || fast.driving || fast.paymentAuthorizing || fast.stopped || busy || submitting || !page.documentElement || active.phase !== 'checking_out') return;
       if (fast.editor || fast.securePayment || fast.paymentQuote) fast.started=Date.now();
-      if (Date.now()-fast.started > 120000) { haltFast('This is taking longer than expected. Retry or cancel.'); return; }
+      if (Date.now()-fast.started > 120000) { haltFast('This is taking longer than expected. Use standard checkout or try again.','checkout_timeout'); return; }
       fast.driving = true;
       var current = fast;
       try {
@@ -1967,6 +2038,7 @@
       var style = doc.createElement('style'); style.id = 'wl-buy-now-styles';
       style.textContent = "#wl-buy-now{position:fixed;inset:0;z-index:2147483000;background:#16101591;display:flex;align-items:center;justify-content:center;padding:20px;font:14px/1.4 system-ui,-apple-system,sans-serif;color:#25282b;backdrop-filter:blur(3px)}\n#wl-buy-now *{box-sizing:border-box}#wl-buy-now [hidden]{display:none!important}.bn-panel{display:flex;flex-direction:column;width:min(100%,500px);max-height:94dvh;background:#fff;border-radius:18px;box-shadow:0 22px 80px #0005;overflow:hidden;position:relative}.bn-head{display:flex;align-items:center;justify-content:space-between;padding:19px 22px 13px}.bn-head h2{font:750 24px/1.15 system-ui;margin:0 0 3px}.bn-head small{font-size:11px;color:#7d6a6d}.bn-head .bn-action{border:0;padding:7px 0 7px 14px;color:#71666a;background:transparent;min-height:38px;font-size:13px}.bn-progress{display:flex;gap:9px;align-items:center;padding:10px 22px;background:#f6f3f0;color:#68575a;font-size:12px;min-height:36px}.bn-progress .bn-error{color:#9b241e}.bn-spinner{width:14px;height:14px;flex:none;border:2px solid #dcc5ca;border-top-color:#6b0016;border-radius:50%;display:none}.bn-loading .bn-spinner{display:block;animation:bn-spin .8s linear infinite}.bn-body{padding:20px 22px 14px;overflow:auto;min-height:0}.bn-product{display:flex;gap:14px;align-items:center;margin-bottom:18px}.bn-product h3{font-size:15px;line-height:1.4;margin:0 0 6px;font-weight:650}.bn-product span{font-size:12px;color:#777}.bn-product [data-bn-photo]{width:56px;height:62px;border-radius:8px;background:#f5f4f1;flex:none;display:grid;place-items:center}.bn-product img{width:52px;height:58px;object-fit:contain}.bn-methods{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:17px}.bn-methods button{border:1px solid #dedbd9;border-radius:11px;background:#fff;padding:12px 5px 11px;display:flex;flex-direction:column;align-items:center;gap:5px;color:#4e4648;cursor:pointer;min-height:105px;font:inherit}.bn-methods svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.bn-methods strong{font-size:13px}.bn-methods small{font-size:10px;line-height:1.3}.bn-methods [aria-pressed=true]{background:#fcf5f6;border:2px solid #6b0016;padding:11px 4px 10px;color:#6b0016}.bn-methods [data-available=false]{opacity:.45}.bn-methods button:disabled{cursor:default}.bn-loading .bn-methods small{opacity:.55}.bn-options{border:1px solid #e6e2df;border-radius:11px;overflow:hidden}.bn-option{display:flex;gap:11px;align-items:center;padding:12px 13px}.bn-option+.bn-option{border-top:1px solid #eeeae7}.bn-option-icon{font-size:22px;color:#907b80;width:23px;text-align:center;flex:none}.bn-option>div{display:grid;gap:3px;min-width:0;flex:1}.bn-option strong{font-size:12px;font-weight:650}.bn-option div>span{font-size:12px;color:#777;overflow-wrap:anywhere}.bn-option button,.bn-more{color:#6b0016;background:none;border:0;font:600 12px system-ui;cursor:pointer;padding:8px 0 8px 8px;min-height:36px}.bn-option button:disabled,.bn-more:disabled{opacity:.45;cursor:default}.bn-extras{display:flex;justify-content:space-between;align-items:center;width:100%;padding:12px 13px;margin-top:12px;background:#f8f6f3;border:1px dashed #dacdd0;border-radius:9px;color:#6b0016;font:600 12px system-ui;text-align:left;cursor:pointer;min-height:44px}.bn-extras:disabled{opacity:.6;cursor:default}.bn-more{font-weight:400;padding-left:0;margin:3px 0 0}.bn-totals{border-top:1px solid #e9e4e1;margin-top:7px;padding-top:12px;display:grid;gap:6px;font-size:12px;color:#6c6768}.bn-totals>div{display:flex;justify-content:space-between;gap:12px}.bn-totals .bn-grand{font-size:17px;color:#25282b;padding-top:9px;margin-top:4px;border-top:1px solid #eee9e7}.bn-action{border:1px solid #6b0016;background:#6b0016;color:white;border-radius:8px;padding:11px 16px;font:650 14px/1.4 system-ui;cursor:pointer;min-height:44px}.bn-action:disabled{opacity:.5;cursor:wait}.bn-secondary{background:white;color:#6b0016}.bn-confirm{width:100%;margin-top:14px;min-height:47px;font-size:15px}.bn-terms{font-size:10px;color:#888;text-align:center;margin:10px 0 0}.bn-terms a{color:inherit;text-decoration:underline}.wl-buy-now-button{margin:6px;white-space:nowrap}.bn-frame{position:fixed!important;left:0!important;top:0!important;z-index:-1;width:1000px!important;height:800px!important;opacity:0;pointer-events:none;border:0}.bn-frame.bn-frame-open{position:relative!important;left:auto!important;top:auto!important;width:100%!important;height:60dvh!important;opacity:1;pointer-events:auto;margin-top:16px}.bn-success{font-size:48px;color:#297048;text-align:center}.bn-body:has(.bn-success){text-align:center;padding:30px}.bn-notice{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:white;border:1px solid #6b0016;box-shadow:0 4px 20px #0003;padding:12px;z-index:2147482999;max-width:calc(100% - 24px);font:14px/1.5 system-ui}.bn-notice button{margin-left:12px}.bn-panel [data-bn-editor]{border:1px solid #decdd1;border-radius:10px;padding:15px;margin:8px 0 14px;background:#fdfbfa}.bn-panel [data-bn-editor] h3{font-size:16px;margin:0 0 12px}.bn-panel [data-bn-editor] label{display:grid;gap:5px;font-size:12px;margin:10px 0}.bn-panel [data-bn-editor] input,.bn-panel [data-bn-editor] select,.bn-panel [data-bn-editor] textarea{width:100%;min-width:0;padding:10px;border:1px solid #c9c1c1;border-radius:6px;background:#fff;font:14px system-ui}.bn-panel [data-bn-editor] .bn-check{display:flex;gap:10px;align-items:center}.bn-panel [data-bn-editor] .bn-check input{width:19px;height:19px;flex:none}.bn-editor-actions{display:flex;gap:8px;margin-top:14px}.bn-loading .bn-totals [data-bn-total]{color:#a59a9d}.bn-panel button:focus-visible,.bn-panel input:focus-visible,.bn-panel select:focus-visible{outline:3px solid #9c5565;outline-offset:2px}@keyframes bn-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.bn-loading .bn-spinner{animation:none;border-top-width:4px}}@media(max-width:540px){#wl-buy-now{padding:0;align-items:flex-end}.bn-panel{max-height:100dvh;width:100%;border-radius:18px 18px 0 0}.bn-head{padding:16px 18px 12px}.bn-body{padding:16px 18px 13px}.bn-progress{padding-left:18px}.bn-product{margin-bottom:15px}.bn-methods{gap:7px}.bn-methods button{min-height:100px}.bn-terms{margin-bottom:env(safe-area-inset-bottom,0)}}\n.bn-footer{padding:13px 22px 15px;border-top:1px solid #e9e4e1;background:#fff;flex:none}.bn-footer .bn-totals{margin:0;border:0;padding:0;gap:4px}.bn-footer .bn-grand{padding-top:7px;margin-top:3px}.bn-footer .bn-confirm{margin-top:11px}.bn-footer .bn-terms{margin-top:8px}.bn-product{margin-bottom:14px}.bn-methods{margin-bottom:14px}.bn-methods button{min-height:89px;padding-top:8px;padding-bottom:8px}.bn-methods [aria-pressed=true]{padding-top:7px;padding-bottom:7px}.bn-option{padding:9px 12px}.bn-option div>span{line-height:1.25}.bn-more{min-height:32px;padding-top:6px;padding-bottom:6px}.bn-progress:has(.bn-error){background:#fff0ed}.bn-panel:not([aria-busy=true]) .bn-spinner{display:block;border:0;width:14px;height:14px}.bn-panel:not([aria-busy=true]) .bn-spinner:after{content:'✓';color:#3c7753;font-size:15px}.bn-panel:has(.bn-error) .bn-spinner:after{content:'!';color:#a03028}.bn-body:has([data-bn-editor]:not([hidden]))~.bn-footer .bn-terms{display:none}@media(max-width:540px){.bn-footer{padding:12px 18px max(12px,env(safe-area-inset-bottom,0))}.bn-body{padding-bottom:8px}.bn-methods button{min-height:86px}}\n";
       style.textContent += `
+.bn-standard.bn-recovery{background:#6b0016;color:#fff;border-radius:8px;min-height:44px;font-size:14px;font-weight:650;margin:8px 20px 12px}
 .wl-pilot-add-cart{background:linear-gradient(145deg,#f5f8fb,#e5edf5)!important;color:#60182b!important;border:1px solid #b9c9d9!important;border-radius:12px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;min-height:48px!important;padding:11px 12px!important;font:700 14px/1.2 system-ui!important;text-decoration:none!important;box-shadow:inset 0 1px 0 #fff,0 2px 0 #26466314;transition:background .2s,transform .2s!important;width:100%;white-space:nowrap}
 .wl-pilot-add-cart:hover{background:#dce7f1!important;transform:translateY(-1px)}
 .wl-buy-now-button,#wl-buy-now .bn-confirm{background:radial-gradient(ellipse at 70% -65%,transparent 56%,#172d4455 58%,transparent 63%),radial-gradient(ellipse at 85% -30%,#84a8c824,transparent 64%),conic-gradient(from 220deg at 58% 50%,#6b0016 0deg,#7e2141 85deg,#41617f 175deg,#294764 250deg,#6b0016 360deg)!important;color:#fff!important;border:1px solid #829bb3!important;border-radius:12px!important;box-shadow:inset 0 1px 0 #ffffff52,inset 0 -1px 0 #150d243b,0 3px 0 #26324f24,0 7px 18px #223e5b29;text-shadow:0 1px 2px #17152466;position:relative;overflow:hidden;isolation:isolate;transition:transform .2s,box-shadow .2s}
@@ -2029,6 +2101,19 @@
       doc.head.appendChild(style);
     }
     installStyles();
+    // Never use an analytics snapshot or an unverified account as cart proof.
+    if (win.sessionStorage.getItem(GUEST_CART_KEY) && win.navigator.locks) {
+      try { if (await restoreGuestCart()) return; }
+      catch (error) {
+        dismiss(); win.sessionStorage.removeItem(GUEST_START_KEY);
+        var recovery=notice(error.message+' Your guest cart backup is retained.');
+        recovery.appendChild(button('Retry restoring cart',function () { win.location.reload(); },true));
+        recovery.appendChild(button('Keep current cart',function () { win.sessionStorage.removeItem(GUEST_CART_KEY); win.location.reload(); },true));
+        var proceed=doc.getElementById('ctl00_PageBody_PlaceOrderButton');
+        if (proceed) { proceed.disabled=true; proceed.setAttribute('aria-disabled','true'); }
+        return;
+      }
+    }
     var pending = record();
     if (pending) {
       await withLock(async function () {
@@ -2054,5 +2139,5 @@
       if (latest && latest.owner !== owner) { busy = true; clearFrame(); status('Buy now is active in another tab. Cart changes have stopped here.', true); }
     });
   }
-  return { listedSalesDetails:listedSalesDetails, salesAddressPage:salesAddressPage, allSalesAddresses:allSalesAddresses, savedSalesAddresses:savedSalesAddresses, salesAddressLabel:salesAddressLabel, matchingSalesAddresses:matchingSalesAddresses, savedSalesDetails:savedSalesDetails, assertSalesReview:assertSalesReview, relayControl:relayControl, nativeFormsReady:nativeFormsReady, continueNativeCart:continueNativeCart, pickupStoreName:pickupStoreName, centralCalendar:centralCalendar, calendarAfter:calendarAfter, pickupTimeChoices:pickupTimeChoices, stockFromDocument:stockFromDocument, pickupReadiness:pickupReadiness, boot: boot, build: BUILD, audience: AUDIENCE, deliveryAddressSummary:deliveryAddressSummary, nativeStateOption:nativeStateOption, accountScopeInput:accountScopeInput, guestContext:guestContext, guestStartPending:guestStartPending, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, nativeOrderNumber: nativeOrderNumber, cartOrderReceipt: cartOrderReceipt, readCartOrderReceipt: readCartOrderReceipt, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, cartPolicyReady: cartPolicyReady, hasCustomCuts: hasCustomCuts, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, paymentTotals: paymentTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, hydrateMatchingAddressState: hydrateMatchingAddressState, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
+  return { guestCartHandoff:guestCartHandoff, listedSalesDetails:listedSalesDetails, salesAddressPage:salesAddressPage, allSalesAddresses:allSalesAddresses, savedSalesAddresses:savedSalesAddresses, salesAddressLabel:salesAddressLabel, matchingSalesAddresses:matchingSalesAddresses, savedSalesDetails:savedSalesDetails, assertSalesReview:assertSalesReview, relayControl:relayControl, nativeFormsReady:nativeFormsReady, continueNativeCart:continueNativeCart, pickupStoreName:pickupStoreName, centralCalendar:centralCalendar, calendarAfter:calendarAfter, pickupTimeChoices:pickupTimeChoices, stockFromDocument:stockFromDocument, pickupReadiness:pickupReadiness, boot: boot, build: BUILD, audience: AUDIENCE, deliveryAddressSummary:deliveryAddressSummary, nativeStateOption:nativeStateOption, accountScopeInput:accountScopeInput, guestContext:guestContext, guestStartPending:guestStartPending, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, nativeOrderNumber: nativeOrderNumber, cartOrderReceipt: cartOrderReceipt, readCartOrderReceipt: readCartOrderReceipt, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, cartPolicyReady: cartPolicyReady, hasCustomCuts: hasCustomCuts, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, paymentTotals: paymentTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, hydrateMatchingAddressState: hydrateMatchingAddressState, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
 });

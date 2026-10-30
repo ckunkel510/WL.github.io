@@ -7,6 +7,7 @@
   // Guest checkout needs to show controls on the cart page, but it also needs to
   // run on the checkout page so saved guest data can be applied after WebForms navigates.
   if (!IS_CART_PAGE && !IS_CHECKOUT_PAGE) return;
+  document.documentElement?.setAttribute?.('data-wl-guest-checkout-build','20261030-guest-cart-recovery-1');
 
   const LOG = (...a) => console.log('[GuestCheckout]', ...a);
   const ERR = (...a) => console.error('[GuestCheckout]', ...a);
@@ -16,6 +17,7 @@
   const AUTOFILL_KEY = 'wl_guest_checkout_needs_autofill';
   const MODE_KEY = 'wl_checkout_mode';
   const COMPACT_START_KEY = 'wl_compact_guest_start_v1';
+  const CART_HANDOFF_KEY = 'wl_guest_cart_handoff_v1';
   const CHECKOUT_SNAPSHOT_KEY = 'wl_checkout_form_snapshot_v2';
   const DATE_STATE_KEY = 'wl_checkout_date_state_v2';
 
@@ -33,6 +35,8 @@
     try { sessionStorage.removeItem(KEY); } catch {}
     try { sessionStorage.removeItem(AUTOFILL_KEY); } catch {}
     try { sessionStorage.removeItem(COMPACT_START_KEY); } catch {}
+    // Basket recovery is separate from guest autofill. Keep it through a
+    // duplicate-email sign-in; the compact engine verifies the exact login.
   }
 
   function resetCheckoutDraftStateForGuest() {
@@ -260,8 +264,11 @@
     document.head.appendChild(style);
   }
 
-  function guestMetric(eventName) {
-    try { window.WLAnalytics?.track(eventName,{customer_type:'guest'}); } catch (_) {}
+  function guestMetric(eventName, errorCode) {
+    try {
+      const fields=errorCode==='guest_validation' ? Array.from(document.querySelectorAll('.gc-invalid')).map(el=>el.id).filter(id=>/^gc_(?:email|phone|fname|lname|del_(?:addr1|city|state|zip)|inv_(?:addr1|city|state|zip))$/.test(id)).join(',') : undefined;
+      window.WLAnalytics?.track(eventName,{customer_type:'guest',error_code:errorCode,validation_fields:fields});
+    } catch (_) {}
   }
 
   function showModal() {
@@ -606,13 +613,18 @@
   async function onSubmitGuest() {
     const submit = $('#gc_submit');
     const payload = collectGuestPayload();
-    if (payload.error) { guestMetric('guest_checkout_error'); return showError(payload.error); }
+    if (payload.error) { guestMetric('guest_checkout_error','guest_validation'); return showError(payload.error); }
 
-    saveGuest(payload);
+    // The credential is only needed in memory for the native signup form.
+    const draft = Object.assign({},payload); delete draft.password; saveGuest(draft);
     if (submit) { submit.disabled = true; submit.textContent = 'Continuing…'; }
 
+    let failureCode='guest_cart_unavailable';
     try {
+      await backupGuestCart(payload.email);
+      failureCode='guest_signup_failed';
       await createAccountInBackground(payload);
+      await verifyGuestAccount(payload.email);
       guestMetric('guest_details_complete');
       // Signup is finished. Do not retain its generated credential in the draft.
       delete payload.password;
@@ -620,17 +632,64 @@
       continueCheckoutAndHookBilling();
       closeModal();
     } catch (e) {
-      guestMetric('guest_checkout_error');
-      ERR('Account creation error:', e);
-      clearGuestState();
+      const reason=['guest_cart_unsupported','guest_cart_unavailable','guest_signup_unconfirmed','guest_signup_timeout','email-exists'].includes(e.code)?e.code:failureCode;
+      guestMetric('guest_checkout_error',reason);
+      ERR('Guest checkout could not start.',reason);
+      // Retain the basket backup if signup may have changed the server session.
+      try { sessionStorage.removeItem(COMPACT_START_KEY); } catch {}
+      try { sessionStorage.removeItem(AUTOFILL_KEY); } catch {}
       setCheckoutMode('');
       showError(e && e.userMessage
         ? e.userMessage
         : 'We could not start guest checkout. Please try again, or use Sign In if this email already has an account.',
-        e && e.code === 'email-exists');
+        e && ['email-exists','guest_cart_unsupported'].includes(e.code));
     } finally {
       if (submit) { submit.disabled = false; submit.textContent = 'Continue'; }
     }
+  }
+
+  async function guestNativeDocument(path) {
+    const controller = new AbortController(), timer = setTimeout(()=>controller.abort(),20000);
+    try {
+      const response = await fetch(path,{credentials:'same-origin',cache:'no-store',signal:controller.signal});
+      if (!response.ok) throw new Error('Native page unavailable');
+      return new DOMParser().parseFromString(await response.text(),'text/html');
+    } finally { clearTimeout(timer); }
+  }
+
+  function guestCartItems(page) {
+    const rows = Array.from(page.querySelectorAll('.shopping-cart-item'));
+    return rows.map(row => {
+      const link = row.querySelector('a[href*="pid="]');
+      const pid = (link?.getAttribute('href') || '').match(/[?&]pid=(\d+)/i)?.[1];
+      const input = row.querySelector('input.riTextBox,input[id*="_qty_"]:not([type="hidden"])');
+      const code = clean(row.querySelector('.portalGridLink,.cart-item-card h6 a')?.textContent);
+      const unitNode = row.querySelector('[data-title="Per"],[data-title="UOM"],.productPer,.unit-of-measure,.wl-qty-unit');
+      const parent = input?.closest('.float-right');
+      const direct = parent ? clean(Array.from(parent.childNodes).filter(n=>n.nodeType===3).map(n=>n.textContent).join(' ')) : '';
+      const unit = clean(row.getAttribute('data-wl-cart-unit') || unitNode?.textContent || direct).toLowerCase();
+      const configured = Array.from(row.querySelectorAll('input[id$="_txtSpecialProductCode"],input[id$="_txtSpecialProductDescription"]')).some(el=>clean(el.value));
+      const quantity = Number(input?.value);
+      if (!pid || !code || !unit || configured || !Number.isSafeInteger(quantity) || quantity<1 || quantity>9999) throw Object.assign(new Error('This cart needs sign-in checkout so its item configuration can be preserved.'),{code:'guest_cart_unsupported',userMessage:'Please sign in to check out with these configured items. Your cart has not been changed.'});
+      return {pid,code,unit,quantity,name:clean(row.querySelector('.description,.ProductDescription,.cart-item-card p.small,.cart-item-card p.text-secondary')?.textContent || code).slice(0,180)};
+    });
+  }
+
+  async function backupGuestCart(email) {
+    const visible = guestCartItems(document), items = guestCartItems(await guestNativeDocument('/ShoppingCart.aspx'));
+    const signature = rows => JSON.stringify(rows.map(item=>[item.pid,item.code,item.unit,item.quantity]).sort());
+    if (signature(visible)!==signature(items)) throw Object.assign(new Error('Your cart is still updating.'),{code:'guest_cart_unavailable',userMessage:'Your cart changed. Close this form and refresh the cart before starting checkout.'});
+    if (!items.length || items.length>60 || new Set(items.map(item=>item.pid)).size!==items.length) throw Object.assign(new Error('The cart could not be verified.'),{code:'guest_cart_unavailable',userMessage:'Your cart could not be confirmed. Refresh the cart before starting checkout.'});
+    // sessionStorage is tab-scoped. Never use analytics snapshots as cart proof.
+    sessionStorage.setItem(CART_HANDOFF_KEY,JSON.stringify({version:1,createdAt:Date.now(),email:clean(email).toLowerCase(),items}));
+  }
+
+  async function verifyGuestAccount(email) {
+    try {
+      const page = await guestNativeDocument('/AccountSettings.aspx');
+      const names = Array.from(page.querySelectorAll('.formPageHeader')).map(el=>clean(el.textContent).match(/^Change (?:password|details) for user\s+['"]([^'"]+)['"]$/i)?.[1]?.toLowerCase()).filter(Boolean);
+      if (!page.querySelector('a[href*="SignOut=1" i]') || !names.length || names.some(name=>name!==clean(email).toLowerCase())) throw new Error('Identity mismatch');
+    } catch (_) { throw Object.assign(new Error('Guest sign-in was not confirmed.'),{code:'guest_signup_unconfirmed',userMessage:'Your guest sign-in could not be confirmed. Your cart backup is retained; return to the cart or sign in before continuing.'}); }
   }
 
   function createAccountInBackground(payload) {
@@ -688,7 +747,7 @@
       };
 
       const timeout = setTimeout(() => {
-        fail('WebTrack took too long to start guest checkout. Please try again.', 'Signup confirmation timed out.');
+        fail('WebTrack took too long to start guest checkout. Please try again.', 'Signup confirmation timed out.','guest_signup_timeout');
       }, 25000);
 
       frame.onload = () => {

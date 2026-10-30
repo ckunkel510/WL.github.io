@@ -62,12 +62,12 @@ test('browsers without cart locking keep the native entry',()=>{
 const pilot = fs.readFileSync(require.resolve('../BuyNowPilot'), 'utf8');
 const driverSource=pilot.slice(pilot.indexOf('    async function driveFast('),pilot.indexOf('    async function submitNative('));
 async function quoteTimeout(replace) {
-  const page={documentElement:{dataset:{bnFieldsApplied:'1'}},getElementById:id=>['btnDelivered','btnPickup'].includes(id)?{}:null};
+  const page={readyState:'complete',querySelector:selector=>selector==='form'?{}:null,documentElement:{dataset:{bnFieldsApplied:'1'}},getElementById:id=>['btnDelivered','btnPickup'].includes(id)?{}:null};
   const initial={method:'delivery',started:Date.now(),driving:false}; let timeout;
   const context=vm.createContext({nativeFormsReady:core.nativeFormsReady,fast:initial,frame:{contentDocument:page},busy:false,submitting:false,active:{phase:'checking_out',purchase:[]},setStage(){},quoteForCart:()=>null,fulfillmentOptions:()=>({}),updateFastOptions(){},status(){},detailsQuotes:new WeakMap(),refreshDetailsQuote:core.refreshDetailsQuote,
     win:{setTimeout:fn=>{timeout=fn;return 1;},clearTimeout(){}}});
   vm.runInContext(driverSource,context);
-  const promise=context.driveFast({WLCheckout:{refreshDateUI(){},validateBeforeFinalSubmit(){}},WLShippingOffer:{current:()=>null,refresh:()=>new Promise(()=>{})}},page);
+  const promise=context.driveFast({document:page,WLCheckout:{refreshDateUI(){},validateBeforeFinalSubmit(){}},WLShippingOffer:{current:()=>null,refresh:()=>new Promise(()=>{})}},page);
   if(replace) {context.fast={method:'pickup',ready:true};context.frame={contentDocument:{}};}
   timeout(); await promise;
   return context.fast;

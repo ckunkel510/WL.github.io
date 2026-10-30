@@ -22,7 +22,7 @@ test('confirmed dropdown decreases report the removed delta and the new total qu
 });
 test('failed native delete produces an error instead of a false removal',()=>{
  const f=fixture(),c=f.context;c.queueCartMutation('remove',c.items[0],0,f.root);f.replace(c.items);c.confirmCartMutation(c.items);
- assert.deepEqual(f.events.map(e=>e.name),['cart_action_error']);assert.equal(f.events[0].error_code,'cart_change_not_confirmed');
+ assert.deepEqual(f.events.map(e=>e.name),['cart_action_error']);assert.equal(f.events[0].error_code,'cart_change_not_confirmed');assert.equal(f.events[0].ecommerce.items[0].item_id,'85');assert.equal(f.events[0].previous_quantity,3);assert.equal(f.events[0].requested_quantity,0);assert.equal(f.events[0].quantity,3);
 });
 test('a confirmed empty cart and Save for Later each report the actual removed line once',()=>{
  for(const kind of ['remove','save']){const f=fixture(),c=f.context;c.queueCartMutation(kind,c.items[0],0,f.root);f.replace([]);c.confirmCartMutation([]);c.confirmCartMutation([]);
