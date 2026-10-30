@@ -1,4 +1,4 @@
-# Checkout recovery release candidate — October 30, 2026
+# Checkout recovery release — October 30, 2026
 
 The tested staff-manager compact checkout could remain loading while the same basket and selected job reached native charge review. Guest signup also switched the tested anonymous basket to an empty signed-in basket. This change adds recovery for those states and makes checkout diagnostics more useful.
 
@@ -26,6 +26,8 @@ Native WebTrack separately references Checkout2.js, Guestcheckout.js and headerm
 PRs #107 and #108 are published. Live staff-manager testing reached native charge review with the original quantities and subtotal; no order was submitted. GA4 Realtime received analytics version 1.8.4 and staff-assisted context. Event-scoped Checkout Context, Commerce Error Code and Guest Validation Fields definitions are registered.
 
 A subsequent guest preflight exposed an empty WebTrack placeholder carrying the same class as product rows. Guest parser build `20261030-guest-cart-recovery-2` ignores only rows with neither a quantity input nor a product link. Incomplete real product rows still stop before account creation. A regression check covers both states. This correction is part of the user-approved rollout and requires fresh live guest verification.
+
+Guest build `20261030-guest-cart-recovery-3` addresses signup waiting exclusively for the hidden frame's full load event. The frame now has a layout and eager loading, and a bounded readiness probe waits for native fields, a form and WebForms hooks. It submits the native action once and ignores that same document while waiting for a new response. Timeout codes distinguish an unopened form from an unconfirmed submission. A confirmation timeout performs a fresh matching-login read before reporting failure; it never repeats signup. Generated credentials always satisfy the native uppercase, digit, symbol and length requirements and remain in memory only. Local checks cover a held load event, missing hooks, blank frames, duplicate-submit prevention, native duplicate-email response, timeout cleanup and verified-login recovery. Live confirmation is still required; the exact source of the frame delay is unproven.
 
 ## Rollback
 
