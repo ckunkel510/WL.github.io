@@ -387,3 +387,24 @@ test("offers a carrier-rated mixed custom-cut cart without using profile labels 
   assert.equal(result.packageProfile.easyParcel, false);
   assert.equal(result.recommendation.mode, "ship");
 });
+
+test('native carrier reservation uses the configured shipper while local delivery retains its branch', async () => {
+  const claims=require('../api/fulfillment-sessions');claims.resetMemoryClaims();
+  const body={...baseBody(),shipFrom:{name:'Bryan',city:'Bryan',state:'TX',postalCode:'77801'}};
+  const carrierOrigin={name:'Brenham',city:'Brenham',state:'TX',postalCode:'77833',country:'US'};
+  let ratedOrigin,deliveryOrigin;
+  await buildFulfillmentQuote(body,{
+    carrierOrigin,
+    requestRates:async input=>{ratedOrigin=input.shipFrom;return upsRate(11.33)();},
+    getCatalogProducts:async()=>catalog(),shippingPolicy:policy,
+    quoteWoodsonDelivery:async input=>{deliveryOrigin=input.shipFrom;return {available:true,mode:'delivery',amount:25,currency:'USD',serviceCode:'03',serviceName:'Woodson Local Delivery',billingWeight:8};}
+  });
+  assert.equal(ratedOrigin.postalCode,'77833');assert.equal(deliveryOrigin.postalCode,'77801');
+  const req={method:'POST',url:'/api/fulfillment-quote',headers:{origin:'https://webtrack.woodsonlumber.com'},socket:{remoteAddress:'native-origin-test'},body:{action:'select',mode:'delivery',shipFrom:body.shipFrom,shipTo:body.shipTo,totalWeight:8}};
+  let result;const res={setHeader(){},end(raw){result=JSON.parse(raw);}};
+  await require('../api/fulfillment-quote')(req,res);
+  assert.equal(res.statusCode,200);assert.equal(result.ok,true);
+  const native=await claims.findFulfillmentClaim({shipFrom:carrierOrigin,shipTo:body.shipTo,packages:[{weight:8}]});
+  assert.equal(native.recommendation.mode,'delivery');assert.equal(native.rates[0].amount,25);
+  assert.equal(await claims.findFulfillmentClaim({shipFrom:body.shipFrom,shipTo:body.shipTo,totalWeight:8}),null);
+});
