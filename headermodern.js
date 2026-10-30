@@ -134,6 +134,15 @@
   // native submit rescue, not repeated menus, store/account lookups or chat.
   if (isBuyNowFrame()) { document.documentElement.dataset.wlBuyNowHeader = "parent"; return; }
 
+  function loadGuestSignupRecovery() {
+    if (window.parent!==window || /\/(?:ShoppingCart|Checkout[^/]*)\.aspx$/i.test(location.pathname)) return;
+    try { if (!sessionStorage.getItem('wl_guest_signup_recovery_v1')) return; } catch (_) { return; }
+    if (window.__WL_GUEST_CHECKOUT_LOADED__ || document.querySelector('script[data-wl-guest-recovery]')) return;
+    var script=document.createElement('script');
+    script.src='https://ckunkel510.github.io/WL.github.io/Guestcheckout.js?v=20261030-guest-cart-recovery-4';
+    script.async=true; script.setAttribute('data-wl-guest-recovery','true'); document.head.appendChild(script);
+  }
+
   function loadAnalytics() {
     if (window.WLAnalytics || document.querySelector("script[data-wl-analytics]")) return;
 
@@ -3393,6 +3402,7 @@
   loadContactManager();
 
   onReady(function () {
+    loadGuestSignupRecovery();
     loadSmartSearch();
     loadCartDesign();
     loadBuyNowPilot();

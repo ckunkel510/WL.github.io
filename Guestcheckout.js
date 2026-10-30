@@ -4,10 +4,16 @@
   const IS_CART_PAGE = /ShoppingCart\.aspx/i.test(location.pathname);
   const IS_CHECKOUT_PAGE = /Checkout/i.test(location.pathname) || /PlaceOrder/i.test(location.pathname);
 
+  const FULL_PAGE_KEY = 'wl_guest_signup_recovery_v1';
+  const IS_SIGNUP_PAGE = /\/UserSignup\.aspx$/i.test(location.pathname);
+  const HAS_FULL_PAGE_RECOVERY = !IS_CART_PAGE && !IS_CHECKOUT_PAGE && (() => { try { return !!sessionStorage.getItem(FULL_PAGE_KEY); } catch { return false; } })();
+
   // Guest checkout needs to show controls on the cart page, but it also needs to
   // run on the checkout page so saved guest data can be applied after WebForms navigates.
-  if (!IS_CART_PAGE && !IS_CHECKOUT_PAGE) return;
-  document.documentElement?.setAttribute?.('data-wl-guest-checkout-build','20261030-guest-cart-recovery-3');
+  if (!IS_CART_PAGE && !IS_CHECKOUT_PAGE && !HAS_FULL_PAGE_RECOVERY) return;
+  if (window.__WL_GUEST_CHECKOUT_LOADED__) return;
+  window.__WL_GUEST_CHECKOUT_LOADED__ = true;
+  document.documentElement?.setAttribute?.('data-wl-guest-checkout-build','20261030-guest-cart-recovery-4');
 
   const LOG = (...a) => console.log('[GuestCheckout]', ...a);
   const ERR = (...a) => console.error('[GuestCheckout]', ...a);
@@ -32,6 +38,7 @@
   }
 
   function clearGuestState() {
+    try { sessionStorage.removeItem(FULL_PAGE_KEY); } catch {}
     try { sessionStorage.removeItem(KEY); } catch {}
     try { sessionStorage.removeItem(AUTOFILL_KEY); } catch {}
     try { sessionStorage.removeItem(COMPACT_START_KEY); } catch {}
@@ -658,6 +665,7 @@
         ? e.userMessage
         : 'We could not start guest checkout. Please try again, or use Sign In if this email already has an account.',
         e && ['email-exists','guest_cart_unsupported'].includes(e.code));
+      if (reason==='guest_signup_form_timeout') offerFullPageGuestRecovery();
     } finally {
       if (submit) { submit.disabled = false; submit.textContent = 'Continue'; }
     }
@@ -708,6 +716,148 @@
       const names = Array.from(page.querySelectorAll('.formPageHeader')).map(el=>clean(el.textContent).match(/^Change (?:password|details) for user\s+['"]([^'"]+)['"]$/i)?.[1]?.toLowerCase()).filter(Boolean);
       if (!page.querySelector('a[href*="SignOut=1" i]') || !names.length || names.some(name=>name!==clean(email).toLowerCase())) throw new Error('Identity mismatch');
     } catch (_) { throw Object.assign(new Error('Guest sign-in was not confirmed.'),{code:'guest_signup_unconfirmed',userMessage:'Your guest sign-in could not be confirmed. Your cart backup is retained; return to the cart or sign in before continuing.'}); }
+  }
+
+  function fillNativeGuestSignup(doc, payload) {
+    const Email1=byId('ctl00_PageBody_UserNameTextBox',doc), Email2=byId('ctl00_PageBody_EmailAddressTextBox',doc);
+    const Pass1=byId('ctl00_PageBody_Password1TextBox',doc), Pass2=byId('ctl00_PageBody_Password2TextBox',doc);
+    const Phone=byId('ctl00_PageBody_ContactTelephoneTextBox',doc);
+    if (!Email1 || !Email2 || !Pass1 || !Pass2 || !Phone) return false;
+    [Email1, Email2, Pass1, Pass2].forEach(inp => {
+      try {
+        inp.autocomplete = 'off';
+        inp.readOnly = true;
+        if (!IS_SIGNUP_PAGE) { inp.tabIndex = -1; inp.setAttribute('aria-hidden', 'true'); }
+        inp.setAttribute('data-1p-ignore', 'true');
+        inp.setAttribute('data-lpignore', 'true');
+      } catch {}
+    });
+    [Pass1, Pass2].forEach(inp => {
+      // Hidden setup avoids a generated-password prompt; visible setup keeps
+      // both fields masked. Neither path stores the credential.
+      try { inp.type = IS_SIGNUP_PAGE ? 'password' : 'text'; } catch {}
+    });
+
+    setVal(Email1, payload.email);
+    setVal(Email2, payload.email);
+    setVal(Pass1, payload.password);
+    setVal(Pass2, payload.password);
+    setVal(Phone, payload.phone);
+    setId('ctl00_PageBody_FirstNameTextBox', payload.fname, doc);
+    setId('ctl00_PageBody_LastNameTextBox', payload.lname, doc);
+    // Preserve the customer's real first/last name for checkout while
+    // marking the generated account so staff can identify guest signups.
+    setId('ctl00_PageBody_ContactNameTextBox', `Guest User - ${payload.contactName}`, doc);
+    setId('ctl00_PageBody_DeliveryAddressLine1TextBox', payload.d_addr1, doc);
+    setId('ctl00_PageBody_DeliveryCityTextBox', payload.d_city, doc);
+    setId('ctl00_PageBody_DeliveryStateCountyTextBox', payload.d_state, doc);
+    setId('ctl00_PageBody_DeliveryStateTextBox', payload.d_state, doc);
+    setId('ctl00_PageBody_DeliveryPostalCodeTextBox', payload.d_zip, doc);
+    setId('ctl00_PageBody_DeliveryCountryTextBox', 'USA', doc);
+    setId('ctl00_PageBody_InvoiceAddressLine1TextBox', payload.i_addr1, doc);
+    setId('ctl00_PageBody_InvoiceCityTextBox', payload.i_city, doc);
+    setId('ctl00_PageBody_InvoiceStateCountyTextBox', payload.i_state2, doc);
+    setId('ctl00_PageBody_InvoicePostalCodeTextBox', payload.i_zip, doc);
+    setId('ctl00_PageBody_InvoiceCountryTextBox', 'USA', doc);
+
+    return true;
+  }
+
+  function readFullPageGuestRecovery() {
+    try {
+      const record=JSON.parse(sessionStorage.getItem(FULL_PAGE_KEY)||'null');
+      const draft=loadGuest(), basket=JSON.parse(sessionStorage.getItem(CART_HANDOFF_KEY)||'null');
+      const age=record && Date.now()-record.createdAt, basketAge=basket && Date.now()-basket.createdAt;
+      if (!record || record.version!==1 || !['ready','submitted'].includes(record.phase) ||
+          !Number.isFinite(age) || age<0 || age>=300000 || !clean(record.email) ||
+          clean(record.email).toLowerCase()!==clean(draft.email).toLowerCase() ||
+          clean(record.email).toLowerCase()!==clean(basket?.email).toLowerCase() ||
+          !Number.isFinite(basketAge) || basketAge<0 || basketAge>=300000 || !basket.items?.length) {
+        sessionStorage.removeItem(FULL_PAGE_KEY); return null;
+      }
+      return record;
+    } catch { try { sessionStorage.removeItem(FULL_PAGE_KEY); } catch {} return null; }
+  }
+
+  function offerFullPageGuestRecovery() {
+    const box=byId('gc_error');
+    if (!box || byId('gc_full_page')) return;
+    const button=document.createElement('button');
+    button.id='gc_full_page'; button.type='button'; button.className='gc-btn';
+    button.textContent='Continue with standard guest setup';
+    button.addEventListener('click',async()=>{
+      button.disabled=true;
+      try {
+        const draft=loadGuest();
+        // The timeout was before submission. Recheck the current native basket
+        // before offering a separate full-page signup; never retry an uncertain post.
+        await backupGuestCart(draft.email);
+        sessionStorage.setItem(FULL_PAGE_KEY,JSON.stringify({version:1,createdAt:Date.now(),email:draft.email,phase:'ready'}));
+        setCheckoutMode('guest');
+        location.assign('/UserSignup.aspx');
+      } catch {
+        button.disabled=false;
+        showError('Your cart could not be confirmed. Return to the cart and refresh before continuing.');
+      }
+    });
+    box.appendChild(button);
+  }
+
+  function fullPageGuestNotice(message) {
+    let box=byId('gc_full_page_notice');
+    if (!box) {
+      box=document.createElement('section'); box.id='gc_full_page_notice';
+      box.style.cssText='box-sizing:border-box;max-width:920px;margin:20px auto;padding:16px;border:1px solid #d8c7cb;border-radius:8px;background:#fff7f8;color:#520014;overflow-wrap:anywhere';
+      box.setAttribute('role','status');
+      const native=byId('ctl00_PageBody_SignupButton');
+      const form=native?.closest('form') || document.querySelector('form');
+      if (form) form.insertBefore(box,form.firstChild); else document.body.prepend(box);
+    }
+    box.textContent=message+' ';
+    const back=document.createElement('a'); back.href='/ShoppingCart.aspx'; back.textContent='Return to cart';
+    back.addEventListener('click',()=>{ try { sessionStorage.removeItem(FULL_PAGE_KEY); } catch {} });
+    box.appendChild(back);
+    return box;
+  }
+
+  async function resumeFullPageGuestRecovery() {
+    const record=readFullPageGuestRecovery();
+    if (!record || window.parent!==window) return false;
+    if (IS_SIGNUP_PAGE && !document.querySelector('a[href*="SignOut=1" i]')) {
+      if (record.phase==='submitted') {
+        // A native response/error or reload never causes another automatic post.
+        fullPageGuestNotice('WebTrack has not confirmed this guest signup. Review any message below. Return to the cart to sign in or start again.');
+        return true;
+      }
+      const button=byId('ctl00_PageBody_SignupButton');
+      const payload=loadGuest(); payload.password=randTempPassword(18);
+      if (!button || !fillNativeGuestSignup(document,payload)) {
+        fullPageGuestNotice('Guest setup could not load. Your cart backup is retained.'); return true;
+      }
+      // Keep the reviewed details bound to the basket owner. Changes start from
+      // the cart, so a different email cannot inherit this recovery handoff.
+      const ids=['UserNameTextBox','EmailAddressTextBox','FirstNameTextBox','LastNameTextBox','ContactNameTextBox','ContactTelephoneTextBox','DeliveryAddressLine1TextBox','DeliveryCityTextBox','DeliveryStateCountyTextBox','DeliveryPostalCodeTextBox','DeliveryCountryTextBox','InvoiceAddressLine1TextBox','InvoiceCityTextBox','InvoiceStateCountyTextBox','InvoicePostalCodeTextBox','InvoiceCountryTextBox'];
+      ids.forEach(id=>{const input=byId('ctl00_PageBody_'+id);if(input)input.readOnly=true;});
+      fullPageGuestNotice('Guest checkout setup: confirm your details below, then continue. A temporary login is prepared for this order. Return to the cart to change your details.');
+      button.textContent='Continue to checkout';
+      button.addEventListener('click',event=>{
+        if (readFullPageGuestRecovery()?.phase!=='ready') { event.preventDefault(); event.stopImmediatePropagation(); fullPageGuestNotice('Guest setup expired. Return to the cart to start again.'); return; }
+        if (typeof window.Page_ClientValidate==='function' && !window.Page_ClientValidate('')) return;
+        sessionStorage.setItem(FULL_PAGE_KEY,JSON.stringify({...record,phase:'submitted'}));
+      },true);
+      return true;
+    }
+    if (record.phase!=='submitted' && !IS_SIGNUP_PAGE) return false;
+    try {
+      await verifyGuestAccount(record.email);
+      sessionStorage.removeItem(FULL_PAGE_KEY);
+      saveGuest(loadGuest());
+      guestMetric('guest_details_complete');
+      continueCheckoutAndHookBilling();
+    } catch {
+      fullPageGuestNotice('Guest sign-in could not be confirmed. Your cart backup is retained. Return to the cart to sign in before continuing.');
+    }
+    return true;
   }
 
   function createAccountInBackground(payload) {
@@ -816,43 +966,7 @@
           if (/^javascript:/i.test(btn.getAttribute('href') || '') &&
               (typeof win.WebForm_DoPostBackWithOptions!=='function' || typeof win.WebForm_PostBackOptions!=='function')) return;
 
-          [Email1, Email2, Pass1, Pass2].forEach(inp => {
-            try {
-              inp.autocomplete = 'off';
-              inp.tabIndex = -1;
-              inp.readOnly = true;
-              inp.setAttribute('aria-hidden', 'true');
-              inp.setAttribute('data-1p-ignore', 'true');
-              inp.setAttribute('data-lpignore', 'true');
-            } catch {}
-          });
-          [Pass1, Pass2].forEach(inp => {
-            // WebTrack only needs the posted value. A text field prevents iOS from
-            // presenting this generated password as a customer login prompt.
-            try { inp.type = 'text'; } catch {}
-          });
-
-          setVal(Email1, payload.email);
-          setVal(Email2, payload.email);
-          setVal(Pass1, payload.password);
-          setVal(Pass2, payload.password);
-          setVal(Phone, payload.phone);
-          setId('ctl00_PageBody_FirstNameTextBox', payload.fname, doc);
-          setId('ctl00_PageBody_LastNameTextBox', payload.lname, doc);
-          // Preserve the customer's real first/last name for checkout while
-          // marking the generated account so staff can identify guest signups.
-          setId('ctl00_PageBody_ContactNameTextBox', `Guest User - ${payload.contactName}`, doc);
-          setId('ctl00_PageBody_DeliveryAddressLine1TextBox', payload.d_addr1, doc);
-          setId('ctl00_PageBody_DeliveryCityTextBox', payload.d_city, doc);
-          setId('ctl00_PageBody_DeliveryStateCountyTextBox', payload.d_state, doc);
-          setId('ctl00_PageBody_DeliveryStateTextBox', payload.d_state, doc);
-          setId('ctl00_PageBody_DeliveryPostalCodeTextBox', payload.d_zip, doc);
-          setId('ctl00_PageBody_DeliveryCountryTextBox', 'USA', doc);
-          setId('ctl00_PageBody_InvoiceAddressLine1TextBox', payload.i_addr1, doc);
-          setId('ctl00_PageBody_InvoiceCityTextBox', payload.i_city, doc);
-          setId('ctl00_PageBody_InvoiceStateCountyTextBox', payload.i_state2, doc);
-          setId('ctl00_PageBody_InvoicePostalCodeTextBox', payload.i_zip, doc);
-          setId('ctl00_PageBody_InvoiceCountryTextBox', 'USA', doc);
+          fillNativeGuestSignup(doc,payload);
 
           btn.classList.remove('disabled');
           btn.removeAttribute('aria-disabled');
@@ -998,7 +1112,9 @@
     }, t));
   }
 
-  function init() {
+  async function init() {
+    if (await resumeFullPageGuestRecovery()) return;
+    if (!IS_CART_PAGE && !IS_CHECKOUT_PAGE) return;
     injectStyles();
     bindGuestEntryDelegation();
     document.addEventListener('input', (ev) => {
