@@ -141,6 +141,7 @@ test("duplicate-email recovery uses native sign-in and removes stale guest autof
   env.element("wl-checkout-transition");
   env.storage.set("wl_guest_checkout_payload", "discarded guest details");
   env.storage.set("wl_guest_checkout_needs_autofill", "1");
+  env.storage.set("wl_guest_cart_handoff_v1", "retained-basket");
   load("Guestcheckout.js", env, "window.guestError = showError;");
   env.context.guestError("An account already uses this email.", true);
   assert.equal(env.elements.has("wl-checkout-transition"), false);
@@ -151,6 +152,7 @@ test("duplicate-email recovery uses native sign-in and removes stale guest autof
   assert.equal(env.storage.has("wl_guest_checkout_payload"), false);
   assert.equal(env.storage.has("wl_guest_checkout_needs_autofill"), false);
   assert.equal(env.storage.get("wl_checkout_mode"), "signed_in");
+  assert.equal(env.storage.get("wl_guest_cart_handoff_v1"), "retained-basket");
 });
 
 async function refreshedQuote(mode, available = true) {
@@ -253,8 +255,32 @@ test('legacy guest autofill leaves an owned compact frame to its verified parent
 test('successful guest signup removes the generated credential before retaining checkout details',async()=>{
   const env=environment();env.element('gc_submit');let reloads=0;
   env.context.location.assign=()=>{reloads++;};
-  load('Guestcheckout.js',env,`collectGuestPayload=()=>({email:'guest@example.invalid',password:'temporary-only',fname:'Guest',lname:'Test'});createAccountInBackground=async()=>{};window.submitGuest=onSubmitGuest;`);
+  load('Guestcheckout.js',env,`collectGuestPayload=()=>({email:'guest@example.invalid',password:'temporary-only',fname:'Guest',lname:'Test'});backupGuestCart=()=>{};createAccountInBackground=async()=>{};verifyGuestAccount=async()=>{};window.submitGuest=onSubmitGuest;`);
   await env.context.submitGuest();
   const draft=JSON.parse(env.storage.get('wl_guest_checkout_payload'));
   assert.equal(draft.email,'guest@example.invalid');assert.equal('password' in draft,false);assert.equal(reloads,1);
+});
+
+function guestRow(quantity=2) {
+  return {getAttribute:()=> 'ea',querySelectorAll:()=>[],querySelector(selector){
+    if(selector==='a[href*="pid="]')return {getAttribute:()=>'/ProductDetail.aspx?pid=85'};
+    if(selector.startsWith('input.riTextBox'))return {value:String(quantity),closest:()=>null};
+    if(selector.startsWith('.portalGridLink'))return {textContent:'FISH'};
+    if(selector.startsWith('.description'))return {textContent:'Fish food'};
+    return null;
+  }};
+}
+test('guest basket backup uses matching native rows and refuses a pending or configured cart',async()=>{
+  const env=environment();env.document.querySelectorAll=()=>[guestRow()];
+  load('Guestcheckout.js',env,'guestNativeDocument=async()=>window.nativePage;window.backupGuest=backupGuestCart;');
+  env.context.nativePage={querySelectorAll:()=>[guestRow()]};await env.context.backupGuest('guest@example.invalid');
+  const saved=JSON.parse(env.storage.get('wl_guest_cart_handoff_v1'));assert.equal(saved.items[0].pid,'85');assert.equal(saved.items[0].quantity,2);assert.equal(saved.items[0].unit,'ea');assert.equal('password' in saved,false);
+  env.storage.delete('wl_guest_cart_handoff_v1');env.context.nativePage={querySelectorAll:()=>[guestRow(3)]};await assert.rejects(env.context.backupGuest('guest@example.invalid'));assert.equal(env.storage.has('wl_guest_cart_handoff_v1'),false);
+  const invalid=guestRow();invalid.querySelectorAll=()=>[{value:'custom cut'}];env.document.querySelectorAll=()=>[invalid];await assert.rejects(env.context.backupGuest('guest@example.invalid'));assert.equal(env.storage.has('wl_guest_cart_handoff_v1'),false);
+});
+test('guest signup success requires fresh native login proof matching the supplied email',async()=>{
+  const env=environment();load('Guestcheckout.js',env,'guestNativeDocument=async()=>window.nativePage;window.verifyGuest=verifyGuestAccount;');
+  function identity(login,signedIn=true){return {querySelector:()=>signedIn?{}:null,querySelectorAll:()=>[{textContent:`Change details for user '${login}'`}]};}
+  env.context.nativePage=identity('guest@example.invalid');await env.context.verifyGuest('guest@example.invalid');
+  for(const page of [identity('another-login'),identity('guest@example.invalid',false),{querySelector:()=>null,querySelectorAll:()=>[]}]) {env.context.nativePage=page;await assert.rejects(env.context.verifyGuest('guest@example.invalid'),error=>error.code==='guest_signup_unconfirmed');}
 });

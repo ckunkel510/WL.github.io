@@ -3,13 +3,14 @@
 
   if (window.WLAnalytics) return;
 
-  var VERSION = "1.8.3";
+  var VERSION = "1.8.4";
   var EVENT_NAME = "wl_analytics_event";
   var GA_MEASUREMENT_ID = "G-4ZLV1YB6GY";
   var META_PIXEL_ID = "188974749776655";
   var CART_STORAGE_KEY = "wl_analytics_cart_v1";
   var CHECKOUT_STORAGE_KEY = "wl_analytics_checkout_v1";
   var PURCHASE_STORAGE_KEY = "wl_analytics_purchases_v1";
+  var PENDING_PURCHASE_KEY = "wl_analytics_confirmed_purchase_pending_v1";
   var PENDING_ADD_STORAGE_KEY = "wl_analytics_pending_add_v1";
   var EXPERIMENT_STORAGE_KEY = "wl_analytics_experiment_v1";
   var RECOMMENDATION_STORAGE_KEY = "wl_pdp_recommendation_attribution_v1";
@@ -314,6 +315,15 @@
       });
     }
 
+    if (name==='purchase' && parameters.transaction_id) {
+      const transactionId=parameters.transaction_id;
+      // gtag acknowledges command processing, not network receipt. Keep the
+      // confirmed payload until processing and use the same ID for any retry.
+      parameters.event_callback=function () {
+        markPurchased(transactionId);
+        if (readPendingPurchase(transactionId)) safeStorage(window.sessionStorage,'remove',PENDING_PURCHASE_KEY);
+      };
+    }
     window.gtag("event", name, parameters);
   }
 
@@ -396,13 +406,17 @@
     }
     if (!ALLOWED_EVENTS[name] || (name === "purchase" && !confirmedPurchase)) return false;
 
+    parameters=Object.assign({},parameters);
+    if ((/^guest_checkout_/.test(name) || name==='guest_details_complete') && !parameters.ecommerce) parameters.ecommerce=ecommerce(cartItems(),null);
     var enriched = Object.assign({}, experimentContext(), recommendationContext(name, parameters));
     var payload = sanitize(enriched, "", 0) || {};
     payload.sign_in_state = document.querySelector("a[href*='SignOut=1' i]") ? "signed_in" : "signed_out";
+    if (/checkout|cart|shipping|payment|purchase|guest_details/.test(name)) payload.checkout_context=document.getElementById('ctl00_EmployeeStatusBar_LogonBarPanel') ? 'staff_assisted' : 'customer';
     payload.event = EVENT_NAME;
     payload.event_name = name;
     payload.analytics_version = VERSION;
     payload.page_type = name === "purchase" ? "order_confirmation" : enriched.checkout_flow ? "compact_checkout" : pageType();
+    if (name==='purchase') safeStorage(window.sessionStorage,'set',PENDING_PURCHASE_KEY,JSON.stringify({at:Date.now(),payload:payload}));
 
     window.dataLayer = window.dataLayer || [];
     if (payload.ecommerce) window.dataLayer.push({ ecommerce: null });
@@ -596,7 +610,7 @@
     var current=items.find(function (item) { return item.item_id===pending.item.item_id; });
     var quantity=current ? current.quantity : 0;
     safeStorage(window.sessionStorage,"remove",PENDING_CART_KEY); pendingCartRoot=null;
-    if (Math.abs(quantity-pending.after)>0.000001) return pushEvent("cart_action_error",{cart_action:pending.kind,error_code:"cart_change_not_confirmed"});
+    if (Math.abs(quantity-pending.after)>0.000001) return pushEvent("cart_action_error",{cart_action:pending.kind,error_code:"cart_change_not_confirmed",previous_quantity:pending.before,requested_quantity:pending.after,quantity:quantity,ecommerce:ecommerce([Object.assign({},pending.item,{quantity:pending.before || pending.after})],null)});
     var item=Object.assign({},pending.item,current || {},{quantity:Math.abs(quantity-pending.before)});
     var value=typeof item.price==="number" ? item.price*item.quantity : null;
     var params={cart_action:pending.kind,ecommerce:ecommerce([item],value)};
@@ -832,6 +846,14 @@
     [window.localStorage,window.sessionStorage].forEach(function (storage) { safeStorage(storage,"set",PURCHASE_STORAGE_KEY,JSON.stringify(ids.slice(0,200))); });
   }
 
+  function readPendingPurchase(transactionId) {
+    try {
+      var pending=JSON.parse(safeStorage(window.sessionStorage,'get',PENDING_PURCHASE_KEY) || 'null');
+      if (!pending || !Number.isFinite(pending.at) || Date.now()<pending.at || Date.now()-pending.at>1800000 || pending.payload?.ecommerce?.transaction_id!==transactionId) return null;
+      return pending.payload;
+    } catch (_) { return null; }
+  }
+
   function validMoney(value) {
     var amount=typeof value === "number" ? value : toNumber(value);
     return typeof amount === "number" && amount>=0 && isFinite(amount) ? roundMoney(amount) : null;
@@ -903,10 +925,10 @@
     page=page || document;
     var transactionId=confirmedOrderId(page);
     if (!transactionId || details && transactionId!==details.orderNumber || sent["purchase:"+transactionId] || purchaseIds().includes(transactionId)) return false;
-    var review=readReview();
-    if (details && (!review || review.key!==details.id || !sameCheckoutItems(review.items,details.items))) return false;
+    var review=readReview(), pending=readPendingPurchase(transactionId);
+    if (!pending && details && (!review || review.key!==details.id || !sameCheckoutItems(review.items,details.items))) return false;
     if (!details && review?.key!=="native") review=null;
-    var params={ecommerce:Object.assign({transaction_id:transactionId,currency:"USD",items:review?.items || []},review?.amounts || {})};
+    var params=pending || {ecommerce:Object.assign({transaction_id:transactionId,currency:"USD",items:review?.items || []},review?.amounts || {})};
     // Merchant Center uses the native numeric PID as its offer ID (US / en).
     // Attach cart data only when every final unit price and quantity reconciles
     // with the verified merchandise subtotal. Never substitute catalog prices.
@@ -924,7 +946,13 @@
     // Set the guard before dispatch, including reentrant callbacks/storage failures.
     sent["purchase:"+transactionId]=true; confirmedPurchase=true;
     try { pushEvent("purchase",params); } finally { confirmedPurchase=false; }
-    markPurchased(transactionId); currentReview=null;
+    // A bounded retry covers a slow/unavailable tag in this live runtime. On a
+    // reload, retry only if the native page again proves this exact order ID.
+    window.setTimeout(function () {
+      var queued=readPendingPurchase(transactionId);
+      if (queued && !purchaseIds().includes(transactionId)) { try { sendToGa4('purchase',queued); } catch (_) {} }
+    },5000);
+    currentReview=null;
     [CART_STORAGE_KEY,CHECKOUT_STORAGE_KEY,REVIEW_STORAGE_KEY,PENDING_CART_KEY,PENDING_ADD_STORAGE_KEY].forEach(function (key) { safeStorage(window.sessionStorage,"remove",key); });
     safeStorage(window.localStorage,"remove",CART_STORAGE_KEY);
     return true;
@@ -945,10 +973,10 @@
     if (stage==="submit" && (!record || record.key!==details.id || !sameCheckoutItems(record.items,items))) return false;
     if (["pickup","delivery","ship"].includes(details.method)) { params.shipping_tier=details.method; params.fulfillment_method=details.method; }
     if (["stored_card","new_card","no_payment_due","webtrack"].includes(details.paymentType)) params.payment_type=details.paymentType;
-    if (stage==="error") params.error_code="checkout_unavailable";
+    if (stage==="error") params.error_code=["native_entry_unavailable","checkout_timeout","checkout_unavailable","guest_cart_restore_failed"].includes(details.errorCode)?details.errorCode:"checkout_unavailable";
     if (stage==="cancel" && record?.key===details.id) { currentReview=null; safeStorage(window.sessionStorage,"remove",REVIEW_STORAGE_KEY); }
     var signature=stage==="begin" ? "" : items.map(function (item) { return item.item_id+":"+item.quantity; }).sort().join("|");
-    var choice=stage==="shipping"?details.method:stage==="payment"?details.paymentType:stage==="review"?JSON.stringify(record?.amounts):"";
+    var choice=stage==="shipping"?details.method:stage==="payment"?details.paymentType:stage==="review"?JSON.stringify(record?.amounts):stage==="error"?params.error_code:"";
     return trackOnce("checkout:"+details.id+":"+stage+":"+signature+":"+choice,name,params);
   }
 

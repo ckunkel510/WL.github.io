@@ -3,12 +3,12 @@ const test=require('node:test'),assert=require('node:assert/strict'),vm=require(
 const source=fs.readFileSync(require.resolve('../wl-site.js'),'utf8');
 function storage(fail=false) {const data=new Map();return {getItem:k=>fail?null:data.get(k)||null,setItem(k,v){if(fail)throw Error('blocked');data.set(k,String(v));},removeItem(k){if(fail)throw Error('blocked');data.delete(k);}};}
 function setup(options={}) {
-  const local=options.local||storage(),session=options.session||storage(),events=[];
+  const local=options.local||storage(),session=options.session||storage(),events=[],timers=[];
   const doc={readyState:'loading',body:null,head:{appendChild(){}},addEventListener(){},querySelector(){return null;},getElementById(){return null;},createElement(){return {setAttribute(){}};}};
-  const win={dataLayer:events,localStorage:local,sessionStorage:session,location:{pathname:'/ProductDetail.aspx',search:'?pid=85'},setTimeout(){},dispatchEvent(){}};
+  const win={dataLayer:events,localStorage:local,sessionStorage:session,location:{pathname:'/ProductDetail.aspx',search:'?pid=85'},setTimeout(fn,ms){timers.push({fn,ms});},dispatchEvent(){}};
   if(options.badTransport)win.gtag=()=>{throw Error('unavailable');};
   vm.runInNewContext(source,{window:win,document:doc,CustomEvent:class{constructor(name,init){this.detail=init.detail;}}});
-  return {win,doc,local,session,events,api:win.WLAnalytics};
+  return {win,doc,local,session,events,timers,api:win.WLAnalytics};
 }
 function page({success=true,merchant=true,order='W123456',message='Thank you. Order number W123456'}={}) {
   return {defaultView:{location:{search:success?'?success=1':'?success=0'}},getElementById(id){if(id==='ctl00_PageBody_CompleteCheckoutButton')return {};if(id==='CartResponseMessage')return {textContent:message,querySelector:()=>({textContent:order})};if(id==='ctl00_PageBody_SuccessfulPaymentResults_MerchantDetailsPanel')return merchant?{textContent:'Woodson Lumber'}:null;return null;}};
@@ -65,7 +65,34 @@ test('native confirmation without a verified review never borrows stale cart tot
 });
 test('confirmation refresh and a second runtime share transaction deduplication',()=>{
  const f=setup(),d=details();f.api.checkout('review',d,page());f.api.checkout('purchase',{...d,orderNumber:'W123456'},page());
+ f.events.find(e=>e[0]==='event'&&e[1]==='purchase')[2].event_callback();
  const again=setup({local:f.local,session:f.session});again.api.checkout('review',d,page());assert.equal(again.api.checkout('purchase',{...d,orderNumber:'W123456'},page()),false);assert.equal(purchases(again).length,0);
+});
+test('an unprocessed confirmed purchase survives reload and retains its verified amounts',()=>{
+ const f=setup(),d=details();f.api.checkout('review',d,page());f.api.checkout('purchase',{...d,orderNumber:'W123456'},page());
+ assert.equal(f.local.getItem('wl_analytics_purchases_v1'),null);
+ const again=setup({local:f.local,session:f.session});
+ assert.equal(again.api.checkout('purchase',{...d,orderNumber:'W123456'},page()),true);
+ const queued=again.events.find(e=>e[0]==='event'&&e[1]==='purchase')[2];assert.equal(queued.value,6);assert.equal(queued.items[0].quantity,3);
+ queued.event_callback();assert.equal(again.session.getItem('wl_analytics_confirmed_purchase_pending_v1'),null);assert.ok(again.local.getItem('wl_analytics_purchases_v1').includes('W123456'));
+});
+test('pending purchase data cannot create a purchase without fresh native proof of the same order',()=>{
+ const f=setup(),d=details();f.api.checkout('review',d,page());f.api.checkout('purchase',{...d,orderNumber:'W123456'},page());
+ for(const invalid of [{success:false},{order:'W999999',message:'Thank you. Order number W999999'},{message:'Payment declined'}]) {
+  const again=setup({session:f.session});assert.equal(again.api.checkout('purchase',{...d,orderNumber:'W123456'},page(invalid)),false);assert.equal(purchases(again).length,0);
+ }
+});
+test('a tag processing failure gets one bounded retry with the same transaction ID and no duplicate Meta event',()=>{
+ const f=setup({badTransport:true}),d=details();f.api.checkout('review',d,page());f.api.checkout('purchase',{...d,orderNumber:'W123456'},page());
+ assert.equal(f.local.getItem('wl_analytics_purchases_v1'),null);const calls=[];f.win.gtag=(...args)=>calls.push(args);
+ const retries=f.timers.filter(t=>t.ms===5000);assert.equal(retries.length,1);retries[0].fn();
+ assert.equal(calls.length,1);assert.equal(calls[0][1],'purchase');assert.equal(calls[0][2].transaction_id,'W123456');assert.equal(purchases(f).length,1);
+ calls[0][2].event_callback();retries[0].fn();assert.equal(calls.length,1);
+});
+test('checkout errors retain distinct safe reasons and staff context without customer identifiers',()=>{
+ const f=setup(),d=details();f.doc.getElementById=id=>id==='ctl00_EmployeeStatusBar_LogonBarPanel'?{textContent:'PRIVATE CUSTOMER 12345'}:null;
+ for(const errorCode of ['native_entry_unavailable','checkout_timeout','private@example.invalid']) f.api.checkout('error',{...d,errorCode});
+ const events=f.events.filter(e=>e.event_name==='checkout_error');assert.deepEqual(events.map(e=>e.error_code),['native_entry_unavailable','checkout_timeout','checkout_unavailable']);assert.ok(events.every(e=>e.checkout_context==='staff_assisted'));assert.ok(!JSON.stringify(events).includes('PRIVATE CUSTOMER'));
 });
 test('transport and persistent-storage failures do not duplicate confirmed events',()=>{
  const f=setup({local:storage(true),session:storage(true),badTransport:true}),d=details();f.api.checkout('review',d,page());

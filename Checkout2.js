@@ -6,7 +6,8 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20260917-custom-cuts-3";
+  window.WL_CHECKOUT_BUILD = "20261030-native-checkout-recovery-4";
+  document.documentElement?.setAttribute?.('data-wl-checkout-build',window.WL_CHECKOUT_BUILD);
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
   const UPS_SHIPPING_ENABLED = true;
@@ -793,7 +794,17 @@
     const nameParts = splitDisplayName(payload.contactName || "");
     applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_DeliveryAddress_ContactFirstNameTextBox"), nameParts.first, true) || applied;
     applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_DeliveryAddress_ContactLastNameTextBox"), nameParts.last, true) || applied;
-    applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_InvoiceAddress_EmailAddressTextBox"), payload.email, true) || applied;
+    // A saved job's delivery contact must not replace the main invoice email.
+    if (!payload.billing && !payload.preserveInvoiceContact) applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_InvoiceAddress_EmailAddressTextBox"), payload.email, true) || applied;
+    if (payload.billing) {
+      const billing = payload.billing;
+      [["AddressLine1","line1"],["AddressLine2","line2"],["AddressLine3","line3"],["City","city"],["Postcode","zip"],["ContactTelephoneTextBox","phone"],["EmailAddressTextBox","email"]].forEach(function (field) {
+        if (payload.preserveInvoiceContact && ["phone","email"].includes(field[1])) return;
+        if (billing[field[1]] !== undefined) applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_InvoiceAddress_"+field[0]), billing[field[1]], true) || applied;
+      });
+      if (billing.stateValue || billing.stateText) setCheckoutSelect(document.getElementById("ctl00_PageBody_InvoiceAddress_CountySelector_CountyList"), billing.stateValue, billing.stateText);
+      if (billing.countryValue || billing.countryText) setCheckoutSelect(document.getElementById("ctl00_PageBody_InvoiceAddress_CountrySelector1"), billing.countryValue, billing.countryText);
+    }
     if (cleanText(payload.stateValue || payload.stateText)) {
       setCheckoutSelect(document.getElementById("ctl00_PageBody_DeliveryAddress_CountySelector_CountyList"), payload.stateValue, payload.stateText);
       applied = true;
@@ -802,6 +813,7 @@
       setCheckoutSelect(document.getElementById("ctl00_PageBody_DeliveryAddress_CountrySelector"), payload.countryValue || "USA", payload.countryText || "United States");
       applied = true;
     }
+    if (payload.checkoutReference !== undefined) applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_PurchaseOrderNumberTextBox"),payload.checkoutReference,true) || applied;
 
     try { sessionStorage.setItem("wl_returnStep", "3"); } catch {}
     try { window.WLCheckout?.refreshSectionSummaries?.(); } catch {}

@@ -4,7 +4,7 @@ const core=require('../BuyNowPilot');
 const href='javascript:WebForm_DoPostBackWithOptions(new WebForm_PostBackOptions("ctl00$PageBody$PlaceOrderButton", "", true, "", "", false, true))';
 function fixture(){
  const calls=[];let clicks=0,initialized=true;
- const child={Sys:{Application:{get_isInitialized:()=>initialized}},Page_IsValid:true,
+ const child={document:{readyState:'complete',querySelector:()=>({})},Sys:{Application:{get_isInitialized:()=>initialized}},Page_IsValid:true,
   WebForm_PostBackOptions:function(...args){this.args=args;},WebForm_DoPostBackWithOptions(options){calls.push(options.args);}};
  const control={getAttribute:name=>name==='href'?href:null,click(){clicks++;}};
  return {child,control,calls,clicks:()=>clicks,initializing(){initialized=false;}};
