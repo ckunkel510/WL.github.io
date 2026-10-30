@@ -44,6 +44,10 @@ function publicOriginBranch(input) {
     '76667': 'mexia', '76642': 'groesbeck' })[normalizeRoute(input).shipFromPostalCode] || 'unmapped';
 }
 
+function completeDestination(input) {
+  return Boolean(input.shipTo?.state && input.shipTo?.city && input.shipTo?.addressLine?.length);
+}
+
 function claimWeight(input) {
   return positive(input?.totalWeight) || positive(input?.productWeight) || packageWeight(input?.packages);
 }
@@ -106,6 +110,9 @@ async function storeFulfillmentClaim(input, selected = false) {
   const totalWeight = claimWeight(input);
   const keys = [exactKey(route, totalWeight), bucketKey(route, totalWeight), postalKey(route)]
     .filter(Boolean).map((key) => selected ? key.replace("wl:fulfillment-quote:", "wl:fulfillment-selected:") : key);
+  if (!selected && completeDestination(input)) {
+    keys.push(...keys.map((key) => key.replace("wl:fulfillment-quote:", "wl:fulfillment-complete:")));
+  }
   if (!keys.length) return { ok: false, reason: "missing-route" };
   const now = Date.now();
   const recommendation = input?.recommendation && typeof input.recommendation === "object"
@@ -121,7 +128,7 @@ async function storeFulfillmentClaim(input, selected = false) {
   }
   const claim = {
     route,
-    destinationComplete: Boolean(input.shipTo?.state && input.shipTo?.city && input.shipTo?.addressLine?.length),
+    destinationComplete: completeDestination(input),
     totalWeight,
     recommendation,
     rates,
@@ -178,7 +185,9 @@ async function findFulfillmentClaim(input, preferSelected = true) {
     }
     return null;
   }
-  const automatic = await readClaim(keys);
+  // Postal-only cart estimates share the legacy route keys, but cannot replace
+  // checkout's complete-address rates before the customer reserves a mode.
+  const automatic = await readClaim(keys.map((key) => key.replace("wl:fulfillment-quote:", "wl:fulfillment-complete:")).concat(keys));
   if (preferSelected) {
     // Quote calculation may finish after a customer reserves an alternate mode.
     // Keep that choice in separate keys so late recommendations cannot replace
