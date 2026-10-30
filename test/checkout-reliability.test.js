@@ -67,7 +67,7 @@ test('an empty embedded document is not a ready WebForms checkout',()=>{
 function handoff(options={}) {
   const calls=[],context=vm.createContext({active:{current:basket,phase:options.phase||'checking_out'},fast:{},cartEntry:true,submitting:false,busy:false,bypassCartEntry:false,
     clearFrame(){calls.push('clear-frame');},loading(){},status(){},assertNoPendingCartOrder(){if(options.pending)throw Error('Uncertain order');},
-    checkIdentity:async()=>{if(options.identityFailure)throw Error('Customer changed');calls.push('verify-identity');},cart:async()=>({items:options.changedCart?[]:basket}),signature:core.signature,
+    checkIdentity:async()=>{if(options.identityFailure)throw Error('Customer changed');calls.push('verify-identity');},cart:async()=>({items:options.changedCart?[]:basket}),signature:core.signature,nativeCartSignature:core.nativeCartSignature,
     doc:{getElementById:()=>({click(){calls.push('native-click-and-draft-reset');}})},seedSession(nativeHandoff){assert.equal(nativeHandoff,true);calls.push('seed-current-options');},dismiss(){calls.push('dismiss');},showError(error){calls.push(error.message);}
   });vm.runInContext(section('    async function standardCheckout()','    function notice('),context);
   return {calls,run:()=>context.standardCheckout()};

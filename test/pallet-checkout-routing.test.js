@@ -2,60 +2,39 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const core=require('../BuyNowPilot');
 const source=fs.readFileSync(require.resolve('../BuyNowPilot'),'utf8');
-const helpers=source.slice(source.indexOf('  function hasPalletCart('),source.indexOf('  var STATE_NAMES'));
-const ids=source.match(/var PALLET_PRODUCTS = new Set\('([^']+)'/)[1].split(',');
-function page(items) {
-  return {querySelectorAll:()=>items.map(([pid,code])=>({querySelectorAll:()=>[
-    {textContent:code,getAttribute:()=>'/ProductDetail.aspx?pid='+pid}
-  ]}))};
-}
-function helper() {
-  const context=vm.createContext({PALLET_PRODUCTS:new Set(ids),text:value=>String(value??'').replace(/\s+/g,' ').trim(),pidOf:value=>String(value).match(/[?&]pid=(\d+)(?:&|$)/i)?.[1]||''});
-  vm.runInContext(helpers,context);return context.hasPalletCart;
-}
-test('ASC and every native pallet-rule product use native routing, including before the pallet has been added',()=>{
-  const detect=helper();
+const pallet=[{pid:'22444',code:'ASC',quantity:30,unit:'bag'},{pid:'23297',code:'EPALLETS',quantity:1,unit:'ea'}];
+test('every native pallet-rule product remains excluded from Quick Buy mutations',()=>{
   const rowSource=fs.readFileSync(require.resolve('../ShoppingCartRow.js'),'utf8');
   const rules=rowSource.slice(rowSource.indexOf('  var WL_EPALLET_RULES ='),rowSource.indexOf('  var WL_EPALLET_RULES_BY_CODE'));
   const nativeIds=[...rules.matchAll(/\b(\d+):\s*\{/g)].map(match=>match[1]);
   assert.ok(nativeIds.includes('22444'));
-  for(const pid of [...nativeIds,'23297'])assert.equal(detect(page([[pid,'SKU']])),true,pid);
-  assert.equal(detect(page([['22444','ASC'],['23297','EPALLETS']])),true);
+  for(const pid of [...nativeIds,'23297'])assert.throws(()=>core.lines([{pid,code:'SKU',quantity:1,unit:'ea'}]),/Pallet/,pid);
 });
-test('pallet aliases route natively and ordinary or empty carts keep compact checkout',()=>{
-  const detect=helper();
-  for(const code of ['EPALLETS','E-Pallet','Concrete'])assert.equal(detect(page([['23297',code]])),true);
-  assert.equal(detect(page([['999999','EPALLETS']])),true);
-  assert.equal(detect(page([['57927','HARDWARE']])),false);
-  assert.equal(detect(page([])),false);
+test('compact cart review verifies both pallet lines and rejects missing or changed quantities',()=>{
+  const rows=pallet.map(item=>({code:item.code,quantity:item.quantity,unit:item.unit}));
+  assert.doesNotThrow(()=>core.assertReview(rows,pallet,true));
+  assert.throws(()=>core.assertReview(rows,pallet),/Pallet/);
+  assert.throws(()=>core.assertReview(rows.slice(0,1),pallet,true),/differs/);
+  assert.throws(()=>core.assertReview([{...rows[0],quantity:29},rows[1]],pallet,true),/differs/);
 });
-test('Quick Buy still rejects pallet mutations after the cart routing fix',()=>{
-  assert.throws(()=>core.lines([{pid:'22444',quantity:30,code:'ASC',unit:'Bag'}]),/Pallet-handling/);
-  assert.throws(()=>core.lines([{pid:'23297',quantity:1,code:'EPALLETS',unit:'ea'}]),/Pallet/);
-});
-function route(options={}) {
-  const events=[];
-  const native={disabled:!!options.disabled,getAttribute:()=>options.ariaDisabled?'true':null,click(){assert.equal(context.bypassCartEntry,true);events.push('native click');}};
-  const context=vm.createContext({ENABLE_CART_CHECKOUT:true,overlay:null,busy:false,cartEntry:false,bypassCartEntry:false,
-    hasPalletCart:()=>true,doc:{getElementById:()=>options.missing?null:native},
-    withLock:async work=>work(),releaseLock:()=>events.push('release'),record:()=>options.recovery?{}:null,
-    assertNoPendingCartOrder(){events.push('order guard');if(options.uncertain)throw new Error('unconfirmed order');},
-    async checkIdentity(){events.push('identity');if(options.identity)throw new Error('identity changed');},
-    shell(){throw new Error('compact shell must not open');},seedSession(){throw new Error('compact must not seed native pallet checkout');}
-  });
+function start(options={}) {
+  const calls=[];
+  const context=vm.createContext({ENABLE_CART_CHECKOUT:true,overlay:null,busy:false,cartEntry:false,fast:null,frame:null,scope:'scope',branch:'1',owner:'owner',guest:null,
+    doc:{},win:{sessionStorage:{getItem:k=>k==='wl_fulfillment_intent'?'pickup':k==='wl_fulfillment_selection_source_v1'?'user':null},crypto:{randomUUID:()=> 'test'}},
+    withLock:async fn=>fn(),shell(){calls.push('compact');context.overlay={querySelector:()=>({})};},showPreview(){},loading(){},status(){},record:()=>options.recovery?{}:null,
+    assertNoPendingCartOrder(){if(options.uncertain)throw Error('uncertain');},cartFromDocument:(doc,allow)=>{assert.equal(allow,true);return {items:pallet};},
+    newFast:opts=>({...opts,dirty:false}),renderFast(){},updatePickupReadiness(){},updateFastOptions(){},seedSession(){},warmPickupStock(){},
+    openFrame(){calls.push('frame');context.frame={contentDocument:null};},
+    cart:async allow=>{assert.equal(allow,true);calls.push('verify cart');return {items:options.changed?[pallet[0]]:pallet};},
+    checkIdentity:async()=>{calls.push('identity');if(options.identity)throw Error('identity');},purchaseRestrictions:async()=>new Set(options.blocked?['22444']:[]),
+    hasCustomCuts:()=>false,nativeCartSignature:core.nativeCartSignature,measureCheckout(){},cancelPending:false});
   vm.runInContext(source.slice(source.indexOf('    async function startCart('),source.indexOf('    function bindCartEntry(')),context);
-  return {context,events,start:()=>context.startCart()};
+  return {context,calls,run:()=>context.startCart()};
 }
-test('signed-in and guest cart entry verifies identity, clicks native once, releases the lock and never opens compact',async()=>{
-  // Both manual cart entry and the post-signup guest start call startCart.
-  const f=route();await f.start();
-  assert.deepEqual(f.events,['order guard','identity','native click','release']);
-  assert.equal(f.context.busy,false);assert.equal(f.context.cartEntry,false);assert.equal(f.context.bypassCartEntry,false);assert.equal(f.context.releaseLock,null);
+test('ASC30 and its pallet stay in compact checkout through read-only cart verification',async()=>{
+  const f=start();await f.run();assert.equal(f.calls[0],'compact');assert.ok(f.calls.includes('frame'));assert.ok(f.calls.includes('identity'));assert.ok(f.calls.includes('verify cart'));
+  assert.equal(f.context.active.cartCheckout,true);assert.equal(core.nativeCartSignature(f.context.active.current),core.nativeCartSignature(pallet));assert.equal(f.context.busy,false);
 });
-test('pallet routing retains recovery, uncertain-order, account and disabled-control guards',async()=>{
-  for(const option of ['recovery','uncertain','identity','disabled','ariaDisabled','missing']) {
-    const f=route({[option]:true});await assert.rejects(f.start());
-    assert.equal(f.events.includes('native click'),false,option);
-    assert.equal(f.events.at(-1),'release',option);assert.equal(f.context.busy,false,option);
-  }
+test('compact pallet entry retains recovery, uncertain-order, identity, changed-cart and restricted-item guards',async()=>{
+  for(const option of ['recovery','uncertain','identity','changed','blocked']) {const f=start({[option]:true});await assert.rejects(f.run());}
 });

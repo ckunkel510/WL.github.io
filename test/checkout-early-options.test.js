@@ -2,22 +2,28 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),core=require('../BuyNowPilot');
 const source=fs.readFileSync(require.resolve('../BuyNowPilot'),'utf8'),start=source.indexOf('    function requestFastUpdate()'),end=source.indexOf('    function editableFast(',start);
 function fixture(options={}) {
- let refresh=0,seeds=0;const item={pid:'85',code:'0001363',quantity:1,unit:'ea'};
- const fast={cartCheckout:options.cartCheckout!==false,ready:!!options.ready,stopped:!!options.stopped,securePayment:!!options.securePayment};
- const page={URL:options.page==='blank'?'about:blank':'https://webtrack.woodsonlumber.com/ShoppingCart.aspx',getElementById:()=>options.page==='details'?null:{}};
- const context=vm.createContext({fast,submitting:false,busy:!!options.busy,active:{cartCheckout:fast.cartCheckout,purchase:[item]},frame:{contentDocument:page},signature:core.signature,proposedItems:()=>[{...item,quantity:options.changedBasket?2:1}],updatePickupReadiness(){},updateFastOptions(){},warmPickupStock(){},seedSession(){seeds++;},refreshFast(){refresh++;return Promise.resolve();},showError(){throw Error('Unexpected error');}});
- vm.runInContext(source.slice(start,end),context);context.requestFastUpdate();return {refresh,seeds,fast};
+ let refresh=0,seeds=0,clears=0,presented=0;const item={pid:'85',code:'0001363',quantity:1,unit:'ea'};
+ const original={cartCheckout:options.cartCheckout!==false,ready:!!options.ready,stopped:!!options.stopped,securePayment:!!options.securePayment,revision:0,method:'delivery',address:{zip:'77833'},pickupPerson:'Test collector',reference:'Test reference'};
+ const context=vm.createContext({fast:original,submitting:false,busy:!!options.busy,active:{cartCheckout:original.cartCheckout,purchase:[item]},frame:{contentDocument:{}},proposedItems:()=>[item],updatePickupReadiness(){},warmPickupStock(){},clearFrame(){clears++;context.frame=null;},paymentWorkspace(){},presentDraft(){presented++;},seedSession(){seeds++;},refreshFast(){refresh++;return Promise.resolve();}});
+ vm.runInContext(source.slice(start,end),context);return {context,original,change(method){context.fast.method=method;context.requestFastUpdate();},counts:()=>({refresh,seeds,clears,presented})};
 }
-test('early option edits keep native blank/cart entry requests running for cart and Quick buy',()=>{
- for(const page of ['blank','cart'])for(const cartCheckout of [true,false]) { const f=fixture({page,cartCheckout});assert.equal(f.refresh,0);assert.equal(f.seeds,1); }
-});
-test('changed Quick buy baskets and later, stopped or payment stages retain full refresh protection',()=>{
- for(const options of [{changedBasket:true,cartCheckout:false},{page:'details'},{stopped:true},{ready:true},{securePayment:true}]) {
-  const f=fixture(options);assert.equal(f.refresh,1);assert.equal(f.seeds,0);
+test('rapid method edits preserve the latest draft without restarting native checkout',()=>{
+ for(const cartCheckout of [true,false]) {
+  const f=fixture({cartCheckout,ready:true});for(const method of ['pickup','delivery','ship','pickup'])f.change(method);
+  assert.equal(f.context.fast.method,'pickup');assert.equal(f.context.fast.pickupPerson,'Test collector');assert.equal(f.context.fast.reference,'Test reference');assert.equal(f.context.fast.address.zip,'77833');
+  assert.notEqual(f.context.fast,f.original);assert.equal(f.context.fast.revision,4);assert.equal(f.context.fast.dirty,true);assert.equal(f.context.fast.ready,false);assert.equal(f.context.fast.review,null);
+  assert.deepEqual(f.counts(),{refresh:0,seeds:0,clears:4,presented:4});
  }
 });
-test('early edits during preflight remain queued without bypassing the busy guard',()=>{
- const f=fixture({busy:true});assert.equal(f.fast.refreshQueued,true);assert.equal(f.refresh,0);assert.equal(f.seeds,0);
+test('edits remain drafts during preflight, a stopped checkout or secure-payment navigation',()=>{
+ for(const options of [{busy:true},{stopped:true},{securePayment:true}]) {const f=fixture(options);f.change('ship');assert.equal(f.context.fast.dirty,true);assert.equal(f.counts().refresh,0);assert.equal(f.context.fast.securePayment,false);assert.equal(f.context.fast.refreshQueued,options.busy?true:undefined);}
+});
+test('the explicit draft Review click refreshes once and never submits the old order',()=>{
+ let handler,refreshes=0,submits=0;
+ const context=vm.createContext({fast:{dirty:true,ready:true},busy:false,frame:{contentDocument:{}},overlay:{querySelector:()=>({addEventListener:(name,fn)=>{handler=fn;}})},refreshFast(){refreshes++;context.busy=true;return Promise.resolve();},submitNative(){submits++;return Promise.resolve();},showError(error){throw error;}});
+ const clickStart=source.indexOf("      overlay.querySelector('[data-bn-confirm]').addEventListener('click', function () {");
+ vm.runInContext(source.slice(clickStart,source.indexOf('      loading(true);',clickStart)),context);
+ handler();handler();assert.equal(refreshes,1);assert.equal(submits,0);
 });
 test('loading timeout does not abandon an open editor or secure payment, while a stalled ordinary load remains bounded',async()=>{
  const driver=source.slice(source.indexOf('    async function driveFast('),source.indexOf('    async function submitNative('));
