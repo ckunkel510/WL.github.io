@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261030-checkout-recovery-48';
+  var BUILD = '20261030-checkout-recovery-49';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -1348,7 +1348,8 @@
       win.sessionStorage.setItem('wl_checkout_date_state_v2',JSON.stringify({ts:Date.now(),pickupDate:fast.method==='pickup'?fast.date || '':'',pickupTime:fast.pickupTime || '',pickupPerson:fast.pickupPerson || '',deliveryDate:fast.method!=='pickup'?fast.date || '':'',deliveryTime:fast.window || '',extra:[fast.notes,salesNote].filter(Boolean).join('\n')}));
       if (fast.address) {
         var billing=fast.billing ? Object.assign({},fast.billing,{stateText:STATE_NAMES[text(fast.billing.stateValue).toUpperCase()] || fast.billing.stateText}) : null;
-        win.sessionStorage.setItem('wl_checkout_address_payload', JSON.stringify(Object.assign({},fast.address,{stateText:STATE_NAMES[text(fast.address.stateValue).toUpperCase()] || fast.address.stateText,ts:Date.now(),billing:billing,preserveInvoiceContact:!guest,checkoutReference:fast.reference})));
+        var pickupBranchValue=nativeHandoff && fast.method==='pickup' && (fast.stores || []).some(function (store) { return store.value===fast.store; }) ? fast.store : '';
+        win.sessionStorage.setItem('wl_checkout_address_payload', JSON.stringify(Object.assign({},fast.address,{stateText:STATE_NAMES[text(fast.address.stateValue).toUpperCase()] || fast.address.stateText,ts:Date.now(),billing:billing,preserveInvoiceContact:!guest,checkoutReference:fast.reference,pickupBranchValue:pickupBranchValue})));
       }
     }
     function revisePurchase(wanted) {
