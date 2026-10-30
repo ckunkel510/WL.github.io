@@ -11,7 +11,7 @@ function recovery(options={}) {
   const backup={version:1,createdAt:Date.now(),email:'guest@example.invalid',items:basket,...options.backup};
   data.set(key,JSON.stringify(backup));
   const session={getItem:k=>data.get(k)||null,setItem:(k,v)=>data.set(k,String(v)),removeItem:k=>data.delete(k)};
-  const context=vm.createContext({active:null,user:'guest@example.invalid',scope:'verified-account',branch:'1',busy:false,cartEntry:false,GUEST_CART_KEY:key,lockName:'guest-lock',text:v=>String(v||'').trim(),guestCartHandoff:core.guestCartHandoff,signature:core.signature,assertExpected:core.assertExpected,nextMutation:core.nextMutation,afterMutation:core.afterMutation,
+  const context=vm.createContext({active:null,user:'guest@example.invalid',scope:'verified-account',branch:'1',busy:false,cartEntry:false,GUEST_CART_KEY:key,lockName:'guest-lock',text:v=>String(v||'').trim(),guestCartHandoff:core.guestCartHandoff,signature:core.signature,nativeCartSignature:core.nativeCartSignature,lines:core.lines,assertExpected:core.assertExpected,nextMutation:core.nextMutation,afterMutation:core.afterMutation,
     win:{sessionStorage:session,navigator:{locks:{request:async(name,opts,fn)=>fn({})}},location:{reload(){reloads++;}}},
     shell(){},loading(){},status(){},dismiss(){context.active=null;context.busy=false;},
     assertNoPendingCartOrder(){if(options.pendingOrder)throw Error('An earlier order is uncertain');},record:()=>options.quickBuy?{}:null,
@@ -28,6 +28,18 @@ test('guest signup can restore an empty native account cart with exact quantitie
 });
 test('native-preserved baskets need no cart writes or reload',async()=>{
   const f=recovery({server:basket});assert.equal(await f.run(),false);assert.deepEqual(f.writes,[]);assert.equal(f.data.has(key),false);
+});
+const palletBasket=[{pid:'22444',code:'ASC',unit:'bag',quantity:30,name:'Concrete'},{pid:'23297',code:'EPALLETS',unit:'ea',quantity:1,name:'Pallet'}];
+test('a retained guest pallet basket is verified without compact writes and its handoff is cleared',async()=>{
+  const f=recovery({server:palletBasket,backup:{items:palletBasket}});assert.equal(await f.run(),false);assert.deepEqual(f.writes,[]);assert.equal(f.data.has(key),false);
+});
+test('changed or lost guest pallet baskets retain their backup and never enter compact mutations',async()=>{
+  for(const server of [[],palletBasket.slice(0,1),[{...palletBasket[0],quantity:29},palletBasket[1]]]) {
+    const f=recovery({server,backup:{items:palletBasket}});await assert.rejects(f.run(),/guest pallet cart differs/);assert.deepEqual(f.writes,[]);assert.equal(f.data.has(key),true);
+  }
+});
+test('guest pallet verification cannot bypass account, recovery or uncertain-order checks',async()=>{
+  for(const option of ['identityFailure','quickBuy','pendingOrder']) {const f=recovery({server:palletBasket,backup:{items:palletBasket},[option]:true});await assert.rejects(f.run());assert.deepEqual(f.writes,[]);assert.equal(f.data.has(key),true);}
 });
 test('an existing different customer cart and a changed server identity prohibit recovery writes',async()=>{
   for(const options of [{server:[basket[0]]},{identityFailure:true},{pendingOrder:true},{quickBuy:true},{backup:{scope:'another-account',current:[]}}]) {

@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261030-checkout-recovery-52';
+  var BUILD = '20261030-checkout-recovery-53';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -236,13 +236,13 @@
     try { value=JSON.parse(raw); } catch (_) { throw new Error('The guest cart backup could not be read. No cart changes were made.'); }
     if (text(value?.email).toLowerCase()!==user) return null;
     if (value?.version!==1 || !Number.isFinite(value.createdAt) || now<value.createdAt || now-value.createdAt>3600000) throw new Error('The guest cart backup has expired. No cart changes were made.');
-    value.items=lines(value.items);
+    value.items=nativeCartLines(value.items);
     if (!value.items.length) throw new Error('The guest cart backup is empty. No cart changes were made.');
-    if (value.current) value.current=lines(value.current);
+    if (value.current) value.current=nativeCartLines(value.current);
     if (value.pending && (typeof value.pending.before!=='string' || typeof value.pending.after!=='string')) throw new Error('The guest cart recovery needs review.');
     return value;
   }
-  function lines(value) {
+  function nativeCartLines(value) {
     if (!Array.isArray(value) || value.length > 60) throw new Error('This cart needs regular checkout.');
     var seen = new Set();
     return value.map(function (row) {
@@ -250,14 +250,23 @@
       if (!/^\d+$/.test(item.pid) || seen.has(item.pid) || !Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.quantity > 9999) {
         throw new Error('This cart has a quantity or configuration that needs regular checkout.');
       }
-      if (/epallet|e-pallet|wdoor/i.test(item.code)) throw new Error('Pallet and configured orders need regular checkout with compact checkout.');
-      if (PALLET_PRODUCTS.has(item.pid)) throw new Error('Pallet-handling products need regular checkout with compact checkout.');
+      if (/wdoor/i.test(item.code)) throw new Error('Pallet and configured orders need regular checkout with compact checkout.');
       seen.add(item.pid);
       return item;
     });
   }
+  function lines(value) {
+    return nativeCartLines(value).map(function (item) {
+      if (/epallet|e-pallet/i.test(item.code)) throw new Error('Pallet and configured orders need regular checkout with compact checkout.');
+      if (PALLET_PRODUCTS.has(item.pid)) throw new Error('Pallet-handling products need regular checkout with compact checkout.');
+      return item;
+    });
+  }
+  function nativeCartSignature(value) {
+    return JSON.stringify(nativeCartLines(value).map(function (row) { return [row.pid, row.quantity, row.code.toUpperCase(), row.unit]; }).sort(function (a, b) { return a[0].localeCompare(b[0]); }));
+  }
   function signature(value) {
-    return JSON.stringify(lines(value).map(function (row) { return [row.pid, row.quantity, row.code.toUpperCase(), row.unit]; }).sort(function (a, b) { return a[0].localeCompare(b[0]); }));
+    return nativeCartSignature(lines(value));
   }
   function plan(original, primary, selected) {
     var before = lines(original), purchase = lines([primary]), chosen = new Set((selected || []).map(String));
@@ -775,7 +784,7 @@
         }).catch(reject);
       });
     }
-    function cartFromDocument(page) {
+    function cartFromDocument(page, nativePalletRead) {
       if (!signedIn(page)) throw new Error('WebTrack sign-in expired. Sign back in before recovering your cart.');
       var rows = Array.from(page.querySelectorAll('.shopping-cart-item')).filter(function (row) {
         return !!row.querySelector('input.riTextBox,input[id*="_qty_"]:not([type="hidden"]),a[href*="pid="]');
@@ -797,9 +806,9 @@
         if (!unit) throw new Error('The cart unit could not be verified. Please use regular checkout.');
         return { pid: pidOf(link.getAttribute('href')), code: text(code.textContent), quantity: Number(quantity.value), unit: unit, name: text(row.querySelector('[data-title="Description"],.description,.ProductDescription,.cart-item-card p.small,.cart-item-card p.text-secondary')?.textContent || link.parentElement?.nextElementSibling?.textContent || code.textContent) };
       });
-      return { doc: page, items: lines(parsed), rows: rows };
+      return { doc: page, items: nativePalletRead ? nativeCartLines(parsed) : lines(parsed), rows: rows };
     }
-    async function cart() { return cartFromDocument(await fetchDocument('/ShoppingCart.aspx')); }
+    async function cart(nativePalletRead) { return cartFromDocument(await fetchDocument('/ShoppingCart.aspx'),nativePalletRead); }
     function formBody(page) {
       var form = page.querySelector('form');
       if (!form) throw new Error('The native WebTrack form is missing.');
@@ -910,8 +919,12 @@
         if (!lock) throw new Error('Guest cart recovery is active in another tab. Finish there first.');
         assertNoPendingCartOrder();
         if (record()) throw new Error('Recover the earlier Quick buy cart before restoring this guest cart.');
-        var checks=await Promise.all([checkIdentity(),cart()]), before=checks[1];
-        if (signature(before.items)===signature(backup.items)) { win.sessionStorage.removeItem(GUEST_CART_KEY); return; }
+        var checks=await Promise.all([checkIdentity(),cart(true)]), before=checks[1];
+        // A retained native pallet basket needs verification only. Never send
+        // it through the compact mutation/recovery engine just to compare it.
+        if (nativeCartSignature(before.items)===nativeCartSignature(backup.items)) { win.sessionStorage.removeItem(GUEST_CART_KEY); return; }
+        try { lines(backup.items); lines(before.items); }
+        catch (_) { throw new Error('Your guest pallet cart differs from its backup. No items were changed. Review the current cart before continuing with standard checkout.'); }
         if (backup.scope && backup.scope!==scope) throw new Error('The guest cart account changed. Your existing cart has not been changed.');
         if (!backup.current && before.items.length) throw new Error('Your signed-in cart differs from the guest cart. Both have been retained; review the cart before continuing.');
         // An interrupted add can resume only from its exact recorded state.
@@ -2201,5 +2214,5 @@
       if (latest && latest.owner !== owner) { busy = true; clearFrame(); status('Buy now is active in another tab. Cart changes have stopped here.', true); }
     });
   }
-  return { pickupPersonName:pickupPersonName, applyPickupSelection:applyPickupSelection, guestCartHandoff:guestCartHandoff, listedSalesDetails:listedSalesDetails, salesAddressPage:salesAddressPage, allSalesAddresses:allSalesAddresses, savedSalesAddresses:savedSalesAddresses, salesAddressLabel:salesAddressLabel, matchingSalesAddresses:matchingSalesAddresses, savedSalesDetails:savedSalesDetails, assertSalesReview:assertSalesReview, relayControl:relayControl, nativeFormsReady:nativeFormsReady, continueNativeCart:continueNativeCart, pickupStoreName:pickupStoreName, centralCalendar:centralCalendar, calendarAfter:calendarAfter, pickupTimeChoices:pickupTimeChoices, stockFromDocument:stockFromDocument, pickupReadiness:pickupReadiness, boot: boot, build: BUILD, audience: AUDIENCE, deliveryAddressSummary:deliveryAddressSummary, nativeStateOption:nativeStateOption, accountScopeInput:accountScopeInput, guestContext:guestContext, guestStartPending:guestStartPending, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, nativeOrderNumber: nativeOrderNumber, cartOrderReceipt: cartOrderReceipt, readCartOrderReceipt: readCartOrderReceipt, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, cartPolicyReady: cartPolicyReady, hasCustomCuts: hasCustomCuts, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, paymentTotals: paymentTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, hydrateMatchingAddressState: hydrateMatchingAddressState, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
+  return { nativeCartLines:nativeCartLines, nativeCartSignature:nativeCartSignature, pickupPersonName:pickupPersonName, applyPickupSelection:applyPickupSelection, guestCartHandoff:guestCartHandoff, listedSalesDetails:listedSalesDetails, salesAddressPage:salesAddressPage, allSalesAddresses:allSalesAddresses, savedSalesAddresses:savedSalesAddresses, salesAddressLabel:salesAddressLabel, matchingSalesAddresses:matchingSalesAddresses, savedSalesDetails:savedSalesDetails, assertSalesReview:assertSalesReview, relayControl:relayControl, nativeFormsReady:nativeFormsReady, continueNativeCart:continueNativeCart, pickupStoreName:pickupStoreName, centralCalendar:centralCalendar, calendarAfter:calendarAfter, pickupTimeChoices:pickupTimeChoices, stockFromDocument:stockFromDocument, pickupReadiness:pickupReadiness, boot: boot, build: BUILD, audience: AUDIENCE, deliveryAddressSummary:deliveryAddressSummary, nativeStateOption:nativeStateOption, accountScopeInput:accountScopeInput, guestContext:guestContext, guestStartPending:guestStartPending, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, nativeOrderNumber: nativeOrderNumber, cartOrderReceipt: cartOrderReceipt, readCartOrderReceipt: readCartOrderReceipt, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, cartPolicyReady: cartPolicyReady, hasCustomCuts: hasCustomCuts, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, paymentTotals: paymentTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, hydrateMatchingAddressState: hydrateMatchingAddressState, quoteForCart: quoteForCart, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
 });
