@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20261030-native-checkout-recovery-5";
+  window.WL_CHECKOUT_BUILD = "20261030-native-checkout-recovery-6";
   document.documentElement?.setAttribute?.('data-wl-checkout-build',window.WL_CHECKOUT_BUILD);
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
@@ -148,6 +148,7 @@
   const FULFILLMENT_CONFIRMATION_KEY = "wl_confirmed_fulfillment_v1";
   const CHECKOUT_ADDRESS_PAYLOAD_KEY = "wl_checkout_address_payload";
   const CHECKOUT_CONTACT_PAYLOAD_KEY = "wl_checkout_contact_payload";
+  const PICKUP_BRANCH_HANDOFF_KEY = "wl_pickup_branch_handoff_v1";
   const CONTACT_RETURN_KEY = "wl_contact_return_path";
   const WL_EPALLET_SNAPSHOT_KEY = "wl_epallet_cart_snapshot_v1";
   const WL_EPALLET_RETURN_KEY = "wl_epallet_checkout_return_v1";
@@ -756,6 +757,32 @@
     try { sessionStorage.removeItem(key); } catch {}
   }
 
+  function readPickupBranchHandoff() {
+    const value=readSessionJson(PICKUP_BRANCH_HANDOFF_KEY),age=Date.now()-value?.ts;
+    if (!value || value.version!==1 || !cleanText(value.value) || !Number.isFinite(value.ts) || age<0 || age>=300000) {
+      removeSessionKey(PICKUP_BRANCH_HANDOFF_KEY);return null;
+    }
+    return value;
+  }
+
+  function preparePickupBranchChoice(select) {
+    const pending=readPickupBranchHandoff();
+    if (!pending || !getPickupSelected() || !select) return null;
+    // Native fulfillment postbacks can reset the branch. Require the shopper's
+    // native branch action after Pickup, rather than accepting that default.
+    select.value='';
+    document.documentElement?.setAttribute?.('data-wl-pickup-branch-handoff','confirmation_required');
+    return pending;
+  }
+
+  function confirmPickupBranchChoice(select) {
+    const value=cleanText(select?.value);
+    if (!value || value==='0' || !Array.from(select?.options || []).some(option=>cleanText(option.value)===value)) return false;
+    removeSessionKey(PICKUP_BRANCH_HANDOFF_KEY);
+    document.documentElement?.setAttribute?.('data-wl-pickup-branch-handoff','confirmed');
+    return true;
+  }
+
   function applyCheckoutContactPayload(payload, options) {
     if (!payload) return false;
     options = options || {};
@@ -784,12 +811,9 @@
   function applyCheckoutAddressPayload(payload) {
     if (!payload) return false;
     let applied = false;
-    const branch = document.getElementById("ctl00_PageBody_BranchDropDownList");
-    const branchOption = payload.pickupBranchValue && Array.from(branch?.options || []).find(option => cleanText(option.value)===cleanText(payload.pickupBranchValue));
-    const branchChanged = !!branchOption && branch.value!==branchOption.value;
-    // Select only a real native option. Set it before other change handlers can
-    // serialize the form, then refresh through the native branch event last.
-    if (branchChanged) { branch.value=branchOption.value; applied=true; }
+    if (cleanText(payload.pickupBranchValue)) {
+      try { sessionStorage.setItem(PICKUP_BRANCH_HANDOFF_KEY,JSON.stringify({version:1,ts:Date.now(),value:cleanText(payload.pickupBranchValue)})); } catch {}
+    }
     applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_DeliveryAddress_AddressLine1"), payload.line1, true) || applied;
     applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_DeliveryAddress_AddressLine2"), payload.line2, true) || applied;
     applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_DeliveryAddress_AddressLine3"), payload.line3, true) || applied;
@@ -820,7 +844,6 @@
       applied = true;
     }
     if (payload.checkoutReference !== undefined) applied = setCheckoutValueIfPresent(document.getElementById("ctl00_PageBody_PurchaseOrderNumberTextBox"),payload.checkoutReference,true) || applied;
-    if (branchChanged) { try { branch.dispatchEvent(new Event("change",{bubbles:true})); } catch {} }
 
     try { sessionStorage.setItem("wl_returnStep", "3"); } catch {}
     try { window.WLCheckout?.refreshSectionSummaries?.(); } catch {}
@@ -1026,6 +1049,7 @@
 
     function isBranchChosen(field) {
       if (!field) return false;
+      if (getPickupSelected() && readPickupBranchHandoff()) return false;
       const v = norm(field.value);
       if (!v || v === "0") return false;
 
@@ -1091,6 +1115,11 @@
 
       const sel = document.getElementById("ctl00_PageBody_BranchDropDownList") || getBranchField();
       if (!sel || sel.tagName !== "SELECT") return;
+      const pendingBranch=preparePickupBranchChoice(sel);
+      if (!sel.dataset.wlBranchConfirmationBound) {
+        sel.dataset.wlBranchConfirmationBound='1';
+        sel.addEventListener('change',function (event) { if (event.isTrusted) confirmPickupBranchChoice(sel); },true);
+      }
 
       try {
         const label = sel.closest(".epi-form-group-checkout")?.querySelector("label");
@@ -1138,8 +1167,10 @@
       const selectedValue = norm(sel.value);
       const current = opts.find(o => o.value === selectedValue) || null;
       const choices = current ? opts.filter(o => o.value !== current.value) : opts;
+      const previousBranch=pendingBranch && opts.find(option=>option.value===pendingBranch.value);
 
       wrap.innerHTML = `
+        ${pendingBranch ? `<p class="wl-branch-confirmation">${previousBranch ? `Pickup was previously set to ${wlHtml(previousBranch.name)}. ` : ''}Please confirm your pickup store below.</p>` : ''}
         <div class="wl-branch-selected">
           <div class="wl-branch-selected-title">Pickup branch</div>
           ${current ? `
@@ -1176,6 +1207,7 @@
           try {
             Array.from(sel.options).forEach(o => { o.selected = (norm(o.value) === v); });
           } catch {}
+          if (!confirmPickupBranchChoice(sel)) return;
           try { localStorage.setItem("wl_last_branch", v); } catch {}
 
           try { enhanceBranchPicker(); } catch {}
