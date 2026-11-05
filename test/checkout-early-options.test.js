@@ -4,7 +4,7 @@ const source=fs.readFileSync(require.resolve('../BuyNowPilot'),'utf8'),start=sou
 function fixture(options={}) {
  let refresh=0,seeds=0,clears=0,presented=0;const item={pid:'85',code:'0001363',quantity:1,unit:'ea'};
  const original={cartCheckout:options.cartCheckout!==false,ready:!!options.ready,stopped:!!options.stopped,securePayment:!!options.securePayment,revision:0,method:'delivery',address:{zip:'77833'},pickupPerson:'Test collector',reference:'Test reference'};
- const context=vm.createContext({fast:original,submitting:false,busy:!!options.busy,active:{cartCheckout:original.cartCheckout,purchase:[item]},frame:{contentDocument:{}},proposedItems:()=>[item],updatePickupReadiness(){},warmPickupStock(){},clearFrame(){clears++;context.frame=null;},paymentWorkspace(){},presentDraft(){presented++;},seedSession(){seeds++;},refreshFast(){refresh++;return Promise.resolve();}});
+ const context=vm.createContext({fast:original,submitting:false,busy:!!options.busy,active:{cartCheckout:original.cartCheckout,purchase:[item]},frame:{contentDocument:{}},proposedItems:()=>[item],keepCartDraft(){},updatePickupReadiness(){},warmPickupStock(){},clearFrame(){clears++;context.frame=null;},paymentWorkspace(){},presentDraft(){presented++;},seedSession(){seeds++;},refreshFast(){refresh++;return Promise.resolve();}});
  vm.runInContext(source.slice(start,end),context);return {context,original,change(method){context.fast.method=method;context.requestFastUpdate();},counts:()=>({refresh,seeds,clears,presented})};
 }
 test('rapid method edits preserve the latest draft without restarting native checkout',()=>{

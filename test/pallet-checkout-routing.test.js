@@ -23,7 +23,7 @@ function start(options={}) {
     doc:{},win:{sessionStorage:{getItem:k=>k==='wl_fulfillment_intent'?'pickup':k==='wl_fulfillment_selection_source_v1'?'user':null},crypto:{randomUUID:()=> 'test'}},
     withLock:async fn=>fn(),shell(){calls.push('compact');context.overlay={querySelector:()=>({})};},showPreview(){},loading(){},status(){},record:()=>options.recovery?{}:null,
     assertNoPendingCartOrder(){if(options.uncertain)throw Error('uncertain');},cartFromDocument:(doc,allow)=>{assert.equal(allow,true);return {items:pallet};},
-    newFast:opts=>({...opts,dirty:false}),renderFast(){},updatePickupReadiness(){},updateFastOptions(){},seedSession(){},warmPickupStock(){},
+    cartDraft:()=>({}),newFast:opts=>({...opts,stores:[{value:'1'}],dirty:false}),renderFast(){},updatePickupReadiness(){},updateFastOptions(){},seedSession(){},warmPickupStock(){},
     openFrame(){calls.push('frame');context.frame={contentDocument:null};},
     cart:async allow=>{assert.equal(allow,true);calls.push('verify cart');return {items:options.changed?[pallet[0]]:pallet};},
     checkIdentity:async()=>{calls.push('identity');if(options.identity)throw Error('identity');},purchaseRestrictions:async()=>new Set(options.blocked?['22444']:[]),

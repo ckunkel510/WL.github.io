@@ -17,7 +17,7 @@ test('an active compact timeout offers retry while uncertain orders and pending 
     const actions=[],messages=[];
     const context=vm.createContext({fast:{securePayment:mode==='secure-payment',paymentAuthorizing:mode==='payment-authorizing'},busy:true,cartEntry:true,submitting:mode==='uncertain',active:{cartCheckout:true,phase:mode==='uncertain'?'uncertain':'checking_out',pending:mode==='pending-write'?{}:null},
       overlay:{querySelector:selector=>selector==='[data-bn-body]'?{appendChild:button=>actions.push(button.label)}:null},storage:{},cartOrderKey:'guard',
-      measureCheckout(){},status:message=>messages.push(message),loading(){},readCartOrderReceipt:()=>mode==='receipt'?{phase:'confirmed'}:null,
+      measureCheckout(){},recoverStandard:()=>false,status:message=>messages.push(message),loading(){},readCartOrderReceipt:()=>mode==='receipt'?{phase:'confirmed'}:null,
       button:(label,handler)=>({label,handler,dataset:{}})});
     vm.runInContext(section('    function showError(','    function showRestoreButton('),context);
     context.showError(Object.assign(new Error('signal is aborted without reason'),{name:'AbortError'}));
