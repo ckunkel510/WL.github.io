@@ -18,3 +18,7 @@ Automatic handoff does not leave an isolated Quick buy basket, an in-progress ho
 Validation: 571 automated tests pass, including blank/unavailable/detached frames, stale rejections, single recovery, Back during pending work, changed identities/baskets, a new uncertain receipt during handoff, session-draft isolation/expiry, and UPS speed changes. Syntax and whitespace checks pass. Synthetic Chrome testing reproduced a blank native entry and reached standard checkout automatically; browser Back and forward re-entry stayed on standard checkout with zero orders and zero cart writes. Live publication and verification are recorded in the project checkpoint.
 
 Rollback: revert the release commit (runtime, loader version and related tests) to the preceding build. No shipping-service or native final-submission code changed.
+
+## Native Back follow-up
+
+Live recovery testing found that consolidated standard checkout's Back button changed its selected step but left the destination section collapsed. `Checkout2.js` build `20261105-native-back-navigation-7` opens that selected section through the existing section editor. Ordinary wizard navigation remains unchanged. Two regressions cover collapsed billing and the ordinary wizard; the full suite passes 573 tests. The compact module remains build60.
