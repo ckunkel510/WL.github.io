@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20261030-native-checkout-recovery-6";
+  window.WL_CHECKOUT_BUILD = "20261105-native-back-navigation-7";
   document.documentElement?.setAttribute?.('data-wl-checkout-build',window.WL_CHECKOUT_BUILD);
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
@@ -1999,6 +1999,7 @@ const navDiv = document.createElement("div");
         back.addEventListener("click", (e) => {
           e.preventDefault();
           showStep(num - 1);
+          if (singlePageCheckout) window.WLCheckout?.openSection?.(getStep());
         });
         navDiv.appendChild(back);
       }
@@ -4925,6 +4926,7 @@ document.addEventListener("click", function (ev) {
       window.WLCheckout = window.WLCheckout || {};
       window.WLCheckout.refreshSectionSummaries = refreshSectionSummaries;
       window.WLCheckout.openFirstIncompleteSection = openFirstIncompleteSection;
+      window.WLCheckout.openSection = openSection;
 
       window.setTimeout(function () {
         refreshSectionSummaries();
