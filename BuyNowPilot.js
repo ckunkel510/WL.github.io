@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261104-unavailable-delivery-59';
+  var BUILD = '20261105-checkout-recovery-60';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -624,6 +624,7 @@
     }
     var branch = text(settings.getElementById('ctl00_PageBody_ChangeUserDetailsControl_ddBranch')?.value);
     var key = PREFIX + scope, preferenceKey = PREFIX + 'payment:' + scope, cartOrderKey = PREFIX + 'cart-order:' + scope;
+    var draftKey = PREFIX + 'cart-draft:' + scope, standardKey = PREFIX + 'native:' + scope;
     var blocked = initial[2];
     var owner = win.crypto.randomUUID(), active = null, overlay = null, frame = null, releaseLock = null;
     var previousFocus = null, previousOverflow = '', busy = false, submitting = false, cancelPending = false, frameObserver = null, frameTimer = null, framePulse = null, frameReadyTimer = null, installedPage = null, permittedFinal = null, fast = null, cartEntry = false, bypassCartEntry = false;
@@ -633,6 +634,41 @@
     doc.documentElement.dataset.wlBuyNowBuild = BUILD;
     doc.documentElement.dataset.wlCompactCheckoutMode = guest ? 'guest' : 'signed-in';
     var detailsQuotes = new WeakMap();
+
+    function keepCartDraft() {
+      if (!active?.cartCheckout || !fast || active.phase!=='checking_out' || submitting) return;
+      var options={};
+      ['address','billing','addressChanged','billingChanged','salesSelection','method','store','pickupPerson','date','pickupTime','window','notes','reference','shippingValue'].forEach(function (name) { if (fast[name]!==undefined) options[name]=fast[name]; });
+      // Same-account, same-basket session draft only; never retain payment state.
+      try { win.sessionStorage.setItem(draftKey,JSON.stringify({version:1,ts:Date.now(),signature:nativeCartSignature(active.current),options:options})); } catch (_) {}
+    }
+    function cartDraft(items) {
+      try {
+        var draft=JSON.parse(win.sessionStorage.getItem(draftKey) || 'null');
+        if (!draft || draft.version!==1 || !Number.isFinite(draft.ts) || Date.now()<draft.ts || Date.now()-draft.ts>1800000 || draft.signature!==nativeCartSignature(items)) { win.sessionStorage.removeItem(draftKey); return {}; }
+        var options={};
+        ['address','billing','addressChanged','billingChanged','salesSelection','method','store','pickupPerson','date','pickupTime','window','notes','reference','shippingValue'].forEach(function (name) { if (draft.options && draft.options[name]!==undefined) options[name]=draft.options[name]; });
+        if (!['pickup','delivery','ship'].includes(options.method)) options.method='';
+        return options;
+      } catch (_) { return {}; }
+    }
+    function nativeCheckoutRequested() {
+      if (doc.documentElement.dataset.wlCompactNativeOnly==='1') return true;
+      try {
+        var saved=JSON.parse(win.sessionStorage.getItem(standardKey) || 'null');
+        if (saved && saved.version===1 && saved.ts<=Date.now() && Date.now()-saved.ts<1800000) return true;
+        win.sessionStorage.removeItem(standardKey);
+      } catch (_) {}
+      return false;
+    }
+    function recoverStandard(errorCode) {
+      // Never redirect a hosted payment, pending cart mutation, or uncertain order.
+      if (!cartEntry || !active?.cartCheckout || active.phase!=='checking_out' || active.pending || submitting || !fast || fast.standardRecoveryAttempted || fast.editor || fast.dirty || fast.securePayment || fast.paymentAuthorizing || fast.paymentApproval || cancelPending) return false;
+      fast.standardRecoveryAttempted=true;
+      measureCheckout('error',null,null,null,errorCode || 'compact_recovery');
+      standardCheckout();
+      return true;
+    }
 
     async function purchaseRestrictions() {
       var controller = new win.AbortController(), timer = win.setTimeout(function () { controller.abort(); }, 15000);
@@ -751,11 +787,13 @@
       body.replaceChildren(row,skeleton);
     }
     function showError(error) {
+      if (!overlay) return;
       measureCheckout('error');
       if (fast) { fast.ready = false; fast.stopped = true; }
       status(error?.name==='AbortError' || /signal.*abort/i.test(error?.message || '') ? 'WebTrack took too long to respond. Your selections are kept. Try compact checkout again.' : error && error.message || 'Buy now stopped. Your recovery copy is retained.', true);
       busy = false;
       if (fast && overlay) loading(false);
+      if (recoverStandard('compact_request_failed')) return;
       if (active && !active.cartCheckout && !['submitting', 'uncertain'].includes(active.phase)) showRestoreButton();
       var receipt;
       try { receipt=readCartOrderReceipt(storage,cartOrderKey); } catch (_) { receipt={}; }
@@ -949,10 +987,10 @@
       if (submitting || active && ['submitting', 'uncertain'].includes(active.phase)) {
         status('The order result must be checked before restoring the cart. Do not submit the order again.', true); return;
       }
-      if (busy) { cancelPending = true; status(cartEntry ? 'Returning to your cart…' : 'Finishing this change, then restoring your cart…'); return; }
+      if (busy) { cancelPending = true; if (active?.cartCheckout) clearFrame(); status(cartEntry ? 'Returning to your cart…' : 'Finishing this change, then restoring your cart…'); return; }
       if (!active) { dismiss(); return; }
       if (fast?.editor) closeEditor();
-      if (active.cartCheckout) { measureCheckout('cancel'); dismiss(); win.location.reload(); return; }
+      if (active.cartCheckout) { keepCartDraft(); measureCheckout('cancel'); dismiss(); win.location.reload(); return; }
       busy = true; clearFrame();
       var wanted = recoveryTarget(active);
       active.phase = 'restoring'; save(); loading(true); status('Restoring your cart…');
@@ -964,19 +1002,30 @@
     }
     async function standardCheckout() {
       if (!cartEntry || submitting || busy || active && ['submitting','uncertain','confirmed'].includes(active.phase)) return;
-      busy=true; clearFrame(); loading(true); status('Opening checkout…');
+      var attempt=active, current=fast;
+      busy=true; keepCartDraft(); clearFrame(); loading(true); status('Opening standard checkout…');
       try {
         assertNoPendingCartOrder();
         var checks=await Promise.all([checkIdentity(),cart(true)]);
+        if (active!==attempt || !overlay) return;
+        if (cancelPending) { busy=false; cancelPending=false; await cancel(); return; }
+        if (fast!==current || fast?.editor) { busy=false; presentDraft(); return; }
         if (active && nativeCartSignature(checks[1].items)!==nativeCartSignature(active.current)) throw new Error('Your cart changed. Return to the cart and review your items.');
         var native=doc.getElementById('ctl00_PageBody_PlaceOrderButton');
         if (!native || native.disabled) throw new Error('Checkout is unavailable. Return to the cart and try again.');
+        assertNoPendingCartOrder();
+        // A late pilot bootstrap or browser Back must not intercept this handoff.
+        win.sessionStorage.setItem(standardKey,JSON.stringify({version:1,ts:Date.now()}));
+        doc.documentElement.dataset.wlCompactNativeOnly='1';
         // Native cart listeners reset old wizard drafts during this click. Seed
         // the verified current selection afterwards, before the next page loads.
         bypassCartEntry=true;
         try { native.click(); seedSession(true); } finally { bypassCartEntry=false; }
         dismiss();
-      } catch (error) { busy=false; showError(error); }
+      } catch (error) {
+        if (active!==attempt || !overlay) return;
+        busy=false; if (fast) fast.standardRecoveryAttempted=true; showError(error);
+      }
     }
     function notice(message) {
       var el = doc.createElement('div'); el.className = 'bn-notice'; el.setAttribute('role', 'status'); el.textContent = message;
@@ -1084,6 +1133,7 @@
       // Replacing the revision makes late reads/quotes harmless. Keep the form
       // usable and apply all choices together on the next explicit Review click.
       clearFrame(); paymentWorkspace(false);
+      keepCartDraft();
       updatePickupReadiness(); warmPickupStock(proposedItems()); presentDraft();
     }
     function editableFast(kind) {
@@ -1128,7 +1178,7 @@
       try { quote=readPaymentTotal(page); } catch (error) {
         fast.paymentQuote=null; paymentWorkspace(false); loading(true); status('Confirming shipping and tax…');
         if (!page.documentElement.dataset.bnTotalWaiting) page.documentElement.dataset.bnTotalWaiting=String(Date.now());
-        if (Date.now()-Number(page.documentElement.dataset.bnTotalWaiting)>5000) haltFast('Your total could not be confirmed before payment. Please use standard checkout.');
+        if (Date.now()-Number(page.documentElement.dataset.bnTotalWaiting)>5000) haltFast('Your total could not be confirmed before payment. Please use standard checkout.','payment_total_unconfirmed');
         return false;
       }
       delete page.documentElement.dataset.bnTotalWaiting;
@@ -1378,22 +1428,24 @@
       } catch (failure) { if (live()) { notice.textContent=''; error.textContent=failure.message; } }
     }
 
-    function seedSession(nativeHandoff) {
+    function seedSession(nativeHandoff, options) {
+      var selected=options || fast;
+      if (!selected) return;
       SESSION_KEYS.forEach(function (name) { win.sessionStorage.removeItem(name); });
       win.sessionStorage.setItem('wl_checkout_single_page_preview','1');
       // A remembered intent only styles the native choice; it does not activate
       // WebTrack's radio/postback. Recovery must reopen that explicit choice.
-      if (!nativeHandoff && ['pickup','delivery','ship'].includes(fast.method)) {
-        win.sessionStorage.setItem('wl_fulfillment_intent',fast.method);
-        win.sessionStorage.setItem('wl_fulfillment_method',fast.method);
+      if (!nativeHandoff && ['pickup','delivery','ship'].includes(selected.method)) {
+        win.sessionStorage.setItem('wl_fulfillment_intent',selected.method);
+        win.sessionStorage.setItem('wl_fulfillment_method',selected.method);
         win.sessionStorage.setItem('wl_fulfillment_selection_source_v1','user');
       }
-      var salesNote=fast.salesSelection && fast.salesSelection.id!=='main' ? 'Sales / job address: '+fast.salesSelection.code+(fast.salesSelection.jobReference ? ' | Job ref: '+fast.salesSelection.jobReference : '') : '';
-      win.sessionStorage.setItem('wl_checkout_date_state_v2',JSON.stringify({ts:Date.now(),pickupDate:fast.method==='pickup'?fast.date || '':'',pickupTime:fast.pickupTime || '',pickupPerson:pickupPersonName(fast),deliveryDate:fast.method!=='pickup'?fast.date || '':'',deliveryTime:fast.window || '',extra:[fast.notes,salesNote].filter(Boolean).join('\n')}));
-      if (fast.address) {
-        var billing=fast.billing ? Object.assign({},fast.billing,{stateText:STATE_NAMES[text(fast.billing.stateValue).toUpperCase()] || fast.billing.stateText}) : null;
-        var pickupBranchValue=nativeHandoff && fast.method==='pickup' && (fast.stores || []).some(function (store) { return store.value===fast.store; }) ? fast.store : '';
-        win.sessionStorage.setItem('wl_checkout_address_payload', JSON.stringify(Object.assign({},fast.address,{stateText:STATE_NAMES[text(fast.address.stateValue).toUpperCase()] || fast.address.stateText,ts:Date.now(),billing:billing,preserveInvoiceContact:!guest,checkoutReference:fast.reference,pickupBranchValue:pickupBranchValue})));
+      var salesNote=selected.salesSelection && selected.salesSelection.id!=='main' ? 'Sales / job address: '+selected.salesSelection.code+(selected.salesSelection.jobReference ? ' | Job ref: '+selected.salesSelection.jobReference : '') : '';
+      win.sessionStorage.setItem('wl_checkout_date_state_v2',JSON.stringify({ts:Date.now(),pickupDate:selected.method==='pickup'?selected.date || '':'',pickupTime:selected.pickupTime || '',pickupPerson:pickupPersonName(selected),deliveryDate:selected.method!=='pickup'?selected.date || '':'',deliveryTime:selected.window || '',extra:[selected.notes,salesNote].filter(Boolean).join('\n')}));
+      if (selected.address) {
+        var billing=selected.billing ? Object.assign({},selected.billing,{stateText:STATE_NAMES[text(selected.billing.stateValue).toUpperCase()] || selected.billing.stateText}) : null;
+        var pickupBranchValue=nativeHandoff && selected.method==='pickup' && (selected.stores || []).some(function (store) { return store.value===selected.store; }) ? selected.store : '';
+        win.sessionStorage.setItem('wl_checkout_address_payload', JSON.stringify(Object.assign({},selected.address,{stateText:STATE_NAMES[text(selected.address.stateValue).toUpperCase()] || selected.address.stateText,ts:Date.now(),billing:billing,preserveInvoiceContact:!guest,checkoutReference:selected.reference,pickupBranchValue:pickupBranchValue})));
       }
     }
     function revisePurchase(wanted) {
@@ -1448,22 +1500,27 @@
     }
     async function startCart() {
       if (!ENABLE_CART_CHECKOUT || overlay || busy) return;
-      await withLock(async function () {
+      var entryOverlay=null;
+      try { await withLock(async function () {
         cartEntry=true; busy=true;
         var opened=Date.now(); timings={started:opened,requests:{},stages:{}};
         shell('Checkout'); showPreview({name:'Your cart'},'—'); loading(true); status('Checking your cart…');
+        entryOverlay=overlay;
         if (record()) throw new Error('Finish or restore your earlier Quick buy cart before checkout.');
         assertNoPendingCartOrder();
         var visible=cartFromDocument(doc,true);
         if (!visible.items.length) throw new Error('Your cart is empty.');
         var method=win.sessionStorage.getItem('wl_fulfillment_intent');
         if (win.sessionStorage.getItem('wl_fulfillment_selection_source_v1')!=='user' || !['pickup','delivery','ship'].includes(method)) method='';
-        fast=newFast({cartCheckout:true,method:method,opened:opened});
+        fast=newFast(Object.assign({cartCheckout:true,method:method,opened:opened},cartDraft(visible.items)));
+        if (!fast.stores.some(function (store) { return store.value===fast.store; })) fast.store=branch;
         active={cartCheckout:true,guestCheckout:!!guest,scope:scope,branch:branch,id:'CC-'+win.crypto.randomUUID(),owner:owner,phase:'checking_out',createdAt:opened,purchase:visible.items,current:visible.items};
+        var attempt=active;
         renderFast({name:'Your cart',doc:doc},visible.items[0],visible.items); updatePickupReadiness(); updateFastOptions(); status('Choose your options while we prepare checkout.');
         seedSession(); warmPickupStock(visible.items); openFrame(overlay.querySelector('[data-bn-native-host]'));
         // Read/compare only. Cart checkout never adds, removes or restores lines.
         var checks=await Promise.all([cart(true),checkIdentity(),purchaseRestrictions()]);
+        if (active!==attempt || !overlay) return;
         var before=checks[0]; blocked=checks[2];
         if (!before.items.length) throw new Error('Your cart is empty.');
         var cuts;
@@ -1471,22 +1528,36 @@
         if (hasCustomCuts(before.items,cuts)) throw new Error('Custom cutting needs standard checkout with compact checkout.');
         if (nativeCartSignature(before.items)!==nativeCartSignature(visible.items)) throw new Error('Update your cart quantities or refresh the cart before checkout.');
         if (before.items.some(function (item) { return blocked.has(item.pid); })) throw new Error('This cart needs standard checkout. Review its product restrictions first.');
-        if (cancelPending) { dismiss(); return; }
+        if (cancelPending) { keepCartDraft(); dismiss(); return; }
         active.purchase=before.items; active.current=before.items; fast.refreshQueued=false;
         seedSession(); busy=false; loading(true); measureCheckout('begin');
         if (fast.dirty) { clearFrame(); presentDraft(); return; }
         if (frame?.contentDocument) driveFast(frame.contentWindow,frame.contentDocument).catch(showError);
-      });
+      }); } catch (error) { if (!entryOverlay || overlay===entryOverlay) throw error; }
     }
     function bindCartEntry() {
       if (!ENABLE_CART_CHECKOUT || !win.navigator.locks || !/\/ShoppingCart\.aspx$/i.test(win.location.pathname)) return;
       doc.documentElement.dataset.wlCompactCartCheckout=BUILD;
       win.addEventListener('click',function (event) {
         var control=event.target?.closest?.('#ctl00_PageBody_PlaceOrderButton');
-        if (bypassCartEntry || !control || control.disabled || control.getAttribute('aria-disabled')==='true' || !doc.querySelector('.shopping-cart-item')) return;
+        if (bypassCartEntry || nativeCheckoutRequested() || !control || control.disabled || control.getAttribute('aria-disabled')==='true' || !doc.querySelector('.shopping-cart-item')) return;
         event.preventDefault(); event.stopImmediatePropagation();
         startCart().catch(function (error) { if (overlay) showError(error); else notice(error.message); });
       },true);
+      win.addEventListener('click',function (event) {
+        var control=event.target?.closest?.('#ctl00_PageBody_PlaceOrderButton');
+        if (active || bypassCartEntry || !control || control.disabled || control.getAttribute('aria-disabled')==='true' || !nativeCheckoutRequested()) return;
+        // Native cart listeners discard the prior wizard state first. Reseed
+        // the verified same-basket draft at the end of bubbling on re-entry.
+        try {
+          var options=cartDraft(cartFromDocument(doc,true).items);
+          if (options.address) {
+            var stores=Array.from(settings.getElementById('ctl00_PageBody_ChangeUserDetailsControl_ddBranch')?.options || []);
+            options.stores=stores.map(function (option) { return {value:option.value}; });
+            seedSession(true,options);
+          }
+        } catch (_) { /* Native checkout still validates the current basket. */ }
+      });
     }
     async function refreshFast() {
       if (!fast || submitting) return;
@@ -1498,6 +1569,7 @@
       if (reuse && !active.cartCheckout) reuse=signature(plan(fast.original,fast.primary,fast.selected).purchase)===signature(active.purchase);
       // New identity per revision makes old asynchronous driver work obsolete.
       fast = Object.assign({},fast,{dirty:false,ready:false,review:null,revision:fast.revision+1,started:Date.now(),opened:Date.now(),driving:false,stopped:false,securePayment:false,paymentStepSeen:false,accountBilling:false,paymentQuote:null,paymentApproval:null,paymentAuthorizing:false,paymentPricing:null,paymentOptionsOpen:false,refreshQueued:false});
+      var attempt=active;
       timings = {started:fast.opened,requests:{},stages:{}}; setStage(0); updateFastOptions();
       overlay.querySelector('[data-bn-retry]')?.remove();
       ['subtotal','shipping','tax','total'].forEach(function (key) { fastText('[data-bn-'+key+']','—'); });
@@ -1513,6 +1585,7 @@
       try {
         if (active.cartCheckout) {
           var checks=await Promise.all([checkIdentity(),cart(true)]);
+          if (active!==attempt || !overlay) return;
           if (nativeCartSignature(checks[1].items)!==nativeCartSignature(active.current)) throw new Error('Your cart changed. Return to the cart and review it before checkout.');
           active.phase='checking_out'; seedSession(); busy=false;
           if (cancelPending) { cancelPending=false; await cancel(); return; }
@@ -1529,30 +1602,56 @@
         if (fast.refreshQueued) { fast.refreshQueued = false; await refreshFast(); return; }
         fastText('[data-bn-extras]',fast.selected.length ? fast.selected.length+' cart item'+(fast.selected.length===1?'':'s')+' included' : 'Also in your cart ('+fast.original.length+')');
         openFrame(overlay.querySelector('[data-bn-native-host]'));
-      } catch (error) { busy=false; if (fast?.dirty) { presentDraft(); return; } throw error; }
+      } catch (error) { if (active!==attempt || !overlay) return; busy=false; if (fast?.dirty) { presentDraft(); return; } throw error; }
     }
     function openFrame(body) {
-      var opened=Date.now(), nativeEntered=false;
+      var opened=Date.now(), nativeEntered=false, retried=false, lastPage=null, progressed=opened;
       frame = doc.createElement('iframe'); frame.title = 'Secure WebTrack checkout'; frame.className = 'bn-frame'; frame.name = 'woodson-buy-now-checkout'; frame.loading = 'eager';
+      var ownedFrame=frame;
+      function current() { return frame===ownedFrame && !!active && !!fast && !fast.stopped; }
+      function install() {
+        var revision=fast;
+        installFrame().catch(function (error) { if (current() && fast===revision) showError(error); });
+      }
       frame.setAttribute('aria-hidden','true'); frame.setAttribute('tabindex','-1');
-      frame.addEventListener('load', function () { installFrame().catch(showError); });
+      frame.addEventListener('load', function () {
+        if (!current()) return;
+        var page;
+        try { page=ownedFrame.contentDocument; } catch (_) {}
+        // A newly attached iframe can fire its initial empty-document load.
+        // It is not WebTrack, a payment redirect, or a completed checkout step.
+        if (page?.URL==='about:blank') return;
+        install();
+      });
       // A fresh native document is required for current WebForms state/cart.
-      frame.src = '/ShoppingCart.aspx?wlCheckout=single&wlRun='+win.crypto.randomUUID(); body.appendChild(frame);
+      // Mount before navigating, and ignore detached frames' late callbacks.
+      body.appendChild(frame);
+      frame.src = '/ShoppingCart.aspx?wlCheckout=single&wlRun='+win.crypto.randomUUID();
       // Images/chat widgets must not hold up native forms that are already ready.
       frameReadyTimer = win.setInterval(function () {
+        if (!current()) return;
         var page;
-        try { page = frame?.contentDocument; } catch (_) { return; }
+        try { page = ownedFrame.contentDocument; } catch (_) {}
         if (page?.querySelector('form')) nativeEntered=true;
+        if (page && page!==lastPage) { lastPage=page; progressed=Date.now(); }
         if (overlay) {
           overlay.dataset.bnNativeEntryState=nativeEntered?'form_loaded':!page?'unavailable':page.readyState==='loading'?'loading':'empty';
           overlay.dataset.bnNativeEntryMs=String(Math.floor((Date.now()-opened)/1000)*1000);
           overlay.dataset.bnNativeEntryGuard=busy?'preflight':submitting?'submitting':fast?.stopped?'stopped':fast?.securePayment || fast?.paymentAuthorizing?'payment':active?.phase || 'inactive';
         }
-        if (page && page !== installedPage && page.body && page.readyState !== 'loading' && /\/ShoppingCart\.aspx$/i.test(new URL(page.URL).pathname)) installFrame().catch(showError);
-        if (!nativeEntered && page && !page.querySelector('form') && fast && !fast.stopped && !fast.securePayment && !fast.paymentAuthorizing && !submitting && active?.phase==='checking_out' && !busy && Date.now()-opened>12000) {
+        if (page && page !== installedPage && page.body && page.readyState !== 'loading' && /\/ShoppingCart\.aspx$/i.test(new URL(page.URL).pathname)) install();
+        var waitingForCustomer=fast.loading===false || fast.editor || fast.dirty || fast.ready || fast.securePayment || fast.paymentAuthorizing || fast.paymentQuote || fast.paymentApproval;
+        if (waitingForCustomer || busy) progressed=Date.now();
+        if (waitingForCustomer || submitting || active.phase!=='checking_out' || busy) return;
+        // Retry only an empty initial GET. Never replay a native POST, payment,
+        // or a frame that has already entered any WebTrack form.
+        if (!nativeEntered && !retried && page?.URL==='about:blank' && Date.now()-opened>4000) { retried=true; ownedFrame.src=ownedFrame.src; }
+        if (!nativeEntered && Date.now()-opened>12000) {
           haltFast('Secure checkout did not open. Continue with standard checkout to review your order.','native_entry_unavailable');
           var fallback=overlay?.querySelector('[data-bn-standard]');
           if (fallback) { fallback.textContent='Continue with standard checkout'; fallback.classList.add('bn-recovery'); }
+        } else if (nativeEntered && Date.now()-progressed>45000) {
+          haltFast('Checkout is taking too long. Continuing with standard checkout.','native_step_timeout');
         }
       },100);
     }
@@ -1561,9 +1660,10 @@
       var child = frame.contentWindow, page;
       try { page = frame.contentDocument; if (child.location.origin !== ORIGIN) page = null; } catch (_) { page = null; }
       if (!page) {
-        if (!fast?.paymentApproval) { haltFast('The total could not be confirmed before payment. Please use standard checkout.'); return; }
+        if (!fast?.paymentApproval) { haltFast('The total could not be confirmed before payment. Please use standard checkout.','native_document_unavailable'); return; }
         paymentWorkspace(true); loading(false); status('Complete the secure payment step.'); return;
       }
+      if (page.URL==='about:blank') return;
       if (!page.documentElement || !page.body || page.readyState==='loading' || page === installedPage) return;
       installedPage = page;
       if (frameObserver) frameObserver.disconnect();
@@ -1652,9 +1752,13 @@
       }
       var scheduled = false;
       function inspect() {
-        if (scheduled || !frame) return;
+        if (scheduled || frame?.contentDocument!==page || fast?.stopped) return;
         scheduled = true;
-        frameTimer = win.setTimeout(function () { scheduled = false; inspectFrame(child, page).catch(showError); }, 80);
+        var revision=fast;
+        frameTimer = win.setTimeout(function () {
+          scheduled = false;
+          inspectFrame(child, page).catch(function (error) { if (fast===revision && frame?.contentDocument===page && !fast?.stopped) showError(error); });
+        }, 80);
       }
       frameObserver = new win.MutationObserver(inspect); frameObserver.observe(page.body, { childList: true, subtree: true });
       framePulse = win.setInterval(inspect,300);
@@ -1798,8 +1902,10 @@
       input?.focus();
     }
     function haltFast(message, errorCode) {
+      if (!fast || !overlay) return;
       if (!fast.stopped) measureCheckout('error',null,null,null,errorCode || 'checkout_unavailable');
       fast.stopped = true; fast.ready = false; loading(false); status(message,true); fastText('[data-bn-confirm]','Update your options'); updateFastOptions();
+      if (errorCode && recoverStandard(errorCode)) return;
       if (!overlay.querySelector('[data-bn-retry]')) {
         var retry = button('Try again',function () { retry.remove(); refreshFast().catch(showError); },true); retry.dataset.bnRetry = ''; overlay.querySelector('[data-bn-native-host]').before(retry);
       }
@@ -1819,7 +1925,7 @@
           var reviewed;
           try { reviewed = readNativeReview(page); } catch (error) {
             if (!page.documentElement.dataset.bnReviewWaiting) page.documentElement.dataset.bnReviewWaiting = String(Date.now());
-            if (Date.now()-Number(page.documentElement.dataset.bnReviewWaiting) > 4000) haltFast(error.message);
+            if (Date.now()-Number(page.documentElement.dataset.bnReviewWaiting) > 4000) haltFast(error.message,'review_unconfirmed');
             return;
           }
           measureCheckout('review',page,reviewed); measureCheckout('shipping',page,reviewed); measureCheckout('payment',page,reviewed);
@@ -1905,7 +2011,7 @@
           // Native method clicks await rate reservation before applying the UI.
           // Do not validate/continue using the previous delivery/UPS intent.
           if (!fulfillmentApplied(fast.method,child.sessionStorage.getItem('wl_fulfillment_intent'),appliedButton?.getAttribute('aria-pressed'))) {
-            if (Date.now()-Number(appliedButton.dataset.bnRequestedAt)>15000) haltFast('WebTrack could not confirm that option. Retry or choose Pickup.');
+            if (Date.now()-Number(appliedButton.dataset.bnRequestedAt)>15000) haltFast('WebTrack could not confirm that option. Retry or choose Pickup.','native_option_unconfirmed');
             return;
           }
           if (manager?.get_isInAsyncPostBack?.()) return;
@@ -1989,7 +2095,7 @@
           if (!stored || stored.disabled || cards.disabled) selected=null;
           if (!selected || fast.addPayment) {
             var newCard = page.getElementById('ctl00_PageBody_rbCreditCard'), next = page.getElementById('ctl00_PageBody_btnContinue_CardOnFileView');
-            if (!newCard || newCard.disabled || !next) { haltFast('New payment is unavailable. Please use standard checkout.'); return; }
+            if (!newCard || newCard.disabled || !next) { haltFast('New payment is unavailable. Please use standard checkout.','payment_unavailable'); return; }
             if (!paymentTotalGate(page)) return;
             await checkIdentity(); if (fast!==current || !frame || frame.contentDocument!==page) return;
             fast.addPayment = false; fast.paymentFingerprint=''; fast.securePayment = true; fastText('[data-bn-payment]','New payment'); page.documentElement.dataset.bnPaymentContinued = '1'; newCard.checked = true; newCard.dispatchEvent(new child.Event('change',{bubbles:true})); next.click(); return;
@@ -2007,7 +2113,8 @@
           cachePaymentTotal(page);
           // Pickup/local-delivery already have a native automatic continuation.
           if (child.__wlPickupShippingAutoAdvance) return;
-          var select = page.getElementById('ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList');
+          var select = fast.method==='ship' ? page.getElementById('ctl00_PageBody_CartSummary2_UPSShippingCalculatorControl_ShippingSelection') : null;
+          if (!select) select=page.getElementById('ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList');
           if (select) {
             fast.shippingOptions = Array.from(select.options).filter(function (option) { return !option.disabled && /\$/.test(option.textContent); }).map(function (option) { return {value:option.value,label:text(option.textContent)}; });
             if (!fast.shippingOptions.length && fast.method!=='pickup') return;
@@ -2182,6 +2289,12 @@
       doc.head.appendChild(style);
     }
     installStyles();
+    // Back/Forward cache can retain the old dialog and its asynchronous readers.
+    // End only the natural-cart attempt; isolated Quick buy journals stay intact.
+    win.addEventListener('pagehide',function () {
+      if (!active?.cartCheckout || submitting || active.phase!=='checking_out') return;
+      keepCartDraft(); dismiss();
+    });
     // Never use an analytics snapshot or an unverified account as cart proof.
     if (win.sessionStorage.getItem(GUEST_CART_KEY) && win.navigator.locks) {
       try { if (await restoreGuestCart()) return; }

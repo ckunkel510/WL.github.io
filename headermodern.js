@@ -181,13 +181,15 @@
   function deferCartCheckoutUntilPilotReady(script) {
     if (!/\/ShoppingCart\.aspx$/i.test(window.location.pathname) || !window.navigator.locks) return;
     var pending = null, previousBusy = null, settled = false;
-    var timeout = window.setTimeout(finish, 65000);
+    var timeout = window.setTimeout(finish, 12000);
     function finish() {
       if (settled) return;
       settled = true;
       window.clearTimeout(timeout);
       window.removeEventListener('click', hold, true);
       window.removeEventListener('wl-buy-now-pilot-settled', finish);
+      window.removeEventListener('pagehide', abandon);
+      if (!document.documentElement.dataset.wlCompactCartCheckout) document.documentElement.dataset.wlCompactNativeOnly='1';
       if (!pending) return;
       if (previousBusy === null) pending.removeAttribute('aria-busy');
       else pending.setAttribute('aria-busy', previousBusy);
@@ -196,10 +198,18 @@
       var control = document.getElementById('ctl00_PageBody_PlaceOrderButton');
       if (control && !control.disabled && control.getAttribute('aria-disabled') !== 'true') control.click();
     }
+    function abandon() {
+      // Do not replay a queued checkout click after the customer navigates Back.
+      if (pending) {
+        if (previousBusy === null) pending.removeAttribute('aria-busy');
+        else pending.setAttribute('aria-busy',previousBusy);
+      }
+      pending=null; finish();
+    }
     function hold(event) {
       var control = event.target?.closest?.('#ctl00_PageBody_PlaceOrderButton');
       if (settled || !control || control.disabled || control.getAttribute('aria-disabled') === 'true' ||
-          document.documentElement.dataset.wlCompactCartCheckout || !document.querySelector('.shopping-cart-item')) return;
+          document.documentElement.dataset.wlCompactCartCheckout || document.documentElement.dataset.wlCompactNativeOnly==='1' || !document.querySelector('.shopping-cart-item')) return;
       event.preventDefault(); event.stopImmediatePropagation();
       if (pending) return;
       pending = control;
@@ -210,6 +220,7 @@
     // after fresh account checks, through the pilot's own handler or native route.
     window.addEventListener('click', hold, true);
     window.addEventListener('wl-buy-now-pilot-settled', finish);
+    window.addEventListener('pagehide', abandon);
     script.addEventListener('error', finish, { once: true });
   }
 
@@ -246,7 +257,7 @@
     }
     // UI and account-scoped state require fresh native sign-in/account checks.
     var script = document.createElement('script');
-    script.src = 'https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261104-unavailable-delivery-59';
+    script.src = 'https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261105-checkout-recovery-60';
     script.async = true;
     script.setAttribute('data-wl-buy-now-pilot', 'true');
     deferCartCheckoutUntilPilotReady(script);
