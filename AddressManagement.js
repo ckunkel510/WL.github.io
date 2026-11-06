@@ -1,7 +1,7 @@
 (function (root, factory) {
   "use strict";
 
-  var api = factory(root);
+  var api = root && root.WLAddressManager || factory(root);
   if (typeof module === "object" && module.exports) module.exports = api;
   if (root) root.WLAddressManager = api;
 })(typeof window !== "undefined" ? window : null, function (win) {

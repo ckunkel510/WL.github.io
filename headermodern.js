@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  window.WL_HEADER_BUILD = "20261106-choices-first-loader-6";
+  window.WL_HEADER_BUILD = "20261106-customization-cleanup-7";
 
   var LOG = "[WL HeaderEnhancer]";
   var DEBUG = false; // Set to true only when actively troubleshooting.
@@ -297,6 +297,26 @@
   function loadAddressManager() {
     if (!/\/(?:addresslist_r|addressdetails)\.aspx$/i.test(window.location.pathname || "")) return;
     if (window.WLAddressManager || document.querySelector("script[data-wl-address-manager]")) return;
+
+    // WebTrack's older inline loader can already have this module in flight.
+    // Reuse it while retaining one bounded recovery if that request fails.
+    var existing=Array.from(document.querySelectorAll('script[src]')).find(function (script) {
+      try { var url=new URL(script.src,window.location.href),wanted=new URL(ADDRESS_MANAGER_URL); return url.origin===wanted.origin && url.pathname===wanted.pathname; }
+      catch (_) { return false; }
+    });
+    if (existing) {
+      existing.setAttribute('data-wl-address-manager','existing');
+      var abandoned=false,retried=false,timer;
+      function retry() {
+        if (retried || abandoned || window.WLAddressManager) return;
+        retried=true; window.clearTimeout(timer); existing.remove(); loadAddressManager();
+      }
+      existing.addEventListener('error',retry,{once:true});
+      existing.addEventListener('load',function () { window.clearTimeout(timer); if (!window.WLAddressManager) retry(); },{once:true});
+      window.addEventListener('pagehide',function () { abandoned=true; window.clearTimeout(timer); },{once:true});
+      timer=window.setTimeout(retry,8000);
+      return;
+    }
 
     var script = document.createElement("script");
     script.src = ADDRESS_MANAGER_URL;
@@ -2616,20 +2636,36 @@
       return;
     }
 
-    var existing = document.querySelector("script[data-wl-quagga]");
-    if (existing) {
-      existing.addEventListener("load", function () { callback(null); }, { once: true });
-      existing.addEventListener("error", function () { callback(new Error("Scanner library failed to load")); }, { once: true });
-      return;
+    // The old inline bootstrap may already have requested this same library.
+    var script = Array.prototype.find.call(document.querySelectorAll("script[src]"), function (node) {
+      return node.src.split("?")[0] === QUAGGA_URL;
+    });
+    var existing = !!script;
+    if (!script) {
+      script = document.createElement("script");
+      script.src = QUAGGA_URL;
+      script.async = true;
     }
-
-    var script = document.createElement("script");
-    script.src = QUAGGA_URL;
-    script.async = true;
     script.setAttribute("data-wl-quagga", "true");
-    script.addEventListener("load", function () { callback(null); }, { once: true });
-    script.addEventListener("error", function () { callback(new Error("Scanner library failed to load")); }, { once: true });
-    document.head.appendChild(script);
+    var settled = false;
+    var timer;
+    function finish(error) {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      script.removeEventListener("load", loaded);
+      script.removeEventListener("error", failed);
+      if (error && !window.Quagga) script.remove();
+      callback(error);
+    }
+    function loaded() {
+      finish(window.Quagga ? null : new Error("Scanner library is unavailable"));
+    }
+    function failed() { finish(new Error("Scanner library failed to load")); }
+    script.addEventListener("load", loaded);
+    script.addEventListener("error", failed);
+    timer = window.setTimeout(failed, 12000);
+    if (!existing) document.head.appendChild(script);
   }
 
   function addBarcodeScanner() {

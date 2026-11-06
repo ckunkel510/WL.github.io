@@ -5,6 +5,7 @@ const test = require('node:test');
 
 const read = (name) => fs.readFileSync(path.join(__dirname, '..', name), 'utf8');
 const routerAndLegacySource = read('PayByInvoice.js');
+const legacySource = read('legacy/PayByInvoice.js');
 const previewSource = read('PayByInvoicePreview.js');
 const accountInfoSource = read('Accountinfo.js');
 const paymentFixtureSource = read('test/fixtures/pay-by-invoice-flow.html');
@@ -19,14 +20,15 @@ test('production router loads the payment flow for every account by default', ()
 });
 
 test('legacy payment enhancements remain available behind the native escape hatch', () => {
-  const guardedLegacyModules = routerAndLegacySource.match(
+  const guardedLegacyModules = legacySource.match(
     /if \(window\.__WL_PAYMENT_PREVIEW_ACTIVE__ \|\| !\/AccountPayment_r\\\.aspx\/i\.test\(location\.pathname\)\) return;/g
   ) || [];
 
   assert.equal(guardedLegacyModules.length, 14);
-  assert.match(routerAndLegacySource, /PayByInvoice version v38/);
-  assert.match(routerAndLegacySource, /wlProxySubmit/);
-  assert.match(routerAndLegacySource, /wiz\.id = 'wlApWizard3'/);
+  assert.match(routerAndLegacySource, /legacy\/PayByInvoice\.js/);
+  assert.match(legacySource, /PayByInvoice version v38/);
+  assert.match(legacySource, /wlProxySubmit/);
+  assert.match(legacySource, /wiz\.id = 'wlApWizard3'/);
 });
 
 test('account overview enables the payment flow for every account', () => {

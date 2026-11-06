@@ -1,0 +1,452 @@
+{
+  "baseCommit": "b303cc1bb2ea7e44ad55152ee3f1e574f7893ec2",
+  "scope": "Observed page families and loader/source dependency review, not transaction submissions.",
+  "livePageStates": 23,
+  "observedAssets": 58,
+  "pages": [
+    {
+      "page": "about",
+      "path": "/AboutUs.aspx",
+      "scriptElements": 4,
+      "assets": [
+        "headermodern.js",
+        "wl-site.js",
+        "wl-chat.js",
+        "smart-search.js"
+      ],
+      "declaredSourceBytes": 230925,
+      "restoreManifest": "about-live-before.json"
+    },
+    {
+      "page": "account",
+      "path": "/AccountInfo_R.aspx",
+      "scriptElements": 5,
+      "assets": [
+        "Accountinfo.js",
+        "headermodern.js",
+        "smart-search.js",
+        "wl-site.js",
+        "wl-chat.js"
+      ],
+      "declaredSourceBytes": 330972,
+      "restoreManifest": "account-live-before.json"
+    },
+    {
+      "page": "addresses",
+      "path": "/AddressList_R.aspx",
+      "scriptElements": 6,
+      "assets": [
+        "AddressManagement.js",
+        "headermodern.js",
+        "wl-site.js",
+        "wl-chat.js",
+        "smart-search.js",
+        "AddressManagement.js"
+      ],
+      "declaredSourceBytes": 304859,
+      "restoreManifest": "addresses-live-before.json"
+    },
+    {
+      "page": "cart",
+      "path": "/ShoppingCart.aspx",
+      "scriptElements": 23,
+      "assets": [
+        "WoodsonShoppingCart.js",
+        "Checkout2.js",
+        "Guestcheckout.js",
+        "Requestquote.js",
+        "ShoppingCartBranch.js",
+        "ShoppingCartSubtotal.js",
+        "cartbranchdropdown.js",
+        "Addtocart.js",
+        "MetaShop.js",
+        "ShoppingCartSummary.js",
+        "CardContainer.js",
+        "SavedForLater.js",
+        "storeNotification.js",
+        "ShoppingCartRow.js",
+        "DeliveryOptions.js",
+        "UpsShippingPromo.js",
+        "headermodern.js",
+        "wl-site.js",
+        "wl-chat.js",
+        "smart-search.js",
+        "CartDesignPilot.js",
+        "BuyNowPilot.js",
+        "UpsShippingOffer.js"
+      ],
+      "declaredSourceBytes": 1077091,
+      "restoreManifest": "cart-live-before.json"
+    },
+    {
+      "page": "contacts",
+      "path": "/Contacts_r.aspx",
+      "scriptElements": 5,
+      "assets": [
+        "headermodern.js",
+        "wl-site.js",
+        "wl-chat.js",
+        "smart-search.js",
+        "ContactManagement.js"
+      ],
+      "declaredSourceBytes": 265548,
+      "restoreManifest": "contacts-live-before.json"
+    },
+    {
+      "page": "credit-notes",
+      "path": "/CreditNotes_r.aspx",
+      "scriptElements": 5,
+      "assets": [
+        "credits.js",
+        "headermodern.js",
+        "wl-site.js",
+        "wl-chat.js",
+        "smart-search.js"
+      ],
+      "declaredSourceBytes": 282823,
+      "restoreManifest": "credit-notes-live-before.json"
+    },
+    {
+      "page": "dashboards",
+      "path": "/Dashboards.aspx",
+      "scriptElements": 4,
+      "assets": [
+        "headermodern.js",
+        "wl-site.js",
+        "wl-chat.js",
+        "smart-search.js"
+      ],
+      "declaredSourceBytes": 230925,
+      "restoreManifest": "dashboards-live-before.json"
+    },
+    {
+      "page": "help",
+      "path": "/Help.aspx",
+      "scriptElements": 4,
+      "assets": [
+        "headermodern.js",
+        "wl-site.js",
+        "wl-chat.js",
+        "smart-search.js"
+      ],
+      "declaredSourceBytes": 230925,
+      "restoreManifest": "help-live-before.json"
+    },
+    {
+      "page": "homepage",
+      "path": "/",
+      "scriptElements": 2,
+      "assets": [
+        "woodson-unified-header.js",
+        "TurtleboxPromo.js"
+      ],
+      "declaredSourceBytes": 57132,
+      "restoreManifest": "homepage-live-before.json"
+    },
+    {
+      "page": "invoice-payment",
+      "path": "/AccountPayment_r.aspx",
+      "scriptElements": 6,
+      "assets": [
+        "PayByInvoice.js",
+        "headermodern.js",
+        "wl-site.js",
+        "wl-chat.js",
+        "smart-search.js",
+        "PayByInvoicePreview.js"
+      ],
+      "declaredSourceBytes": 591852,
+      "restoreManifest": "invoice-payment-live-before.json"
+    },
+    {
+      "page": "invoices",
+      "path": "/Invoices_r.aspx",
+      "scriptElements": 5,
+      "assets": [
+        "invoices.js",
+        "headermodern.js",
+        "wl-site.js",
+        "wl-chat.js",
+        "smart-search.js"
+      ],
+      "declaredSourceBytes": 294365,
+      "restoreManifest": "invoices-live-before.json"
+    },
+    {
+      "page": "job-balances",
+      "path": "/JobBalances_R.aspx",
+      "scriptElements": 4,
+      "assets": [
+        "headermodern.js",
+        "wl-site.js",
+        "wl-chat.js",
+        "smart-search.js"
+      ],
+      "declaredSourceBytes": 230925,
+      "restoreManifest": "job-balances-live-before.json"
+    },
+    {
+      "page": "legacy-location-hub",
+      "path": "/Default.aspx",
+      "scriptElements": 17,
+      "assets": [
+        "URLSanitize.js",
+        "wl-productgroup-images.js",
+        "filterpanel.js",
+        "ProductCardFlags.js",
+        "Requestquote.js",
+        "productcardBulkprice.js",
+        "localStockRow.js",
+        "mobilepcstyling.js",
+        "default.js",
+        "stihlRestricted.js",
+        "storelocations.js",
+        "brenham.js",
+        "headermodern.js",
+        "wl-site.js",
+        "wl-chat.js",
+        "smart-search.js",
+        "BuyNowPilot.js"
+      ],
+      "declaredSourceBytes": 671417,
+      "restoreManifest": "legacy-location-hub-live-before.json"
+    },
+    {
+      "page": "legacy-store-page",
+      "path": "/Default.aspx",
+      "scriptElements": 17,
+      "assets": [
+        "URLSanitize.js",
+        "wl-productgroup-images.js",
+        "filterpanel.js",
+        "ProductCardFlags.js",
+        "Requestquote.js",
+        "productcardBulkprice.js",
+        "localStockRow.js",
+        "mobilepcstyling.js",
+        "default.js",
+        "stihlRestricted.js",
+        "storelocations.js",
+        "brenham.js",
+        "headermodern.js",
+        "wl-site.js",
+        "wl-chat.js",
+        "smart-search.js",
+        "BuyNowPilot.js"
+      ],
+      "declaredSourceBytes": 671417,
+      "restoreManifest": "legacy-store-page-live-before.json"
+    },
+    {
+      "page": "orders",
+      "path": "/OpenOrders_r.aspx",
+      "scriptElements": 5,
+      "assets": [
+        "Tracking.js",
+        "headermodern.js",
+        "wl-site.js",
+        "wl-chat.js",
+        "smart-search.js"
+      ],
+      "declaredSourceBytes": 279594,
+      "restoreManifest": "orders-live-before.json"
+    },
+    {
+      "page": "payment-methods",
+      "path": "/CustomerTokens.aspx",
+      "scriptElements": 5,
+      "assets": [
+        "CustomerTokens.js",
+        "headermodern.js",
+        "wl-site.js",
+        "wl-chat.js",
+        "smart-search.js"
+      ],
+      "declaredSourceBytes": 281917,
+      "restoreManifest": "payment-methods-live-before.json"
+    },
+    {
+      "page": "product-detail",
+      "path": "/ProductDetail.aspx",
+      "scriptElements": 20,
+      "assets": [
+        "URLSanitize.js",
+        "ProductDescription.js",
+        "ProductImages.js",
+        "ProductCardFlags.js",
+        "ProductPageStock.js",
+        "QuantityButton.js",
+        "Requestquote.js",
+        "productcardBulkprice.js",
+        "product-sidebar.js",
+        "Addtocart.js",
+        "stihlRestricted.js",
+        "Reviewwidget.js",
+        "OptionDropdown.js",
+        "Productdescriptionstyle.js",
+        "headermodern.js",
+        "wl-site.js",
+        "wl-chat.js",
+        "smart-search.js",
+        "BuyNowPilot.js",
+        "ProductDetailPilot.js"
+      ],
+      "declaredSourceBytes": 699579,
+      "restoreManifest": "product-detail-live-before.json"
+    },
+    {
+      "page": "products",
+      "path": "/Products.aspx",
+      "scriptElements": 16,
+      "assets": [
+        "URLSanitize.js",
+        "wl-productgroup-images.js",
+        "filterpanel.js",
+        "ProductCardFlags.js",
+        "Requestquote.js",
+        "productcardBulkprice.js",
+        "localStockRow.js",
+        "mobilepcstyling.js",
+        "default.js",
+        "stihlRestricted.js",
+        "storelocations.js",
+        "brenham.js",
+        "headermodern.js",
+        "wl-site.js",
+        "wl-chat.js",
+        "smart-search.js"
+      ],
+      "declaredSourceBytes": 432373,
+      "restoreManifest": "products-live-before.json"
+    },
+    {
+      "page": "purchased-products",
+      "path": "/ProductsPurchased_R.aspx",
+      "scriptElements": 5,
+      "assets": [
+        "ProductsPurchased.js",
+        "headermodern.js",
+        "wl-site.js",
+        "wl-chat.js",
+        "smart-search.js"
+      ],
+      "declaredSourceBytes": 307397,
+      "restoreManifest": "purchased-products-live-before.json"
+    },
+    {
+      "page": "quotes",
+      "path": "/OpenQuotes_r.aspx",
+      "scriptElements": 5,
+      "assets": [
+        "OpenQuotes.js",
+        "headermodern.js",
+        "wl-site.js",
+        "wl-chat.js",
+        "smart-search.js"
+      ],
+      "declaredSourceBytes": 270011,
+      "restoreManifest": "quotes-live-before.json"
+    },
+    {
+      "page": "saved-lists",
+      "path": "/Quicklists_R.aspx",
+      "scriptElements": 5,
+      "assets": [
+        "HideQuickList.js",
+        "headermodern.js",
+        "wl-site.js",
+        "wl-chat.js",
+        "smart-search.js"
+      ],
+      "declaredSourceBytes": 266074,
+      "restoreManifest": "saved-lists-live-before.json"
+    },
+    {
+      "page": "settings",
+      "path": "/AccountSettings.aspx",
+      "scriptElements": 4,
+      "assets": [
+        "headermodern.js",
+        "wl-site.js",
+        "wl-chat.js",
+        "smart-search.js"
+      ],
+      "declaredSourceBytes": 230925,
+      "restoreManifest": "settings-live-before.json"
+    },
+    {
+      "page": "statements",
+      "path": "/Statements_R.aspx",
+      "scriptElements": 5,
+      "assets": [
+        "statements.js",
+        "headermodern.js",
+        "wl-site.js",
+        "wl-chat.js",
+        "smart-search.js"
+      ],
+      "declaredSourceBytes": 238963,
+      "restoreManifest": "statements-live-before.json"
+    }
+  ],
+  "rootScriptsNotDirectlyObserved": [
+    "AccountProvider.js",
+    "AdScriptOnProductPages.js",
+    "AdjustPositionIMGPriceButton.js",
+    "Analytics.js",
+    "AutoContinuePickup.js",
+    "BarcodeScanner.js",
+    "CartError.js",
+    "CartNativeViews.js",
+    "GoogleSignIn.js",
+    "GoogleSignInButton.js",
+    "HomePageTab.js",
+    "InStoreBarcodeScanner.js",
+    "JobBalanceRadio.js",
+    "MarketingCalendarPromo.js",
+    "Marketingsignup.js",
+    "OrderConfirmation.js",
+    "Paymentlink.js",
+    "PromoCodes.js",
+    "ShoppingCart2.0.js",
+    "ShoppingCartError.js",
+    "Signupvalidation.js",
+    "Traffic.js",
+    "UserSignUpEmailRestriction.js",
+    "UserSignUpLocation.js",
+    "defaultrouter.js",
+    "modal.js",
+    "storemode.js",
+    "surveyredirect.js",
+    "tawk-commerce-assist.js",
+    "wl-commerce.js",
+    "wl-events.js",
+    "wl-home-merch.js",
+    "wl-shoppingcart.bundle.js",
+    "woodson-home.js",
+    "woodson-shelf.js"
+  ],
+  "unobservedNote": "Candidates for dependency review only. Some are lazy dependencies, compatibility entry points, development tools or used outside observed pages; not safe to delete based on this list.",
+  "changes": {
+    "payment": {
+      "entryBefore": 269410,
+      "entryAfter": 2487,
+      "modernModuleUnchanged": "8c5725d155d9bae42c69136868f41e88a182aeb4114565c9d4ec4d1441e6f9d8",
+      "legacyPreservedBytes": 267743
+    },
+    "preparedInlineOnly": {
+      "normalProductPageSkippedBytes": 59103,
+      "cartBasketSkippedBytes": 256975
+    },
+    "addressDuplicateEvaluationBytes": 36967,
+    "scanner": {
+      "entryBefore": 5494,
+      "entryAfter": 3598,
+      "modernOwner": "headermodern.js",
+      "fallback": "legacy/BarcodeScanner.js",
+      "fallbackOriginalSha256": "60bf40c861afea3c7945ccf72601b29c30674d9e397da68b512e91c4002d9c7e",
+      "fallbackDifference": "One existing-container entry guard; all other original source retained.",
+      "cameraLibrary": "Existing Quagga 0.12.1; modern path requests it on scan action. Admin replacement removes old eager request."
+    }
+  }
+}
