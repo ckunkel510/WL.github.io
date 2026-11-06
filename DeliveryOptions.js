@@ -1,3 +1,14 @@
+// Native jQuery is parser-loaded after the asynchronous customization tags.
+// Wait for DOM ready so delivery order cannot execute this module before it.
+(function (start) {
+  function ready() {
+    var library=window.jQuery || (typeof $==='function'?$:null);
+    if (document.documentElement) document.documentElement.dataset.wlCartDeliveryDependency=library?'ready':'missing';
+    if (typeof library==='function') start(library);
+  }
+  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded',ready,{once:true});
+  else ready();
+})(function ($) {
 
 $(function(){
   // 1) Check delivery cost
@@ -135,7 +146,7 @@ $(function(){
 
 
 
-document.addEventListener('DOMContentLoaded', function () {
+$(function () {
   const headers = document.querySelectorAll('th');
   headers.forEach(th => {
     if (th.textContent.trim() === 'Summary') {
@@ -466,3 +477,5 @@ document.addEventListener('DOMContentLoaded', function () {
       .add_endRequest(hideDeliveryPanelIfOnlyAreaDropdownShown);
   }
 })(jQuery);
+
+});
