@@ -1945,8 +1945,11 @@
       fastText('[data-bn-shipping-label]',fast.method==='pickup'?'Pickup':fast.method==='ship'?'Shipping':'Delivery');
       if (fast.method === 'ship') {
         var service = (fast.shippingOptions || []).find(function (option) { return option.value === fast.shippingValue; });
-        fastText('[data-bn-timing]', service ? service.label : 'UPS Ground');
-        fastText('[data-bn-arrival]',shippingEstimate(fast.methods.ship,service));
+        // A restored draft retains the selected value, but native options are
+        // read afresh. Do not substitute Ground's date for an unconfirmed speed.
+        var confirming = !!fast.shippingValue && !service;
+        fastText('[data-bn-timing]', service ? service.label : confirming ? 'Confirming selected UPS speed…' : 'UPS Ground');
+        fastText('[data-bn-arrival]',confirming ? 'Confirming the UPS arrival estimate…' : shippingEstimate(fast.methods.ship,service));
       } else if (fast.date) {
         var parts = fast.date.split('-').map(Number), date = new Date(parts[0],parts[1]-1,parts[2],12);
         fastText('[data-bn-timing]',date.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})+' · '+(fast.method==='pickup' ? fast.pickupTime || 'First available' : fast.window));

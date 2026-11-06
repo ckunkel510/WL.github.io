@@ -49,6 +49,14 @@ test('switching back from UPS clears the old shipping-speed caption in the picku
   for(const method of ['pickup','delivery']) {context.fast.method=method;context.updateFastOptions();assert.equal(rendered['[data-bn-timing]'],'Earliest available');}
 });
 
+test('a restored expedited choice never borrows Ground arrival while native service options reload',()=>{
+  const rendered={},context=vm.createContext({fast:{methods:{ship:{available:true,rates:[{serviceCode:'03',transit:{businessDays:4,pickupDate:'2026-11-06',arrivalDate:'2026-11-12'}}]}},method:'ship',shippingValue:'02',date:'',ready:false},guest:false,overlay:{querySelector:()=>null,querySelectorAll:()=>[]},loading(){},submitting:false,fastText:(key,value)=>{rendered[key]=value;},deliveryAddressSummary:core.deliveryAddressSummary,pickupPersonName:core.pickupPersonName,shippingEstimate:core.shippingEstimate});
+  vm.runInContext(source.slice(source.indexOf('    function updateFastOptions('),source.indexOf('    function requestPickupPerson(')),context);
+  context.updateFastOptions();assert.equal(rendered['[data-bn-timing]'],'Confirming selected UPS speed…');assert.equal(rendered['[data-bn-arrival]'],'Confirming the UPS arrival estimate…');
+  context.fast.shippingOptions=[{value:'02',label:'UPS Second Day Air $49.31 USD'}];
+  context.updateFastOptions();assert.equal(rendered['[data-bn-timing]'],'UPS Second Day Air $49.31 USD');assert.match(rendered['[data-bn-arrival]'],/^Arrival estimate unavailable/);
+});
+
 test('local delivery hides after an unavailable quote and returns for pending or available quotes',()=>{
   const buttons=Object.fromEntries(['pickup','delivery','ship'].map(method=>[method,{hidden:false,dataset:{},attributes:{},setAttribute(name,value){this.attributes[name]=value;}}]));
   const context=vm.createContext({fast:{methods:{},method:'ship',date:'',ready:false},guest:false,submitting:false,
