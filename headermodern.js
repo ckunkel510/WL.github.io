@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  window.WL_HEADER_BUILD = "20261106-customization-cleanup-7";
+  window.WL_HEADER_BUILD = "20261106-scanner-reliability-8";
 
   var LOG = "[WL HeaderEnhancer]";
   var DEBUG = false; // Set to true only when actively troubleshooting.
@@ -1430,76 +1430,70 @@
         outline: none;
       }
 
-      #wl-barcode-overlay[hidden] {
-        display: none !important;
-      }
-
+      #wl-barcode-overlay [hidden],
+      #wl-barcode-overlay[hidden] { display: none !important; }
       #wl-barcode-overlay {
-        position: fixed;
-        inset: 0;
-        z-index: 100000;
-        color: #fff;
-        background: #111;
+        position: fixed; inset: 0; z-index: 2147483647;
+        display: flex; align-items: center; justify-content: center;
+        overflow: auto; overscroll-behavior: contain;
+        padding: 16px; box-sizing: border-box;
+        background: rgba(9, 15, 24, .88); color: #17212c;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
-
-      #wl-barcode-reader,
-      #wl-barcode-reader video,
-      #wl-barcode-reader canvas {
-        width: 100% !important;
-        height: 100% !important;
+      .wl-barcode-panel {
+        width: 100%; max-width: 560px; margin: auto;
+        border-radius: 24px; background: #fff; overflow: hidden;
+        box-shadow: 0 24px 90px rgba(0, 0, 0, .28);
       }
-
-      #wl-barcode-reader video,
-      #wl-barcode-reader canvas {
-        position: absolute;
-        inset: 0;
-        object-fit: cover;
+      .wl-barcode-heading {
+        display: flex; align-items: center; justify-content: space-between; gap: 16px;
+        padding: 22px 24px 16px;
       }
-
+      .wl-barcode-brand { margin: 0 0 5px; font-size: 11px; font-weight: 800; letter-spacing: .13em; color: #78001b; }
+      .wl-barcode-heading h2 { margin: 0; font-size: 25px; font-weight: 750; line-height: 1.2; color: #17212c; }
+      #wl-barcode-overlay button, #wl-barcode-overlay input, #wl-barcode-overlay a { box-sizing: border-box; font: inherit; }
+      #wl-barcode-overlay button { cursor: pointer; min-height: 44px; }
+      #wl-barcode-overlay button:focus-visible, #wl-barcode-overlay input:focus-visible, #wl-barcode-overlay a:focus-visible { outline: 3px solid #c89735; outline-offset: 3px; }
+      #wl-barcode-overlay .wl-barcode-close {
+        display: inline-flex; align-items: center; justify-content: center; flex: 0 0 44px;
+        width: 44px; height: 44px; padding: 0; border: 1px solid #dce1e5;
+        border-radius: 50%; background: #f5f6f8; color: #23303e; font-size: 30px; line-height: 1;
+      }
+      .wl-barcode-stage { position: relative; aspect-ratio: 4 / 3; margin: 0 16px; border-radius: 16px; background: #111a23; overflow: hidden; }
+      #wl-barcode-reader { position: absolute; inset: 0; width: 100%; height: 100%; }
+      #wl-barcode-reader video { position: absolute; inset: 0; width: 100% !important; height: 100% !important; object-fit: contain; }
+      #wl-barcode-reader canvas { display: none !important; }
       .wl-barcode-guide {
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        width: min(72vw, 520px);
-        height: min(24vh, 190px);
-        border: 3px solid #f5c400;
-        border-radius: 8px;
-        box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.28);
-        transform: translate(-50%, -50%);
-        pointer-events: none;
+        position: absolute; top: 50%; left: 50%; width: 80%; height: 44%;
+        box-sizing: border-box; border: 2px solid rgba(255,255,255,.9); border-radius: 14px;
+        box-shadow: 0 0 0 999px rgba(0,0,0,.18); transform: translate(-50%, -50%); pointer-events: none;
       }
-
-      .wl-barcode-status {
-        position: absolute;
-        right: 20px;
-        bottom: 28px;
-        left: 20px;
-        margin: 0;
-        font-size: 16px;
-        font-weight: 750;
-        text-align: center;
-        text-shadow: 0 1px 4px #000;
+      .wl-barcode-guide::after { content: ""; position: absolute; top: 50%; left: 8%; right: 8%; height: 1px; background: rgba(244, 83, 111, .85); }
+      #wl-barcode-overlay[data-scanner-state="confirming"] .wl-barcode-guide { border-color: #68e3a8; }
+      .wl-barcode-found { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: #edf8f1; color: #125b35; }
+      .wl-barcode-check { font-size: 54px; line-height: 1; }
+      .wl-barcode-found strong { font-size: 24px; letter-spacing: .06em; overflow-wrap: anywhere; max-width: 95%; }
+      .wl-barcode-footer { padding: 20px 24px 24px; }
+      .wl-barcode-status { margin: 0 0 8px; font-size: 18px; font-weight: 750; line-height: 1.35; color: #17212c; }
+      .wl-barcode-hint { margin: 0; color: #5c6772; font-size: 14px; line-height: 1.5; }
+      .wl-barcode-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+      #wl-barcode-overlay .wl-barcode-manual-toggle, #wl-barcode-overlay .wl-barcode-retry {
+        border: 1px solid #d7dee4; border-radius: 10px; padding: 10px 14px; background: #fff; color: #630017; font-size: 14px; font-weight: 700;
       }
-
-      .wl-barcode-close {
-        position: absolute;
-        top: 16px;
-        right: 16px;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 46px;
-        height: 46px;
-        padding: 0;
-        color: #292d31;
-        background: #fff;
-        border: 1px solid #d8dbde;
-        border-radius: 6px;
-        cursor: pointer;
-      }
-
-      body.wl-barcode-open {
-        overflow: hidden !important;
+      #wl-barcode-overlay .wl-barcode-retry { background: #78001b; border-color: #78001b; color: #fff; }
+      .wl-barcode-manual { margin-top: 18px; display: grid; gap: 12px; }
+      .wl-barcode-manual label { display: grid; gap: 7px; font-size: 14px; font-weight: 650; }
+      #wl-barcode-overlay input { width: 100%; min-width: 0; min-height: 48px; border: 1px solid #b8c3cc; border-radius: 9px; padding: 10px 12px; font-size: 16px; background: #fff; color: #17212c; }
+      #wl-barcode-overlay input[aria-invalid="true"] { border-color: #a11831; }
+      #wl-barcode-overlay .wl-barcode-search { border: 0; border-radius: 9px; padding: 12px 16px; font-weight: 700; background: #78001b; color: #fff; }
+      .wl-barcode-results { display: inline-block; margin-top: 16px; padding: 10px 0; color: #630017; font-weight: 700; }
+      body.wl-barcode-open { overflow: hidden !important; }
+      body.wl-barcode-open iframe[title="Chat widget"] { visibility: hidden !important; pointer-events: none !important; }
+      @media (max-width: 600px) {
+        #wl-barcode-overlay { padding: 0; align-items: flex-start; background: #fff; }
+        .wl-barcode-panel { border-radius: 0; min-height: 100%; box-shadow: none; }
+        .wl-barcode-heading { padding: calc(20px + env(safe-area-inset-top, 0px)) 20px 18px; }
+        .wl-barcode-footer { padding: 20px 20px calc(24px + env(safe-area-inset-bottom, 0px)); }
       }
 
       #wl-mobile-account-menu {
@@ -2668,16 +2662,34 @@
     if (!existing) document.head.appendChild(script);
   }
 
+  function scannerSearchCode(result) {
+    var value = String(result && result.codeResult && result.codeResult.code || "").trim();
+    var format = String(result && result.codeResult && result.codeResult.format || "");
+    if (!value || value.length > 64 || /[^\x20-\x7e]/.test(value)) return "";
+    if (!/code_128/i.test(format) && /^\d+$/.test(value) && /^(?:8|12|13|14)$/.test(String(value.length))) {
+      var sum = 0;
+      for (var i = value.length - 2, weight = 3; i >= 0; i--, weight = 4 - weight) sum += Number(value[i]) * weight;
+      if ((10 - sum % 10) % 10 !== Number(value[value.length - 1])) return "";
+      if (value.length === 13 && value[0] === "0") value = value.slice(1);
+    } else if (/upc|ean/i.test(format)) return "";
+    var errors = (result && result.codeResult && result.codeResult.decodedCodes || []).map(function (item) { return item.error; }).filter(function (error) { return typeof error === "number" && isFinite(error); });
+    if (errors.length && errors.reduce(function (sum, error) { return sum + error; }, 0) / errors.length > 0.18) return "";
+    return value;
+  }
+
   function addBarcodeScanner() {
     if (document.getElementById("barcode-scanner-container")) return false;
-
     var target = document.getElementById("c50_2");
     if (!target) return false;
-
-    var container = document.createElement("div");
+    function element(tag, className, text) {
+      var node = document.createElement(tag);
+      if (className) node.className = className;
+      if (text) node.textContent = text;
+      return node;
+    }
+    var container = element("div");
     container.id = "barcode-scanner-container";
-
-    var startButton = document.createElement("button");
+    var startButton = element("button");
     startButton.id = "start-scanner";
     startButton.type = "button";
     startButton.setAttribute("aria-label", "Scan a product barcode");
@@ -2686,128 +2698,250 @@
     container.appendChild(startButton);
     target.appendChild(container);
 
-    var overlay = document.createElement("div");
+    var overlay = element("div");
     overlay.id = "wl-barcode-overlay";
     overlay.hidden = true;
+    overlay.tabIndex = -1;
     overlay.setAttribute("role", "dialog");
+    overlay.setAttribute("aria-modal", "true");
     overlay.setAttribute("aria-label", "Barcode scanner");
-
-    var reader = document.createElement("div");
-    reader.id = "wl-barcode-reader";
-
-    var guide = document.createElement("div");
-    guide.className = "wl-barcode-guide";
-    guide.setAttribute("aria-hidden", "true");
-
-    var status = document.createElement("p");
-    status.className = "wl-barcode-status";
-    status.setAttribute("aria-live", "polite");
-    status.textContent = "Point the camera at a product barcode";
-
-    var closeButton = document.createElement("button");
-    closeButton.className = "wl-barcode-close";
+    var panel = element("section", "wl-barcode-panel");
+    var heading = element("header", "wl-barcode-heading");
+    var headingText = element("div");
+    headingText.appendChild(element("p", "wl-barcode-brand", "WOODSON LUMBER"));
+    headingText.appendChild(element("h2", "", "Scan a product"));
+    heading.appendChild(headingText);
+    var closeButton = element("button", "wl-barcode-close", "×");
     closeButton.type = "button";
     closeButton.setAttribute("aria-label", "Close barcode scanner");
-    closeButton.title = "Close barcode scanner";
-    closeButton.innerHTML = '<i class="fas fa-times" aria-hidden="true"></i>';
-
-    overlay.appendChild(reader);
-    overlay.appendChild(guide);
-    overlay.appendChild(status);
-    overlay.appendChild(closeButton);
+    heading.appendChild(closeButton);
+    panel.appendChild(heading);
+    var stage = element("div", "wl-barcode-stage");
+    var reader = element("div");
+    reader.id = "wl-barcode-reader";
+    stage.appendChild(reader);
+    var guide = element("div", "wl-barcode-guide");
+    guide.setAttribute("aria-hidden", "true");
+    stage.appendChild(guide);
+    var found = element("div", "wl-barcode-found");
+    found.hidden = true;
+    found.appendChild(element("span", "wl-barcode-check", "✓"));
+    var foundCode = element("strong");
+    found.appendChild(foundCode);
+    found.appendChild(element("span", "", "Barcode found"));
+    stage.appendChild(found);
+    panel.appendChild(stage);
+    var footer = element("div", "wl-barcode-footer");
+    var status = element("p", "wl-barcode-status", "Ready to scan");
+    status.setAttribute("role", "status");
+    status.setAttribute("aria-live", "polite");
+    var hint = element("p", "wl-barcode-hint", "Fit the whole barcode inside the frame. Hold it steady and avoid glare.");
+    footer.appendChild(status);
+    footer.appendChild(hint);
+    var actions = element("div", "wl-barcode-actions");
+    var retryButton = element("button", "wl-barcode-retry", "Try camera again");
+    retryButton.type = "button";
+    retryButton.hidden = true;
+    var manualButton = element("button", "wl-barcode-manual-toggle", "Enter barcode instead");
+    manualButton.type = "button";
+    actions.appendChild(retryButton);
+    actions.appendChild(manualButton);
+    footer.appendChild(actions);
+    var manualForm = element("form", "wl-barcode-manual");
+    manualForm.hidden = true;
+    var label = element("label", "", "Barcode number");
+    var manualInput = element("input");
+    manualInput.id = "wl-barcode-number";
+    manualInput.type = "text";
+    manualInput.setAttribute("inputmode", "numeric");
+    manualInput.setAttribute("autocomplete", "off");
+    manualInput.setAttribute("maxlength", "32");
+    manualInput.setAttribute("placeholder", "Numbers printed below the barcode");
+    label.appendChild(manualInput);
+    manualForm.appendChild(label);
+    var manualSubmit = element("button", "wl-barcode-search", "Search products");
+    manualSubmit.type = "submit";
+    manualForm.appendChild(manualSubmit);
+    footer.appendChild(manualForm);
+    var resultsLink = element("a", "wl-barcode-results", "View search results");
+    resultsLink.hidden = true;
+    footer.appendChild(resultsLink);
+    panel.appendChild(footer);
+    overlay.appendChild(panel);
     document.body.appendChild(overlay);
 
-    var scannerSession = 0;
-    var activeHandler = null;
-
-    function stopScanner() {
-      scannerSession++;
-
-      if (window.Quagga) {
+    var scannerSession = 0, activeHandler = null, processedHandler = null, ownedVideo = null;
+    var ownsCamera = false, startupTimer, frameTimer, hintTimer, navigationTimer;
+    function releaseVideo(video) {
+      if (!video) return;
+      try {
+        var stream = video.srcObject;
+        if (stream && stream.getTracks) stream.getTracks().forEach(function (track) { track.stop(); });
+        video.srcObject = null;
+      } catch (_) {}
+    }
+    function stopCapture() {
+      window.clearTimeout(startupTimer);
+      window.clearTimeout(frameTimer);
+      window.clearTimeout(hintTimer);
+      var quagga = window.Quagga;
+      if (quagga) {
         try {
-          if (activeHandler && typeof window.Quagga.offDetected === "function") {
-            window.Quagga.offDetected(activeHandler);
-          }
-          window.Quagga.stop();
-        } catch (error) {
-          debugLog("scanner stop failed", error);
-        }
+          if (activeHandler && quagga.offDetected) quagga.offDetected(activeHandler);
+          if (processedHandler && quagga.offProcessed) quagga.offProcessed(processedHandler);
+          if (ownsCamera) quagga.stop();
+        } catch (error) { debugLog("scanner stop failed", error); }
       }
-
       activeHandler = null;
+      processedHandler = null;
+      ownsCamera = false;
+      releaseVideo(ownedVideo);
+    }
+    function setState(state, message, detail) {
+      overlay.setAttribute("data-scanner-state", state);
+      status.textContent = message;
+      if (detail) hint.textContent = detail;
+    }
+    function closeScanner(restoreFocus) {
+      scannerSession++;
+      stopCapture();
+      window.clearTimeout(navigationTimer);
       reader.textContent = "";
       overlay.hidden = true;
       startButton.disabled = false;
       document.body.classList.remove("wl-barcode-open");
+      if (restoreFocus !== false) startButton.focus();
     }
-
-    function showScannerError(message) {
-      status.textContent = message;
-      startButton.disabled = false;
+    function cameraError(session, message) {
+      if (session !== scannerSession || overlay.hidden) return;
+      scannerSession++;
+      stopCapture();
+      retryButton.hidden = false;
+      setState("error", message, "Try the camera again, or enter the number printed under the barcode.");
     }
-
+    function search(code, delay) {
+      scannerSession++;
+      stopCapture();
+      foundCode.textContent = code;
+      stage.hidden = false;
+      found.hidden = false;
+      manualForm.hidden = true;
+      retryButton.hidden = true;
+      manualButton.hidden = true;
+      resultsLink.href = "/Products.aspx?pg=0&searchText=" + encodeURIComponent(code);
+      resultsLink.hidden = false;
+      setState("found", "Barcode found — searching products…", "Opening results for " + code);
+      navigationTimer = window.setTimeout(function () { if (!overlay.hidden) window.location.href = resultsLink.href; }, delay);
+    }
     function startScanner() {
-      var session = ++scannerSession;
-      var detections = Object.create(null);
-
+      scannerSession++;
+      stopCapture();
+      window.clearTimeout(navigationTimer);
+      var session = scannerSession;
+      var lastCode = "", matches = 0, lastReadAt = 0, processed = false;
+      reader.textContent = "";
+      ownedVideo = element("video");
+      var video = ownedVideo;
+      video.autoplay = true;
+      video.muted = true;
+      video.playsInline = true;
+      video.setAttribute("playsinline", "");
+      video.addEventListener("loadedmetadata", function () { if (session !== scannerSession) releaseVideo(video); });
+      reader.appendChild(video);
       overlay.hidden = false;
+      stage.hidden = false;
+      found.hidden = true;
+      resultsLink.hidden = true;
+      manualForm.hidden = true;
+      manualButton.hidden = false;
+      retryButton.textContent = "Try camera again";
+      retryButton.hidden = true;
       startButton.disabled = true;
-      status.textContent = "Starting camera...";
       document.body.classList.add("wl-barcode-open");
-
+      setState("loading", "Loading scanner…", "Your camera is used only to read the barcode. Nothing is uploaded.");
+      closeButton.focus();
       loadQuagga(function (loadError) {
         if (session !== scannerSession) return;
-        if (loadError || !window.Quagga) {
-          showScannerError("The scanner could not load. Close it and try again.");
-          return;
-        }
-
-        window.Quagga.init({
-          inputStream: {
-            name: "Live",
-            type: "LiveStream",
-            target: reader,
-            constraints: {
-              facingMode: "environment"
-            }
-          },
-          decoder: {
-            readers: ["upc_reader", "ean_reader", "code_128_reader"]
-          },
-          locate: true,
-          frequency: 8
-        }, function (initError) {
-          if (session !== scannerSession) return;
-          if (initError) {
-            showScannerError("Camera access is unavailable. Check permission and try again.");
-            return;
-          }
-
-          status.textContent = "Point the camera at a product barcode";
-          activeHandler = function (result) {
-            var code = result && result.codeResult && result.codeResult.code;
-            if (!code) return;
-
-            detections[code] = (detections[code] || 0) + 1;
-            if (detections[code] < 3) return;
-
-            status.textContent = "Barcode found";
-            stopScanner();
-            window.location.href = "/Products.aspx?pg=0&searchText=" + encodeURIComponent(code);
-          };
-
-          window.Quagga.onDetected(activeHandler);
-          window.Quagga.start();
-        });
+        if (loadError || !window.Quagga) { cameraError(session, "The scanner could not load."); return; }
+        var quagga = window.Quagga;
+        ownsCamera = true;
+        setState("starting", "Starting camera…", "Allow camera access when your browser asks.");
+        startupTimer = window.setTimeout(function () { cameraError(session, "The scanner took too long to start."); }, 12000);
+        try {
+          quagga.init({
+            inputStream: { name: "Live", type: "LiveStream", target: reader, size: 1280, constraints: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } } },
+            // Decode without worker bootstrap so a blocked worker cannot stall camera startup.
+            numOfWorkers: 0,
+            locator: { halfSample: true, patchSize: "small" },
+            decoder: { readers: ["upc_reader", "ean_reader", "ean_8_reader", "code_128_reader"] },
+            locate: true,
+            frequency: 8
+          }, function (initError) {
+            if (session !== scannerSession) { releaseVideo(video); return; }
+            window.clearTimeout(startupTimer);
+            if (initError) { cameraError(session, "Camera access is unavailable."); return; }
+            setState("scanning", "Scanning for a barcode", "Fit the whole barcode inside the frame. Hold it steady and avoid glare.");
+            processedHandler = function () { processed = true; window.clearTimeout(frameTimer); };
+            if (quagga.onProcessed) quagga.onProcessed(processedHandler);
+            frameTimer = window.setTimeout(function () { if (!processed) cameraError(session, "The camera opened, but scanning did not start."); }, 6000);
+            hintTimer = window.setTimeout(function () { if (session === scannerSession) hint.textContent = "Not reading? Move slightly farther away, reduce glare, or enter the number below."; }, 7000);
+            activeHandler = function (result) {
+              if (session !== scannerSession || overlay.hidden) return;
+              var code = scannerSearchCode(result), now = Date.now();
+              if (!code) return;
+              matches = code === lastCode && now - lastReadAt < 1500 ? matches + 1 : 1;
+              lastCode = code; lastReadAt = now;
+              setState("confirming", "Barcode detected — hold steady", "Confirming the number before searching.");
+              if (matches >= (/code_128/i.test(result.codeResult.format || "") ? 3 : 2)) search(code, 450);
+            };
+            quagga.onDetected(activeHandler);
+            try { quagga.start(); } catch (_) { cameraError(session, "Scanning could not start."); }
+          });
+        } catch (_) { cameraError(session, "The camera could not start."); }
       });
     }
-
     startButton.addEventListener("click", startScanner);
-    closeButton.addEventListener("click", stopScanner);
-    document.addEventListener("keydown", function (event) {
-      if (event.key === "Escape" && !overlay.hidden) stopScanner();
+    retryButton.addEventListener("click", startScanner);
+    closeButton.addEventListener("click", function () { closeScanner(true); });
+    manualButton.addEventListener("click", function () {
+      scannerSession++;
+      stopCapture();
+      manualForm.hidden = false;
+      stage.hidden = true;
+      manualButton.hidden = true;
+      retryButton.textContent = "Use camera";
+      retryButton.hidden = false;
+      setState("manual", "Enter the barcode number", "Use the numbers printed below the bars, including the first and last digits.");
+      manualInput.focus();
     });
-
+    manualForm.addEventListener("submit", function (event) {
+      event.preventDefault();
+      var value = manualInput.value.replace(/[\s-]/g, "");
+      var code = scannerSearchCode({ codeResult: { code: value, format: "ean" } });
+      if (!/^(?:\d{8}|\d{12}|\d{13}|\d{14})$/.test(value) || !code) {
+        setState("manual", "Check the barcode number", "Enter all 8, 12, 13 or 14 digits printed below the bars.");
+        manualInput.setAttribute("aria-invalid", "true"); manualInput.focus(); return;
+      }
+      manualInput.removeAttribute("aria-invalid");
+      search(code, 0);
+    });
+    document.addEventListener("keydown", function (event) {
+      if (overlay.hidden) return;
+      if (event.key === "Escape") { event.preventDefault(); closeScanner(true); return; }
+      if (event.key !== "Tab") return;
+      var controls = [closeButton];
+      if (!retryButton.hidden) controls.push(retryButton);
+      if (!manualButton.hidden) controls.push(manualButton);
+      if (!manualForm.hidden) controls.push(manualInput, manualSubmit);
+      if (!resultsLink.hidden) controls.push(resultsLink);
+      var first = controls[0], last = controls[controls.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    });
+    window.addEventListener("pagehide", function () { closeScanner(false); });
+    document.addEventListener("visibilitychange", function () {
+      if (document.hidden && !overlay.hidden && manualForm.hidden && found.hidden) cameraError(scannerSession, "Camera paused while you were away.");
+    });
     return true;
   }
 
