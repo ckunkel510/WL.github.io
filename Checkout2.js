@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20261105-native-back-navigation-8";
+  window.WL_CHECKOUT_BUILD = "20261105-compact-continue-recovery-9";
   document.documentElement?.setAttribute?.('data-wl-checkout-build',window.WL_CHECKOUT_BUILD);
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
@@ -2037,20 +2037,29 @@ const navDiv = document.createElement("div");
             : ((native.value || native.innerText || "Continue").trim() || "Continue");
 
           proxy.addEventListener("click", async function () {
+            if (proxy.dataset.wlContinueState === "confirming" || (proxy.dataset.wlContinueState === "posting" && proxy.disabled)) return;
+            proxy.dataset.wlContinueState = "validating";
             // Clear any sticky inline errors on Step 5 before submitting
             try { clearInlineError(5); } catch {}
             const ok = (window.WLCheckout && typeof window.WLCheckout.validateBeforeFinalSubmit === "function")
               ? window.WLCheckout.validateBeforeFinalSubmit()
               : ((typeof validateStep === "function") ? validateStep(5) : true);
-            if (!ok) return;
+            if (!ok) {
+              proxy.dataset.wlContinueState = "blocked";
+              proxy.dataset.wlContinueReason = "validation";
+              return;
+            }
 
             const originalText = proxy.textContent;
             let submitted = false;
             proxy.disabled = true;
             proxy.textContent = "Confirming fulfillment…";
+            proxy.dataset.wlContinueState = "confirming";
 
             const fulfillmentSynced = await syncFulfillmentForNativeSubmit();
             if (!fulfillmentSynced) {
+              proxy.dataset.wlContinueState = "blocked";
+              proxy.dataset.wlContinueReason = "fulfillment";
               try {
                 showInlineError(1, "<strong>Please reselect your fulfillment method.</strong><br>We could not confirm that rate with WebTrack.");
                 const fulfillmentEdit = wizard.querySelector('[data-wl-edit-step="1"]');
@@ -2066,6 +2075,7 @@ const navDiv = document.createElement("div");
             syncNativeRequiredDate();
 
             // Trigger native submit/postback
+            proxy.dataset.wlContinueState = "posting";
             const worked = clickNativeContinue();
             submitted = worked;
             if (!worked) {

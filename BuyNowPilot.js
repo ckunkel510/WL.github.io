@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261105-checkout-recovery-60';
+  var BUILD = '20261105-compact-loading-61';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -147,10 +147,13 @@
   function nativeFormsReady(child) {
     var page=child.document;
     if (!page || page.URL==='about:blank' || page.querySelector && !page.querySelector('form')) return false;
-    if (page && page.readyState!=='complete') return false;
+    if (page.readyState!=='complete' && page.readyState!=='interactive') return false;
     var manager=child.Sys?.WebForms?.PageRequestManager?.getInstance?.();
     if (manager?.get_isInAsyncPostBack?.()) return false;
     var application=child.Sys?.Application;
+    // WebForms initializes at DOM ready. Slow images/chat may keep the window
+    // load event pending long after validated native controls are usable.
+    if (page.readyState==='interactive') return application?.get_isInitialized?.()===true;
     return !application?.get_isInitialized || application.get_isInitialized();
   }
   function relayControl(name) {
@@ -449,7 +452,11 @@
   function assertPickupStore(nativeLabel, expectedLabel) {
     if (!text(expectedLabel) || text(nativeLabel)!==text(expectedLabel)) throw new Error('WebTrack did not confirm your pickup store. Change it and try again.');
   }
-  async function refreshDetailsQuote(refresh, isCurrent) {
+  async function refreshDetailsQuote(refresh, isCurrent, refreshCheckout) {
+    if (refreshCheckout) {
+      var fresh = await refreshCheckout();
+      return isCurrent() ? fresh : null;
+    }
     // refresh() may first return an already-running cart-page request. Let that
     // finish, then request the quote with the completed native address fields.
     await refresh();
@@ -1605,7 +1612,7 @@
       } catch (error) { if (active!==attempt || !overlay) return; busy=false; if (fast?.dirty) { presentDraft(); return; } throw error; }
     }
     function openFrame(body) {
-      var opened=Date.now(), nativeEntered=false, retried=false, lastPage=null, progressed=opened;
+      var opened=Date.now(), nativeEntered=false, lastPage=null, progressed=opened;
       frame = doc.createElement('iframe'); frame.title = 'Secure WebTrack checkout'; frame.className = 'bn-frame'; frame.name = 'woodson-buy-now-checkout'; frame.loading = 'eager';
       var ownedFrame=frame;
       function current() { return frame===ownedFrame && !!active && !!fast && !fast.stopped; }
@@ -1643,9 +1650,8 @@
         var waitingForCustomer=fast.loading===false || fast.editor || fast.dirty || fast.ready || fast.securePayment || fast.paymentAuthorizing || fast.paymentQuote || fast.paymentApproval;
         if (waitingForCustomer || busy) progressed=Date.now();
         if (waitingForCustomer || submitting || active.phase!=='checking_out' || busy) return;
-        // Retry only an empty initial GET. Never replay a native POST, payment,
-        // or a frame that has already entered any WebTrack form.
-        if (!nativeEntered && !retried && page?.URL==='about:blank' && Date.now()-opened>4000) { retried=true; ownedFrame.src=ownedFrame.src; }
+        // about:blank is also visible while the initial HTTP request is pending.
+        // Reassigning src cancels that request and starts the same work again.
         if (!nativeEntered && Date.now()-opened>12000) {
           haltFast('Secure checkout did not open. Continue with standard checkout to review your order.','native_entry_unavailable');
           var fallback=overlay?.querySelector('[data-bn-standard]');
@@ -1901,11 +1907,11 @@
       if (error) error.textContent='Enter the name of the person picking up this order.';
       input?.focus();
     }
-    function haltFast(message, errorCode) {
+    function haltFast(message, errorCode, keepCompact) {
       if (!fast || !overlay) return;
       if (!fast.stopped) measureCheckout('error',null,null,null,errorCode || 'checkout_unavailable');
       fast.stopped = true; fast.ready = false; loading(false); status(message,true); fastText('[data-bn-confirm]','Update your options'); updateFastOptions();
-      if (errorCode && recoverStandard(errorCode)) return;
+      if (errorCode && !keepCompact && recoverStandard(errorCode)) return;
       if (!overlay.querySelector('[data-bn-retry]')) {
         var retry = button('Try again',function () { retry.remove(); refreshFast().catch(showError); },true); retry.dataset.bnRetry = ''; overlay.querySelector('[data-bn-native-host]').before(retry);
       }
@@ -1954,6 +1960,14 @@
         var methodButton = page.getElementById('btnDelivered'), pickupButton = page.getElementById('btnPickup');
         if (methodButton && pickupButton) {
           setStage(1);
+          var continued = page.querySelector('.wl-proxy-continue');
+          if (page.documentElement.dataset.bnDetailsContinued && continued?.dataset.wlContinueState==='blocked') {
+            // The proxy explicitly rejected this attempt before a native POST.
+            // Keep the shopper in compact checkout and make its Retry usable.
+            delete page.documentElement.dataset.bnDetailsContinued;
+            haltFast(continued.dataset.wlContinueReason==='fulfillment' ? 'That shipping rate could not be confirmed. Try again or choose another option.' : 'Check your address, billing, or pickup details, then try again.','native_continue_rejected',true);
+            return;
+          }
           if (!child.WLCheckout?.refreshDateUI || !child.WLCheckout?.validateBeforeFinalSubmit) return;
           var manager = child.Sys?.WebForms?.PageRequestManager?.getInstance?.(); if (manager?.get_isInAsyncPostBack?.()) return;
           if (!page.documentElement.dataset.bnFieldsApplied) {
@@ -1982,13 +1996,20 @@
               var quoteTimer, freshQuote;
               try {
                 freshQuote = await Promise.race([
-                  refreshDetailsQuote(function () { return child.WLShippingOffer.refresh(); },function () { return fast===current && frame?.contentDocument===page && !manager?.get_isInAsyncPostBack?.(); }),
+                  refreshDetailsQuote(function () { return child.WLShippingOffer.refresh(); },function () { return fast===current && frame?.contentDocument===page && !manager?.get_isInAsyncPostBack?.(); },child.WLShippingOffer.refreshCheckout && function () { return child.WLShippingOffer.refreshCheckout(); }),
                   new Promise(function (_,reject) { quoteTimer=win.setTimeout(function () { reject(new Error('Delivery rates are taking longer than expected. Retry or choose Pickup.')); },25000); })
                 ]);
+              } catch (_) {
+                if (fast===current && frame?.contentDocument===page) haltFast('Shipping rates are taking longer than expected. Try again or choose Pickup.','fulfillment_quote_timeout',true);
+                return;
               } finally { win.clearTimeout(quoteTimer); }
               if (fast!==current || !frame || frame.contentDocument!==page) return;
               quote = quoteForCart(freshQuote,active.purchase);
-              if (!quote) return;
+              if (!quote) {
+                if (manager?.get_isInAsyncPostBack?.()) return;
+                haltFast('Shipping rates could not be confirmed. Try again or choose Pickup.','fulfillment_quote_unavailable',true);
+                return;
+              }
               detailsQuotes.set(page,quote);
             } else quote = detailsQuotes.get(page);
           }
@@ -2011,7 +2032,7 @@
           // Native method clicks await rate reservation before applying the UI.
           // Do not validate/continue using the previous delivery/UPS intent.
           if (!fulfillmentApplied(fast.method,child.sessionStorage.getItem('wl_fulfillment_intent'),appliedButton?.getAttribute('aria-pressed'))) {
-            if (Date.now()-Number(appliedButton.dataset.bnRequestedAt)>15000) haltFast('WebTrack could not confirm that option. Retry or choose Pickup.','native_option_unconfirmed');
+            if (Date.now()-Number(appliedButton.dataset.bnRequestedAt)>15000) haltFast('WebTrack could not confirm that option. Retry or choose Pickup.','native_option_unconfirmed',true);
             return;
           }
           if (manager?.get_isInAsyncPostBack?.()) return;

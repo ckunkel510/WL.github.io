@@ -487,3 +487,12 @@ test('guest contact hydration uses the entered phone while account hydration pre
   core.applyContactDefaults(page,contact,null);assert.equal(phone.value,'existing');
   core.applyContactDefaults(page,contact,null,true);assert.equal(phone.value,'9795550100');
 });
+
+test('the explicit fresh checkout quote path needs one call and discards obsolete results',async()=>{
+ let oldCalls=0,freshCalls=0,current=true;
+ const quote={options:{ups:{available:true,amount:9.95}}};
+ const refresh=()=>{oldCalls++;return quote;},fresh=async()=>{freshCalls++;return quote;};
+ assert.equal(await core.refreshDetailsQuote(refresh,()=>current,fresh),quote);
+ assert.equal(oldCalls,0);assert.equal(freshCalls,1);
+ current=false;assert.equal(await core.refreshDetailsQuote(refresh,()=>current,fresh),null);
+});

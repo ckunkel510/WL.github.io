@@ -57,9 +57,14 @@ test('cart and Quick buy both wait for cart policy and block a shortage before n
  }
 });
 
-test('native navigation waits for document load as well as WebForms initialization',()=>{
+test('native navigation can use initialized WebForms while unrelated resources still load',()=>{
  const f=fixture();f.child.document={readyState:'loading'};assert.equal(core.continueNativeCart(f.child,f.control),false);
- f.child.document.readyState='interactive';assert.equal(core.continueNativeCart(f.child,f.control),false);assert.equal(f.calls.length,0);
+ f.child.document.readyState='interactive';assert.equal(core.continueNativeCart(f.child,f.control),true);assert.equal(f.calls.length,1);
+});
+test('interactive documents require positive WebForms initialization before posting',()=>{
+ const f=fixture();f.child.document.readyState='interactive';f.initializing();
+ assert.equal(core.continueNativeCart(f.child,f.control),false);
+ delete f.child.Sys.Application;assert.equal(core.continueNativeCart(f.child,f.control),false);assert.equal(f.calls.length,0);
  f.child.document.readyState='complete';assert.equal(core.continueNativeCart(f.child,f.control),true);assert.equal(f.calls.length,1);
 });
 
@@ -69,4 +74,16 @@ test('native controls wait while an UpdatePanel request is in flight',()=>{
  assert.equal(core.continueNativeCart(f.child,f.control),false);assert.equal(f.calls.length,0);
  f.child.Sys.WebForms.PageRequestManager.getInstance=()=>({get_isInAsyncPostBack:()=>false});
  assert.equal(core.continueNativeCart(f.child,f.control),true);assert.equal(f.calls.length,1);
+});
+
+test('hidden checkout skips advisory branch requests only for the exact owned same-origin frame',()=>{
+ const fs=require('node:fs'),vm=require('node:vm'),source=fs.readFileSync(require.resolve('../ShoppingCartBranch.js'),'utf8');
+ for(const mode of ['owned','top','other-name','other-frame','other-origin','inaccessible']) {
+  let ready=0;
+  const win={name:mode==='other-name'?'other':'woodson-buy-now-checkout',location:{pathname:'/ShoppingCart.aspx',origin:'https://webtrack.woodsonlumber.com'}};
+  win.parent=mode==='top'?win:{location:{origin:mode==='other-origin'?'https://example.test':win.location.origin},document:{querySelector:()=>({contentWindow:mode==='other-frame'?{}:win})}};
+  if(mode==='inaccessible')Object.defineProperty(win.parent,'location',{get(){throw Error('cross origin')}});
+  vm.runInNewContext(source,{window:win,document:{},console:{log(){}},$:()=>({ready(){ready++}})});
+  assert.equal(ready,mode==='owned'?0:1,mode);
+ }
 });

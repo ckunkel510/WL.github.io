@@ -65,6 +65,7 @@ async function quoteTimeout(replace) {
   const page={readyState:'complete',querySelector:selector=>selector==='form'?{}:null,documentElement:{dataset:{bnFieldsApplied:'1'}},getElementById:id=>['btnDelivered','btnPickup'].includes(id)?{}:null};
   const initial={method:'delivery',started:Date.now(),driving:false}; let timeout;
   const context=vm.createContext({nativeFormsReady:core.nativeFormsReady,fast:initial,frame:{contentDocument:page},busy:false,submitting:false,active:{phase:'checking_out',purchase:[]},setStage(){},quoteForCart:()=>null,fulfillmentOptions:()=>({}),updateFastOptions(){},status(){},detailsQuotes:new WeakMap(),refreshDetailsQuote:core.refreshDetailsQuote,
+    haltFast(message,code,keepCompact){context.fast.reported={message,code,keepCompact};context.fast.stopped=true;},
     win:{setTimeout:fn=>{timeout=fn;return 1;},clearTimeout(){}}});
   vm.runInContext(driverSource,context);
   const promise=context.driveFast({document:page,WLCheckout:{refreshDateUI(){},validateBeforeFinalSubmit(){}},WLShippingOffer:{current:()=>null,refresh:()=>new Promise(()=>{})}},page);
@@ -75,8 +76,10 @@ async function quoteTimeout(replace) {
 test('a timed-out carrier request from a replaced frame cannot corrupt a ready pickup revision',async()=>{
   const current=await quoteTimeout(true); assert.equal(current.method,'pickup'); assert.equal(current.ready,true);
 });
-test('a carrier timeout on the current checkout still reports the actionable error',async()=>{
-  await assert.rejects(quoteTimeout(false),/Delivery rates are taking longer/);
+test('a carrier timeout on the current checkout offers a compact retry without switching checkout',async()=>{
+  const current=await quoteTimeout(false);
+  assert.match(current.reported.message,/Shipping rates are taking longer/);
+  assert.equal(current.reported.code,'fulfillment_quote_timeout');assert.equal(current.reported.keepCompact,true);assert.equal(current.stopped,true);
 });
 
 const loaderSource=header.slice(header.indexOf('  function deferCartCheckoutUntilPilotReady('),header.indexOf('  function loadTawkCommerceAssist('));

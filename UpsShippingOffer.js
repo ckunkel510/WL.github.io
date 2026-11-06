@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var BUILD_VERSION = "20261030-checkout-quote-context-4";
+  var BUILD_VERSION = "20261105-bounded-checkout-quotes-5";
   var RATE_URL = "https://wl-upsrates.vercel.app/api/fulfillment-quote";
   var APPROVAL_URL = "https://wl-upsrates.vercel.app/api/customization-approval";
   var CUT_POLICY_URL = "https://ckunkel510.github.io/WL.github.io/data/cut-to-ship-products.json?v=20260917-2";
@@ -369,10 +369,26 @@
     return key ? Object.assign({}, STORE_ORIGINS[key]) : null;
   }
 
+  function shippingRequest(url, options, read) {
+    var controller = typeof AbortController === 'function' ? new AbortController() : null;
+    var timer;
+    var request = Promise.resolve().then(function () {
+      return fetch(url, Object.assign({}, options, controller ? { signal: controller.signal } : {}));
+    }).then(read);
+    // Bound response bodies too. Release the shared in-flight promise so the
+    // customer's next attempt can actually retry a stalled request.
+    return Promise.race([request, new Promise(function (_, reject) {
+      timer = setTimeout(function () {
+        if (controller) controller.abort();
+        reject(new Error('Shipping service timed out. Please retry.'));
+      }, 20000);
+    })]).finally(function () { clearTimeout(timer); });
+  }
+
   function accountCarrierOrigin() {
     if (!carrierOriginPromise) {
-      carrierOriginPromise = fetch('/AccountSettings.aspx', { credentials: 'same-origin', cache: 'no-store' })
-        .then(function (response) { if (!response.ok) throw new Error('Account branch unavailable.'); return response.text(); })
+      carrierOriginPromise = shippingRequest('/AccountSettings.aspx', { credentials: 'same-origin', cache: 'no-store' },
+        function (response) { if (!response.ok) throw new Error('Account branch unavailable.'); return response.text(); })
         .then(function (html) { return carrierOriginFromSettings(new DOMParser().parseFromString(html, 'text/html')); })
         .catch(function () { return null; })
         .then(function (origin) { if (!origin) carrierOriginPromise = null; return origin; });
@@ -425,8 +441,8 @@
       var guestZip = text(guest && (guest.zip || guest.postalCode || guest.postcode)).match(/\d{5}/);
       if (guestZip) return Promise.resolve(guestZip[0]);
     } catch (error) {}
-    return fetch("/AccountInfo_R.aspx", { credentials: "same-origin", cache: "no-store" })
-      .then(function (response) { return response.ok ? response.text() : ""; })
+    return shippingRequest("/AccountInfo_R.aspx", { credentials: "same-origin", cache: "no-store" },
+      function (response) { return response.ok ? response.text() : ""; })
       .then(function (html) {
         var doc = new DOMParser().parseFromString(html, "text/html");
         var content = text(Array.prototype.map.call(doc.querySelectorAll(".accountInfoAddress li"), function (item) {
@@ -512,13 +528,15 @@
         shipTo: address,
         cart: items
       };
-      var response = await fetch(RATE_URL, {
+      var result = await shippingRequest(RATE_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody)
+      }, async function (response) {
+        var result = await response.json().catch(function () { return {}; });
+        if (!response.ok) throw new Error(result.error || "UPS shipping offer could not be prepared.");
+        return result;
       });
-      var result = await response.json().catch(function () { return {}; });
-      if (!response.ok) throw new Error(result.error || "UPS shipping offer could not be prepared.");
       // A cart estimate or an earlier address request may finish after native
       // checkout receives its complete address/branch. Do not publish that old
       // result into shared session state or let it change the chosen method.
@@ -547,6 +565,16 @@
       }
     });
     return activeRequest;
+  }
+
+  async function refreshCheckoutOffer() {
+    // Finish an older estimate before taking a new snapshot of the completed
+    // native address. With no active estimate this makes exactly one request.
+    clearTimeout(refreshTimer);
+    if (activeRequest) await activeRequest;
+    clearTimeout(refreshTimer);
+    refreshQueued = false;
+    return refreshOffer();
   }
 
   function scheduleRefresh(delay) {
@@ -853,7 +881,7 @@
     var origin = selectedOrigin();
     var address = checkoutAddress();
     if (!offer || !origin || !address.postalCode) return Promise.resolve(false);
-    activeSelectionRequest = fetch(RATE_URL, {
+    activeSelectionRequest = shippingRequest(RATE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -864,14 +892,16 @@
         shipTo: address,
         totalWeight: offer.packageProfile && offer.packageProfile.totalWeight
       })
-    }).then(function (response) {
+    }, function (response) {
       return response.json().catch(function () { return {}; }).then(function (result) {
         if (!response.ok || !result.ok) throw new Error(result.error || "The fulfillment choice could not be saved.");
-        offer.recommendation = result.recommendation || offer.recommendation;
-        offer.ts = Date.now();
-        try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(offer)); } catch (error) {}
-        return true;
+        return result;
       });
+    }).then(function (result) {
+      offer.recommendation = result.recommendation || offer.recommendation;
+      offer.ts = Date.now();
+      try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(offer)); } catch (error) {}
+      return true;
     }).catch(function (error) {
       console.warn("[WLShippingOffer] Fulfillment selection could not be saved.", error);
       return false;
@@ -882,6 +912,7 @@
   window.WLShippingOffer = {
     version: BUILD_VERSION,
     refresh: refreshOffer,
+    refreshCheckout: refreshCheckoutOffer,
     current: currentOffer,
     select: selectOffer,
     renderCutControls: renderCutControls,

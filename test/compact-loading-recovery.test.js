@@ -16,9 +16,9 @@ function frameFixture() {
   return {context,frame,page,sourceWrites,halts,installs:()=>installs,errors:()=>loads,
     tick(ms){clock=ms;tick();},load(){events.load();}};
 }
-test('frame mounts before its GET; initial about:blank load never enters the checkout driver',()=>{
+test('frame mounts before its GET; a pending initial navigation is never cancelled and restarted',()=>{
   const f=frameFixture();assert.equal(f.sourceWrites[0].mounted,true);f.load();assert.equal(f.installs(),0);
-  f.tick(4100);f.tick(6000);assert.equal(f.sourceWrites.length,2,'only one empty-document GET retry');
+  f.tick(4100);f.tick(6000);assert.equal(f.sourceWrites.length,1,'about:blank can represent a legitimate pending GET');
   f.tick(12001);assert.deepEqual(f.halts,['native_entry_unavailable']);
 });
 test('unavailable documents recover too, and detached-frame loads and timers cannot touch a replacement attempt',()=>{

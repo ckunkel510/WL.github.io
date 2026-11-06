@@ -526,3 +526,55 @@ test('native checkout ignores another page quote with a different address or bra
   env.element('ctl00_PageBody_DeliveryAddress_AddressLine1').value='456 Other St';
   assert.equal(env.context.WLShippingOffer.current(),null);
 });
+
+function quotePerformanceEnvironment() {
+ const env=environment();env.context.AbortController=AbortController;
+ env.element('ctl00_PageBody_DeliveryAddress_Postcode').value='77836';
+ env.storage.set('wl_shipping_offer_cart_v1',JSON.stringify({items:[{productId:'85',productCode:'FISH',quantity:1}],ts:Date.now()}));
+ return env;
+}
+const performanceQuote=amount=>({options:{ups:{available:true,amount}},packageProfile:{totalWeight:50}});
+async function until(condition){for(let i=0;i<100&&!condition();i++)await Promise.resolve();assert.ok(condition());}
+
+test('checkout makes one fresh quote without an already-running estimate',async()=>{
+ const env=quotePerformanceEnvironment();let calls=0;
+ env.context.fetch=async()=>{calls++;return{ok:true,json:async()=>performanceQuote(9.95)}};
+ load('UpsShippingOffer.js',env);
+ const result=await env.context.WLShippingOffer.refreshCheckout();
+ assert.equal(calls,1);assert.equal(result.options.ups.amount,9.95);
+});
+
+test('checkout waits for an older estimate then quotes the newly completed address once',async()=>{
+ const env=quotePerformanceEnvironment();let finish,calls=0;
+ env.context.fetch=async()=>{calls++;if(calls===1)return new Promise(resolve=>{finish=resolve});return{ok:true,json:async()=>performanceQuote(9.95)}};
+ load('UpsShippingOffer.js',env);const older=env.context.WLShippingOffer.refresh();await until(()=>finish);
+ const fresh=env.context.WLShippingOffer.refreshCheckout();
+ env.element('ctl00_PageBody_DeliveryAddress_AddressLine1').value='123 Test St';
+ finish({ok:true,json:async()=>performanceQuote(99)});await older;
+ const result=await fresh;assert.equal(calls,2);assert.equal(result.options.ups.amount,9.95);
+ assert.equal(env.context.WLShippingOffer.current().options.ups.amount,9.95);
+});
+
+test('a stalled quote response body times out, releases Retry, and cannot publish its late result',async()=>{
+ const env=quotePerformanceEnvironment();let finishBody,signal,calls=0;
+ env.context.fetch=async(url,options)=>{calls++;signal=options.signal;return{ok:true,json:()=>new Promise(resolve=>{finishBody=resolve})}};
+ load('UpsShippingOffer.js',env);const stalled=env.context.WLShippingOffer.refreshCheckout();await until(()=>finishBody);
+ env.timers.at(-1)();assert.equal(await stalled,null);assert.equal(signal.aborted,true);
+ assert.equal(env.storage.has('wl_shipping_offer_v1'),false);
+ env.context.fetch=async()=>({ok:true,json:async()=>performanceQuote(9.95)});
+ const retried=await env.context.WLShippingOffer.refreshCheckout();assert.equal(retried.options.ups.amount,9.95);
+ finishBody(performanceQuote(99));await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(env.context.WLShippingOffer.current().options.ups.amount,9.95);assert.equal(calls,1);
+});
+
+test('a stalled fulfillment reservation releases Retry and a late success cannot change the chosen offer',async()=>{
+ const env=quotePerformanceEnvironment();let finishBody;
+ env.context.fetch=async()=>({ok:true,json:async()=>performanceQuote(9.95)});load('UpsShippingOffer.js',env);
+ await env.context.WLShippingOffer.refreshCheckout();
+ env.context.fetch=async()=>({ok:true,json:()=>new Promise(resolve=>{finishBody=resolve})});
+ const pending=env.context.WLShippingOffer.select('ship');await until(()=>finishBody);env.timers.at(-1)();assert.equal(await pending,false);
+ env.context.fetch=async()=>({ok:true,json:async()=>({ok:true,recommendation:{mode:'delivery'}})});
+ assert.equal(await env.context.WLShippingOffer.select('delivery'),true);
+ finishBody({ok:true,recommendation:{mode:'ship'}});await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(env.context.WLShippingOffer.current().recommendation.mode,'delivery');
+});
