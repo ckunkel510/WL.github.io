@@ -1,5 +1,7 @@
 # Compact checkout recovery — November 5, 2026
 
+The build60 behavior below is historical. Build61 supersedes its four-second GET retry and improves native readiness and compact rate recovery; see `compact-checkout-performance-2026-11-05.md`.
+
 Build: `20261105-checkout-recovery-60`. Runtime source is `BuyNowPilot.js`; `headermodern.js` loads its versioned URL. The legacy shopping-cart bundle does not contain this module and is unchanged.
 
 The observed failure left the compact checkout's native iframe on an empty document and eventually required the shopper to find the standard-checkout button. The same cart and destination returned UPS rates in standard checkout. The initial frame-loading cause was not conclusively isolated; the repair bounds that failure and prevents it becoming a checkout dead end.

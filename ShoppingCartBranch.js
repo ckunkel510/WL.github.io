@@ -1,4 +1,11 @@
-if (window.location.pathname === "/ShoppingCart.aspx") {
+function wlBranchIsOwnedCheckoutFrame() {
+  try {
+    return window.parent!==window && window.name==='woodson-buy-now-checkout' && window.parent.location.origin===window.location.origin && window.parent.document.querySelector('#wl-buy-now iframe.bn-frame')?.contentWindow===window;
+  } catch (_) { return false; }
+}
+// The visible cart already prepares its branch suggestion. Repeating account
+// and per-product stock requests in the native frame delays checkout work.
+if (window.location.pathname === "/ShoppingCart.aspx" && !wlBranchIsOwnedCheckoutFrame()) {
   console.log("[CartBranch] Script started.");
 
   const STORES = [

@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var BUILD_VERSION = "20261030-checkout-quote-context-4";
+  var BUILD_VERSION = "20261106-native-summary-quotes-9";
   var RATE_URL = "https://wl-upsrates.vercel.app/api/fulfillment-quote";
   var APPROVAL_URL = "https://wl-upsrates.vercel.app/api/customization-approval";
   var CUT_POLICY_URL = "https://ckunkel510.github.io/WL.github.io/data/cut-to-ship-products.json?v=20260917-2";
@@ -24,6 +24,11 @@
   var cutPolicyPromise = null;
   var webTrackUserIdPromise = null;
   var carrierOriginPromise = null;
+  var quoteState = 'idle';
+  function setQuoteState(value) {
+    quoteState = value;
+    document.documentElement?.setAttribute?.('data-wl-shipping-quote-state',value);
+  }
 
   if (!/ShoppingCart\.aspx|Checkout|PlaceOrder/i.test(window.location.pathname || "")) return;
   if (window.WLShippingOffer && window.WLShippingOffer.version === BUILD_VERSION) return;
@@ -369,10 +374,31 @@
     return key ? Object.assign({}, STORE_ORIGINS[key]) : null;
   }
 
+  function shippingRequest(url, options, read) {
+    var controller = typeof AbortController === 'function' ? new AbortController() : null;
+    var timer;
+    var request = Promise.resolve().then(function () {
+      return fetch(url, Object.assign({}, options, controller ? { signal: controller.signal } : {})).catch(function (error) {
+        var failure=new Error('Shipping service could not be reached. Please retry.');
+        failure.name=error?.name==='AbortError'?'AbortError':'ShippingNetworkError';
+        throw failure;
+      });
+    }).then(read);
+    // Bound response bodies too. Release the shared in-flight promise so the
+    // customer's next attempt can actually retry a stalled request.
+    return Promise.race([request, new Promise(function (_, reject) {
+      timer = setTimeout(function () {
+        var failure=new Error('Shipping service timed out. Please retry.'); failure.name='TimeoutError';
+        reject(failure);
+        if (controller) controller.abort();
+      }, 20000);
+    })]).finally(function () { clearTimeout(timer); });
+  }
+
   function accountCarrierOrigin() {
     if (!carrierOriginPromise) {
-      carrierOriginPromise = fetch('/AccountSettings.aspx', { credentials: 'same-origin', cache: 'no-store' })
-        .then(function (response) { if (!response.ok) throw new Error('Account branch unavailable.'); return response.text(); })
+      carrierOriginPromise = shippingRequest('/AccountSettings.aspx', { credentials: 'same-origin', cache: 'no-store' },
+        function (response) { if (!response.ok) throw new Error('Account branch unavailable.'); return response.text(); })
         .then(function (html) { return carrierOriginFromSettings(new DOMParser().parseFromString(html, 'text/html')); })
         .catch(function () { return null; })
         .then(function (origin) { if (!origin) carrierOriginPromise = null; return origin; });
@@ -425,8 +451,8 @@
       var guestZip = text(guest && (guest.zip || guest.postalCode || guest.postcode)).match(/\d{5}/);
       if (guestZip) return Promise.resolve(guestZip[0]);
     } catch (error) {}
-    return fetch("/AccountInfo_R.aspx", { credentials: "same-origin", cache: "no-store" })
-      .then(function (response) { return response.ok ? response.text() : ""; })
+    return shippingRequest("/AccountInfo_R.aspx", { credentials: "same-origin", cache: "no-store" },
+      function (response) { return response.ok ? response.text() : ""; })
       .then(function (html) {
         var doc = new DOMParser().parseFromString(html, "text/html");
         var content = text(Array.prototype.map.call(doc.querySelectorAll(".accountInfoAddress li"), function (item) {
@@ -481,23 +507,39 @@
     }
   }
 
+  function compactFrameOwnsQuote() {
+    return window.top===window && !!document.querySelector('#wl-buy-now iframe.bn-frame');
+  }
+  function nativePricedStage() {
+    return !document.getElementById('ctl00_PageBody_DeliveryAddress_Postcode') && ['ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView','ctl00_PageBody_ddlCardsOnFile','ctl00_PageBody_CompleteCheckoutButton','ctl00_PageBody_CardOnFileViewTitle_HeaderText'].some(function (id) { return !!document.getElementById(id); });
+  }
+
   async function refreshOffer() {
+    // These views no longer contain the delivery address. An account-address
+    // estimate here would overwrite the checkout quote and add account reads.
+    if (compactFrameOwnsQuote() || nativePricedStage()) {
+      var retained=currentOffer();
+      setQuoteState(retained?'ready':'context_missing');
+      return retained;
+    }
     if (activeRequest) {
       refreshQueued = true;
       return activeRequest;
     }
     activeRequest = (async function () {
+      setQuoteState('requesting');
       var items = cartItems();
       var origin = selectedOrigin();
       var carrierOrigin = await accountCarrierOrigin();
       // Anonymous cart estimates can use their browsing store. A native
       // checkout must resolve its trading branch rather than guess a route.
-      if (!carrierOrigin && document.getElementById('ctl00_PageBody_DeliveryAddress_Postcode')) return null;
+      if (!carrierOrigin && document.getElementById('ctl00_PageBody_DeliveryAddress_Postcode')) { setQuoteState('context_missing'); return null; }
       carrierOrigin = carrierOrigin || origin;
       rememberCart(items, origin);
       var address = checkoutAddress();
       var zip = address.postalCode || await savedZip();
       if (!items.length || !origin || !zip) {
+        setQuoteState('context_missing');
         if (items.length && missingContextRetries < MISSING_CONTEXT_MAX_RETRIES) {
           missingContextRetries += 1;
           scheduleRefresh(750);
@@ -512,20 +554,26 @@
         shipTo: address,
         cart: items
       };
-      var response = await fetch(RATE_URL, {
+      var result = await shippingRequest(RATE_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(requestBody)
+      }, async function (response) {
+        var result = await response.json().catch(function () { return {}; });
+        if (!response.ok) throw new Error(result.error || "UPS shipping offer could not be prepared.");
+        return result;
       });
-      var result = await response.json().catch(function () { return {}; });
-      if (!response.ok) throw new Error(result.error || "UPS shipping offer could not be prepared.");
       // A cart estimate or an earlier address request may finish after native
       // checkout receives its complete address/branch. Do not publish that old
       // result into shared session state or let it change the chosen method.
       if (addressQuoteKey(checkoutAddress(), zip) !== addressQuoteKey(address, zip) || selectedOrigin().postalCode !== origin.postalCode) {
+        setQuoteState('context_changed');
         scheduleRefresh(100);
         return null;
       }
+      // A cart estimate can finish after compact checkout opens its frame.
+      // Let that frame own the address quote; do not publish the older estimate.
+      if (compactFrameOwnsQuote() || nativePricedStage()) { setQuoteState('superseded'); return null; }
       var payload = writeOffer(result, zip, items, false, address, origin, carrierOrigin);
       var selected = rememberedSelection();
       // Checkout calls the mode "ship"; the quote exposes that option as "ups".
@@ -535,8 +583,10 @@
         payload = currentOffer() || payload;
       }
       notifyOffer(payload);
+      setQuoteState('ready');
       return payload;
     })().catch(function (error) {
+      setQuoteState(error?.name==='AbortError'?'aborted':error?.name==='ShippingNetworkError'?'network_error':'error');
       console.warn("[WLShippingOffer] Automatic fulfillment quote could not be prepared.", error);
       return null;
     }).finally(function () {
@@ -547,6 +597,23 @@
       }
     });
     return activeRequest;
+  }
+
+  async function refreshCheckoutOffer(isCurrent) {
+    // Finish an older estimate before taking a new snapshot of the completed
+    // native address. With no active estimate this makes exactly one request.
+    for (var attempt=0; attempt<3; attempt++) {
+      clearTimeout(refreshTimer);
+      if (activeRequest) await activeRequest;
+      if (typeof isCurrent==='function' && !isCurrent()) { setQuoteState('superseded'); return null; }
+      clearTimeout(refreshTimer);
+      refreshQueued = false;
+      var quote = await refreshOffer();
+      if (quote || !['context_changed','aborted','network_error'].includes(quoteState)) return quote;
+      // Native address/state hydration can settle while the quote is running.
+      // Discard it and quote the current context, without retrying HTTP errors.
+    }
+    return null;
   }
 
   function scheduleRefresh(delay) {
@@ -853,7 +920,7 @@
     var origin = selectedOrigin();
     var address = checkoutAddress();
     if (!offer || !origin || !address.postalCode) return Promise.resolve(false);
-    activeSelectionRequest = fetch(RATE_URL, {
+    activeSelectionRequest = shippingRequest(RATE_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -864,14 +931,16 @@
         shipTo: address,
         totalWeight: offer.packageProfile && offer.packageProfile.totalWeight
       })
-    }).then(function (response) {
+    }, function (response) {
       return response.json().catch(function () { return {}; }).then(function (result) {
         if (!response.ok || !result.ok) throw new Error(result.error || "The fulfillment choice could not be saved.");
-        offer.recommendation = result.recommendation || offer.recommendation;
-        offer.ts = Date.now();
-        try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(offer)); } catch (error) {}
-        return true;
+        return result;
       });
+    }).then(function (result) {
+      offer.recommendation = result.recommendation || offer.recommendation;
+      offer.ts = Date.now();
+      try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(offer)); } catch (error) {}
+      return true;
     }).catch(function (error) {
       console.warn("[WLShippingOffer] Fulfillment selection could not be saved.", error);
       return false;
@@ -882,6 +951,7 @@
   window.WLShippingOffer = {
     version: BUILD_VERSION,
     refresh: refreshOffer,
+    refreshCheckout: refreshCheckoutOffer,
     current: currentOffer,
     select: selectOffer,
     renderCutControls: renderCutControls,

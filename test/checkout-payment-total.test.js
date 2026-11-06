@@ -35,7 +35,7 @@ test('approved totals from another checkout revision cannot expose card entry',a
 test('native stored-card selection preserves automatic review; new-card selection waits at total gate',async()=>{
  const driver=source.slice(source.indexOf('    async function driveFast('),source.indexOf('    async function submitNative('));
  for(const hasCard of [true,false]) {
-  let next=0,gates=0;const cards={options:hasCard?[{value:'stored-id',textContent:'1111 Visa'}]:[{value:'',textContent:'Select'}],dispatchEvent(){}},stored={},newCard={dispatchEvent(){}};
+  let next=0,gates=0;const cards={value:hasCard?'stored-id':'',options:hasCard?[{value:'stored-id',textContent:'1111 Visa'}]:[{value:'',textContent:'Select'}],dispatchEvent(){}},stored={checked:hasCard},newCard={dispatchEvent(){}};
   const elements={ctl00_PageBody_ddlCardsOnFile:cards,ctl00_PageBody_rbStoredCard:stored,ctl00_PageBody_rbCreditCard:newCard,ctl00_PageBody_btnContinue_CardOnFileView:{click(){next++;}}};
   const native={documentElement:{dataset:{}},getElementById:id=>elements[id]||null,querySelector:()=>null};
   const fast={started:Date.now(),payments:[]},context=vm.createContext({fast,frame:{contentDocument:native},scope:'test',active:{phase:'checking_out'},busy:false,submitting:false,nativeFormsReady:()=>true,text:String,setStage(){},digest:async()=> 'fingerprint',savedChoice:options=>options[0],guest:true,storage:{getItem(){}},checkIdentity:async()=>{},fastText(){},status(){},paymentTotalGate(){gates++;return false;}});
@@ -51,14 +51,48 @@ test('background quote refresh during identity verification does not swallow pay
 });
 
 
-test('an intermediate native shipping continuation is blocked until the quoted charge and tax match',()=>{
+test('a native shipping click waits for settled totals without consuming Continue or dropping compact checkout',()=>{
  const listenerStart=source.indexOf("      page.addEventListener('click', function (event) {\n        if (fast && event.target.closest('#ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView'))");
  const listenerEnd=source.indexOf("      page.addEventListener('click'",listenerStart+20);
  for(const valid of [true,false]) {
-  let listener,prevented=0,halted=0;
-  const context=vm.createContext({page:{addEventListener:(name,fn)=>{listener=fn;}},fast:{},cachePaymentTotal:()=>valid,haltFast:()=>{halted++;}});
+  let listener,prevented=0,waiting=0;const page={documentElement:{dataset:{bnShippingContinued:'1'}},addEventListener:(name,fn)=>{listener=fn;}};
+  const context=vm.createContext({page,fast:{},cachePaymentTotal:()=>valid,waitShippingTotal:()=>{waiting++;}});
   vm.runInContext(source.slice(listenerStart,listenerEnd),context);
   listener({target:{closest:()=>({})},preventDefault(){prevented++;},stopImmediatePropagation(){prevented++;}});
-  assert.equal(halted,valid?0:1);assert.equal(prevented,valid?0:2);
+  assert.equal(waiting,valid?0:1);assert.equal(prevented,valid?0:2);assert.equal(page.documentElement.dataset.bnShippingContinued,valid?'1':undefined);
  }
+});
+
+test('saved-card changes finish their native update before Continue and an unchanged card emits no extra change',async()=>{
+ const driver=source.slice(source.indexOf('    async function driveFast('),source.indexOf('    async function submitNative('));
+ let pending=false,changes=0,continues=0;
+ const cards={value:'old',options:[{value:'chosen',textContent:'1111 Fixture Visa'}],dispatchEvent(event){if(event.type==='change'){changes++;pending=true}}},stored={checked:true};
+ const elements={ctl00_PageBody_ddlCardsOnFile:cards,ctl00_PageBody_rbStoredCard:stored,ctl00_PageBody_btnContinue_CardOnFileView:{click(){continues++}}};
+ const page={documentElement:{dataset:{}},getElementById:id=>elements[id]||null,querySelector:()=>null};
+ const context=vm.createContext({fast:{started:Date.now(),payments:[]},frame:{contentDocument:page},scope:'fixture',active:{phase:'checking_out'},busy:false,submitting:false,nativeFormsReady:()=>!pending,text:String,setStage(){},digest:async()=> 'fingerprint',savedChoice:options=>options[0],guest:true,storage:{getItem(){}},checkIdentity:async()=>{},fastText(){},status(){}});
+ vm.runInContext(source.slice(source.indexOf('    function setNative('),source.indexOf('    function nativeAddress(')),context);
+ vm.runInContext(driver,context);const child={Event:class{constructor(type){this.type=type}}};
+ await context.driveFast(child,page);assert.equal(changes,1);assert.equal(continues,0);assert.equal(page.documentElement.dataset.bnPaymentContinued,undefined);
+ await context.driveFast(child,page);assert.equal(continues,0);
+ pending=false;await context.driveFast(child,page);assert.equal(changes,1);assert.equal(continues,1);
+ await context.driveFast(child,page);assert.equal(continues,1);
+});
+
+
+test('a shipping view can recover a late quote only for its exact destination and basket',()=>{
+ const address={line1:'100 Fixture Yard',city:'Hudson',stateValue:'NY',zip:'10520',countryValue:'USA'};
+ const items=[{pid:'1',code:'ITEM',quantity:1,unit:'ea'}],offer={cartSignature:'1:ITEM:1:',addressKey:JSON.stringify([['100 fixture yard'],'hudson','NY','10520','US']),options:{ups:{available:true,amount:25}}};
+ for(const mode of ['matching','address','basket']) {
+  const candidate={...offer};if(mode==='address')candidate.addressKey=candidate.addressKey.replace('10520','77833');if(mode==='basket')candidate.cartSignature='other';
+  const fast={revision:1,address,method:'ship',methods:{ship:{pending:true}},shippingOptions:[]};
+  const native=page(delivered());const context=vm.createContext({fast,frame:{contentWindow:{WLShippingOffer:{current:()=>candidate}}},active:{cartCheckout:true,current:items,purchase:items},nativeCartSignature:core.nativeCartSignature,paymentTotals:core.paymentTotals,quotedShipping:core.quotedShipping,quoteForAddress:core.quoteForAddress,quoteForCart:core.quoteForCart,fulfillmentOptions:core.fulfillmentOptions});
+  vm.runInContext(source.slice(source.indexOf('    function paymentPricingScope('),source.indexOf('    function readPaymentTotal(')),context);
+  assert.equal(context.cachePaymentTotal(native),mode==='matching',mode);assert.equal(!!fast.paymentPricing,mode==='matching',mode);
+ }
+});
+
+test('shipping total wait has a bounded compact retry and never accepts unconfirmed tax',()=>{
+ let clock=1,halts=0;const native=page([]);const context=vm.createContext({status(){},Date:{now:()=>clock},haltFast(message,code,keepCompact){assert.equal(code,'shipping_total_unconfirmed');assert.equal(keepCompact,true);halts++;}});
+ vm.runInContext(source.slice(source.indexOf('    function waitShippingTotal('),source.indexOf('    function readPaymentTotal(')),context);
+ context.waitShippingTotal(native);clock=9000;context.waitShippingTotal(native);assert.equal(halts,0);clock=10002;context.waitShippingTotal(native);assert.equal(halts,1);
 });
