@@ -97,3 +97,22 @@ test('native-view loader deduplicates existing native script tags and retries on
  win.document={readyState:'complete',scripts,querySelector:()=>({}),createElement:()=>({setAttribute(){},remove(){}}),head:{appendChild:s=>scripts.push(s)}};
  core.boot(win);assert.equal(scripts.length,2);assert.equal(timers.length,0);scripts[1].onerror();timers[0]();assert.equal(scripts.length,3);scripts[2].onerror();assert.equal(timers.length,1);
 });
+
+test('critical UI assets can follow the existing production mirror without accepting arbitrary asset hosts',()=>{
+ const source=header.slice(header.indexOf('  function uiAssetBase('),header.indexOf('  var UI_ASSET_BASE='));
+ const context=vm.createContext({URL});vm.runInContext(source,context);
+ for(const origin of ['https://wl-upsrates.vercel.app','https://ckunkel510.github.io/WL.github.io']) {
+  const expected=origin.endsWith('vercel.app')?origin+'/':'https://ckunkel510.github.io/WL.github.io/';
+  assert.equal(context.uiAssetBase(origin+'/headermodern.js?v=1'),expected);
+  assert.equal(cart.assetBase(origin+'/CartDesignPilot.js?v=1'),expected);
+ }
+ for(const source of ['',undefined,'https://example.invalid/headermodern.js','https://wl-upsrates.vercel.app/other/headermodern.js'])assert.equal(context.uiAssetBase(source),'https://ckunkel510.github.io/WL.github.io/');
+ assert.equal(cart.assetBase('https://example.invalid/CartDesignPilot.js'),'https://ckunkel510.github.io/WL.github.io/');
+});
+test('cart and compact runtime URLs use the chosen UI asset base while optional measurement remains separate',()=>{
+ const source=header.slice(header.indexOf('  function deferCartCheckoutUntilPilotReady('),header.indexOf('  function loadTawkCommerceAssist(')),scripts=[];
+ const win=Object.assign(bus(),{location:{origin:'https://webtrack.woodsonlumber.com',pathname:'/ShoppingCart.aspx'},navigator:{},setTimeout(){}});win.top=win;
+ const doc={querySelector:s=>s.includes('SignOut=1')?{}:null,createElement:()=>Object.assign(bus(),{setAttribute(){}}),head:{appendChild:s=>scripts.push(s)}};
+ const context=vm.createContext({window:win,document:doc,WEBTRACK:win.location.origin,UI_ASSET_BASE:'https://wl-upsrates.vercel.app/'});vm.runInContext(source,context);context.loadCartDesign();context.loadBuyNowPilot();assert.equal(scripts.length,2);assert.ok(scripts.every(s=>s.src.startsWith('https://wl-upsrates.vercel.app/')));
+ assert.match(header,/ANALYTICS_URL = "https:\/\/ckunkel510\.github\.io/);assert.match(header,/TAWK_COMMERCE_ASSIST_URL = "https:\/\/ckunkel510\.github\.io/);
+});

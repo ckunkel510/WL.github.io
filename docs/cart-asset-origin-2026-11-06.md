@@ -1,0 +1,9 @@
+# Optional cart asset mirror — November 6, 2026
+
+GitHub Pages accepted the PR131 artifact but left both deployment attempts in deployment_queued before failing. Public verification still showed the previous release. The existing wl-upsrates Vercel project already serves the repository's static files with the expected JavaScript/CSS content types, so it can supply the cart UI without a DNS change.
+
+The header's critical UI loaders and the cart stylesheet now follow the existing production Vercel origin only when their own script was loaded from that exact approved host/path. Normal GitHub loading retains its existing base. Other origins fall back to the established GitHub base. Analytics and chat retain their existing independent URLs. No new API, credentials, account, cart or order behavior is introduced.
+
+Optional admin configuration is supplied in config/webtrack-cart-script-block.vercel.js and config/webtrack-header-loader.vercel.html. Replace the corresponding existing blocks; do not add duplicates. The cart block preserves existing functional scripts, keeps optional MetaShop on its prior host, and uses CartNativeViews for native wizard/card decorators. Versioned core URLs select the jQuery readiness repair. These admin changes are not activated by a repository merge.
+
+625 tests pass, including exact origin selection, rejection of arbitrary asset hosts and critical-versus-optional asset delivery. Authenticated native Chrome candidate mirror loading rendered cart style10 and reached the requested destination/saved-card compact review in29.9s. The root/header configuration was simulated with public-JS Local Overrides; the cart stylesheet and other mirror runtime files were served by the real existing Vercel host. Published mirror byte comparison follows merge. The precise iPhone VPN failure and resolution still require the user's configuration update and retest. No orders or cart-line changes.

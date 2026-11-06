@@ -1,15 +1,22 @@
 /* Woodson Ink cart. Native cart controls remain the action owners. */
 (function (root, factory) {
   'use strict';
-  var core=factory();
+  var core=factory(root && root.document && root.document.currentScript && root.document.currentScript.src);
   if (typeof module==='object' && module.exports) module.exports=core;
   else core.boot(root).catch(function () { /* Keep the existing cart if unavailable. */ });
-})(typeof window==='object' ? window : null,function () {
+})(typeof window==='object' ? window : null,function (source) {
   'use strict';
-  var BUILD='20261106-cart-style-recovery-9';
+  var BUILD='20261106-cart-style-origin-10';
   var ORIGIN='https://webtrack.woodsonlumber.com';
-  var ASSETS='https://ckunkel510.github.io/WL.github.io/';
+  var ASSETS=assetBase(source);
   var REVEAL=164;
+  function assetBase(source) {
+    try {
+      var url=new URL(source);
+      if (url.origin==='https://wl-upsrates.vercel.app' && url.pathname==='/CartDesignPilot.js') return url.origin+'/';
+    } catch (_) {}
+    return 'https://ckunkel510.github.io/WL.github.io/';
+  }
   function text(value) { return String(value || '').replace(/\s+/g,' ').trim(); }
   function naturalCart(doc) {
     if (doc.querySelector('#ctl00_PageBody_CompleteCheckoutButton,#ctl00_PageBody_SuccessfulPaymentResults_MerchantDetailsPanel,#btnPickup')) return false;
@@ -198,5 +205,5 @@
       return cartStyles(win,doc,ASSETS+'CartDesignPilot.css?v='+BUILD);
     }
   }
-  return {cartStyles:cartStyles,boot:boot,build:BUILD,naturalCart:naturalCart,checkoutVisible:checkoutVisible,gestureAxis:gestureAxis,swipeOffset:swipeOffset,revealAfterDrag:revealAfterDrag,delegateAction:delegateAction};
+  return {assetBase:assetBase,cartStyles:cartStyles,boot:boot,build:BUILD,naturalCart:naturalCart,checkoutVisible:checkoutVisible,gestureAxis:gestureAxis,swipeOffset:swipeOffset,revealAfterDrag:revealAfterDrag,delegateAction:delegateAction};
 });

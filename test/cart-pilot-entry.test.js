@@ -89,7 +89,7 @@ function loaderFixture({signedIn=true,pathname='/Products.aspx',storage={}}={}) 
   const scripts=[];
   const win={location:{origin:'https://webtrack.woodsonlumber.com',pathname},navigator:{},setTimeout(){},addEventListener(){}};win.top=win;
   const document={querySelector:selector=>selector.includes('SignOut=1')?(signedIn?{}:null):null,createElement:()=>Object.assign(bus(),{setAttribute(){}}),head:{appendChild:node=>scripts.push(node)}};
-  const context=vm.createContext({window:win,document,localStorage:storage,WEBTRACK:win.location.origin});vm.runInContext(loaderSource,context);context.loadBuyNowPilot();return scripts;
+  const context=vm.createContext({window:win,document,localStorage:storage,UI_ASSET_BASE:'https://ckunkel510.github.io/WL.github.io/',WEBTRACK:win.location.origin});vm.runInContext(loaderSource,context);context.loadBuyNowPilot();return scripts;
 }
 test('the product loader no longer requires the former pilot user hint',()=>{
   assert.equal(loaderFixture().length,1);
@@ -109,7 +109,7 @@ test('Ink cart loader is independent of sign-in and excludes frames, other pages
   for(const mode of ['signed-in','guest','anonymous','frame','product','duplicate','other-origin']) {
     const scripts=[],win={addEventListener(){},location:{origin:mode==='other-origin'?'https://example.invalid':'https://webtrack.woodsonlumber.com',pathname:mode==='product'?'/Products.aspx':'/ShoppingCart.aspx'}};win.top=mode==='frame'?{}:win;
     const document={querySelector:()=>mode==='duplicate'?{}:null,createElement:()=>Object.assign(bus(),{setAttribute(){}}),head:{appendChild:s=>scripts.push(s)}};
-    const context=vm.createContext({window:win,document,WEBTRACK:'https://webtrack.woodsonlumber.com'});vm.runInContext(deliverySource+cartLoaderSource,context);context.loadCartDesign();
+    const context=vm.createContext({window:win,document,UI_ASSET_BASE:'https://ckunkel510.github.io/WL.github.io/',WEBTRACK:'https://webtrack.woodsonlumber.com'});vm.runInContext(deliverySource+cartLoaderSource,context);context.loadCartDesign();
     assert.equal(scripts.length,['signed-in','guest','anonymous'].includes(mode)?1:0,mode);
     if(scripts.length)assert.equal(new URL(scripts[0].src).searchParams.get('v'),require('../CartDesignPilot').build);
   }
