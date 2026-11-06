@@ -56,6 +56,31 @@ function baseBody() {
   };
 }
 
+test("carrier transit estimates survive packing, pricing and the compact fulfillment response", async () => {
+  const { normalizedRates } = require('../api/ups-rates')._test;
+  const compact = require('../BuyNowPilot');
+  const rates = normalizedRates({ RateResponse: { RatedShipment: [
+    { Service: { Code: '03' }, TotalCharges: { MonetaryValue: '8.00' }, TimeInTransit: { ServiceSummary: { EstimatedArrival: {
+      BusinessDaysInTransit: '4', Pickup: { Date: '20261106' }, Arrival: { Date: '20261112' }
+    } } } },
+    { Service: { Code: '02' }, TotalCharges: { MonetaryValue: '49.31' }, TimeInTransit: { ServiceSummary: { EstimatedArrival: {
+      BusinessDaysInTransit: '2', Pickup: { Date: '20261106' }, Arrival: { Date: '20261110' }
+    } } } }
+  ] } });
+  let stored;
+  const quote = await buildFulfillmentQuote(baseBody(), {
+    requestRates: async () => ({ rates }), getCatalogProducts: async () => catalog(), shippingPolicy: policy,
+    quoteWoodsonDelivery: async () => ({ available: false }),
+    storeFulfillmentClaim: async claim => { stored = claim; return { ok: true }; }
+  });
+  const ship = compact.fulfillmentOptions(true, quote).ship;
+  assert.equal(ship.rate, '$9.95');
+  assert.match(compact.shippingEstimate(ship, { value: '03', label: 'UPS Ground $9.95 USD' }), /Nov 12/);
+  assert.match(compact.shippingEstimate(ship, { value: '02', label: 'UPS Second Day Air $49.31 USD' }), /Nov 10/);
+  assert.equal(compact.quotedShipping('ship', ship, { value: '02' }, false), 4931);
+  assert.deepEqual(stored.availableRates.ship[1].transit, rates[1].transit);
+});
+
 test("prefers UPS when it is the lower-cost home fulfillment option", () => {
   const result = recommendFulfillment({
     ups: { available: true, amount: 20 },

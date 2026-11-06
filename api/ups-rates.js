@@ -217,10 +217,17 @@ function packagePayload(item) {
   return payload;
 }
 
-function buildRateRequest(body) {
+function buildRateRequest(body, includeTransit = true) {
   const accountNumber = process.env.UPS_ACCOUNT_NUMBER || "";
   const shipFrom = normalizeAddress(body.shipFrom, "Ship-from");
   const shipTo = normalizeAddress(body.shipTo, "Ship-to");
+  if (includeTransit) {
+    // UPS transit rejects city/ZIP mismatches that ordinary rating accepts.
+    // Normalize only the carrier lookup; do not edit the customer's order address.
+    for (const address of [shipFrom, shipTo]) {
+      address.City = cleanText(zipcodes.lookup(address.PostalCode.slice(0, 5))?.city || address.City, 30);
+    }
+  }
   const packages = normalizePackages(body.packages);
   const totalWeight = packages.reduce((sum, item) => sum + item.weight, 0);
 
@@ -229,7 +236,7 @@ function buildRateRequest(body) {
     payload: {
       RateRequest: {
         Request: {
-          RequestOption: "Shop",
+          RequestOption: includeTransit ? "Shoptimeintransit" : "Shop",
           TransactionReference: { CustomerContext: "Woodson WebTrack checkout" }
         },
         Shipment: {
@@ -243,6 +250,9 @@ function buildRateRequest(body) {
           PaymentDetails: {
             ShipmentCharge: [{ Type: "01", BillShipper: { AccountNumber: accountNumber } }]
           },
+          // Normally request transit details with the rates in one carrier call.
+          // UPS defaults the quote's pickup date; it is not a store dispatch promise.
+          ...(includeTransit ? { DeliveryTimeInformation: { PackageBillType: "03" } } : {}),
           NumOfPieces: String(packages.length),
           ShipmentTotalWeight: {
             UnitOfMeasurement: { Code: "LBS", Description: "Pounds" },
@@ -256,38 +266,83 @@ function buildRateRequest(body) {
   };
 }
 
+function carrierDate(value) {
+  const raw = String(value || "");
+  if (!/^\d{8}$/.test(raw)) return "";
+  const iso = `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
+  const date = new Date(`${iso}T12:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === iso ? iso : "";
+}
+
+function transitEstimate(shipment) {
+  const arrival = shipment?.TimeInTransit?.ServiceSummary?.EstimatedArrival;
+  const rawDays = arrival?.BusinessDaysInTransit ?? shipment?.GuaranteedDelivery?.BusinessDaysInTransit;
+  const days = /^\d{1,2}$/.test(String(rawDays)) ? Number(rawDays) : NaN;
+  const pickupDate = carrierDate(arrival?.Pickup?.Date);
+  const arrivalDate = carrierDate(arrival?.Arrival?.Date);
+  const result = {};
+  if (Number.isInteger(days) && days >= 0 && days <= 60) result.businessDays = days;
+  // Calendar estimates only make sense together with their carrier pickup basis.
+  if (pickupDate && arrivalDate && arrivalDate >= pickupDate) {
+    result.pickupDate = pickupDate;
+    result.arrivalDate = arrivalDate;
+  }
+  return Object.keys(result).length ? result : null;
+}
+
 function normalizedRates(data) {
   const rated = data?.RateResponse?.RatedShipment;
   const shipments = Array.isArray(rated) ? rated : (rated ? [rated] : []);
+  const services = new Set();
   return shipments.map((shipment) => {
     const serviceCode = cleanText(shipment?.Service?.Code, 4);
     const charge = shipment?.NegotiatedRateCharges?.TotalCharge || shipment?.TotalCharges || {};
+    const transit = transitEstimate(shipment);
     return {
       serviceCode,
       serviceName: SERVICE_NAMES[serviceCode] || `UPS service ${serviceCode}`,
       currency: cleanText(charge.CurrencyCode || "USD", 3),
       amount: Number(charge.MonetaryValue),
-      billingWeight: Number(shipment?.BillingWeight?.Weight || 0)
+      billingWeight: Number(shipment?.BillingWeight?.Weight || 0),
+      ...(transit ? { transit } : {})
     };
   }).filter((rate) => rate.serviceCode && Number.isFinite(rate.amount))
-    .sort((left, right) => left.amount - right.amount);
+    .sort((left, right) => left.amount - right.amount)
+    // Transit shopping may include surcharge variants (e.g. Saturday) for the
+    // same code. Native checkout selects by service code, not those add-ons.
+    .filter((rate) => {
+      if (services.has(rate.serviceCode)) return false;
+      services.add(rate.serviceCode);
+      return true;
+    });
 }
 
 async function requestRates(body) {
   const accessToken = await getAccessToken();
-  const { payload } = buildRateRequest(body);
   const transactionId = `wl-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`.slice(0, 32);
-  const response = await fetchWithTimeout(`${upsBaseUrl()}/api/rating/v2409/Shop`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-      transId: transactionId,
-      transactionSrc: "woodson-webtrack"
-    },
-    body: JSON.stringify(payload)
-  });
-  const data = await response.json().catch(() => ({}));
+  const deadline = Date.now() + 9000;
+  async function rate(includeTransit) {
+    const { payload } = buildRateRequest(body, includeTransit);
+    const option = payload.RateRequest.Request.RequestOption;
+    const response = await fetchWithTimeout(`${upsBaseUrl()}/api/rating/v2409/${option}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        transId: transactionId,
+        transactionSrc: "woodson-webtrack"
+      },
+      body: JSON.stringify(payload)
+    }, Math.max(1, deadline - Date.now()));
+    return { response, data: await response.json().catch(() => ({})) };
+  }
+  let { response, data } = await rate(true);
+  // An explicit transit validation rejection must not make ordinary UPS rates
+  // unavailable. Retry that read once, sharing the original nine-second budget.
+  // Do not replay timeouts, authentication failures, rate limits or outages.
+  if (!response.ok && [400, 422].includes(response.status) && Date.now() < deadline) {
+    ({ response, data } = await rate(false));
+  }
   if (!response.ok) {
     const upstreamMessage = data?.response?.errors?.[0]?.message || "UPS could not rate this shipment.";
     throw new RequestError(502, cleanText(upstreamMessage, 180));

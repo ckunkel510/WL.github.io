@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  window.WL_HEADER_BUILD = "20261106-cart-delivery-recovery-3";
+  window.WL_HEADER_BUILD = "20261106-ups-speed-loader-5";
 
   var LOG = "[WL HeaderEnhancer]";
   var DEBUG = false; // Set to true only when actively troubleshooting.
@@ -281,7 +281,7 @@
       catch (_) { return; }
     }
     // UI and account-scoped state require fresh native sign-in/account checks.
-    loadCartRuntimeScript('script[data-wl-buy-now-pilot]','https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261106-native-card-choice-71','data-wl-buy-now-pilot',deferCartCheckoutUntilPilotReady);
+    loadCartRuntimeScript('script[data-wl-buy-now-pilot]','https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261106-ups-speed-estimates-72','data-wl-buy-now-pilot',deferCartCheckoutUntilPilotReady);
   }
 
   function loadTawkCommerceAssist() {

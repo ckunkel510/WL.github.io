@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261106-native-card-choice-71';
+  var BUILD = '20261106-ups-speed-estimates-72';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -487,6 +487,24 @@
     var rate = (option.rates || []).find(function (row) { return String(row.serviceCode) === service.value || clean(service.label).includes(clean(row.serviceName)) && !!clean(row.serviceName); });
     if (!rate || !(Number(rate.amount) > 0)) throw new Error('This shipping speed needs regular checkout.');
     return Math.round(Number(rate.amount)*100);
+  }
+  function shippingEstimate(option, service) {
+    if (!option || option.pending) return 'Checking the UPS arrival estimate…';
+    var clean = function (value) { return text(value).toLowerCase().replace(/\bups\b/g,'').replace(/[^a-z0-9]/g,''); };
+    var rates = option.rates || [], label = clean(service?.label);
+    var rate = rates.find(function (row) { return service?.value && String(row.serviceCode)===service.value; }) ||
+      rates.find(function (row) { return label && clean(row.serviceName) && label.includes(clean(row.serviceName)); }) ||
+      ((!service || /ground/i.test(service.label)) ? rates.find(function (row) { return row.serviceCode==='03'; }) : null);
+    var estimate = option.available===false ? null : rate?.transit;
+    var day = function (value) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(value || '')) return '';
+      var date = new Date(value+'T12:00:00Z');
+      return Number.isFinite(date.getTime()) && date.toISOString().slice(0,10)===value ? date.toLocaleDateString(undefined,{month:'short',day:'numeric',timeZone:'UTC'}) : '';
+    };
+    var arrival = day(estimate?.arrivalDate), pickup = day(estimate?.pickupDate);
+    if (arrival && pickup && estimate.arrivalDate>=estimate.pickupDate) return 'UPS estimated arrival '+arrival+' if dispatched '+pickup+'. Store dispatch timing must be confirmed; arrival is not guaranteed.';
+    if (Number.isInteger(estimate?.businessDays) && estimate.businessDays>=0 && estimate.businessDays<=60) return 'UPS estimated transit: '+estimate.businessDays+' business day'+(estimate.businessDays===1?'':'s')+' after dispatch. Store processing time is additional.';
+    return 'Arrival estimate unavailable. UPS transit starts after dispatch.';
   }
   function reviewTotals(summary) {
     var result = {};
@@ -1082,7 +1100,7 @@
         '<div class="bn-options">' +
         (guest ? '' : '<div class="bn-option"><span class="bn-option-icon" aria-hidden="true">⌂</span><div><strong>Sales address / job</strong><span data-bn-sales>Main account</span><span data-bn-invoice>Invoice: main account</span></div><button type="button" data-bn-edit="sales" aria-label="Change sales address or job">Change</button></div>') +
         '<div class="bn-option"><span class="bn-option-icon">⌖</span><div><strong data-bn-address-title>Deliver to</strong><span data-bn-address>Choose an address</span><span data-bn-pickup-person hidden></span></div><button type="button" data-bn-edit="address">Change</button></div>' +
-        '<div class="bn-option"><span class="bn-option-icon">◷</span><div><strong data-bn-timing-title>When</strong><span data-bn-timing>Earliest available</span></div><button type="button" data-bn-edit="timing">Change</button></div>' +
+        '<div class="bn-option"><span class="bn-option-icon">◷</span><div><strong data-bn-timing-title>When</strong><span data-bn-timing>Earliest available</span><span data-bn-arrival hidden></span></div><button type="button" data-bn-edit="timing">Change</button></div>' +
         '<div class="bn-option"><span class="bn-option-icon">▤</span><div><strong>Payment</strong><span data-bn-payment>Saved payment</span></div><button type="button" data-bn-edit="payment">Change</button></div></div>' +
         '<button type="button" class="bn-extras" data-bn-edit="extras"><span data-bn-extras></span><span>＋</span></button>' +
         '<button type="button" class="bn-more" data-bn-edit="notes">Order notes & billing</button>' +
@@ -1294,7 +1312,7 @@
     function editFast(kind) {
       if (!fast || submitting || fast.editor || !editableFast(kind)) return;
       var host = overlay.querySelector('[data-bn-editor]'); host.replaceChildren(); host.hidden = false; fast.editor = kind; fast.editorTrigger=doc.activeElement; overlay.querySelector('.bn-panel').classList.add('bn-editing'); loading(fast.loading);
-      var titles = {sales:'Sales address / job',address:fast.method === 'pickup' ? 'Pickup store & person' : 'Delivery address',timing:'Schedule',payment:'Payment',extras:'Add from your cart',notes:'Order details'};
+      var titles = {sales:'Sales address / job',address:fast.method === 'pickup' ? 'Pickup store & person' : 'Delivery address',timing:fast.method==='ship'?'UPS shipping speed':'Schedule',payment:'Payment',extras:'Add from your cart',notes:'Order details'};
       var heading=node('div','','bn-workspace-head'); heading.append(node('h3',titles[kind]),button('Back to order',closeEditor,true)); host.appendChild(heading);
       var form = doc.createElement('form'), values = {}, action = null; form.className='bn-editor-form'; host.appendChild(form);
       var fields=node('div','','bn-editor-fields'); form.appendChild(fields);
@@ -1329,7 +1347,11 @@
           values.window = field(fields, 'Delivery window', fast.window, 'text', [{value:'Morning',label:'Morning'},{value:'Afternoon',label:'Afternoon'}]);
         } else {
           values.date.closest('label').hidden = true;
-          values.shipping = field(fields, 'UPS service', fast.shippingValue, 'text', fast.shippingOptions || []);
+          values.shipping = field(fields, 'UPS shipping speed', fast.shippingValue, 'text', fast.shippingOptions || []);
+          var estimate = node('p','','bn-shipping-estimate'); estimate.setAttribute('role','status'); fields.appendChild(estimate);
+          var preview = function () { estimate.textContent=shippingEstimate(fast.methods.ship,(fast.shippingOptions || []).find(function (option) { return option.value===values.shipping.value; })); };
+          values.shipping.addEventListener('change',preview); preview();
+          fields.appendChild(node('p','Apply your choice, then review the updated shipping, tax and order total.'));
         }
       } else if (kind === 'payment') {
         values.payment = field(fields, 'Saved payment', fast.paymentFingerprint, 'text', (fast.payments || []).map(function (option) { return {value:option.fingerprint,label:option.label}; }));
@@ -1918,15 +1940,21 @@
       overlay?.querySelector('[data-bn-edit="address"]')?.setAttribute('aria-label',fast.method==='pickup' ? 'Change pickup store or person' : 'Change delivery address');
       if (overlay) { overlay.querySelectorAll('[data-bn-pickup-notice],[data-bn-pickup-items]').forEach(function (el) { el.hidden=fast.method!=='pickup'; }); }
       if (guest && !fast.ready && !fast.securePayment) fastText('[data-bn-payment]','Enter securely');
-      fastText('[data-bn-timing-title]',fast.method==='pickup' ? 'Pickup request' : 'When');
+      fastText('[data-bn-timing-title]',fast.method==='pickup' ? 'Pickup request' : fast.method==='ship' ? 'UPS shipping speed' : 'When');
+      fastText('[data-bn-edit="timing"]',fast.method==='ship' ? 'Change speed' : 'Change');
       fastText('[data-bn-shipping-label]',fast.method==='pickup'?'Pickup':fast.method==='ship'?'Shipping':'Delivery');
       if (fast.method === 'ship') {
         var service = (fast.shippingOptions || []).find(function (option) { return option.value === fast.shippingValue; });
-        fastText('[data-bn-timing]', service ? service.label : 'UPS Ground');
+        // A restored draft retains the selected value, but native options are
+        // read afresh. Do not substitute Ground's date for an unconfirmed speed.
+        var confirming = !!fast.shippingValue && !service;
+        fastText('[data-bn-timing]', service ? service.label : confirming ? 'Confirming selected UPS speed…' : 'UPS Ground');
+        fastText('[data-bn-arrival]',confirming ? 'Confirming the UPS arrival estimate…' : shippingEstimate(fast.methods.ship,service));
       } else if (fast.date) {
         var parts = fast.date.split('-').map(Number), date = new Date(parts[0],parts[1]-1,parts[2],12);
         fastText('[data-bn-timing]',date.toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'})+' · '+(fast.method==='pickup' ? fast.pickupTime || 'First available' : fast.window));
       } else fastText('[data-bn-timing]','Earliest available');
+      var arrival=overlay?.querySelector('[data-bn-arrival]'); if (arrival) arrival.hidden=fast.method!=='ship';
       if (overlay) loading(fast.loading);
     }
     function requestPickupPerson() {
@@ -2435,5 +2463,5 @@
       if (latest && latest.owner !== owner) { busy = true; clearFrame(); status('Buy now is active in another tab. Cart changes have stopped here.', true); }
     });
   }
-  return { nativeCartLines:nativeCartLines, nativeCartSignature:nativeCartSignature, pickupPersonName:pickupPersonName, applyPickupSelection:applyPickupSelection, guestCartHandoff:guestCartHandoff, listedSalesDetails:listedSalesDetails, salesAddressPage:salesAddressPage, allSalesAddresses:allSalesAddresses, savedSalesAddresses:savedSalesAddresses, salesAddressLabel:salesAddressLabel, matchingSalesAddresses:matchingSalesAddresses, savedSalesDetails:savedSalesDetails, assertSalesReview:assertSalesReview, relayControl:relayControl, nativeFormsReady:nativeFormsReady, continueNativeCart:continueNativeCart, pickupStoreName:pickupStoreName, centralCalendar:centralCalendar, calendarAfter:calendarAfter, pickupTimeChoices:pickupTimeChoices, stockFromDocument:stockFromDocument, pickupReadiness:pickupReadiness, boot: boot, build: BUILD, audience: AUDIENCE, deliveryAddressSummary:deliveryAddressSummary, nativeStateOption:nativeStateOption, accountScopeInput:accountScopeInput, guestContext:guestContext, guestStartPending:guestStartPending, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, nativeOrderNumber: nativeOrderNumber, cartOrderReceipt: cartOrderReceipt, readCartOrderReceipt: readCartOrderReceipt, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, cartPolicyReady: cartPolicyReady, hasCustomCuts: hasCustomCuts, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, paymentTotals: paymentTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, hydrateMatchingAddressState: hydrateMatchingAddressState, quoteForCart: quoteForCart, quoteForAddress: quoteForAddress, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
+  return { shippingEstimate:shippingEstimate, nativeCartLines:nativeCartLines, nativeCartSignature:nativeCartSignature, pickupPersonName:pickupPersonName, applyPickupSelection:applyPickupSelection, guestCartHandoff:guestCartHandoff, listedSalesDetails:listedSalesDetails, salesAddressPage:salesAddressPage, allSalesAddresses:allSalesAddresses, savedSalesAddresses:savedSalesAddresses, salesAddressLabel:salesAddressLabel, matchingSalesAddresses:matchingSalesAddresses, savedSalesDetails:savedSalesDetails, assertSalesReview:assertSalesReview, relayControl:relayControl, nativeFormsReady:nativeFormsReady, continueNativeCart:continueNativeCart, pickupStoreName:pickupStoreName, centralCalendar:centralCalendar, calendarAfter:calendarAfter, pickupTimeChoices:pickupTimeChoices, stockFromDocument:stockFromDocument, pickupReadiness:pickupReadiness, boot: boot, build: BUILD, audience: AUDIENCE, deliveryAddressSummary:deliveryAddressSummary, nativeStateOption:nativeStateOption, accountScopeInput:accountScopeInput, guestContext:guestContext, guestStartPending:guestStartPending, lines: lines, signature: signature, plan: plan, nextMutation: nextMutation, afterMutation: afterMutation, assertExpected: assertExpected, recoveryTarget: recoveryTarget, assertReview: assertReview, marker: marker, nativeOrderNumber: nativeOrderNumber, cartOrderReceipt: cartOrderReceipt, readCartOrderReceipt: readCartOrderReceipt, savedChoice: savedChoice, loginFromDocument: loginFromDocument, readRecord: readRecord, persist: persist, targetOf: targetOf, mainAddress: mainAddress, readableCart: readableCart, cartPolicyReady: cartPolicyReady, hasCustomCuts: hasCustomCuts, dateChoice: dateChoice, firstDate: firstDate, money: money, reviewTotals: reviewTotals, paymentTotals: paymentTotals, fulfillmentApplied: fulfillmentApplied, requestNativeMethod: requestNativeMethod, quotedShipping: quotedShipping, employeeZeroReview: employeeZeroReview, fulfillmentOptions: fulfillmentOptions, productMethod: productMethod, contactDefaults: contactDefaults, applyContactDefaults: applyContactDefaults, hydrateMatchingAddressState: hydrateMatchingAddressState, quoteForCart: quoteForCart, quoteForAddress: quoteForAddress, cheapestHomeMethod: cheapestHomeMethod, assertPickupStore: assertPickupStore, refreshDetailsQuote: refreshDetailsQuote };
 });
