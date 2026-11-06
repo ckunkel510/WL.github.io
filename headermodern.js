@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  window.WL_HEADER_BUILD = "20260917-account-commerce-header-2";
+  window.WL_HEADER_BUILD = "20261106-cart-delivery-recovery-3";
 
   var LOG = "[WL HeaderEnhancer]";
   var DEBUG = false; // Set to true only when actively troubleshooting.
@@ -221,17 +221,42 @@
     window.addEventListener('click', hold, true);
     window.addEventListener('wl-buy-now-pilot-settled', finish);
     window.addEventListener('pagehide', abandon);
-    script.addEventListener('error', finish, { once: true });
+    // A managed transport reports failure only after its bounded retry.
+    script.addEventListener('error', function () { if (script.getAttribute?.('data-wl-managed-load')!=='1') finish(); }, { once: true });
+    script.addEventListener('wl-asset-failed', finish, { once: true });
+  }
+
+  function loadCartRuntimeScript(selector,src,mark,prepare) {
+    var existing=document.querySelector(selector);
+    if (existing) return existing;
+    var attempt=0,original=null,current=null,abandoned=false;
+    window.addEventListener('pagehide',function () { abandoned=true; },{once:true});
+    function request() {
+      if (abandoned) return;
+      if (current && document.querySelector(selector)!==current) return;
+      var script=document.createElement('script');
+      attempt++; script.src=src; script.async=true;
+      script.setAttribute(mark,'true'); script.setAttribute('data-wl-managed-load','1');
+      script.setAttribute('data-wl-load-state','loading'); script.setAttribute('data-wl-load-attempt',String(attempt));
+      script.setAttribute('fetchpriority','high');
+      script.addEventListener('load',function () { script.setAttribute('data-wl-load-state','loaded'); },{once:true});
+      script.addEventListener('error',function () {
+        if (abandoned || current!==script) return;
+        script.setAttribute('data-wl-load-state',attempt<2?'retrying':'failed');
+        if (attempt<2) window.setTimeout(request,350);
+        else original.dispatchEvent(new window.Event('wl-asset-failed'));
+      },{once:true});
+      if (!original) { original=script; if (prepare) prepare(original); }
+      if (current) current.remove();
+      current=script; document.head.appendChild(script);
+    }
+    request(); return original;
   }
 
   function loadCartDesign() {
     if (window.top !== window || window.location.origin !== WEBTRACK || !/^\/ShoppingCart\.aspx$/i.test(window.location.pathname)) return;
     if (window.WLCartStudio || document.querySelector('script[data-wl-cart-studio]')) return;
-    var script = document.createElement('script');
-    script.src = 'https://ckunkel510.github.io/WL.github.io/CartDesignPilot.js?v=20261020-ink-cart-8';
-    script.async = true;
-    script.setAttribute('data-wl-cart-studio', 'true');
-    document.head.appendChild(script);
+    loadCartRuntimeScript('script[data-wl-cart-studio]','https://ckunkel510.github.io/WL.github.io/CartDesignPilot.js?v=20261106-cart-style-recovery-9','data-wl-cart-studio');
   }
 
   function loadProductDetailExperience() {
@@ -256,12 +281,7 @@
       catch (_) { return; }
     }
     // UI and account-scoped state require fresh native sign-in/account checks.
-    var script = document.createElement('script');
-    script.src = 'https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261106-native-quote-settling-70';
-    script.async = true;
-    script.setAttribute('data-wl-buy-now-pilot', 'true');
-    deferCartCheckoutUntilPilotReady(script);
-    document.head.appendChild(script);
+    loadCartRuntimeScript('script[data-wl-buy-now-pilot]','https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261106-native-card-choice-71','data-wl-buy-now-pilot',deferCartCheckoutUntilPilotReady);
   }
 
   function loadTawkCommerceAssist() {

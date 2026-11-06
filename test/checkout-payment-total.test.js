@@ -96,3 +96,26 @@ test('shipping total wait has a bounded compact retry and never accepts unconfir
  vm.runInContext(source.slice(source.indexOf('    function waitShippingTotal('),source.indexOf('    function readPaymentTotal(')),context);
  context.waitShippingTotal(native);clock=9000;context.waitShippingTotal(native);assert.equal(halts,0);clock=10002;context.waitShippingTotal(native);assert.equal(halts,1);
 });
+
+test('compact opens the native stored-card selector without the legacy tile decorator or a duplicate postback',async()=>{
+ const driver=source.slice(source.indexOf('    async function driveFast('),source.indexOf('    async function submitNative('));
+ let clicks=0,verifications=0,busy=false;
+ const stored={checked:false,disabled:false,click(){clicks++;stored.checked=true;busy=true;}};
+ const native={documentElement:{dataset:{}},querySelector:()=>null,getElementById:id=>id==='ctl00_PageBody_rbStoredCard'?stored:null};
+ const context=vm.createContext({fast:{started:Date.now()},active:{phase:'checking_out'},frame:{contentDocument:native},busy:false,submitting:false,nativeFormsReady:()=>!busy,setStage(){},status(){},checkIdentity:async()=>{verifications++;}});
+ vm.runInContext(driver,context);await context.driveFast({},native);await context.driveFast({},native);busy=false;await context.driveFast({},native);
+ assert.equal(clicks,1);assert.equal(verifications,1);assert.equal(native.documentElement.dataset.bnStoredCardRequested,'1');
+});
+test('a stored-card view replaced during identity verification is never clicked',async()=>{
+ const driver=source.slice(source.indexOf('    async function driveFast('),source.indexOf('    async function submitNative('));let done,clicks=0;
+ const stored={checked:false,disabled:false,click(){clicks++;}},native={documentElement:{dataset:{}},querySelector:()=>null,getElementById:id=>id==='ctl00_PageBody_rbStoredCard'?stored:null};
+ const context=vm.createContext({fast:{started:Date.now()},active:{phase:'checking_out'},frame:{contentDocument:native},busy:false,submitting:false,nativeFormsReady:()=>true,setStage(){},status(){},checkIdentity:()=>new Promise(resolve=>{done=resolve;})});
+ vm.runInContext(driver,context);const pending=context.driveFast({},native);context.frame={contentDocument:{}};done();await pending;assert.equal(clicks,0);
+});
+
+test('native saved-card hydration may exceed ten seconds but stops with compact Retry at its own deadline',async()=>{
+ const driver=source.slice(source.indexOf('    async function driveFast('),source.indexOf('    async function submitNative('));let clock=1,halts=0;
+ const stored={checked:true,disabled:false},native={documentElement:{dataset:{}},querySelector:()=>null,getElementById:id=>id==='ctl00_PageBody_rbStoredCard'?stored:null};
+ const context=vm.createContext({fast:{started:1},active:{phase:'checking_out'},frame:{contentDocument:native},busy:false,submitting:false,Date:{now:()=>clock},nativeFormsReady:()=>true,setStage(){},status(){},haltFast(message,code,keepCompact){assert.equal(code,'stored_card_unavailable');assert.equal(keepCompact,true);halts++;}});
+ vm.runInContext(driver,context);await context.driveFast({},native);clock=15000;await context.driveFast({},native);assert.equal(halts,0);clock=30002;await context.driveFast({},native);assert.equal(halts,1);
+});

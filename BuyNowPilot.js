@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261106-native-quote-settling-70';
+  var BUILD = '20261106-native-card-choice-71';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = true;
   var AUDIENCE = 'signed-in';
@@ -2157,6 +2157,22 @@
           return;
         }
         var cards = page.getElementById('ctl00_PageBody_ddlCardsOnFile');
+        var nativeStored=page.getElementById('ctl00_PageBody_rbStoredCard');
+        // WebTrack can omit the dropdown until its native stored-card radio is
+        // selected. Compact owns this initialization; the legacy tile widget
+        // must not independently switch radios or submit the same step.
+        if (!cards && nativeStored && !nativeStored.disabled && !fast.addPayment) {
+          fast.paymentStepSeen=true; setStage(2); status('Loading your saved payment options…');
+          if (!page.documentElement.dataset.bnStoredCardWaiting) page.documentElement.dataset.bnStoredCardWaiting=String(Date.now());
+          if (Date.now()-Number(page.documentElement.dataset.bnStoredCardWaiting)>30000) { haltFast('Saved payment options did not load. Try again or choose another payment method.','stored_card_unavailable',true); return; }
+          if (!nativeStored.checked && !page.documentElement.dataset.bnStoredCardRequested) {
+            await checkIdentity();
+            if (fast!==current || fast.driving!==driver || frame?.contentDocument!==page || page.getElementById('ctl00_PageBody_rbStoredCard')!==nativeStored || !nativeFormsReady(child)) return;
+            page.documentElement.dataset.bnStoredCardRequested='1';
+            nativeStored.click();
+          }
+          return;
+        }
         if (cards) {
           fast.paymentStepSeen=true;
           setStage(2);

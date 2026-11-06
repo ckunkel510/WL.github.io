@@ -1,0 +1,31 @@
+<!-- Replace only the existing wl-header-locations-test script block in WebTrack's custom header. -->
+<script>
+(function () {
+  'use strict';
+  var src='https://ckunkel510.github.io/WL.github.io/headermodern.js?v=20261106-cart-delivery-recovery-3';
+  var id='wl-header-locations-test',attempt=0,abandoned=false;
+  if (document.getElementById(id)) return;
+  window.addEventListener('pagehide',function () { abandoned=true; },{once:true});
+  function request() {
+    if (abandoned || document.getElementById(id)) return;
+    attempt++;
+    var script=document.createElement('script');
+    script.id=id; script.src=src; script.defer=true;
+    script.setAttribute('fetchpriority','high');
+    script.setAttribute('data-wl-load-attempt',String(attempt));
+    script.setAttribute('data-wl-load-state','loading');
+    script.onload=function () { script.setAttribute('data-wl-load-state','loaded'); };
+    script.onerror=function () {
+      if (abandoned) return;
+      script.setAttribute('data-wl-load-state',attempt<2?'retrying':'failed');
+      // Retry only a failed delivery. A slow pending script is left alone.
+      if (attempt<2) {
+        script.remove();
+        window.setTimeout(request,350);
+      }
+    };
+    document.head.appendChild(script);
+  }
+  request();
+})();
+</script>

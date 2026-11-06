@@ -1,5 +1,13 @@
 
 (function () {
+  // Compact checkout owns its payment/review UI and native intermediates.
+  // Leave the regular WebTrack checkout and its fallback enhancements intact.
+  try {
+    if (window.parent!==window && window.name==='woodson-buy-now-checkout' &&
+        window.parent.location.origin===window.location.origin &&
+        window.parent.document.querySelector('#wl-buy-now iframe.bn-frame')?.contentWindow===window) return;
+  } catch (_) {}
+
   // ---------- config ----------
   const IDS = {
     main: '.mainContents',

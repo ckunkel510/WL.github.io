@@ -16,7 +16,7 @@ test('cart design starts loading for anonymous shoppers without account or stora
   const links=[];let requests=0;
   const doc=Object.assign(cartDocument(),{readyState:'complete',createElement:()=>({remove(){}}),head:{appendChild(link){links.push(link);link.onerror();}}});
   const win={document:doc,location:{origin:'https://webtrack.woodsonlumber.com',pathname:'/ShoppingCart.aspx'},setTimeout,clearTimeout,fetch(){requests++;throw Error('No account fetch needed');}};win.top=win;
-  await core.boot(win);assert.equal(requests,0);assert.equal(links.length,1);assert.match(links[0].href,/CartDesignPilot\.css/);
+  await core.boot(win);assert.equal(requests,0);assert.equal(links.length,2);assert.match(links[0].href,/CartDesignPilot\.css/);
   assert.equal(win.WLCartStudio,undefined); // A CSS failure keeps the native cart.
 });
 test('frames, other pages and checkout views do not load cart presentation assets',async()=>{
