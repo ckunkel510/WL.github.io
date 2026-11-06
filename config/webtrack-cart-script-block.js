@@ -3,9 +3,9 @@
 if (isShoppingCart) {
   [
     'WoodsonShoppingCart.js','Guestcheckout.js','Requestquote.js',
-    'ShoppingCartBranch.js','ShoppingCartSubtotal.js','cartbranchdropdown.js',
+    'ShoppingCartBranch.js?v=20261106-native-ready-1','ShoppingCartSubtotal.js','cartbranchdropdown.js',
     'Addtocart.js','MetaShop.js','ShoppingCartSummary.js','SavedForLater.js','storeNotification.js',
-    'ShoppingCartRow.js','DeliveryOptions.js','UpsShippingPromo.js'
+    'ShoppingCartRow.js?v=20261106-native-ready-1','DeliveryOptions.js?v=20261106-native-ready-1','UpsShippingPromo.js'
   ].forEach(function (file) {
     loadScriptOnce('https://ckunkel510.github.io/WL.github.io/'+file);
   });

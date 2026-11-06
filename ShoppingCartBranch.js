@@ -1,3 +1,14 @@
+// Native jQuery is parser-loaded after the asynchronous customization tags.
+// Wait for DOM ready so delivery order cannot execute this module before it.
+(function (start) {
+  function ready() {
+    var library=window.jQuery || (typeof $==='function'?$:null);
+    if (document.documentElement) document.documentElement.dataset.wlCartBranchDependency=library?'ready':'missing';
+    if (typeof library==='function') start(library);
+  }
+  if (document.readyState==='loading') document.addEventListener('DOMContentLoaded',ready,{once:true});
+  else ready();
+})(function ($) {
 function wlBranchIsOwnedCheckoutFrame() {
   try {
     return window.parent!==window && window.name==='woodson-buy-now-checkout' && window.parent.location.origin===window.location.origin && window.parent.document.querySelector('#wl-buy-now iframe.bn-frame')?.contentWindow===window;
@@ -164,3 +175,5 @@ function availableStockColumnIndex(table) {
 }
 
 }
+
+});
