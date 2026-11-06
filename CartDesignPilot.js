@@ -6,7 +6,7 @@
   else core.boot(root).catch(function () { /* Keep the existing cart if unavailable. */ });
 })(typeof window==='object' ? window : null,function () {
   'use strict';
-  var BUILD='20261020-ink-cart-8';
+  var BUILD='20261106-cart-style-recovery-9';
   var ORIGIN='https://webtrack.woodsonlumber.com';
   var ASSETS='https://ckunkel510.github.io/WL.github.io/';
   var REVEAL=164;
@@ -29,6 +29,33 @@
     if (!row.isConnected || row.querySelector(selector)!==control || control.disabled || control.getAttribute('aria-disabled')==='true' || blocked()) return false;
     control.click(); return true;
   }
+  function cartStyles(win,doc,url) {
+    // The native cart remains usable while CSS is pending. A slow stylesheet
+    // must still be allowed to finish instead of being removed at ten seconds.
+    return new Promise(function (resolve) {
+      var attempt=0,finished=false,link=null;
+      function state(value) { if (doc.documentElement) doc.documentElement.dataset.wlCartStyleState=value; }
+      function start() {
+        if (finished) return;
+        attempt++;
+        var current=doc.createElement('link'),delayed=win.setTimeout(function () { if (!finished && link===current) state('delayed'); },10000);
+        link=current; state('loading');
+        current.rel='stylesheet'; current.href=url;
+        current.onload=function () {
+          if (finished || link!==current) return;
+          finished=true; win.clearTimeout(delayed); state('ready'); resolve(true);
+        };
+        current.onerror=function () {
+          if (finished || link!==current) return;
+          win.clearTimeout(delayed); current.onload=current.onerror=null; current.remove();
+          if (attempt<2) { state('retrying'); win.setTimeout(start,350); }
+          else { finished=true; state('failed'); resolve(false); }
+        };
+        doc.head.appendChild(current);
+      }
+      start();
+    });
+  }
   async function boot(win) {
     if (!win || win.top!==win || win.location.origin!==ORIGIN || !/^\/ShoppingCart\.aspx$/i.test(win.location.pathname) || win.WLCartStudio) return;
     var doc=win.document;
@@ -36,6 +63,7 @@
     if (!naturalCart(doc)) return;
     var shell=doc.querySelector('.mainContents');
     if (!shell || !await loadStyles()) return;
+    if (win.document!==doc || shell.isConnected===false || !naturalCart(doc)) return;
     var rows=new Map(),openRow=null,scheduled=false,pending=false,revoked=false;
     var live=doc.createElement('div'); live.className='cs-announcement cs-only'; live.setAttribute('role','status'); live.setAttribute('aria-live','polite'); doc.body.appendChild(live);
     var dock=doc.createElement('div'); dock.className='cs-mobile-dock cs-only'; dock.setAttribute('aria-label','Cart checkout');
@@ -167,12 +195,8 @@
     doc.documentElement.dataset.wlCartStudioBuild=BUILD; win.WLCartStudio={build:BUILD};
     doc.documentElement.dataset.wlCartStudioTheme='ink'; doc.documentElement.classList.add('wl-cart-studio'); decorate();
     async function loadStyles() {
-      return new Promise(function (resolve) {
-        var link=doc.createElement('link'),settled=false,timer=win.setTimeout(function () { finish(false); },10000);
-        function finish(ok) { if (settled) return; settled=true; win.clearTimeout(timer); if (!ok) link.remove(); resolve(ok); }
-        link.rel='stylesheet'; link.href=ASSETS+'CartDesignPilot.css?v='+BUILD; link.onload=function () { finish(true); }; link.onerror=function () { finish(false); }; doc.head.appendChild(link);
-      });
+      return cartStyles(win,doc,ASSETS+'CartDesignPilot.css?v='+BUILD);
     }
   }
-  return {boot:boot,build:BUILD,naturalCart:naturalCart,checkoutVisible:checkoutVisible,gestureAxis:gestureAxis,swipeOffset:swipeOffset,revealAfterDrag:revealAfterDrag,delegateAction:delegateAction};
+  return {cartStyles:cartStyles,boot:boot,build:BUILD,naturalCart:naturalCart,checkoutVisible:checkoutVisible,gestureAxis:gestureAxis,swipeOffset:swipeOffset,revealAfterDrag:revealAfterDrag,delegateAction:delegateAction};
 });
