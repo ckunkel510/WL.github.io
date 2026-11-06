@@ -1,6 +1,6 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),core=require('../BuyNowPilot');
-const source=fs.readFileSync(require.resolve('../BuyNowPilot'),'utf8'),start=source.indexOf('    function requestFastUpdate()'),end=source.indexOf('    function editableFast(',start);
+const source=fs.readFileSync(require.resolve('../BuyNowPilot'),'utf8'),start=source.indexOf('    function requestFastUpdate('),end=source.indexOf('    function editableFast(',start);
 function fixture(options={}) {
  let refresh=0,seeds=0,clears=0,presented=0;const item={pid:'85',code:'0001363',quantity:1,unit:'ea'};
  const original={cartCheckout:options.cartCheckout!==false,ready:!!options.ready,stopped:!!options.stopped,securePayment:!!options.securePayment,revision:0,method:'delivery',address:{zip:'77833'},pickupPerson:'Test collector',reference:'Test reference'};

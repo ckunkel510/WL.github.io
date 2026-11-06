@@ -13,7 +13,7 @@
   if (!IS_CART_PAGE && !IS_CHECKOUT_PAGE && !HAS_FULL_PAGE_RECOVERY) return;
   if (window.__WL_GUEST_CHECKOUT_LOADED__) return;
   window.__WL_GUEST_CHECKOUT_LOADED__ = true;
-  document.documentElement?.setAttribute?.('data-wl-guest-checkout-build','20261030-guest-cart-recovery-4');
+  document.documentElement?.setAttribute?.('data-wl-guest-checkout-build','20261106-guest-manual-fields-5');
 
   const LOG = (...a) => console.log('[GuestCheckout]', ...a);
   const ERR = (...a) => console.error('[GuestCheckout]', ...a);
@@ -379,7 +379,7 @@
           <div class="gc-field"><label for="gc_del_city">City</label><input id="gc_del_city" type="text" autocomplete="section-shipping shipping address-level2" required></div>
         </div>
         <div class="gc-row">
-          <div class="gc-field"><label for="gc_del_state">State</label><input id="gc_del_state" type="text" maxlength="2" placeholder="TX" autocomplete="section-shipping shipping address-level1" required></div>
+          <div class="gc-field"><label for="gc_del_state">State</label><input id="gc_del_state" type="text" maxlength="40" placeholder="TX or Texas" autocomplete="section-shipping shipping address-level1" required></div>
           <div class="gc-field"><label for="gc_del_zip">ZIP</label><input id="gc_del_zip" type="text" inputmode="numeric" autocomplete="section-shipping shipping postal-code" required></div>
         </div>
 
@@ -395,7 +395,7 @@
             <div class="gc-field"><label for="gc_inv_city">City</label><input id="gc_inv_city" type="text" autocomplete="section-billing billing address-level2"></div>
           </div>
           <div class="gc-row">
-            <div class="gc-field"><label for="gc_inv_state">State</label><input id="gc_inv_state" type="text" maxlength="2" placeholder="TX" autocomplete="section-billing billing address-level1"></div>
+            <div class="gc-field"><label for="gc_inv_state">State</label><input id="gc_inv_state" type="text" maxlength="40" placeholder="TX or Texas" autocomplete="section-billing billing address-level1"></div>
             <div class="gc-field"><label for="gc_inv_zip">ZIP</label><input id="gc_inv_zip" type="text" inputmode="numeric" autocomplete="section-billing billing postal-code"></div>
           </div>
         </div>
@@ -416,6 +416,11 @@
     $('#gc_cancel').addEventListener('click', function () { guestMetric('checkout_cancel'); closeModal(); });
     backdrop.addEventListener('click', closeModal);
     $('#gc_submit').addEventListener('click', onSubmitGuest);
+    modal.addEventListener('keydown', (event) => {
+      if (event.key==='Enter' && !event.isComposing && event.target?.tagName==='INPUT') {
+        event.preventDefault(); onSubmitGuest();
+      }
+    });
   }
 
   function getProceedBtn() { return document.getElementById('ctl00_PageBody_PlaceOrderButton'); }
@@ -526,6 +531,10 @@
   }
 
   function validateEmail(email) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean(email)); }
+  function normalizeGuestState(value) {
+    const entered=clean(value).toUpperCase();
+    return STATE_LONG[entered] ? entered : Object.keys(STATE_LONG).find(code=>STATE_LONG[code].toUpperCase()===entered) || entered;
+  }
   function normalizeZip(zip) {
     const d = digits(zip);
     if (d.length === 5) return d;
@@ -570,12 +579,12 @@
     const lname = clean($('#gc_lname')?.value);
     const d_addr1 = clean($('#gc_del_addr1')?.value);
     const d_city = clean($('#gc_del_city')?.value);
-    const d_state = clean($('#gc_del_state')?.value).toUpperCase();
+    const d_state = normalizeGuestState($('#gc_del_state')?.value);
     const d_zip = normalizeZip($('#gc_del_zip')?.value);
     const billSame = !!$('#gc_bill_same')?.checked;
     const i_addr1 = billSame ? d_addr1 : clean($('#gc_inv_addr1')?.value);
     const i_city = billSame ? d_city : clean($('#gc_inv_city')?.value);
-    const i_state2 = billSame ? d_state : clean($('#gc_inv_state')?.value).toUpperCase();
+    const i_state2 = billSame ? d_state : normalizeGuestState($('#gc_inv_state')?.value);
     const i_zip = billSame ? d_zip : normalizeZip($('#gc_inv_zip')?.value);
 
     // Put normalized values back so the customer sees the fix before continuing.
@@ -585,6 +594,8 @@
     if (dz) dz.value = d_zip;
     const iz = $('#gc_inv_zip');
     if (iz && !billSame) iz.value = i_zip;
+    const ds=$('#gc_del_state'); if (ds) ds.value=d_state;
+    const invState=$('#gc_inv_state'); if (invState && !billSame) invState.value=i_state2;
 
     const errors = [];
     const add = (id, msg) => { errors.push(msg); markGuestInvalid(id, msg); };
@@ -595,13 +606,13 @@
     if (!lname) add('gc_lname', 'Last name is required.');
     if (!d_addr1) add('gc_del_addr1', 'Street address is required.');
     if (!d_city) add('gc_del_city', 'City is required.');
-    if (!/^[A-Z]{2}$/.test(d_state)) add('gc_del_state', 'Use a 2-letter state, like TX.');
+    if (!STATE_LONG[d_state]) add('gc_del_state', 'Enter a valid state, like TX or Texas.');
     if (!validateZip(d_zip)) add('gc_del_zip', 'ZIP must be 5 digits or ZIP+4.');
 
     if (!billSame) {
       if (!i_addr1) add('gc_inv_addr1', 'Billing street address is required.');
       if (!i_city) add('gc_inv_city', 'Billing city is required.');
-      if (!/^[A-Z]{2}$/.test(i_state2)) add('gc_inv_state', 'Use a 2-letter state, like TX.');
+      if (!STATE_LONG[i_state2]) add('gc_inv_state', 'Enter a valid billing state, like TX or Texas.');
       if (!validateZip(i_zip)) add('gc_inv_zip', 'Billing ZIP must be 5 digits or ZIP+4.');
     }
 
@@ -626,6 +637,7 @@
 
   async function onSubmitGuest() {
     const submit = $('#gc_submit');
+    if (submit?.disabled) return;
     const payload = collectGuestPayload();
     if (payload.error) { guestMetric('guest_checkout_error','guest_validation'); return showError(payload.error); }
 

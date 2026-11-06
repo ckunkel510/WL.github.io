@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  window.WL_HEADER_BUILD = "20261106-ups-speed-loader-5";
+  window.WL_HEADER_BUILD = "20261106-choices-first-loader-6";
 
   var LOG = "[WL HeaderEnhancer]";
   var DEBUG = false; // Set to true only when actively troubleshooting.
@@ -139,7 +139,7 @@
     try { if (!sessionStorage.getItem('wl_guest_signup_recovery_v1')) return; } catch (_) { return; }
     if (window.__WL_GUEST_CHECKOUT_LOADED__ || document.querySelector('script[data-wl-guest-recovery]')) return;
     var script=document.createElement('script');
-    script.src='https://ckunkel510.github.io/WL.github.io/Guestcheckout.js?v=20261030-guest-cart-recovery-4';
+    script.src='https://ckunkel510.github.io/WL.github.io/Guestcheckout.js?v=20261106-guest-manual-fields-5';
     script.async=true; script.setAttribute('data-wl-guest-recovery','true'); document.head.appendChild(script);
   }
 
@@ -281,7 +281,7 @@
       catch (_) { return; }
     }
     // UI and account-scoped state require fresh native sign-in/account checks.
-    loadCartRuntimeScript('script[data-wl-buy-now-pilot]','https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261106-ups-speed-estimates-72','data-wl-buy-now-pilot',deferCartCheckoutUntilPilotReady);
+    loadCartRuntimeScript('script[data-wl-buy-now-pilot]','https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261106-choices-first-73','data-wl-buy-now-pilot',deferCartCheckoutUntilPilotReady);
   }
 
   function loadTawkCommerceAssist() {
