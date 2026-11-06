@@ -46,6 +46,15 @@ test("builds a UPS multi-package shop request", () => {
   assert.deepEqual(result.payload.RateRequest.Shipment.DeliveryTimeInformation, { PackageBillType: "03" });
 });
 
+test("transit lookup uses the ZIP's postal city without rewriting the order or ordinary rate address", () => {
+  const body={shipFrom:{postalCode:'77833'},shipTo:{city:'Hudson',state:'NY',postalCode:'10520'},packages:[{weight:2}]};
+  assert.equal(buildRateRequest(body).payload.RateRequest.Shipment.ShipTo.Address.City,'Croton On Hudson');
+  const ordinary=buildRateRequest(body,false).payload.RateRequest;
+  assert.equal(ordinary.Shipment.ShipTo.Address.City,'Hudson');
+  assert.equal(ordinary.Request.RequestOption,'Shop');assert.equal(ordinary.Shipment.DeliveryTimeInformation,undefined);
+  assert.equal(body.shipTo.city,'Hudson');
+});
+
 test("preserves carrier arrival and pickup basis separately for each service", () => {
   const rates = normalizedRates({ RateResponse: { RatedShipment: [
     { Service: { Code: "03" }, TotalCharges: { MonetaryValue: "18.50" }, TimeInTransit: { ServiceSummary: { EstimatedArrival: {
@@ -87,6 +96,49 @@ test("requests rates and transit in one carrier call and retains rates when tran
     global.fetch = previousFetch;
     for (const [key, value] of Object.entries(before)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
   }
+});
+
+test("a rejected transit lookup falls back to ordinary rates once within the original timeout budget", async () => {
+  const originalFetch=global.fetch,originalNow=Date.now,originalTimer=global.setTimeout;
+  const calls=[],timers=[];let clock=Date.now();Date.now=()=>clock;
+  global.setTimeout=(fn,ms,...args)=>{timers.push(ms);return originalTimer(fn,ms,...args);};
+  global.fetch=async(url,options)=>{
+    if(String(url).includes('oauth/token')) return {ok:true,json:async()=>({access_token:'test-token',expires_in:3600})};
+    calls.push({url,body:JSON.parse(options.body)});
+    if(calls.length===1){clock+=1250;return {ok:false,status:400,json:async()=>({response:{errors:[{message:'Invalid Destination.'}]}})};}
+    return {ok:true,json:async()=>({RateResponse:{RatedShipment:{Service:{Code:'03'},TotalCharges:{MonetaryValue:'18.50'}}}})};
+  };
+  try {
+    const rated=await upsRatesHandler._internal.requestRates({shipFrom:{postalCode:'77833'},shipTo:{city:'Hudson',state:'NY',postalCode:'10520'},packages:[{weight:2}]});
+    assert.equal(rated.rates[0].amount,18.5);assert.equal(calls.length,2);
+    assert.match(calls[0].url,/Shoptimeintransit$/);assert.match(calls[1].url,/\/Shop$/);
+    assert.equal(calls[0].body.RateRequest.Shipment.ShipTo.Address.City,'Croton On Hudson');
+    assert.equal(calls[1].body.RateRequest.Shipment.ShipTo.Address.City,'Hudson');
+    assert.deepEqual(timers.slice(-2),[9000,7750]);
+  } finally {global.fetch=originalFetch;Date.now=originalNow;global.setTimeout=originalTimer;}
+});
+
+test("transit authentication errors, rate limits, outages and network failures are not retried", async () => {
+  const originalFetch=global.fetch;
+  try {
+    for(const failure of [401,429,503,'network']) {
+      let calls=0;global.fetch=async(url)=>{
+        if(String(url).includes('oauth/token'))return {ok:true,json:async()=>({access_token:'test-token',expires_in:3600})};
+        calls++;if(failure==='network')throw Error('network unavailable');
+        return {ok:false,status:failure,json:async()=>({response:{errors:[{message:'Carrier unavailable'}]}})};
+      };
+      await assert.rejects(upsRatesHandler._internal.requestRates({shipFrom:{postalCode:'77833'},shipTo:{postalCode:'10520'},packages:[{weight:2}]}));
+      assert.equal(calls,1);
+    }
+  } finally {global.fetch=originalFetch;}
+});
+
+test("surcharge variants cannot create ambiguous duplicate native service codes", () => {
+  const rates=normalizedRates({RateResponse:{RatedShipment:[
+    {Service:{Code:'01'},TotalCharges:{MonetaryValue:'115.70'},TimeInTransit:{ServiceSummary:{EstimatedArrival:{Pickup:{Date:'20261106'},Arrival:{Date:'20261107'}}}}},
+    {Service:{Code:'01'},TotalCharges:{MonetaryValue:'94.22'},TimeInTransit:{ServiceSummary:{EstimatedArrival:{Pickup:{Date:'20261106'},Arrival:{Date:'20261109'}}}}}
+  ]}});
+  assert.equal(rates.length,1);assert.equal(rates[0].amount,94.22);assert.equal(rates[0].transit.arrivalDate,'2026-11-09');
 });
 
 test("rejects packages beyond UPS small-package dimensions", () => {

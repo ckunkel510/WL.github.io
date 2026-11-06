@@ -217,10 +217,17 @@ function packagePayload(item) {
   return payload;
 }
 
-function buildRateRequest(body) {
+function buildRateRequest(body, includeTransit = true) {
   const accountNumber = process.env.UPS_ACCOUNT_NUMBER || "";
   const shipFrom = normalizeAddress(body.shipFrom, "Ship-from");
   const shipTo = normalizeAddress(body.shipTo, "Ship-to");
+  if (includeTransit) {
+    // UPS transit rejects city/ZIP mismatches that ordinary rating accepts.
+    // Normalize only the carrier lookup; do not edit the customer's order address.
+    for (const address of [shipFrom, shipTo]) {
+      address.City = cleanText(zipcodes.lookup(address.PostalCode.slice(0, 5))?.city || address.City, 30);
+    }
+  }
   const packages = normalizePackages(body.packages);
   const totalWeight = packages.reduce((sum, item) => sum + item.weight, 0);
 
@@ -229,7 +236,7 @@ function buildRateRequest(body) {
     payload: {
       RateRequest: {
         Request: {
-          RequestOption: "Shoptimeintransit",
+          RequestOption: includeTransit ? "Shoptimeintransit" : "Shop",
           TransactionReference: { CustomerContext: "Woodson WebTrack checkout" }
         },
         Shipment: {
@@ -243,9 +250,9 @@ function buildRateRequest(body) {
           PaymentDetails: {
             ShipmentCharge: [{ Type: "01", BillShipper: { AccountNumber: accountNumber } }]
           },
-          // Request transit details with the rates, without another carrier call.
+          // Normally request transit details with the rates in one carrier call.
           // UPS defaults the quote's pickup date; it is not a store dispatch promise.
-          DeliveryTimeInformation: { PackageBillType: "03" },
+          ...(includeTransit ? { DeliveryTimeInformation: { PackageBillType: "03" } } : {}),
           NumOfPieces: String(packages.length),
           ShipmentTotalWeight: {
             UnitOfMeasurement: { Code: "LBS", Description: "Pounds" },
@@ -286,6 +293,7 @@ function transitEstimate(shipment) {
 function normalizedRates(data) {
   const rated = data?.RateResponse?.RatedShipment;
   const shipments = Array.isArray(rated) ? rated : (rated ? [rated] : []);
+  const services = new Set();
   return shipments.map((shipment) => {
     const serviceCode = cleanText(shipment?.Service?.Code, 4);
     const charge = shipment?.NegotiatedRateCharges?.TotalCharge || shipment?.TotalCharges || {};
@@ -299,24 +307,42 @@ function normalizedRates(data) {
       ...(transit ? { transit } : {})
     };
   }).filter((rate) => rate.serviceCode && Number.isFinite(rate.amount))
-    .sort((left, right) => left.amount - right.amount);
+    .sort((left, right) => left.amount - right.amount)
+    // Transit shopping may include surcharge variants (e.g. Saturday) for the
+    // same code. Native checkout selects by service code, not those add-ons.
+    .filter((rate) => {
+      if (services.has(rate.serviceCode)) return false;
+      services.add(rate.serviceCode);
+      return true;
+    });
 }
 
 async function requestRates(body) {
   const accessToken = await getAccessToken();
-  const { payload } = buildRateRequest(body);
   const transactionId = `wl-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`.slice(0, 32);
-  const response = await fetchWithTimeout(`${upsBaseUrl()}/api/rating/v2409/Shoptimeintransit`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      "Content-Type": "application/json",
-      transId: transactionId,
-      transactionSrc: "woodson-webtrack"
-    },
-    body: JSON.stringify(payload)
-  });
-  const data = await response.json().catch(() => ({}));
+  const deadline = Date.now() + 9000;
+  async function rate(includeTransit) {
+    const { payload } = buildRateRequest(body, includeTransit);
+    const option = payload.RateRequest.Request.RequestOption;
+    const response = await fetchWithTimeout(`${upsBaseUrl()}/api/rating/v2409/${option}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        transId: transactionId,
+        transactionSrc: "woodson-webtrack"
+      },
+      body: JSON.stringify(payload)
+    }, Math.max(1, deadline - Date.now()));
+    return { response, data: await response.json().catch(() => ({})) };
+  }
+  let { response, data } = await rate(true);
+  // An explicit transit validation rejection must not make ordinary UPS rates
+  // unavailable. Retry that read once, sharing the original nine-second budget.
+  // Do not replay timeouts, authentication failures, rate limits or outages.
+  if (!response.ok && [400, 422].includes(response.status) && Date.now() < deadline) {
+    ({ response, data } = await rate(false));
+  }
   if (!response.ok) {
     const upstreamMessage = data?.response?.errors?.[0]?.message || "UPS could not rate this shipment.";
     throw new RequestError(502, cleanText(upstreamMessage, 180));
