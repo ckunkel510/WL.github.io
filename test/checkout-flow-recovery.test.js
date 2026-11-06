@@ -578,3 +578,57 @@ test('a stalled fulfillment reservation releases Retry and a late success cannot
  finishBody({ok:true,recommendation:{mode:'ship'}});await new Promise(resolve=>setImmediate(resolve));
  assert.equal(env.context.WLShippingOffer.current().recommendation.mode,'delivery');
 });
+
+test('an obsolete checkout step does not start another quote after its older estimate finishes',async()=>{
+ const env=quotePerformanceEnvironment();let finish,calls=0,current=true;
+ env.context.fetch=async()=>{calls++;return new Promise(resolve=>{finish=resolve})};load('UpsShippingOffer.js',env);
+ const older=env.context.WLShippingOffer.refresh();await until(()=>finish);
+ const pending=env.context.WLShippingOffer.refreshCheckout(()=>current);current=false;
+ finish({ok:true,json:async()=>performanceQuote(9.95)});await older;
+ assert.equal(await pending,null);assert.equal(calls,1);
+});
+
+test('a fresh checkout quote follows native address hydration instead of reporting a false carrier failure',async()=>{
+ const env=quotePerformanceEnvironment();let finish,calls=0;
+ env.context.fetch=async()=>{calls++;if(calls===1)return new Promise(resolve=>{finish=resolve});return{ok:true,json:async()=>performanceQuote(9.95)}};
+ load('UpsShippingOffer.js',env);const pending=env.context.WLShippingOffer.refreshCheckout(()=>true);await until(()=>finish);
+ env.element('ctl00_PageBody_DeliveryAddress_City').value='Updated fixture city';
+ finish({ok:true,json:async()=>performanceQuote(99)});const result=await pending;
+ assert.equal(calls,2);assert.equal(result.options.ups.amount,9.95);assert.equal(env.context.WLShippingOffer.current().options.ups.amount,9.95);
+});
+
+test('a transient fetch cancellation or connection failure can recover a quote without replaying a native postback',async()=>{
+ for(const kind of ['AbortError','TypeError']) {
+  const env=quotePerformanceEnvironment();let calls=0;
+  env.context.fetch=async()=>{if(++calls===1){const error=new Error('fixture transport failure');error.name=kind;throw error;}return{ok:true,json:async()=>performanceQuote(9.95)}};
+  load('UpsShippingOffer.js',env);const result=await env.context.WLShippingOffer.refreshCheckout(()=>true);
+  assert.equal(calls,2);assert.equal(result.options.ups.amount,9.95);
+ }
+});
+
+test('read-only quote transport retries are bounded and HTTP rejection remains a customer retry',async()=>{
+ for(const kind of ['network','http']) {
+  const env=quotePerformanceEnvironment();let calls=0;
+  env.context.fetch=async()=>{calls++;if(kind==='network')throw new TypeError('fixture offline');return{ok:false,json:async()=>({error:'fixture rejected'})}};
+  load('UpsShippingOffer.js',env);assert.equal(await env.context.WLShippingOffer.refreshCheckout(()=>true),null);assert.equal(calls,kind==='network'?3:1);
+ }
+});
+
+test('native shipping, payment and review retain the address quote without issuing account-address estimates',async()=>{
+ for(const stage of ['ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView','ctl00_PageBody_ddlCardsOnFile','ctl00_PageBody_CompleteCheckoutButton']) {
+  const env=quotePerformanceEnvironment();let calls=0;
+  env.context.fetch=async()=>{calls++;return{ok:true,json:async()=>performanceQuote(9.95)}};
+  load('UpsShippingOffer.js',env);const before=await env.context.WLShippingOffer.refresh();assert.ok(before);
+  env.elements.delete('ctl00_PageBody_DeliveryAddress_Postcode');env.element(stage);
+  const count=calls,retained=await env.context.WLShippingOffer.refresh();assert.equal(calls,count);assert.equal(retained.addressKey,before.addressKey);assert.equal(retained.options.ups.amount,9.95);
+ }
+});
+
+test('a late top-cart estimate cannot overwrite the quote owned by compact checkout',async()=>{
+ const env=quotePerformanceEnvironment();let finish;env.context.top=env.context;
+ const query=env.document.querySelector;let owned=false;
+ env.document.querySelector=selector=>selector==='#wl-buy-now iframe.bn-frame'?(owned?{}:null):query(selector);
+ env.context.fetch=()=>new Promise(resolve=>{finish=resolve});load('UpsShippingOffer.js',env);
+ const pending=env.context.WLShippingOffer.refresh();await until(()=>finish);owned=true;
+ finish({ok:true,json:async()=>performanceQuote(99)});assert.equal(await pending,null);assert.equal(env.context.WLShippingOffer.current(),null);
+});

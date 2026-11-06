@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var BUILD_VERSION = "20261105-bounded-checkout-quotes-5";
+  var BUILD_VERSION = "20261106-native-summary-quotes-9";
   var RATE_URL = "https://wl-upsrates.vercel.app/api/fulfillment-quote";
   var APPROVAL_URL = "https://wl-upsrates.vercel.app/api/customization-approval";
   var CUT_POLICY_URL = "https://ckunkel510.github.io/WL.github.io/data/cut-to-ship-products.json?v=20260917-2";
@@ -24,6 +24,11 @@
   var cutPolicyPromise = null;
   var webTrackUserIdPromise = null;
   var carrierOriginPromise = null;
+  var quoteState = 'idle';
+  function setQuoteState(value) {
+    quoteState = value;
+    document.documentElement?.setAttribute?.('data-wl-shipping-quote-state',value);
+  }
 
   if (!/ShoppingCart\.aspx|Checkout|PlaceOrder/i.test(window.location.pathname || "")) return;
   if (window.WLShippingOffer && window.WLShippingOffer.version === BUILD_VERSION) return;
@@ -373,14 +378,19 @@
     var controller = typeof AbortController === 'function' ? new AbortController() : null;
     var timer;
     var request = Promise.resolve().then(function () {
-      return fetch(url, Object.assign({}, options, controller ? { signal: controller.signal } : {}));
+      return fetch(url, Object.assign({}, options, controller ? { signal: controller.signal } : {})).catch(function (error) {
+        var failure=new Error('Shipping service could not be reached. Please retry.');
+        failure.name=error?.name==='AbortError'?'AbortError':'ShippingNetworkError';
+        throw failure;
+      });
     }).then(read);
     // Bound response bodies too. Release the shared in-flight promise so the
     // customer's next attempt can actually retry a stalled request.
     return Promise.race([request, new Promise(function (_, reject) {
       timer = setTimeout(function () {
+        var failure=new Error('Shipping service timed out. Please retry.'); failure.name='TimeoutError';
+        reject(failure);
         if (controller) controller.abort();
-        reject(new Error('Shipping service timed out. Please retry.'));
       }, 20000);
     })]).finally(function () { clearTimeout(timer); });
   }
@@ -497,23 +507,39 @@
     }
   }
 
+  function compactFrameOwnsQuote() {
+    return window.top===window && !!document.querySelector('#wl-buy-now iframe.bn-frame');
+  }
+  function nativePricedStage() {
+    return !document.getElementById('ctl00_PageBody_DeliveryAddress_Postcode') && ['ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView','ctl00_PageBody_ddlCardsOnFile','ctl00_PageBody_CompleteCheckoutButton','ctl00_PageBody_CardOnFileViewTitle_HeaderText'].some(function (id) { return !!document.getElementById(id); });
+  }
+
   async function refreshOffer() {
+    // These views no longer contain the delivery address. An account-address
+    // estimate here would overwrite the checkout quote and add account reads.
+    if (compactFrameOwnsQuote() || nativePricedStage()) {
+      var retained=currentOffer();
+      setQuoteState(retained?'ready':'context_missing');
+      return retained;
+    }
     if (activeRequest) {
       refreshQueued = true;
       return activeRequest;
     }
     activeRequest = (async function () {
+      setQuoteState('requesting');
       var items = cartItems();
       var origin = selectedOrigin();
       var carrierOrigin = await accountCarrierOrigin();
       // Anonymous cart estimates can use their browsing store. A native
       // checkout must resolve its trading branch rather than guess a route.
-      if (!carrierOrigin && document.getElementById('ctl00_PageBody_DeliveryAddress_Postcode')) return null;
+      if (!carrierOrigin && document.getElementById('ctl00_PageBody_DeliveryAddress_Postcode')) { setQuoteState('context_missing'); return null; }
       carrierOrigin = carrierOrigin || origin;
       rememberCart(items, origin);
       var address = checkoutAddress();
       var zip = address.postalCode || await savedZip();
       if (!items.length || !origin || !zip) {
+        setQuoteState('context_missing');
         if (items.length && missingContextRetries < MISSING_CONTEXT_MAX_RETRIES) {
           missingContextRetries += 1;
           scheduleRefresh(750);
@@ -541,9 +567,13 @@
       // checkout receives its complete address/branch. Do not publish that old
       // result into shared session state or let it change the chosen method.
       if (addressQuoteKey(checkoutAddress(), zip) !== addressQuoteKey(address, zip) || selectedOrigin().postalCode !== origin.postalCode) {
+        setQuoteState('context_changed');
         scheduleRefresh(100);
         return null;
       }
+      // A cart estimate can finish after compact checkout opens its frame.
+      // Let that frame own the address quote; do not publish the older estimate.
+      if (compactFrameOwnsQuote() || nativePricedStage()) { setQuoteState('superseded'); return null; }
       var payload = writeOffer(result, zip, items, false, address, origin, carrierOrigin);
       var selected = rememberedSelection();
       // Checkout calls the mode "ship"; the quote exposes that option as "ups".
@@ -553,8 +583,10 @@
         payload = currentOffer() || payload;
       }
       notifyOffer(payload);
+      setQuoteState('ready');
       return payload;
     })().catch(function (error) {
+      setQuoteState(error?.name==='AbortError'?'aborted':error?.name==='ShippingNetworkError'?'network_error':'error');
       console.warn("[WLShippingOffer] Automatic fulfillment quote could not be prepared.", error);
       return null;
     }).finally(function () {
@@ -567,14 +599,21 @@
     return activeRequest;
   }
 
-  async function refreshCheckoutOffer() {
+  async function refreshCheckoutOffer(isCurrent) {
     // Finish an older estimate before taking a new snapshot of the completed
     // native address. With no active estimate this makes exactly one request.
-    clearTimeout(refreshTimer);
-    if (activeRequest) await activeRequest;
-    clearTimeout(refreshTimer);
-    refreshQueued = false;
-    return refreshOffer();
+    for (var attempt=0; attempt<3; attempt++) {
+      clearTimeout(refreshTimer);
+      if (activeRequest) await activeRequest;
+      if (typeof isCurrent==='function' && !isCurrent()) { setQuoteState('superseded'); return null; }
+      clearTimeout(refreshTimer);
+      refreshQueued = false;
+      var quote = await refreshOffer();
+      if (quote || !['context_changed','aborted','network_error'].includes(quoteState)) return quote;
+      // Native address/state hydration can settle while the quote is running.
+      // Discard it and quote the current context, without retrying HTTP errors.
+    }
+    return null;
   }
 
   function scheduleRefresh(delay) {

@@ -62,7 +62,8 @@ test('browsers without cart locking keep the native entry',()=>{
 const pilot = fs.readFileSync(require.resolve('../BuyNowPilot'), 'utf8');
 const driverSource=pilot.slice(pilot.indexOf('    async function driveFast('),pilot.indexOf('    async function submitNative('));
 async function quoteTimeout(replace) {
-  const page={readyState:'complete',querySelector:selector=>selector==='form'?{}:null,documentElement:{dataset:{bnFieldsApplied:'1'}},getElementById:id=>['btnDelivered','btnPickup'].includes(id)?{}:null};
+  const controls={btnDelivered:{},btnPickup:{}};
+  const page={readyState:'complete',querySelector:selector=>selector==='form'?{}:null,documentElement:{dataset:{bnFieldsApplied:'1'}},getElementById:id=>controls[id]||null};
   const initial={method:'delivery',started:Date.now(),driving:false}; let timeout;
   const context=vm.createContext({nativeFormsReady:core.nativeFormsReady,fast:initial,frame:{contentDocument:page},busy:false,submitting:false,active:{phase:'checking_out',purchase:[]},setStage(){},quoteForCart:()=>null,fulfillmentOptions:()=>({}),updateFastOptions(){},status(){},detailsQuotes:new WeakMap(),refreshDetailsQuote:core.refreshDetailsQuote,
     haltFast(message,code,keepCompact){context.fast.reported={message,code,keepCompact};context.fast.stopped=true;},

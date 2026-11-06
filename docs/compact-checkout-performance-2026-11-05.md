@@ -1,18 +1,22 @@
-# Compact checkout loading and rate recovery — November 5, 2026
+# Compact checkout loading and rate recovery — November 2026
 
-Runtime `20261105-compact-loading-61`; native wizard `20261105-compact-continue-recovery-9`; shipping offer `20261105-bounded-checkout-quotes-5`.
+Runtime `20261106-native-quote-settling-70`; native wizard `20261105-compact-continue-recovery-9`; shipping offer `20261106-native-summary-quotes-9`.
 
-The compact flow had several independent sources of delay:
+Compact checkout could wait for unrelated page resources, cancel a legitimate entry request, or apply an old async result to a replacement WebForms view. It could also lose its confirmed quote when WebTrack advanced to shipping: those later views have no delivery-address fields, so a background estimate could overwrite the quote with an account-address estimate. Continue then rejected the already priced native order.
 
-- `nativeFormsReady` required `document.readyState === 'complete'`. A usable, initialized WebForms form could wait for unrelated images and chat resources. Interactive documents now qualify only with positive `Sys.Application` initialization, a real form and no active UpdatePanel request. Native validation and postback helpers remain required.
-- The previous four-second empty-frame retry cancelled legitimate pending GETs. The initial navigation now completes once or reaches the existing bounded standard-checkout recovery. No native POST is retried automatically.
-- Details always refreshed shipping twice. A new explicit `refreshCheckout()` waits out an older estimate and takes one fresh address snapshot; an idle service makes one quote request. The compact runtime keeps the old two-call path for cached older shipping scripts.
-- Quote, reservation and shipping context requests could hang forever and retain their shared in-flight promise. A 20-second deadline covers fetch and response decoding, aborts where supported, and releases the request for Retry. A response arriving after the deadline cannot publish stale rates or selections.
-- The wizard could reject rate confirmation after compact checkout had marked Continue as used. The proxy now reports validation/confirmation/posting state. A known rejection before POST releases that marker and offers compact Retry. Rate failures stay in compact checkout; native loading failures retain the guarded standard handoff.
-- The owned native frame repeated advisory account/stock requests from `ShoppingCartBranch.js`. Only the exact same-origin frame owned by the compact overlay skips those suggestions. Ordinary carts and clearance/inventory enforcement retain their existing work.
+The repair makes each async continuation belong to its exact native view and driver, preserves address quotes through shipping/payment/review, and accepts a recovered quote only for the exact basket and selected destination. Shipping Continue waits up to ten seconds for confirmed native shipping, tax and arithmetic, then offers compact Retry. It never accepts an estimate or bypasses total validation. Saved-card changes settle before the following native Continue. The inactivity timer recognizes same-document step changes while retaining bounded recovery for a true stall.
 
-Validation includes initialized interactive forms, missing initialization, busy UpdatePanels, pending navigation without restart, exact iframe ownership, fresh quote counts, old-address responses, stalled response bodies, timed-out reservations, stale responses, native rejection, duplicate in-flight Continue, and compact versus standard recovery. Existing account, basket, final-total, payment and uncertain-order checks remain in force.
+Other loading improvements:
 
-A controlled Chrome cart reached compact review in 2,841 ms with one native entry GET, zero orders and no cart writes. This is a synthetic fixture measurement, not a production latency claim. An authenticated live retest requires restoring the WebTrack session, which expired during this investigation. Browser navigation intermittently stalls under automated inspection, so isolated gate tests and a healthy fixture pass do not prove every production path is fixed. Production verification and any remaining test limitations are recorded in the project checkpoint.
+- Initialized interactive WebForms documents can proceed without waiting for images/chat. A form, positive initialization and no active UpdatePanel request are required.
+- Initial native GETs are no longer cancelled and restarted at four seconds. No native POST is automatically replayed.
+- Explicit checkout quote refresh waits out older estimates and snapshots the settled address. Changed-context or cancelled read-only requests get bounded retries; HTTP rejections remain customer-controlled.
+- A twenty-second deadline covers shipping fetch and response decoding, releases Retry and rejects late results.
+- Known native validation/rate rejections release compact Continue and remain in compact checkout. Genuine native loading failures retain guarded standard-checkout handoff.
+- The exact owned native frame skips duplicated advisory branch/account stock requests; ordinary cart, clearance and inventory enforcement remain in place.
 
-Rollback: revert this release, including all three runtime build identifiers and both shipping loader versions. No backend rate calculation, payment-entry code or final order submission was changed.
+Identity, basket, destination/invoice, final-total, hosted-payment and uncertain-order safeguards remain enforced. No backend rate calculation or final order submission code is changed. Drafts contain no payment state, and status markers contain no customer data.
+
+Validation: 601 automated tests pass, including stale views, duplicate in-flight Continue, native quote preservation, rejected destination/basket quotes, total settling, saved-card postback settling, same-document inactivity and guarded fallback. Responsive recovery markup fits phone, tablet and desktop widths. Authenticated local-override QA with the final repair reached compact NY UPS review, then Back preserved the original six-unit basket and re-entry returned to the same $80.72 review. Two consecutive runs took 40.6 and 29.6 seconds. Earlier builds failed repeated entry and are superseded by this repair. The user reported intermittent power/internet issues during the live investigation, so live latency and loading failures require repeatable verification. No orders were placed or cart lines changed.
+
+Rollback: revert this release, including the three runtime identifiers and both shipping loaders.

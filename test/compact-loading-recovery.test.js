@@ -107,8 +107,27 @@ test('actual UPS shipping dropdown is used and its native change is allowed to f
   let changes=0,continues=0;const dropdown={value:'03',options:[{value:'03',textContent:'UPS Ground $9.95 USD'},{value:'02',textContent:'UPS Second Day Air $49.31 USD'}]};
   const page={documentElement:{dataset:{}},getElementById:id=>id==='ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView'?{click(){continues++;}}:id==='ctl00_PageBody_CartSummary2_UPSShippingCalculatorControl_ShippingSelection'?dropdown:null,querySelector:()=>null};
   const context=vm.createContext({fast:{method:'ship',shippingValue:'02',started:Date.now()},active:{phase:'checking_out'},busy:false,submitting:false,nativeFormsReady:()=>true,
-    frame:{contentDocument:page},setStage(){},status(){},cachePaymentTotal(){},updateFastOptions(){},text:String,setNative(child,el,value){changes++;el.value=value;},haltFast(message){throw Error(message);}});
+    frame:{contentDocument:page},setStage(){},status(){},cachePaymentTotal(){return true;},updateFastOptions(){},text:String,setNative(child,el,value){changes++;el.value=value;},haltFast(message){throw Error(message);}});
   vm.runInContext(section('    async function driveFast(','    async function submitNative('),context);
   await context.driveFast({},page);assert.equal(changes,1);assert.equal(continues,0);assert.equal(context.fast.shippingOptions.length,2);
   await context.driveFast({},page);assert.equal(changes,1);assert.equal(continues,1);
+});
+
+
+test('same-document native step changes reset the inactivity deadline but repeated polls do not',()=>{
+ const f=frameFixture();let control={};
+ f.page.URL='https://webtrack.woodsonlumber.com/ShoppingCart.aspx';f.page.querySelector=()=>({});f.page.getElementById=id=>id==='btnPickup'?control:null;f.context.installedPage=f.page;
+ f.tick(1);f.tick(40000);control={};f.tick(44000);f.tick(70000);assert.deepEqual(f.halts,[]);
+ f.tick(90001);assert.deepEqual(f.halts,['native_step_timeout']);assert.equal(f.sourceWrites.length,1);
+});
+
+test('shipping waits for native totals then continues once, including a blocked native auto-advance',async()=>{
+ for(const auto of [false,true]) {
+  let ready=false,posts=0,waiting=0;const button={click(){posts++;}};
+  const page={documentElement:{dataset:auto?{bnShippingAutoBlocked:'1'}:{}},getElementById:id=>id==='ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView'?button:null,querySelector:()=>null};
+  const context=vm.createContext({fast:{method:'pickup',started:Date.now()},active:{phase:'checking_out'},busy:false,submitting:false,nativeFormsReady:()=>true,frame:{contentDocument:page},setStage(){},status(){},cachePaymentTotal:()=>ready,waitShippingTotal(){waiting++;},updateFastOptions(){}});
+  vm.runInContext(section('    async function driveFast(','    async function submitNative('),context);
+  const child={__wlPickupShippingAutoAdvance:auto};await context.driveFast(child,page);assert.equal(posts,0);assert.equal(waiting,1);assert.equal(page.documentElement.dataset.bnShippingContinued,undefined);
+  ready=true;await context.driveFast(child,page);await context.driveFast(child,page);assert.equal(posts,1);
+ }
 });
