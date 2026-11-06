@@ -1,7 +1,16 @@
 (function () {
   "use strict";
 
-  window.WL_HEADER_BUILD = "20261106-cart-delivery-recovery-3";
+  window.WL_HEADER_BUILD = "20261106-cart-asset-origin-4";
+
+  function uiAssetBase(source) {
+    try {
+      var url=new URL(source);
+      if (url.origin==='https://wl-upsrates.vercel.app' && url.pathname==='/headermodern.js') return url.origin+'/';
+    } catch (_) {}
+    return 'https://ckunkel510.github.io/WL.github.io/';
+  }
+  var UI_ASSET_BASE=uiAssetBase(document.currentScript && document.currentScript.src);
 
   var LOG = "[WL HeaderEnhancer]";
   var DEBUG = false; // Set to true only when actively troubleshooting.
@@ -12,9 +21,9 @@
   // Keep the hosted filename neutral. Common privacy filters block filenames
   // associated with analytics, tracking, events, or commerce before execution.
   var ANALYTICS_URL = "https://ckunkel510.github.io/WL.github.io/wl-site.js?v=20261030-checkout-recovery-1";
-  var SMART_SEARCH_URL = "https://ckunkel510.github.io/WL.github.io/smart-search.js?v=20261016-4";
-  var ADDRESS_MANAGER_URL = "https://ckunkel510.github.io/WL.github.io/AddressManagement.js?v=20260707-2";
-  var CONTACT_MANAGER_URL = "https://ckunkel510.github.io/WL.github.io/ContactManagement.js?v=20260707-3";
+  var SMART_SEARCH_URL = UI_ASSET_BASE+"smart-search.js?v=20261016-4";
+  var ADDRESS_MANAGER_URL = UI_ASSET_BASE+"AddressManagement.js?v=20260707-2";
+  var CONTACT_MANAGER_URL = UI_ASSET_BASE+"ContactManagement.js?v=20260707-3";
   var TAWK_COMMERCE_ASSIST_URL = "https://ckunkel510.github.io/WL.github.io/wl-chat.js?v=20260924-1";
   var QUAGGA_URL = "https://unpkg.com/quagga@0.12.1/dist/quagga.min.js";
   var DEPARTMENT_CACHE_KEY = "wl_header_departments_v1";
@@ -139,7 +148,7 @@
     try { if (!sessionStorage.getItem('wl_guest_signup_recovery_v1')) return; } catch (_) { return; }
     if (window.__WL_GUEST_CHECKOUT_LOADED__ || document.querySelector('script[data-wl-guest-recovery]')) return;
     var script=document.createElement('script');
-    script.src='https://ckunkel510.github.io/WL.github.io/Guestcheckout.js?v=20261030-guest-cart-recovery-4';
+    script.src=UI_ASSET_BASE+'Guestcheckout.js?v=20261030-guest-cart-recovery-4';
     script.async=true; script.setAttribute('data-wl-guest-recovery','true'); document.head.appendChild(script);
   }
 
@@ -256,7 +265,7 @@
   function loadCartDesign() {
     if (window.top !== window || window.location.origin !== WEBTRACK || !/^\/ShoppingCart\.aspx$/i.test(window.location.pathname)) return;
     if (window.WLCartStudio || document.querySelector('script[data-wl-cart-studio]')) return;
-    loadCartRuntimeScript('script[data-wl-cart-studio]','https://ckunkel510.github.io/WL.github.io/CartDesignPilot.js?v=20261106-cart-style-recovery-9','data-wl-cart-studio');
+    loadCartRuntimeScript('script[data-wl-cart-studio]',UI_ASSET_BASE+'CartDesignPilot.js?v=20261106-cart-style-origin-10','data-wl-cart-studio');
   }
 
   function loadProductDetailExperience() {
@@ -264,7 +273,7 @@
     if (window.WLPdpExperience || document.querySelector('script[data-wl-pdp-preview-loader]')) return;
     // Public presentation only; existing native controls keep their access rules.
     var script = document.createElement('script');
-    script.src = 'https://ckunkel510.github.io/WL.github.io/ProductDetailPilot.js?v=20261016-pdp-light-3';
+    script.src = UI_ASSET_BASE+'ProductDetailPilot.js?v=20261016-pdp-light-3';
     script.async = true;
     script.setAttribute('data-wl-pdp-preview-loader', 'true');
     document.head.appendChild(script);
@@ -281,7 +290,7 @@
       catch (_) { return; }
     }
     // UI and account-scoped state require fresh native sign-in/account checks.
-    loadCartRuntimeScript('script[data-wl-buy-now-pilot]','https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261106-native-card-choice-71','data-wl-buy-now-pilot',deferCartCheckoutUntilPilotReady);
+    loadCartRuntimeScript('script[data-wl-buy-now-pilot]',UI_ASSET_BASE+'BuyNowPilot.js?v=20261106-native-card-choice-71','data-wl-buy-now-pilot',deferCartCheckoutUntilPilotReady);
   }
 
   function loadTawkCommerceAssist() {
