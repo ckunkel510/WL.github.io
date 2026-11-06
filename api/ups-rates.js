@@ -229,7 +229,7 @@ function buildRateRequest(body) {
     payload: {
       RateRequest: {
         Request: {
-          RequestOption: "Shop",
+          RequestOption: "Shoptimeintransit",
           TransactionReference: { CustomerContext: "Woodson WebTrack checkout" }
         },
         Shipment: {
@@ -243,6 +243,9 @@ function buildRateRequest(body) {
           PaymentDetails: {
             ShipmentCharge: [{ Type: "01", BillShipper: { AccountNumber: accountNumber } }]
           },
+          // Request transit details with the rates, without another carrier call.
+          // UPS defaults the quote's pickup date; it is not a store dispatch promise.
+          DeliveryTimeInformation: { PackageBillType: "03" },
           NumOfPieces: String(packages.length),
           ShipmentTotalWeight: {
             UnitOfMeasurement: { Code: "LBS", Description: "Pounds" },
@@ -256,18 +259,44 @@ function buildRateRequest(body) {
   };
 }
 
+function carrierDate(value) {
+  const raw = String(value || "");
+  if (!/^\d{8}$/.test(raw)) return "";
+  const iso = `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
+  const date = new Date(`${iso}T12:00:00Z`);
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === iso ? iso : "";
+}
+
+function transitEstimate(shipment) {
+  const arrival = shipment?.TimeInTransit?.ServiceSummary?.EstimatedArrival;
+  const rawDays = arrival?.BusinessDaysInTransit ?? shipment?.GuaranteedDelivery?.BusinessDaysInTransit;
+  const days = /^\d{1,2}$/.test(String(rawDays)) ? Number(rawDays) : NaN;
+  const pickupDate = carrierDate(arrival?.Pickup?.Date);
+  const arrivalDate = carrierDate(arrival?.Arrival?.Date);
+  const result = {};
+  if (Number.isInteger(days) && days >= 0 && days <= 60) result.businessDays = days;
+  // Calendar estimates only make sense together with their carrier pickup basis.
+  if (pickupDate && arrivalDate && arrivalDate >= pickupDate) {
+    result.pickupDate = pickupDate;
+    result.arrivalDate = arrivalDate;
+  }
+  return Object.keys(result).length ? result : null;
+}
+
 function normalizedRates(data) {
   const rated = data?.RateResponse?.RatedShipment;
   const shipments = Array.isArray(rated) ? rated : (rated ? [rated] : []);
   return shipments.map((shipment) => {
     const serviceCode = cleanText(shipment?.Service?.Code, 4);
     const charge = shipment?.NegotiatedRateCharges?.TotalCharge || shipment?.TotalCharges || {};
+    const transit = transitEstimate(shipment);
     return {
       serviceCode,
       serviceName: SERVICE_NAMES[serviceCode] || `UPS service ${serviceCode}`,
       currency: cleanText(charge.CurrencyCode || "USD", 3),
       amount: Number(charge.MonetaryValue),
-      billingWeight: Number(shipment?.BillingWeight?.Weight || 0)
+      billingWeight: Number(shipment?.BillingWeight?.Weight || 0),
+      ...(transit ? { transit } : {})
     };
   }).filter((rate) => rate.serviceCode && Number.isFinite(rate.amount))
     .sort((left, right) => left.amount - right.amount);
@@ -277,7 +306,7 @@ async function requestRates(body) {
   const accessToken = await getAccessToken();
   const { payload } = buildRateRequest(body);
   const transactionId = `wl-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`.slice(0, 32);
-  const response = await fetchWithTimeout(`${upsBaseUrl()}/api/rating/v2409/Shop`, {
+  const response = await fetchWithTimeout(`${upsBaseUrl()}/api/rating/v2409/Shoptimeintransit`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,

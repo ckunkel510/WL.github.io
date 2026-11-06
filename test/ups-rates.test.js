@@ -42,6 +42,51 @@ test("builds a UPS multi-package shop request", () => {
   assert.equal(result.packages.length, 2);
   assert.equal(result.payload.RateRequest.Shipment.NumOfPieces, "2");
   assert.equal(result.payload.RateRequest.Shipment.Shipper.ShipperNumber, "ABC123");
+  assert.equal(result.payload.RateRequest.Request.RequestOption, "Shoptimeintransit");
+  assert.deepEqual(result.payload.RateRequest.Shipment.DeliveryTimeInformation, { PackageBillType: "03" });
+});
+
+test("preserves carrier arrival and pickup basis separately for each service", () => {
+  const rates = normalizedRates({ RateResponse: { RatedShipment: [
+    { Service: { Code: "03" }, TotalCharges: { MonetaryValue: "18.50" }, TimeInTransit: { ServiceSummary: { EstimatedArrival: {
+      BusinessDaysInTransit: "4", Pickup: { Date: "20261106" }, Arrival: { Date: "20261112" }
+    } } } },
+    { Service: { Code: "02" }, TotalCharges: { MonetaryValue: "42.00" }, GuaranteedDelivery: { BusinessDaysInTransit: "2" } }
+  ] } });
+  assert.deepEqual(rates[0].transit, { businessDays: 4, pickupDate: "2026-11-06", arrivalDate: "2026-11-12" });
+  assert.deepEqual(rates[1].transit, { businessDays: 2 });
+});
+
+test("omits missing or malformed carrier dates without losing a usable shipping rate", () => {
+  for (const estimate of [{}, { BusinessDaysInTransit: "", Pickup: { Date: "20260230" }, Arrival: { Date: "20260303" } },
+    { BusinessDaysInTransit: "-1", Pickup: { Date: "20261106" }, Arrival: { Date: "20261105" } }]) {
+    const [rate] = normalizedRates({ RateResponse: { RatedShipment: {
+      Service: { Code: "03" }, TotalCharges: { MonetaryValue: "18.50" }, TimeInTransit: { ServiceSummary: { EstimatedArrival: estimate } }
+    } } });
+    assert.equal(rate.amount, 18.5); assert.equal(rate.transit, undefined);
+  }
+});
+
+test("requests rates and transit in one carrier call and retains rates when transit is absent", async () => {
+  const previousFetch = global.fetch;
+  const before = Object.fromEntries(["UPS_CLIENT_ID", "UPS_CLIENT_SECRET", "UPS_ACCOUNT_NUMBER"].map(key => [key, process.env[key]]));
+  const calls = [];
+  Object.assign(process.env, { UPS_CLIENT_ID: "test-client", UPS_CLIENT_SECRET: "test-secret", UPS_ACCOUNT_NUMBER: "test-account" });
+  global.fetch = async (url, options) => {
+    calls.push({ url, options });
+    return { ok: true, json: async () => String(url).includes("oauth/token") ? { access_token: "test-token", expires_in: 3600 } :
+      { RateResponse: { RatedShipment: { Service: { Code: "03" }, TotalCharges: { MonetaryValue: "18.50" } } } } };
+  };
+  try {
+    const result = await upsRatesHandler._internal.requestRates({ shipFrom: { postalCode: "77833" }, shipTo: { postalCode: "10520" }, packages: [{ weight: 2 }] });
+    assert.equal(result.rates[0].amount, 18.5);
+    assert.equal(calls.filter(call => /\/rating\//.test(call.url)).length, 1);
+    assert.match(calls.at(-1).url, /\/rating\/v2409\/Shoptimeintransit$/);
+    assert.equal(JSON.parse(calls.at(-1).options.body).RateRequest.Request.RequestOption, "Shoptimeintransit");
+  } finally {
+    global.fetch = previousFetch;
+    for (const [key, value] of Object.entries(before)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
+  }
 });
 
 test("rejects packages beyond UPS small-package dimensions", () => {

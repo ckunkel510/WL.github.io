@@ -43,7 +43,7 @@ test('a native navigation with a temporarily detached document does not stop the
 });
 
 test('switching back from UPS clears the old shipping-speed caption in the pickup or delivery draft',()=>{
-  const rendered={},context=vm.createContext({fast:{methods:{},method:'ship',date:'',ready:false},guest:false,overlay:null,submitting:false,fastText:(key,value)=>{rendered[key]=value;},deliveryAddressSummary:core.deliveryAddressSummary,pickupPersonName:core.pickupPersonName});
+  const rendered={},context=vm.createContext({fast:{methods:{},method:'ship',date:'',ready:false},guest:false,overlay:null,submitting:false,fastText:(key,value)=>{rendered[key]=value;},deliveryAddressSummary:core.deliveryAddressSummary,pickupPersonName:core.pickupPersonName,shippingEstimate:core.shippingEstimate});
   vm.runInContext(source.slice(source.indexOf('    function updateFastOptions('),source.indexOf('    function requestPickupPerson(')),context);
   context.updateFastOptions();assert.equal(rendered['[data-bn-timing]'],'UPS Ground');
   for(const method of ['pickup','delivery']) {context.fast.method=method;context.updateFastOptions();assert.equal(rendered['[data-bn-timing]'],'Earliest available');}
@@ -53,7 +53,7 @@ test('local delivery hides after an unavailable quote and returns for pending or
   const buttons=Object.fromEntries(['pickup','delivery','ship'].map(method=>[method,{hidden:false,dataset:{},attributes:{},setAttribute(name,value){this.attributes[name]=value;}}]));
   const context=vm.createContext({fast:{methods:{},method:'ship',date:'',ready:false},guest:false,submitting:false,
     overlay:{querySelector(selector){const method=selector.match(/^\[data-bn-method="(pickup|delivery|ship)"\]$/);return method?buttons[method[1]]:null;},querySelectorAll:()=>[]},
-    fastText(){},loading(){},deliveryAddressSummary:core.deliveryAddressSummary,pickupPersonName:core.pickupPersonName});
+    fastText(){},loading(){},deliveryAddressSummary:core.deliveryAddressSummary,pickupPersonName:core.pickupPersonName,shippingEstimate:core.shippingEstimate});
   vm.runInContext(source.slice(source.indexOf('    function updateFastOptions('),source.indexOf('    function requestPickupPerson(')),context);
   for(const quote of [
     {options:{delivery:{available:false,reason:'outside-texas'},ups:{available:true,amount:81.93}}},

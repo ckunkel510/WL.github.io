@@ -65,7 +65,7 @@ test('guest, signed-in and edited delivery/shipping summaries show the selected 
   const address={line1:'702 W Buck St',city:'Caldwell',stateValue:'TX',zip:'77836'};
   for(const guest of [true,false])for(const method of ['delivery','ship'])for(const changed of [false,true]) {
     const rendered={},selected={...address,line1:changed?'100 Test St':address.line1};
-    const context=require('node:vm').createContext({overlay:null,guest,submitting:false,deliveryAddressSummary:core.deliveryAddressSummary,pickupPersonName:core.pickupPersonName,fast:{methods:{},method,address:selected,addressChanged:changed,ready:true},fastText:(selector,value)=>{rendered[selector]=value;}});
+    const context=require('node:vm').createContext({overlay:null,guest,submitting:false,deliveryAddressSummary:core.deliveryAddressSummary,pickupPersonName:core.pickupPersonName,shippingEstimate:core.shippingEstimate,fast:{methods:{},method,address:selected,addressChanged:changed,ready:true},fastText:(selector,value)=>{rendered[selector]=value;}});
     require('node:vm').runInContext(updateSource,context);context.updateFastOptions();
     assert.equal(rendered['[data-bn-address-title]'],'Deliver to');
     assert.equal(rendered['[data-bn-address]'],(changed?'100 Test St':'702 W Buck St')+', Caldwell, TX 77836');
@@ -300,6 +300,27 @@ test('UPS confirmation uses authoritative quoted rates rather than a stale nativ
   assert.throws(()=>core.quotedShipping('ship',ups,{value:'unknown',label:'Unknown service ($25.00)'},false));
   assert.equal(core.quotedShipping('delivery',{rate:'$25.00'}),2500);
   assert.equal(core.quotedShipping('pickup',null),0);
+});
+
+test('compact arrival estimate follows the selected UPS service and states its dispatch basis', () => {
+  const ups={available:true,rates:[
+    {serviceCode:'03',serviceName:'UPS Ground',amount:9.95,transit:{businessDays:4,pickupDate:'2026-11-06',arrivalDate:'2026-11-12'}},
+    {serviceCode:'02',serviceName:'UPS 2nd Day Air',amount:49.31,transit:{businessDays:2,pickupDate:'2026-11-06',arrivalDate:'2026-11-10'}}
+  ]};
+  assert.match(core.shippingEstimate(ups,{value:'03',label:'UPS Ground $9.95 USD'}),/Nov 12 if dispatched Nov 6/);
+  assert.match(core.shippingEstimate(ups,{value:'02',label:'UPS Second Day Air $49.31 USD'}),/Nov 10 if dispatched Nov 6/);
+  assert.match(core.shippingEstimate(ups,{value:'-1',label:'UPS Ground ($9.95)'}),/not guaranteed/);
+  assert.match(core.shippingEstimate({...ups,pending:true},{value:'02'}),/Checking/);
+  assert.match(core.shippingEstimate({...ups,available:false},{value:'02'}),/unavailable/);
+  assert.match(core.shippingEstimate(ups,{value:'unknown',label:'UPS Express'}),/unavailable/);
+});
+
+test('compact transit never invents an arrival date when UPS supplies only days or no estimate', () => {
+  assert.equal(core.shippingEstimate({rates:[{serviceCode:'03',transit:{businessDays:1}}]}),
+    'UPS estimated transit: 1 business day after dispatch. Store processing time is additional.');
+  for(const transit of [undefined,{businessDays:'2'},{businessDays:-1},{arrivalDate:'2026-02-30',pickupDate:'2026-02-28'}]) {
+    assert.match(core.shippingEstimate({rates:[{serviceCode:'03',transit}]}),/^Arrival estimate unavailable/);
+  }
 });
 
 
