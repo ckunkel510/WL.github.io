@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  window.WL_HEADER_BUILD = "20261106-scanner-reliability-8";
+  window.WL_HEADER_BUILD = "20261109-native-cart-9";
 
   var LOG = "[WL HeaderEnhancer]";
   var DEBUG = false; // Set to true only when actively troubleshooting.
@@ -274,14 +274,20 @@
     if (window.top !== window || window.location.origin !== WEBTRACK) return;
     if (!document.querySelector('a[href*="SignOut=1"],a[href*="signout=1"]')) return;
     if (document.querySelector('script[data-wl-buy-now-pilot]')) return;
-    // Avoid extra account reads on unrelated pages. A durable Quick buy journal
-    // still loads recovery there; the module independently verifies its owner.
-    if (!/\/(?:ProductDetail|Products|ShoppingCart)\.aspx$/i.test(window.location.pathname)) {
-      try { if (!Object.keys(localStorage).some(function (key) { return /^wl_buy_now_pilot_v1:[a-f0-9]{64}$/.test(key); })) return; }
-      catch (_) { return; }
+    // Ordinary cart checkout is native. Keep the compact engine available only
+    // for Quick Buy and verified recovery of an interrupted/guest basket.
+    var recovery = false;
+    try {
+      recovery = Object.keys(localStorage).some(function (key) { return /^wl_buy_now_pilot_v1:[a-f0-9]{64}$/.test(key); }) ||
+        !!window.sessionStorage.getItem('wl_guest_cart_handoff_v1');
+    } catch (_) { recovery = true; } // An unreadable backup must not be bypassed.
+    if (/\/ShoppingCart\.aspx$/i.test(window.location.pathname) && !recovery) {
+      document.documentElement.dataset.wlCompactNativeOnly = '1';
+      return;
     }
+    if (!/\/(?:ProductDetail|Products)\.aspx$/i.test(window.location.pathname) && !recovery) return;
     // UI and account-scoped state require fresh native sign-in/account checks.
-    loadCartRuntimeScript('script[data-wl-buy-now-pilot]','https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261106-choices-first-73','data-wl-buy-now-pilot',deferCartCheckoutUntilPilotReady);
+    loadCartRuntimeScript('script[data-wl-buy-now-pilot]','https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261109-native-cart-74','data-wl-buy-now-pilot',deferCartCheckoutUntilPilotReady);
   }
 
   function loadTawkCommerceAssist() {

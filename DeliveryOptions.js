@@ -337,6 +337,30 @@ $(function () {
 (function () {
   const METHOD_KEY = "wl_fulfillment_method";
   const CONTINUE_ID = "ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView";
+  const BACK_KEY = "wl_native_shipping_back_v1";
+  const FORWARD_KEY = "wl_native_shipping_forward_v1";
+  document.documentElement.dataset.wlNativeShippingNavigation = '20261109-back-safe-2';
+  let abandoned = false;
+  window.addEventListener('pagehide', function () { abandoned = true; }, { once: true });
+  document.addEventListener('click', function (event) {
+    if (window.top !== window || !event.target?.closest?.('#ctl00_PageBody_btnBack_CardOnFileView')) return;
+    try { sessionStorage.setItem(BACK_KEY, String(Date.now())); } catch (_) {}
+  }, true);
+
+  function returningToShipping() {
+    if (window.top !== window) return false;
+    try {
+      const navigation = window.performance?.getEntriesByType?.('navigation')?.[0];
+      const raw = sessionStorage.getItem(BACK_KEY);
+      sessionStorage.removeItem(BACK_KEY);
+      const age = Date.now() - Number(raw);
+      const forward = sessionStorage.getItem(FORWARD_KEY);
+      sessionStorage.removeItem(FORWARD_KEY);
+      const forwardAge = Date.now() - Number(forward);
+      const freshForward = !!forward && Number.isFinite(forwardAge) && forwardAge >= 0 && forwardAge < 120000;
+      return !freshForward || navigation?.type === 'back_forward' || (!!raw && Number.isFinite(age) && age >= 0 && age < 300000);
+    } catch (_) { return true; } // Keep native controls available when storage is blocked.
+  }
 
   function isVisible(el) {
     if (!el) return false;
@@ -372,7 +396,7 @@ $(function () {
   }
 
   function autoAdvancePickupShipping() {
-    if (window.__wlPickupShippingAutoAdvance) return;
+    if (abandoned || window.__wlPickupShippingAutoAdvance) return;
 
     let method = "";
     try { method = sessionStorage.getItem(METHOD_KEY) || ""; } catch {}
@@ -381,21 +405,31 @@ $(function () {
     // so the default option can be accepted without asking the customer to choose speed.
     if (method !== "pickup" && method !== "delivery") return;
 
+    const continueButton = document.getElementById(CONTINUE_ID);
+    if (!continueButton) return;
+    if (returningToShipping()) {
+      // Back must stay back. Otherwise this intermediate step sends the shopper
+      // straight to payment again and makes earlier details impossible to edit.
+      window.__wlPickupShippingAutoAdvance = true;
+      document.documentElement.dataset.wlNativeShippingBack = 'held';
+      return;
+    }
+
     if (method === "delivery") {
       const options = document.querySelector("#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList");
+      if (options && options.options.length > 1) return;
       if (options && options.options.length) {
         options.selectedIndex = 0;
         try { options.dispatchEvent(new Event("change", { bubbles: true })); } catch {}
       }
     }
 
-    const continueButton = document.getElementById(CONTINUE_ID);
     if (!continueButton || (method === "pickup" && hasShippingChoice())) return;
 
     window.__wlPickupShippingAutoAdvance = true;
     addPickupProgress();
     window.setTimeout(function () {
-      if (document.documentElement.contains(continueButton)) continueButton.click();
+      if (!abandoned && document.documentElement.contains(continueButton)) continueButton.click();
     }, 180);
   }
 
