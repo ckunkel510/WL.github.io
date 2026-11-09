@@ -71,6 +71,44 @@ test("uses the true destination-specific UPS Ground cost for the subsidy", async
   assert.equal(hawaii.result.rates[0].amount, 45);
 });
 
+test("does not subsidize a 55 lb clearance roll even when catalog retail overstates the selling price", async () => {
+  const trusted = catalog();
+  Object.assign(trusted.products[0], {
+    productCode: "CLEARANCE-ROLL", price: 200, averageCost: 10,
+    weight: 55, length: 30, width: 6, height: 6, isClearance: true
+  });
+  const result = await buildAutomaticShippingQuote({
+    shipFrom: { postalCode: "77836" }, shipTo: { postalCode: "77002" },
+    cart: [{ productId: "100", quantity: 1, isClearance: false, weight: 1 }]
+  }, {
+    getCatalogProducts: async () => trusted,
+    requestRates: async () => ({ rates: [
+      { serviceCode: "03", serviceName: "UPS Ground", amount: 91.34, billingWeight: 56, currency: "USD" }
+    ] }),
+    policy: policy()
+  });
+  assert.equal(result.result.rates[0].amount, 91.34);
+  assert.equal(result.claim.decision.subsidyAmount, 0);
+  assert.equal(result.claim.decision.reason, "clearance-full-ground-required");
+});
+
+test("uses carrier dimensional billing weight to prevent a subsidy on light bulky merchandise", async () => {
+  const trusted = catalog();
+  Object.assign(trusted.products[0], { price: 1000, averageCost: 10, weight: 11, length: 24, width: 18, height: 24 });
+  const result = await buildAutomaticShippingQuote({
+    shipFrom: { postalCode: "77836" }, shipTo: { postalCode: "77002" },
+    cart: [{ productId: "100", quantity: 1 }]
+  }, {
+    getCatalogProducts: async () => trusted,
+    requestRates: async () => ({ rates: [
+      { serviceCode: "03", serviceName: "UPS Ground", amount: 101.08, billingWeight: 94, currency: "USD" }
+    ] }),
+    policy: policy()
+  });
+  assert.equal(result.result.rates[0].amount, 101.08);
+  assert.equal(result.claim.decision.reason, "heavy-or-oversized-full-ground-required");
+});
+
 test("builds the claim from trusted catalog revenue and cost instead of browser values", async () => {
   const result = await buildAutomaticShippingQuote({
     shipFrom: { postalCode: "77833" },

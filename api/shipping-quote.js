@@ -111,6 +111,7 @@ function trustedCartLines(cart, products, env = process.env) {
       productId: cleanText(product.productId || item.productId || item.id, 40),
       productCode: cleanText(product.productCode || item.productCode || item.code, 80),
       brand: cleanText(product.brand, 80),
+      isClearance: product.isClearance === true,
       quantity: lineQuantity,
       price: product.price,
       averageCost: product.averageCost,
@@ -160,6 +161,8 @@ async function buildAutomaticShippingQuote(body, dependencies = {}) {
     lines,
     groundCost: selected.groundCost,
     packageCount: selected.plan.packageCount,
+    packages: selected.packages,
+    billingWeight: groundRate(selected.rated)?.billingWeight,
     policy
   });
   const result = (dependencies.applyCutToShipCharge || applyCutToShipCharge)(
@@ -207,6 +210,7 @@ async function buildAutomaticShippingQuote(body, dependencies = {}) {
         configured: policy.configured
       },
       decision: {
+        reason: decision.reason,
         mode: decision.mode,
         customerGroundAmount: decision.customerGroundAmount,
         groundCost: decision.groundCost,
