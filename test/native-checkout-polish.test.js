@@ -77,8 +77,8 @@ test('rapid native method clicks cannot apply a second mode using the first pend
  const selector={setAttribute:(k,v)=>attributes.set(k,v),removeAttribute:k=>attributes.delete(k)};
  const doc={dispatchEvent:e=>events.push(e.type)};
  const jq=el=>({data:()=>el.mode,on:(type,selector,fn)=>{handler=fn;}});
- const context=vm.createContext({$:jq,document:doc,isBuyNowFrame:()=>false,addressRegion:()=> 'texas',window:{WLShippingOffer:{select:mode=>{requested.push(mode);return new Promise(resolve=>{finish=resolve;});}}},Event:class{constructor(type){this.type=type;}},updateShippingStyles:mode=>chosen.push(mode),showOutOfStateMessage(){},updateAddressAwareOptions(){}});
- const start=source.indexOf('          let nativeSelectionBusy');const block=source.slice(start,source.indexOf('          $(document).on("change"',start));vm.runInContext(block,context);
+ const context=vm.createContext({$:jq,document:doc,nativeSelectionBusy:false,nativeChoiceAbandoned:false,nativeChoiceEpoch:0,nativeShippingChoiceState:()=> 'ready',nativeShippingContextKey:()=> 'same',currentFulfillmentQuote:()=>({}),updateNativeChoiceReadiness(){},isBuyNowFrame:()=>false,addressRegion:()=> 'texas',window:{WLShippingOffer:{select:mode=>{requested.push(mode);return new Promise(resolve=>{finish=resolve;});}}},Event:class{constructor(type){this.type=type;}},updateShippingStyles:mode=>chosen.push(mode),showOutOfStateMessage(){},updateAddressAwareOptions(){}});
+ const start=source.indexOf('          $(document).on("click", ".modern-shipping-selector button"');const block=source.slice(start,source.indexOf("          if (!isBuyNowFrame()) {\n            document.querySelector('.wl-shipping-retry')",start));vm.runInContext(block,context);
  const event={preventDefault(){},stopImmediatePropagation(){}};const button=mode=>({mode,disabled:false,closest:()=>selector});
  const first=handler.call(button('ship'),event);assert.equal(attributes.get('aria-busy'),'true');
  await handler.call(button('delivery'),event);assert.deepEqual(requested,['ship']);assert.deepEqual(chosen,[]);

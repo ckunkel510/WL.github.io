@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20261109-native-choice-12";
+  window.WL_CHECKOUT_BUILD = "20261109-native-choice-13";
   document.documentElement?.setAttribute?.('data-wl-checkout-build',window.WL_CHECKOUT_BUILD);
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
@@ -52,6 +52,44 @@
       }
       window.addEventListener('pagehide', abandon, { once: true });
       check();
+    });
+  }
+
+  function nativeShippingContextKey() {
+    return JSON.stringify(['AddressLine1','AddressLine2','AddressLine3','City','CountySelector_CountyList','Postcode','CountrySelector'].map(function (field) {
+      return document.getElementById('ctl00_PageBody_DeliveryAddress_'+field)?.value || '';
+    }).concat(document.getElementById('ctl00_PageBody_BranchDropDownList')?.value || ''));
+  }
+
+  function nativeShippingChoiceState(quote) {
+    const prefix='ctl00_PageBody_DeliveryAddress_';
+    const fields=['AddressLine1','City','CountySelector_CountyList','Postcode'].map(name=>document.getElementById(prefix+name));
+    if (!nativeDetailsReady() || fields.some(field=>!field) ||
+        (typeof window.WebForm_DoPostBackWithOptions!=='function' && typeof window.__doPostBack!=='function')) return 'loading';
+    const [street,city,state,zip]=fields;
+    const stateText=String(state.selectedOptions?.[0]?.textContent || state.value || '').trim();
+    if (!String(street.value || '').trim() || !String(city.value || '').trim() ||
+        !String(state.value || '').trim() || /^(?:0|00|select|\[select)/i.test(stateText) ||
+        !/^\d{5}(?:-\d{4})?$/.test(String(zip.value || '').trim())) return 'address';
+    return quote?.options ? 'ready' : 'quote';
+  }
+
+  function awaitNativeShippingQuote() {
+    return new Promise(function (resolve) {
+      const began=Date.now(),key=nativeShippingContextKey();let timer,done=false;
+      function finish(quote) {
+        if(done)return;done=true;window.clearTimeout(timer);window.removeEventListener('pagehide',abandon);resolve(quote);
+      }
+      function abandon() { finish(null); }
+      function check() {
+        if(done)return;
+        if(key!==nativeShippingContextKey()){finish(null);return;}
+        const quote=window.WLShippingOffer?.current?.();
+        if(quote){finish(quote);return;}
+        if(Date.now()-began>=10000){finish(null);return;}
+        timer=window.setTimeout(check,150);
+      }
+      window.addEventListener('pagehide',abandon,{once:true});check();
     });
   }
 
@@ -248,9 +286,14 @@
     if (!ups || !ups.checked) return false;
     if (!window.WLShippingOffer || typeof window.WLShippingOffer.select !== "function") return false;
 
-    const quote = typeof window.WLShippingOffer.current === "function"
+    let quote = typeof window.WLShippingOffer.current === "function"
       ? window.WLShippingOffer.current()
       : null;
+    if (!quote && !isBuyNowFrame()) {
+      const key=nativeShippingContextKey();
+      quote=await awaitNativeShippingQuote();
+      if(key!==nativeShippingContextKey() || getFulfillmentIntent()!==mode)return false;
+    }
     const option = quote?.options?.[mode === "ship" ? "ups" : "delivery"];
     if (!option?.available || !(Number(option.amount) > 0)) return false;
 
@@ -2125,7 +2168,7 @@ const navDiv = document.createElement("div");
               proxy.dataset.wlContinueState = "blocked";
               proxy.dataset.wlContinueReason = "fulfillment";
               try {
-                showInlineError(1, "<strong>Please reselect your fulfillment method.</strong><br>We could not confirm that rate with WebTrack.");
+                showInlineError(1, isBuyNowFrame() ? "<strong>Please reselect your fulfillment method.</strong><br>We could not confirm that rate with WebTrack." : "<strong>Delivery options aren't ready yet.</strong><br>Please try again in Delivery method, then continue.");
                 const fulfillmentEdit = wizard.querySelector('[data-wl-edit-step="1"]');
                 if (fulfillmentEdit) fulfillmentEdit.click();
                 else showStep(1);
@@ -3873,25 +3916,26 @@ document.addEventListener("click", function (ev) {
           }
 
           const hasNativeUps = UPS_SHIPPING_ENABLED && $("#ctl00_PageBody_SaleTypeSelector_rbUPSDelivery").length > 0;
+          const nativeLoading = isBuyNowFrame() ? '' : ' disabled aria-disabled="true"';
           const shipHTML = `
             <div class="modern-shipping-selector d-flex justify-content-around">
-              <button type="button" id="btnPickup" class="btn btn-secondary" data-mode="pickup" data-value="rbCollectLater">
+              <button type="button" id="btnPickup" class="btn btn-secondary" data-mode="pickup" data-value="rbCollectLater"${nativeLoading}>
                 <span class="wl-option-label"><i class="fas fa-store"></i> Pickup</span>
                 <span class="wl-option-meta">Choose a Woodson store</span>
                 <span class="wl-option-tag">Free</span>
               </button>
-              <button type="button" id="btnDelivered" class="btn btn-primary" data-mode="delivery" data-value="rbUPSDelivery">
+              <button type="button" id="btnDelivered" class="btn btn-primary" data-mode="delivery" data-value="rbUPSDelivery"${nativeLoading}>
                 <span class="wl-option-label"><i class="fas fa-truck"></i> Delivered by Woodson</span>
                 <span class="wl-option-meta">Local delivery to your address</span>
                 <span class="wl-option-tag" data-wl-delivery-tag>Checking address</span>
               </button>
               ${hasNativeUps ? `
-              <button type="button" id="btnShip" class="btn btn-secondary" data-mode="ship" data-value="rbUPSDelivery">
+              <button type="button" id="btnShip" class="btn btn-secondary" data-mode="ship" data-value="rbUPSDelivery"${nativeLoading}>
                 <span class="wl-option-label"><i class="fas fa-shipping-fast"></i> Ship via UPS</span>
                 <span class="wl-option-meta">Shipped to your address</span>
                 <span class="wl-option-tag" data-wl-ship-tag>Checking cart</span>
               </button>` : ""}
-            </div>`;
+            </div>${isBuyNowFrame() ? '' : '<div class="wl-shipping-readiness"><p role="status" aria-live="polite"></p><button type="button" class="wl-shipping-retry" hidden>Try again</button></div>'}`;
           $(".epi-form-col-single-checkout:has(.SaleTypeSelector)").append(shipHTML);
 
           (function(){
@@ -3904,6 +3948,9 @@ document.addEventListener("click", function (ev) {
 .modern-shipping-selector button.wl-option-disabled{opacity:.72 !important;cursor:not-allowed !important;border-style:dashed !important;}
 .wl-outstate-shipping-note{display:none;margin-top:10px;padding:10px 12px;border:1px solid #d9dde2;border-radius:8px;background:#f7f7f7;color:#25282c;font-size:13px;line-height:1.35;}
 .wl-outstate-shipping-note.wl-warning{border-color:#e6c15a;background:#fff8dc;color:#3b2b00;}
+.wl-shipping-readiness{margin-top:10px;color:#62676d;font:13px/1.4 system-ui;}
+.wl-shipping-readiness p{margin:0;}.wl-shipping-readiness:has(p:empty){margin-top:0;}
+.wl-shipping-retry{margin-top:8px;min-height:44px;border:1px solid #cbd2dc;border-radius:8px;background:white;color:#6b0016;padding:8px 16px;font:600 14px system-ui;}
 .wl-step-li{display:flex;align-items:center;gap:10px;}
 .wl-step-icon{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:6px;}
 .wl-step-icon svg{width:20px;height:20px;display:block;}
@@ -3976,9 +4023,57 @@ document.addEventListener("click", function (ev) {
           ]);
           let addressAwareTimer = null;
           let addressAwareUpdating = false;
+          let nativeSelectionBusy = false;
+          let nativeChoiceTimer = null;
+          let nativeChoiceWaitingSince = 0;
+          let nativeChoiceRetrying = false;
+          let nativeChoiceAbandoned = false;
+          let nativeChoiceEpoch = 0;
+
+          function updateNativeChoiceReadiness(quote) {
+            if (isBuyNowFrame() || nativeChoiceAbandoned) return;
+            window.clearTimeout(nativeChoiceTimer);
+            let phase=nativeShippingChoiceState(quote);
+            const waiting=phase==='loading' || phase==='quote';
+            const terminal=/^(?:error|network_error|aborted)$/.test(document.documentElement.getAttribute('data-wl-shipping-quote-state') || '');
+            if (waiting) {
+              if (!nativeChoiceWaitingSince) nativeChoiceWaitingSince=Date.now();
+              if (!nativeChoiceRetrying && ((phase==='quote' && terminal) || Date.now()-nativeChoiceWaitingSince>=12000)) phase='retry';
+              else nativeChoiceTimer=window.setTimeout(updateAddressAwareOptions,200);
+            } else nativeChoiceWaitingSince=0;
+            const selector=document.querySelector('.modern-shipping-selector');
+            if (selector) selector.dataset.wlReadyState=phase;
+            $('.modern-shipping-selector button[data-mode]').each(function () {
+              const mode=this.dataset.mode,option=quote?.options?.[mode==='ship'?'ups':mode];
+              const disabled=nativeSelectionBusy || phase==='loading' || (phase==='retry' && !nativeDetailsReady()) ||
+                (mode!=='pickup' && (phase==='quote' || phase==='retry' || (phase==='ready' && !option?.available)));
+              $(this).prop('disabled',disabled).attr('aria-disabled',String(disabled)).toggleClass('wl-option-disabled',disabled);
+              if (mode!=='pickup' && phase!=='ready') $(this).find('.wl-option-tag').text(phase==='address'?'Add address for rate':phase==='retry'?'Rate unavailable':'Checking options…');
+            });
+            const status=document.querySelector('.wl-shipping-readiness p');
+            const message=nativeSelectionBusy?'Confirming your choice…':phase==='loading'?'Preparing checkout…':phase==='quote'?'Checking delivery options…':phase==='retry'?(nativeDetailsReady()?'Delivery options could not load. Try again, or choose pickup.':'Checkout is taking longer to load. Try again in a moment.'):'';
+            if (status && status.textContent!==message) status.textContent=message;
+            const retry=document.querySelector('.wl-shipping-retry');
+            if (retry) { retry.hidden=phase!=='retry';retry.disabled=nativeChoiceRetrying; }
+          }
+
+          async function retryNativeShippingChoices() {
+            if (nativeChoiceAbandoned || nativeChoiceRetrying || nativeSelectionBusy) return;
+            const retryEpoch=nativeChoiceEpoch;
+            nativeChoiceRetrying=true;nativeChoiceWaitingSince=Date.now();
+            updateAddressAwareOptions();
+            try {
+              if (!(await awaitNativeDetails()) || nativeChoiceAbandoned || retryEpoch!==nativeChoiceEpoch) return;
+              const key=nativeShippingContextKey();
+              const refresh=window.WLShippingOffer?.refreshCheckout || window.WLShippingOffer?.refresh;
+              if (refresh && nativeShippingChoiceState(null)!=='address') await refresh(()=>!nativeChoiceAbandoned && retryEpoch===nativeChoiceEpoch && key===nativeShippingContextKey());
+            } catch (_) {}
+            finally { if(retryEpoch===nativeChoiceEpoch){nativeChoiceRetrying=false;if(!nativeChoiceAbandoned)updateAddressAwareOptions();} }
+          }
 
           function currentFulfillmentQuote() {
             try {
+              if (!isBuyNowFrame() && typeof window.WLShippingOffer?.current !== 'function') return null;
               const quote = window.WLShippingOffer && typeof window.WLShippingOffer.current === "function"
                 ? window.WLShippingOffer.current()
                 : JSON.parse(sessionStorage.getItem("wl_shipping_offer_v1") || "null");
@@ -4245,6 +4340,10 @@ document.addEventListener("click", function (ev) {
                 } else {
                   showOutOfStateMessage(isBuyNowFrame() ? "Rates are based on your cart and address. " + (recommendedMode === "delivery" ? "Woodson Delivery is recommended." : "UPS Shipping is recommended.") : "", "");
                 }
+              } else if (!isBuyNowFrame()) {
+                $delivery.toggle(region !== 'outside');
+                $ship.show();
+                showOutOfStateMessage('', '');
               } else if (region === "outside") {
                 $delivery.hide();
                 if ($ship.length) {
@@ -4290,6 +4389,7 @@ document.addEventListener("click", function (ev) {
                 $shipTag.text("Enter address");
                 showOutOfStateMessage("", "");
               }
+              updateNativeChoiceReadiness(quote);
               try { window.WLCheckout?.refreshSectionSummaries?.(); } catch {}
             } finally {
               addressAwareUpdating = false;
@@ -4438,10 +4538,15 @@ document.addEventListener("click", function (ev) {
             } catch {}
           }, 700);
 
-          let nativeSelectionBusy = false;
           $(document).on("click", ".modern-shipping-selector button", async function (event) {
             const mode = $(this).data("mode");
             if (!isBuyNowFrame() && nativeSelectionBusy) { event.preventDefault(); return false; }
+            // Recheck synchronously: an address edit can invalidate the quote
+            // before the debounced presentation has disabled this button.
+            const nativePhase=isBuyNowFrame()?'compact':nativeShippingChoiceState(currentFulfillmentQuote());
+            if (!isBuyNowFrame() && (nativePhase==='loading' || (mode!=='pickup' && nativePhase==='quote'))) {
+              event.preventDefault();updateAddressAwareOptions();return false;
+            }
             if (this.disabled) {
               event.preventDefault();
               return false;
@@ -4452,31 +4557,59 @@ document.addEventListener("click", function (ev) {
               updateAddressAwareOptions();
               return false;
             }
-            if ((mode === "delivery" || mode === "ship") && window.WLShippingOffer?.select) {
+            if ((mode === "delivery" || mode === "ship") && nativePhase!=='address' && window.WLShippingOffer?.select) {
               event.preventDefault();
               let saved = false;
               const selector = this.closest('.modern-shipping-selector');
+              const selectionContext=isBuyNowFrame()?'':nativeShippingContextKey();
+              const selectionEpoch=nativeChoiceEpoch;
               if (!isBuyNowFrame()) {
                 nativeSelectionBusy = true;
                 selector?.setAttribute('aria-busy','true');
+                updateNativeChoiceReadiness(currentFulfillmentQuote());
                 document.dispatchEvent(new Event('wl:native-method-pending'));
               }
               try { saved = await window.WLShippingOffer.select(mode); }
               catch (_) { saved = false; }
               finally {
-                if (!isBuyNowFrame()) {
+                if (!isBuyNowFrame() && selectionEpoch===nativeChoiceEpoch) {
                   nativeSelectionBusy = false;
                   selector?.removeAttribute('aria-busy');
+                  updateAddressAwareOptions();
                   document.dispatchEvent(new Event('wl:native-method-pending'));
                 }
               }
+              if (!isBuyNowFrame() && (nativeChoiceAbandoned || selectionEpoch!==nativeChoiceEpoch || selectionContext!==nativeShippingContextKey())) return false;
               if (!saved) {
-                showOutOfStateMessage("That rate could not be reserved. Please recheck the address and try again.", "warning");
+                showOutOfStateMessage(isBuyNowFrame() ? "That rate could not be reserved. Please recheck the address and try again." : "We couldn't confirm this shipping option. Please try again.", "warning");
                 return false;
               }
             }
             updateShippingStyles(mode);
           });
+
+          if (!isBuyNowFrame()) {
+            document.querySelector('.wl-shipping-retry')?.addEventListener('click',retryNativeShippingChoices);
+            const readinessObserver=new MutationObserver(scheduleAddressAwareOptions);
+            readinessObserver.observe(document.documentElement,{attributes:true,attributeFilter:['data-wl-shipping-quote-state']});
+            document.addEventListener('readystatechange',scheduleAddressAwareOptions);
+            try {
+              const manager=window.Sys?.WebForms?.PageRequestManager?.getInstance();
+              manager?.add_beginRequest(scheduleAddressAwareOptions);
+              manager?.add_endRequest(scheduleAddressAwareOptions);
+            } catch (_) {}
+            window.addEventListener('pagehide',function () {
+              nativeChoiceAbandoned=true;nativeChoiceEpoch++;readinessObserver.disconnect();
+              window.clearTimeout(nativeChoiceTimer);window.clearTimeout(addressAwareTimer);
+            });
+            window.addEventListener('pageshow',function (event) {
+              if (!event.persisted) return;
+              nativeChoiceAbandoned=false;nativeChoiceWaitingSince=0;nativeChoiceRetrying=false;nativeSelectionBusy=false;
+              document.querySelector('.modern-shipping-selector')?.removeAttribute('aria-busy');
+              readinessObserver.observe(document.documentElement,{attributes:true,attributeFilter:['data-wl-shipping-quote-state']});
+              updateAddressAwareOptions();
+            });
+          }
 
           $(document).on("change", "#ctl00_PageBody_DeliveryAddress_CountySelector_CountyList, #ctl00_PageBody_InvoiceAddress_CountySelector_CountyList", scheduleAddressAwareOptions);
           try {

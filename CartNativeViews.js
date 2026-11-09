@@ -6,7 +6,7 @@
   else core.boot(root,document.currentScript && document.currentScript.src);
 })(typeof window==='object'?window:null,function () {
   'use strict';
-  var BUILD='20261109-native-views-6';
+  var BUILD='20261109-native-views-7';
   function needsNativeViews(doc) {
     if (doc.querySelector('#ctl00_PageBody_DeliveryAddress_Postcode,#ctl00_PageBody_SaleTypeSelector_rbCollectLater,#ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView,#ctl00_PageBody_ddlCardsOnFile,#ctl00_PageBody_rbStoredCard,#ctl00_PageBody_CardOnFileViewTitle_HeaderText,#ctl00_PageBody_CompleteCheckoutButton,#summary')) return true;
     return !['ctl00_PageBody_ShoppingCartDetailPanel','ctl00_PageBody_EmptyCartPanel','ctl00_PageBody_EmptyCartDetailPanel'].some(function (id) { return !!doc.getElementById(id); });
@@ -40,7 +40,7 @@
       loaded=true; if (observer) observer.disconnect();
       // Presentation is optional and parallel: never hold native checkout for it.
       if (win.top===win) load('NativeCheckout.js','20261109-native-polish-5');
-      load('Checkout2.js','20261109-native-choice-12');
+      load('Checkout2.js','20261109-native-choice-13');
       load('CardContainer.js','20261106-compact-ui-ownership-1');
     }
     function ready() {
