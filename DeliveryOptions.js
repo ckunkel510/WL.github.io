@@ -165,6 +165,10 @@ $(function () {
 
 (function ($) {
   function initDeliveryWidget() {
+    // Native UPS keeps the actual priced service control visible. Its optional
+    // native guide adds carrier-derived arrival feedback; do not also build the
+    // old guessed-date/arrow widget. Quick Buy and local delivery are unchanged.
+    try { if(window.top===window && sessionStorage.getItem('wl_fulfillment_method')==='ship')return; } catch (_) {}
     var $area = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_lstDeliveryAreas'),
         $opts = $('#ctl00_PageBody_CartSummary2_LocalDeliveryChargeControl_DeliveryOptionsDropDownList'),
         $summary = $('#SummaryEntry2'),
