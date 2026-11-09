@@ -6,7 +6,7 @@
   else core.boot(root);
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261109-native-polish-5';
+  var BUILD = '20261109-payment-cancel-6';
   var TITLES = {1:'Delivery method',2:'Pickup store',3:'Delivery address',4:'Billing address',5:'Timing & notes'};
   var ETA_KEY='wl_native_ups_estimates_v1',ETA_MAX_AGE=15*60*1000;
   var UPS_SELECT='ctl00_PageBody_CartSummary2_UPSShippingCalculatorControl_ShippingSelection';
@@ -142,6 +142,132 @@
     if (doc.getElementById('ctl00_PageBody_btnContinue_CardOnFileView') || doc.getElementById('ctl00_PageBody_ddlCardsOnFile')) return 'payment';
     if (doc.getElementById('ctl00_PageBody_SaleTypeSelector_rbCollectLater') || doc.getElementById('ctl00_PageBody_DeliveryAddress_Postcode')) return 'details';
     return null;
+  }
+
+  function hostedPaymentOperation(event,frames) {
+    if (event.origin!=='https://sce.toogo.io' || !frames.some(function (frame) { return frame.source===event.source; })) return null;
+    var data=event.data;
+    // Provider results can contain card tokens. Read only the operation name;
+    // never inspect, copy, log or retain any result parameters.
+    if (!data || typeof data!=='object' || Array.isArray(data)) return null;
+    return data.operation==='close'?'close':data.operation==='token'?'result':null;
+  }
+
+  function installPaymentCancelRecovery(win) {
+    var doc=win.document,key='wl_native_payment_closed_v1',frames=[],pending=false,closedSource=null,resultSeen=false,paused=false,disposed=false,timer=null,began=0,observer=null;
+    function state(value) { doc.documentElement?.setAttribute?.('data-wl-native-payment-state',value); }
+    function clearMarker() { try { win.sessionStorage.removeItem(key); } catch (_) {} }
+    function readMarker() {
+      try {
+        var raw=win.sessionStorage.getItem(key),age=Date.now()-Number(raw);clearMarker();
+        return !!raw && Number.isFinite(age) && age>=0 && age<90000;
+      } catch (_) { return false; }
+    }
+    function provider(frame) {
+      try {
+        var src=new URL(frame.getAttribute('src') || '',win.location.href);
+        return frame.tagName==='IFRAME' && src.origin==='https://sce.toogo.io' && /^\/hp(?:\/|$)/.test(src.pathname);
+      } catch (_) { return false; }
+    }
+    function remember(frame) {
+      if (!provider(frame) || !frame.contentWindow) return;
+      if (!frames.some(function (known) { return known.element===frame && known.source===frame.contentWindow; })) {
+        frames.push({element:frame,source:frame.contentWindow});
+        if (frames.length>8) frames.shift();
+      }
+    }
+    function scan(node) {
+      if (node?.tagName==='IFRAME') remember(node);
+      node?.querySelectorAll?.('iframe').forEach(remember);
+    }
+    function visible(node) {
+      if (!node || node.hidden) return false;
+      var style=win.getComputedStyle(node),rect=node.getBoundingClientRect();
+      return style.display!=='none' && style.visibility!=='hidden' && rect.width>0 && rect.height>0;
+    }
+    function usableView() {
+      // The hosted-card return uses the native MainLayoutRow directly;
+      // unlike the details view it may have no .mainContents wrapper.
+      var host=doc.querySelector('.mainContents') || doc.getElementById('MainLayoutRow');
+      if (!host) return true; // Wait for a known native container.
+      if (!visible(host)) return false;
+      if (String(host.innerText || '').trim()) return true;
+      return Array.from(host.querySelectorAll('input:not([type="hidden"]),select,textarea,button,a')).some(visible);
+    }
+    function busy() {
+      try { return !!win.Sys?.WebForms?.PageRequestManager?.getInstance()?.get_isInAsyncPostBack(); } catch (_) { return false; }
+    }
+    function removePanel() { doc.getElementById('wl-native-payment-recovery')?.remove(); }
+    function render() {
+      if (doc.getElementById('wl-native-payment-recovery')) { clearMarker();state('recovered');return; }
+      var panel=doc.createElement('section');panel.id='wl-native-payment-recovery';
+      panel.setAttribute('role','status');panel.setAttribute('aria-live','polite');
+      panel.style.cssText='position:fixed;z-index:2147483647;top:clamp(150px,26vh,260px);left:16px;right:16px;width:calc(100% - 32px);max-width:600px;box-sizing:border-box;margin:0 auto;padding:28px;border:1px solid #dce1e8;border-radius:16px;background:#fff;color:#29242a;box-shadow:0 10px 32px rgba(30,35,45,.1);font-family:system-ui,-apple-system,sans-serif';
+      var title=doc.createElement('h2');title.textContent='Card entry closed';title.style.cssText='margin:0 0 10px;font-size:24px;line-height:1.25';
+      var text=doc.createElement('p');text.textContent='Return to your cart to continue checkout.';text.style.cssText='margin:0 0 20px;color:#62676d;font-size:15px;line-height:1.5';
+      var link=doc.createElement('a');link.href='/ShoppingCart.aspx';link.textContent='Return to cart';
+      link.style.cssText='display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;min-height:48px;max-width:100%;padding:12px 20px;border-radius:10px;background:#6b0016;color:white;text-decoration:none;font-size:15px;font-weight:650';
+      panel.append(title,text,link);doc.body.appendChild(panel);clearMarker();state('recovered');
+      link.focus?.({preventScroll:true});
+    }
+    function refresh() {
+      win.clearTimeout(timer);
+      if (disposed || paused || !pending || resultSeen) return;
+      if (doc.readyState==='loading' || (busy() && Date.now()-began<8000)) {
+        if (Date.now()-began<8000) timer=win.setTimeout(refresh,200);
+        return;
+      }
+      // A new/returned document may already be opening a fresh native card
+      // window. A previous close must never cover that active attempt.
+      var anotherFrame=Array.from(doc.querySelectorAll('iframe')).some(function (frame) {
+        return provider(frame) && visible(frame) && frame.contentWindow!==closedSource;
+      });
+      if (anotherFrame) { pending=false;clearMarker();removePanel();state('native-view');return; }
+      if (usableView()) { pending=false;clearMarker();removePanel();state('native-view');return; }
+      render();
+    }
+    function schedule() {
+      if (disposed || paused || !pending || resultSeen) return;
+      win.clearTimeout(timer);timer=win.setTimeout(refresh,350);
+    }
+    function message(event) {
+      if (disposed || paused) return;
+      scan(doc);
+      var operation=hostedPaymentOperation(event,frames);
+      if (operation==='result') {
+        resultSeen=true;pending=false;clearMarker();win.clearTimeout(timer);removePanel();state('native-result');
+      } else if (operation==='close' && !resultSeen) {
+        pending=true;closedSource=event.source;began=Date.now();state('closed');
+        try { win.sessionStorage.setItem(key,String(began)); } catch (_) {}
+        schedule();
+      }
+    }
+    function mutations(changes) {
+      if (disposed || paused) return;
+      changes.forEach(function (change) {
+        if (change.type==='attributes') remember(change.target);
+        else Array.from(change.addedNodes || []).forEach(scan);
+      });
+      schedule();
+    }
+    function observe() {
+      scan(doc);
+      if (observer && doc.body) observer.observe(doc.body,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});
+      schedule();
+    }
+    function pause() { paused=true;observer?.disconnect();win.clearTimeout(timer); }
+    function resume(event) { if(event.persisted && !disposed){paused=false;began=Date.now();observe();} }
+    function dispose() {
+      disposed=true;pause();
+      win.removeEventListener('message',message);win.removeEventListener('pagehide',pause);win.removeEventListener('pageshow',resume);
+      doc.removeEventListener('DOMContentLoaded',observe);frames=[];
+    }
+    pending=readMarker();began=Date.now();state(pending?'closed':'watching');
+    win.addEventListener('message',message);win.addEventListener('pagehide',pause);win.addEventListener('pageshow',resume);
+    if (win.MutationObserver) observer=new win.MutationObserver(mutations);
+    if (doc.readyState==='loading') doc.addEventListener('DOMContentLoaded',observe,{once:true});else observe();
+    try { win.Sys?.WebForms?.PageRequestManager?.getInstance()?.add_endRequest(schedule); } catch (_) {}
+    return {refresh:refresh,dispose:dispose};
   }
 
   function pickupContactName(doc) {
@@ -508,6 +634,7 @@
   function boot(win) {
     if (!win || win.top!==win || win.location.origin!=='https://webtrack.woodsonlumber.com' || !/\/ShoppingCart\.aspx$/i.test(win.location.pathname) || win.WLNativeCheckout) return;
     win.WLNativeCheckout={build:BUILD,enhanceSections:enhanceSections,captureShippingEstimate:function () { return captureShippingEstimate(win); }};
+    installPaymentCancelRecovery(win);
     win.dispatchEvent(new win.Event('wl-native-checkout-ready'));
     var abandoned=false,feedbackTimer=null;
     var detailsEntered=false;
@@ -540,5 +667,5 @@
     if (win.document.readyState==='loading') win.document.addEventListener('DOMContentLoaded',watch,{once:true});else watch();
     win.addEventListener('pagehide',function () { abandoned=true;win.clearTimeout(feedbackTimer); },{once:true});
   }
-  return {build:BUILD,sectionPlan:sectionPlan,nativeStage:nativeStage,pickupContactName:pickupContactName,hasNativeError:hasNativeError,paymentFeedback:paymentFeedback,renderPaymentFeedback:renderPaymentFeedback,upsQuoteSnapshot:upsQuoteSnapshot,upsArrival:upsArrival,selectedUpsRate:selectedUpsRate,addUpsBusinessDays:addUpsBusinessDays,captureShippingEstimate:captureShippingEstimate,renderUpsArrival:renderUpsArrival,mountGuide:mountGuide,enhanceSections:enhanceSections,boot:boot};
+  return {build:BUILD,sectionPlan:sectionPlan,nativeStage:nativeStage,hostedPaymentOperation:hostedPaymentOperation,installPaymentCancelRecovery:installPaymentCancelRecovery,pickupContactName:pickupContactName,hasNativeError:hasNativeError,paymentFeedback:paymentFeedback,renderPaymentFeedback:renderPaymentFeedback,upsQuoteSnapshot:upsQuoteSnapshot,upsArrival:upsArrival,selectedUpsRate:selectedUpsRate,addUpsBusinessDays:addUpsBusinessDays,captureShippingEstimate:captureShippingEstimate,renderUpsArrival:renderUpsArrival,mountGuide:mountGuide,enhanceSections:enhanceSections,boot:boot};
 });
