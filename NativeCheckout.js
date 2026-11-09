@@ -6,7 +6,7 @@
   else core.boot(root);
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261109-native-polish-3';
+  var BUILD = '20261109-native-polish-4';
   var TITLES = {1:'Delivery method',2:'Pickup store',3:'Delivery address',4:'Billing address',5:'Timing & notes'};
   var ETA_KEY='wl_native_ups_estimates_v1',ETA_MAX_AGE=15*60*1000;
   var UPS_SELECT='ctl00_PageBody_CartSummary2_UPSShippingCalculatorControl_ShippingSelection';
@@ -287,6 +287,16 @@
       .wl-native-ups-arrival h2{font:650 26px/1.25 system-ui;letter-spacing:-.6px;margin:6px 0 8px;color:#243d2d}
       .wl-native-ups-arrival p{font-size:13px;margin:0 0 4px}.wl-native-ups-arrival small{display:block;font-size:12px;line-height:1.5;color:#617267}
       .wl-native-ups-arrival[data-kind="unavailable"]{background:#f7f8fa;border-color:#e1e4e9}.wl-native-ups-arrival[data-kind="unavailable"] h2{font-size:18px}
+      html[data-wl-native-checkout-stage="shipping"] #MainLayoutRow{width:100%!important;max-width:960px!important;margin:20px auto 40px!important}
+      html[data-wl-native-checkout-stage="shipping"] #MainLayoutRow>.container-fluid{width:100%!important;max-width:100%!important;padding:20px!important;box-sizing:border-box}
+      html[data-wl-native-checkout-stage="shipping"] #MainLayoutRow>.container-fluid>.row{margin:0!important;padding:0!important}
+      html[data-wl-native-checkout-stage="shipping"] #MainLayoutRow>.container-fluid>.row>.col{padding:0!important;min-width:0}
+      html[data-wl-native-checkout-stage="shipping"] #MainLayoutRow .mainContents{width:100%!important;min-width:0}
+      html[data-wl-native-checkout-stage="shipping"] #MainLayoutRow .wl-native-guide{padding:0;margin:0 auto 18px}
+      html[data-wl-native-checkout-stage="shipping"] .wl-native-ups-select{min-width:0!important}
+      html[data-wl-native-checkout-stage="shipping"] #ctl00_PageBody_BackToCartButton3,
+      html[data-wl-native-checkout-stage="shipping"] #ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:11px 18px;border-radius:10px;max-width:100%;font:600 15px/1.4 system-ui}
+      @media(max-width:767px){html[data-wl-native-checkout-stage="shipping"] #MainLayoutRow>.container-fluid{padding:16px!important}}
       @media(max-width:600px){
         .wl-native-guide{padding:0 16px;margin-top:18px}.wl-native-guide h1{font-size:24px}
         .wl-native-progress{gap:8px;font-size:12px}
