@@ -6,7 +6,7 @@
   else core.boot(root);
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261109-native-polish-4';
+  var BUILD = '20261109-native-polish-5';
   var TITLES = {1:'Delivery method',2:'Pickup store',3:'Delivery address',4:'Billing address',5:'Timing & notes'};
   var ETA_KEY='wl_native_ups_estimates_v1',ETA_MAX_AGE=15*60*1000;
   var UPS_SELECT='ctl00_PageBody_CartSummary2_UPSShippingCalculatorControl_ShippingSelection';
@@ -90,9 +90,9 @@
     var format=function(value) { return new Date(value+'T12:00:00Z').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',timeZone:'UTC',...(value.slice(0,4)!==today.slice(0,4)?{year:'numeric'}:{})}); };
     if (pickup && pickup>=today && arrival && arrival>=pickup && arrival<=addUpsBusinessDays(pickup,62,rate.serviceCode)) {
       var padded=addUpsBusinessDays(arrival,1,rate.serviceCode);
-      return {kind:'date',headline:format(padded),date:padded,detail:rate.serviceName+' · Includes 1 extra business day',basis:'If dispatched '+format(pickup)+' from Texas. Timing may vary.'};
+      return {kind:'date',headline:format(padded),date:padded,detail:rate.serviceName,basis:'If dispatched '+format(pickup)+' from Texas. Timing may vary.'};
     }
-    if (Number.isInteger(days) && days>=0 && days<=60) return {kind:'transit',headline:'About '+(days+1)+' business days',detail:rate.serviceName+' · Includes 1 extra business day',basis:'After dispatch from Texas. A calendar date is not available yet.'};
+    if (Number.isInteger(days) && days>=0 && days<=60) return {kind:'transit',headline:'About '+(days+1)+' business days',detail:rate.serviceName,basis:'After dispatch from Texas. A calendar date is not available yet.'};
     return unavailable;
   }
   function captureShippingEstimate(win) {
