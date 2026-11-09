@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20261109-billing-validation-11";
+  window.WL_CHECKOUT_BUILD = "20261109-native-choice-12";
   document.documentElement?.setAttribute?.('data-wl-checkout-build',window.WL_CHECKOUT_BUILD);
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
@@ -122,6 +122,7 @@
     if (intent === "ship" && ups && ups.checked) return true;
     if (el && el.checked) return true;
     if (ups && ups.checked) return true;
+    if (!isBuyNowFrame()) return false;
     // Fallback: modern selector buttons (no radio checked yet)
     try {
       const btn = document.querySelector(`.modern-shipping-selector button[data-value="rbDelivered"].is-selected, .modern-shipping-selector button[data-value="rbDelivered"].selected, .modern-shipping-selector button[data-value="rbDelivered"].active, .modern-shipping-selector button[data-value="rbDelivered"].wl-selected`);
@@ -132,6 +133,7 @@
   function getPickupSelected() {
     const el = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbCollectLater");
     if (el && el.checked) return true;
+    if (!isBuyNowFrame()) return false;
     // Fallback: modern selector buttons (no radio checked yet)
     try {
       const btn = document.querySelector(`.modern-shipping-selector button[data-value="rbCollectLater"].is-selected, .modern-shipping-selector button[data-value="rbCollectLater"].selected, .modern-shipping-selector button[data-value="rbCollectLater"].active, .modern-shipping-selector button[data-value="rbCollectLater"].wl-selected`);
@@ -1201,6 +1203,7 @@
 
       const selectedValue = norm(sel.value);
       const current = opts.find(o => o.value === selectedValue) || null;
+      wrap.classList.toggle('wl-native-branch-empty',!current && !isBuyNowFrame());
       const choices = current ? opts.filter(o => o.value !== current.value) : opts;
       const previousBranch=pendingBranch && opts.find(option=>option.value===pendingBranch.value);
 
@@ -2073,7 +2076,7 @@ const navDiv = document.createElement("div");
           proxy.type = "button";
           proxy.className = (native.className || "btn btn-primary") + " wl-proxy-continue";
           proxy.textContent = singlePageCheckout
-            ? (isBuyNowFrame() ? "Continue Checkout" : "Continue to shipping & payment")
+            ? (isBuyNowFrame() ? "Continue Checkout" : "Continue to shipping")
             : ((native.value || native.innerText || "Continue").trim() || "Continue");
 
           proxy.addEventListener("click", async function () {
@@ -2195,7 +2198,7 @@ const navDiv = document.createElement("div");
           b.classList.remove("aspNetDisabled");
           if (b.classList.contains("wl-proxy-continue") && b.dataset.wlContinueState === "posting") {
             b.dataset.wlContinueState = "blocked";
-            b.textContent = isBuyNowFrame() ? "Continue Checkout" : "Continue to shipping & payment";
+            b.textContent = isBuyNowFrame() ? "Continue Checkout" : "Continue to shipping";
           }
         });
       } catch {}
@@ -2470,8 +2473,9 @@ document.addEventListener("click", function (ev) {
         const rbDel = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbDelivered");
         const rbUPS = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbUPSDelivery");
         if (!(rbPick && rbPick.checked) && !(rbDel && rbDel.checked) && !(rbUPS && rbUPS.checked)) {
-          // If using the modern button selector, infer selection from the active button
-          try {
+          // Quick Buy retains its existing relay. Native recommendations must
+          // never become a radio selection merely because a card looks active.
+          if (isBuyNowFrame()) try {
             const btnDel = document.querySelector('.modern-shipping-selector button[data-value="rbDelivered"].is-selected, .modern-shipping-selector button[data-value="rbDelivered"].selected, .modern-shipping-selector button[data-value="rbDelivered"].active');
             const btnPick = document.querySelector('.modern-shipping-selector button[data-value="rbCollectLater"].is-selected, .modern-shipping-selector button[data-value="rbCollectLater"].selected, .modern-shipping-selector button[data-value="rbCollectLater"].active');
             const btnUPS = document.querySelector('.modern-shipping-selector button[data-value="rbUPSDelivery"].is-selected, .modern-shipping-selector button[data-value="rbUPSDelivery"].selected, .modern-shipping-selector button[data-value="rbUPSDelivery"].active');
@@ -2481,7 +2485,7 @@ document.addEventListener("click", function (ev) {
           } catch {}
 
           if (!(rbPick && rbPick.checked) && !(rbDel && rbDel.checked) && !(rbUPS && rbUPS.checked)) {
-            showInlineError(1, "<strong>Please choose:</strong> Delivered or Pickup.");
+            showInlineError(1, "Choose a delivery method to continue.");
             return false;
           }
         }
@@ -3148,7 +3152,10 @@ document.addEventListener("click", function (ev) {
         specialIns.parentElement;
 
       specialIns.style.display = "none";
-      if (Array.from(siWrap.querySelectorAll('input,select,textarea')).every(function (field) { return field === specialIns || field.type === 'hidden'; })) siWrap.style.display = 'none';
+      if (Array.from(siWrap.querySelectorAll('input,select,textarea')).every(function (field) { return field === specialIns || field.type === 'hidden'; })) {
+        siWrap.style.display = 'none';
+        if (!isBuyNowFrame()) siWrap.classList.add('wl-native-original-notes');
+      }
 
       const pickupDiv = document.createElement("div");
       pickupDiv.className = "form-group";
@@ -3177,7 +3184,9 @@ document.addEventListener("click", function (ev) {
       shippingAutoNote.className = "alert alert-info wl-auto-ship-note";
       shippingAutoNote.style.display = "none";
       shippingAutoNote.style.marginTop = "10px";
-      shippingAutoNote.innerHTML = "<strong>Ship via UPS:</strong> Choose the shipping speed on the next step. We will show the estimated arrival date before final review.";
+      shippingAutoNote.innerHTML = isBuyNowFrame()
+        ? "<strong>Ship via UPS:</strong> Choose the shipping speed on the next step. We will show the estimated arrival date before final review."
+        : "Choose UPS speed and view arrival next.";
 
       siWrap.insertAdjacentElement("afterend", pickupDiv);
       pickupDiv.insertAdjacentElement("afterend", deliveryDiv);
@@ -3189,6 +3198,7 @@ document.addEventListener("click", function (ev) {
         <label for="specialInsExtra">Additional instructions:</label>
         <textarea id="specialInsExtra" class="form-control" placeholder="Optional additional notes"></textarea>`;
       shippingAutoNote.insertAdjacentElement("afterend", extraDiv);
+      if (!isBuyNowFrame()) extraDiv.querySelector('label').textContent='Order notes (optional)';
 
       const specialExtra = document.getElementById("specialInsExtra");
 
@@ -4223,7 +4233,7 @@ document.addEventListener("click", function (ev) {
                   updateShippingStyles(upsAvailable ? "ship" : "", { silent: true, reason: "delivery-unavailable" });
                 } else if (!upsAvailable && intent === "ship") {
                   updateShippingStyles(deliveryAvailable ? "delivery" : "", { silent: true, reason: "ups-unavailable" });
-                } else if ((!intent || selectionSource !== "user") && (recommendedMode === "ship" || recommendedMode === "delivery")) {
+                } else if ((!intent || selectionSource !== "user") && (recommendedMode === "ship" || recommendedMode === "delivery") && (isBuyNowFrame() || !['rbCollectLater','rbUPSDelivery'].some(name => document.getElementById('ctl00_PageBody_SaleTypeSelector_' + name)?.checked))) {
                   updateShippingStyles(recommendedMode, { silent: true, reason: "recommended-fulfillment" });
                 }
                 if (upsProblemMessage) {
@@ -4233,7 +4243,7 @@ document.addEventListener("click", function (ev) {
                 } else if (cutToShip && cutToShip.applied) {
                   showOutOfStateMessage("The UPS rate includes $" + Number(cutToShip.addedCharge || 0).toFixed(2) + " for custom cutting and packaging. Customized merchandise and the added fee are a non-refundable special order.", "");
                 } else {
-                  showOutOfStateMessage("Rates are based on your cart and address. " + (recommendedMode === "delivery" ? "Woodson Delivery is recommended." : "UPS Shipping is recommended."), "");
+                  showOutOfStateMessage(isBuyNowFrame() ? "Rates are based on your cart and address. " + (recommendedMode === "delivery" ? "Woodson Delivery is recommended." : "UPS Shipping is recommended.") : "", "");
                 }
               } else if (region === "outside") {
                 $delivery.hide();
@@ -4242,7 +4252,7 @@ document.addEventListener("click", function (ev) {
                   $shipTag.text("Available nationwide");
                   const intent = getFulfillmentIntent();
                   showOutOfStateMessage(
-                    intent === "pickup"
+                    !isBuyNowFrame() ? "" : intent === "pickup"
                       ? "Pickup is selected. Ship via UPS is also available for this out-of-state address."
                       : "Ship via UPS is selected for this out-of-state address. Pickup from a Woodson store is also available.",
                     ""
@@ -4321,19 +4331,23 @@ document.addEventListener("click", function (ev) {
                 try {
                   const el = btn.get(0);
                   if (el && el.style) {
-                    el.style.setProperty("background-color", selected ? "#6b0016" : "#f5f5f5", "important");
-                    el.style.setProperty("color", selected ? "#fff" : "#000", "important");
-                    el.style.setProperty("border", selected ? "none" : "1px solid #ccc", "important");
+                    el.style.setProperty("background-color", selected ? (isBuyNowFrame() ? "#6b0016" : "#fff5f7") : (isBuyNowFrame() ? "#f5f5f5" : "#fff"), "important");
+                    el.style.setProperty("color", isBuyNowFrame() ? (selected ? "#fff" : "#000") : "#29242a", "important");
+                    el.style.setProperty("border", selected ? (isBuyNowFrame() ? "none" : "2px solid #6b0016") : (isBuyNowFrame() ? "1px solid #ccc" : "1px solid #d7dde5"), "important");
                   }
                   btn.find("i").each(function(){
-                    try { this.style.setProperty("color", selected ? "#fff" : "#000", "important"); } catch(e){}
+                    try { this.style.setProperty("color", isBuyNowFrame() ? (selected ? "#fff" : "#000") : "#6b0016", "important"); } catch(e){}
                   });
                 } catch (e) {}
               };
 
               $buttons.each(function () {
                 const $button = $(this);
-                setSelected($button, hasSelection && $button.data("mode") === mode);
+                const matches = hasSelection && $button.data("mode") === mode;
+                const nativeChecked = isPickup ? pickRad.is(":checked") : upsRad.is(":checked");
+                const confirmed = isBuyNowFrame() || !silent || nativeChecked;
+                setSelected($button, matches && confirmed);
+                $button.toggleClass("wl-recommended", matches && !confirmed);
               });
             } catch (e) {}
 
@@ -4424,8 +4438,10 @@ document.addEventListener("click", function (ev) {
             } catch {}
           }, 700);
 
+          let nativeSelectionBusy = false;
           $(document).on("click", ".modern-shipping-selector button", async function (event) {
             const mode = $(this).data("mode");
+            if (!isBuyNowFrame() && nativeSelectionBusy) { event.preventDefault(); return false; }
             if (this.disabled) {
               event.preventDefault();
               return false;
@@ -4438,7 +4454,22 @@ document.addEventListener("click", function (ev) {
             }
             if ((mode === "delivery" || mode === "ship") && window.WLShippingOffer?.select) {
               event.preventDefault();
-              const saved = await window.WLShippingOffer.select(mode);
+              let saved = false;
+              const selector = this.closest('.modern-shipping-selector');
+              if (!isBuyNowFrame()) {
+                nativeSelectionBusy = true;
+                selector?.setAttribute('aria-busy','true');
+                document.dispatchEvent(new Event('wl:native-method-pending'));
+              }
+              try { saved = await window.WLShippingOffer.select(mode); }
+              catch (_) { saved = false; }
+              finally {
+                if (!isBuyNowFrame()) {
+                  nativeSelectionBusy = false;
+                  selector?.removeAttribute('aria-busy');
+                  document.dispatchEvent(new Event('wl:native-method-pending'));
+                }
+              }
               if (!saved) {
                 showOutOfStateMessage("That rate could not be reserved. Please recheck the address and try again.", "warning");
                 return false;
