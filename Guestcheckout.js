@@ -13,7 +13,7 @@
   if (!IS_CART_PAGE && !IS_CHECKOUT_PAGE && !HAS_FULL_PAGE_RECOVERY) return;
   if (window.__WL_GUEST_CHECKOUT_LOADED__) return;
   window.__WL_GUEST_CHECKOUT_LOADED__ = true;
-  document.documentElement?.setAttribute?.('data-wl-guest-checkout-build','20261106-guest-manual-fields-5');
+  document.documentElement?.setAttribute?.('data-wl-guest-checkout-build','20261109-guest-native-6');
 
   const LOG = (...a) => console.log('[GuestCheckout]', ...a);
   const ERR = (...a) => console.error('[GuestCheckout]', ...a);
@@ -26,6 +26,7 @@
   const CART_HANDOFF_KEY = 'wl_guest_cart_handoff_v1';
   const CHECKOUT_SNAPSHOT_KEY = 'wl_checkout_form_snapshot_v2';
   const DATE_STATE_KEY = 'wl_checkout_date_state_v2';
+  let verifiedAutofillEmail='';
 
   function getCheckoutMode() { try { return sessionStorage.getItem(MODE_KEY) || ''; } catch { return ''; } }
   function setCheckoutMode(mode) { try { sessionStorage.setItem(MODE_KEY, mode); } catch {} }
@@ -1016,6 +1017,8 @@
   }
 
   function awaitCompactGuestCheckout() {
+    // Retain the former marker name so an in-flight guest signup can finish
+    // after this release. Normal guest checkout now enters the native form.
     const pending = () => {
       try {
         const value=JSON.parse(sessionStorage.getItem(COMPACT_START_KEY) || 'null');
@@ -1023,29 +1026,42 @@
         return value?.version===1 && Number.isFinite(value.createdAt) && age>=0 && age<300000;
       } catch { return false; }
     };
-    if (!IS_CART_PAGE) return;
+    if (!IS_CART_PAGE || isCompactCheckoutFrame()) return;
     if (!pending()) { try { sessionStorage.removeItem(COMPACT_START_KEY); } catch {} return; }
-    let settled = false;
-    const fallback = () => {
+    let settled=false, timeout=null;
+    const continueNative = async () => {
       if (settled) return;
-      settled = true;
+      // A guest basket must finish its existing account-scoped recovery first.
+      if (sessionStorage.getItem(CART_HANDOFF_KEY)) return;
+      settled=true;
       clearTimeout(timeout);
-      window.removeEventListener('wl-buy-now-pilot-settled', fallback);
-      // The compact engine consumes this marker only after matching the fresh
-      // server login to this guest. Back/cancel never automatically restarts it.
+      window.removeEventListener('wl-buy-now-pilot-settled', continueNative);
       if (!pending()) return;
       sessionStorage.removeItem(COMPACT_START_KEY);
-      if (getCheckoutMode() !== 'guest' || !loadGuest().email) return;
-      if (!document.querySelector('a[href*="SignOut=1"],a[href*="signout=1"]')) {
-        showError('Your guest session could not be confirmed. Please sign in to continue.');
-        return;
+      const guest=loadGuest();
+      if (getCheckoutMode()!=='guest' || !guest.email) return;
+      try {
+        await verifyGuestAccount(guest.email);
+        const proceed=getProceedBtn();
+        if (!proceed || proceed.disabled || proceed.getAttribute('aria-disabled')==='true' || document.getElementById('wl-buy-now')) return;
+        // Use the real click so inventory, special-order and cart safety gates
+        // still run. Never eval the native URL around those gates.
+        document.documentElement.dataset.wlCompactNativeOnly='1';
+        proceed.click();
+      } catch (_) {
+        fullPageGuestNotice('Your guest sign-in could not be confirmed. Your cart is retained. Please sign in before continuing checkout.');
       }
-      const proceed = getProceedBtn();
-      if (proceed) runNativeButton(proceed);
     };
-    const timeout = setTimeout(fallback, 65000);
-    window.addEventListener('wl-buy-now-pilot-settled', fallback);
-    if (document.documentElement.dataset.wlCompactCheckoutSettled === '1') fallback();
+    window.addEventListener('wl-buy-now-pilot-settled',continueNative);
+    timeout=setTimeout(() => {
+      if (settled) return;
+      if (!sessionStorage.getItem(CART_HANDOFF_KEY)) { continueNative(); return; }
+      settled=true;
+      window.removeEventListener('wl-buy-now-pilot-settled',continueNative);
+      // No automatic post or discarded basket when recovery fails or is slow.
+      fullPageGuestNotice('Your guest cart still needs confirmation. Your cart backup is retained. Refresh the cart to continue.');
+    },20000);
+    continueNative();
   }
 
   function applyGuestToCheckout() {
@@ -1053,7 +1069,7 @@
     // owned frame. Legacy autofill must not race or overwrite edited defaults.
     if (isCompactCheckoutFrame()) return false;
     const payload = loadGuest();
-    if (!payload || !payload.email) return false;
+    if (!payload || !payload.email || clean(payload.email).toLowerCase()!==verifiedAutofillEmail) return false;
 
     const hasCheckoutFields = byId('ctl00_PageBody_InvoiceAddress_AddressLine1') || byId('ctl00_PageBody_DeliveryAddress_AddressLine1');
     if (!hasCheckoutFields) return false;
@@ -1153,8 +1169,17 @@
     const wantsAutofill = (() => { try { return sessionStorage.getItem(AUTOFILL_KEY) === '1'; } catch { return false; } })();
     // Never apply an old guest payload just because the shopper is on checkout.
     // It should only hydrate the page when this checkout was explicitly started as Guest Checkout.
-    if (payload && payload.email && wantsAutofill && getCheckoutMode() === 'guest' && !isCompactCheckoutFrame()) {
-      installBillingObserver();
+    if (payload && payload.email && wantsAutofill && getCheckoutMode() === 'guest' && !isCompactCheckoutFrame() &&
+        (byId('ctl00_PageBody_InvoiceAddress_AddressLine1') || byId('ctl00_PageBody_DeliveryAddress_AddressLine1'))) {
+      try {
+        await verifyGuestAccount(payload.email);
+        verifiedAutofillEmail=clean(payload.email).toLowerCase();
+        installBillingObserver();
+      } catch (_) {
+        clearGuestState();
+        setCheckoutMode('signed_in');
+        // Native account defaults remain intact when a previous guest signed out.
+      }
     }
 
     window.WLGuestCheckout = window.WLGuestCheckout || {};

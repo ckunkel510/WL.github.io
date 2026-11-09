@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20261105-compact-continue-recovery-9";
+  window.WL_CHECKOUT_BUILD = "20261109-native-guided-10";
   document.documentElement?.setAttribute?.('data-wl-checkout-build',window.WL_CHECKOUT_BUILD);
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
@@ -18,6 +18,41 @@
         window.parent.location.origin === window.location.origin &&
         window.parent.document.querySelector("#wl-buy-now iframe.bn-frame")?.contentWindow === window;
     } catch (_) { return false; }
+  }
+
+  function nativeDetailsReady() {
+    try {
+      if (document.readyState === 'loading') return false;
+      const application = window.Sys?.Application;
+      if (application?.get_isInitialized && !application.get_isInitialized()) return false;
+      const manager = window.Sys?.WebForms?.PageRequestManager?.getInstance();
+      if (manager?.get_isInAsyncPostBack()) return false;
+      const button = document.getElementById('ctl00_PageBody_ContinueButton2') || document.getElementById('ctl00_PageBody_ContinueButton1');
+      return !!button && !button.disabled && button.getAttribute('aria-disabled') !== 'true';
+    } catch (_) { return false; }
+  }
+
+  function awaitNativeDetails() {
+    return new Promise(function (resolve) {
+      let timer, done = false;
+      const began = Date.now();
+      function finish(ready) {
+        if (done) return;
+        done = true;
+        window.clearTimeout(timer);
+        window.removeEventListener('pagehide', abandon);
+        resolve(ready);
+      }
+      function abandon() { finish(false); }
+      function check() {
+        if (done) return;
+        if (nativeDetailsReady()) { finish(true); return; }
+        if (Date.now() - began >= 8000) { finish(false); return; }
+        timer = window.setTimeout(check, 150);
+      }
+      window.addEventListener('pagehide', abandon, { once: true });
+      check();
+    });
   }
 
   function suppressQuoteCheckoutPath() {
@@ -903,6 +938,15 @@
   function initCheckout() {
     const $ = window.jQuery;
 
+    // Do not build the checkout wizard on the regular cart page or unrelated WebTrack pages.
+    // The page must have at least one of the actual checkout controls.
+    const hasCheckoutControls =
+      document.getElementById("ctl00_PageBody_SaleTypeSelector_rbDelivered") ||
+      document.getElementById("ctl00_PageBody_SaleTypeSelector_rbCollectLater") ||
+      document.getElementById("ctl00_PageBody_InvoiceAddress_GoogleAddressSearchWrapper") ||
+      document.getElementById("ctl00_PageBody_SpecialInstructionsTextBox");
+    if (!hasCheckoutControls) return;
+
     // -------------------------------------------------------------------------
     // A) Hide legacy UI bits
     // -------------------------------------------------------------------------
@@ -935,15 +979,6 @@
     // -------------------------------------------------------------------------
     const container = document.querySelector(".container");
     if (!container) return;
-
-    // Do not build the checkout wizard on the regular cart page or unrelated WebTrack pages.
-    // The page must have at least one of the actual checkout controls.
-    const hasCheckoutControls =
-      document.getElementById("ctl00_PageBody_SaleTypeSelector_rbDelivered") ||
-      document.getElementById("ctl00_PageBody_SaleTypeSelector_rbCollectLater") ||
-      document.getElementById("ctl00_PageBody_InvoiceAddress_GoogleAddressSearchWrapper") ||
-      document.getElementById("ctl00_PageBody_SpecialInstructionsTextBox");
-    if (!hasCheckoutControls) return;
 
     try { document.body.classList.add("wl-checkout-active"); } catch {}
 
@@ -1961,9 +1996,12 @@ steps.forEach(function (step, i) {
           btn.disabled = false;
           if (typeof WebForm_DoPostBackWithOptions === "function" && typeof WebForm_PostBackOptions === "function") {
             btn.click();
+            if (!isBuyNowFrame() && window.Page_IsValid === false) return false;
             return true;
           }
         } catch {}
+
+        if (!isBuyNowFrame()) return false;
 
         // Fallback: include the submit button name/value, then submit the form.
         try {
@@ -2033,11 +2071,26 @@ const navDiv = document.createElement("div");
           proxy.type = "button";
           proxy.className = (native.className || "btn btn-primary") + " wl-proxy-continue";
           proxy.textContent = singlePageCheckout
-            ? "Continue Checkout"
+            ? (isBuyNowFrame() ? "Continue Checkout" : "Continue to shipping & payment")
             : ((native.value || native.innerText || "Continue").trim() || "Continue");
 
           proxy.addEventListener("click", async function () {
-            if (proxy.dataset.wlContinueState === "confirming" || (proxy.dataset.wlContinueState === "posting" && proxy.disabled)) return;
+            if (['waiting','confirming','posting'].includes(proxy.dataset.wlContinueState)) return;
+            if (!isBuyNowFrame()) {
+              const entryText = proxy.textContent;
+              proxy.dataset.wlContinueState = 'waiting';
+              proxy.disabled = true;
+              proxy.textContent = 'Finishing your changes…';
+              const ready = await awaitNativeDetails();
+              proxy.disabled = false;
+              proxy.textContent = entryText;
+              if (!ready) {
+                proxy.dataset.wlContinueState = 'blocked';
+                proxy.dataset.wlContinueReason = 'native-updating';
+                showInlineError(5, 'WebTrack is still updating your changes. Please wait a moment, then try Continue again.');
+                return;
+              }
+            }
             proxy.dataset.wlContinueState = "validating";
             // Clear any sticky inline errors on Step 5 before submitting
             try { clearInlineError(5); } catch {}
@@ -2051,6 +2104,12 @@ const navDiv = document.createElement("div");
             }
 
             const originalText = proxy.textContent;
+            const submissionKey = function () {
+              return JSON.stringify([getSaleType(), ...['AddressLine1','AddressLine2','AddressLine3','City','CountySelector_CountyList','Postcode','CountrySelector'].map(function (field) {
+                return document.getElementById('ctl00_PageBody_DeliveryAddress_'+field)?.value || '';
+              }), getBranchField()?.value || '']);
+            };
+            const routingBefore = isBuyNowFrame() ? '' : submissionKey();
             let submitted = false;
             proxy.disabled = true;
             proxy.textContent = "Confirming fulfillment…";
@@ -2071,15 +2130,32 @@ const navDiv = document.createElement("div");
               return;
             }
 
+            if (!isBuyNowFrame() && (!(await awaitNativeDetails()) || routingBefore !== submissionKey())) {
+              proxy.dataset.wlContinueState = 'blocked';
+              proxy.dataset.wlContinueReason = 'native-updating';
+              proxy.disabled = false;
+              proxy.textContent = originalText;
+              showInlineError(5, 'Your checkout options are still updating. Review your latest choices, then continue.');
+              return;
+            }
+
             try { clearInlineError(1); } catch {}
             syncNativeRequiredDate();
 
             // Trigger native submit/postback
             proxy.dataset.wlContinueState = "posting";
+            if (!isBuyNowFrame()) {
+              proxy.textContent = "Loading shipping & payment…";
+              try {
+                sessionStorage.removeItem('wl_native_shipping_back_v1');
+                sessionStorage.setItem('wl_native_shipping_forward_v1', String(Date.now()));
+              } catch {}
+            }
             const worked = clickNativeContinue();
+            if (!worked && !isBuyNowFrame()) { try { sessionStorage.removeItem('wl_native_shipping_forward_v1'); } catch {} }
             submitted = worked;
-            if (!worked) {
-              // As a last resort, try submitting the form
+            if (!worked && isBuyNowFrame()) {
+              // Preserve the compact driver's legacy relay fallback only.
               try {
                 const form = native.closest("form") || document.querySelector("form");
                 if (form) {
@@ -2091,6 +2167,9 @@ const navDiv = document.createElement("div");
             if (!submitted) {
               proxy.disabled = false;
               proxy.textContent = originalText;
+              proxy.dataset.wlContinueState = "blocked";
+              proxy.dataset.wlContinueReason = "native-not-ready";
+              try { showInlineError(5, "WebTrack is still preparing checkout. Please try Continue again in a moment."); } catch {}
             }
           });
 
@@ -2112,6 +2191,10 @@ const navDiv = document.createElement("div");
           b.disabled = false;
           b.removeAttribute("disabled");
           b.classList.remove("aspNetDisabled");
+          if (b.classList.contains("wl-proxy-continue") && b.dataset.wlContinueState === "posting") {
+            b.dataset.wlContinueState = "blocked";
+            b.textContent = isBuyNowFrame() ? "Continue Checkout" : "Continue to shipping & payment";
+          }
         });
       } catch {}
     }
@@ -2272,6 +2355,9 @@ const navDiv = document.createElement("div");
       });
 
       setStep(n);
+      try {
+        if (singlePageCheckout && !isBuyNowFrame()) window.WLCheckout?.openCheckoutSection?.(n, { scroll: false });
+      } catch {}
       try {
         if (window.WLCheckout && typeof window.WLCheckout.setSameAsDeliveryVisible === "function") {
           window.WLCheckout.setSameAsDeliveryVisible(!getPickupSelected());
@@ -3060,6 +3146,7 @@ document.addEventListener("click", function (ev) {
         specialIns.parentElement;
 
       specialIns.style.display = "none";
+      if (Array.from(siWrap.querySelectorAll('input,select,textarea')).every(function (field) { return field === specialIns || field.type === 'hidden'; })) siWrap.style.display = 'none';
 
       const pickupDiv = document.createElement("div");
       pickupDiv.className = "form-group";
@@ -4861,6 +4948,22 @@ document.addEventListener("click", function (ev) {
         return "";
       }
 
+      // Native guidance may arrive before or after this decorator. The fallback
+      // is the open native form, so no optional script can hold checkout loading.
+      if (!isBuyNowFrame()) {
+        const installNativeSections = function () {
+          try { return !!window.WLNativeCheckout?.enhanceSections(window, wizard, {
+            valid: sectionValid,
+            summary: sectionSummary,
+            validate: validateStep,
+            deliveryEditor: function () { window.WLCheckout?.showDeliveryEditor?.(); },
+            invoiceEditor: function () { window.WLCheckout?.showInvoiceEditor?.(); }
+          }); } catch (_) { return false; }
+        };
+        if (!installNativeSections()) window.addEventListener('wl-native-checkout-ready',installNativeSections,{once:true});
+        return;
+      }
+
       function refreshSectionSummaries() {
         let firstIncomplete = null;
         panes.forEach(function (pane) {
@@ -4957,6 +5060,10 @@ document.addEventListener("click", function (ev) {
       let requested = false;
       try { requested = sessionStorage.getItem(AUTO_ADVANCE_KEY) === "1"; } catch {}
       if (!singlePageCheckout || !requested) return;
+      if (!isBuyNowFrame() && window.WLNativeCheckout) {
+        try { sessionStorage.removeItem(AUTO_ADVANCE_KEY); } catch {}
+        return;
+      }
 
       let cancelled = false;
       let advancing = false;
@@ -5435,7 +5542,7 @@ document.addEventListener("click", function (ev) {
         setTimeout(tryJump, 300);
         setTimeout(tryJump, 1200);
         setTimeout(() => {
-          if (!tryJump()) showStep(returnStep || saved || initial || 2);
+          if (!tryJump() && (!singlePageCheckout || isBuyNowFrame())) showStep(returnStep || saved || initial || 2);
         }, 1600);
       }
     }

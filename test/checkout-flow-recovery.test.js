@@ -227,22 +227,27 @@ test('confirmed guest signup reloads the natural cart with a minimal single-use 
   assert.deepEqual(Object.keys(marker).sort(),['createdAt','version']);
   assert.equal(marker.version,1); assert.equal(env.storage.get('wl_checkout_mode'),'guest');
 });
-function guestHandoffEnv() {
+function guestHandoffEnv(identity=true) {
   const env=environment();env.document.documentElement={dataset:{}};
   env.context.removeEventListener=(name,fn)=>env.listeners.set(name,(env.listeners.get(name)||[]).filter(value=>value!==fn));
   env.document.querySelector=selector=>selector.includes('SignOut=1')?{}:null;
   env.storage.set('wl_compact_guest_start_v1',JSON.stringify({version:1,createdAt:Date.now()}));
   env.storage.set('wl_checkout_mode','guest');env.storage.set('wl_guest_checkout_payload',JSON.stringify({email:'guest@example.invalid'}));
-  let native=0;const control=env.element('ctl00_PageBody_PlaceOrderButton');control.click=()=>native++;
-  load('Guestcheckout.js',env,'window.waitGuest = awaitCompactGuestCheckout;');
+  let native=0;const control=env.element('ctl00_PageBody_PlaceOrderButton');control.click=()=>native++;control.getAttribute=()=>null;
+  env.context.identity=identity;env.context.notices=0;
+  load('Guestcheckout.js',env,"verifyGuestAccount=async()=>{if(!window.identity)throw Error('changed account');};fullPageGuestNotice=()=>{window.notices++;};window.waitGuest = awaitCompactGuestCheckout;");
   return {...env,native:()=>native};
 }
-test('guest handoff does not replay a consumed start or duplicate the native fallback',()=>{
-  const compact=guestHandoffEnv();compact.context.waitGuest();compact.storage.delete('wl_compact_guest_start_v1');
-  for(const fn of [...compact.listeners.get('wl-buy-now-pilot-settled')])fn();assert.equal(compact.native(),0);
-  const fallback=guestHandoffEnv();fallback.context.waitGuest();
-  for(const fn of [...fallback.listeners.get('wl-buy-now-pilot-settled')])fn();
-  fallback.timers.at(-1)();assert.equal(fallback.native(),1);
+test('guest handoff enters native immediately once identity and basket recovery are confirmed',async()=>{
+  const direct=guestHandoffEnv();direct.context.waitGuest();await Promise.resolve();assert.equal(direct.native(),1);
+  for(const fn of [...direct.listeners.get('wl-buy-now-pilot-settled')||[]])await fn();
+  direct.timers[0]();assert.equal(direct.native(),1);
+  const recovered=guestHandoffEnv();recovered.storage.set('wl_guest_cart_handoff_v1','backup');recovered.context.waitGuest();
+  await Promise.resolve();assert.equal(recovered.native(),0);
+  recovered.storage.delete('wl_guest_cart_handoff_v1');
+  for(const fn of [...recovered.listeners.get('wl-buy-now-pilot-settled')])await fn();
+  assert.equal(recovered.native(),1);
+  const consumed=guestHandoffEnv();consumed.storage.delete('wl_compact_guest_start_v1');consumed.context.waitGuest();await Promise.resolve();assert.equal(consumed.native(),0);
 });
 test('an expired guest handoff never automatically enters native checkout',()=>{
   const env=guestHandoffEnv();env.storage.set('wl_compact_guest_start_v1',JSON.stringify({version:1,createdAt:Date.now()-300001}));
@@ -631,4 +636,18 @@ test('a late top-cart estimate cannot overwrite the quote owned by compact check
  env.context.fetch=()=>new Promise(resolve=>{finish=resolve});load('UpsShippingOffer.js',env);
  const pending=env.context.WLShippingOffer.refresh();await until(()=>finish);owned=true;
  finish({ok:true,json:async()=>performanceQuote(99)});assert.equal(await pending,null);assert.equal(env.context.WLShippingOffer.current(),null);
+});
+
+test('guest native entry cannot bypass an account change or an unresolved basket backup',async()=>{
+ const changed=guestHandoffEnv(false);changed.context.waitGuest();await Promise.resolve();await Promise.resolve();
+ assert.equal(changed.native(),0);assert.equal(changed.context.notices,1);
+ const pending=guestHandoffEnv();pending.storage.set('wl_guest_cart_handoff_v1','backup');pending.context.waitGuest();
+ pending.timers[0]();await Promise.resolve();assert.equal(pending.native(),0);assert.equal(pending.context.notices,1);
+ assert.equal(pending.storage.get('wl_guest_cart_handoff_v1'),'backup');
+});
+test('an unverified old guest draft cannot autofill another native customer form',()=>{
+ const env=environment();env.storage.set('wl_guest_checkout_payload',JSON.stringify({email:'old@example.invalid',fname:'Old'}));
+ env.element('ctl00_PageBody_InvoiceAddress_AddressLine1');let writes=0;
+ load('Guestcheckout.js',env,'setId=()=>{writes++;};window.applyGuest=applyGuestToCheckout;');
+ assert.equal(env.context.applyGuest(),false);assert.equal(writes,0);
 });

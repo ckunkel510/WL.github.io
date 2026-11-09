@@ -9,9 +9,9 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261106-choices-first-73';
+  var BUILD = '20261109-native-cart-74';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
-  var ENABLE_CART_CHECKOUT = true;
+  var ENABLE_CART_CHECKOUT = false;
   var AUDIENCE = 'signed-in';
   var GUEST_START_KEY = 'wl_compact_guest_start_v1';
   var GUEST_CART_KEY = 'wl_guest_cart_handoff_v1';

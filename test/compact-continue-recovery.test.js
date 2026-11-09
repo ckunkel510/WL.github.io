@@ -1,13 +1,13 @@
 'use strict';
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const checkout=fs.readFileSync(require.resolve('../Checkout2.js'),'utf8');
-function proxyFixture() {
+function proxyFixture(compact=false) {
  let handler,posts=0,valid=true,confirm=async()=>true;
  const proxy={dataset:{},textContent:'Continue Checkout',addEventListener(type,fn){handler=fn}};
- const context=vm.createContext({proxy,window:{WLCheckout:{validateBeforeFinalSubmit:()=>valid}},wizard:{querySelector:()=>null},clearInlineError(){},showInlineError(){},showStep(){},syncFulfillmentForNativeSubmit:()=>confirm(),syncNativeRequiredDate(){},clickNativeContinue(){posts++;return true;},native:{},document:{querySelector:()=>null}});
+ const context=vm.createContext({awaitNativeDetails:async()=>true,getSaleType:()=>'pickup',getBranchField:()=>null,isBuyNowFrame:()=>compact,proxy,window:{WLCheckout:{validateBeforeFinalSubmit:()=>valid}},wizard:{querySelector:()=>null},clearInlineError(){},showInlineError(){},showStep(){},syncFulfillmentForNativeSubmit:()=>confirm(),syncNativeRequiredDate(){},clickNativeContinue(){posts++;return true;},native:{},document:{querySelector:()=>null,getElementById:()=>null}});
  const start=checkout.indexOf('          proxy.addEventListener("click", async function () {');
  vm.runInContext(checkout.slice(start,checkout.indexOf('          navDiv.appendChild(proxy);',start)),context);
- return {proxy,click:()=>handler(),posts:()=>posts,invalid(){valid=false},confirm(fn){confirm=fn}};
+ return {proxy,click:()=>handler(),posts:()=>posts,invalid(){valid=false},confirm(fn){confirm=fn},nativeReady(fn){context.awaitNativeDetails=fn}};
 }
 test('native proxy identifies validation and rate rejection before any postback and allows a corrected retry',async()=>{
  for(const reason of ['validation','fulfillment']) {
@@ -19,7 +19,7 @@ test('native proxy identifies validation and rate rejection before any postback 
 test('repeated Continue cannot duplicate an in-flight reservation or native postback',async()=>{
  const f=proxyFixture();let finish,checks=0;
  f.confirm(()=>{checks++;return new Promise(resolve=>{finish=resolve})});const pending=f.click();await f.click();
- assert.equal(checks,1);assert.equal(f.posts(),0);finish(true);await pending;await f.click();assert.equal(f.posts(),1);
+ assert.equal(checks,1);assert.equal(f.posts(),0);finish(true);await pending;f.proxy.disabled=false;await f.click();assert.equal(f.posts(),1);
 });
 test('compact checkout surfaces a pre-postback rejection immediately and keeps its native details reusable',async()=>{
  const source=fs.readFileSync(require.resolve('../BuyNowPilot'),'utf8');
@@ -100,4 +100,15 @@ test('a replacement WebForms request manager is rechecked after a quote await',a
  const context=vm.createContext({fast:{method:'ship',started:Date.now()},frame:{contentDocument:page},overlay:{dataset:{}},active:{phase:'checking_out',purchase:[]},busy:false,submitting:false,nativeFormsReady:core.nativeFormsReady,setStage(){},status(){},haltFast(){halts++},quoteForCart:core.quoteForCart,fulfillmentOptions:()=>({}),updateFastOptions(){},detailsQuotes:new WeakMap(),refreshDetailsQuote:core.refreshDetailsQuote,win:{setTimeout:()=>1,clearTimeout(){}}});
  vm.runInContext(driver,context);const pending=context.driveFast(child,page);await Promise.resolve();assert.ok(finish);
  manager={get_isInAsyncPostBack:()=>true};finish(null);await pending;assert.equal(halts,0);assert.equal(context.fast.driving,false);
+});
+
+test('Quick Buy retains its compact native Continue path',async()=>{
+ const f=proxyFixture(true);await f.click();assert.equal(f.posts(),1);assert.equal(f.proxy.dataset.wlContinueState,'posting');
+});
+
+test('native Continue waits for the current form update and never posts after its bounded readiness failure',async()=>{
+ const f=proxyFixture();let ready;
+ f.nativeReady(()=>new Promise(resolve=>{ready=resolve}));const pending=f.click();await f.click();assert.equal(f.posts(),0);
+ assert.equal(f.proxy.dataset.wlContinueState,'waiting');ready(false);await pending;
+ assert.equal(f.posts(),0);assert.equal(f.proxy.disabled,false);assert.equal(f.proxy.dataset.wlContinueReason,'native-updating');
 });

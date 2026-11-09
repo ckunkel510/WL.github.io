@@ -87,8 +87,8 @@ test('a carrier timeout on the current checkout offers a compact retry without s
 const loaderSource=header.slice(header.indexOf('  function deferCartCheckoutUntilPilotReady('),header.indexOf('  function loadTawkCommerceAssist('));
 function loaderFixture({signedIn=true,pathname='/Products.aspx',storage={}}={}) {
   const scripts=[];
-  const win={location:{origin:'https://webtrack.woodsonlumber.com',pathname},navigator:{},setTimeout(){},addEventListener(){}};win.top=win;
-  const document={querySelector:selector=>selector.includes('SignOut=1')?(signedIn?{}:null):null,createElement:()=>Object.assign(bus(),{setAttribute(){}}),head:{appendChild:node=>scripts.push(node)}};
+  const win={sessionStorage:{getItem:()=>null},location:{origin:'https://webtrack.woodsonlumber.com',pathname},navigator:{},setTimeout(){},addEventListener(){}};win.top=win;
+  const document={documentElement:{dataset:{}},querySelector:selector=>selector.includes('SignOut=1')?(signedIn?{}:null):null,createElement:()=>Object.assign(bus(),{setAttribute(){}}),head:{appendChild:node=>scripts.push(node)}};
   const context=vm.createContext({window:win,document,localStorage:storage,WEBTRACK:win.location.origin});vm.runInContext(loaderSource,context);context.loadBuyNowPilot();return scripts;
 }
 test('the product loader no longer requires the former pilot user hint',()=>{
