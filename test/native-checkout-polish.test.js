@@ -21,7 +21,7 @@ test('a snapshot requires a fresh carrier quote from a recognized Texas origin',
 });
 test('changing native UPS speed uses that exact service estimate and adds one business day',()=>{
  const q=snapshot(),ground=core.upsArrival(q,{value:'-1',label:'UPS Ground ($30.00)'},now),air=core.upsArrival(q,{value:'2',label:'UPS 2nd Day Air (+ $30.00)'},now);
- assert.equal(ground.date,'2026-11-16');assert.equal(air.date,'2026-11-12');assert.match(air.detail,/1 extra business day/);assert.match(air.basis,/^If dispatched.*Texas/);
+ assert.equal(ground.date,'2026-11-16');assert.equal(air.date,'2026-11-12');assert.equal(air.detail,'UPS Second Day Air');assert.doesNotMatch(JSON.stringify(air),/extra|cushion|buffer|padding/i);assert.match(air.basis,/^If dispatched.*Texas/);
 });
 test('service-name matching cannot borrow another service date through a numeric ID or prefix',()=>{
  const rates=quote().options.ups.rates;
@@ -35,7 +35,7 @@ test('missing, expired, future or wrong-origin transfer data never produces a ca
  assert.equal(core.upsArrival(snapshot(),{label:'Unrecognized service'},now).kind,'unavailable');
 });
 test('transit-days-only and past pickup dates show after-dispatch timing rather than invented calendar dates',()=>{
- const q=snapshot();q.rates[0].transit={businessDays:5};let result=core.upsArrival(q,{label:'UPS Ground'},now);assert.equal(result.kind,'transit');assert.match(result.headline,/6 business days/);assert.equal(result.date,undefined);
+ const q=snapshot();q.rates[0].transit={businessDays:5};let result=core.upsArrival(q,{label:'UPS Ground'},now);assert.equal(result.kind,'transit');assert.match(result.headline,/6 business days/);assert.equal(result.date,undefined);assert.equal(result.detail,'UPS Ground');assert.doesNotMatch(JSON.stringify(result),/extra|cushion|buffer|padding/i);
  q.rates[0].transit={pickupDate:'2026-11-08',arrivalDate:'2026-11-13',businessDays:5};assert.equal(core.upsArrival(q,{label:'UPS Ground'},now).kind,'transit');
  q.rates[0].transit={pickupDate:'2026-11-09',arrivalDate:'2026-02-30'};assert.equal(core.upsArrival(q,{label:'UPS Ground'},now).kind,'unavailable');
 });
