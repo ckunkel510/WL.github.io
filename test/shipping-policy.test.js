@@ -164,6 +164,42 @@ test("keeps the automatic offer limited to Ground", () => {
   assert.equal(result.shippingOffer.subsidyAmount, 5.05);
 });
 
+test("retains the carrier rate for heavy, oversized, bulky, and clearance shipments regardless of margin", () => {
+  const cases = [
+    { lines: [{ weight: 50 }], reason: "heavy-or-oversized-full-ground-required" },
+    { lines: [{ length: 49, width: 4, height: 4 }], reason: "heavy-or-oversized-full-ground-required" },
+    { lines: [{}], packages: [{ weight: 50.5 }], reason: "heavy-or-oversized-full-ground-required" },
+    { lines: [{ weight: 11 }], billingWeight: 94, reason: "heavy-or-oversized-full-ground-required" },
+    { lines: [{ weight: 11 }], packages: [{ weight: 11.5, length: 25, width: 19, height: 25 }], reason: "heavy-or-oversized-full-ground-required" },
+    { lines: [{ isClearance: true, weight: 1 }], reason: "clearance-full-ground-required" },
+    { lines: [{}, { isClearance: true }], reason: "clearance-full-ground-required" }
+  ];
+  for (const entry of cases) {
+    const decision = evaluateShippingOffer({
+      ...entry,
+      lines: entry.lines.map((line) => ({ quantity: 1, price: 1000, averageCost: 10, ...line })),
+      groundCost: 100,
+      packageCount: 1,
+      policy: policy()
+    });
+    assert.equal(decision.customerGroundAmount, 100, JSON.stringify(entry));
+    assert.equal(decision.subsidyAmount, 0);
+    assert.equal(decision.reason, entry.reason);
+  }
+});
+
+test("keeps profitable ordinary parcels eligible below the heavy and oversize boundaries", () => {
+  const decision = evaluateShippingOffer({
+    lines: [{ quantity: 1, price: 1000, averageCost: 10, weight: 49, length: 48, width: 4, height: 4 }],
+    packages: [{ weight: 49.5, length: 48, width: 4, height: 4 }],
+    billingWeight: 49.99,
+    groundCost: 20,
+    packageCount: 1,
+    policy: policy()
+  });
+  assert.equal(decision.customerGroundAmount, 9.95);
+});
+
 test("the final rate safeguard raises discounted and sub-floor charges to $9.95", () => {
   const result = applyShippingMinimumToRates({
     rates: [

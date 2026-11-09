@@ -130,10 +130,43 @@ function modeForAmount(amount, groundCost) {
   return "regular";
 }
 
+function subsidyExclusionReason(input) {
+  const lines = Array.isArray(input.lines) ? input.lines : [];
+  if (lines.some((line) => line?.isClearance === true)) return "clearance-full-ground-required";
+  const packages = Array.isArray(input.packages) ? input.packages : [];
+  const heavyOrOversized = lines.concat(packages).some((item) => (
+    finiteNumber(item?.weight, 0) >= 50 ||
+    Math.max(...[item?.length, item?.width, item?.height].map((value) => finiteNumber(value, 0))) > 48 ||
+    [item?.length, item?.width, item?.height].reduce((volume, value) => volume * finiteNumber(value, 0), 1) / 139 >= 50
+  ));
+  // Carrier billing weight includes dimensional weight. A light but bulky
+  // carton must not qualify for a subsidy merely because its scale weight is low.
+  return heavyOrOversized || finiteNumber(input.billingWeight, 0) >= 50
+    ? "heavy-or-oversized-full-ground-required"
+    : "";
+}
+
 function evaluateShippingOffer(input) {
   const policy = input.policy || policyFromEnv();
   const groundCost = money(nonNegative(input.groundCost, 0));
   const minimumAmount = minimumGroundAmount(policy);
+  const exclusionReason = subsidyExclusionReason(input);
+  if (exclusionReason && groundCost > 0) {
+    const customerGroundAmount = money(Math.max(groundCost, minimumAmount));
+    let economics = null;
+    try {
+      economics = orderEconomics({ ...input, customerShipping: customerGroundAmount, policy });
+    } catch {}
+    return {
+      mode: modeForAmount(customerGroundAmount, groundCost),
+      customerGroundAmount,
+      groundCost,
+      subsidyAmount: 0,
+      reviewRequired: Boolean(economics && economics.margin < policy.marginFloor),
+      reason: exclusionReason,
+      economics
+    };
+  }
   if (!policy.configured || groundCost <= 0) {
     const customerGroundAmount = groundCost > 0 ? money(Math.max(groundCost, minimumAmount)) : groundCost;
     return {
@@ -260,5 +293,6 @@ module.exports = {
   minimumGroundAmount,
   orderEconomics,
   policyFromEnv,
+  subsidyExclusionReason,
   uniqueCandidateAmounts
 };
