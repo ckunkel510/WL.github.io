@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20261109-native-guided-10";
+  window.WL_CHECKOUT_BUILD = "20261109-billing-validation-11";
   document.documentElement?.setAttribute?.('data-wl-checkout-build',window.WL_CHECKOUT_BUILD);
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
@@ -1430,6 +1430,8 @@
       if (!box) {
         box = document.createElement("div");
         box.className = "wl-inline-error alert alert-warning";
+        box.setAttribute('role','alert');
+        box.setAttribute('aria-atomic','true');
         box.style.marginBottom = "12px";
         pane.insertBefore(box, pane.firstChild);
       }
@@ -4955,7 +4957,11 @@ document.addEventListener("click", function (ev) {
           try { return !!window.WLNativeCheckout?.enhanceSections(window, wizard, {
             valid: sectionValid,
             summary: sectionSummary,
-            validate: validateStep,
+            validate: function (stepNum) {
+              const valid = validateStep(stepNum);
+              if (valid && stepNum === 4 && getPickupSelected()) setBillingConfirmed(true);
+              return valid;
+            },
             deliveryEditor: function () { window.WLCheckout?.showDeliveryEditor?.(); },
             invoiceEditor: function () { window.WLCheckout?.showInvoiceEditor?.(); }
           }); } catch (_) { return false; }

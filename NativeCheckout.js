@@ -6,7 +6,7 @@
   else core.boot(root);
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261109-native-guide-1';
+  var BUILD = '20261109-billing-feedback-2';
   var TITLES = {1:'How to receive your order',2:'Pickup store',3:'Delivery address',4:'Billing address',5:'Timing & instructions'};
 
   function sectionPlan(rows, editing) {
@@ -50,6 +50,53 @@
     });
   }
 
+  function paymentFeedback(message) {
+    var text=String(message || '').replace(/\s+/g,' ').trim();
+    // An AVS warning can accompany an approval. Never turn an approval or an
+    // order confirmation into a decline, and never infer AVS from account data.
+    var confirmedOrder=/\border\b.{0,80}\b(?:confirmed|submitted|placed)\b/i.test(text) && !/\b(?:no|not|never)\b.{0,40}\b(?:order|confirmed|submitted|placed)\b/i.test(text);
+    if (confirmedOrder || /\b(?:payment|transaction)\s+(?:was\s+)?approved\b/i.test(text)) return null;
+    if (/\b(?:payment|transaction|gateway|processor)\b.{0,70}\b(?:timed? out|timeout|unavailable|unknown|could not be confirmed)\b|\bunable to (?:confirm|determine)\b.{0,40}\b(?:payment|transaction)\b|\b(?:AVS|address verification)\b.{0,60}\b(?:unavailable|timeout|not supported)\b/i.test(text)) {
+      return {kind:'unconfirmed',title:'Payment status needs confirmation',detail:'Check your order history or contact the store before trying another payment. This screen cannot confirm whether the payment went through.'};
+    }
+    if (/\bAVS\s*(?:(?:result|response|code)\s*)?[:=]\s*N\b|\b(?:AVS|address verification)\b.{0,70}\b(?:fail\w*|mismatch|no match|declin\w*|reject\w*)\b|\bbilling (?:street|address|zip|postal code)\b.{0,60}\b(?:mismatch|does not match|did not match|not matching)\b/i.test(text)) {
+      return {kind:'billing',title:'Check your billing address',detail:'Use the billing street address and ZIP code shown on your card statement. Your delivery address can be different. Review the details before trying again.'};
+    }
+    if (/\b(?:CVV|CVC|security code|card verification)\b.{0,60}\b(?:mismatch|no match|incorrect|invalid|fail\w*|does not match|did not match)\b/i.test(text)) {
+      return {kind:'security-code',title:'Check your card security code',detail:'Review the security code and expiration date on your card, or choose another payment method. Enter payment details only in the secure payment form.'};
+    }
+    if (/\binsufficient funds\b/i.test(text)) return {kind:'funds',title:'Your payment was not approved',detail:'Your card issuer reported insufficient funds. Choose another payment method or contact your card issuer.'};
+    if (/\b(?:payment|transaction|card)\b.{0,60}\b(?:declin\w*|reject\w*|not approved)\b|\bdeclin\w*\b.{0,40}\b(?:payment|transaction|card)\b/i.test(text)) {
+      return {kind:'declined',title:'Your payment was not approved',detail:'Review your card details and billing address, choose another payment method, or contact your card issuer.'};
+    }
+    return null;
+  }
+
+  function renderPaymentFeedback(win) {
+    var doc=win.document,existing=doc.getElementById('wl-native-payment-feedback');
+    var selectors='#CartResponseMessage,.validation-summary-errors,[id^="ctl00_PageBody_"][id$="ErrorLabel"],[id^="ctl00_PageBody_"][id$="ErrorMessage"],[id^="ctl00_PageBody_"][id$="ErrorMessageLabel"]';
+    var messages=Array.from(doc.querySelectorAll(selectors)).filter(function (node) {
+      if (node.closest('#wl-native-payment-feedback,#wl-native-guide')) return false;
+      var style=win.getComputedStyle(node);
+      return style.display!=='none' && style.visibility!=='hidden';
+    }).map(function (node) { return node.textContent; });
+    var feedback=paymentFeedback(messages.join(' ').slice(0,4000));
+    if (!feedback) { if(existing)existing.remove(); return; }
+    if (existing?.dataset.kind===feedback.kind) return;
+    var host=doc.querySelector('.mainContents') || doc.querySelector('.container');
+    if (!host) return;
+    var box=existing || doc.createElement('section');
+    box.id='wl-native-payment-feedback';box.className='wl-native-payment-feedback';box.dataset.kind=feedback.kind;
+    box.setAttribute('role','alert');box.setAttribute('aria-atomic','true');
+    box.replaceChildren();
+    var title=doc.createElement('h2'),detail=doc.createElement('p');
+    title.textContent=feedback.title;detail.textContent=feedback.detail;box.append(title,detail);
+    if (!existing)host.insertBefore(box,host.firstChild);
+    // The native message and controls stay in place. No automatic retry,
+    // payment submission, card access, logging or address comparison occurs.
+    styles(doc);
+  }
+
   function styles(doc) {
     if (doc.getElementById('wl-native-guide-css')) return;
     var style=doc.createElement('style'); style.id='wl-native-guide-css';
@@ -61,6 +108,10 @@
       .wl-native-guide h1{font-size:28px;font-weight:700;letter-spacing:0;line-height:1.2;margin:0 0 8px;color:#24272b}
       .wl-native-return{display:inline-flex;align-items:center;min-height:44px;margin-bottom:8px;color:#6b0016;text-decoration:underline;font-size:14px}
       .wl-native-guide p{font-size:15px;line-height:1.5;margin:0 0 12px;color:#57535b}
+      .wl-native-billing-hint{font-size:14px;line-height:1.5;color:#57535b;margin:0 0 16px}
+      .wl-native-payment-feedback{box-sizing:border-box;width:min(100% - 32px,920px);margin:20px auto;padding:18px;border:1px solid #c89195;border-left:4px solid #8b1425;border-radius:6px;background:#fff7f7;color:#39292c;font:16px/1.5 Arial,sans-serif;overflow-wrap:anywhere}
+      .wl-native-payment-feedback h2{margin:0 0 8px;font-size:20px;color:#6b0016;letter-spacing:0}
+      .wl-native-payment-feedback p{margin:0}
       .wl-native-section-status{display:block;font-size:12px;font-weight:600;color:#65626a;margin-top:5px}
       .wl-native-details .wl-section-title{font-size:19px!important}
       .wl-native-details .checkout-step{scroll-margin-top:24px}
@@ -175,6 +226,9 @@
         else refresh();
         return;
       }
+      // A valid edit still needs native validation to clear the old error box
+      // and record the explicit billing confirmation before leaving the pane.
+      if (!adapter.validate(step)) { if(explicit)open(step);else refresh();return; }
       editing=null;
       var plan=refresh();
       // Follow only a deliberate Done action. Blur never steals focus from a
@@ -185,6 +239,11 @@
       var step=Number(pane.dataset.step),title=pane.querySelector('.wl-section-title'),heading=pane.querySelector('.wl-section-heading');
       if (title) title.textContent=TITLES[step];
       if (heading) { var status=doc.createElement('span'); status.className='wl-native-section-status'; title?.appendChild(status); }
+      if (step===4 && heading) {
+        var hint=doc.createElement('p');hint.className='wl-native-billing-hint';
+        hint.textContent='For card payments, use the billing street address and ZIP code on your card statement. Your delivery address can be different.';
+        heading.insertAdjacentElement('afterend',hint);
+      }
       if (step>1 && step<5) {
         var done=doc.createElement('button'); done.type='button'; done.className='wl-native-done'; done.dataset.wlNativeDone=String(step); done.textContent='Use these details'; pane.appendChild(done);
       }
@@ -196,6 +255,9 @@
     wizard.addEventListener('input',function (event) { if(event.target.id==='pickupPerson')pickupPersonEdited=true; schedule(); },true);
     wizard.addEventListener('change',schedule,true);
     wizard.addEventListener('focusout',function (event) {
+      // Opening an editor hides its Edit button, which blurs that button.
+      // Only leaving a data-entry field can commit a section automatically.
+      if (!/^(INPUT|SELECT|TEXTAREA)$/.test(event.target?.tagName || '')) return;
       var pane=paneFor(event.target),step=stepFor(event.target);
       if (!pane || !step || pane.contains(event.relatedTarget)) return;
       win.clearTimeout(commitTimer);
@@ -245,9 +307,22 @@
     if (!win || win.top!==win || win.location.origin!=='https://webtrack.woodsonlumber.com' || !/\/ShoppingCart\.aspx$/i.test(win.location.pathname) || win.WLNativeCheckout) return;
     win.WLNativeCheckout={build:BUILD,enhanceSections:enhanceSections};
     win.dispatchEvent(new win.Event('wl-native-checkout-ready'));
-    function ready() { mountGuide(win); }
+    var abandoned=false,feedbackTimer=null;
+    function ready() { if(!abandoned) { mountGuide(win);renderPaymentFeedback(win); } }
     if (win.document.readyState==='loading') win.document.addEventListener('DOMContentLoaded',ready,{once:true}); else ready();
     try { win.Sys?.WebForms?.PageRequestManager?.getInstance()?.add_endRequest(ready); } catch (_) {}
+    function watch() {
+      var host=win.document.querySelector('.mainContents') || win.document.querySelector('.container');
+      if (!host || !win.MutationObserver || abandoned) return;
+      var observer=new win.MutationObserver(function (mutations) {
+        if (abandoned || mutations.every(function (mutation) { return mutation.target.closest?.('#wl-native-payment-feedback'); })) return;
+        win.clearTimeout(feedbackTimer);feedbackTimer=win.setTimeout(ready,100);
+      });
+      observer.observe(host,{childList:true,subtree:true});
+      win.addEventListener('pagehide',function () { observer.disconnect(); },{once:true});
+    }
+    if (win.document.readyState==='loading') win.document.addEventListener('DOMContentLoaded',watch,{once:true});else watch();
+    win.addEventListener('pagehide',function () { abandoned=true;win.clearTimeout(feedbackTimer); },{once:true});
   }
-  return {build:BUILD,sectionPlan:sectionPlan,nativeStage:nativeStage,pickupContactName:pickupContactName,hasNativeError:hasNativeError,enhanceSections:enhanceSections,boot:boot};
+  return {build:BUILD,sectionPlan:sectionPlan,nativeStage:nativeStage,pickupContactName:pickupContactName,hasNativeError:hasNativeError,paymentFeedback:paymentFeedback,renderPaymentFeedback:renderPaymentFeedback,enhanceSections:enhanceSections,boot:boot};
 });
