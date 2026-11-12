@@ -294,11 +294,14 @@
     }
     async function scan() {
       if (dead || dialog) return;
+      function state(value) { doc.documentElement.setAttribute('data-wl-substitution-scan', value); }
+      state('reading-cart');
       var parsed;
-      try { parsed = cartFromDocument(doc, availability); } catch (_) { return; }
+      try { parsed = cartFromDocument(doc, availability); } catch (_) { state('cart-unreadable'); return; }
       var fresh;
-      try { fresh = await io.read(); } catch (_) { return; }
-      if (dead || signature(fresh) !== signature(parsed)) return;
+      try { fresh = await io.read(); } catch (_) { state('native-cart-unavailable'); return; }
+      if (dead || signature(fresh) !== signature(parsed)) { state('cart-changed'); return; }
+      state('checking-stock');
       var cursor = 0;
       async function worker() {
         while (cursor < parsed.items.length && !dead) {
@@ -314,6 +317,7 @@
         }
       }
       await Promise.all([worker(), worker(), worker()]);
+      state('ready');
     }
     await scan();
     return { open: open, scan: scan, adapter: io, close: close };
