@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  window.WL_HEADER_BUILD = "20261112-accessibility-1";
+  window.WL_HEADER_BUILD = "20261112-accessibility-2";
 
   var LOG = "[WL HeaderEnhancer]";
   var DEBUG = false; // Set to true only when actively troubleshooting.
@@ -13,7 +13,7 @@
   // associated with analytics, tracking, events, or commerce before execution.
   var ANALYTICS_URL = "https://ckunkel510.github.io/WL.github.io/wl-site.js?v=20261030-checkout-recovery-1";
   var SMART_SEARCH_URL = "https://ckunkel510.github.io/WL.github.io/smart-search.js?v=20261016-4";
-  var ACCESSIBILITY_URL = "https://ckunkel510.github.io/WL.github.io/Accessibility.js?v=20261112-1";
+  var ACCESSIBILITY_URL = "https://ckunkel510.github.io/WL.github.io/Accessibility.js?v=20261112-2";
   var ADDRESS_MANAGER_URL = "https://ckunkel510.github.io/WL.github.io/AddressManagement.js?v=20260707-2";
   var CONTACT_MANAGER_URL = "https://ckunkel510.github.io/WL.github.io/ContactManagement.js?v=20260707-3";
   var TAWK_COMMERCE_ASSIST_URL = "https://ckunkel510.github.io/WL.github.io/wl-chat.js?v=20260924-1";
@@ -277,7 +277,7 @@
     if (window.WLPdpExperience || document.querySelector('script[data-wl-pdp-preview-loader]')) return;
     // Public presentation only; existing native controls keep their access rules.
     var script = document.createElement('script');
-    script.src = 'https://ckunkel510.github.io/WL.github.io/ProductDetailPilot.js?v=20261016-pdp-light-3';
+    script.src = 'https://ckunkel510.github.io/WL.github.io/ProductDetailPilot.js?v=20261112-pdp-a11y-4';
     script.async = true;
     script.setAttribute('data-wl-pdp-preview-loader', 'true');
     document.head.appendChild(script);

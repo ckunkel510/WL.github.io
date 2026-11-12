@@ -45,3 +45,7 @@ Review/merge the candidate only for the authorized release. GitHub main publishe
 Rollback by reverting this change and republishing these four runtime assets. Remove the added header load and return recommendation markup/CSS to the baseline together. Reload affected pages; do not clear customer storage or reset carts, account records or checkout state. Accessibility.js alone can also be used as an injected IIFE, but the source-renderer changes in this candidate prevent the bad recommendation role at creation time.
 
 Testing cleanup: local overrides were cleared from Chrome, developer tools closed, normal viewport restored, unused empty snippet removed. Only agent-owned test tabs were used/closed; the original user cart tab was retained. No live code was published.
+
+## Live publication verification follow-up
+
+PR152 was published as bafca87261e6ab095bd291492654e79f1bbba115. Live verification found two naming mismatches: WebTrack department cards repeat `id="ProductGroupCardContainer"` rather than the fixture class, and ProductDetailPilot resets the quantity stepper names after the accessibility runtime runs. The follow-up accepts the actual repeated-ID markup and makes ProductDetailPilot own the same contextual names. Header versions advance both assets. No commerce handlers, fields, requests or validation rules change. The department fixture now exercises two cards with the actual duplicated-ID structure. All852 Node tests and22 browser fixture checks pass.
