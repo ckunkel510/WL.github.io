@@ -34,6 +34,9 @@
     "api/product-recommendations.js": {
       "maxDuration": 10
     },
+    "api/cart-substitutions.js": {
+      "maxDuration": 15
+    },
     "api/product-content.js": {
       "maxDuration": 10
     },
