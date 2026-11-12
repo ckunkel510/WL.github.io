@@ -6,7 +6,7 @@
   else core.boot(root).catch(function () { /* Retain the existing product page. */ });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261016-pdp-light-3';
+  var BUILD = '20261112-pdp-a11y-4';
   var ORIGIN = 'https://webtrack.woodsonlumber.com';
   var ASSETS = 'https://ckunkel510.github.io/WL.github.io/';
   var SCOPE = 'data-wl-pdp-preview';
@@ -112,7 +112,9 @@
         var quantityLabel = make('label', 'wl-pdp-quantity-label', 'Quantity'); quantityLabel.htmlFor = input.id; action.prepend(quantityLabel);
       }
       action?.querySelectorAll('.productQtySegment button').forEach(function (button) {
-        attr(button, 'aria-label', text(button.textContent) === '+' ? 'Increase quantity' : 'Decrease quantity');
+        var actionName = text(button.textContent) === '+' ? 'Increase quantity' : 'Decrease quantity';
+        var productName = text(doc.getElementById('wl-product-title')?.textContent);
+        attr(button, 'aria-label', actionName + (productName ? ' for ' + productName : ''));
       });
       var quicklist = doc.getElementById('ctl00_PageBody_productDetail_ctl00_QuickList_QuickListLink');
       var stock = doc.getElementById('ctl00_PageBody_productDetail_ctl00_btnShowStock');

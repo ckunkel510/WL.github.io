@@ -6,7 +6,7 @@
   else { root.WLAccessibilityEnhancer = api; api.boot(root); }
 })(typeof window === 'object' ? window : this, function () {
   'use strict';
-  var BUILD = '20261112-accessibility-1';
+  var BUILD = '20261112-accessibility-2';
   var PAGES = /\/(?:Products|ProductDetail|ShoppingCart|SignIn|Default)\.aspx$/i;
   var FIELDS = 'input:not([type="hidden"]),select,textarea';
   var INVALID = '.wl-field-invalid,.is-invalid,.input-validation-error,[aria-invalid="true"]';
@@ -108,7 +108,7 @@
       if (/\/ProductDetail\.aspx$/i.test(win.location.pathname)) contextualize(container, clean(text(container.querySelector('#wl-product-title,h1'))));
       all(container, 'select[id*="SearchOrderControl"]').forEach(function (node) { if (!node.getAttribute('aria-labelledby')) set(node, 'aria-label', 'Sort products'); });
       all(container, 'a[id$="lnkGrid"],a[id$="lnkList"]').forEach(function (node) { set(node, 'aria-label', /lnkGrid$/.test(node.id) ? 'Show product grid' : 'Show product list'); });
-      all(container, '.ProductGroupCardContainer').forEach(function (card) {
+      all(container, '.ProductGroupCardContainer,[id="ProductGroupCardContainer"]').forEach(function (card) {
         var header = card.querySelector('a[id$="ProductGroupLinkHeader"]'); var name = clean(text(header)); if (!name) return;
         all(card, 'a[href]').forEach(function (node) {
           if (!text(node) && !node.getAttribute('aria-labelledby')) set(node, 'aria-label', 'Shop ' + name);
