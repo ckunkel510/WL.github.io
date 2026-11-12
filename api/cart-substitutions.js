@@ -1,6 +1,7 @@
 'use strict';
 const rules = require('../SubstitutionRules');
 const approved = require('../data/approved-substitutions.json');
+const families = require('../data/substitution-families.json');
 const blocked = new Set(require('../blocked-products.json').blockedProductIds.map(String));
 const { getAiCatalogProducts } = require('./ai-product-catalog');
 const history = require('./substitution-history');
@@ -43,7 +44,7 @@ function createHandler(deps = {}) {
         const source = catalog.products.find(p => p.productId === pid);
         if (!source) return send(res, 200, { success: true, source: null, suggestions: [] });
         const counts = await history.counts(pid).catch(() => ({}));
-        const matches = blocked.has(pid) ? [] : rules.candidates(catalog.products.filter(p => !blocked.has(p.productId)), pid, approved, counts);
+        const matches = blocked.has(pid) ? [] : rules.candidates(catalog.products.filter(p => !blocked.has(p.productId)), pid, approved, counts, deps.families || families);
         const suggestions = await Promise.all(matches.map(async row => ({
           productId: row.product.productId, title: row.product.title, category: row.product.category, brand: row.product.brand,
           productCode: row.product.productCode, reason: row.match.reason, differences: row.match.differences,
@@ -62,7 +63,8 @@ function createHandler(deps = {}) {
       const offer = await history.readOffer(body.receipt);
       if (!offer) return send(res, 200, { success: true, recorded: false });
       const from = catalog.products.find(p => p.productId === offer.from), to = catalog.products.find(p => p.productId === offer.to);
-      if (blocked.has(offer.from) || blocked.has(offer.to) || !rules.eligibility(from, to, approved)) return send(res, 409, { success: false, recorded: false });
+      const match = rules.eligibility(from, to, approved, deps.families || families);
+      if (blocked.has(offer.from) || blocked.has(offer.to) || !match || match.rule !== offer.rule) return send(res, 409, { success: false, recorded: false });
       const recorded = await history.accept(body.receipt, { scope: body.scope, quantity: body.quantity, store: body.store });
       return send(res, 200, { success: true, recorded });
     } catch (_) { return send(res, 503, { success: false, suggestions: [] }); }

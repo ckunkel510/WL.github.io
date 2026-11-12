@@ -1,0 +1,114 @@
+[
+  {
+    "id": "turtlebox-ranger-colors",
+    "enabled": true,
+    "revision": 1,
+    "reviewedAt": "2026-11-12",
+    "type": "color_variant",
+    "model": "Turtlebox Ranger",
+    "brand": "Turtlebox",
+    "category": "Tools > Power Tools > Hand Power Tools > Job Site Radios",
+    "members": [
+      {
+        "productId": "282953",
+        "title": "Turtlebox Ranger - Tan",
+        "variant": "Tan"
+      },
+      {
+        "productId": "282954",
+        "title": "Turtlebox Ranger - Gray",
+        "variant": "Gray"
+      },
+      {
+        "productId": "282955",
+        "title": "Turtlebox Ranger - Ivory",
+        "variant": "Ivory"
+      },
+      {
+        "productId": "290262",
+        "title": "Turtlebox Ranger - Delta",
+        "variant": "Delta"
+      },
+      {
+        "productId": "313359",
+        "title": "Turtlebox Ranger - River Rock",
+        "variant": "River Rock",
+        "allowMissingBrand": true
+      },
+      {
+        "productId": "324139",
+        "title": "Turtlebox Ranger - Mossy Oak Bottomland Camo",
+        "variant": "Mossy Oak Bottomland Camo"
+      }
+    ]
+  },
+  {
+    "id": "turtlebox-original-gen3-colors",
+    "enabled": true,
+    "revision": 1,
+    "reviewedAt": "2026-11-12",
+    "type": "color_variant",
+    "model": "Turtlebox Original",
+    "brand": "Turtlebox",
+    "category": "Tools > Power Tools > Hand Power Tools > Job Site Radios",
+    "members": [
+      {
+        "productId": "282948",
+        "title": "Turtlebox Original - Tan",
+        "variant": "Tan"
+      },
+      {
+        "productId": "282949",
+        "title": "Turtlebox Original - White",
+        "variant": "White"
+      },
+      {
+        "productId": "282951",
+        "title": "Turtlebox Original - Gray",
+        "variant": "Gray"
+      },
+      {
+        "productId": "282952",
+        "title": "Turtlebox Original - Orange",
+        "variant": "Orange"
+      },
+      {
+        "productId": "287775",
+        "title": "Turtlebox Original - Maroon",
+        "variant": "Maroon"
+      },
+      {
+        "productId": "287776",
+        "title": "Turtlebox Original - Burnt Orange",
+        "variant": "Burnt Orange"
+      }
+    ]
+  },
+  {
+    "id": "turtlebox-ranger-bumper-colors",
+    "enabled": true,
+    "revision": 1,
+    "reviewedAt": "2026-11-12",
+    "type": "color_variant",
+    "model": "Turtlebox Ranger Bumper Set",
+    "brand": "Turtlebox",
+    "category": "Tools > Power Tools > Hand Power Tools > Job Site Radios",
+    "members": [
+      {
+        "productId": "282973",
+        "title": "Turtlebox Ranger Bumper Set- Maroon",
+        "variant": "Maroon"
+      },
+      {
+        "productId": "282974",
+        "title": "Turtlebox Ranger Bumper Set- Burnt Orange",
+        "variant": "Burnt Orange"
+      },
+      {
+        "productId": "282975",
+        "title": "Turtlebox Ranger Bumper Set- Black",
+        "variant": "Black"
+      }
+    ]
+  }
+]
