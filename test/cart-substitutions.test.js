@@ -45,7 +45,7 @@ function fixture(options = {}) {
   const calls = [], copy = () => structuredClone(cart);
   const io = {
     read: async () => { calls.push(['read']); if (options.readFailsAfterAdd && calls.some(c => c[0] === 'add')) throw Error('Read failed'); return copy(); },
-    stock: async pid => ({ verified: !options.unknownStock, branches: { Caldwell: pid === '1' ? (options.local ?? 2) : (options.targetStock ?? 100) } }),
+    stock: async pid => ({ verified: !options.unknownStock, branches: { Caldwell: pid === '1' ? (options.local ?? 2) : (options.targetStock ?? 100), Bryan: pid === '1' ? 0 : (options.otherStock ?? 0) } }),
     product: async pid => ({ pid, name: pid === '1' ? source.title : replacement.title, code: 'CODE' + pid, unit: 'ea', price: pid === '1' ? 500 : (Object.hasOwn(options, 'targetPrice') ? options.targetPrice : 650) }),
     add: async (info, quantity) => { calls.push(['add', info.pid, quantity]); if (options.addRejected) throw Error('Rejected'); let row = cart.items.find(r => r.pid === info.pid); if (row) row.quantity += quantity; else cart.items.push({ pid: info.pid, code: info.code, quantity, unit: 'ea', configured: false, price: info.price }); if (options.concurrentEdit) cart.items.find(r => r.pid === '9').quantity++; if (options.addReplyLost) throw Error('Reply lost'); },
     change: async (before, pid, quantity) => { calls.push(['change', pid, quantity]); if (pid === '1' && options.reduceRejected) throw Error('Rejected'); if (pid === '2' && options.rollbackRejected) throw Error('Rejected'); if (quantity) cart.items.find(r => r.pid === pid).quantity = quantity; else cart.items = cart.items.filter(r => r.pid !== pid); if (pid === '1' && options.reduceReplyLost) throw Error('Reply lost'); }
@@ -186,4 +186,103 @@ test('test storage cannot connect to Redis, while preview and production offers 
   assert.ok(await load('test').offer('1', '2', 'rule'));
   await load('production').offer('1', '2', 'rule'); await load('preview').offer('1', '2', 'rule');
   assert.equal(writes.length, 2); assert.notEqual(writes[0].split('offer:')[0], writes[1].split('offer:')[0]);
+});
+
+const families = require('../data/substitution-families.json');
+const audit = require('../scripts/audit-substitutions');
+function familyProducts(registry = families) {
+  return registry.flatMap(family => family.members.map(member => ({ productId: member.productId, title: member.title, brand: member.allowMissingBrand ? '' : family.brand, category: family.category, availability: 'in_stock', productCode: 'CODE' + member.productId })));
+}
+test('reviewed Turtlebox colors stay inside the exact Ranger, Original or bumper family', () => {
+  const products = familyProducts(), ranger = products.find(p => p.productId === '313359');
+  const rows = rules.candidates(products, ranger.productId, [], {}, families);
+  assert.equal(rows.length, 5);
+  assert.ok(rows.every(row => row.match.kind === 'reviewed_family' && row.match.familyId === 'turtlebox-ranger-colors'));
+  assert.match(rows.find(row => row.product.productId === '282954').match.differences, /River Rock to Gray/);
+  assert.equal(rules.eligibility(ranger, products.find(p => p.productId === '282948'), [], families), null);
+  assert.equal(rules.eligibility(ranger, products.find(p => p.productId === '282975'), [], families), null);
+  for (const family of families) assert.deepEqual(rules.familyErrors(family), []);
+});
+test('family ID, title, brand, category or listed pack/model drift cannot become a substitute', () => {
+  const products = familyProducts(), a = products.find(p => p.productId === '313359'), b = products.find(p => p.productId === '282954');
+  for (const drift of [{ productId: '999' }, { title: b.title + ' (2 pack)' }, { title: 'Turtlebox Grande - Gray' }, { brand: 'Different' }, { brand: '' }, { category: b.category + ' Other' }]) assert.equal(rules.eligibility(a, { ...b, ...drift }, [], families), null);
+  assert.ok(rules.eligibility({ ...a, brand: 'Turtlebox' }, b, [], families)); // normal catalog enrichment stays eligible
+  assert.equal(rules.eligibility({ ...a, brand: 'Unexpected' }, b, [], families), null);
+  assert.equal(rules.eligibility({ ...a, title: a.title + ' Gen 2' }, b, [], families), null);
+});
+test('reviewed membership works in either direction; no newly seen color or learned pair can expand it', () => {
+  const products = familyProducts(), a = products.find(p => p.productId === '313359'), b = products.find(p => p.productId === '282954');
+  assert.ok(rules.eligibility(b, a, [], families));
+  const unknown = { ...b, productId: '123', title: 'Turtlebox Ranger - Blue' };
+  const rows = rules.candidates([...products, unknown], a.productId, [], { 123: 100000, 282954: 10 }, families);
+  assert.equal(rows[0].product.productId, '282954');
+  assert.equal(rows.some(row => row.product.productId === '123'), false);
+});
+test('disabled, incomplete, duplicate and ambiguous family entries fail closed', () => {
+  const products = familyProducts(), a = products.find(p => p.productId === '313359'), b = products.find(p => p.productId === '282954'), f = families[0];
+  for (const changed of [{ ...f, enabled: false }, { ...f, reviewedAt: '' }, { ...f, revision: 0 }, { ...f, members: [...f.members, f.members[0]] }, { ...f, model: 'Turtlebox' }]) assert.equal(rules.eligibility(a, b, [], [changed]), null);
+  assert.equal(rules.eligibility(a, b, [], [f, { ...f }]), null);
+  assert.equal(rules.eligibility(a, b, [], [f, { ...f, id: 'ambiguous-family' }]), null);
+  assert.equal(rules.eligibility(a, b, [], [null, null, {}]), null);
+});
+test('native title equality is still required for server-reviewed family choices', () => {
+  const [a, b] = familyProducts(), selected = { ...b, kind: 'reviewed_family' };
+  assert.equal(core.eligibleNative(rules, a, selected, { name: a.title }, { name: b.title }), true);
+  assert.equal(core.eligibleNative(rules, a, selected, { name: a.title }, { name: b.title + ' Kit' }), false);
+});
+test('enough verified company stock can supply a replacement while transfer quantities remain explicit', async () => {
+  const f = fixture({ targetStock: 4, otherStock: 8 });
+  const quote = await core.prepare(f.io, rules, source, replacement, 'shortage');
+  assert.equal(quote.quantity, 10); assert.equal(quote.available, 4); assert.equal(quote.companyAvailable, 12); assert.equal(quote.transfer, 6);
+  assert.match(core.stockLabel(quote), /4 at Caldwell · 12 companywide/);
+  assert.match(core.stockLabel(quote), /another store/);
+  assert.match(core.stockLabel(quote), /eligibility and timing are shown at checkout/);
+  await core.swap(f.io, rules, quote);
+  assert.deepEqual(f.get().items.map(r => [r.pid, r.quantity]), [['1', 2], ['9', 2], ['2', 10]]);
+});
+test('whole and shortage scopes each require enough company stock including existing target lines', async () => {
+  const f = fixture({ targetStock: 4, otherStock: 6 });
+  assert.equal((await core.prepare(f.io, rules, source, replacement, 'shortage')).quantity, 10);
+  await assert.rejects(core.prepare(f.io, rules, source, replacement, 'whole'), /enough stock companywide/);
+  await assert.rejects(core.prepare(fixture({ targetStock: 4, otherStock: 8, existing: 3 }).io, rules, source, replacement, 'shortage'), /enough stock companywide/);
+});
+test('changed transfer requirement invalidates a reviewed choice before any cart write', async () => {
+  const f = fixture({ targetStock: 12 }), quote = await core.prepare(f.io, rules, source, replacement, 'shortage');
+  f.options.targetStock = 4; f.options.otherStock = 8;
+  await assert.rejects(core.swap(f.io, rules, quote), /Review this choice again/);
+  assert.equal(f.calls.some(c => c[0] === 'add'), false);
+  for (const stock of [{ verified: false, branches: { Caldwell: 10 } }, { verified: true, branches: { Caldwell: 2, Other: NaN } }, { verified: true, branches: { Caldwell: -1 } }]) assert.equal(core.companyStock(stock), null);
+});
+test('family suggestions issue receipts and record only the still-current reviewed family revision', async () => {
+  endpoint.reset(); history._test.reset();
+  const registry = structuredClone(families), catalog = { fresh: true, products: familyProducts(registry) }, handler = endpoint.createHandler({ catalog: async () => catalog, families: registry });
+  const offered = await request(handler, 'GET', { pid: '313359' });
+  const gray = offered.data.suggestions.find(row => row.productId === '282954');
+  assert.equal(gray.kind, 'reviewed_family'); assert.equal(gray.rule, 'family:turtlebox-ranger-colors:v1');
+  const body = { receipt: gray.receipt, quantity: 10, scope: 'shortage', store: 'Caldwell' };
+  assert.equal((await request(handler, 'POST', body)).data.recorded, true);
+  const again = await request(handler, 'GET', { pid: '313359' });
+  const stale = again.data.suggestions.find(row => row.productId === '282954');
+  registry[0].revision = 2;
+  assert.equal((await request(handler, 'POST', { ...body, receipt: stale.receipt })).status, 409);
+});
+test('maintenance audit identifies catalog drift, missing members and unreviewed colors without enabling them', () => {
+  const products = familyProducts().filter(p => p.productId !== '290262');
+  products.find(p => p.productId === '282954').title += ' Kit';
+  products.push({ ...products.find(p => p.productId === '282955'), productId: '123', title: 'Turtlebox Ranger - Blue' });
+  const report = audit.audit(products, families, new Date('2026-11-12T21:00:00Z'));
+  assert.ok(report.issues.some(i => i.productId === '290262' && i.type === 'missing_from_catalog'));
+  assert.ok(report.issues.some(i => i.productId === '282954' && i.type === 'catalog_changed_or_ambiguous'));
+  assert.ok(report.reviewCandidates.some(i => i.productId === '123'));
+  assert.equal(report.automaticallyEnabled, false);
+  assert.deepEqual(rules.candidates(products, '313359', [], {}, families).map(r => r.product.productId).sort(), ['282953', '282955', '324139']);
+});
+test('maintenance discovery groups unreviewed color families for human review and reads Merchant CSV or public JSON only', () => {
+  const products = [{ productId: '1', title: 'Example Bottle 20oz - Black', brand: 'Example', category: 'Bottles' }, { productId: '2', title: 'Example Bottle 20oz - White', brand: 'Example', category: 'Bottles' }];
+  const report = audit.audit(products, [], new Date('2026-11-12T21:00:00Z'));
+  assert.equal(report.potentialNewFamilies.length, 1); assert.equal(report.potentialNewFamilies[0].products.length, 2);
+  assert.deepEqual(audit.readCatalog(JSON.stringify({ products })), products);
+  const csv = 'id,title,brand,product_type,private_field\n1,"Example, White",Example,Bottles,discard-me\n';
+  assert.deepEqual(audit.readCatalog(csv), [{ productId: '1', title: 'Example, White', brand: 'Example', category: 'Bottles' }]);
+  assert.throws(() => audit.readCatalog('id,title\n1,Example\n'), /Merchant CSV needs/);
 });

@@ -1,3 +1,5 @@
+> Expanded review: see [reviewed families and fulfillment-neutral cart wording](substitution-families-2026-11-12.md). The following records the initial PR149 design; the expansion allows verified company stock and adds reviewed color families.
+
 # Optional cart substitutions
 
 Customers with a verified shortage at their account's currently selected store can open **Find a substitute** from that cart line. They can keep their original items and proceed with the existing pickup estimates at any time. Suggestions and history failures do not gate native Proceed or change pickup/date/order/payment rules.

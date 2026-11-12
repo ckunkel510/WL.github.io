@@ -6,7 +6,7 @@
   else { root.WLCartSubstitutions = core; core.boot(root).catch(function () {}); }
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261112-substitutions-1';
+  var BUILD = '20261112-substitutions-2';
   var ORIGIN = 'https://webtrack.woodsonlumber.com';
   var API = 'https://wl-upsrates.vercel.app/api/cart-substitutions';
   var BASE = 'https://ckunkel510.github.io/WL.github.io/';
@@ -124,10 +124,17 @@
   }
   function eligibleNative(rules, source, replacement, nativeSource, nativeTarget) {
     if (rules.normalized(source.title) !== rules.normalized(nativeSource.name) || rules.normalized(replacement.title) !== rules.normalized(nativeTarget.name)) return false;
-    if (replacement.kind === 'approved_pair') return true; // server-maintained explicit pair, with native title drift checked above
+    if (['approved_pair', 'reviewed_family'].includes(replacement.kind)) return true; // server-maintained explicit pair, with native title drift checked above
     return !!rules.eligibility(Object.assign({}, source, { title: nativeSource.name }), { productId: replacement.productId, title: nativeTarget.name, category: replacement.category, brand: replacement.brand });
   }
   async function inspect(io, sourceId) { return Promise.all([io.read(), io.stock(sourceId), io.product(sourceId)]); }
+  function companyStock(stock) {
+    if (!stock?.verified || !stock.branches || !Object.keys(stock.branches).length || !Object.values(stock.branches).every(function (count) { return Number.isFinite(count) && count >= 0; })) return null;
+    return Object.values(stock.branches).reduce(function (sum, count) { return sum + Math.floor(count); }, 0);
+  }
+  function stockLabel(quote) {
+    return quote.available + ' at ' + quote.baseline.store + ' · ' + quote.companyAvailable + ' companywide. ' + (quote.transfer ? 'Some of this replacement would need stock from another store. ' : '') + 'Pickup or delivery eligibility and timing are shown at checkout; availability is confirmed by Woodson.';
+  }
   async function prepare(io, rules, catalogSource, replacement, scope, context) {
     var values = await Promise.all([context || inspect(io, catalogSource.productId), io.stock(replacement.productId), io.product(replacement.productId)]);
     var cart = values[0][0], source = cart.items.find(function (r) { return r.pid === catalogSource.productId; }), a = values[0][1], b = values[1], nativeSource = values[0][2], nativeTarget = values[2];
@@ -135,15 +142,16 @@
     var target = cart.items.find(function (r) { return r.pid === replacement.productId; });
     if (target && (target.configured || target.unit !== 'ea' || target.code.toUpperCase() !== nativeTarget.code.toUpperCase())) throw Error('The replacement already has a different configuration in your cart.');
     var quantities = rules.quantities(source.quantity, a.branches[cart.store], scope);
-    if (!quantities.replace || quantities.replace + (target?.quantity || 0) > Math.min(9999, Math.floor(b.branches[cart.store]))) throw Error('This alternative does not have enough stock at your store for this choice. You can keep your original items.');
+    var companyAvailable = companyStock(b), needed = quantities.replace + (target?.quantity || 0);
+    if (!quantities.replace || companyAvailable === null || needed > Math.min(9999, companyAvailable)) throw Error('This alternative does not have enough stock companywide for this choice. You can keep your original items.');
     if (!Number.isInteger(source.price) || !Number.isInteger(nativeTarget.price)) throw Error('Your current prices could not be confirmed. Keep your original items or contact the store.');
-    return { baseline: cart, source: source, target: nativeTarget, catalogSource: catalogSource, replacement: replacement, scope: scope, keep: quantities.keep, quantity: quantities.replace, local: a.branches[cart.store], available: Math.floor(b.branches[cart.store]), price: nativeTarget.price, originalPrice: source.price, delta: quantities.replace * (nativeTarget.price - source.price), at: Date.now() };
+    return { baseline: cart, source: source, target: nativeTarget, catalogSource: catalogSource, replacement: replacement, scope: scope, keep: quantities.keep, quantity: quantities.replace, local: a.branches[cart.store], available: Math.floor(b.branches[cart.store]), companyAvailable: companyAvailable, transfer: Math.max(0, needed - Math.floor(b.branches[cart.store])), price: nativeTarget.price, originalPrice: source.price, delta: quantities.replace * (nativeTarget.price - source.price), at: Date.now() };
   }
   // Native WebTrack has no atomic replace endpoint. Add first, verify, then
   // reduce the original. Ambiguous replies are read back, never blindly retried.
   async function swap(io, rules, proposal) {
     var fresh = await prepare(io, rules, proposal.catalogSource, proposal.replacement, proposal.scope);
-    if (Date.now() - proposal.at > 120000 || signature(fresh.baseline) !== signature(proposal.baseline) || fresh.baseline.store !== proposal.baseline.store || fresh.keep !== proposal.keep || fresh.quantity !== proposal.quantity || fresh.price !== proposal.price || fresh.originalPrice !== proposal.originalPrice) throw Error('Stock, price or your cart changed. Review this choice again before applying it.');
+    if (Date.now() - proposal.at > 120000 || signature(fresh.baseline) !== signature(proposal.baseline) || fresh.baseline.store !== proposal.baseline.store || fresh.keep !== proposal.keep || fresh.quantity !== proposal.quantity || fresh.price !== proposal.price || fresh.originalPrice !== proposal.originalPrice || fresh.transfer !== proposal.transfer) throw Error('Stock, price or your cart changed. Review this choice again before applying it.');
     var afterAddExpected = expectedCart(fresh.baseline, fresh.source.pid, fresh.target, fresh.source.quantity, fresh.quantity);
     var finalExpected = expectedCart(fresh.baseline, fresh.source.pid, fresh.target, fresh.keep, fresh.quantity);
     var originalTargetQty = fresh.baseline.items.find(function (r) { return r.pid === fresh.target.pid; })?.quantity || 0;
@@ -210,7 +218,7 @@
       var header = el('div', '', 'wl-sub-header'), closeTop = el('button', '×'); closeTop.type = 'button'; closeTop.setAttribute('aria-label', 'Keep original items and close substitutes');
       header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:0;background:#fffdfb;z-index:2';
       header.append(title, closeTop);
-      var intro = el('p', 'Keep your original items and their pickup estimates, or choose an alternative. Nothing changes until you apply a choice.');
+      var intro = el('p', 'Keep your original items, or choose an alternative. Checkout will show fulfillment options and timing. Nothing changes until you apply a choice.');
       var content = el('div'), status = el('p', 'Checking compatible alternatives and your store’s stock…'); status.setAttribute('role', 'status');
       var keep = el('button', 'Keep original items'); keep.type = 'button'; keep.onclick = function () { close(); opener.focus(); };
       var footer = el('div', '', 'wl-sub-footer'); footer.appendChild(keep);
@@ -222,14 +230,14 @@
       try {
         var payload = await apiJson('?pid=' + item.pid);
         if (dead || dialog !== view) return;
-        if (!payload.success || !payload.source || !payload.suggestions?.length) { status.textContent = 'No verified substitute is available yet. Keep your original items and continue with their pickup estimate.'; return; }
+        if (!payload.success || !payload.source || !payload.suggestions?.length) { status.textContent = 'No verified substitute is available yet. Keep your original items and continue to checkout for fulfillment options and timing.'; return; }
         var current = await io.read(), source = current.items.find(function (row) { return row.pid === item.pid; }), stock = await io.stock(item.pid);
         if (!source || !stock.verified || !Number.isFinite(stock.branches[current.store])) throw Error('Availability could not be confirmed.');
         var missing = Math.max(0, source.quantity - Math.floor(stock.branches[current.store]));
         if (!missing) { status.textContent = 'Your requested quantity is now available at ' + current.store + '. Keep your original items to continue.'; return; }
         status.textContent = source.quantity + ' requested · ' + (source.quantity - missing) + ' at ' + current.store + ' · ' + missing + ' unavailable at this store.';
         var fieldset = el('fieldset'), legend = el('legend', 'How much would you like to replace?'); fieldset.appendChild(legend);
-        [['shortage', 'Only the unavailable quantity (' + missing + ')'], ['whole', 'The whole line (' + source.quantity + ')']].forEach(function (part) {
+        [['shortage', 'Only the quantity unavailable at ' + current.store + ' (' + missing + ')'], ['whole', 'The whole line (' + source.quantity + ')']].forEach(function (part) {
           var label = el('label'), input = doc.createElement('input'); input.type = 'radio'; input.name = 'wl-sub-scope'; input.value = part[0]; input.checked = part[0] === 'shortage'; label.append(input, el('span', part[1])); fieldset.appendChild(label);
         });
         content.appendChild(fieldset);
@@ -259,13 +267,13 @@
             var card = el('div', '', 'wl-sub-option'), chooseLabel = el('label'), radio = doc.createElement('input'); radio.type = 'radio'; radio.name = 'wl-sub-product';
             chooseLabel.append(radio, el('strong', row.replacement.title)); card.appendChild(chooseLabel);
             card.append(el('p', row.replacement.reason), el('p', row.replacement.differences));
-            card.append(el('small', row.quote.available + ' available at ' + row.quote.baseline.store + ' · local pickup, allow at least 2 hours and wait for ready confirmation.'));
+            card.append(el('small', stockLabel(row.quote)));
             card.append(el('p', dollars(row.quote.price) + ' each · replace ' + row.quote.quantity + ' · estimated merchandise change ' + (row.quote.delta >= 0 ? '+' : '−') + dollars(Math.abs(row.quote.delta))));
             var details = el('a', 'View product details'); details.href = (options.preview ? ORIGIN : '') + '/ProductDetail.aspx?pid=' + row.replacement.productId; details.target = '_blank'; details.rel = 'noopener'; card.appendChild(details);
             radio.onchange = function () { selected = row.replacement; selectedQuote = row.quote; ack.checked = false; ackLabel.hidden = false; update(); };
             list.appendChild(card);
           });
-          if (!list.childElementCount) list.appendChild(el('p', 'No verified alternative has enough stock at this store for this choice. Keep your original items, or try replacing only the unavailable quantity.'));
+          if (!list.childElementCount) list.appendChild(el('p', 'No verified alternative has enough company stock for this choice. Keep your original items, or try replacing only the quantity unavailable at your store.'));
         }
         fieldset.onchange = function () { render().catch(function () { status.textContent = 'Choices could not be refreshed. Keep your original items and continue.'; }); };
         apply.onclick = async function () {
@@ -290,7 +298,7 @@
           } finally { win.removeEventListener('beforeunload', leaving); applying = false; keep.disabled = false; closeTop.disabled = false; fieldset.disabled = false; Array.from(view.querySelectorAll('input')).forEach(function (input) { input.disabled = false; }); update(); }
         };
         await render();
-      } catch (_) { if (dialog === view) status.textContent = 'Substitutes are temporarily unavailable. Keep your original items and continue with their pickup estimate.'; }
+      } catch (_) { if (dialog === view) status.textContent = 'Substitutes are temporarily unavailable. Keep your original items and continue to checkout for fulfillment options and timing.'; }
     }
     async function scan() {
       if (dead || dialog) return;
@@ -310,7 +318,7 @@
           try {
             var stock = await io.stock(item.pid);
             if (dead || !item.row.isConnected || !stock.verified || !Number.isFinite(stock.branches[fresh.store]) || stock.branches[fresh.store] >= item.quantity) continue;
-            var slot = el('div', '', 'wl-substitute-slot'), note = el('p', Math.max(0, item.quantity - Math.floor(stock.branches[fresh.store])) + ' unavailable at ' + fresh.store + '. You can keep these items with the pickup estimate.');
+            var slot = el('div', '', 'wl-substitute-slot'), note = el('p', Math.max(0, item.quantity - Math.floor(stock.branches[fresh.store])) + ' unavailable at ' + fresh.store + '. Choose a substitute, or continue to checkout to see fulfillment options and timing.');
             var button = el('button', 'Find a substitute', 'wl-substitute-button'); button.type = 'button'; button.onclick = function () { open(item, button); };
             slot.append(note, button); (item.row.querySelector('.card-body') || item.row).appendChild(slot);
           } catch (_) {}
@@ -322,5 +330,5 @@
     await scan();
     return { open: open, scan: scan, adapter: io, close: close };
   }
-  return { build: BUILD, money: money, unit: unit, targetOf: targetOf, signature: signature, expectedCart: expectedCart, cartFromDocument: cartFromDocument, productFromDocument: productFromDocument, formPost: formPost, setQuantity: setQuantity, adapter: adapter, prepare: prepare, swap: swap, eligibleNative: eligibleNative, boot: boot };
+  return { build: BUILD, money: money, unit: unit, targetOf: targetOf, signature: signature, expectedCart: expectedCart, cartFromDocument: cartFromDocument, productFromDocument: productFromDocument, formPost: formPost, setQuantity: setQuantity, adapter: adapter, companyStock: companyStock, stockLabel: stockLabel, prepare: prepare, swap: swap, eligibleNative: eligibleNative, boot: boot };
 });
