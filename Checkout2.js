@@ -6,8 +6,23 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20261109-native-choice-13";
+  window.WL_CHECKOUT_BUILD = "20261112-pickup-14";
   document.documentElement?.setAttribute?.('data-wl-checkout-build',window.WL_CHECKOUT_BUILD);
+  const pickupAssetBase = new URL('.', document.currentScript?.src || 'https://ckunkel510.github.io/WL.github.io/Checkout2.js').href;
+  let pickupAvailabilityLoad;
+  function loadPickupAvailability() {
+    if (window.WLPickupAvailability) return Promise.resolve(window.WLPickupAvailability);
+    if (pickupAvailabilityLoad) return pickupAvailabilityLoad;
+    pickupAvailabilityLoad = new Promise(function (resolve) {
+      const script = document.createElement('script');
+      const timeout = window.setTimeout(function () { script.remove(); pickupAvailabilityLoad = null; resolve(null); }, 10000);
+      script.src = pickupAssetBase + 'PickupAvailability.js?v=20261112-pickup-1';
+      script.onload = function () { window.clearTimeout(timeout); pickupAvailabilityLoad = null; resolve(window.WLPickupAvailability || null); };
+      script.onerror = function () { window.clearTimeout(timeout); script.remove(); pickupAvailabilityLoad = null; resolve(null); };
+      document.head.appendChild(script);
+    });
+    return pickupAvailabilityLoad;
+  }
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
   const UPS_SHIPPING_ENABLED = true;
@@ -2138,6 +2153,13 @@ const navDiv = document.createElement("div");
                 showInlineError(5, 'WebTrack is still updating your changes. Please wait a moment, then try Continue again.');
                 return;
               }
+              if (getPickupSelected() && !(await window.WLCheckout?.preparePickupAvailability?.())) {
+                proxy.dataset.wlContinueState = 'blocked';
+                proxy.dataset.wlContinueReason = 'pickup-availability';
+                showInlineError(5, 'Please review pickup availability, your requested date and time, and any transfer or supplier estimates.');
+                showStep(5);
+                return;
+              }
             }
             proxy.dataset.wlContinueState = "validating";
             // Clear any sticky inline errors on Step 5 before submitting
@@ -2155,7 +2177,7 @@ const navDiv = document.createElement("div");
             const submissionKey = function () {
               return JSON.stringify([getSaleType(), ...['AddressLine1','AddressLine2','AddressLine3','City','CountySelector_CountyList','Postcode','CountrySelector'].map(function (field) {
                 return document.getElementById('ctl00_PageBody_DeliveryAddress_'+field)?.value || '';
-              }), getBranchField()?.value || '']);
+              }), getBranchField()?.value || '', window.WLCheckout?.pickupRequestKey?.() || '']);
             };
             const routingBefore = isBuyNowFrame() ? '' : submissionKey();
             let submitted = false;
@@ -3255,6 +3277,34 @@ document.addEventListener("click", function (ev) {
       const pickupInput = pickupDiv.querySelector("#pickupDate");
       const pickupTimeSel = pickupDiv.querySelector("#pickupTime");
       const deliveryInput = deliveryDiv.querySelector("#deliveryDate");
+      let pickupAvailability = null, pickupMount = null;
+      const pickupLoading = document.createElement('p');
+      if (!isBuyNowFrame()) {
+        pickupLoading.setAttribute('role', 'status');
+        pickupLoading.textContent = 'Pickup availability will be checked for your requested quantities.';
+        pickupDiv.prepend(pickupLoading);
+      }
+      async function ensurePickupAvailability() {
+        if (isBuyNowFrame()) return null; // Quick Buy already owns its inventory policy.
+        if (pickupAvailability) return pickupAvailability;
+        if (pickupMount) return pickupMount;
+        pickupMount = (async function () {
+          const core = await loadPickupAvailability();
+          if (!core || !pickupDiv.isConnected) {
+            pickupLoading.textContent = 'Pickup availability could not load. Choose Continue to retry the check.';
+            return null;
+          }
+          pickupLoading.remove();
+          pickupAvailability = core.attach(window, { root: pickupDiv, date: pickupInput, time: pickupTimeSel, onChange: updateSpecial });
+          await pickupAvailability.refresh();
+          return pickupAvailability;
+        })();
+        try { return await pickupMount; }
+        catch (_) {
+          pickupLoading.textContent = 'Pickup availability could not load. Choose Continue to retry the check.';
+          return null;
+        } finally { pickupMount = null; }
+      }
 
       const WL_DATE_STATE_KEY = "wl_checkout_date_state_v2";
 
@@ -3420,6 +3470,11 @@ document.addEventListener("click", function (ev) {
       }
 
       function populatePickupTimes(date) {
+        if (!isBuyNowFrame()) {
+          if (pickupAvailability) pickupAvailability.populate();
+          else { pickupTimeSel.replaceChildren(); pickupTimeSel.disabled = true; }
+          return;
+        }
         const day = date.getDay();
         let openMins = 7 * 60 + 30;
         let closeMins;
@@ -3468,6 +3523,7 @@ document.addEventListener("click", function (ev) {
       }
 
       pickupInput.addEventListener("change", function () {
+        if (!isBuyNowFrame()) { populatePickupTimes(); updateSpecial(); return; }
         if (!this.value) return updateSpecial();
         let d = parseLocalDate(this.value);
 
@@ -3617,7 +3673,9 @@ document.addEventListener("click", function (ev) {
           const p = pickupDiv.querySelector("#pickupPerson").value;
 
           specialIns.readOnly = false;
-          baseText = "Pickup on " + d + (t ? " at " + t : "") + (p ? " for " + p : "");
+          baseText = !isBuyNowFrame()
+            ? (pickupAvailability?.instruction() || 'PICKUP AVAILABILITY NOT YET VERIFIED') + (p ? '; pickup person: ' + p : '')
+            : "Pickup on " + d + (t ? " at " + t : "") + (p ? " for " + p : "");
         } else if (getDeliveredSelected() && !getPickupSelected()) {
           specialIns.readOnly = true;
           const shippingOrder = applyShippingDefaults();
@@ -3643,6 +3701,7 @@ document.addEventListener("click", function (ev) {
           deliveryDiv.style.display = "none";
           shippingAutoNote.style.display = "none";
           syncVisibleDateControlValidation("pickup");
+          if (!isBuyNowFrame()) ensurePickupAvailability();
 
           // If date already chosen, enforce same-day rule immediately
           if (pickupInput.value) populatePickupTimes(parseLocalDate(pickupInput.value));
@@ -3696,6 +3755,7 @@ document.addEventListener("click", function (ev) {
         }
 
         if (getPickupSelected()) {
+          if (!isBuyNowFrame() && !pickupAvailability?.valid(mark)) add(pickupInput, 'Review pickup availability and acknowledge any transfer or supplier estimates.');
           if (!pickupInput.value) add(pickupInput, "Please select a requested pickup date.");
           const pickupPerson = pickupDiv.querySelector("#pickupPerson");
           if (!pickupPerson.value.trim()) add(pickupPerson, "Please enter who will pick up the order.");
@@ -3747,6 +3807,11 @@ document.addEventListener("click", function (ev) {
       };
       window.WLCheckout.validateDateInstructions = validateDateInstructions;
       window.WLCheckout.validateBeforeFinalSubmit = validateBeforeFinalSubmit;
+      window.WLCheckout.preparePickupAvailability = async function () {
+        const availability = await ensurePickupAvailability();
+        return !!availability && availability.prepare();
+      };
+      window.WLCheckout.pickupRequestKey = function () { return getPickupSelected() ? pickupAvailability?.requestKey() || 'unverified' : ''; };
 
 
       // Client validation on Continue buttons
