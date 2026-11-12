@@ -245,6 +245,7 @@
       ".wl-smart-search__control{display:inline-grid;place-items:center;width:40px;height:40px;padding:0;border:1px solid #aeb5bd;border-radius:50%;background:#fff;color:#20262d;font-size:23px;line-height:1;cursor:pointer}",
       ".wl-smart-search__control:hover,.wl-smart-search__control:focus-visible{border-color:#6b0016;color:#6b0016;outline:3px solid rgba(107,0,22,.14);outline-offset:1px}",
       ".wl-smart-search__rail{display:flex;gap:14px;width:100%;max-width:100%;padding:2px 2px 10px;overflow-x:auto;overflow-y:hidden;overscroll-behavior-inline:contain;scroll-behavior:smooth;scroll-snap-type:x mandatory;scrollbar-width:thin;box-sizing:border-box}",
+      ".wl-smart-search-item{display:flex;flex:0 0 calc((100% - 42px)/4);min-width:0;scroll-snap-align:start}.wl-smart-search-item>.wl-smart-search-card{width:100%;flex:1 1 auto}",
       ".wl-smart-search-card{display:flex;flex:0 0 calc((100% - 42px)/4);flex-direction:column;min-width:0;min-height:338px;padding:14px;border:1px solid #d9dde1;border-radius:8px;background:#fff;color:#20262d!important;scroll-snap-align:start;text-decoration:none!important;box-sizing:border-box;transition:border-color .16s,box-shadow .16s,transform .16s}",
       ".wl-smart-search-card:hover,.wl-smart-search-card:focus-visible{border-color:#6b0016;box-shadow:0 6px 18px rgba(25,31,38,.11);outline:none;transform:translateY(-1px)}",
       ".wl-smart-search-card__image{display:block;width:100%;height:165px;margin:0 0 12px;object-fit:contain}",
@@ -256,8 +257,8 @@
       ".wl-smart-search__empty{padding:18px;border-radius:8px;background:#f5f6f7;color:#3f4852}",
       ".wl-smart-search__empty p{margin:0 0 12px;line-height:1.5}",
       ".wl-smart-search__edit{min-height:42px;padding:9px 16px;border:0;border-radius:5px;background:#6b0016;color:#fff;font-weight:800;cursor:pointer}",
-      "@media(max-width:900px){.wl-smart-search-card{flex-basis:calc((100% - 14px)/2)}}",
-      "@media(max-width:600px){.wl-smart-search{margin:18px 0;padding:18px 14px}.wl-smart-search__header{align-items:flex-start}.wl-smart-search__title{font-size:21px}.wl-smart-search__controls{display:none}.wl-smart-search__rail{margin-right:-14px;padding-right:14px}.wl-smart-search-card{flex-basis:78%;min-height:318px}.wl-smart-search-card__image,.wl-smart-search-card__image-fallback{height:150px}#productlistcards>.wl-smart-search--in-grid{margin:6px 0 14px}.wl-smart-search__search-links{align-items:flex-start}}"
+      "@media(max-width:900px){.wl-smart-search-item{flex-basis:calc((100% - 14px)/2)}}",
+      "@media(max-width:600px){.wl-smart-search{margin:18px 0;padding:18px 14px}.wl-smart-search__header{align-items:flex-start}.wl-smart-search__title{font-size:21px}.wl-smart-search__controls{display:none}.wl-smart-search__rail{margin-right:-14px;padding-right:14px}.wl-smart-search-item{flex-basis:78%}.wl-smart-search-card{min-height:318px}.wl-smart-search-card__image,.wl-smart-search-card__image-fallback{height:150px}#productlistcards>.wl-smart-search--in-grid{margin:6px 0 14px}.wl-smart-search__search-links{align-items:flex-start}}"
     ].join("");
     document.head.appendChild(style);
   }
@@ -433,7 +434,8 @@
     items.forEach(function (item, index) {
       var card = element("a", "wl-smart-search-card");
       card.href = safeUrl(item.productUrl, "product");
-      card.setAttribute("role", "listitem");
+      var itemWrapper = element("div", "wl-smart-search-item");
+      itemWrapper.setAttribute("role", "listitem");
       card.setAttribute("data-smart-search-product-id", String(item.productId));
       card.setAttribute("data-smart-search-rank", String(index + 1));
       var image = element("img", "wl-smart-search-card__image");
@@ -465,7 +467,8 @@
           ecommerce: { items: selectedItems }
         });
       });
-      rail.appendChild(card);
+      itemWrapper.appendChild(card);
+      rail.appendChild(itemWrapper);
     });
     section.appendChild(rail);
     return rail;

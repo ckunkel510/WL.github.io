@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  window.WL_HEADER_BUILD = "20261109-native-cart-9";
+  window.WL_HEADER_BUILD = "20261112-accessibility-1";
 
   var LOG = "[WL HeaderEnhancer]";
   var DEBUG = false; // Set to true only when actively troubleshooting.
@@ -13,6 +13,7 @@
   // associated with analytics, tracking, events, or commerce before execution.
   var ANALYTICS_URL = "https://ckunkel510.github.io/WL.github.io/wl-site.js?v=20261030-checkout-recovery-1";
   var SMART_SEARCH_URL = "https://ckunkel510.github.io/WL.github.io/smart-search.js?v=20261016-4";
+  var ACCESSIBILITY_URL = "https://ckunkel510.github.io/WL.github.io/Accessibility.js?v=20261112-1";
   var ADDRESS_MANAGER_URL = "https://ckunkel510.github.io/WL.github.io/AddressManagement.js?v=20260707-2";
   var CONTACT_MANAGER_URL = "https://ckunkel510.github.io/WL.github.io/ContactManagement.js?v=20260707-3";
   var TAWK_COMMERCE_ASSIST_URL = "https://ckunkel510.github.io/WL.github.io/wl-chat.js?v=20260924-1";
@@ -150,6 +151,18 @@
     script.src = ANALYTICS_URL;
     script.async = true;
     script.setAttribute("data-wl-analytics", "true");
+    document.head.appendChild(script);
+  }
+
+  function loadAccessibility() {
+    if (!/\/(?:Products|ProductDetail|ShoppingCart|SignIn|Default)\.aspx$/i.test(location.pathname) ||
+        window.top !== window || window.location.origin !== WEBTRACK ||
+        window.WLAccessibilityEnhancer || document.querySelector('script[data-wl-accessibility]')) return;
+    // Independent of consent/analytics and never awaited by shopping/checkout.
+    var script = document.createElement('script');
+    script.src = ACCESSIBILITY_URL;
+    script.async = true;
+    script.setAttribute('data-wl-accessibility','true');
     document.head.appendChild(script);
   }
 
@@ -3589,6 +3602,8 @@
     onReady(startHeaderStateBridge);
     return;
   }
+
+  loadAccessibility();
 
   if (isSmoothAccountExperience()) {
     var loadNonCriticalAccountScripts = function () {
