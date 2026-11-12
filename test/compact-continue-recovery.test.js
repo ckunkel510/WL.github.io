@@ -2,12 +2,12 @@
 const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm');
 const checkout=fs.readFileSync(require.resolve('../Checkout2.js'),'utf8');
 function proxyFixture(compact=false) {
- let handler,posts=0,valid=true,confirm=async()=>true;
+ let handler,posts=0,valid=true,confirm=async()=>true,prepare=async()=>true,pickupKey='original';
  const proxy={dataset:{},textContent:'Continue Checkout',addEventListener(type,fn){handler=fn}};
- const context=vm.createContext({awaitNativeDetails:async()=>true,getSaleType:()=>'pickup',getBranchField:()=>null,isBuyNowFrame:()=>compact,proxy,window:{WLCheckout:{validateBeforeFinalSubmit:()=>valid}},wizard:{querySelector:()=>null},clearInlineError(){},showInlineError(){},showStep(){},syncFulfillmentForNativeSubmit:()=>confirm(),syncNativeRequiredDate(){},clickNativeContinue(){posts++;return true;},native:{},document:{querySelector:()=>null,getElementById:()=>null}});
+ const context=vm.createContext({awaitNativeDetails:async()=>true,getPickupSelected:()=>true,getSaleType:()=>'pickup',getBranchField:()=>null,isBuyNowFrame:()=>compact,proxy,window:{WLCheckout:{validateBeforeFinalSubmit:()=>valid,preparePickupAvailability:()=>prepare(),pickupRequestKey:()=>pickupKey}},wizard:{querySelector:()=>null},clearInlineError(){},showInlineError(){},showStep(){},syncFulfillmentForNativeSubmit:()=>confirm(),syncNativeRequiredDate(){},clickNativeContinue(){posts++;return true;},native:{},document:{querySelector:()=>null,getElementById:()=>null}});
  const start=checkout.indexOf('          proxy.addEventListener("click", async function () {');
  vm.runInContext(checkout.slice(start,checkout.indexOf('          navDiv.appendChild(proxy);',start)),context);
- return {proxy,click:()=>handler(),posts:()=>posts,invalid(){valid=false},confirm(fn){confirm=fn},nativeReady(fn){context.awaitNativeDetails=fn}};
+ return {proxy,click:()=>handler(),posts:()=>posts,invalid(){valid=false},changePickup(){pickupKey='changed'},prepare(fn){prepare=fn},confirm(fn){confirm=fn},nativeReady(fn){context.awaitNativeDetails=fn}};
 }
 test('native proxy identifies validation and rate rejection before any postback and allows a corrected retry',async()=>{
  for(const reason of ['validation','fulfillment']) {
@@ -19,7 +19,20 @@ test('native proxy identifies validation and rate rejection before any postback 
 test('repeated Continue cannot duplicate an in-flight reservation or native postback',async()=>{
  const f=proxyFixture();let finish,checks=0;
  f.confirm(()=>{checks++;return new Promise(resolve=>{finish=resolve})});const pending=f.click();await f.click();
+ await new Promise(setImmediate);
  assert.equal(checks,1);assert.equal(f.posts(),0);finish(true);await pending;f.proxy.disabled=false;await f.click();assert.equal(f.posts(),1);
+});
+test('pickup preflight blocks changes and repeated clicks cannot bypass an in-flight inventory check',async()=>{
+ const f=proxyFixture();let finish,checks=0;
+ f.prepare(()=>{checks++;return new Promise(resolve=>{finish=resolve});});
+ const pending=f.click();await f.click();assert.equal(checks,1);assert.equal(f.posts(),0);
+ finish(false);await pending;assert.equal(f.proxy.dataset.wlContinueReason,'pickup-availability');assert.equal(f.posts(),0);
+ f.prepare(async()=>true);await f.click();assert.equal(f.posts(),1);
+});
+test('pickup date, plan or acknowledgement edits during fulfillment confirmation cannot post stale instructions',async()=>{
+ const f=proxyFixture();let finish;f.confirm(()=>new Promise(resolve=>{finish=resolve}));
+ const pending=f.click();await new Promise(setImmediate);f.changePickup();finish(true);await pending;
+ assert.equal(f.posts(),0);assert.equal(f.proxy.dataset.wlContinueReason,'native-updating');
 });
 test('compact checkout surfaces a pre-postback rejection immediately and keeps its native details reusable',async()=>{
  const source=fs.readFileSync(require.resolve('../BuyNowPilot'),'utf8');
