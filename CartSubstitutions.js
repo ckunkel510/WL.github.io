@@ -6,11 +6,28 @@
   else { root.WLCartSubstitutions = core; core.boot(root).catch(function () {}); }
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261112-substitutions-2';
+  var BUILD = '20261112-substitutions-3';
   var ORIGIN = 'https://webtrack.woodsonlumber.com';
   var API = 'https://wl-upsrates.vercel.app/api/cart-substitutions';
   var BASE = 'https://ckunkel510.github.io/WL.github.io/';
   function text(value) { return String(value || '').replace(/\s+/g, ' ').trim(); }
+  function imageUrl(value) {
+    try {
+      var url = new URL(String(value || ''));
+      return url.protocol === 'https:' && !url.username && !url.password && (!url.port || url.port === '443') && ['images-woodsonlumber.sirv.com', 'webtrack.woodsonlumber.com'].includes(url.hostname) ? url.href : '';
+    } catch (_) { return ''; }
+  }
+  function productPhoto(doc, replacement) {
+    var frame = doc.createElement('span'); frame.className = 'wl-sub-photo';
+    var fallback = doc.createElement('span'); fallback.textContent = 'Photo unavailable'; frame.appendChild(fallback);
+    var src = imageUrl(replacement.imageUrl);
+    if (src) {
+      var photo = doc.createElement('img'); photo.alt = replacement.title; photo.width = 112; photo.height = 112; photo.loading = 'lazy'; photo.decoding = 'async'; photo.referrerPolicy = 'no-referrer';
+      photo.onerror = function () { photo.remove(); fallback.hidden = false; };
+      fallback.hidden = true; photo.src = src; frame.appendChild(photo);
+    }
+    return frame;
+  }
   function money(value) {
     var match = text(value).match(/^\$\s*((?:\d+|\d{1,3}(?:,\d{3})+)\.\d{2})(?:\s+(?:ea|each|pc|pcs|board|boards))?$/i);
     return match ? Math.round(Number(match[1].replace(/,/g, '')) * 100) : null;
@@ -201,6 +218,7 @@
     doc.documentElement.setAttribute('data-wl-substitutions-build', BUILD);
     var style = doc.createElement('style');
     style.textContent = '.wl-substitute-slot{padding:12px 0 0;clear:both}.wl-substitute-slot p{font-size:13px;margin:4px 0 8px}.wl-substitute-button,.wl-sub-dialog button{min-height:44px;padding:10px 14px;border:1px solid #916b75;border-radius:7px;background:white;color:#670020;font:inherit;cursor:pointer}.wl-sub-dialog{width:min(680px,calc(100% - 28px));max-height:calc(100dvh - 32px);box-sizing:border-box;padding:24px;border:1px solid #d8ced0;border-radius:14px;color:#303030;background:#fffdfb;overflow:auto}.wl-sub-dialog::backdrop{background:#20111699}.wl-sub-dialog h2{font-size:24px;color:#670020;margin:0 0 10px}.wl-sub-dialog h3{font-size:18px;margin:0 0 8px}.wl-sub-dialog p{line-height:1.5;overflow-wrap:anywhere}.wl-sub-dialog fieldset{border:1px solid #e3dadd;border-radius:8px;margin:16px 0;padding:12px}.wl-sub-dialog legend{font-size:16px;font-weight:600}.wl-sub-dialog label{display:flex;gap:10px;align-items:flex-start;margin:8px 0;padding:8px 0;line-height:1.5}.wl-sub-dialog input{width:18px;height:18px;flex:none;accent-color:#670020;margin-top:3px}.wl-sub-option{border-top:1px solid #e3dadd;padding:16px 0}.wl-sub-option small{display:block;line-height:1.5}.wl-sub-footer{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:18px}.wl-sub-dialog .wl-sub-apply{background:#670020;color:white}.wl-sub-dialog button:disabled{opacity:.6;cursor:default}.wl-sub-dialog a{color:#670020;text-decoration:underline}.wl-sub-notice{background:#f6f1e9;border-radius:8px;padding:12px}.wl-sub-error{color:#981c32}.wl-sub-dialog [hidden]{display:none!important}@media(max-width:480px){.wl-sub-dialog{padding:18px}.wl-sub-footer button{width:100%}}';
+    style.textContent += '.wl-sub-list{display:grid;gap:12px}.wl-sub-option{border:1px solid #e3dadd;border-radius:12px;padding:14px;background:white;min-width:0}.wl-sub-option:has(input:checked){border-color:#670020;box-shadow:0 0 0 1px #670020}.wl-sub-dialog .wl-sub-choice{display:grid;grid-template-columns:18px 112px minmax(0,1fr);gap:12px;align-items:center;margin:0;padding:0;cursor:pointer}.wl-sub-copy{display:flex;flex-direction:column;gap:4px;min-width:0;overflow-wrap:anywhere}.wl-sub-photo{display:grid;place-items:center;width:112px;height:112px;box-sizing:border-box;background:white;border-radius:8px;overflow:hidden}.wl-sub-photo img{display:block;width:100%;height:100%;object-fit:contain}.wl-sub-photo>span{font-size:12px;line-height:1.4;text-align:center;color:#687078;background:#f3f1ee;padding:8px;box-sizing:border-box;width:100%;height:100%;display:grid;place-items:center}.wl-sub-difference{font-size:13px;color:#5b5054}.wl-sub-price{font-weight:600}.wl-sub-delta{font-size:13px}.wl-sub-stock{margin-top:10px;font-size:13px}.wl-sub-transfer{display:inline-block;margin-top:4px;padding:2px 7px;background:#fff0d8;border-radius:5px;color:#704a12;font-size:12px}.wl-sub-details{margin-top:4px;font-size:13px}.wl-sub-details summary{cursor:pointer;color:#670020;min-height:44px;display:list-item;align-content:center;line-height:1.4}.wl-sub-details p{margin:8px 0}.wl-sub-details a{display:inline-block;min-height:44px;align-content:center}.wl-sub-checkout-note{font-size:13px;color:#665d60;margin:12px 0 0}@media(max-width:480px){.wl-sub-option{padding:12px}.wl-sub-dialog .wl-sub-choice{grid-template-columns:18px 84px minmax(0,1fr);gap:8px}.wl-sub-photo{width:84px;height:100px}.wl-sub-copy strong{font-size:14px;line-height:1.35}.wl-sub-price{font-size:15px}}';
     doc.head.appendChild(style);
     function el(tag, label, className) { var node = doc.createElement(tag); if (label) node.textContent = label; if (className) node.className = className; return node; }
     function dollars(cents) { return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100); }
@@ -218,7 +236,7 @@
       var header = el('div', '', 'wl-sub-header'), closeTop = el('button', '×'); closeTop.type = 'button'; closeTop.setAttribute('aria-label', 'Keep original items and close substitutes');
       header.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:0;background:#fffdfb;z-index:2';
       header.append(title, closeTop);
-      var intro = el('p', 'Keep your original items, or choose an alternative. Checkout will show fulfillment options and timing. Nothing changes until you apply a choice.');
+      var intro = el('p', 'Choose a replacement, or keep your items. Nothing changes until you apply.');
       var content = el('div'), status = el('p', 'Checking compatible alternatives and your store’s stock…'); status.setAttribute('role', 'status');
       var keep = el('button', 'Keep original items'); keep.type = 'button'; keep.onclick = function () { close(); opener.focus(); };
       var footer = el('div', '', 'wl-sub-footer'); footer.appendChild(keep);
@@ -241,10 +259,10 @@
           var label = el('label'), input = doc.createElement('input'); input.type = 'radio'; input.name = 'wl-sub-scope'; input.value = part[0]; input.checked = part[0] === 'shortage'; label.append(input, el('span', part[1])); fieldset.appendChild(label);
         });
         content.appendChild(fieldset);
-        var list = el('div'); content.appendChild(list);
+        var list = el('div', '', 'wl-sub-list'); content.appendChild(list);
         var selected = null, selectedQuote = null, ack = doc.createElement('input'); ack.type = 'checkbox';
         var ackLabel = el('label'); ackLabel.append(ack, el('span', 'I have reviewed the product differences and want to use this replacement.')); ackLabel.hidden = true; content.appendChild(ackLabel);
-        var priceNote = el('p', 'These are your current unit prices. Quantity pricing and tax are recalculated in your cart.'); content.appendChild(priceNote);
+        var priceNote = el('p', 'Pickup/delivery options, timing and final pricing are shown at checkout.', 'wl-sub-checkout-note'); content.appendChild(priceNote);
         var apply = el('button', 'Apply selected substitute', 'wl-sub-apply'); apply.type = 'button'; apply.disabled = true; footer.appendChild(apply);
         function scope() { return fieldset.querySelector('input:checked').value; }
         function update() { apply.disabled = !selectedQuote || !ack.checked || applying; }
@@ -264,12 +282,15 @@
           if (dead || dialog !== view || generation !== epoch) return;
           list.replaceChildren();
           results.filter(Boolean).slice(0, 3).forEach(function (row) {
-            var card = el('div', '', 'wl-sub-option'), chooseLabel = el('label'), radio = doc.createElement('input'); radio.type = 'radio'; radio.name = 'wl-sub-product';
-            chooseLabel.append(radio, el('strong', row.replacement.title)); card.appendChild(chooseLabel);
-            card.append(el('p', row.replacement.reason), el('p', row.replacement.differences));
-            card.append(el('small', stockLabel(row.quote)));
-            card.append(el('p', dollars(row.quote.price) + ' each · replace ' + row.quote.quantity + ' · estimated merchandise change ' + (row.quote.delta >= 0 ? '+' : '−') + dollars(Math.abs(row.quote.delta))));
-            var details = el('a', 'View product details'); details.href = (options.preview ? ORIGIN : '') + '/ProductDetail.aspx?pid=' + row.replacement.productId; details.target = '_blank'; details.rel = 'noopener'; card.appendChild(details);
+            var card = el('div', '', 'wl-sub-option'), chooseLabel = el('label', '', 'wl-sub-choice'), radio = doc.createElement('input'); radio.type = 'radio'; radio.name = 'wl-sub-product'; radio.setAttribute('aria-label', row.replacement.title);
+            var copy = el('span', '', 'wl-sub-copy');
+            copy.append(el('strong', row.replacement.title), el('span', row.replacement.differenceSummary || row.replacement.differences, 'wl-sub-difference'), el('span', dollars(row.quote.price) + ' each', 'wl-sub-price'), el('span', 'Replace ' + row.quote.quantity + ' · ' + (row.quote.delta >= 0 ? '+' : '−') + dollars(Math.abs(row.quote.delta)) + ' estimate', 'wl-sub-delta'));
+            chooseLabel.append(radio, productPhoto(doc, row.replacement), copy); card.appendChild(chooseLabel);
+            card.appendChild(el('small', row.quote.available + ' at ' + row.quote.baseline.store + ' · ' + row.quote.companyAvailable + ' companywide', 'wl-sub-stock'));
+            if (row.quote.transfer) card.appendChild(el('span', 'Stock from another store needed', 'wl-sub-transfer'));
+            var detailsMore = el('details', '', 'wl-sub-details'), summary = el('summary', 'Details'); summary.setAttribute('aria-label', 'Compare details for ' + row.replacement.title);
+            detailsMore.append(summary, el('p', row.replacement.reason), el('p', row.replacement.differences));
+            var details = el('a', 'View product details'); details.href = (options.preview ? ORIGIN : '') + '/ProductDetail.aspx?pid=' + row.replacement.productId; details.target = '_blank'; details.rel = 'noopener'; detailsMore.appendChild(details); card.appendChild(detailsMore);
             radio.onchange = function () { selected = row.replacement; selectedQuote = row.quote; ack.checked = false; ackLabel.hidden = false; update(); };
             list.appendChild(card);
           });
@@ -330,5 +351,5 @@
     await scan();
     return { open: open, scan: scan, adapter: io, close: close };
   }
-  return { build: BUILD, money: money, unit: unit, targetOf: targetOf, signature: signature, expectedCart: expectedCart, cartFromDocument: cartFromDocument, productFromDocument: productFromDocument, formPost: formPost, setQuantity: setQuantity, adapter: adapter, companyStock: companyStock, stockLabel: stockLabel, prepare: prepare, swap: swap, eligibleNative: eligibleNative, boot: boot };
+  return { build: BUILD, imageUrl: imageUrl, productPhoto: productPhoto, money: money, unit: unit, targetOf: targetOf, signature: signature, expectedCart: expectedCart, cartFromDocument: cartFromDocument, productFromDocument: productFromDocument, formPost: formPost, setQuantity: setQuantity, adapter: adapter, companyStock: companyStock, stockLabel: stockLabel, prepare: prepare, swap: swap, eligibleNative: eligibleNative, boot: boot };
 });

@@ -771,7 +771,7 @@ $(async function(){
       document.querySelector('a[href*="SignOut=1" i]') && !document.getElementById('wl-cart-substitutions-script')) {
     var substitutions = document.createElement('script');
     substitutions.id = 'wl-cart-substitutions-script'; substitutions.async = true;
-    substitutions.src = 'https://ckunkel510.github.io/WL.github.io/CartSubstitutions.js?v=20261112-substitutions-2';
+    substitutions.src = 'https://ckunkel510.github.io/WL.github.io/CartSubstitutions.js?v=20261112-substitutions-3';
     document.head.appendChild(substitutions);
   }
   wlEpalletMaybeReturnToCheckout(wlEpalletRows());
