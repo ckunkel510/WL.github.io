@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20261112-pickup-handoff-15";
+  window.WL_CHECKOUT_BUILD = "20261112-pickup-handoff-16";
   document.documentElement?.setAttribute?.('data-wl-checkout-build',window.WL_CHECKOUT_BUILD);
   const pickupAssetBase = new URL('.', document.currentScript?.src || 'https://ckunkel510.github.io/WL.github.io/Checkout2.js').href;
   let pickupAvailabilityLoad;
@@ -24,15 +24,26 @@
     return pickupAvailabilityLoad;
   }
 
-  function submittedPickupStockInstructions(doc, instructions) {
-    if (!doc.getElementById('ctl00_PageBody_SaleTypeSelector_rbCollectLater')?.checked || !/^PICKUP REQUEST at /.test(instructions || '')) return '';
-    const modal = doc.getElementById('stockModal');
-    if (!modal?.querySelector('#ctl00_PageBody_YesButton')) return '';
-    if (!modal.classList.contains('show') && !modal.classList.contains('wl-auto-bypass') && modal.getAttribute('aria-modal') !== 'true') return '';
-    // WebTrack rebuilds details while confirming a real shortage. Its posted
-    // native notes are already validated; the fresh async panel must not replace
-    // them before the existing clearance-aware confirmation posts Yes.
-    return Array.from(modal.querySelectorAll('table tr')).some(row => row.querySelectorAll('td').length >= 3) ? instructions : '';
+  function pickupStockInstructionKeeper(doc, field) {
+    function target() { return doc.getElementById('ctl00_PageBody_SpecialInstructionsTextBox') || field; }
+    function current() {
+      const value = target().value;
+      return doc.getElementById('ctl00_PageBody_SaleTypeSelector_rbCollectLater')?.checked && /^PICKUP REQUEST at /.test(value || '') ? value : '';
+    }
+    // Keep the server-returned request before the async date UI initializes.
+    // Capture again for same-document WebForms updates at deliberate Continue.
+    let submitted = current(), confirming = false;
+    function restore() {
+      if (!submitted || !doc.getElementById('ctl00_PageBody_SaleTypeSelector_rbCollectLater')?.checked) return false;
+      confirming = true;
+      target().value = submitted;
+      return true;
+    }
+    return {
+      capture: function () { submitted = current(); confirming = false; },
+      restore: restore,
+      protect: function () { return confirming && restore(); }
+    };
   }
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
@@ -2224,6 +2235,7 @@ const navDiv = document.createElement("div");
             syncNativeRequiredDate();
 
             // Trigger native submit/postback
+            if (!isBuyNowFrame()) window.WLCheckout?.capturePickupStockInstructions?.();
             proxy.dataset.wlContinueState = "posting";
             if (!isBuyNowFrame()) {
               proxy.textContent = "Loading shipping & payment…";
@@ -3221,6 +3233,7 @@ document.addEventListener("click", function (ev) {
 
       const specialIns = document.getElementById("ctl00_PageBody_SpecialInstructionsTextBox");
       if (!specialIns) return;
+      const pickupStockInstructions = isBuyNowFrame() ? null : pickupStockInstructionKeeper(document, specialIns);
 
       const siWrap =
         specialIns.closest(".epi-form-group-checkout") ||
@@ -3676,7 +3689,7 @@ document.addEventListener("click", function (ev) {
       }
 
       function updateSpecial() {
-        if (!isBuyNowFrame() && submittedPickupStockInstructions(document, specialIns.value)) return;
+        if (pickupStockInstructions?.protect()) return;
         let baseText = "";
 
         if (rbPick && rbPick.checked) {
@@ -3824,6 +3837,8 @@ document.addEventListener("click", function (ev) {
         return !!availability && availability.prepare();
       };
       window.WLCheckout.pickupRequestKey = function () { return getPickupSelected() ? pickupAvailability?.requestKey() || 'unverified' : ''; };
+      window.WLCheckout.capturePickupStockInstructions = function () { pickupStockInstructions?.capture(); };
+      window.WLCheckout.restorePickupStockInstructions = function () { return pickupStockInstructions?.restore() || false; };
 
 
       // Client validation on Continue buttons
@@ -4887,6 +4902,8 @@ document.addEventListener("click", function (ev) {
 
         stockProceeding = true;
         stockLastTriggerAt = Date.now();
+        // Restore at the actual confirmation boundary, after all async UI work.
+        if (!isBuyNowFrame()) window.WLCheckout?.restorePickupStockInstructions?.();
 
         try {
           yes.setAttribute('data-wl-autoclicked', '1');
