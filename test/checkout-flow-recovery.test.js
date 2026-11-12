@@ -57,9 +57,16 @@ function load(file, env, exports = "") {
   if (file === 'UpsShippingOffer.js') {
     const originalFetch = env.context.fetch;
     env.context.fetch = (url, options) => url === '/AccountSettings.aspx'
-      ? Promise.resolve({ ok: true, text: async () => env.carrierBranch || 'Caldwell' })
+      ? (() => {
+        env.settingsReads = (env.settingsReads || 0) + 1;
+        return Promise.resolve({ ok: env.settingsAvailable !== false, text: async () => env.carrierBranch || 'Caldwell' });
+      })()
       : originalFetch(url, options);
-    env.context.DOMParser = class { parseFromString(label) { return { getElementById: () => ({ options: [{ textContent: label }], selectedIndex: 0 }) }; } };
+    env.context.DOMParser = class { parseFromString(label) { return { getElementById: id => {
+      if (id === 'ctl00_PageBody_ChangeUserDetailsControl_ddBranch') return env.carrierBranch === null ? null : { options: [{ textContent: label }], selectedIndex: 0 };
+      if (id === 'ctl00_EmployeeStatusBar_LogonBarPanel') return env.settingsEmployee ? {} : null;
+      return null;
+    } }; } };
   }
   const source = fs.readFileSync(path.join(__dirname, "..", file), "utf8");
   vm.runInContext(source.replace(/\}\)\(\);\s*$/, `${exports}\n})();`), env.context, { filename: file });
@@ -493,6 +500,110 @@ test('native quoting separates the sign-in carrier branch from the operational b
     await env.context.WLShippingOffer.select('ship');
     assert.equal(requests[1].carrierOrigin.postalCode,carrierPostal);
   }
+});
+
+function employeeQuoteEnvironment(options = {}) {
+  const env = environment();
+  env.document.documentElement = { dataset: {}, setAttribute(key, value) { this[key] = value; } };
+  env.carrierBranch = options.accountBranch ?? null;
+  env.settingsEmployee = options.settingsEmployee !== false;
+  env.settingsAvailable = options.settingsAvailable !== false;
+  if (options.employee !== false) env.element('ctl00_EmployeeStatusBar_LogonBarPanel');
+  const branch = env.element('ctl00_PageBody_BranchDropDownList');
+  branch.options = [{ textContent: options.branchLabel || 'Caldwell - 702 W Buck St, Caldwell, Texas, 77836, United States' }];
+  branch.selectedIndex = 0;
+  env.element('ctl00_PageBody_DeliveryAddress_Postcode').value = '39180';
+  env.storage.set('wl_shipping_offer_cart_v1', JSON.stringify({
+    items: [['65337', 4], ['53032', 2], ['64069', 1], ['27863', 2], ['25586', 3]]
+      .map(([productCode, quantity]) => ({ productCode, quantity })),
+    origin: { postalCode: '77833' }, ts: Date.now()
+  }));
+  env.requests = [];
+  env.context.fetch = async (url, options) => {
+    const body = JSON.parse(options.body); env.requests.push(body);
+    return { ok: true, json: async () => ({ ok: true, recommendation: { mode: 'ship' },
+      options: { ups: { available: true, amount: 13.03 } }, packageProfile: { totalWeight: 5.4 } }) };
+  };
+  load('UpsShippingOffer.js', env);
+  return env;
+}
+
+test('employee-manager password-only settings quote the existing cart using the explicit native branch', async () => {
+  const env = employeeQuoteEnvironment();
+  await env.context.WLShippingOffer.refresh();
+  assert.equal(env.requests.length, 1);
+  assert.equal(env.requests[0].carrierOrigin.postalCode, '77836');
+  assert.equal(env.requests[0].shipTo.postalCode, '39180');
+  assert.deepEqual(env.requests[0].cart.map(item => [item.productCode, item.quantity]),
+    [['65337', 4], ['53032', 2], ['64069', 1], ['27863', 2], ['25586', 3]]);
+  assert.equal(env.document.documentElement['data-wl-shipping-quote-state'], 'ready');
+  await env.context.WLShippingOffer.select('ship');
+  assert.equal(env.requests[1].carrierOrigin.postalCode, '77836');
+});
+
+test('staff fallback recognizes only matching native Woodson store names and postal codes', async () => {
+  for (const [name, postal] of [['Brenham', '77833'], ['Bryan', '77803'], ['Bryan', '77801'],
+    ['Caldwell', '77836'], ['Lexington', '78947'], ['Buffalo', '75831'], ['Mexia', '76667'], ['Groesbeck', '76642']]) {
+    const env = employeeQuoteEnvironment({ branchLabel: `${name} - Store address, Texas, ${postal}, United States` });
+    await env.context.WLShippingOffer.refresh();
+    assert.equal(env.requests[0].carrierOrigin.postalCode, postal);
+  }
+});
+
+test('staff fallback rereads the selected branch instead of caching a previous or browsing branch', async () => {
+  const env = employeeQuoteEnvironment();
+  await env.context.WLShippingOffer.refresh();
+  env.elements.get('ctl00_PageBody_BranchDropDownList').options[0].textContent = 'Groesbeck - Store address, Texas, 76642, United States';
+  assert.equal(env.context.WLShippingOffer.current(), null);
+  await env.context.WLShippingOffer.refresh();
+  assert.deepEqual(env.requests.map(request => request.carrierOrigin.postalCode), ['77836', '76642']);
+  assert.equal(env.settingsReads, 1);
+});
+
+test('missing customer or guest settings never use the staff branch fallback', async () => {
+  for (const options of [{ employee: false }, { settingsEmployee: false }, { settingsAvailable: false }]) {
+    const env = employeeQuoteEnvironment(options);
+    assert.equal(await env.context.WLShippingOffer.refresh(), null);
+    assert.equal(env.requests.length, 0);
+    assert.equal(env.document.documentElement['data-wl-shipping-quote-state'], 'context_missing');
+  }
+});
+
+test('a known account carrier branch remains authoritative for customer, guest and staff pages', async () => {
+  for (const employee of [false, true]) {
+    const env = employeeQuoteEnvironment({ accountBranch: 'Brenham', employee,
+      branchLabel: 'Groesbeck - Store address, Texas, 76642, United States' });
+    await env.context.WLShippingOffer.refresh();
+    assert.equal(env.requests[0].shipFrom.postalCode, '76642');
+    assert.equal(env.requests[0].carrierOrigin.postalCode, '77833');
+  }
+});
+
+test('staff shipping fails closed without a valid explicit native branch', async () => {
+  for (const label of ['Unknown - Store address, 77836, United States',
+    'Caldwell - Store address, 76642, United States', 'Caldwell', 'Choose a store']) {
+    const env = employeeQuoteEnvironment({ branchLabel: label });
+    assert.equal(await env.context.WLShippingOffer.refresh(), null);
+    assert.equal(env.requests.length, 0);
+  }
+  const env = employeeQuoteEnvironment();
+  env.elements.delete('ctl00_PageBody_BranchDropDownList');
+  assert.equal(await env.context.WLShippingOffer.refresh(), null);
+  assert.equal(env.requests.length, 0);
+});
+
+test('staff quote completing after a native branch change is discarded', async () => {
+  const env = employeeQuoteEnvironment();
+  let finish;
+  env.context.fetch = (url, options) => url === '/AccountSettings.aspx'
+    ? Promise.resolve({ ok: true, text: async () => '' })
+    : new Promise(resolve => { finish = resolve; });
+  const pending = env.context.WLShippingOffer.refresh();
+  while (!finish) await Promise.resolve();
+  env.elements.get('ctl00_PageBody_BranchDropDownList').options[0].textContent = 'Groesbeck - Store address, Texas, 76642, United States';
+  finish({ ok: true, json: async () => ({ options: { ups: { available: true, amount: 13.03 } } }) });
+  assert.equal(await pending, null);
+  assert.equal(env.storage.has('wl_shipping_offer_v1'), false);
 });
 
 test('a postal-only response finishing after checkout address hydration is discarded', async () => {

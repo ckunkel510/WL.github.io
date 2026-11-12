@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var BUILD_VERSION = "20261106-native-summary-quotes-9";
+  var BUILD_VERSION = "20261112-employee-carrier-1";
   var RATE_URL = "https://wl-upsrates.vercel.app/api/fulfillment-quote";
   var APPROVAL_URL = "https://wl-upsrates.vercel.app/api/customization-approval";
   var CUT_POLICY_URL = "https://ckunkel510.github.io/WL.github.io/data/cut-to-ship-products.json?v=20260917-2";
@@ -23,7 +23,7 @@
   var MISSING_CONTEXT_MAX_RETRIES = 10;
   var cutPolicyPromise = null;
   var webTrackUserIdPromise = null;
-  var carrierOriginPromise = null;
+  var carrierSettingsPromise = null;
   var quoteState = 'idle';
   function setQuoteState(value) {
     quoteState = value;
@@ -374,6 +374,21 @@
     return key ? Object.assign({}, STORE_ORIGINS[key]) : null;
   }
 
+  function employeeCheckoutOrigin() {
+    if (!document.getElementById('ctl00_EmployeeStatusBar_LogonBarPanel')) return null;
+    var branch = document.getElementById('ctl00_PageBody_BranchDropDownList');
+    var selected = branch && branch.options && branch.options[branch.selectedIndex];
+    var label = text(selected && selected.textContent);
+    var key = Object.keys(STORE_ORIGINS).find(function (name) {
+      return label.toLowerCase().indexOf(name + ' -') === 0;
+    });
+    var postal = label.match(/\b(\d{5})(?:-\d{4})?\s*,?\s*(?:United States|USA|US)?\s*$/i);
+    if (!key || !postal) return null;
+    var origin = STORE_ORIGINS[key];
+    if (postal[1] !== origin.postalCode && !(key === 'bryan' && postal[1] === '77801')) return null;
+    return Object.assign({}, origin, { postalCode: postal[1] });
+  }
+
   function shippingRequest(url, options, read) {
     var controller = typeof AbortController === 'function' ? new AbortController() : null;
     var timer;
@@ -396,14 +411,27 @@
   }
 
   function accountCarrierOrigin() {
-    if (!carrierOriginPromise) {
-      carrierOriginPromise = shippingRequest('/AccountSettings.aspx', { credentials: 'same-origin', cache: 'no-store' },
+    if (!carrierSettingsPromise) {
+      carrierSettingsPromise = shippingRequest('/AccountSettings.aspx', { credentials: 'same-origin', cache: 'no-store' },
         function (response) { if (!response.ok) throw new Error('Account branch unavailable.'); return response.text(); })
-        .then(function (html) { return carrierOriginFromSettings(new DOMParser().parseFromString(html, 'text/html')); })
+        .then(function (html) {
+          var page = new DOMParser().parseFromString(html, 'text/html');
+          var origin = carrierOriginFromSettings(page);
+          if (origin) return { origin: origin };
+          // Staff settings contain password controls, without the customer
+          // branch dropdown. Require staff markers in both authenticated pages.
+          if (page.getElementById('ctl00_EmployeeStatusBar_LogonBarPanel') &&
+              document.getElementById('ctl00_EmployeeStatusBar_LogonBarPanel')) return { employee: true };
+          return null;
+        })
         .catch(function () { return null; })
-        .then(function (origin) { if (!origin) carrierOriginPromise = null; return origin; });
+        .then(function (settings) { if (!settings) carrierSettingsPromise = null; return settings; });
     }
-    return carrierOriginPromise;
+    return carrierSettingsPromise.then(function (settings) {
+      // Read the native selection on every quote; a staff branch change must
+      // never reuse the previous branch or a browsing/default store.
+      return settings && (settings.origin || (settings.employee ? employeeCheckoutOrigin() : null));
+    });
   }
 
   function checkoutZip() {
