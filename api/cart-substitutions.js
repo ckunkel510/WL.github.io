@@ -23,6 +23,17 @@ function send(res, status, value) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.end(JSON.stringify(value));
 }
+function presentation(source, row, registry) {
+  let differenceSummary = row.match.differences;
+  if (row.match.kind === 'reviewed_family') {
+    const index = rules.familyIndex(registry), from = index.get(String(source.productId)), to = index.get(String(row.product.productId));
+    if (from && to) differenceSummary = `${from.member.variant} → ${to.member.variant}`;
+  } else if (row.match.kind === 'longer_lumber') {
+    const from = rules.lumber(source), to = rules.lumber(row.product);
+    if (from && to) differenceSummary = `${to.length} ft instead of ${from.length} ft`;
+  }
+  return { imageUrl: String(row.product.imageUrl || '').slice(0, 500), differenceSummary };
+}
 function createHandler(deps = {}) {
   return async function handler(req, res) {
     const origin = String(req.headers.origin || '');
@@ -44,11 +55,13 @@ function createHandler(deps = {}) {
         const source = catalog.products.find(p => p.productId === pid);
         if (!source) return send(res, 200, { success: true, source: null, suggestions: [] });
         const counts = await history.counts(pid).catch(() => ({}));
-        const matches = blocked.has(pid) ? [] : rules.candidates(catalog.products.filter(p => !blocked.has(p.productId)), pid, approved, counts, deps.families || families);
+        const registry = deps.families || families;
+        const matches = blocked.has(pid) ? [] : rules.candidates(catalog.products.filter(p => !blocked.has(p.productId)), pid, approved, counts, registry);
         const suggestions = await Promise.all(matches.map(async row => ({
           productId: row.product.productId, title: row.product.title, category: row.product.category, brand: row.product.brand,
           productCode: row.product.productCode, reason: row.match.reason, differences: row.match.differences,
           kind: row.match.kind, rule: row.match.rule,
+          ...presentation(source, row, registry),
           receipt: await history.offer(pid, row.product.productId, row.match.rule).catch(() => null)
         })));
         return send(res, 200, { success: true, version: rules.version, source: { productId: pid, title: source.title, category: source.category, brand: source.brand }, suggestions });
@@ -71,4 +84,4 @@ function createHandler(deps = {}) {
   };
 }
 module.exports = createHandler();
-module.exports._test = { createHandler, reset: () => buckets.clear() };
+module.exports._test = { createHandler, presentation, reset: () => buckets.clear() };

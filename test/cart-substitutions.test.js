@@ -286,3 +286,21 @@ test('maintenance discovery groups unreviewed color families for human review an
   assert.deepEqual(audit.readCatalog(csv), [{ productId: '1', title: 'Example, White', brand: 'Example', category: 'Bottles' }]);
   assert.throws(() => audit.readCatalog('id,title\n1,Example\n'), /Merchant CSV needs/);
 });
+test('product photos use existing HTTPS image hosts and reject executable, credentialed or foreign URLs', () => {
+  for (const value of ['https://images-woodsonlumber.sirv.com/merchant-feed/products/282954/main.jpg', 'https://webtrack.woodsonlumber.com/Images/Product.jpg']) assert.equal(core.imageUrl(value), value);
+  for (const value of ['', 'javascript:alert(1)', 'data:image/svg+xml,<svg/>', 'http://images-woodsonlumber.sirv.com/photo.jpg', 'https://images-woodsonlumber.sirv.com.evil.example/photo.jpg', 'https://elsewhere.example/photo.jpg', 'https://user:password@images-woodsonlumber.sirv.com/photo.jpg', 'https://webtrack.woodsonlumber.com:8443/photo.jpg']) assert.equal(core.imageUrl(value), '');
+});
+test('suggestion photo and concise comparison metadata preserve eligibility when photos are absent', async () => {
+  endpoint.reset();
+  const products = familyProducts(), gray = products.find(p => p.productId === '282954'); gray.imageUrl = 'https://images-woodsonlumber.sirv.com/Products/282954.jpg';
+  const handler = endpoint.createHandler({ catalog: async () => ({ fresh: true, products }) });
+  const response = await request(handler, 'GET', { pid: '313359' }), option = response.data.suggestions.find(p => p.productId === gray.productId);
+  assert.equal(option.imageUrl, gray.imageUrl); assert.equal(option.differenceSummary, 'River Rock → Gray');
+  assert.match(option.differences, /Review the product details/);
+  delete gray.imageUrl;
+  const noImage = await request(handler, 'GET', { pid: '313359' });
+  assert.deepEqual(noImage.data.suggestions.map(p => p.productId), response.data.suggestions.map(p => p.productId));
+  assert.equal(noImage.data.suggestions.find(p => p.productId === gray.productId).imageUrl, '');
+  const lumber = endpoint.presentation(source, { product: replacement, match: rules.eligibility(source, replacement) }, []);
+  assert.equal(lumber.differenceSummary, '12 ft instead of 10 ft');
+});
