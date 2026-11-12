@@ -62,7 +62,7 @@
       var quantity = Number(row.querySelector('select.wl-qty-select')?.value || input?.value);
       if (!pid || !Number.isFinite(quantity) || quantity <= 0 || quantity > 999999) throw Error('Basket quantity unavailable');
       var code = text((row.querySelector('.portalGridLink,.cart-item-card h6 a') || links.find(function (el) { return text(el.textContent); }))?.textContent);
-      var name = text(row.querySelector('.description,.ProductDescription,.cart-item-card p.small')?.textContent || link.parentElement?.nextElementSibling?.textContent || code).slice(0, 180);
+      var name = text(row.querySelector('.description,.ProductDescription,.cart-item-card p.small,.row.pl-2.w-100 .col-12.col-sm-6 > div:nth-child(3) div')?.textContent || link.parentElement?.nextElementSibling?.textContent || code).slice(0, 180);
       var configured = Array.from(row.querySelectorAll('input[id$="_txtSpecialProductCode"],input[id$="_txtSpecialProductDescription"]')).some(function (field) { return text(field.value); });
       if (seen.has(pid)) { seen.get(pid).quantity += quantity; seen.get(pid).configured ||= configured; return; } // do not allocate the same stock twice
       var item = { pid: pid, code: code || pid, name: name || code || pid, quantity: quantity, configured: configured };
