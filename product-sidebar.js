@@ -561,6 +561,8 @@ $(document).ready(async function () {
         scrollbar-width: thin;
         box-sizing: border-box;
       }
+      .wl-pdp-recommendation-item { display: flex; flex: 0 0 calc((100% - 42px) / 4); min-width: 0; scroll-snap-align: start; }
+      .wl-pdp-recommendation-item > .wl-pdp-recommendation-card { width: 100%; flex: 1 1 auto; }
       .wl-pdp-recommendation-card {
         display: flex;
         flex: 0 0 calc((100% - 42px) / 4);
@@ -738,7 +740,7 @@ $(document).ready(async function () {
           grid-row: 1 / span 2;
         }
         #product-main { grid-column: 1 / -1; grid-row: 3; }
-        .wl-pdp-recommendation-card { flex-basis: calc((100% - 14px) / 2); }
+        .wl-pdp-recommendation-item { flex-basis: calc((100% - 14px) / 2); }
         #WTRelatedProducts .wl-related-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       }
       @media (max-width: 767px) {
@@ -774,8 +776,10 @@ $(document).ready(async function () {
           max-width: calc(100vw - 36px);
           margin-right: calc(50% - 50vw + 18px);
         }
-        .wl-pdp-recommendation-card {
+        .wl-pdp-recommendation-item {
           flex-basis: min(78vw, 285px);
+        }
+        .wl-pdp-recommendation-card {
           min-height: 325px;
         }
         .wl-pdp-recommendation-card__image,
@@ -1983,7 +1987,6 @@ $(document).ready(async function () {
       const $card = $("<a>", {
         class: "wl-pdp-recommendation-card",
         href: productUrl,
-        role: "listitem",
         "data-recommendation-index": index,
         "data-recommendation-product-id": String(item.productId),
         "data-recommendation-match": String(item.match || "same_category")
@@ -2021,7 +2024,7 @@ $(document).ready(async function () {
           ecommerce: { items: selectedItem }
         });
       });
-      $rail.append($card);
+      $("<div>", { class: "wl-pdp-recommendation-item", role: "listitem" }).append($card).appendTo($rail);
     });
     $section.append($rail);
     $slot.append($section);
