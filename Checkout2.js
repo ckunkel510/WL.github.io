@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20261112-pickup-14";
+  window.WL_CHECKOUT_BUILD = "20261112-pickup-handoff-15";
   document.documentElement?.setAttribute?.('data-wl-checkout-build',window.WL_CHECKOUT_BUILD);
   const pickupAssetBase = new URL('.', document.currentScript?.src || 'https://ckunkel510.github.io/WL.github.io/Checkout2.js').href;
   let pickupAvailabilityLoad;
@@ -22,6 +22,17 @@
       document.head.appendChild(script);
     });
     return pickupAvailabilityLoad;
+  }
+
+  function submittedPickupStockInstructions(doc, instructions) {
+    if (!doc.getElementById('ctl00_PageBody_SaleTypeSelector_rbCollectLater')?.checked || !/^PICKUP REQUEST at /.test(instructions || '')) return '';
+    const modal = doc.getElementById('stockModal');
+    if (!modal?.querySelector('#ctl00_PageBody_YesButton')) return '';
+    if (!modal.classList.contains('show') && !modal.classList.contains('wl-auto-bypass') && modal.getAttribute('aria-modal') !== 'true') return '';
+    // WebTrack rebuilds details while confirming a real shortage. Its posted
+    // native notes are already validated; the fresh async panel must not replace
+    // them before the existing clearance-aware confirmation posts Yes.
+    return Array.from(modal.querySelectorAll('table tr')).some(row => row.querySelectorAll('td').length >= 3) ? instructions : '';
   }
 
   // WebTrack now receives native UPS XML rates through the OAuth compatibility bridge.
@@ -3665,6 +3676,7 @@ document.addEventListener("click", function (ev) {
       }
 
       function updateSpecial() {
+        if (!isBuyNowFrame() && submittedPickupStockInstructions(document, specialIns.value)) return;
         let baseText = "";
 
         if (rbPick && rbPick.checked) {
