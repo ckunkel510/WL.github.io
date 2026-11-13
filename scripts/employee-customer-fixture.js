@@ -34,6 +34,7 @@
     var nativeBefore=fixture.nativeCalls;native.click();check('Change Customer runs its original handler exactly once',fixture.nativeCalls===nativeBefore+1&&drawer().hidden);
     setCustomer(false);await frames();fixture.mismatch=true;await open();check('a mismatched server customer fails closed',drawer().dataset.state==='unavailable'&&!drawer().textContent.includes('$1,240.80'));fixture.mismatch=false;WLStaffCustomerPanel.close();
     calls=fixture.calls;panel.remove();await frames();check('customer-only sessions have no chip or account request',!toggle()&&fixture.calls===calls);slot.appendChild(panel);await frames();check('native employee controls recover after a panel replacement',!!toggle()&&document.getElementById(native.id)===native);
+    await open();window.dispatchEvent(new PageTransitionEvent('pagehide',{persisted:true}));check('page caching closes and clears the customer drawer',drawer().hidden&&!drawer().querySelector('.wl-staff-customer-content').children.length);window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true}));setCustomer(true);await frames();check('restored pages resume customer-context synchronization',toggle().textContent.includes('Demo Cash Customer'));setCustomer(false);await frames();
     check('no uncaught browser errors occur',errors.length===0);
     document.getElementById('customer-check-summary').textContent=passed+' passed · '+failed+' failed at '+innerWidth+' × '+innerHeight;document.documentElement.dataset.customerChecks=failed?'fail':'pass';this.disabled=false;
   });

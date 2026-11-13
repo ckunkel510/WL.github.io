@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  window.WL_HEADER_BUILD = "20261113-layout-polish-1";
+  window.WL_HEADER_BUILD = "20261113-customer-drawer-1";
 
   var LOG = "[WL HeaderEnhancer]";
   var DEBUG = false; // Set to true only when actively troubleshooting.
@@ -16,6 +16,7 @@
   var ACCESSIBILITY_URL = "https://ckunkel510.github.io/WL.github.io/Accessibility.js?v=20261112-2";
   var ADDRESS_MANAGER_URL = "https://ckunkel510.github.io/WL.github.io/AddressManagement.js?v=20260707-2";
   var CONTACT_MANAGER_URL = "https://ckunkel510.github.io/WL.github.io/ContactManagement.js?v=20260707-3";
+  var EMPLOYEE_CUSTOMER_URL = "https://ckunkel510.github.io/WL.github.io/EmployeeCustomerPanel.js?v=20261113-customer-drawer-1";
   var TAWK_COMMERCE_ASSIST_URL = "https://ckunkel510.github.io/WL.github.io/wl-chat.js?v=20260924-1";
   var QUAGGA_URL = "https://unpkg.com/quagga@0.12.1/dist/quagga.min.js";
   var DEPARTMENT_CACHE_KEY = "wl_header_departments_v1";
@@ -188,6 +189,17 @@
     script.src = CONTACT_MANAGER_URL;
     script.async = true;
     script.setAttribute("data-wl-contact-manager", "true");
+    document.head.appendChild(script);
+  }
+
+  function loadEmployeeCustomerPanel() {
+    if (window.top !== window || window.location.origin !== WEBTRACK ||
+        !document.getElementById('ctl00_EmployeeStatusBar_LogonBarPanel') ||
+        window.WLStaffCustomerPanel || document.querySelector('script[data-wl-employee-customer]')) return;
+    var script = document.createElement('script');
+    script.src = EMPLOYEE_CUSTOMER_URL;
+    script.async = true;
+    script.setAttribute('data-wl-employee-customer', 'true');
     document.head.appendChild(script);
   }
 
@@ -3727,6 +3739,7 @@
   function run() {
     var changed = false;
 
+    loadEmployeeCustomerPanel();
     changed = injectStyles() || changed;
     changed = normalizeHeaderContainers() || changed;
     changed = createFallbackCommerceRow() || changed;

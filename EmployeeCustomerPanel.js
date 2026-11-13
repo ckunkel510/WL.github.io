@@ -1,4 +1,4 @@
-/* Employee-only customer drawer. Workshop candidate; not loaded by the live header. */
+/* Employee-only customer drawer; preserves WebTrack's native customer picker. */
 (function (root, factory) {
   'use strict';
   var core = factory();
@@ -89,6 +89,7 @@
   function boot(win) {
     if (!win || win.top !== win || win.WLStaffCustomerPanel) return;
     var doc = win.document, active = null, scheduled = false;
+    doc.documentElement.dataset.wlStaffCustomerBuild = '20261113-customer-drawer-1';
     function mount(panel) {
       var native = panel.querySelector('#' + CHANGE), source = nativeLabel(panel);
       if (!native || !source) return null;
@@ -102,7 +103,7 @@
       drawer.innerHTML = '<header class="wl-staff-customer-head"><div><small>Employee customer view</small><h2 id="wl-staff-customer-title">Customer details</h2><div class="wl-staff-customer-code"></div></div><button type="button" class="wl-staff-customer-close" aria-label="Close customer details">×</button></header><div class="wl-staff-customer-content" aria-live="polite"></div><footer class="wl-staff-customer-foot"><button type="button" class="wl-staff-customer-refresh">Refresh</button><small>Details refresh when opened. Changing customer uses WebTrack.</small></footer>';
       var content = drawer.querySelector('.wl-staff-customer-content'), footer = drawer.querySelector('footer'), closeButton = drawer.querySelector('.wl-staff-customer-close');
       footer.insertBefore(native, footer.firstChild);
-      (doc.getElementById('aspnetForm') || doc.body).append(backdrop, drawer);
+      (native.closest('form') || doc.getElementById('aspnetForm') || doc.body).append(backdrop, drawer);
       source.classList.add('wl-staff-customer-source-label'); panel.classList.add('wl-staff-customer-ready'); slot.classList.add('wl-staff-slot'); wrapper.insertBefore(toggle, source);
       var opened = false, current = null, request = null, epoch = 0, overflow = '', previousFocus = null;
       function status(message) { content.replaceChildren(); var p = doc.createElement('p'); p.className = 'wl-staff-customer-status'; p.textContent = message; content.appendChild(p); }
@@ -156,7 +157,8 @@
       toggle.addEventListener('click', function () { if (opened) close(); else open(); });
       closeButton.addEventListener('click', function () { close(); }); backdrop.addEventListener('click', function () { close(); });
       drawer.querySelector('.wl-staff-customer-refresh').addEventListener('click', load);
-      native.addEventListener('click', function () { close(false); });
+      function changingCustomer() { close(false); }
+      native.addEventListener('click', changingCustomer);
       drawer.addEventListener('keydown', function (event) {
         if (event.key === 'Escape') { event.preventDefault(); close(); }
         if (event.key !== 'Tab') return;
@@ -165,7 +167,7 @@
         else if (!event.shiftKey && doc.activeElement === last) { event.preventDefault(); first.focus(); }
       });
       sync();
-      return { panel: panel, sync: sync, close: close, open: open, dispose: function () { close(false); wrapper.insertBefore(native, nativeNext?.parentNode === wrapper ? nativeNext : null); source.classList.remove('wl-staff-customer-source-label'); panel.classList.remove('wl-staff-customer-ready'); slot.classList.remove('wl-staff-slot'); toggle.remove(); drawer.remove(); backdrop.remove(); } };
+      return { panel: panel, sync: sync, close: close, open: open, dispose: function () { close(false); native.removeEventListener('click', changingCustomer); wrapper.insertBefore(native, nativeNext?.parentNode === wrapper ? nativeNext : null); source.classList.remove('wl-staff-customer-source-label'); panel.classList.remove('wl-staff-customer-ready'); slot.classList.remove('wl-staff-slot'); toggle.remove(); drawer.remove(); backdrop.remove(); } };
     }
     function refresh() {
       scheduled = false;
@@ -177,7 +179,8 @@
     win.WLStaffCustomerPanel = { refresh: refresh, open: function () { active?.open(); }, close: function () { active?.close(); } };
     if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', refresh, { once: true }); else refresh();
     var observer = new win.MutationObserver(schedule); observer.observe(doc.body || doc.documentElement, { childList: true, subtree: true, characterData: true });
-    win.addEventListener('pagehide', function () { observer.disconnect(); active?.close(false); }, { once: true });
+    win.addEventListener('pagehide', function () { observer.disconnect(); active?.close(false); });
+    win.addEventListener('pageshow', function (event) { if (event.persisted) { observer.observe(doc.body || doc.documentElement, { childList: true, subtree: true, characterData: true }); refresh(); } });
     doc.addEventListener('visibilitychange', function () { if (doc.hidden) active?.close(false); });
   }
   return { identity: identity, accountSummary: accountSummary, boot: boot };
