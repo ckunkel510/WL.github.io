@@ -5,12 +5,12 @@
   else holiday.boot(root);
 })(typeof window === 'undefined' ? null : window, function () {
   'use strict';
-  var BUILD = '20261113-christmas-2';
+  var BUILD = '20261113-christmas-3';
   var DAY = 86400000;
   var START = Date.parse('2026-11-13T00:00:00-06:00');
   var END = Date.parse('2026-12-26T00:00:00-06:00');
   var VISIT_KEY = 'wl_christmas_2026_seen';
-  var SESSION_KEY = 'wl_christmas_2026_entry_v2';
+  var SESSION_KEY = 'wl_christmas_2026_entry_v3';
   var SHOP = '/Products.aspx?pl1=4647&pg=4649&sort=StockClassSort&direction=asc';
   var GROUPS = {
     '4651': ['Christmas Lights', 'Bring on the twinkle.', 'Light it up', '01 / SPARKLE'],
@@ -186,11 +186,19 @@
     enhanceGroups(doc);
   }
 
+  function hasVisibleModal(doc) {
+    return Array.from(doc.querySelectorAll('dialog[open], [aria-modal="true"]')).some(function (modal) {
+      if (modal.hidden || modal.getAttribute('aria-hidden') === 'true' || !modal.getClientRects().length) return false;
+      var style = doc.defaultView.getComputedStyle(modal);
+      return style.display !== 'none' && style.visibility !== 'hidden' && style.visibility !== 'collapse';
+    });
+  }
+
   function showPopup(win, preview) {
     var doc = win.document;
     if (doc.getElementById('wl-holiday-popup')) return;
     // Let shoppers keep typing/searching and let existing dialogs finish first.
-    if (doc.querySelector('dialog[open], [aria-modal="true"]') ||
+    if (hasVisibleModal(doc) ||
         /^(INPUT|TEXTAREA|SELECT)$/.test(doc.activeElement && doc.activeElement.tagName || '') ||
         doc.visibilityState === 'hidden') {
       if (!preview) firstEntry(win);
@@ -297,6 +305,6 @@
     return win.WLHolidayShop;
   }
   return { boot: boot, inSeason: inSeason, shoppingPage: shoppingPage, christmasPage: christmasPage, christmasContext: christmasContext,
-    recent: recent, readVisit: readVisit, rememberVisit: rememberVisit, firstEntry: firstEntry, entryAvailable: entryAvailable,
+    recent: recent, readVisit: readVisit, rememberVisit: rememberVisit, firstEntry: firstEntry, entryAvailable: entryAvailable, hasVisibleModal: hasVisibleModal,
     DAY: DAY, VISIT_KEY: VISIT_KEY, SESSION_KEY: SESSION_KEY };
 });

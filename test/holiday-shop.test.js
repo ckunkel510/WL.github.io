@@ -66,6 +66,17 @@ test('a first-party cookie preserves the 24-hour cap when localStorage is blocke
   assert.equal(holiday.readVisit(win),now);
   assert.match(win.document.cookie,/Max-Age=86400; Path=\/; SameSite=Lax; Secure/);
 });
+test('closed account and barcode overlays do not suppress the invitation; visible dialogs do', () => {
+  function modal(display,rects=1,hidden=false,ariaHidden=null) {
+    return {hidden,getAttribute:()=>ariaHidden,getClientRects:()=>Array(rects).fill({}),style:{display,visibility:'visible'}};
+  }
+  const doc={defaultView:{getComputedStyle:e=>e.style},querySelectorAll:()=>[modal('none',0),modal('none',0)]};
+  assert.equal(holiday.hasVisibleModal(doc),false);
+  doc.querySelectorAll=()=>[modal('block')];
+  assert.equal(holiday.hasVisibleModal(doc),true);
+  doc.querySelectorAll=()=>[modal('block',1,true),modal('block',1,false,'true')];
+  assert.equal(holiday.hasVisibleModal(doc),false);
+});
 test('when neither persistent store works the runtime declines to show a repeated popup', () => {
   const win=visitor();
   Object.defineProperty(win,'localStorage',{get(){throw new Error('blocked');}});
