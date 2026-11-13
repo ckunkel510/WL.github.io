@@ -61,8 +61,28 @@ function load(file, env, exports = "") {
         env.settingsReads = (env.settingsReads || 0) + 1;
         return Promise.resolve({ ok: env.settingsAvailable !== false, text: async () => env.carrierBranch || 'Caldwell' });
       })()
+      : url === '/ShoppingCart.aspx' ? (() => {
+        env.nativeCartReads = (env.nativeCartReads || 0) + 1;
+        assert.equal(options.credentials, 'same-origin');
+        assert.equal(options.cache, 'no-store');
+        assert.equal(options.method, undefined, 'staff origin lookup must not post the cart');
+        return Promise.resolve({ ok: env.nativeCartAvailable !== false, text: async () => '__native_cart__' });
+      })()
       : originalFetch(url, options);
-    env.context.DOMParser = class { parseFromString(label) { return { getElementById: id => {
+    env.context.DOMParser = class { parseFromString(label) {
+      if (label === '__native_cart__') return {
+        getElementById: id => id === 'ctl00_EmployeeStatusBar_LogonBarPanel' && env.nativeCartEmployee !== false ? {} : null,
+        querySelectorAll: () => (env.nativeCartBranches === null ? [] : env.nativeCartBranches || ['Caldwell']).map((names, index) => ({
+          querySelectorAll: () => [{ getAttribute: () => `ProductDetail.aspx?pid=${index + 100}` }],
+          querySelector: () => env.nativeCartMissingInfo ? null : {
+            childNodes: [], closest: () => null,
+            querySelectorAll: () => (Array.isArray(names) ? names : [names]).map(name => ({
+              closest: () => null, childNodes: [{ nodeType: 3, textContent: name }]
+            }))
+          }
+        }))
+      };
+      return { getElementById: id => {
       if (id === 'ctl00_PageBody_ChangeUserDetailsControl_ddBranch') return env.carrierBranch === null ? null : { options: [{ textContent: label }], selectedIndex: 0 };
       if (id === 'ctl00_EmployeeStatusBar_LogonBarPanel') return env.settingsEmployee ? {} : null;
       return null;
@@ -508,6 +528,10 @@ function employeeQuoteEnvironment(options = {}) {
   env.carrierBranch = options.accountBranch ?? null;
   env.settingsEmployee = options.settingsEmployee !== false;
   env.settingsAvailable = options.settingsAvailable !== false;
+  env.nativeCartBranches = options.nativeBranches === undefined ? ['Caldwell'] : options.nativeBranches;
+  env.nativeCartAvailable = options.nativeCartAvailable !== false;
+  env.nativeCartEmployee = options.nativeCartEmployee !== false;
+  env.nativeCartMissingInfo = options.nativeCartMissingInfo;
   if (options.employee !== false) env.element('ctl00_EmployeeStatusBar_LogonBarPanel');
   const branch = env.element('ctl00_PageBody_BranchDropDownList');
   branch.options = [{ textContent: options.branchLabel || 'Caldwell - 702 W Buck St, Caldwell, Texas, 77836, United States' }];
@@ -528,10 +552,11 @@ function employeeQuoteEnvironment(options = {}) {
   return env;
 }
 
-test('employee-manager password-only settings quote the existing cart using the explicit native branch', async () => {
-  const env = employeeQuoteEnvironment();
+test('employee-manager password-only settings use the server cart trading branch for the reported cart', async () => {
+  const env = employeeQuoteEnvironment({ branchLabel: 'Groesbeck - Store address, Texas, 76642, United States' });
   await env.context.WLShippingOffer.refresh();
   assert.equal(env.requests.length, 1);
+  assert.equal(env.requests[0].shipFrom.postalCode, '76642');
   assert.equal(env.requests[0].carrierOrigin.postalCode, '77836');
   assert.equal(env.requests[0].shipTo.postalCode, '39180');
   assert.deepEqual(env.requests[0].cart.map(item => [item.productCode, item.quantity]),
@@ -541,23 +566,26 @@ test('employee-manager password-only settings quote the existing cart using the 
   assert.equal(env.requests[1].carrierOrigin.postalCode, '77836');
 });
 
-test('staff fallback recognizes only matching native Woodson store names and postal codes', async () => {
-  for (const [name, postal] of [['Brenham', '77833'], ['Bryan', '77803'], ['Bryan', '77801'],
+test('staff fallback recognizes unanimous native trading branches across all Woodson stores', async () => {
+  for (const [name, postal] of [['Brenham', '77833'], ['Bryan', '77803'],
     ['Caldwell', '77836'], ['Lexington', '78947'], ['Buffalo', '75831'], ['Mexia', '76667'], ['Groesbeck', '76642']]) {
-    const env = employeeQuoteEnvironment({ branchLabel: `${name} - Store address, Texas, ${postal}, United States` });
+    const env = employeeQuoteEnvironment({ nativeBranches: [name, name, name] });
     await env.context.WLShippingOffer.refresh();
     assert.equal(env.requests[0].carrierOrigin.postalCode, postal);
   }
 });
 
-test('staff fallback rereads the selected branch instead of caching a previous or browsing branch', async () => {
+test('staff carrier lookup rereads native trading data and never follows a changed fulfillment branch', async () => {
   const env = employeeQuoteEnvironment();
   await env.context.WLShippingOffer.refresh();
   env.elements.get('ctl00_PageBody_BranchDropDownList').options[0].textContent = 'Groesbeck - Store address, Texas, 76642, United States';
   assert.equal(env.context.WLShippingOffer.current(), null);
   await env.context.WLShippingOffer.refresh();
-  assert.deepEqual(env.requests.map(request => request.carrierOrigin.postalCode), ['77836', '76642']);
+  env.nativeCartBranches = ['Brenham'];
+  await env.context.WLShippingOffer.refresh();
+  assert.deepEqual(env.requests.map(request => request.carrierOrigin.postalCode), ['77836', '77836', '77833']);
   assert.equal(env.settingsReads, 1);
+  assert.equal(env.nativeCartReads, 3);
 });
 
 test('missing customer or guest settings never use the staff branch fallback', async () => {
@@ -565,6 +593,7 @@ test('missing customer or guest settings never use the staff branch fallback', a
     const env = employeeQuoteEnvironment(options);
     assert.equal(await env.context.WLShippingOffer.refresh(), null);
     assert.equal(env.requests.length, 0);
+    assert.equal(env.nativeCartReads || 0, 0);
     assert.equal(env.document.documentElement['data-wl-shipping-quote-state'], 'context_missing');
   }
 });
@@ -576,27 +605,25 @@ test('a known account carrier branch remains authoritative for customer, guest a
     await env.context.WLShippingOffer.refresh();
     assert.equal(env.requests[0].shipFrom.postalCode, '76642');
     assert.equal(env.requests[0].carrierOrigin.postalCode, '77833');
+    assert.equal(env.nativeCartReads || 0, 0);
   }
 });
 
-test('staff shipping fails closed without a valid explicit native branch', async () => {
-  for (const label of ['Unknown - Store address, 77836, United States',
-    'Caldwell - Store address, 76642, United States', 'Caldwell', 'Choose a store']) {
-    const env = employeeQuoteEnvironment({ branchLabel: label });
+test('staff shipping fails closed for absent, ambiguous, mixed or unverified native trading branches', async () => {
+  for (const options of [{nativeBranches:['Unknown']}, {nativeBranches:['Caldwell','Groesbeck']},
+    {nativeBranches:[['Caldwell','Groesbeck']]}, {nativeBranches:null}, {nativeCartAvailable:false},
+    {nativeCartEmployee:false}, {nativeCartMissingInfo:true}]) {
+    const env = employeeQuoteEnvironment(options);
     assert.equal(await env.context.WLShippingOffer.refresh(), null);
     assert.equal(env.requests.length, 0);
   }
-  const env = employeeQuoteEnvironment();
-  env.elements.delete('ctl00_PageBody_BranchDropDownList');
-  assert.equal(await env.context.WLShippingOffer.refresh(), null);
-  assert.equal(env.requests.length, 0);
 });
 
 test('staff quote completing after a native branch change is discarded', async () => {
   const env = employeeQuoteEnvironment();
   let finish;
-  env.context.fetch = (url, options) => url === '/AccountSettings.aspx'
-    ? Promise.resolve({ ok: true, text: async () => '' })
+  env.context.fetch = (url, options) => ['/AccountSettings.aspx', '/ShoppingCart.aspx'].includes(url)
+    ? Promise.resolve({ ok: true, text: async () => url === '/ShoppingCart.aspx' ? '__native_cart__' : '' })
     : new Promise(resolve => { finish = resolve; });
   const pending = env.context.WLShippingOffer.refresh();
   while (!finish) await Promise.resolve();
