@@ -49,12 +49,11 @@
     const methodLabelEl = Array.from(legacySummary.querySelectorAll('.row .font-weight-bold'))
       .find(el => /Shipping Method/i.test(el.textContent));
     const methodValue = methodLabelEl?.parentElement?.querySelector('.col')?.textContent.trim() || '';
-    let isPickup = /^pickup/i.test(methodValue);
+    const isPickup = /^pickup/i.test(methodValue);
     let fulfillmentIntent = '';
     let shippingSelection = null;
     try {
       fulfillmentIntent = sessionStorage.getItem('wl_fulfillment_intent') || sessionStorage.getItem('wl_fulfillment_method') || '';
-      if (fulfillmentIntent==='pickup') isPickup=true;
       shippingSelection = JSON.parse(sessionStorage.getItem('wl_shipping_selection_v1') || 'null');
     } catch(e){}
     const isShip = !isPickup && fulfillmentIntent === 'ship';
@@ -333,7 +332,6 @@
       completeBtn?.click();
     });
 
-    window.setTimeout(function () { window.WLCartPricing?.render(); },0);
     return shell; // so caller can add thumbnails next
   }
 

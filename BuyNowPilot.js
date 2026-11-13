@@ -10,7 +10,6 @@
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
   var BUILD = '20261113-merry50-1';
-  var CART_SALE_PRODUCTS = new Set(["255014","255026","255051","255085","255099","255117","255120","255139","255149","255155","255156","255159","268610","268611","268612","268613","268618","268622","268623","276803","276804","276805","276806","276807","276808","276809","276810","276811","276813","276814","276815","276816","276817","276818","276819","276820","276821","276822","276823","276824","276825","276870","276871","254983","254985","268621"]);
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = false;
   var AUDIENCE = 'signed-in';
@@ -1572,8 +1571,7 @@
       } else if (kind === 'extras') {
         fast.original.forEach(function (item) {
           var label = node('label', '', 'bn-check'), check = doc.createElement('input'); check.type = 'checkbox'; check.value = item.pid; check.checked = fast.selected.includes(item.pid);
-          if (CART_SALE_PRODUCTS.has(item.pid)) { check.checked=false; check.disabled=true; }
-          label.append(check, doc.createTextNode((item.name || item.code) + ' · Qty ' + item.quantity + (CART_SALE_PRODUCTS.has(item.pid)?' · Light sale available through cart checkout':''))); fields.appendChild(label);
+          label.append(check, doc.createTextNode((item.name || item.code) + ' · Qty ' + item.quantity)); fields.appendChild(label);
         });
         if (!fast.original.length) fields.appendChild(node('p','No other cart items.'));
       } else if (kind === 'notes') {
@@ -1762,7 +1760,6 @@
     }
     async function start(id, quantity, preview) {
       if (!ENABLE_NEW_STARTS || guest || overlay || busy) return;
-      if (CART_SALE_PRODUCTS.has(String(id))) throw new Error('Add these lights to your cart to apply the automatic mix-and-match savings.');
       await withLock(async function () {
         var opened = Date.now();
         timings = {started:opened,requests:{},stages:{}};
@@ -1903,7 +1900,6 @@
       } catch (error) { if (active!==attempt || !overlay) return; busy=false; if (fast?.dirty) { presentDraft(); return; } throw error; }
     }
     function openFrame(body) {
-      if (active?.purchase?.some(function (item) { return CART_SALE_PRODUCTS.has(item.pid); })) { showError(new Error('These lights need cart checkout to apply the automatic sale. Restore your cart, then proceed from the cart.')); return; }
       var opened=Date.now(), nativeEntered=false, lastPage=null, lastControl=null, progressed=opened;
       frame = doc.createElement('iframe'); frame.title = 'Secure WebTrack checkout'; frame.className = 'bn-frame'; frame.name = 'woodson-buy-now-checkout'; frame.loading = 'eager';
       var ownedFrame=frame;
@@ -2636,7 +2632,7 @@
       if (!ENABLE_NEW_STARTS || guest || !win.navigator.locks || !blocked || !/\/(?:ProductDetail|Products)\.aspx$/i.test(win.location.pathname)) return;
       doc.querySelectorAll('a[id*="AddProductButton"],input[id*="AddProductButton"],button[id*="AddProductButton"]').forEach(function (control) {
         var product = locateProduct(control);
-        if (control.dataset.bnAttached || control.disabled || control.classList.contains('disabled') || control.getAttribute('aria-disabled') === 'true' || !product || blocked.has(product.pid) || PALLET_PRODUCTS.has(product.pid) || CART_SALE_PRODUCTS.has(product.pid)) return;
+        if (control.dataset.bnAttached || control.disabled || control.classList.contains('disabled') || control.getAttribute('aria-disabled') === 'true' || !product || blocked.has(product.pid) || PALLET_PRODUCTS.has(product.pid)) return;
         control.dataset.bnAttached = '1';
         control.classList.add('wl-pilot-add-cart');
         var buy = button('Quick buy', function () {
