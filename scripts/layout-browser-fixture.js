@@ -33,9 +33,12 @@
       var links = Array.from(document.querySelectorAll('.pagination .page-link')), top = links[0].getBoundingClientRect().top;
       return links.every(function (link) { return Math.abs(link.getBoundingClientRect().top - top) < 1; }) && links[2].getAttribute('href') === '#2';
     });
-    check('pagination and document have no horizontal overflow', function () {
-      var pager = document.querySelector('.pagination');
-      return pager.scrollWidth <= pager.clientWidth + 1 && document.documentElement.scrollWidth <= innerWidth + 1;
+    check('the first page button stays reachable when a long pager scrolls', function () {
+      var pager = box('.pagination'), first = box('.pagination .page-link');
+      return first.left >= pager.left - 1 && first.right <= pager.right + 1 && document.documentElement.scrollWidth <= innerWidth + 1;
+    });
+    check('phone listings use the available width despite legacy desktop margins', function () {
+      return innerWidth > 767 || box('.paging-control').width >= innerWidth - 70;
     });
     check('the native sort menu retains a full touch target in Safari and Chrome', function () {
       return box('.searchDropDown').height >= 44 && document.querySelector('.searchDropDown').options.length === 2;

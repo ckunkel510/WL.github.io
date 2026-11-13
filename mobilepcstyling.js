@@ -558,7 +558,7 @@
       body.wl-products-48 ul.pagination.pagination-sm.m-0 {
         display: flex !important;
         align-items: center;
-        justify-content: center;
+        justify-content: flex-start;
         flex-wrap: nowrap !important;
         gap: 4px;
         float: none !important;
@@ -619,6 +619,7 @@
       }
 
       @media (max-width: 767px) {
+        body.wl-products-48 #MainLayoutRow { width: auto !important; margin: 12px 12px 0 !important; }
         body.wl-products-48 .paging-control { grid-template-columns: minmax(0, 1fr); gap: 12px; }
         body.wl-products-48 .paging-panel { flex-direction: column; justify-content: center; }
       }
