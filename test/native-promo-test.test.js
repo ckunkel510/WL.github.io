@@ -24,12 +24,12 @@ test('visibility repair preserves native field value, Apply action, validation a
   assert.match(ids.get('wl-native-promo-test-style').textContent,/display:table-cell!important/);
   ids.delete('ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView');assert.equal(core.reveal(doc),false);
 });
-test('the normal loader requests the native dependencies plus pricing, and the opt-in adds only the visibility helper',()=>{
+test('the normal loader requests the same three native dependencies, and the opt-in adds only the visibility helper',()=>{
   for(const optIn of [false,true]) {
     const win=scope('https://webtrack.woodsonlumber.com/ShoppingCart.aspx'+(optIn?'?wl_native_promo_test=1':''));win.location.origin='https://webtrack.woodsonlumber.com';win.location.pathname='/ShoppingCart.aspx';
     const scripts=[];win.addEventListener=()=>{};
     win.document={readyState:'complete',scripts,querySelector:()=>({}),createElement:()=>({setAttribute(){}}),head:{appendChild:s=>scripts.push(s)}};
-    loader.boot(win);assert.equal(scripts.length,optIn?5:4);assert.equal(scripts.filter(s=>/NativePromoTest\.js/.test(s.src)).length,optIn?1:0);
+    loader.boot(win);assert.equal(scripts.length,optIn?4:3);assert.equal(scripts.filter(s=>/NativePromoTest\.js/.test(s.src)).length,optIn?1:0);
     assert.equal(scripts.filter(s=>/Checkout2\.js/.test(s.src)).length,1);assert.equal(scripts.filter(s=>/CardContainer\.js/.test(s.src)).length,1);
   }
 });
