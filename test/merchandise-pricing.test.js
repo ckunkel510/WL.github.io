@@ -100,3 +100,16 @@ test('pickup billing helpers cannot overwrite a reserved calculator address duri
   vm.createContext(context);vm.runInContext(source.slice(start,end)+'\n'+name+'({force:true});',context);
  }
 });
+
+
+test('native pricing receipts cannot redeem a retired or below-threshold Christmas shipping quote',async()=>{
+  for(const promotion of [
+    {code:'MERRY50',eligibleSubtotalCents:10000},
+    {code:'MERRY100',eligibleSubtotalCents:9999}
+  ]) {
+    const f=fixture(),{receipt}=await f.core.reserve({...body,mode:'ship'});
+    const record=[...f.records.values()][0];
+    record.rates[0]={...record.rates[0],amount:0,promotion:{...promotion,verified:true,applied:true,groundWaived:true,processingCharge:0,expiresAt:'2026-12-06T00:00:00-06:00'}};
+    await assert.rejects(f.core.nativeResult(native(receipt)),/shipping promotion needs to be refreshed/);
+  }
+});

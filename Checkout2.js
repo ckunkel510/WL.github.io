@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20261113-automatic-pricing-4";
+  window.WL_CHECKOUT_BUILD = "20261113-merry100-1";
   document.documentElement?.setAttribute?.('data-wl-checkout-build',window.WL_CHECKOUT_BUILD);
   const pickupAssetBase = new URL('.', document.currentScript?.src || 'https://ckunkel510.github.io/WL.github.io/Checkout2.js').href;
   let pickupAvailabilityLoad;
@@ -341,7 +341,7 @@
     }
     const option = quote?.options?.[mode === "ship" ? "ups" : "delivery"];
     const christmas = option?.promotion;
-    const holidayGround = mode==='ship' && christmas?.code==='MERRY50' && christmas.verified===true && christmas.applied===true && christmas.groundWaived===true && christmas.eligibleSubtotalCents>=5000 && christmas.expiresAt==='2026-12-06T00:00:00-06:00' && Date.now()<Date.parse(christmas.expiresAt);
+    const holidayGround = mode==='ship' && christmas?.code==='MERRY100' && christmas.verified===true && christmas.applied===true && christmas.groundWaived===true && christmas.eligibleSubtotalCents>=10000 && christmas.expiresAt==='2026-12-06T00:00:00-06:00' && Date.now()<Date.parse(christmas.expiresAt);
     if (!option?.available || (!(Number(option.amount) > 0) && !(Number(option.amount)===0 && holidayGround))) return false;
 
     try {

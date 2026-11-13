@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const {Redis} = require('@upstash/redis');
 const {priceCart} = require('./merchandise-pricing');
+const {promotionalRate} = require('./christmas-promotion');
 const {getCatalogProducts} = require('./shipping-catalog');
 const {buildFulfillmentQuote,carrierOriginFor} = require('./fulfillment-quote')._test;
 const {publicOriginBranch} = require('./fulfillment-sessions');
@@ -101,6 +102,7 @@ function service(deps={}) {
       if (!record || record.version!==1 || record.expiresAt<=now() || record.createdAt>now()+5000 ||
           record.origin!==originPostal(input) || record.destinationHash!==addressHash(input.shipTo) ||
           !Number.isFinite(weight) || Math.abs(weight-record.pricing.totalWeight)>0.021) throw error('Your cart pricing needs to be refreshed from order details.');
+      if (record.rates.some(rate=>rate.promotion && !promotionalRate(rate,now()))) throw error('Your shipping promotion needs to be refreshed from order details.');
       return {rates:record.rates.map(rate=>({...rate,amount:(Math.round(Number(rate.amount)*100)+record.pricing.deltaCents)/100}))};
     }
   };

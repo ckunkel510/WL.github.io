@@ -10,10 +10,10 @@ const bridge=require('../api/rate')._test;
 const {buildFulfillmentQuote}=require('../api/fulfillment-quote')._test;
 const NOW=Date.parse('2026-11-14T12:00:00-06:00');
 const item=manifest.products[0];
-const cart=[{...item,quantity:2,netLineTotalCents:5000}];
-const trusted=[{...item,quantity:2,unitPriceCents:2500}];
+const cart=[{...item,quantity:2,netLineTotalCents:10000}];
+const trusted=[{...item,quantity:2,unitPriceCents:5000}];
 const raw=[{serviceCode:'03',serviceName:'UPS Ground',amount:28,currency:'USD'}, {serviceCode:'02',serviceName:'UPS 2nd Day Air',amount:48,currency:'USD'}];
-function freeRates(){return promo.apply(raw,promo.evaluate('MERRY50',cart,trusted,NOW),0,NOW);}
+function freeRates(){return promo.apply(raw,promo.evaluate('MERRY100',cart,trusted,NOW),0,NOW);}
 const compact=require('../BuyNowPilot');
 const realNow=Date.now;
 test.beforeEach(()=>{Date.now=()=>NOW;sessions.resetMemoryClaims();});
@@ -34,8 +34,8 @@ test('applying or removing a compact shipping code invalidates ready options bef
   const fs=require('node:fs'),vm=require('node:vm'),source=fs.readFileSync(require.resolve('../BuyNowPilot'),'utf8');
   const begin=source.indexOf("      body.querySelector('[data-bn-holiday-apply]').addEventListener('click',function(){");
   const end=source.indexOf("      holidayInput.addEventListener('keydown'",begin);
-  for(const code of ['MERRY50','','INVALID']) {
-    let handler,refreshes=0;const storage=new Map([['wl_shipping_offer_v1','old quote'],['wl_christmas_shipping_code_2026','MERRY50']]);
+  for(const code of ['MERRY100','','INVALID']) {
+    let handler,refreshes=0;const storage=new Map([['wl_shipping_offer_v1','old quote'],['wl_christmas_shipping_code_2026','MERRY100']]);
     const fast={journey:'options',optionsReady:true,paymentReady:true},message={textContent:''};
     const context=vm.createContext({Date,fast,submitting:false,busy:false,holidayInput:{value:code},text:s=>String(s).trim(),body:{querySelector:s=>s.includes('apply')?{addEventListener:(_,fn)=>handler=fn}:message},win:{sessionStorage:{setItem:(k,v)=>storage.set(k,v),removeItem:k=>storage.delete(k)}},refreshFast(){assert.equal(fast.optionsReady,false);assert.equal(fast.paymentReady,false);assert.equal(fast.refreshQuote,true);refreshes++;return Promise.resolve();},showError:e=>{throw e;}});
     vm.runInContext(source.slice(begin,end),context);handler();await Promise.resolve();

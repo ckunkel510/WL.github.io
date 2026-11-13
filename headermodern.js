@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  window.WL_HEADER_BUILD = "20261113-light-sale-details-1";
+  window.WL_HEADER_BUILD = "20261113-merry100-1";
 
   var LOG = "[WL HeaderEnhancer]";
   var DEBUG = false; // Set to true only when actively troubleshooting.
@@ -14,7 +14,7 @@
   var ANALYTICS_URL = "https://ckunkel510.github.io/WL.github.io/wl-site.js?v=20261030-checkout-recovery-1";
   var SMART_SEARCH_URL = "https://ckunkel510.github.io/WL.github.io/smart-search.js?v=20261016-4";
   var ACCESSIBILITY_URL = "https://ckunkel510.github.io/WL.github.io/Accessibility.js?v=20261112-2";
-  var HOLIDAY_SHOP_URL = "https://ckunkel510.github.io/WL.github.io/HolidayShop.js?v=20261113-merry50-1";
+  var HOLIDAY_SHOP_URL = "https://ckunkel510.github.io/WL.github.io/HolidayShop.js?v=20261113-merry100-1";
   var ADDRESS_MANAGER_URL = "https://ckunkel510.github.io/WL.github.io/AddressManagement.js?v=20260707-2";
   var CONTACT_MANAGER_URL = "https://ckunkel510.github.io/WL.github.io/ContactManagement.js?v=20260707-3";
   var EMPLOYEE_CUSTOMER_URL = "https://ckunkel510.github.io/WL.github.io/EmployeeCustomerPanel.js?v=20261113-customer-drawer-1";
@@ -339,7 +339,7 @@
     }
     if (!/\/(?:ProductDetail|Products)\.aspx$/i.test(window.location.pathname) && !recovery) return;
     // UI and account-scoped state require fresh native sign-in/account checks.
-    loadCartRuntimeScript('script[data-wl-buy-now-pilot]','https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261113-merry50-1','data-wl-buy-now-pilot',deferCartCheckoutUntilPilotReady);
+    loadCartRuntimeScript('script[data-wl-buy-now-pilot]','https://ckunkel510.github.io/WL.github.io/BuyNowPilot.js?v=20261113-merry100-1','data-wl-buy-now-pilot',deferCartCheckoutUntilPilotReady);
   }
 
   function loadTawkCommerceAssist() {
