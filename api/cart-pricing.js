@@ -20,6 +20,12 @@ const STORE_ADDRESSES = {
 };
 const clean = value => String(value || '').toUpperCase().replace(/\s+/g,' ').trim();
 const error = (message,status=409) => Object.assign(new Error(message),{status});
+function cleanAddress(address) {
+  if (!address || !Array.isArray(address.addressLine)) throw error('A complete fulfillment address is required.');
+  // WebForms can restore our prior carrier marker from its address draft after
+  // Back. It is never a delivery address line and cannot enter a new receipt.
+  return {...address,addressLine:address.addressLine.map(line=>String(line).trim()).filter(line=>line && !/^WLQ:[a-f0-9]{30}$/i.test(line))};
+}
 function marker(input) {
   const lines = input?.shipTo?.addressLine || [];
   const found = lines.filter(line => clean(line).startsWith(PREFIX));
@@ -66,8 +72,9 @@ function service(deps={}) {
       if (!['ship','delivery','pickup'].includes(body.mode)) throw error('Choose your fulfillment method.');
       if (!(pricing.totalWeight>0)) throw error('The current basket weight must be verified before applying pricing.');
       const origin=originPostal({shipFrom:body.carrierOrigin});
-      const address=body.mode==='pickup' ? STORE_ADDRESSES[String(body.pickupBranch)] : body.shipTo;
-      if (!address) throw error('Please confirm your pickup store.');
+      const sourceAddress=body.mode==='pickup' ? STORE_ADDRESSES[String(body.pickupBranch)] : body.shipTo;
+      if (!sourceAddress) throw error('Please confirm your pickup store.');
+      const address=cleanAddress(sourceAddress);
       const destinationHash=addressHash(address);
       let rates;
       if (body.mode==='pickup') rates=[{serviceCode:'03',serviceName:'Store pickup',amount:0,currency:'USD',billingWeight:pricing.totalWeight}];
@@ -115,4 +122,4 @@ async function handler(req,res) {
   } catch (e) {res.statusCode=e.status || 503;return res.end(JSON.stringify({error:e.status?e.message:'Pricing could not be refreshed. Please retry.'}));}
 }
 module.exports=handler;
-module.exports._internal={service,nativeResult,marker,addressHash,STORE_ADDRESSES,TTL,setTestStore:store=>{testStore=store;}};
+module.exports._internal={service,nativeResult,marker,addressHash,cleanAddress,STORE_ADDRESSES,TTL,setTestStore:store=>{testStore=store;}};

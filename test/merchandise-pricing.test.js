@@ -57,3 +57,19 @@ test('a changed basket supersedes its older quote, and a failed old response can
   assert.equal(revisions.current(old),false);revisions.retry(old);assert.equal(revisions.begin('nine-box-cart'),null);assert.equal(revisions.current(next),true);
   revisions.retry(next);assert.ok(revisions.begin('nine-box-cart')>next);revisions.invalidate();assert.equal(revisions.current(next),false);
 });
+
+test('a new receipt removes prior pricing markers restored by native Back, including a real second address line',async()=>{
+ for(const mode of ['ship','delivery']){
+  const f=fixture(),oldMarker='WLQ:'+'b'.repeat(30),shipTo={...body.shipTo,addressLine:['702 W Buck St','Unit 1',oldMarker]};
+  const {receipt}=await f.core.reserve({...body,mode,shipTo});
+  assert.deepEqual(receipt.nativeAddress.addressLine,['702 W Buck St','Unit 1','WLQ:'+'a'.repeat(30)]);
+  assert.equal((await f.core.nativeResult(native(receipt))).rates[0].amount,mode==='ship'?-22.03:-6.98);
+  assert.deepEqual(shipTo.addressLine,['702 W Buck St','Unit 1',oldMarker]);
+ }
+});
+test('browser Back and re-entry snapshots remove only technical markers and preserve genuine address fields',()=>{
+ const values={AddressLine1:'702 W Buck St',AddressLine2:'Unit 1',AddressLine3:'WLQ:'+'a'.repeat(30),Postcode:'77836'};
+ assert.deepEqual(front.cleanAddressValues(values),{...values,AddressLine3:''});
+ const genuine={...values,AddressLine3:'Building C'};assert.deepEqual(front.cleanAddressValues(genuine),genuine);
+ assert.equal(values.AddressLine3,'WLQ:'+'a'.repeat(30));
+});

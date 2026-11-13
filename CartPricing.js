@@ -1,12 +1,13 @@
 /* Customer presentation and native price receipt bridge. Prices come from our server. */
 (function(root,factory){'use strict';var core=factory();if(typeof module==='object'&&module.exports)module.exports=core;else core.boot(root);})(typeof window==='object'?window:null,function(){
   'use strict';
-  var BUILD='20261113-automatic-pricing-2', API='https://wl-upsrates.vercel.app/api/cart-pricing';
+  var BUILD='20261113-automatic-pricing-3', API='https://wl-upsrates.vercel.app/api/cart-pricing';
   var KEY='wl_merchandise_pricing_v1', CART='wl_merchandise_cart_v1', ADDRESS='wl_pricing_original_address_v1';
   var LIGHT_IDS=["255014","255026","255051","255085","255099","255117","255120","255139","255149","255155","255156","255159","268610","268611","268612","268613","268618","268622","268623","276803","276804","276805","276806","276807","276808","276809","276810","276811","276813","276814","276815","276816","276817","276818","276819","276820","276821","276822","276823","276824","276825","276870","276871","254983","254985","268621"];
   function text(value){return String(value || '').replace(/\s+/g,' ').trim();}
   function cents(value){var m=text(value).replace(/,/g,'').match(/(?:\$\s*)?(-?\d+\.\d{2})/);return m?Math.round(Number(m[1])*100):null;}
   function money(value){return (value<0?'−':'')+'$'+(Math.abs(value)/100).toFixed(2);}
+  function cleanAddressValues(values){var result=Object.assign({},values);['AddressLine1','AddressLine2','AddressLine3'].forEach(function(f){if(/^WLQ:[a-f0-9]{30}$/i.test(text(result[f])))result[f]='';});return result;}
   function quoteRevisions(){
     var sequence=0,fingerprint='';
     return {
@@ -74,7 +75,8 @@
     function restore(){
       if(!doc.getElementById(prefix+'Postcode'))return;
       var old=load(ADDRESS);if(!old)return;
-      fields.forEach(function(f){setField(f,old.values[f]);});
+      var values=cleanAddressValues(old.values);
+      fields.forEach(function(f){setField(f,values[f]);});
       if(old.mode==='pickup'){
         var pick=doc.getElementById('ctl00_PageBody_SaleTypeSelector_rbCollectLater');if(pick)pick.checked=true;
       }
@@ -140,10 +142,10 @@
         var data=await request({action:'reserve',cart:items,shipFrom:nativeOrigin,carrierOrigin:context.carrierOrigin,shipTo:context.shipTo,mode:mode,pickupBranch:branch?.value,employee:employee(),specialQuoteIds:specialIds(),promotionCode:load('wl_christmas_shipping_code_2026') || win.sessionStorage.getItem('wl_christmas_shipping_code_2026')});
         if(!data.receipt){win.sessionStorage.removeItem(KEY);return {ok:true};}
         var r=data.receipt,address=r.nativeAddress;
-        var values={};fields.forEach(function(f){values[f]=doc.getElementById(prefix+f)?.value || '';});
+        var values={};fields.forEach(function(f){values[f]=doc.getElementById(prefix+f)?.value || '';});values=cleanAddressValues(values);
         if(values.AddressLine3 && !/^WLQ:/.test(values.AddressLine3))throw Error('The third address line is needed for delivery. Contact Woodson to confirm sale pricing.');
         save(ADDRESS,{mode:mode,values:values});
-        if(!setField('AddressLine1',address.addressLine[0]) || !setField('AddressLine2',address.addressLine[1] || '') ||
+        if(!setField('AddressLine1',address.addressLine[0]) || !setField('AddressLine2',address.addressLine.length>2?address.addressLine[1]:'') ||
            !setField('AddressLine3',address.addressLine.at(-1)) || !setField('City',address.city) || !setField('Postcode',address.postalCode) ||
            mode==='pickup' && !setField('CountySelector_CountyList','Texas'))throw Error('Native address unavailable.');
         // The marker belongs only in line 3, never duplicated in line 2.
@@ -188,6 +190,7 @@
     }
     function schedule(){win.clearTimeout(timer);timer=win.setTimeout(function(){refreshCart();renderNative();},150);}
     win.WLCartPricing={version:BUILD,receipt:receipt,prepareNativeSubmit:prepareNativeSubmit,refresh:refreshCart,render:renderNative};
+    doc.documentElement.setAttribute('data-wl-merchandise-pricing-build',BUILD);
     if(employee()){win.sessionStorage.removeItem(KEY);win.sessionStorage.removeItem(CART);win.sessionStorage.removeItem(ADDRESS);}
     restore();style();
     doc.addEventListener('click',function(event){
@@ -211,5 +214,5 @@
     win.setTimeout(schedule,750);win.setTimeout(schedule,1600);
     try{var manager=win.Sys?.WebForms?.PageRequestManager?.getInstance();if(manager)manager.add_endRequest(schedule);}catch(_){}
   }
-  return {boot:boot,cents:cents,money:money,readCart:readCart,nativeTotals:nativeTotals,reconcile:reconcile,lightIds:LIGHT_IDS,quoteRevisions:quoteRevisions};
+  return {boot:boot,cents:cents,money:money,readCart:readCart,nativeTotals:nativeTotals,reconcile:reconcile,lightIds:LIGHT_IDS,quoteRevisions:quoteRevisions,cleanAddressValues:cleanAddressValues};
 });

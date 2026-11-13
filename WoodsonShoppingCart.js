@@ -523,7 +523,7 @@
 
     if (!window.WLCartPricing && !document.querySelector('script[data-wl-cart-pricing]')) {
       const pricingScript=document.createElement('script');
-      pricingScript.src='https://ckunkel510.github.io/WL.github.io/CartPricing.js?v=20261113-automatic-pricing-2';
+      pricingScript.src='https://ckunkel510.github.io/WL.github.io/CartPricing.js?v=20261113-automatic-pricing-3';
       pricingScript.setAttribute('data-wl-cart-pricing','1');
       document.head.appendChild(pricingScript);
     }
