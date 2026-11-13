@@ -1,0 +1,11 @@
+# Native Christmas promotion test — proposed, not published
+
+The live shipping-and-summary screen includes WebTrack's original promotion textbox and Apply postback, but desktop/tablet/mobile CSS hide both native promotion cells. The four-box guest basket remains $79.96 with $0.00 native discount. Pickup automatically advances past this hidden form; UPS holds on shipping and exposes the native totals for inspection.
+
+This candidate adds an opt-in visibility helper at `ShoppingCart.aspx?wl_native_promo_test=1`. The normal URL and other pages/frames do not request it. It reveals the original native cells and labels the original textbox, preserving its contents, native Apply/validation/postback, and native tax/payment/order controls. No promotion, price, rate, payment amount, account rule or automatic code application is changed. In the flagged pickup test, revealing the original form may cause the existing visible-choice guard to hold on shipping; use UPS for initial inspection.
+
+After an approved release, open the opt-in URL in the already authorized nonemployee test session, proceed with the two white/two multicolor boxes through UPS to shipping, enter XMASLIGHTS2026 in the native Promotion code field and click its native Apply. Record native response, discount, taxable amount and total. Stop before entering card details or placing an order. This test will establish whether the three existing promotions sharing that code are recognized by WebTrack.
+
+The user's fallback proposal is to carry the discount through the returned delivery charge and present it as a discount. Current rate bridges clamp negative amounts to zero, and native support for negative freight is unverified. For four $19.99 boxes, a $31.98 discount combined with $9.95 shipping would require a returned charge of -$22.03. A nonnegative shipping reduction cannot carry that full merchandise discount. The user will handle BisTrack back-office adjustments; customer-facing amount and tax still require native verification. No rate changes are included here.
+
+NativePromoTest.js is a new standalone source, not a generated bundle. CartNativeViews.js is its existing loader. Rollback is removal of that conditional loader; ordinary customer behavior is unchanged before and after the candidate. Checkout runtime publication requires the repository's release approval after review.
