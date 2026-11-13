@@ -8,6 +8,7 @@ const { applyGroundPromotion, cartHasEligibleProduct, promoCodeMatches } = requi
 const { findPromoClaim, storePromoClaim } = require("./shipping-promo-sessions");
 const { findFulfillmentClaim, publicOriginBranch } = require("./fulfillment-sessions");
 const { applyShippingMinimumToRates } = require("./shipping-policy");
+const { testResultFor } = require('./native-rate-discount-test')._internal;
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -468,8 +469,10 @@ async function handler(req, res) {
     result = applyGroundPromotion(result, promoInput).result;
     result = safePositiveRates(applyShippingMinimumToRates(result));
     if (!result?.rates?.length) throw new RequestError(422, "No positive shipping or delivery rate is available for this order.");
+    const nativeRateTest = await testResultFor(translated.body, result);
+    if (nativeRateTest) result = nativeRateTest;
     console.log("[legacy-rate]", JSON.stringify({
-      event: "positive-rate-returned",
+      event: nativeRateTest ? "native-discount-test-rate-returned" : "positive-rate-returned",
       destinationState: text(translated.body.shipTo?.state).slice(0, 24),
       fulfillmentClaimFound: true,
       originBranch: publicOriginBranch(translated.body),
