@@ -1,0 +1,800 @@
+{
+  "campaign": "christmas-2026",
+  "snapshotDate": "2026-11-13",
+  "source": "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4649&sort=StockClassSort&direction=asc&itemsPerPage=48&pageIndex=0",
+  "productCount": 172,
+  "products": [
+    {
+      "productId": "10754",
+      "productCode": "4033684"
+    },
+    {
+      "productId": "11174",
+      "productCode": "4300786"
+    },
+    {
+      "productId": "11203",
+      "productCode": "4322053"
+    },
+    {
+      "productId": "11204",
+      "productCode": "4326849"
+    },
+    {
+      "productId": "11207",
+      "productCode": "4329462"
+    },
+    {
+      "productId": "11208",
+      "productCode": "4332722"
+    },
+    {
+      "productId": "11228",
+      "productCode": "4343323"
+    },
+    {
+      "productId": "11233",
+      "productCode": "4346466"
+    },
+    {
+      "productId": "11243",
+      "productCode": "4354379"
+    },
+    {
+      "productId": "11247",
+      "productCode": "4366472"
+    },
+    {
+      "productId": "11250",
+      "productCode": "4369997"
+    },
+    {
+      "productId": "11276",
+      "productCode": "4404430"
+    },
+    {
+      "productId": "11281",
+      "productCode": "4408894"
+    },
+    {
+      "productId": "11990",
+      "productCode": "4665907"
+    },
+    {
+      "productId": "254928",
+      "productCode": "9925959"
+    },
+    {
+      "productId": "254940",
+      "productCode": "7222359"
+    },
+    {
+      "productId": "254942",
+      "productCode": "0692491"
+    },
+    {
+      "productId": "254943",
+      "productCode": "9738253"
+    },
+    {
+      "productId": "254962",
+      "productCode": "9739616"
+    },
+    {
+      "productId": "254963",
+      "productCode": "9740978"
+    },
+    {
+      "productId": "254981",
+      "productCode": "9741968"
+    },
+    {
+      "productId": "254982",
+      "productCode": "9995648"
+    },
+    {
+      "productId": "254983",
+      "productCode": "7723703"
+    },
+    {
+      "productId": "254985",
+      "productCode": "4552378"
+    },
+    {
+      "productId": "254986",
+      "productCode": "0745422"
+    },
+    {
+      "productId": "254987",
+      "productCode": "2933984"
+    },
+    {
+      "productId": "255011",
+      "productCode": "5258579"
+    },
+    {
+      "productId": "255013",
+      "productCode": "4073409"
+    },
+    {
+      "productId": "255014",
+      "productCode": "0186643"
+    },
+    {
+      "productId": "255025",
+      "productCode": "4098315"
+    },
+    {
+      "productId": "255026",
+      "productCode": "0215269"
+    },
+    {
+      "productId": "255028",
+      "productCode": "9416439"
+    },
+    {
+      "productId": "255049",
+      "productCode": "3861333"
+    },
+    {
+      "productId": "255050",
+      "productCode": "9549320"
+    },
+    {
+      "productId": "255051",
+      "productCode": "3467925"
+    },
+    {
+      "productId": "255083",
+      "productCode": "4132858"
+    },
+    {
+      "productId": "255084",
+      "productCode": "9964149"
+    },
+    {
+      "productId": "255085",
+      "productCode": "3419488"
+    },
+    {
+      "productId": "255089",
+      "productCode": "3450509"
+    },
+    {
+      "productId": "255091",
+      "productCode": "9514415"
+    },
+    {
+      "productId": "255097",
+      "productCode": "3458874"
+    },
+    {
+      "productId": "255098",
+      "productCode": "3902301"
+    },
+    {
+      "productId": "255099",
+      "productCode": "0216804"
+    },
+    {
+      "productId": "255103",
+      "productCode": "9548892"
+    },
+    {
+      "productId": "255116",
+      "productCode": "9450388"
+    },
+    {
+      "productId": "255117",
+      "productCode": "3742160"
+    },
+    {
+      "productId": "255119",
+      "productCode": "5264346"
+    },
+    {
+      "productId": "255120",
+      "productCode": "0186759"
+    },
+    {
+      "productId": "255121",
+      "productCode": "9517624"
+    },
+    {
+      "productId": "255127",
+      "productCode": "9544628"
+    },
+    {
+      "productId": "255129",
+      "productCode": "8007445"
+    },
+    {
+      "productId": "255131",
+      "productCode": "4075917"
+    },
+    {
+      "productId": "255132",
+      "productCode": "5698402"
+    },
+    {
+      "productId": "255134",
+      "productCode": "5704770"
+    },
+    {
+      "productId": "255135",
+      "productCode": "2931186"
+    },
+    {
+      "productId": "255136",
+      "productCode": "4689832"
+    },
+    {
+      "productId": "255137",
+      "productCode": "3907391"
+    },
+    {
+      "productId": "255138",
+      "productCode": "4697389"
+    },
+    {
+      "productId": "255139",
+      "productCode": "7706153"
+    },
+    {
+      "productId": "255140",
+      "productCode": "8521528"
+    },
+    {
+      "productId": "255141",
+      "productCode": "8540205"
+    },
+    {
+      "productId": "255149",
+      "productCode": "4205795"
+    },
+    {
+      "productId": "255155",
+      "productCode": "4216909"
+    },
+    {
+      "productId": "255156",
+      "productCode": "4536926"
+    },
+    {
+      "productId": "255159",
+      "productCode": "3740362"
+    },
+    {
+      "productId": "255513",
+      "productCode": "9587825"
+    },
+    {
+      "productId": "255999",
+      "productCode": "3387669"
+    },
+    {
+      "productId": "256000",
+      "productCode": "1924109"
+    },
+    {
+      "productId": "256001",
+      "productCode": "5395876"
+    },
+    {
+      "productId": "256003",
+      "productCode": "3548328"
+    },
+    {
+      "productId": "256004",
+      "productCode": "8118549"
+    },
+    {
+      "productId": "256005",
+      "productCode": "2624377"
+    },
+    {
+      "productId": "268610",
+      "productCode": "9086416"
+    },
+    {
+      "productId": "268611",
+      "productCode": "9086417"
+    },
+    {
+      "productId": "268612",
+      "productCode": "9086418"
+    },
+    {
+      "productId": "268613",
+      "productCode": "9086419"
+    },
+    {
+      "productId": "268618",
+      "productCode": "9086420"
+    },
+    {
+      "productId": "268621",
+      "productCode": "9086421"
+    },
+    {
+      "productId": "268622",
+      "productCode": "9086423"
+    },
+    {
+      "productId": "268623",
+      "productCode": "9086424"
+    },
+    {
+      "productId": "276803",
+      "productCode": "9086425"
+    },
+    {
+      "productId": "276804",
+      "productCode": "9086482"
+    },
+    {
+      "productId": "276805",
+      "productCode": "9086483"
+    },
+    {
+      "productId": "276806",
+      "productCode": "9086484"
+    },
+    {
+      "productId": "276807",
+      "productCode": "9096577"
+    },
+    {
+      "productId": "276808",
+      "productCode": "9267451"
+    },
+    {
+      "productId": "276809",
+      "productCode": "9311903"
+    },
+    {
+      "productId": "276810",
+      "productCode": "9086415"
+    },
+    {
+      "productId": "276811",
+      "productCode": "9086343"
+    },
+    {
+      "productId": "276813",
+      "productCode": "9086342"
+    },
+    {
+      "productId": "276814",
+      "productCode": "9086341"
+    },
+    {
+      "productId": "276815",
+      "productCode": "9086340"
+    },
+    {
+      "productId": "276816",
+      "productCode": "9086339"
+    },
+    {
+      "productId": "276817",
+      "productCode": "9086338"
+    },
+    {
+      "productId": "276818",
+      "productCode": "9086337"
+    },
+    {
+      "productId": "276819",
+      "productCode": "9086334"
+    },
+    {
+      "productId": "276820",
+      "productCode": "9086333"
+    },
+    {
+      "productId": "276821",
+      "productCode": "9086332"
+    },
+    {
+      "productId": "276822",
+      "productCode": "9086331"
+    },
+    {
+      "productId": "276823",
+      "productCode": "9086330"
+    },
+    {
+      "productId": "276824",
+      "productCode": "9086329"
+    },
+    {
+      "productId": "276825",
+      "productCode": "9086327"
+    },
+    {
+      "productId": "276826",
+      "productCode": "9016842"
+    },
+    {
+      "productId": "276837",
+      "productCode": "9096900"
+    },
+    {
+      "productId": "276839",
+      "productCode": "5403936"
+    },
+    {
+      "productId": "276840",
+      "productCode": "5427331"
+    },
+    {
+      "productId": "276843",
+      "productCode": "5430889"
+    },
+    {
+      "productId": "276848",
+      "productCode": "5631908"
+    },
+    {
+      "productId": "276849",
+      "productCode": "9098151"
+    },
+    {
+      "productId": "276850",
+      "productCode": "9106171"
+    },
+    {
+      "productId": "276851",
+      "productCode": "9218165"
+    },
+    {
+      "productId": "276852",
+      "productCode": "3011833"
+    },
+    {
+      "productId": "276853",
+      "productCode": "3011845"
+    },
+    {
+      "productId": "276855",
+      "productCode": "9007919"
+    },
+    {
+      "productId": "276856",
+      "productCode": "9096869"
+    },
+    {
+      "productId": "276857",
+      "productCode": "9096872"
+    },
+    {
+      "productId": "276858",
+      "productCode": "9096772"
+    },
+    {
+      "productId": "276859",
+      "productCode": "9096773"
+    },
+    {
+      "productId": "276860",
+      "productCode": "9106939"
+    },
+    {
+      "productId": "276861",
+      "productCode": "9096335"
+    },
+    {
+      "productId": "276862",
+      "productCode": "9106904"
+    },
+    {
+      "productId": "276863",
+      "productCode": "9107105"
+    },
+    {
+      "productId": "276864",
+      "productCode": "9709239"
+    },
+    {
+      "productId": "276865",
+      "productCode": "9086639"
+    },
+    {
+      "productId": "276866",
+      "productCode": "9086558"
+    },
+    {
+      "productId": "276869",
+      "productCode": "9016931"
+    },
+    {
+      "productId": "276870",
+      "productCode": "9086336"
+    },
+    {
+      "productId": "276871",
+      "productCode": "9086335"
+    },
+    {
+      "productId": "284376",
+      "productCode": "9096308"
+    },
+    {
+      "productId": "284377",
+      "productCode": "9107534"
+    },
+    {
+      "productId": "284378",
+      "productCode": "9107482"
+    },
+    {
+      "productId": "284379",
+      "productCode": "9096898"
+    },
+    {
+      "productId": "284380",
+      "productCode": "9096481"
+    },
+    {
+      "productId": "284381",
+      "productCode": "9097204"
+    },
+    {
+      "productId": "284382",
+      "productCode": "9106467"
+    },
+    {
+      "productId": "284383",
+      "productCode": "9069528"
+    },
+    {
+      "productId": "284385",
+      "productCode": "9106483"
+    },
+    {
+      "productId": "284386",
+      "productCode": "9097202"
+    },
+    {
+      "productId": "284391",
+      "productCode": "9070229"
+    },
+    {
+      "productId": "284392",
+      "productCode": "9106270"
+    },
+    {
+      "productId": "284393",
+      "productCode": "9106290"
+    },
+    {
+      "productId": "284394",
+      "productCode": "9096228"
+    },
+    {
+      "productId": "284395",
+      "productCode": "96362"
+    },
+    {
+      "productId": "284396",
+      "productCode": "9814534"
+    },
+    {
+      "productId": "284397",
+      "productCode": "9096273"
+    },
+    {
+      "productId": "284400",
+      "productCode": "9106281"
+    },
+    {
+      "productId": "284401",
+      "productCode": "9750548"
+    },
+    {
+      "productId": "284402",
+      "productCode": "9096037"
+    },
+    {
+      "productId": "284403",
+      "productCode": "9107259"
+    },
+    {
+      "productId": "284404",
+      "productCode": "9107261"
+    },
+    {
+      "productId": "284405",
+      "productCode": "9107421"
+    },
+    {
+      "productId": "284406",
+      "productCode": "9107420"
+    },
+    {
+      "productId": "284408",
+      "productCode": "9106371"
+    },
+    {
+      "productId": "284409",
+      "productCode": "9080474"
+    },
+    {
+      "productId": "284425",
+      "productCode": "9106286"
+    },
+    {
+      "productId": "287763",
+      "productCode": "9070674"
+    },
+    {
+      "productId": "287764",
+      "productCode": "9086223"
+    },
+    {
+      "productId": "287765",
+      "productCode": "9096833"
+    },
+    {
+      "productId": "287766",
+      "productCode": "9096831"
+    },
+    {
+      "productId": "289029",
+      "productCode": "4399572"
+    },
+    {
+      "productId": "290453",
+      "productCode": "9953993"
+    },
+    {
+      "productId": "290454",
+      "productCode": "9620675"
+    },
+    {
+      "productId": "292102",
+      "productCode": "8768418"
+    },
+    {
+      "productId": "292635",
+      "productCode": "8957797"
+    },
+    {
+      "productId": "319011",
+      "productCode": "7463367"
+    },
+    {
+      "productId": "319014",
+      "productCode": "7463342"
+    },
+    {
+      "productId": "321000",
+      "productCode": "EJD9122072"
+    },
+    {
+      "productId": "321002",
+      "productCode": "EJD9122162"
+    },
+    {
+      "productId": "321009",
+      "productCode": "1833409"
+    },
+    {
+      "productId": "321010",
+      "productCode": "9445800"
+    },
+    {
+      "productId": "321011",
+      "productCode": "5747621"
+    },
+    {
+      "productId": "322516",
+      "productCode": "9445818"
+    }
+  ],
+  "groups": [
+    {
+      "id": "4649",
+      "name": "Christmas Shop",
+      "href": "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4649&sort=StockClassSort&direction=asc&itemsPerPage=48&pageIndex=0",
+      "parentId": null
+    },
+    {
+      "id": "4651",
+      "href": "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4651&sort=StockClassSort&direction=asc",
+      "name": "Christmas Lights",
+      "parentId": "4649"
+    },
+    {
+      "id": "4656",
+      "href": "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4656&sort=StockClassSort&direction=asc",
+      "name": "Christmas Trees",
+      "parentId": "4649"
+    },
+    {
+      "id": "4658",
+      "href": "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4658&sort=StockClassSort&direction=asc",
+      "name": "Garlands & Wreaths",
+      "parentId": "4649"
+    },
+    {
+      "id": "4660",
+      "href": "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4660&sort=StockClassSort&direction=asc",
+      "name": "Outdoor Decorations",
+      "parentId": "4649"
+    },
+    {
+      "id": "4662",
+      "href": "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4662&sort=StockClassSort&direction=asc",
+      "name": "Ornaments & Stockings",
+      "parentId": "4649"
+    },
+    {
+      "id": "4664",
+      "href": "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4664&sort=StockClassSort&direction=asc",
+      "name": "Christmas Storage",
+      "parentId": "4649"
+    },
+    {
+      "id": "4681",
+      "href": "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4681&sort=StockClassSort&direction=asc",
+      "name": "Extension Cords",
+      "parentId": "4649"
+    },
+    {
+      "id": "4693",
+      "href": "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4693&sort=StockClassSort&direction=asc",
+      "name": "Icicle Lights",
+      "parentId": "4651"
+    },
+    {
+      "id": "4694",
+      "href": "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4694&sort=StockClassSort&direction=asc",
+      "name": "Mini/T5/C3 Lights",
+      "parentId": "4651"
+    },
+    {
+      "id": "4695",
+      "href": "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4695&sort=StockClassSort&direction=asc",
+      "name": "Specialty",
+      "parentId": "4651"
+    },
+    {
+      "id": "4696",
+      "href": "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4696&sort=StockClassSort&direction=asc",
+      "name": "C9",
+      "parentId": "4651"
+    },
+    {
+      "id": "4697",
+      "href": "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4697&sort=StockClassSort&direction=asc",
+      "name": "C6",
+      "parentId": "4651"
+    },
+    {
+      "id": "4698",
+      "href": "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4698&sort=StockClassSort&direction=asc",
+      "name": "Net Lights",
+      "parentId": "4651"
+    },
+    {
+      "id": "4700",
+      "href": "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4700&sort=StockClassSort&direction=asc",
+      "name": "Clips",
+      "parentId": "4651"
+    },
+    {
+      "id": "4654",
+      "href": "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4654&sort=StockClassSort&direction=asc",
+      "name": "Inflatable Decorations",
+      "parentId": "4660"
+    },
+    {
+      "id": "4702",
+      "href": "https://webtrack.woodsonlumber.com/Products.aspx?pl1=4647&pg=4702&sort=StockClassSort&direction=asc",
+      "name": "Yard Decorations",
+      "parentId": "4660"
+    }
+  ]
+}

@@ -8,6 +8,7 @@ const { applyShippingMinimumToRates } = require("./shipping-policy");
 const { RequestError, requestRates } = require("./ups-rates")._internal;
 const { selectFulfillmentClaim, storeFulfillmentClaim, publicOriginBranch } = require("./fulfillment-sessions");
 const { quoteWoodsonDelivery } = require("./woodson-delivery");
+const christmas = require('./christmas-promotion');
 
 const DEFAULT_ORIGINS = [
   "https://webtrack.woodsonlumber.com",
@@ -125,7 +126,7 @@ function offeredRates(automatic) {
   const protectedResult = applyShippingMinimumToRates(automatic?.result || { rates: [] });
   return (Array.isArray(protectedResult?.rates) ? protectedResult.rates : [])
     .map((rate) => ({ ...rate, amount: money(rate.amount) }))
-    .filter((rate) => rate.amount > 0);
+    .filter((rate) => rate.amount > 0 || christmas.promotionalRate(rate));
 }
 
 function groundRate(rates) {
@@ -134,7 +135,7 @@ function groundRate(rates) {
 
 function upsOption(rates) {
   const ground = groundRate(rates);
-  if (!ground || positive(ground.amount) <= 0) return null;
+  if (!ground || (positive(ground.amount) <= 0 && !christmas.promotionalRate(ground))) return null;
   return {
     available: true,
     mode: "ship",
@@ -143,7 +144,8 @@ function upsOption(rates) {
     amount: money(ground.amount),
     currency: cleanText(ground.currency || "USD", 3),
     billingWeight: positive(ground.billingWeight),
-    rates
+    rates,
+    promotion: christmas.promotionalRate(ground) ? ground.promotion : null
   };
 }
 
@@ -186,6 +188,7 @@ async function buildFulfillmentQuote(body, dependencies = {}) {
   let upsFailure = "";
   let upsIssues = [];
   let cutToShip = null;
+  let promotion = christmas.evaluate(body.promotionCode, [], []);
   const cutToShipOptions = availableCutToShipOptions(cart);
 
   if (cart.length) {
@@ -200,6 +203,9 @@ async function buildFulfillmentQuote(body, dependencies = {}) {
       totalWeight = positive(automatic.claim?.productWeight) || totalWeight;
       rates = offeredRates(automatic);
       cutToShip = automatic.result?.cutToShip || null;
+      promotion = christmas.evaluate(body.promotionCode, cart, automatic.claim?.basis?.productRefs);
+      if (promotion.applied && !groundRate(rates)) promotion = { ...promotion, applied: false, reason: 'ground-unavailable' };
+      rates = christmas.apply(rates, promotion, cutToShip?.addedCharge);
     } catch (error) {
       upsFailure = cleanText(error?.message || "UPS automatic packing was unavailable.", 180);
       upsIssues = Array.isArray(error?.shippingIssues) ? error.shippingIssues.slice(0, 50) : [];
@@ -249,7 +255,7 @@ async function buildFulfillmentQuote(body, dependencies = {}) {
   }, dependencies);
   const easyParcel = Boolean(ratedUps.available && isEasyParcel(packages));
   const customCutParcel = Boolean(ratedUps.available && cutToShip?.applied && cutToShip?.customParcelEligible);
-  // A successful positive UPS Ground rate is the availability decision. Package
+  // A successful UPS Ground quote is the availability decision. Package
   // validation and carrier limits have already run before ratedUps is created;
   // profile labels must not hide a carrier-rated option from the customer.
   const ups = ratedUps;
@@ -296,6 +302,7 @@ async function buildFulfillmentQuote(body, dependencies = {}) {
     recommendation,
     options: { ups, delivery },
     shippingIssues: ups.available ? [] : upsIssues,
+    promotion,
     cutToShip: {
       availableOptions: cutToShipOptions,
       applied: cutToShip?.applied === true,
