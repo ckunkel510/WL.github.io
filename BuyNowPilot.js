@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261109-native-cart-74';
+  var BUILD = '20261113-merry50-1';
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = false;
   var AUDIENCE = 'signed-in';
@@ -431,11 +431,16 @@
     state.value=option.value;
     return true;
   }
+  function holidayGround(option) {
+    var p=option?.promotion;
+    return p?.code==='MERRY50' && p.verified===true && p.applied===true && p.groundWaived===true &&
+      p.eligibleSubtotalCents>=5000 && p.expiresAt==='2026-12-06T00:00:00-06:00' && Date.now()<Date.parse(p.expiresAt);
+  }
   function fulfillmentOptions(pickupAvailable, quote) {
     return {
       pickup:{available:pickupAvailable,rate:'Free'},
       delivery:{available:!!quote?.options?.delivery?.available,pending:!quote,rate:'$'+Number(quote?.options?.delivery?.amount||0).toFixed(2),reason:text(quote?.options?.delivery?.reason)},
-      ship:{available:!!quote?.options?.ups?.available,pending:!quote,rate:'$'+Number(quote?.options?.ups?.amount||0).toFixed(2),rates:quote?.options?.ups?.rates || [],reason:text(quote?.options?.ups?.reason)}
+      ship:{available:!!quote?.options?.ups?.available,pending:!quote,rate:'$'+Number(quote?.options?.ups?.amount||0).toFixed(2),rates:quote?.options?.ups?.rates || [],promotion:quote?.options?.ups?.promotion || null,reason:text(quote?.options?.ups?.reason)}
     };
   }
   function quoteForCart(quote, items) {
@@ -452,7 +457,7 @@
   }
   function cheapestHomeMethod(quote) {
     var options = quote?.options, delivery = options?.delivery, ups = options?.ups;
-    var valid = function (option) { return option?.available && Number.isFinite(Number(option.amount)) && Number(option.amount)>0; };
+    var valid = function (option) { return option?.available && Number.isFinite(Number(option.amount)) && (Number(option.amount)>0 || Number(option.amount)===0 && holidayGround(option)); };
     if (valid(delivery) && (!valid(ups) || Number(delivery.amount)<=Number(ups.amount))) return 'delivery';
     return valid(ups) ? 'ship' : 'pickup';
   }
@@ -480,11 +485,11 @@
   }
   function quotedShipping(method, option, service, first) {
     if (method === 'pickup') return 0;
-    if (!option || option.pending || option.available===false || !(money(option.rate)>0)) throw new Error('The fulfillment quote is unavailable.');
+    if (!option || option.pending || option.available===false || (!(money(option.rate)>0) && !(method==='ship' && money(option.rate)===0 && holidayGround(option)))) throw new Error('The fulfillment quote is unavailable.');
     if (method === 'delivery' || first || !service || /ground/i.test(service.label)) return money(option.rate);
     var clean = function (value) { return text(value).toLowerCase().replace(/\bups\b/g,'').replace(/[^a-z0-9]/g,''); };
     var rate = (option.rates || []).find(function (row) { return String(row.serviceCode) === service.value || clean(service.label).includes(clean(row.serviceName)) && !!clean(row.serviceName); });
-    if (!rate || !(Number(rate.amount) > 0)) throw new Error('This shipping speed needs regular checkout.');
+    if (!rate || (!(Number(rate.amount) > 0) && !(Number(rate.amount)===0 && holidayGround(rate)))) throw new Error('This shipping speed needs regular checkout.');
     return Math.round(Number(rate.amount)*100);
   }
   function shippingEstimate(option, service) {
@@ -508,7 +513,7 @@
   function quoteShippingChoices(option) {
     if (!option?.available || option.pending) return [];
     return (option.rates || []).filter(function (rate) {
-      return /^\d{1,3}$/.test(String(rate.serviceCode)) && Number.isFinite(Number(rate.amount)) && Number(rate.amount)>0;
+      return /^\d{1,3}$/.test(String(rate.serviceCode)) && Number.isFinite(Number(rate.amount)) && (Number(rate.amount)>0 || Number(rate.amount)===0 && holidayGround(rate));
     }).map(function (rate) {
       var label=rate.serviceCode==='59' ? 'UPS 2nd Day Air A.M.' : text(rate.serviceName) || 'UPS service '+rate.serviceCode;
       return {value:String(rate.serviceCode),label:label+' · $'+Number(rate.amount).toFixed(2)};
@@ -1160,6 +1165,7 @@
         '<div class="bn-option"><span class="bn-option-icon">▤</span><div><strong>Payment</strong><span data-bn-payment>Saved payment</span></div><button type="button" data-bn-edit="payment">Change</button></div></div>' +
         '<button type="button" class="bn-extras" data-bn-edit="extras"><span data-bn-extras></span><span>＋</span></button>' +
         '<button type="button" class="bn-more" data-bn-edit="notes">Order notes & billing</button>' +
+        '<section data-bn-holiday-promo hidden style="padding:12px;margin:8px 0;border:1px solid #ded5bc;border-radius:8px;background:#f8f4e9"><label for="bn-holiday-code" style="display:block;font-size:12px;font-weight:600">Shipping promo code</label><div style="display:flex;gap:8px;margin-top:6px"><input id="bn-holiday-code" autocomplete="off" autocapitalize="characters" spellcheck="false" style="flex:1;min-width:0;padding:9px;border:1px solid #b5b6ac;border-radius:5px"><button type="button" data-bn-holiday-apply class="bn-action" style="padding:9px 12px">Apply</button></div><p role="status" data-bn-holiday-status style="font-size:11px;margin:7px 0 0"></p></section>' +
         (guest ? '<p class="bn-billing-summary" data-bn-billing-summary></p>' : '') +
         '<section class="bn-payment-choices" data-bn-payment-choices hidden><label class="bn-inline-choice">Payment method<select aria-label="Payment method" data-bn-payment-select></select></label><p data-bn-payment-help>Your payment choice is checked before the final order review.</p><button type="button" class="bn-more" data-bn-back-options>Back to delivery details</button></section>' +
         '<div data-bn-editor hidden></div><div class="bn-totals"><div><span>Items</span><span data-bn-subtotal>—</span></div><div><span data-bn-shipping-label>Delivery</span><span data-bn-shipping>—</span></div><div><span>Tax</span><span data-bn-tax>—</span></div><div class="bn-grand"><strong>Order total</strong><strong data-bn-total>—</strong></div></div>' +
@@ -1197,6 +1203,17 @@
       body.querySelectorAll('[data-bn-method]').forEach(function (el) {
         el.addEventListener('click', function () { var option = fast.methods[el.dataset.bnMethod]; if (submitting || fast.editor || fast.method === el.dataset.bnMethod || !(option?.available || option?.pending)) return; fast.method = el.dataset.bnMethod; fast.date = ''; fast.pickupTime=''; fast.shippingValue = ''; updatePickupReadiness(); updateFastOptions(); requestFastUpdate('method'); });
       });
+      var holidayInput=body.querySelector('#bn-holiday-code');
+      try {holidayInput.value=win.sessionStorage.getItem('wl_christmas_shipping_code_2026') || '';} catch(_) {}
+      body.querySelector('[data-bn-holiday-apply]').addEventListener('click',function(){
+        if(Date.now()>=Date.parse('2026-12-06T00:00:00-06:00') || submitting || busy || fast.loading || fast.journey && fast.journey!=='options') return;
+        var code=text(holidayInput.value).toUpperCase(),message=body.querySelector('[data-bn-holiday-status]');
+        if(code && code!=='MERRY50'){message.textContent='That shipping code was not recognized.';return;}
+        try {if(code)win.sessionStorage.setItem('wl_christmas_shipping_code_2026',code);else win.sessionStorage.removeItem('wl_christmas_shipping_code_2026');win.sessionStorage.removeItem('wl_shipping_offer_v1');}catch(_){}
+        message.textContent=code?'Code saved. Choose Ship to confirm free Ground on $50+ in Christmas merchandise.':'Code removed. Updating shipping…';
+        fast.refreshQuote=true;fast.optionsReady=false;fast.paymentReady=false;refreshFast().catch(showError);
+      });
+      holidayInput.addEventListener('keydown',function(event){if(event.key==='Enter'){event.preventDefault();body.querySelector('[data-bn-holiday-apply]').click();}});
       body.querySelector('[data-bn-speed-select]').addEventListener('change',function (event) {
         if (!fast.journey || fast.journey!=='options' || submitting || fast.editor || event.target.value===fast.shippingValue) return;
         fast.shippingValue=event.target.value; requestFastUpdate('shipping');
@@ -2141,7 +2158,7 @@
         var store = (fast.stores || []).find(function (option) { return option.value===fast.store; });
         assertPickupStore(page.getElementById('ctl00_PageBody_ShoppingCartSummaryTableControl_BranchRow')?.querySelector('.col')?.textContent,store?.label);
       }
-      if (!employeeZero && fast.method !== 'pickup' && !(money(totals.shipping) > 0)) throw new Error('WebTrack did not confirm the delivery charge.');
+      if (!employeeZero && fast.method !== 'pickup' && !(money(totals.shipping) > 0) && !(fast.method==='ship' && money(totals.shipping)===0 && holidayGround(fast.methods.ship))) throw new Error('WebTrack did not confirm the delivery charge.');
       var service = (fast.shippingOptions || []).find(function (option) { return option.value === fast.shippingValue; });
       var expectedShipping = quotedShipping(fast.method, fast.methods[fast.method], service, service && service === fast.shippingOptions[0]);
       if (!employeeZero && money(totals.shipping) !== expectedShipping) throw new Error('The delivery charge changed. Refresh your options before ordering.');
@@ -2149,6 +2166,15 @@
       return {totals:totals,employeeZero:employeeZero,signature:JSON.stringify([(active.cartCheckout ? nativeCartSignature : signature)(active.current),totals,fast.method,fast.paymentFingerprint || '',fast.revision])};
     }
     function updateFastOptions() {
+      var holidayPanel=overlay?.querySelector('[data-bn-holiday-promo]');
+      if(holidayPanel){
+        holidayPanel.hidden=Date.now()>=Date.parse('2026-12-06T00:00:00-06:00') || !!fast.securePayment || !!fast.paymentAuthorizing || !!(fast.journey && fast.journey!=='options');
+        var applyHoliday=holidayPanel.querySelector('[data-bn-holiday-apply]');
+        if(applyHoliday)applyHoliday.disabled=!!(busy || fast.loading || submitting || fast.editor);
+        var holidayStatus=holidayPanel.querySelector('[data-bn-holiday-status]');
+        if(holidayGround(fast.methods?.ship))holidayStatus.textContent='MERRY50 applied: standard Ground shipping is free on the entire eligible order.';
+        else holidayStatus.textContent=holidayPanel.querySelector('input')?.value==='MERRY50' ? 'MERRY50 saved. Free Ground requires $50+ in qualifying Christmas merchandise and an eligible shipping address.' : '';
+      }
       Object.entries(fast.methods).forEach(function (entry) {
         var el = overlay.querySelector('[data-bn-method="'+entry[0]+'"]'); if (!el) return;
         el.setAttribute('aria-pressed',fast.method===entry[0]?'true':'false');

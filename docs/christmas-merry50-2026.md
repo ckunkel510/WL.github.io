@@ -23,3 +23,9 @@ The offer copy automatically falls back to generic Christmas copy at expiry. Sea
 Release the API exception and verified native bridge before enabling the advertised offer and code-entry UI. Verify a live carrier quote with qualifying merchandise, no code, below-threshold spend, and native XML zero preservation using a public business destination. Check desktop and mobile subgroup cards, popup dismissal, navigation and overflow. The automated suite includes threshold, discounts, mixed basket, expiry, paid upgrades, processing charges, address isolation, native bridge and compact-review checks.
 
 To withdraw early, remove the offer copy/code-entry UI and invalidate the promotion in `api/christmas-promotion.js`, deploying both front-end assets and the Vercel API. Do not revert unrelated checkout work. A backend-only withdrawal can leave advertising visible until the front-end update, so coordinate both deployments. Existing paid shipping rules remain in force.
+
+## Verified release evidence
+
+The production carrier API was checked on November 13 with three Christmas light sets (SKU 9086423, $59.97 qualifying merchandise) and a public business destination. MERRY50 returned Ground $0 and a saved $0 ship selection; all expedited rates remained positive. The same basket without the code returned Ground $9.95. A discounted qualifying total of $49.99 also returned $9.95. These were quotes only, with no order or label created. Native XML zero preservation was verified by automated integration tests; no authenticated customer order was submitted.
+
+Responsive browser checks covered desktop, 390px mobile and 320px narrow mobile. Christmas Lights and its C9 leaf collection retain the festive hero and offer, with no horizontal overflow. The invitation’s CTA and dismissal stay visible at 320px.

@@ -5,7 +5,9 @@
   else holiday.boot(root);
 })(typeof window === 'undefined' ? null : window, function () {
   'use strict';
-  var BUILD = '20261113-christmas-3';
+  var BUILD = '20261113-merry50-1';
+  var OFFER_END = Date.parse('2026-12-06T00:00:00-06:00');
+  function offerActive() { return Date.now() >= START && Date.now() < OFFER_END; }
   var DAY = 86400000;
   var START = Date.parse('2026-11-13T00:00:00-06:00');
   var END = Date.parse('2026-12-26T00:00:00-06:00');
@@ -19,7 +21,16 @@
     '4660': ['Outdoor Decorations', 'Make the whole block smile.', 'Spread some cheer', '04 / DELIGHT'],
     '4662': ['Ornaments & Stockings', 'The little things make it magic.', 'Add the finishing touches', '05 / MAKE IT YOURS'],
     '4664': ['Christmas Storage', 'Keep the magic for next year.', 'Wrap it up', '06 / KEEP'],
-    '4681': ['Extension Cords', 'A little help behind the holiday glow.', 'Shop extension cords', 'THE HOLIDAY HELPERS']
+    '4681': ['Extension Cords', 'A little help behind the holiday glow.', 'Shop extension cords', 'THE HOLIDAY HELPERS'],
+    '4693': ['Icicle Lights', 'Give your roofline a frosty glow.', 'Shop icicle lights', 'FROST & GLOW'],
+    '4694': ['Mini/T5/C3 Lights', 'Little lights. Big holiday spirit.', 'Find your sparkle', 'SMALL & SPARKLY'],
+    '4695': ['Specialty Lights', 'A little unexpected holiday magic.', 'Make it your own', 'SOMETHING SPECIAL'],
+    '4696': ['C9 Lights', 'Big bulbs. Classic Christmas cheer.', 'Go big on glow', 'BOLD & BRIGHT'],
+    '4697': ['C6 Lights', 'A classic shape with a festive glow.', 'Shop C6 lights', 'A CHRISTMAS CLASSIC'],
+    '4698': ['Net Lights', 'Wrap your greenery in twinkle.', 'Light up the landscape', 'WRAP IT IN LIGHT'],
+    '4700': ['Light Clips', 'Keep every strand in its happy place.', 'Finish the setup', 'THE LITTLE HELPERS'],
+    '4654': ['Inflatable Decorations', 'A big dose of front-yard cheer.', 'Make spirits bright', 'BIG HOLIDAY ENERGY'],
+    '4702': ['Yard Decorations', 'Bring a little magic outside.', 'Dress up the yard', 'CURBSIDE CHRISTMAS']
   };
 
   function inSeason(now) { return now >= START && now < END; }
@@ -108,7 +119,9 @@
     var bar = element(doc, 'aside', 'wl-holiday-ribbon');
     bar.id = 'wl-holiday-ribbon';
     bar.setAttribute('aria-label', 'Christmas at Woodson');
-    bar.innerHTML = '<span class="wl-holiday-lights" aria-hidden="true"></span><span class="wl-holiday-ribbon-copy"><span aria-hidden="true">✧</span> A little merry. A lot of Woodson.</span>';
+    bar.innerHTML = '<span class="wl-holiday-lights" aria-hidden="true"></span>';
+    var copy = element(doc,'span','wl-holiday-ribbon-copy',offerActive() ? 'Free Ground on your entire order · $50+ in Christmas items · MERRY50 · Ends Dec 5' : '✧ A little merry. A lot of Woodson.');
+    bar.appendChild(copy);
     var link = element(doc, 'a', '', 'Shop Christmas →');
     link.href = SHOP;
     bar.appendChild(link);
@@ -119,7 +132,7 @@
     if (!panel) return;
     panel.classList.add('wl-holiday-groups');
     var grid = panel.querySelector('fieldset.Cards');
-    if (grid) grid.classList.add('wl-holiday-grid');
+    if (grid) {grid.classList.add('wl-holiday-grid');grid.setAttribute('data-wl-holiday-count',String(grid.querySelectorAll('fieldset[id="productGroupCard"]').length));}
     panel.querySelectorAll('fieldset[id="productGroupCard"]').forEach(function (card) {
       if (card.hasAttribute('data-wl-holiday-card')) return;
       var nativeLink = card.querySelector('a[href*="Products.aspx"]');
@@ -145,12 +158,32 @@
       link.append(art, copy);
       card.replaceChildren(link);
       card.setAttribute('data-wl-holiday-card', pg);
-      if (pg === '4681') card.classList.add('wl-holiday-helpers');
+      if (pg === '4681' || pg === '4700') card.classList.add('wl-holiday-helpers');
     });
   }
-  function christmasLanding(doc) {
+  function offerDetails(doc, compact) {
+    var offer = element(doc,'div','wl-holiday-offer');
+    if (!compact) offer.id='wl-holiday-offer';
+    if(!compact){
+      offer.appendChild(element(doc,'strong','','Free Ground. More merry.'));
+      offer.appendChild(element(doc,'p','','Spend $50+ on Christmas Shop merchandise and get free standard Ground shipping on your entire eligible order.'));
+    }
+    offer.appendChild(element(doc,'span','wl-holiday-code','MERRY50'));
+    offer.appendChild(element(doc,'span','wl-holiday-offer-date','Through December 5'));
+    var details=element(doc,'details','wl-holiday-offer-terms');
+    details.appendChild(element(doc,'summary','','Offer details'));
+    details.appendChild(element(doc,'p','','Enter MERRY50 in the Shipping promo code box in your cart. $50 minimum in qualifying Christmas merchandise after item discounts, before tax and shipping. Standard UPS Ground parcel orders only. Upgraded shipping, local delivery and custom processing are extra. Ends December 5, 2026 at 11:59 PM Central.'));
+    offer.appendChild(details);
+    return offer;
+  }
+
+  function christmasLanding(doc, groupId) {
+    groupId=groupId || '4649';
+    var subgroup=groupId!=='4649';
     var panel = doc.getElementById('ctl00_PageBody_ProductGroupDrillDownUpdatePanel');
-    if (!panel) return;
+    var hasGroups=!!panel?.querySelector('fieldset[id="productGroupCard"]');
+    var anchor = hasGroups ? panel : doc.getElementById('ctl00_PageBody_ProductGroupStandardPanel');
+    if (!anchor) return;
     var main = doc.getElementById('MainLayoutRow');
     if (main) {
       main.classList.add('wl-holiday-landing');
@@ -159,31 +192,37 @@
     }
     if (!doc.getElementById('wl-holiday-hero')) {
       var hero = element(doc, 'section', 'wl-holiday-hero');
+      if(subgroup) hero.classList.add('wl-holiday-hero--subgroup');
       hero.id = 'wl-holiday-hero';
       hero.setAttribute('aria-labelledby', 'wl-holiday-hero-title');
       var copy = element(doc, 'div', 'wl-holiday-hero-copy');
       copy.appendChild(element(doc, 'p', 'wl-holiday-eyebrow', 'CHRISTMAS AT WOODSON'));
-      var heading = element(doc, 'h2', '', 'Make room for merry.');
+      if(subgroup){var back=element(doc,'a','wl-holiday-back','← Back to the Christmas Shop');back.href=SHOP;copy.appendChild(back);}
+      var heading = element(doc, 'h2', '', subgroup ? GROUPS[groupId][0] : 'Make room for merry.');
       heading.id = 'wl-holiday-hero-title';
       copy.appendChild(heading);
-      copy.appendChild(element(doc, 'p', 'wl-holiday-hero-description', 'A little sparkle. A lot of holiday spirit. Find the finishing touches for your home, inside and out.'));
-      var button = element(doc, 'a', 'wl-holiday-button wl-holiday-button--cream', 'Find your holiday spirit ↓');
-      button.href = '#wl-holiday-categories';
+      copy.appendChild(element(doc, 'p', 'wl-holiday-hero-description', subgroup ? GROUPS[groupId][1] : 'A little sparkle. A lot of holiday spirit. Find the finishing touches for your home, inside and out.'));
+      if(offerActive()) {
+        if(subgroup){var promoLink=element(doc,'a','wl-holiday-sub-offer','$50+ in Christmas items? MERRY50 unlocks free Ground on your entire eligible order. Through Dec 5.');promoLink.href=SHOP+'#wl-holiday-offer';copy.appendChild(promoLink);}
+        else copy.appendChild(offerDetails(doc,false));
+      }
+      var button = element(doc, 'a', 'wl-holiday-button wl-holiday-button--cream', hasGroups ? 'Find your holiday spirit ↓' : 'Shop the collection ↓');
+      button.href = hasGroups ? '#wl-holiday-categories' : '#ctl00_PageBody_ProductGroupStandardPanel';
       copy.appendChild(button);
       var art = element(doc, 'div', 'wl-holiday-hero-art');
       art.innerHTML = winterScene();
       hero.append(copy, art);
-      panel.insertAdjacentElement('beforebegin', hero);
+      anchor.insertAdjacentElement('beforebegin', hero);
       var title = element(doc, 'div', 'wl-holiday-section-title');
       title.id = 'wl-holiday-categories';
       title.tabIndex = -1;
       title.appendChild(element(doc, 'p', 'wl-holiday-eyebrow', 'LET THE MERRY-MAKING BEGIN'));
-      title.appendChild(element(doc, 'h2', '', 'All the ways to make it Christmas.'));
-      panel.insertAdjacentElement('beforebegin', title);
+      title.appendChild(element(doc, 'h2', '', subgroup ? 'Find your kind of holiday magic.' : 'All the ways to make it Christmas.'));
+      if(hasGroups) panel.insertAdjacentElement('beforebegin', title);
       var pageHeading = doc.getElementById('wl-a11y-page-heading');
-      if (pageHeading) pageHeading.textContent = 'Christmas Shop';
+      if (pageHeading) pageHeading.textContent = subgroup ? GROUPS[groupId][0] : 'Christmas Shop';
     }
-    enhanceGroups(doc);
+    if(hasGroups) enhanceGroups(doc);
   }
 
   function hasVisibleModal(doc) {
@@ -210,6 +249,7 @@
     }
     var previousFocus = doc.activeElement;
     var modal = element(doc, 'dialog', 'wl-holiday-popup');
+    if(offerActive())modal.classList.add('wl-holiday-popup--offer');
     modal.id = 'wl-holiday-popup';
     modal.setAttribute('aria-labelledby', 'wl-holiday-popup-title');
     modal.setAttribute('aria-describedby', 'wl-holiday-popup-description');
@@ -220,12 +260,13 @@
     art.innerHTML = winterScene();
     var copy = element(doc, 'div', 'wl-holiday-popup-copy');
     copy.appendChild(element(doc, 'p', 'wl-holiday-eyebrow', 'CHRISTMAS AT WOODSON'));
-    var title = element(doc, 'h2', '', 'Your holiday happy place.');
+    var title = element(doc, 'h2', '', offerActive() ? 'Make it merry. Ship it free.' : 'Your holiday happy place.');
     title.id = 'wl-holiday-popup-title';
     copy.appendChild(title);
-    var description = element(doc, 'p', '', 'Twinkly lights, festive trees & all the merry little details. Let’s make the season feel like home.');
+    var description = element(doc, 'p', '', offerActive() ? 'Spend $50+ on Christmas Shop items. Free standard Ground shipping covers your entire eligible order.' : 'Twinkly lights, festive trees & all the merry little details. Let’s make the season feel like home.');
     description.id = 'wl-holiday-popup-description';
     copy.appendChild(description);
+    if(offerActive()) copy.appendChild(offerDetails(doc,true));
     var shop = element(doc, 'a', 'wl-holiday-button', 'Explore the Christmas Shop →');
     shop.href = SHOP;
     copy.appendChild(shop);
@@ -281,11 +322,12 @@
       ribbon(doc);
       var christmas = christmasPage(preview ? '/Products.aspx' : win.location.pathname, win.location.search);
       var alreadyShoppingChristmas = christmasContext(preview ? '/Products.aspx' : win.location.pathname, win.location.search);
-      if (christmas) {
-        christmasLanding(doc);
+      if (alreadyShoppingChristmas && /^\/Products\.aspx$/i.test(preview ? '/Products.aspx' : win.location.pathname)) {
+        var groupId=params.get('pg');
+        christmasLanding(doc,groupId);
         // WebTrack can replace the drill-down panel through its ASP.NET UpdatePanel.
         if (win.Sys && win.Sys.WebForms && win.Sys.WebForms.PageRequestManager) {
-          win.Sys.WebForms.PageRequestManager.getInstance().add_endRequest(function () { christmasLanding(doc); });
+          win.Sys.WebForms.PageRequestManager.getInstance().add_endRequest(function () { christmasLanding(doc,groupId); });
         }
       }
       // WebTrack rewrites listing URLs to add page-size parameters. Do not consume
@@ -299,6 +341,12 @@
         if (css.sheet) schedule();
         else css.addEventListener('load', schedule, { once: true });
       }
+      if(offerActive())win.setTimeout(function(){
+        doc.querySelectorAll('.wl-holiday-offer,.wl-holiday-sub-offer').forEach(function(el){el.remove();});
+        var ribbonCopy=doc.querySelector('.wl-holiday-ribbon-copy');if(ribbonCopy)ribbonCopy.textContent='✧ A little merry. A lot of Woodson.';
+        var title=doc.getElementById('wl-holiday-popup-title');if(title)title.textContent='Your holiday happy place.';
+        var description=doc.getElementById('wl-holiday-popup-description');if(description)description.textContent='Twinkly lights, festive trees & all the merry little details. Let’s make the season feel like home.';
+      },Math.min(OFFER_END-Date.now()+1000,2147483647));
     }
     if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', start, { once: true });
     else start();
