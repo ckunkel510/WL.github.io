@@ -22,12 +22,13 @@
 .wl-holiday-section-title{margin:0 0 20px;scroll-margin-top:210px;color:#24382f}
 .wl-holiday-section-title .wl-holiday-eyebrow{color:#7a4e38;margin-bottom:7px!important}
 .wl-holiday-section-title h2{font:400 clamp(25px,3vw,34px)/1.2 Georgia,'Times New Roman',serif!important;color:#24382f!important;margin:0!important}
+body div#MainLayoutRow.wl-holiday-landing{width:100%!important;max-width:1200px;margin:20px auto 0!important}
 .wl-holiday-landing .wl-holiday-empty-nav{display:none!important}
 .wl-holiday-landing>.container-fluid{max-width:1200px;margin:0 auto;padding:0 24px}
 .wl-holiday-landing>.container-fluid>.row>.col{min-width:0}
 .wl-holiday-groups{padding:0!important;overflow:visible!important}
 .wl-holiday-groups .productGroupScrollingPanelFull{height:auto!important;max-height:none!important;overflow:visible!important}
-.wl-holiday-groups .paging-control{display:none!important}
+#ctl00_PageBody_ProductGroupDrillDownUpdatePanel.wl-holiday-groups .paging-control{display:none!important}
 .wl-holiday-groups fieldset.Cards.wl-holiday-grid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;width:100%!important;padding:0!important;margin:0 0 30px!important;border:0!important;min-width:0}
 .wl-holiday-groups .wl-holiday-grid fieldset#productGroupCard{float:none!important;display:block!important;width:auto!important;height:auto!important;min-width:0!important;margin:0!important;padding:0!important;border:0!important;background:transparent!important}
 .wl-holiday-category{display:flex;flex-direction:column;height:100%;overflow:hidden;border:1px solid #e6e7dc;border-radius:12px;background:#fff;color:#263a30!important;text-decoration:none!important;box-shadow:0 3px 10px #173c3008;transition:transform .2s,box-shadow .2s,border-color .2s}
