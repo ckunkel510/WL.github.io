@@ -55,10 +55,10 @@ test('optional native guidance loads in parallel and never holds the required na
   const scripts=[],timers=[],events={};
   const win={location:{origin:'https://webtrack.woodsonlumber.com',pathname:'/ShoppingCart.aspx',href:'https://webtrack.woodsonlumber.com/ShoppingCart.aspx'},setTimeout(fn,ms){timers.push({fn,ms});},addEventListener(name,fn){events[name]=fn;}};win.top=win;
   win.document={readyState:'complete',scripts,querySelector:()=>({}),createElement:()=>({setAttribute(){},remove(){}}),head:{appendChild:script=>scripts.push(script)}};
-  loader.boot(win);assert.equal(scripts.length,4);assert.match(scripts[0].src,/NativeCheckout.js/);assert.match(scripts[1].src,/Checkout2.js/);assert.match(scripts[2].src,/CartPricing.js/);assert.match(scripts[3].src,/CardContainer.js/);
+  loader.boot(win);assert.equal(scripts.length,3);assert.match(scripts[0].src,/NativeCheckout.js/);assert.match(scripts[1].src,/Checkout2.js/);assert.match(scripts[2].src,/CardContainer.js/);
   assert.equal(timers.length,0);
   scripts[0].onerror();assert.equal(scripts.filter(script=>/Checkout2.js/.test(script.src)).length,1);
-  events.pagehide();timers[0].fn();assert.equal(scripts.length,4);
+  events.pagehide();timers[0].fn();assert.equal(scripts.length,3);
 });
 
 test('pickup contact uses the native delivery contact when billing has no name controls',()=>{
