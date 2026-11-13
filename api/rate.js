@@ -9,6 +9,7 @@ const { findPromoClaim, storePromoClaim } = require("./shipping-promo-sessions")
 const { findFulfillmentClaim, publicOriginBranch } = require("./fulfillment-sessions");
 const { applyShippingMinimumToRates } = require("./shipping-policy");
 const { testResultFor } = require('./native-rate-discount-test')._internal;
+const { nativeResult: merchandisePricingResult } = require('./cart-pricing')._internal;
 
 const parser = new XMLParser({
   ignoreAttributes: false,
@@ -451,6 +452,11 @@ async function handler(req, res) {
     const { access, rating } = parseLegacyXml(raw);
     authenticate(access);
     const translated = toOAuthRequest(rating);
+    // A receipt is scoped to a random native-address marker, exact destination,
+    // trading branch and catalog weight. Never put merchandise credits into
+    // the ordinary ZIP/weight fulfillment fallback buckets.
+    const priced = await merchandisePricingResult(translated.body);
+    if (priced) return sendXml(res, 200, isSoap ? soapSuccessXml(priced, translated.context) : successXml(priced, translated.context));
     originBranch = publicOriginBranch(translated.body);
     const fulfillmentClaim = await findFulfillmentClaim(translated.body);
     if (!fulfillmentClaim) {
