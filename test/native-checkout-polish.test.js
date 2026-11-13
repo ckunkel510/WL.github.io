@@ -59,6 +59,31 @@ test('only a confirmed native UPS details transition captures date metadata; oth
  const missing=captureFixture();delete missing.win.WLShippingOffer;assert.equal(core.captureShippingEstimate(missing.win),false);assert.equal(missing.data.has('wl_native_ups_estimates_v1'),false);
  assert.doesNotThrow(()=>core.captureShippingEstimate({sessionStorage:{getItem(){throw Error('blocked');},removeItem(){throw Error('blocked');}}}));
 });
+
+test('an intermediate native details response preserves the pending UPS date handoff',()=>{
+ const f=captureFixture();assert.equal(core.captureShippingEstimate(f.win),true);
+ const captured=JSON.parse(f.data.get('wl_native_ups_estimates_v1'));
+ assert.equal(captured.pending,true);
+ assert.equal(core.enterDetailsEstimate(f.win,Date.now()),true);
+ assert.deepEqual(JSON.parse(f.data.get('wl_native_ups_estimates_v1')),captured);
+ const arrival=core.upsArrival(captured,{value:'03',nativeUps:true},Date.now());
+ assert.notEqual(arrival.kind,'unavailable');
+});
+test('shipping consumes the pending handoff so a later Back to details clears the old estimate',()=>{
+ const f=captureFixture();core.captureShippingEstimate(f.win);
+ const captured=JSON.parse(f.data.get('wl_native_ups_estimates_v1'));
+ core.consumeEstimateTransfer(f.win,captured);
+ assert.equal(captured.pending,false);
+ assert.equal(core.enterDetailsEstimate(f.win,Date.now()),false);
+ assert.equal(f.data.has('wl_native_ups_estimates_v1'),false);
+});
+test('stale, future, wrong-origin and unconfirmed handoffs cannot survive a new details entry',()=>{
+ for(const change of [s=>s.capturedAt=Date.now()-120000,s=>s.capturedAt=Date.now()+1000,s=>s.quotedAt=Date.now()-900001,s=>s.originPostalCode='10001',s=>s.pending=false,s=>s.rates=[]]){
+  const f=captureFixture();core.captureShippingEstimate(f.win);const value=JSON.parse(f.data.get('wl_native_ups_estimates_v1'));change(value);f.data.set('wl_native_ups_estimates_v1',JSON.stringify(value));assert.equal(core.enterDetailsEstimate(f.win,Date.now()),false);assert.equal(f.data.has('wl_native_ups_estimates_v1'),false);
+ }
+ const f=captureFixture();core.captureShippingEstimate(f.win);f.data.set('wl_fulfillment_method','pickup');assert.equal(core.enterDetailsEstimate(f.win,Date.now()),false);
+ assert.doesNotThrow(()=>core.enterDetailsEstimate({document:{},sessionStorage:{getItem(){throw Error('blocked');},removeItem(){throw Error('blocked');}}},Date.now()));
+});
 const source=fs.readFileSync(require.resolve('../Checkout2'),'utf8');
 function nativeSelection(frame,radios={}){const context=vm.createContext({document:{getElementById:id=>({checked:!!radios[id.split('_').pop()]}),querySelector:()=>({})},isBuyNowFrame:()=>frame,getFulfillmentIntent:()=> 'ship'});vm.runInContext(source.slice(source.indexOf('  function getDeliveredSelected()'),source.indexOf('  function getSaleType()')),context);return context;}
 test('a highlighted recommendation cannot masquerade as a native radio choice',()=>{
