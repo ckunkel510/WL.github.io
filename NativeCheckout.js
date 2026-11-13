@@ -6,7 +6,7 @@
   else core.boot(root);
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261109-payment-cancel-6';
+  var BUILD = '20261113-ups-handoff-7';
   var TITLES = {1:'Delivery method',2:'Pickup store',3:'Delivery address',4:'Billing address',5:'Timing & notes'};
   var ETA_KEY='wl_native_ups_estimates_v1',ETA_MAX_AGE=15*60*1000;
   var UPS_SELECT='ctl00_PageBody_CartSummary2_UPSShippingCalculatorControl_ShippingSelection';
@@ -99,10 +99,35 @@
     var snapshot=null;
     try {
       if (win.sessionStorage.getItem('wl_fulfillment_method')==='ship' && win.document.getElementById('ctl00_PageBody_SaleTypeSelector_rbUPSDelivery')?.checked) snapshot=upsQuoteSnapshot(win.WLShippingOffer?.current?.(),Date.now());
-      if (snapshot) win.sessionStorage.setItem(ETA_KEY,JSON.stringify(snapshot));
+      if (snapshot) { snapshot.pending=true;win.sessionStorage.setItem(ETA_KEY,JSON.stringify(snapshot)); }
       else win.sessionStorage.removeItem(ETA_KEY);
     } catch (_) { try { win.sessionStorage.removeItem(ETA_KEY); } catch (_) {} }
     return !!snapshot;
+  }
+  function pendingEstimateTransfer(snapshot,now) {
+    var age=now-Number(snapshot?.capturedAt),quoteAge=now-Number(snapshot?.quotedAt);
+    return snapshot?.pending===true && TX_ORIGINS.includes(snapshot.originPostalCode) &&
+      Number.isFinite(age) && age>=0 && age<120000 && Number.isFinite(quoteAge) && quoteAge>=0 && quoteAge<=ETA_MAX_AGE &&
+      Array.isArray(snapshot.rates) && snapshot.rates.length>0;
+  }
+  function enterDetailsEstimate(win,now) {
+    var preserve=false;
+    try {
+      var snapshot=JSON.parse(win.sessionStorage.getItem(ETA_KEY) || 'null');
+      // WebTrack can return an intermediate details document while a confirmed
+      // Continue is moving to shipping. Its initial ready callback must not
+      // erase the metadata captured immediately before that native postback.
+      preserve=win.sessionStorage.getItem('wl_fulfillment_method')==='ship' && pendingEstimateTransfer(snapshot,now);
+      if (!preserve) win.sessionStorage.removeItem(ETA_KEY);
+    } catch (_) { try { win.sessionStorage.removeItem(ETA_KEY); } catch (_) {} }
+    win.document.documentElement?.setAttribute?.('data-wl-native-ups-handoff',preserve?'preserved':'cleared');
+    return preserve;
+  }
+  function consumeEstimateTransfer(win,snapshot) {
+    if (!snapshot?.pending) return;
+    snapshot.pending=false;
+    try { win.sessionStorage.setItem(ETA_KEY,JSON.stringify(snapshot)); } catch (_) {}
+    win.document.documentElement?.setAttribute?.('data-wl-native-ups-handoff','consumed');
   }
   function renderUpsArrival(win) {
     var doc=win.document,existing=doc.getElementById('wl-native-ups-arrival'),mode='';
@@ -113,6 +138,7 @@
     if(!select.getAttribute('aria-label'))select.setAttribute('aria-label','UPS shipping speed');
     var option=select.selectedOptions?.[0],snapshot=null;
     try { snapshot=JSON.parse(win.sessionStorage.getItem(ETA_KEY) || 'null'); } catch (_) {}
+    consumeEstimateTransfer(win,snapshot);
     var copy=upsArrival(snapshot,option?{value:option.value,label:option.textContent,nativeUps:select.id===UPS_SELECT}:null,Date.now());
     if (existing?.dataset.copy===JSON.stringify(copy)) return;
     var host=doc.getElementById('SummaryEntry2');
@@ -642,7 +668,7 @@
       if(abandoned)return;
       if(nativeStage(win.document)==='details' && !detailsEntered) {
         detailsEntered=true;
-        try { win.sessionStorage.removeItem(ETA_KEY); } catch (_) {}
+        enterDetailsEstimate(win,Date.now());
       }
       mountGuide(win);renderPaymentFeedback(win);renderUpsArrival(win);
     }
@@ -667,5 +693,5 @@
     if (win.document.readyState==='loading') win.document.addEventListener('DOMContentLoaded',watch,{once:true});else watch();
     win.addEventListener('pagehide',function () { abandoned=true;win.clearTimeout(feedbackTimer); },{once:true});
   }
-  return {build:BUILD,sectionPlan:sectionPlan,nativeStage:nativeStage,hostedPaymentOperation:hostedPaymentOperation,installPaymentCancelRecovery:installPaymentCancelRecovery,pickupContactName:pickupContactName,hasNativeError:hasNativeError,paymentFeedback:paymentFeedback,renderPaymentFeedback:renderPaymentFeedback,upsQuoteSnapshot:upsQuoteSnapshot,upsArrival:upsArrival,selectedUpsRate:selectedUpsRate,addUpsBusinessDays:addUpsBusinessDays,captureShippingEstimate:captureShippingEstimate,renderUpsArrival:renderUpsArrival,mountGuide:mountGuide,enhanceSections:enhanceSections,boot:boot};
+  return {build:BUILD,sectionPlan:sectionPlan,nativeStage:nativeStage,hostedPaymentOperation:hostedPaymentOperation,installPaymentCancelRecovery:installPaymentCancelRecovery,pickupContactName:pickupContactName,hasNativeError:hasNativeError,paymentFeedback:paymentFeedback,renderPaymentFeedback:renderPaymentFeedback,upsQuoteSnapshot:upsQuoteSnapshot,upsArrival:upsArrival,selectedUpsRate:selectedUpsRate,addUpsBusinessDays:addUpsBusinessDays,captureShippingEstimate:captureShippingEstimate,pendingEstimateTransfer:pendingEstimateTransfer,enterDetailsEstimate:enterDetailsEstimate,consumeEstimateTransfer:consumeEstimateTransfer,renderUpsArrival:renderUpsArrival,mountGuide:mountGuide,enhanceSections:enhanceSections,boot:boot};
 });
