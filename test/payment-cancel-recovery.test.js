@@ -88,5 +88,5 @@ test('the native loader recognizes hosted payment views and carries a recent can
  assert.equal(loader.needsNativeViews({querySelector:s=>s.startsWith('iframe.')?{}:null,getElementById:()=>({})}),true);
  const scripts=[],win={location:{origin:'https://webtrack.woodsonlumber.com',pathname:'/ShoppingCart.aspx',href:'https://webtrack.woodsonlumber.com/ShoppingCart.aspx'},sessionStorage:{getItem:()=>String(Date.now())},addEventListener(){},setTimeout(){}};win.top=win;
  win.document={readyState:'complete',scripts,querySelector:()=>null,getElementById:()=>({}),createElement:()=>({setAttribute(){}}),head:{appendChild:s=>scripts.push(s)}};
- loader.boot(win);assert.equal(scripts.length,3);assert.match(scripts[0].src,/NativeCheckout\.js\?v=20261109-payment-cancel-6/);
+ loader.boot(win);assert.equal(scripts.length,3);assert.match(scripts[0].src,/NativeCheckout\.js\?v=20261113-ups-handoff-7/);
 });
