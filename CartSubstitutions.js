@@ -6,7 +6,8 @@
   else { root.WLCartSubstitutions = core; core.boot(root).catch(function () {}); }
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261112-substitutions-3';
+  var BUILD = '20261113-substitutions-paused-4';
+  var ENABLED = false; // Owner-requested pause; retained preview tooling can still review the work.
   var ORIGIN = 'https://webtrack.woodsonlumber.com';
   var API = 'https://wl-upsrates.vercel.app/api/cart-substitutions';
   var BASE = 'https://ckunkel510.github.io/WL.github.io/';
@@ -208,6 +209,7 @@
   }
   async function boot(win, options) {
     options = options || {};
+    if (!ENABLED && !options.preview) return; // Also covers older cached cart loaders.
     if (!win || win.top !== win || (!options.preview && (win.location.origin !== ORIGIN || !/^\/ShoppingCart\.aspx$/i.test(win.location.pathname)))) return;
     var doc = win.document;
     if (!doc.querySelector('#ctl00_PageBody_ShoppingCartDetailPanel') || !doc.querySelector('a[href*="SignOut=1" i]') || doc.querySelector('iframe[name="woodson-buy-now-checkout"]')) return;
@@ -351,5 +353,5 @@
     await scan();
     return { open: open, scan: scan, adapter: io, close: close };
   }
-  return { build: BUILD, imageUrl: imageUrl, productPhoto: productPhoto, money: money, unit: unit, targetOf: targetOf, signature: signature, expectedCart: expectedCart, cartFromDocument: cartFromDocument, productFromDocument: productFromDocument, formPost: formPost, setQuantity: setQuantity, adapter: adapter, companyStock: companyStock, stockLabel: stockLabel, prepare: prepare, swap: swap, eligibleNative: eligibleNative, boot: boot };
+  return { build: BUILD, enabled: ENABLED, imageUrl: imageUrl, productPhoto: productPhoto, money: money, unit: unit, targetOf: targetOf, signature: signature, expectedCart: expectedCart, cartFromDocument: cartFromDocument, productFromDocument: productFromDocument, formPost: formPost, setQuantity: setQuantity, adapter: adapter, companyStock: companyStock, stockLabel: stockLabel, prepare: prepare, swap: swap, eligibleNative: eligibleNative, boot: boot };
 });
