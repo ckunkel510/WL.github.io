@@ -28,6 +28,7 @@ test('only shopping pages are eligible, including mixed case; commerce/account p
   assert.equal(holiday.christmasContext('/Products.aspx','?pg=4651'),true);
   assert.equal(holiday.christmasContext('/ProductDetail.aspx','?pg=4660'),true);
   assert.equal(holiday.christmasContext('/Products.aspx','?pg=4518'),false);
+  for(const group of require('../data/christmas-shop-2026.json').groups) assert.equal(holiday.christmasContext('/Products.aspx','?pg='+group.id),true,group.name);
 });
 test('a visit survives a new session and is eligible at exactly 24 hours', () => {
   const win=visitor();
@@ -57,7 +58,8 @@ test('native page-size redirects do not consume a session entry before the delay
     try { Date.now=()=>now;holiday.boot(win); } finally {Date.now=RealDateNow;}
     assert.equal(holiday.entryAvailable(win),true);
   }
-  assert.equal(scheduled,2);
+  // Each document schedules its invitation and its campaign-expiration update.
+  assert.equal(scheduled,4);
 });
 test('a first-party cookie preserves the 24-hour cap when localStorage is blocked', () => {
   const win=visitor();

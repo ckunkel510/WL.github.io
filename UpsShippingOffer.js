@@ -1,7 +1,9 @@
 (function () {
   "use strict";
 
-  var BUILD_VERSION = "20261112-employee-carrier-3";
+  var BUILD_VERSION = "20261113-merry50-1";
+  var HOLIDAY_CODE_KEY = 'wl_christmas_shipping_code_2026';
+  var HOLIDAY_END = Date.parse('2026-12-06T00:00:00-06:00');
   var RATE_URL = "https://wl-upsrates.vercel.app/api/fulfillment-quote";
   var APPROVAL_URL = "https://wl-upsrates.vercel.app/api/customization-approval";
   var CUT_POLICY_URL = "https://ckunkel510.github.io/WL.github.io/data/cut-to-ship-products.json?v=20260917-2";
@@ -333,6 +335,7 @@
         productId: productId(row),
         productCode: productCode(row),
         quantity: Math.max(1, Number(select && select.value || input && input.value || locked && locked.textContent || 1) || 1),
+        netLineTotalCents: nativeLineTotal(row),
         cutToShip: cutSelection({ productId: productId(row), productCode: productCode(row) })
       };
     });
@@ -341,6 +344,53 @@
     return stored && stored.items ? stored.items.map(function (item) {
       return Object.assign({}, item, { cutToShip: cutSelection(item) });
     }) : [];
+  }
+
+  function nativeLineTotal(row) {
+    var total = row.querySelector('.cart-item-card .action-block > div:first-child .fw-bold, .col-12.col-sm-3 .d-flex > div:first-child');
+    var match = text(total && total.textContent).match(/\$\s*([\d,]+(?:\.\d{1,2})?)/);
+    return match ? Math.round(Number(match[1].replace(/,/g,'')) * 100) : null;
+  }
+
+  function holidayCode() {
+    if (Date.now() >= HOLIDAY_END) return '';
+    try { return sessionStorage.getItem(HOLIDAY_CODE_KEY) === 'MERRY50' ? 'MERRY50' : ''; } catch (_) { return ''; }
+  }
+
+  function renderHolidayCode() {
+    if (Date.now() >= HOLIDAY_END) { document.getElementById('wl-christmas-shipping-code')?.remove(); return; }
+    if (document.getElementById('wl-christmas-shipping-code') || nativePricedStage()) return;
+    var target = document.querySelector('.shopping-cart-details, .SaleTypeSelector');
+    if (!target) return;
+    var panel = document.createElement('section');
+    panel.id = 'wl-christmas-shipping-code';
+    panel.setAttribute('aria-label','Christmas shipping promotion');
+    panel.style.cssText = 'padding:16px;margin:12px 0 18px;border:1px solid #d9dfd1;border-radius:10px;background:#f7f4eb;color:#24382f;font:13px/1.5 Arial;';
+    panel.innerHTML = '<strong>Make it merry. Ship it free.</strong><p style="margin:5px 0 10px">$50+ in Christmas Shop merchandise unlocks free standard UPS Ground on your entire eligible order. Through Dec 5.</p><label for="wl-holiday-code-input">Shipping promo code</label><div style="display:flex;gap:8px;margin-top:5px"><input id="wl-holiday-code-input" autocomplete="off" autocapitalize="characters" spellcheck="false" style="flex:1;min-width:0;padding:10px;border:1px solid #9aa69a;border-radius:5px;font:14px Arial"><button type="button" style="padding:10px 17px;border:0;border-radius:5px;background:#6b0016;color:#fff;font-weight:700">Apply</button></div><p data-wl-promo-status role="status" aria-live="polite" style="margin:9px 0 0"></p><small>Qualifying merchandise after item discounts, before tax/shipping. Standard parcel Ground only; upgraded shipping, local delivery and custom processing are extra.</small>';
+    var input = panel.querySelector('input'), status = panel.querySelector('[data-wl-promo-status]');
+    input.value = holidayCode();
+    panel.querySelector('button').addEventListener('click', function () {
+      var code = text(input.value).toUpperCase();
+      if (code && code !== 'MERRY50') { status.textContent='That shipping code was not recognized.'; return; }
+      try { if(code) sessionStorage.setItem(HOLIDAY_CODE_KEY,code); else sessionStorage.removeItem(HOLIDAY_CODE_KEY); } catch (_) {}
+      try { sessionStorage.removeItem(STORAGE_KEY); } catch (_) {}
+      status.textContent = code ? 'Checking your Christmas merchandise and shipping eligibility…' : 'Shipping code removed. Updating shipping…';
+      refreshOffer().then(function (offer) {
+        renderHolidayStatus(offer && offer.promotion);
+        if (!offer && code) status.textContent='Code saved. We’ll confirm eligibility once a shipping address and current cart prices are available.';
+      });
+    });
+    input.addEventListener('keydown',function(event){if(event.key==='Enter'){event.preventDefault();panel.querySelector('button').click();}});
+    target.insertAdjacentElement('beforebegin',panel);
+  }
+
+  function renderHolidayStatus(promotion) {
+    var status = document.querySelector('#wl-christmas-shipping-code [data-wl-promo-status]');
+    if (!status) return;
+    if (!holidayCode()) {status.textContent='';return;}
+    if (promotion?.applied) status.textContent='MERRY50 applied: standard Ground shipping is free on the entire eligible order. Select Ship via UPS and Ground.';
+    else if (promotion?.reason==='minimum-not-met') status.textContent='Add $'+Math.max(0,(5000-Number(promotion.eligibleSubtotalCents||0))/100).toFixed(2)+' more in qualifying Christmas merchandise to unlock free Ground.';
+    else status.textContent='MERRY50 is saved. A current Christmas merchandise total and eligible UPS Ground quote are required.';
   }
 
   function selectedOrigin() {
@@ -545,6 +595,7 @@
       options: result && result.options || null,
       cutToShip: result && result.cutToShip || null,
       packageProfile: result && result.packageProfile || null,
+      promotion: result && result.promotion || null,
       ts: Date.now()
     };
     try { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload)); } catch (error) {}
@@ -604,6 +655,7 @@
       missingContextRetries = 0;
       address.postalCode = zip;
       var requestBody = {
+        promotionCode: holidayCode(),
         shipFrom: origin,
         carrierOrigin: carrierOrigin,
         shipTo: address,
@@ -621,7 +673,7 @@
       // A cart estimate or an earlier address request may finish after native
       // checkout receives its complete address/branch. Do not publish that old
       // result into shared session state or let it change the chosen method.
-      if (addressQuoteKey(checkoutAddress(), zip) !== addressQuoteKey(address, zip) || selectedOrigin().postalCode !== origin.postalCode) {
+      if (holidayCode() !== requestBody.promotionCode || addressQuoteKey(checkoutAddress(), zip) !== addressQuoteKey(address, zip) || selectedOrigin().postalCode !== origin.postalCode) {
         setQuoteState('context_changed');
         scheduleRefresh(100);
         return null;
@@ -630,6 +682,7 @@
       // Let that frame own the address quote; do not publish the older estimate.
       if (compactFrameOwnsQuote() || nativePricedStage()) { setQuoteState('superseded'); return null; }
       var payload = writeOffer(result, zip, items, false, address, origin, carrierOrigin);
+      renderHolidayStatus(result.promotion);
       var selected = rememberedSelection();
       // Checkout calls the mode "ship"; the quote exposes that option as "ups".
       var selectedOption = selected && result.options && result.options[selected.mode === "ship" ? "ups" : selected.mode];
@@ -1031,6 +1084,7 @@
   }, true);
 
   function boot() {
+    renderHolidayCode();
     renderCutControls();
     scheduleRefresh(150);
     setTimeout(refreshOffer, 1200);
@@ -1047,6 +1101,7 @@
     if (manager && !manager.__wlShippingOfferHooked) {
       manager.__wlShippingOfferHooked = true;
       manager.add_endRequest(function () {
+        renderHolidayCode();
         renderCutControls();
         scheduleRefresh(150);
       });
