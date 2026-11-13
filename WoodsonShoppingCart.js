@@ -8,7 +8,7 @@
   const CART_SUBTOTAL_KEY = 'wl_cart_subtotal_v1';
   const CUT_SELECTION_KEY = 'wl_cut_to_ship_v1';
   const FULFILLMENT_QUOTE_URL = 'https://wl-upsrates.vercel.app/api/fulfillment-quote';
-  const SHIPPING_OFFER_VERSION = '20261113-merry50-1';
+  const SHIPPING_OFFER_VERSION = '20261113-automatic-pricing-1';
   const SHIPPING_OFFER_SCRIPT_URL = 'https://ckunkel510.github.io/WL.github.io/UpsShippingOffer.js?v=' + SHIPPING_OFFER_VERSION;
   let checkoutBlockReason = '';
   const STORE_ORIGINS = {
@@ -521,6 +521,12 @@
     const wrappers = document.querySelectorAll('.SubtotalWrapper');
     if (!wrappers.length) return;
 
+    if (!window.WLCartPricing && !document.querySelector('script[data-wl-cart-pricing]')) {
+      const pricingScript=document.createElement('script');
+      pricingScript.src='https://ckunkel510.github.io/WL.github.io/CartPricing.js?v=20261113-automatic-pricing-3';
+      pricingScript.setAttribute('data-wl-cart-pricing','1');
+      document.head.appendChild(pricingScript);
+    }
     loadShippingOfferScript();
     injectStyles();
     const signature = getCartSignature();
