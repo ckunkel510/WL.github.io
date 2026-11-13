@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var BUILD_VERSION = "20261112-employee-carrier-2";
+  var BUILD_VERSION = "20261112-employee-carrier-3";
   var RATE_URL = "https://wl-upsrates.vercel.app/api/fulfillment-quote";
   var APPROVAL_URL = "https://wl-upsrates.vercel.app/api/customization-approval";
   var CUT_POLICY_URL = "https://ckunkel510.github.io/WL.github.io/data/cut-to-ship-products.json?v=20260917-2";
@@ -375,19 +375,21 @@
   }
 
   function carrierOriginFromNativeCart(page) {
+    function unavailable(reason) {
+      document.documentElement?.setAttribute?.('data-wl-employee-origin-state', reason);
+      return null;
+    }
     if (!document.getElementById('ctl00_EmployeeStatusBar_LogonBarPanel') ||
-        !page.getElementById('ctl00_EmployeeStatusBar_LogonBarPanel')) return null;
+        !page.getElementById('ctl00_EmployeeStatusBar_LogonBarPanel')) return unavailable('staff-context-missing');
     var rows = Array.prototype.slice.call(page.querySelectorAll('.shopping-cart-item'))
-      .filter(function (row) { return productId(row) || productCode(row); });
-    if (!rows.length) return null;
+      .filter(function (row) { return row.querySelector('a[id$="_ProductCodeHyperLink"]'); });
+    if (!rows.length) return unavailable('native-products-missing');
     var branches = rows.map(function (row) {
       // WebTrack renders its trading branch beside each native product's stock.
-      // Read that server value before cart styling removes the legacy layout.
-      var info = row.querySelector('.row.pl-2.w-100 .col-12.col-sm-6');
-      if (!info) return '';
+      // The stock block can be outside the product-description column.
       var names = [];
-      [info].concat(Array.prototype.slice.call(info.querySelectorAll('*'))).forEach(function (element) {
-        if (element.closest('a')) return;
+      [row].concat(Array.prototype.slice.call(row.querySelectorAll('*'))).forEach(function (element) {
+        if (element.closest('a, script, style, select')) return;
         Array.prototype.forEach.call(element.childNodes, function (node) {
           if (node.nodeType !== 3) return;
           String(node.textContent || '').split(/[\r\n]+/).forEach(function (line) {
@@ -398,7 +400,9 @@
       });
       return names.length === 1 ? names[0] : '';
     });
-    if (branches.some(function (name) { return !name || name !== branches[0]; })) return null;
+    if (branches.some(function (name) { return !name || name !== branches[0]; })) return unavailable('native-branch-unverified');
+    document.documentElement?.setAttribute?.('data-wl-employee-origin-state', 'ready');
+    document.documentElement?.setAttribute?.('data-wl-employee-carrier-origin', STORE_ORIGINS[branches[0]].postalCode);
     return Object.assign({}, STORE_ORIGINS[branches[0]]);
   }
 
@@ -406,7 +410,10 @@
     return shippingRequest('/ShoppingCart.aspx', { credentials: 'same-origin', cache: 'no-store' },
       function (response) { if (!response.ok) throw new Error('Native cart branch unavailable.'); return response.text(); })
       .then(function (html) { return carrierOriginFromNativeCart(new DOMParser().parseFromString(html, 'text/html')); })
-      .catch(function () { return null; });
+      .catch(function () {
+        document.documentElement?.setAttribute?.('data-wl-employee-origin-state', 'native-cart-unavailable');
+        return null;
+      });
   }
 
   function shippingRequest(url, options, read) {

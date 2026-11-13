@@ -73,13 +73,11 @@ function load(file, env, exports = "") {
       if (label === '__native_cart__') return {
         getElementById: id => id === 'ctl00_EmployeeStatusBar_LogonBarPanel' && env.nativeCartEmployee !== false ? {} : null,
         querySelectorAll: () => (env.nativeCartBranches === null ? [] : env.nativeCartBranches || ['Caldwell']).map((names, index) => ({
-          querySelectorAll: () => [{ getAttribute: () => `ProductDetail.aspx?pid=${index + 100}` }],
-          querySelector: () => env.nativeCartMissingInfo ? null : {
-            childNodes: [], closest: () => null,
-            querySelectorAll: () => (Array.isArray(names) ? names : [names]).map(name => ({
-              closest: () => null, childNodes: [{ nodeType: 3, textContent: name }]
-            }))
-          }
+          childNodes: [], closest: () => null,
+          querySelector: () => env.nativeCartMissingInfo ? null : {},
+          querySelectorAll: () => (Array.isArray(names) ? names : [names]).map(name => ({
+            closest: () => null, childNodes: [{ nodeType: 3, textContent: name }]
+          }))
         }))
       };
       return { getElementById: id => {
@@ -562,6 +560,8 @@ test('employee-manager password-only settings use the server cart trading branch
   assert.deepEqual(env.requests[0].cart.map(item => [item.productCode, item.quantity]),
     [['65337', 4], ['53032', 2], ['64069', 1], ['27863', 2], ['25586', 3]]);
   assert.equal(env.document.documentElement['data-wl-shipping-quote-state'], 'ready');
+  assert.equal(env.document.documentElement['data-wl-employee-origin-state'], 'ready');
+  assert.equal(env.document.documentElement['data-wl-employee-carrier-origin'], '77836');
   await env.context.WLShippingOffer.select('ship');
   assert.equal(env.requests[1].carrierOrigin.postalCode, '77836');
 });
