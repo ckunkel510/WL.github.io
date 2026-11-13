@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var BUILD_VERSION = "20261113-automatic-pricing-1";
+  var BUILD_VERSION = "20261113-merry50-1";
   var HOLIDAY_CODE_KEY = 'wl_christmas_shipping_code_2026';
   var HOLIDAY_END = Date.parse('2026-12-06T00:00:00-06:00');
   var RATE_URL = "https://wl-upsrates.vercel.app/api/fulfillment-quote";
@@ -1062,9 +1062,6 @@
     refreshCheckout: refreshCheckoutOffer,
     current: currentOffer,
     select: selectOffer,
-    pricingContext: async function () {
-      return {shipFrom:selectedOrigin(),carrierOrigin:await accountCarrierOrigin(),shipTo:checkoutAddress(),cart:cartItems()};
-    },
     renderCutControls: renderCutControls,
     approval: readCustomizationApproval,
     validateCustomizationBeforeCheckout: validateCustomizationBeforeCheckout
