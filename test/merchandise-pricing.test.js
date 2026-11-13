@@ -43,3 +43,17 @@ test('the authenticated native XML bridge imports pickup, UPS and local-delivery
     }
   }finally{route._internal.setTestStore(null);for(const k of keys)before[k]===undefined?delete process.env[k]:process.env[k]=before[k];}
 });
+
+test('repeated startup callbacks keep a slow same-cart price response current',async()=>{
+  const revisions=front.quoteRevisions();let finish;const response=new Promise(resolve=>{finish=resolve;});
+  const first=revisions.begin('four-box-cart');let applied=false;
+  const pending=response.then(()=>{if(revisions.current(first))applied=true;});
+  assert.equal(revisions.begin('four-box-cart'),null);assert.equal(revisions.begin('four-box-cart'),null);
+  finish();await pending;assert.equal(applied,true);
+  assert.equal(revisions.begin('four-box-cart'),null);assert.equal(revisions.current(first),true);
+});
+test('a changed basket supersedes its older quote, and a failed old response cannot reset the new basket',()=>{
+  const revisions=front.quoteRevisions(),old=revisions.begin('three-box-cart'),next=revisions.begin('nine-box-cart');
+  assert.equal(revisions.current(old),false);revisions.retry(old);assert.equal(revisions.begin('nine-box-cart'),null);assert.equal(revisions.current(next),true);
+  revisions.retry(next);assert.ok(revisions.begin('nine-box-cart')>next);revisions.invalidate();assert.equal(revisions.current(next),false);
+});

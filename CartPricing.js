@@ -7,6 +7,15 @@
   function text(value){return String(value || '').replace(/\s+/g,' ').trim();}
   function cents(value){var m=text(value).replace(/,/g,'').match(/(?:\$\s*)?(-?\d+\.\d{2})/);return m?Math.round(Number(m[1])*100):null;}
   function money(value){return (value<0?'−':'')+'$'+(Math.abs(value)/100).toFixed(2);}
+  function quoteRevisions(){
+    var sequence=0,fingerprint='';
+    return {
+      begin:function(next){if(next===fingerprint)return null;fingerprint=next;return ++sequence;},
+      current:function(revision){return revision===sequence;},
+      retry:function(revision){if(revision===sequence)fingerprint='';},
+      invalidate:function(){fingerprint='';sequence++;}
+    };
+  }
   function readCart(doc){
     return Array.from(doc.querySelectorAll('.shopping-cart-item')).map(function(row){
       var link=Array.from(row.querySelectorAll('a[href*="ProductDetail.aspx"]')).find(function(a){return /[?&]pid=\d+/i.test(a.getAttribute('href') || '');});
@@ -42,7 +51,7 @@
   }
   function boot(win){
     if(!win || win.top!==win || !/\/ShoppingCart\.aspx$/i.test(win.location.pathname) || win.WLCartPricing)return;
-    var doc=win.document,sequence=0,timer,abandoned=false,verified=false,lastFingerprint='';
+    var doc=win.document,revisions=quoteRevisions(),timer,abandoned=false,verified=false;
     var prefix='ctl00_PageBody_DeliveryAddress_';
     var fields=['AddressLine1','AddressLine2','AddressLine3','City','CountySelector_CountyList','Postcode','CountrySelector'];
     function employee(){return !!doc.getElementById('ctl00_EmployeeStatusBar_LogonBarPanel');}
@@ -101,13 +110,15 @@
     }
     async function refreshCart(){
       var items=readCart(doc);if(!items.length)return;
-      var fingerprint=JSON.stringify(items),current=++sequence;
+      var current=revisions.begin(JSON.stringify(items));
+      // Repeated ready/partial-update callbacks must neither invalidate a slow
+      // same-cart quote nor erase the verified pricing saved by its response.
+      if(current===null)return;
       save(CART,{cart:items,ts:Date.now()});
-      if(fingerprint===lastFingerprint)return;
-      lastFingerprint=fingerprint;win.sessionStorage.removeItem(KEY);
+      win.sessionStorage.removeItem(KEY);
       if(!needed(items) && !specialIds().length){cartPanels(null);return;}
-      try{var data=await request({cart:items,employee:employee(),specialQuoteIds:specialIds()});if(!abandoned && current===sequence){save(CART,{cart:items,pricing:data.pricing,ts:Date.now()});cartPanels(data.pricing);doc.documentElement.dataset.wlCartPricing='ready';}}
-      catch(_){lastFingerprint='';if(!abandoned && current===sequence){cartPanels(null);doc.documentElement.dataset.wlCartPricing='unavailable';}}
+      try{var data=await request({cart:items,employee:employee(),specialQuoteIds:specialIds()});if(!abandoned && revisions.current(current)){save(CART,{cart:items,pricing:data.pricing,ts:Date.now()});cartPanels(data.pricing);doc.documentElement.dataset.wlCartPricing='ready';}}
+      catch(_){if(!abandoned && revisions.current(current)){revisions.retry(current);cartPanels(null);doc.documentElement.dataset.wlCartPricing='unavailable';}}
     }
     async function freshCart(){
       var response=await win.fetch('/ShoppingCart.aspx',{credentials:'same-origin',cache:'no-store',signal:win.AbortSignal.timeout(15000)});
@@ -183,7 +194,7 @@
       var handoff=event.target.closest?.('#ctl00_PageBody_PlaceOrderButton,#gc_guest_btn');
       var items=readCart(doc);
       if(handoff && needed(items) && doc.documentElement.dataset.wlCartPricing!=='ready'){
-        event.preventDefault();event.stopImmediatePropagation();lastFingerprint='';refreshCart();win.alert('Please wait while your light savings are confirmed, then continue.');return;
+        event.preventDefault();event.stopImmediatePropagation();revisions.invalidate();refreshCart();win.alert('Please wait while your light savings are confirmed, then continue.');return;
       }
       var financial=event.target.closest?.('#ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView,#ctl00_PageBody_CompleteCheckoutButton,[id*="PayStored"],[id*="UseStored"],#ctl00_PageBody_btnContinue_CardOnFileView,#ctl00_PageBody_btnContinue_NewCardView,#ctl00_PageBody_btnPayByCard,#wl-complete');
       if(financial && receipt()){
@@ -192,7 +203,7 @@
       }
     },true);
     doc.addEventListener('change',schedule,true);
-    doc.addEventListener('input',function(event){if(event.target.matches?.('select.wl-qty-select,input[id*="_qty_"]')){doc.documentElement.dataset.wlCartPricing='updating';lastFingerprint='';schedule();}},true);
+    doc.addEventListener('input',function(event){if(event.target.matches?.('select.wl-qty-select,input[id*="_qty_"]')){doc.documentElement.dataset.wlCartPricing='updating';revisions.invalidate();schedule();}},true);
     doc.addEventListener('wl:shipping-offer-change',renderNative);
     win.addEventListener('wl-native-checkout-ready',renderNative);
     win.addEventListener('pagehide',function(){abandoned=true;win.clearTimeout(timer);},{once:true});
@@ -200,5 +211,5 @@
     win.setTimeout(schedule,750);win.setTimeout(schedule,1600);
     try{var manager=win.Sys?.WebForms?.PageRequestManager?.getInstance();if(manager)manager.add_endRequest(schedule);}catch(_){}
   }
-  return {boot:boot,cents:cents,money:money,readCart:readCart,nativeTotals:nativeTotals,reconcile:reconcile,lightIds:LIGHT_IDS};
+  return {boot:boot,cents:cents,money:money,readCart:readCart,nativeTotals:nativeTotals,reconcile:reconcile,lightIds:LIGHT_IDS,quoteRevisions:quoteRevisions};
 });
