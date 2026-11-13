@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  var BUILD_VERSION = "20261112-employee-carrier-1";
+  var BUILD_VERSION = "20261112-employee-carrier-2";
   var RATE_URL = "https://wl-upsrates.vercel.app/api/fulfillment-quote";
   var APPROVAL_URL = "https://wl-upsrates.vercel.app/api/customization-approval";
   var CUT_POLICY_URL = "https://ckunkel510.github.io/WL.github.io/data/cut-to-ship-products.json?v=20260917-2";
@@ -374,19 +374,39 @@
     return key ? Object.assign({}, STORE_ORIGINS[key]) : null;
   }
 
-  function employeeCheckoutOrigin() {
-    if (!document.getElementById('ctl00_EmployeeStatusBar_LogonBarPanel')) return null;
-    var branch = document.getElementById('ctl00_PageBody_BranchDropDownList');
-    var selected = branch && branch.options && branch.options[branch.selectedIndex];
-    var label = text(selected && selected.textContent);
-    var key = Object.keys(STORE_ORIGINS).find(function (name) {
-      return label.toLowerCase().indexOf(name + ' -') === 0;
+  function carrierOriginFromNativeCart(page) {
+    if (!document.getElementById('ctl00_EmployeeStatusBar_LogonBarPanel') ||
+        !page.getElementById('ctl00_EmployeeStatusBar_LogonBarPanel')) return null;
+    var rows = Array.prototype.slice.call(page.querySelectorAll('.shopping-cart-item'))
+      .filter(function (row) { return productId(row) || productCode(row); });
+    if (!rows.length) return null;
+    var branches = rows.map(function (row) {
+      // WebTrack renders its trading branch beside each native product's stock.
+      // Read that server value before cart styling removes the legacy layout.
+      var info = row.querySelector('.row.pl-2.w-100 .col-12.col-sm-6');
+      if (!info) return '';
+      var names = [];
+      [info].concat(Array.prototype.slice.call(info.querySelectorAll('*'))).forEach(function (element) {
+        if (element.closest('a')) return;
+        Array.prototype.forEach.call(element.childNodes, function (node) {
+          if (node.nodeType !== 3) return;
+          String(node.textContent || '').split(/[\r\n]+/).forEach(function (line) {
+            var key = text(line).toLowerCase();
+            if (STORE_ORIGINS[key] && names.indexOf(key) === -1) names.push(key);
+          });
+        });
+      });
+      return names.length === 1 ? names[0] : '';
     });
-    var postal = label.match(/\b(\d{5})(?:-\d{4})?\s*,?\s*(?:United States|USA|US)?\s*$/i);
-    if (!key || !postal) return null;
-    var origin = STORE_ORIGINS[key];
-    if (postal[1] !== origin.postalCode && !(key === 'bryan' && postal[1] === '77801')) return null;
-    return Object.assign({}, origin, { postalCode: postal[1] });
+    if (branches.some(function (name) { return !name || name !== branches[0]; })) return null;
+    return Object.assign({}, STORE_ORIGINS[branches[0]]);
+  }
+
+  function employeeCarrierOrigin() {
+    return shippingRequest('/ShoppingCart.aspx', { credentials: 'same-origin', cache: 'no-store' },
+      function (response) { if (!response.ok) throw new Error('Native cart branch unavailable.'); return response.text(); })
+      .then(function (html) { return carrierOriginFromNativeCart(new DOMParser().parseFromString(html, 'text/html')); })
+      .catch(function () { return null; });
   }
 
   function shippingRequest(url, options, read) {
@@ -428,9 +448,9 @@
         .then(function (settings) { if (!settings) carrierSettingsPromise = null; return settings; });
     }
     return carrierSettingsPromise.then(function (settings) {
-      // Read the native selection on every quote; a staff branch change must
-      // never reuse the previous branch or a browsing/default store.
-      return settings && (settings.origin || (settings.employee ? employeeCheckoutOrigin() : null));
+      // The fulfillment selector can differ from the native carrier's branch.
+      // Staff must use a fresh server-rendered cart, never a default or pickup.
+      return settings && (settings.origin || (settings.employee ? employeeCarrierOrigin() : null));
     });
   }
 
