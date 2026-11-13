@@ -42,6 +42,9 @@
     },
     "api/product-content-merchant-feed.js": {
       "maxDuration": 60
+    },
+    "api/cart-pricing.js": {
+      "maxDuration": 30
     }
   }
 }

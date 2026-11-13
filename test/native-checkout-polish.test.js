@@ -85,7 +85,7 @@ test('stale, future, wrong-origin and unconfirmed handoffs cannot survive a new 
  assert.doesNotThrow(()=>core.enterDetailsEstimate({document:{},sessionStorage:{getItem(){throw Error('blocked');},removeItem(){throw Error('blocked');}}},Date.now()));
 });
 const source=fs.readFileSync(require.resolve('../Checkout2'),'utf8');
-function nativeSelection(frame,radios={}){const context=vm.createContext({document:{getElementById:id=>({checked:!!radios[id.split('_').pop()]}),querySelector:()=>({})},isBuyNowFrame:()=>frame,getFulfillmentIntent:()=> 'ship'});vm.runInContext(source.slice(source.indexOf('  function getDeliveredSelected()'),source.indexOf('  function getSaleType()')),context);return context;}
+function nativeSelection(frame,radios={}){const context=vm.createContext({window:{},document:{getElementById:id=>({checked:!!radios[id.split('_').pop()]}),querySelector:()=>({})},isBuyNowFrame:()=>frame,getFulfillmentIntent:()=> 'ship'});vm.runInContext(source.slice(source.indexOf('  function pickupPricingBridgeActive()'),source.indexOf('  function getSaleType()')),context);return context;}
 test('a highlighted recommendation cannot masquerade as a native radio choice',()=>{
  const native=nativeSelection(false);assert.equal(native.getDeliveredSelected(),false);assert.equal(native.getPickupSelected(),false);
  assert.equal(nativeSelection(false,{rbUPSDelivery:true}).getDeliveredSelected(),true);assert.equal(nativeSelection(false,{rbCollectLater:true}).getPickupSelected(),true);

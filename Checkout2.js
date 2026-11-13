@@ -6,7 +6,7 @@
 //     auto-trigger CopyDeliveryAddress postback ONCE per session and return to Step 5
 // ─────────────────────────────────────────────────────────────────────────────
 (function () {
-  window.WL_CHECKOUT_BUILD = "20261113-merry50-1";
+  window.WL_CHECKOUT_BUILD = "20261113-automatic-pricing-4";
   document.documentElement?.setAttribute?.('data-wl-checkout-build',window.WL_CHECKOUT_BUILD);
   const pickupAssetBase = new URL('.', document.currentScript?.src || 'https://ckunkel510.github.io/WL.github.io/Checkout2.js').href;
   let pickupAvailabilityLoad;
@@ -189,7 +189,14 @@
   // but didn't define them, which breaks the wizard and greys out steps.
   // Keep these tiny and WebForms-safe.
   // ---------------------------------------------------------------------------
+  function pickupPricingBridgeActive() {
+    const ups = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbUPSDelivery");
+    const receipt = window.WLCartPricing?.receipt?.();
+    return !isBuyNowFrame() && getFulfillmentIntent()==='pickup' && !!ups?.checked &&
+      receipt?.mode==='pickup' && Number(receipt.expiresAt)>Date.now();
+  }
   function getDeliveredSelected() {
+    if (pickupPricingBridgeActive()) return false;
     const el = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbDelivered");
     const ups = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbUPSDelivery");
     const intent = getFulfillmentIntent();
@@ -206,6 +213,7 @@
     return false;
   }
   function getPickupSelected() {
+    if (pickupPricingBridgeActive()) return true;
     const el = document.getElementById("ctl00_PageBody_SaleTypeSelector_rbCollectLater");
     if (el && el.checked) return true;
     if (!isBuyNowFrame()) return false;
@@ -1881,6 +1889,7 @@ function validateZip(zip) {
     }
 
     function syncBillingToDelivery(opts) {
+      if (pickupPricingBridgeActive()) return; // Preserve the reserved store address and pricing marker.
       // Copy invoice/billing fields into delivery fields (no postback).
       // Used primarily for PICKUP mode where we hide the Delivery step, but WebTrack
       // still validates Delivery fields on submit.
@@ -1980,6 +1989,7 @@ function validateZip(zip) {
     }
 
     function ensureDeliveryRequiredForPickup() {
+      if (pickupPricingBridgeActive()) return; // Already validated before the native calculator handoff.
       // In PICKUP mode we hide the Delivery step, but WebTrack still validates delivery fields.
       // Requirement: all delivery fields must be filled EXCEPT the Google address search box.
       // Strategy:
@@ -2238,6 +2248,23 @@ const navDiv = document.createElement("div");
 
             // Trigger native submit/postback
             if (!isBuyNowFrame()) window.WLCheckout?.capturePickupStockInstructions?.();
+            let pricingRequired=false;
+            try { const snapshot=JSON.parse(sessionStorage.getItem('wl_merchandise_cart_v1') || 'null'); pricingRequired=!!snapshot?.pricing?.deltaCents; } catch (_) {}
+            if (!isBuyNowFrame() && pricingRequired && !window.WLCartPricing) {
+              proxy.disabled=false; proxy.textContent=originalText;
+              showInlineError(5,'Sale pricing is still loading. Please try Continue again.'); return;
+            }
+            if (!isBuyNowFrame() && window.WLCartPricing) {
+              const priced = await window.WLCartPricing.prepareNativeSubmit(getSaleType());
+              if (!priced.ok) {
+                proxy.disabled = false;
+                proxy.textContent = originalText;
+                proxy.dataset.wlContinueState = 'blocked';
+                proxy.dataset.wlContinueReason = 'pricing';
+                showInlineError(5, 'Sale pricing could not be confirmed. Please return to your cart, then try again.');
+                return;
+              }
+            }
             proxy.dataset.wlContinueState = "posting";
             if (!isBuyNowFrame()) {
               proxy.textContent = "Loading shipping & payment…";
@@ -3694,7 +3721,7 @@ document.addEventListener("click", function (ev) {
         if (pickupStockInstructions?.protect()) return;
         let baseText = "";
 
-        if (rbPick && rbPick.checked) {
+        if (getPickupSelected()) {
           const d = pickupInput.value;
           const t = pickupTimeSel.disabled ? "" : pickupTimeSel.value;
           const p = pickupDiv.querySelector("#pickupPerson").value;
@@ -3717,13 +3744,14 @@ document.addEventListener("click", function (ev) {
           }
         }
 
+        if (pickupPricingBridgeActive()) baseText = 'STORE PICKUP; DO NOT SHIP. ' + baseText;
         const instructions = [baseText, cutToShipOrderInstruction(), specialExtra.value || ""].filter(Boolean);
         specialIns.value = instructions.join(" – ");
         saveDateState();
       }
 
       function onShip() {
-        if (rbPick && rbPick.checked) {
+        if (getPickupSelected()) {
           pickupDiv.style.display = "block";
           deliveryDiv.style.display = "none";
           shippingAutoNote.style.display = "none";
