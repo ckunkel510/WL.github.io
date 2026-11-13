@@ -48,7 +48,7 @@
         if (win.top===win && params.getAll('wl_native_promo_test').length===1 && params.get('wl_native_promo_test')==='1') load('NativePromoTest.js','20261113-native-promo-test-1');
       } catch (_) {}
       load('Checkout2.js','20261113-automatic-pricing-1');
-      load('CartPricing.js','20261113-automatic-pricing-1');
+      load('CartPricing.js','20261113-automatic-pricing-2');
       load('CardContainer.js','20261106-compact-ui-ownership-1');
     }
     function ready() {

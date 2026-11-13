@@ -1,7 +1,7 @@
 /* Customer presentation and native price receipt bridge. Prices come from our server. */
 (function(root,factory){'use strict';var core=factory();if(typeof module==='object'&&module.exports)module.exports=core;else core.boot(root);})(typeof window==='object'?window:null,function(){
   'use strict';
-  var BUILD='20261113-automatic-pricing-1', API='https://wl-upsrates.vercel.app/api/cart-pricing';
+  var BUILD='20261113-automatic-pricing-2', API='https://wl-upsrates.vercel.app/api/cart-pricing';
   var KEY='wl_merchandise_pricing_v1', CART='wl_merchandise_cart_v1', ADDRESS='wl_pricing_original_address_v1';
   var LIGHT_IDS=["255014","255026","255051","255085","255099","255117","255120","255139","255149","255155","255156","255159","268610","268611","268612","268613","268618","268622","268623","276803","276804","276805","276806","276807","276808","276809","276810","276811","276813","276814","276815","276816","276817","276818","276819","276820","276821","276822","276823","276824","276825","276870","276871","254983","254985","268621"];
   function text(value){return String(value || '').replace(/\s+/g,' ').trim();}
