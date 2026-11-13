@@ -6,7 +6,7 @@
   else core.boot(root,document.currentScript && document.currentScript.src);
 })(typeof window==='object'?window:null,function () {
   'use strict';
-  var BUILD='20261113-native-promo-test-1';
+  var BUILD='20261113-automatic-pricing-1';
   function needsNativeViews(doc) {
     if (doc.querySelector('iframe.hosted-payments-iframe,iframe[src^="https://sce.toogo.io/hp/"]')) return true;
     if (doc.querySelector('#ctl00_PageBody_DeliveryAddress_Postcode,#ctl00_PageBody_SaleTypeSelector_rbCollectLater,#ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView,#ctl00_PageBody_ddlCardsOnFile,#ctl00_PageBody_rbStoredCard,#ctl00_PageBody_CardOnFileViewTitle_HeaderText,#ctl00_PageBody_CompleteCheckoutButton,#summary')) return true;
@@ -47,7 +47,8 @@
         var params=new URL(win.location.href).searchParams;
         if (win.top===win && params.getAll('wl_native_promo_test').length===1 && params.get('wl_native_promo_test')==='1') load('NativePromoTest.js','20261113-native-promo-test-1');
       } catch (_) {}
-      load('Checkout2.js','20261113-merry50-1');
+      load('Checkout2.js','20261113-automatic-pricing-1');
+      load('CartPricing.js','20261113-automatic-pricing-2');
       load('CardContainer.js','20261106-compact-ui-ownership-1');
     }
     function ready() {
