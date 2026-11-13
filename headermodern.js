@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  window.WL_HEADER_BUILD = "20261113-customer-drawer-1";
+  window.WL_HEADER_BUILD = "20261113-christmas-1";
 
   var LOG = "[WL HeaderEnhancer]";
   var DEBUG = false; // Set to true only when actively troubleshooting.
@@ -14,6 +14,7 @@
   var ANALYTICS_URL = "https://ckunkel510.github.io/WL.github.io/wl-site.js?v=20261030-checkout-recovery-1";
   var SMART_SEARCH_URL = "https://ckunkel510.github.io/WL.github.io/smart-search.js?v=20261016-4";
   var ACCESSIBILITY_URL = "https://ckunkel510.github.io/WL.github.io/Accessibility.js?v=20261112-2";
+  var HOLIDAY_SHOP_URL = "https://ckunkel510.github.io/WL.github.io/HolidayShop.js?v=20261113-christmas-1";
   var ADDRESS_MANAGER_URL = "https://ckunkel510.github.io/WL.github.io/AddressManagement.js?v=20260707-2";
   var CONTACT_MANAGER_URL = "https://ckunkel510.github.io/WL.github.io/ContactManagement.js?v=20260707-3";
   var EMPLOYEE_CUSTOMER_URL = "https://ckunkel510.github.io/WL.github.io/EmployeeCustomerPanel.js?v=20261113-customer-drawer-1";
@@ -164,6 +165,19 @@
     script.src = ACCESSIBILITY_URL;
     script.async = true;
     script.setAttribute('data-wl-accessibility','true');
+    document.head.appendChild(script);
+  }
+
+  function loadHolidayShop() {
+    if (window.top !== window || window.location.origin !== WEBTRACK ||
+        !/^\/(?:Products|ProductDetail)\.aspx$/i.test(window.location.pathname) ||
+        Date.now() < Date.parse('2026-11-13T00:00:00-06:00') ||
+        Date.now() >= Date.parse('2026-12-26T00:00:00-06:00') ||
+        window.WLHolidayShop || document.querySelector('script[data-wl-holiday-shop]')) return;
+    var script = document.createElement('script');
+    script.src = HOLIDAY_SHOP_URL;
+    script.async = true;
+    script.setAttribute('data-wl-holiday-shop', 'true');
     document.head.appendChild(script);
   }
 
@@ -3799,6 +3813,7 @@
     // The existing identity script may finish after DOM ready on a new sign-in.
     window.setTimeout(loadBuyNowPilot, 1800);
     var firstRun = run();
+    loadHolidayShop();
     if (firstRun.complete) return;
 
     // Header pieces can render a little late on WebTrack. Poll briefly, then stop

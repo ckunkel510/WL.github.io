@@ -1,0 +1,105 @@
+/* All seasonal styles are isolated to Woodson holiday elements. */
+.wl-holiday-ribbon,.wl-holiday-hero,.wl-holiday-section-title,.wl-holiday-category,.wl-holiday-popup{box-sizing:border-box;font-family:Arial,Helvetica,sans-serif}
+.wl-holiday-ribbon *,.wl-holiday-hero *,.wl-holiday-category *,.wl-holiday-popup *{box-sizing:border-box}
+.wl-holiday-ribbon{position:relative;clear:both;display:flex;align-items:center;justify-content:center;gap:28px;min-height:48px;padding:12px 20px 9px;background:#6b0016;color:#fff7e6;font-size:13px;line-height:1.4;letter-spacing:.02em}
+.wl-holiday-ribbon a{display:inline-flex;align-items:center;min-height:32px;color:#ffe0a3!important;font-weight:700;text-decoration:none;white-space:nowrap}
+.wl-holiday-ribbon a:hover{text-decoration:underline}
+.wl-holiday-ribbon-copy>span{color:#ffe0a3;font-size:21px;margin-right:8px;vertical-align:middle}
+.wl-holiday-lights{position:absolute;inset:0 0 auto;height:5px;background:radial-gradient(ellipse at center,#ffe1a0 0 28%,transparent 40%) 0 0/30px 8px repeat-x;opacity:.85;pointer-events:none}
+.wl-holiday-hero{position:relative;display:grid;grid-template-columns:1.12fr 1fr;overflow:hidden;background:#183e36;border-radius:16px;margin:24px 0 30px;isolation:isolate;color:#fff8e9;min-height:300px}
+.wl-holiday-hero-copy{padding:38px 12px 36px 34px;position:relative;z-index:1}
+.wl-holiday-eyebrow{font-size:10px!important;font-weight:700!important;line-height:1.4!important;letter-spacing:.19em;margin:0 0 15px!important}
+.wl-holiday-hero .wl-holiday-eyebrow{color:#f0d29c}
+.wl-holiday-hero h2{font:400 clamp(35px,4.4vw,58px)/1.02 Georgia,'Times New Roman',serif!important;letter-spacing:-.04em;margin:0 0 18px!important;color:#fff8e9!important;max-width:390px}
+.wl-holiday-hero-description{font-size:14px!important;line-height:1.65!important;max-width:370px;margin:0 0 23px!important;color:#e0e9df}
+.wl-holiday-hero-art{align-self:stretch;position:relative;display:flex;align-items:end}
+.wl-holiday-scene{display:block;width:100%;height:100%;object-fit:cover}
+.wl-holiday-hero-art svg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.wl-holiday-button{display:inline-flex;justify-content:center;align-items:center;min-height:48px;padding:13px 21px;border:0;border-radius:7px;background:#6b0016;color:#fff!important;font-size:13px!important;line-height:1.4!important;font-weight:700;text-decoration:none!important;transition:background .18s,transform .18s;text-align:center}
+.wl-holiday-button:hover{background:#8b1630;color:#fff!important;transform:translateY(-1px)}
+.wl-holiday-button--cream{background:#f4e6c9;color:#183e36!important}
+.wl-holiday-button--cream:hover{background:#fff5dc;color:#183e36!important}
+.wl-holiday-section-title{margin:0 0 20px;scroll-margin-top:210px;color:#24382f}
+.wl-holiday-section-title .wl-holiday-eyebrow{color:#7a4e38;margin-bottom:7px!important}
+.wl-holiday-section-title h2{font:400 clamp(25px,3vw,34px)/1.2 Georgia,'Times New Roman',serif!important;color:#24382f!important;margin:0!important}
+.wl-holiday-landing .wl-holiday-empty-nav{display:none!important}
+.wl-holiday-landing>.container-fluid{max-width:1200px;margin:0 auto;padding:0 24px}
+.wl-holiday-landing>.container-fluid>.row>.col{min-width:0}
+.wl-holiday-groups{padding:0!important;overflow:visible!important}
+.wl-holiday-groups .productGroupScrollingPanelFull{height:auto!important;max-height:none!important;overflow:visible!important}
+.wl-holiday-groups .paging-control{display:none!important}
+.wl-holiday-groups fieldset.Cards.wl-holiday-grid{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px;width:100%!important;padding:0!important;margin:0 0 30px!important;border:0!important;min-width:0}
+.wl-holiday-groups .wl-holiday-grid fieldset#productGroupCard{float:none!important;display:block!important;width:auto!important;height:auto!important;min-width:0!important;margin:0!important;padding:0!important;border:0!important;background:transparent!important}
+.wl-holiday-category{display:flex;flex-direction:column;height:100%;overflow:hidden;border:1px solid #e6e7dc;border-radius:12px;background:#fff;color:#263a30!important;text-decoration:none!important;box-shadow:0 3px 10px #173c3008;transition:transform .2s,box-shadow .2s,border-color .2s}
+.wl-holiday-category:hover{transform:translateY(-4px);box-shadow:0 9px 22px #173c3014;border-color:#acbca9}
+.wl-holiday-category-art{position:relative;display:flex;align-items:center;justify-content:center;height:175px;background:radial-gradient(ellipse at 50% 80%,#fff 8%,#f4f5ec 68%,#e6ede3);padding:18px;overflow:hidden}
+.wl-holiday-category-art::after{content:'✧';position:absolute;top:10px;right:16px;font:30px Georgia;color:#a78550}
+.wl-holiday-category .productGroupImage{object-fit:contain!important;mix-blend-mode:multiply;width:100%!important;max-width:100%!important;height:100%!important;max-height:150px!important;border:0!important;border-radius:0!important;box-shadow:none!important;transition:transform .25s}
+.wl-holiday-category:hover .productGroupImage{transform:scale(1.045)}
+.wl-holiday-category-copy{display:flex;flex:1;flex-direction:column;padding:18px 18px 19px;text-align:left}
+.wl-holiday-kicker{font-size:9px;font-weight:700;line-height:1.4;letter-spacing:.12em;color:#7b6b51;margin-bottom:8px}
+.wl-holiday-category h3{font:400 24px/1.12 Georgia,'Times New Roman',serif!important;color:#24382f!important;margin:0 0 9px!important;overflow-wrap:anywhere}
+.wl-holiday-category-caption{font-size:12px;line-height:1.5;color:#58625a;margin:0 0 18px}
+.wl-holiday-category-cta{margin-top:auto;font-size:12px;font-weight:700;line-height:1.5;color:#6b0016}
+.wl-holiday-grid .wl-holiday-helpers{grid-column:1/-1}
+.wl-holiday-helpers .wl-holiday-category{flex-direction:row;background:#f7f4eb}
+.wl-holiday-helpers .wl-holiday-category-art{height:auto;min-height:142px;width:29%;flex:none;background:#edf0e6}
+.wl-holiday-helpers .wl-holiday-category-copy{padding:22px 24px}
+.wl-holiday-helpers .wl-holiday-category-caption{margin-bottom:12px}
+.wl-holiday-modal-open{overflow:hidden!important;scrollbar-gutter:stable}
+dialog.wl-holiday-popup{position:fixed;inset:0;display:none;grid-template-columns:43% 57%;width:min(760px,calc(100% - 40px));max-width:none;max-height:calc(100dvh - 40px);margin:auto;padding:0;border:0;border-radius:17px;background:#faf6ed;color:#24382f;overflow:auto;box-shadow:0 24px 90px #0005}
+dialog.wl-holiday-popup[open]{display:grid}
+.wl-holiday-popup::backdrop{background:#142d29a8;backdrop-filter:blur(3px)}
+.wl-holiday-popup-art{background:#183e36;overflow:hidden;min-height:330px}
+.wl-holiday-popup-art svg{object-fit:cover;min-height:100%}
+.wl-holiday-popup-copy{padding:45px 32px 25px;align-self:center;text-align:left}
+.wl-holiday-popup-copy .wl-holiday-eyebrow{font-size:9px!important;color:#7b6344}
+.wl-holiday-popup h2{font:400 40px/1.03 Georgia,'Times New Roman',serif!important;color:#24382f!important;letter-spacing:-.04em;margin:0 0 17px!important}
+.wl-holiday-popup-copy>p:not(.wl-holiday-eyebrow){font-size:14px!important;line-height:1.65!important;margin:0 0 23px!important;color:#536157}
+.wl-holiday-popup .wl-holiday-button{width:100%;padding-left:10px;padding-right:10px}
+.wl-holiday-close{position:absolute;z-index:2;top:5px;right:5px;display:flex;align-items:center;justify-content:center;width:44px;height:44px;border:0;border-radius:50%;background:#faf6ed;color:#24382f;cursor:pointer;font:28px/1 Arial!important}
+.wl-holiday-dismiss{display:block;margin:6px auto 0;min-height:44px;padding:9px 15px;border:0;background:transparent;color:#536157;font:12px/1.4 Arial;cursor:pointer;text-decoration:underline;text-underline-offset:3px}
+.wl-holiday-ribbon a:focus-visible,.wl-holiday-button:focus-visible,.wl-holiday-category:focus-visible,.wl-holiday-close:focus-visible,.wl-holiday-dismiss:focus-visible{outline:3px solid #b88324!important;outline-offset:3px}
+@media(max-width:760px){
+ .wl-holiday-ribbon{gap:12px;padding:10px 14px 7px;justify-content:space-between;font-size:11px;min-height:44px}
+ .wl-holiday-ribbon-copy>span{font-size:16px;margin-right:4px}
+ .wl-holiday-hero{grid-template-columns:1.1fr 1fr;min-height:280px;margin-top:18px}
+ .wl-holiday-hero-copy{padding:27px 8px 26px 24px}
+ .wl-holiday-hero h2{font-size:39px!important}
+ .wl-holiday-hero-description{font-size:13px!important}
+ .wl-holiday-grid.wl-holiday-grid{gap:12px}
+ .wl-holiday-groups fieldset.Cards.wl-holiday-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+ .wl-holiday-category-art{height:155px;padding:16px}
+ .wl-holiday-category-copy{padding:16px 14px}
+ .wl-holiday-category h3{font-size:22px!important}
+}
+@media(max-width:520px){
+ .wl-holiday-landing>.container-fluid{padding:0 16px}
+ .wl-holiday-ribbon{font-size:10px;gap:8px;padding-right:12px;padding-left:12px}
+ .wl-holiday-ribbon-copy{max-width:190px}
+ .wl-holiday-hero{grid-template-columns:1fr;min-height:0;margin:16px 0 25px;border-radius:12px}
+ .wl-holiday-hero-copy{padding:28px 24px 18px}
+ .wl-holiday-hero h2{font-size:43px!important;max-width:290px}
+ .wl-holiday-hero-description{max-width:320px;margin-bottom:19px!important}
+ .wl-holiday-hero-art{height:150px}
+ .wl-holiday-hero-art svg{height:255px;top:auto;bottom:-24px}
+ .wl-holiday-section-title h2{max-width:320px;font-size:28px!important}
+ .wl-holiday-eyebrow{font-size:9px!important}
+ .wl-holiday-category-art{height:135px;padding:15px}
+ .wl-holiday-category-copy{padding:13px 12px 15px}
+ .wl-holiday-category h3{font-size:20px!important}
+ .wl-holiday-kicker{font-size:8px;letter-spacing:.08em}
+ .wl-holiday-category-caption{font-size:11px;margin-bottom:14px}
+ .wl-holiday-category-cta{font-size:11px}
+ .wl-holiday-helpers .wl-holiday-category-art{width:33%;min-height:170px;padding:12px}
+ .wl-holiday-helpers .wl-holiday-category-copy{padding:18px 16px}
+ dialog.wl-holiday-popup{grid-template-columns:1fr;width:calc(100% - 28px);max-height:calc(100dvh - 28px);border-radius:14px}
+ .wl-holiday-popup-art{height:160px;min-height:0}
+ .wl-holiday-popup-art svg{height:230px;min-height:0;margin-top:-40px}
+ .wl-holiday-popup-copy{padding:25px 24px 14px}
+ .wl-holiday-popup h2{font-size:37px!important;max-width:285px}
+ .wl-holiday-popup-copy>p:not(.wl-holiday-eyebrow){font-size:13px!important;margin-bottom:19px!important}
+ .wl-holiday-close{background:#faf6edee}
+}
+@media(max-width:359px){.wl-holiday-groups fieldset.Cards.wl-holiday-grid{grid-template-columns:1fr}.wl-holiday-category-art{height:180px}.wl-holiday-ribbon-copy{max-width:155px}.wl-holiday-hero h2{font-size:37px!important}}
+@media(prefers-reduced-motion:reduce){.wl-holiday-category,.wl-holiday-button,.wl-holiday-category .productGroupImage{transition:none!important}.wl-holiday-category:hover,.wl-holiday-button:hover,.wl-holiday-category:hover .productGroupImage{transform:none!important}}
