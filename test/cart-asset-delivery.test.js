@@ -86,14 +86,14 @@ test('native-view loader defers basket-only downloads and retains fallback, part
   const win=Object.assign(bus(),{location:{origin:'https://webtrack.woodsonlumber.com',pathname:mode==='other-page'?'/Products.aspx':'/ShoppingCart.aspx',href:'https://webtrack.woodsonlumber.com/ShoppingCart.aspx'},setTimeout:fn=>timers.push(fn),MutationObserver:class{constructor(fn){mutate=fn;}observe(){}disconnect(){disconnected++;}}});
   win.document={readyState:'complete',scripts,body:{},querySelector:()=>native?{}:null,getElementById:id=>native?null:(id===(mode==='empty'?'ctl00_PageBody_EmptyCartPanel':'ctl00_PageBody_ShoppingCartDetailPanel')?{}:null),createElement:()=>({setAttribute(){},remove(){this.removed=true;}}),head:{appendChild:s=>scripts.push(s)}};
   core.boot(win);if(mode==='other-page'){assert.equal(scripts.length,0);continue;}
-  assert.equal(scripts.length,mode==='native'?2:0,mode);
-  if(mode==='transition'||mode==='back') {if(mode==='back')win.emit('pagehide');native=true;mutate();if(timers[0])timers[0]();assert.equal(scripts.length,mode==='transition'?2:0);}
-  if(mode==='transition'){assert.equal(disconnected,1);assert.ok(scripts[0].src.includes('Checkout2.js'));assert.ok(scripts[1].src.includes('CardContainer.js'));}
+  assert.equal(scripts.length,mode==='native'?3:0,mode);
+  if(mode==='transition'||mode==='back') {if(mode==='back')win.emit('pagehide');native=true;mutate();if(timers[0])timers[0]();assert.equal(scripts.length,mode==='transition'?3:0);}
+  if(mode==='transition'){assert.equal(disconnected,1);assert.ok(scripts[0].src.includes('Checkout2.js'));assert.ok(scripts[1].src.includes('CartPricing.js'));assert.ok(scripts[2].src.includes('CardContainer.js'));}
  }
 });
 test('native-view loader deduplicates existing native script tags and retries only failed delivery',()=>{
  const core=require('../CartNativeViews'),scripts=[{src:'https://ckunkel510.github.io/WL.github.io/Checkout2.js'}],timers=[];
  const win=Object.assign(bus(),{location:{origin:'https://webtrack.woodsonlumber.com',pathname:'/ShoppingCart.aspx',href:'https://webtrack.woodsonlumber.com/ShoppingCart.aspx'},setTimeout:fn=>timers.push(fn)});
  win.document={readyState:'complete',scripts,querySelector:()=>({}),createElement:()=>({setAttribute(){},remove(){}}),head:{appendChild:s=>scripts.push(s)}};
- core.boot(win);assert.equal(scripts.length,2);assert.equal(timers.length,0);scripts[1].onerror();timers[0]();assert.equal(scripts.length,3);scripts[2].onerror();assert.equal(timers.length,1);
+ core.boot(win);assert.equal(scripts.length,3);assert.equal(timers.length,0);scripts[1].onerror();timers[0]();assert.equal(scripts.length,4);scripts[3].onerror();assert.equal(timers.length,1);
 });
