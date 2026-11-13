@@ -45,6 +45,20 @@ test('invalid stored values do not throw; future clock values suppress repeat po
   for (const v of [null,'junk','NaN','Infinity',0,-3]) assert.equal(holiday.recent(v,now),false);
   assert.equal(holiday.recent(now+60000,now),true);
 });
+test('native page-size redirects do not consume a session entry before the delayed invitation opens', () => {
+  const shared=visitor();
+  let scheduled=0;
+  for(const search of ['', '?itemsPerPage=48&pageIndex=0']) {
+    const win={...shared,location:{origin:'https://webtrack.woodsonlumber.com',hostname:'webtrack.woodsonlumber.com',protocol:'https:',pathname:'/Products.aspx',search},setTimeout(){scheduled++;}};
+    const css={sheet:{}};
+    win.document={readyState:'complete',currentScript:{src:'https://ckunkel510.github.io/WL.github.io/HolidayShop.js'},documentElement:{hasAttribute:()=>false},getElementById:id=>id==='wl-holiday-styles'?css:null,cookie:''};
+    win.top=win;
+    const RealDateNow=Date.now;
+    try { Date.now=()=>now;holiday.boot(win); } finally {Date.now=RealDateNow;}
+    assert.equal(holiday.entryAvailable(win),true);
+  }
+  assert.equal(scheduled,2);
+});
 test('a first-party cookie preserves the 24-hour cap when localStorage is blocked', () => {
   const win=visitor();
   Object.defineProperty(win,'localStorage',{get(){throw new Error('blocked');}});

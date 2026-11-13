@@ -5,12 +5,12 @@
   else holiday.boot(root);
 })(typeof window === 'undefined' ? null : window, function () {
   'use strict';
-  var BUILD = '20261113-christmas-1';
+  var BUILD = '20261113-christmas-2';
   var DAY = 86400000;
   var START = Date.parse('2026-11-13T00:00:00-06:00');
   var END = Date.parse('2026-12-26T00:00:00-06:00');
   var VISIT_KEY = 'wl_christmas_2026_seen';
-  var SESSION_KEY = 'wl_christmas_2026_entry';
+  var SESSION_KEY = 'wl_christmas_2026_entry_v2';
   var SHOP = '/Products.aspx?pl1=4647&pg=4649&sort=StockClassSort&direction=asc';
   var GROUPS = {
     '4651': ['Christmas Lights', 'Bring on the twinkle.', 'Light it up', '01 / SPARKLE'],
@@ -60,9 +60,12 @@
     }
     return stored;
   }
+  function entryAvailable(win) {
+    try { return !win.sessionStorage.getItem(SESSION_KEY); } catch (_) { return true; }
+  }
   function firstEntry(win) {
+    if (!entryAvailable(win)) return false;
     try {
-      if (win.sessionStorage.getItem(SESSION_KEY)) return false;
       win.sessionStorage.setItem(SESSION_KEY, '1');
     } catch (_) { /* The persistent 24-hour cap remains authoritative. */ }
     return true;
@@ -189,8 +192,14 @@
     // Let shoppers keep typing/searching and let existing dialogs finish first.
     if (doc.querySelector('dialog[open], [aria-modal="true"]') ||
         /^(INPUT|TEXTAREA|SELECT)$/.test(doc.activeElement && doc.activeElement.tagName || '') ||
-        doc.visibilityState === 'hidden') return;
-    if (!preview && (recent(readVisit(win), Date.now()) || !rememberVisit(win, Date.now()))) return;
+        doc.visibilityState === 'hidden') {
+      if (!preview) firstEntry(win);
+      return;
+    }
+    if (!preview && (recent(readVisit(win), Date.now()) || !rememberVisit(win, Date.now()))) {
+      firstEntry(win);
+      return;
+    }
     var previousFocus = doc.activeElement;
     var modal = element(doc, 'dialog', 'wl-holiday-popup');
     modal.id = 'wl-holiday-popup';
@@ -241,6 +250,7 @@
     }
     win.addEventListener('storage', otherTab);
     modal.showModal();
+    if (!preview) firstEntry(win);
     doc.documentElement.classList.add('wl-holiday-modal-open');
     close.focus({ preventScroll: true });
   }
@@ -270,7 +280,11 @@
           win.Sys.WebForms.PageRequestManager.getInstance().add_endRequest(function () { christmasLanding(doc); });
         }
       }
-      var entry = forcePopup ? true : firstEntry(win);
+      // WebTrack rewrites listing URLs to add page-size parameters. Do not consume
+      // the session entry before the delayed invitation actually opens: that
+      // navigation can replace this document during the delay.
+      var entry = forcePopup ? true : entryAvailable(win);
+      if (!forcePopup && (alreadyShoppingChristmas || recent(readVisit(win), Date.now()))) firstEntry(win);
       if (!alreadyShoppingChristmas && entry && (forcePopup || !recent(readVisit(win), Date.now()))) {
         var css = doc.getElementById('wl-holiday-styles');
         function schedule() { win.setTimeout(function () { showPopup(win, forcePopup); }, 1400); }
@@ -283,6 +297,6 @@
     return win.WLHolidayShop;
   }
   return { boot: boot, inSeason: inSeason, shoppingPage: shoppingPage, christmasPage: christmasPage, christmasContext: christmasContext,
-    recent: recent, readVisit: readVisit, rememberVisit: rememberVisit, firstEntry: firstEntry,
+    recent: recent, readVisit: readVisit, rememberVisit: rememberVisit, firstEntry: firstEntry, entryAvailable: entryAvailable,
     DAY: DAY, VISIT_KEY: VISIT_KEY, SESSION_KEY: SESSION_KEY };
 });
