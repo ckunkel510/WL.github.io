@@ -6,7 +6,7 @@
   else core.boot(root,document.currentScript && document.currentScript.src);
 })(typeof window==='object'?window:null,function () {
   'use strict';
-  var BUILD='20261113-merry50-1';
+  var BUILD='20261113-native-promo-test-1';
   function needsNativeViews(doc) {
     if (doc.querySelector('iframe.hosted-payments-iframe,iframe[src^="https://sce.toogo.io/hp/"]')) return true;
     if (doc.querySelector('#ctl00_PageBody_DeliveryAddress_Postcode,#ctl00_PageBody_SaleTypeSelector_rbCollectLater,#ctl00_PageBody_btnContinue_DeliveryAndPromotionCodesView,#ctl00_PageBody_ddlCardsOnFile,#ctl00_PageBody_rbStoredCard,#ctl00_PageBody_CardOnFileViewTitle_HeaderText,#ctl00_PageBody_CompleteCheckoutButton,#summary')) return true;
@@ -43,6 +43,10 @@
       loaded=true; if (observer) observer.disconnect();
       // Presentation is optional and parallel: never hold native checkout for it.
       if (win.top===win) load('NativeCheckout.js','20261113-ups-handoff-7');
+      try {
+        var params=new URL(win.location.href).searchParams;
+        if (win.top===win && params.getAll('wl_native_promo_test').length===1 && params.get('wl_native_promo_test')==='1') load('NativePromoTest.js','20261113-native-promo-test-1');
+      } catch (_) {}
       load('Checkout2.js','20261113-merry50-1');
       load('CardContainer.js','20261106-compact-ui-ownership-1');
     }
