@@ -1,0 +1,35 @@
+{
+  "payload": {
+    "version": 1,
+    "action": "arm",
+    "issuedAt": 1794607200000,
+    "expiresAt": 1794607380000,
+    "input": {
+      "shipFrom": {
+        "postalCode": "77836"
+      },
+      "shipTo": {
+        "addressLine": [
+          "702 W Buck St",
+          "WL RATE TEST 0123456789ABCDEF"
+        ],
+        "city": "Caldwell",
+        "state": "TX",
+        "postalCode": "77836",
+        "country": "US"
+      },
+      "totalWeight": 4
+    },
+    "cart": [
+      {
+        "pid": "268622",
+        "quantity": 2
+      },
+      {
+        "pid": "268623",
+        "quantity": 2
+      }
+    ]
+  },
+  "signature": "0PN/pLIIb5T/PY6bynOCbip5soTfE4Xookc9n6imWnFwc2peGN7TAZqKLk6CRNbLDEaiHZyvvaxhXyvdpXGRDA=="
+}
