@@ -5,7 +5,7 @@
   else holiday.boot(root);
 })(typeof window === 'undefined' ? null : window, function () {
   'use strict';
-  var BUILD = '20261113-merry50-1';
+  var BUILD = '20261113-merry100-1';
   var OFFER_END = Date.parse('2026-12-06T00:00:00-06:00');
   function offerActive() { return Date.now() >= START && Date.now() < OFFER_END; }
   var DAY = 86400000;
@@ -120,7 +120,7 @@
     bar.id = 'wl-holiday-ribbon';
     bar.setAttribute('aria-label', 'Christmas at Woodson');
     bar.innerHTML = '<span class="wl-holiday-lights" aria-hidden="true"></span>';
-    var copy = element(doc,'span','wl-holiday-ribbon-copy',offerActive() ? 'Free Ground on your entire order · $50+ in Christmas items · MERRY50 · Ends Dec 5' : '✧ A little merry. A lot of Woodson.');
+    var copy = element(doc,'span','wl-holiday-ribbon-copy',offerActive() ? 'Free Ground on your entire order · $100+ in Christmas items · MERRY100 · Ends Dec 5' : '✧ A little merry. A lot of Woodson.');
     bar.appendChild(copy);
     var link = element(doc, 'a', '', 'Shop Christmas →');
     link.href = SHOP;
@@ -166,13 +166,13 @@
     if (!compact) offer.id='wl-holiday-offer';
     if(!compact){
       offer.appendChild(element(doc,'strong','','Free Ground. More merry.'));
-      offer.appendChild(element(doc,'p','','Spend $50+ on Christmas Shop merchandise and get free standard Ground shipping on your entire eligible order.'));
+      offer.appendChild(element(doc,'p','','Spend $100+ on Christmas Shop merchandise and get free standard Ground shipping on your entire eligible order.'));
     }
-    offer.appendChild(element(doc,'span','wl-holiday-code','MERRY50'));
+    offer.appendChild(element(doc,'span','wl-holiday-code','MERRY100'));
     offer.appendChild(element(doc,'span','wl-holiday-offer-date','Through December 5'));
     var details=element(doc,'details','wl-holiday-offer-terms');
     details.appendChild(element(doc,'summary','','Offer details'));
-    details.appendChild(element(doc,'p','','Enter MERRY50 in the Shipping promo code box in your cart. $50 minimum in qualifying Christmas merchandise after item discounts, before tax and shipping. Standard UPS Ground parcel orders only. Upgraded shipping, local delivery and custom processing are extra. Ends December 5, 2026 at 11:59 PM Central.'));
+    details.appendChild(element(doc,'p','','Enter MERRY100 in the Shipping promo code box in your cart. $100 minimum in qualifying Christmas merchandise after item discounts, before tax and shipping. Standard UPS Ground parcel orders only. Upgraded shipping, local delivery and custom processing are extra. Ends December 5, 2026 at 11:59 PM Central.'));
     offer.appendChild(details);
     return offer;
   }
@@ -203,7 +203,7 @@
       copy.appendChild(heading);
       copy.appendChild(element(doc, 'p', 'wl-holiday-hero-description', subgroup ? GROUPS[groupId][1] : 'A little sparkle. A lot of holiday spirit. Find the finishing touches for your home, inside and out.'));
       if(offerActive()) {
-        if(subgroup){var promoLink=element(doc,'a','wl-holiday-sub-offer','$50+ in Christmas items? MERRY50 unlocks free Ground on your entire eligible order. Through Dec 5.');promoLink.href=SHOP+'#wl-holiday-offer';copy.appendChild(promoLink);}
+        if(subgroup){var promoLink=element(doc,'a','wl-holiday-sub-offer','$100+ in Christmas items? MERRY100 unlocks free Ground on your entire eligible order. Through Dec 5.');promoLink.href=SHOP+'#wl-holiday-offer';copy.appendChild(promoLink);}
         else copy.appendChild(offerDetails(doc,false));
       }
       var button = element(doc, 'a', 'wl-holiday-button wl-holiday-button--cream', hasGroups ? 'Find your holiday spirit ↓' : 'Shop the collection ↓');
@@ -263,7 +263,7 @@
     var title = element(doc, 'h2', '', offerActive() ? 'Make it merry. Ship it free.' : 'Your holiday happy place.');
     title.id = 'wl-holiday-popup-title';
     copy.appendChild(title);
-    var description = element(doc, 'p', '', offerActive() ? 'Spend $50+ on Christmas Shop items. Free standard Ground shipping covers your entire eligible order.' : 'Twinkly lights, festive trees & all the merry little details. Let’s make the season feel like home.');
+    var description = element(doc, 'p', '', offerActive() ? 'Spend $100+ on Christmas Shop items. Free standard Ground shipping covers your entire eligible order.' : 'Twinkly lights, festive trees & all the merry little details. Let’s make the season feel like home.');
     description.id = 'wl-holiday-popup-description';
     copy.appendChild(description);
     if(offerActive()) copy.appendChild(offerDetails(doc,true));

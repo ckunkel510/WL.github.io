@@ -9,7 +9,7 @@
   });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261113-merry50-1';
+  var BUILD = '20261113-merry100-1';
   var CART_SALE_PRODUCTS = new Set(["255014","255026","255051","255085","255099","255117","255120","255139","255149","255155","255156","255159","268610","268611","268612","268613","268618","268622","268623","276803","276804","276805","276806","276807","276808","276809","276810","276811","276813","276814","276815","276816","276817","276818","276819","276820","276821","276822","276823","276824","276825","276870","276871","254983","254985","268621"]);
   var ENABLE_NEW_STARTS = true; // Kill switch: recovery remains available when false.
   var ENABLE_CART_CHECKOUT = false;
@@ -434,8 +434,8 @@
   }
   function holidayGround(option) {
     var p=option?.promotion;
-    return p?.code==='MERRY50' && p.verified===true && p.applied===true && p.groundWaived===true &&
-      p.eligibleSubtotalCents>=5000 && p.expiresAt==='2026-12-06T00:00:00-06:00' && Date.now()<Date.parse(p.expiresAt);
+    return p?.code==='MERRY100' && p.verified===true && p.applied===true && p.groundWaived===true &&
+      p.eligibleSubtotalCents>=10000 && p.expiresAt==='2026-12-06T00:00:00-06:00' && Date.now()<Date.parse(p.expiresAt);
   }
   function fulfillmentOptions(pickupAvailable, quote) {
     return {
@@ -1205,13 +1205,13 @@
         el.addEventListener('click', function () { var option = fast.methods[el.dataset.bnMethod]; if (submitting || fast.editor || fast.method === el.dataset.bnMethod || !(option?.available || option?.pending)) return; fast.method = el.dataset.bnMethod; fast.date = ''; fast.pickupTime=''; fast.shippingValue = ''; updatePickupReadiness(); updateFastOptions(); requestFastUpdate('method'); });
       });
       var holidayInput=body.querySelector('#bn-holiday-code');
-      try {holidayInput.value=win.sessionStorage.getItem('wl_christmas_shipping_code_2026') || '';} catch(_) {}
+      try {holidayInput.value=win.sessionStorage.getItem('wl_christmas_shipping_code_2026')==='MERRY100' ? 'MERRY100' : '';} catch(_) {}
       body.querySelector('[data-bn-holiday-apply]').addEventListener('click',function(){
         if(Date.now()>=Date.parse('2026-12-06T00:00:00-06:00') || submitting || busy || fast.loading || fast.journey && fast.journey!=='options') return;
         var code=text(holidayInput.value).toUpperCase(),message=body.querySelector('[data-bn-holiday-status]');
-        if(code && code!=='MERRY50'){message.textContent='That shipping code was not recognized.';return;}
+        if(code && code!=='MERRY100'){message.textContent='That shipping code was not recognized.';return;}
         try {if(code)win.sessionStorage.setItem('wl_christmas_shipping_code_2026',code);else win.sessionStorage.removeItem('wl_christmas_shipping_code_2026');win.sessionStorage.removeItem('wl_shipping_offer_v1');}catch(_){}
-        message.textContent=code?'Code saved. Choose Ship to confirm free Ground on $50+ in Christmas merchandise.':'Code removed. Updating shipping…';
+        message.textContent=code?'Code saved. Choose Ship to confirm free Ground on $100+ in Christmas merchandise.':'Code removed. Updating shipping…';
         fast.refreshQuote=true;fast.optionsReady=false;fast.paymentReady=false;refreshFast().catch(showError);
       });
       holidayInput.addEventListener('keydown',function(event){if(event.key==='Enter'){event.preventDefault();body.querySelector('[data-bn-holiday-apply]').click();}});
@@ -2176,8 +2176,8 @@
         var applyHoliday=holidayPanel.querySelector('[data-bn-holiday-apply]');
         if(applyHoliday)applyHoliday.disabled=!!(busy || fast.loading || submitting || fast.editor);
         var holidayStatus=holidayPanel.querySelector('[data-bn-holiday-status]');
-        if(holidayGround(fast.methods?.ship))holidayStatus.textContent='MERRY50 applied: standard Ground shipping is free on the entire eligible order.';
-        else holidayStatus.textContent=holidayPanel.querySelector('input')?.value==='MERRY50' ? 'MERRY50 saved. Free Ground requires $50+ in qualifying Christmas merchandise and an eligible shipping address.' : '';
+        if(holidayGround(fast.methods?.ship))holidayStatus.textContent='MERRY100 applied: standard Ground shipping is free on the entire eligible order.';
+        else holidayStatus.textContent=holidayPanel.querySelector('input')?.value==='MERRY100' ? 'MERRY100 saved. Free Ground requires $100+ in qualifying Christmas merchandise and an eligible shipping address.' : '';
       }
       Object.entries(fast.methods).forEach(function (entry) {
         var el = overlay.querySelector('[data-bn-method="'+entry[0]+'"]'); if (!el) return;

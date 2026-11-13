@@ -1,11 +1,11 @@
 'use strict';
 
 const catalog = require('../data/christmas-shop-2026.json');
-const CODE = 'MERRY50';
+const CODE = 'MERRY100';
 const START = Date.parse('2026-11-13T00:00:00-06:00');
 const END_AT = '2026-12-06T00:00:00-06:00';
 const END = Date.parse(END_AT);
-const MINIMUM_CENTS = 5000;
+const MINIMUM_CENTS = 10000;
 const ids = new Set(catalog.products.map(p => p.productId));
 const codes = new Set(catalog.products.map(p => p.productCode.toUpperCase()));
 
