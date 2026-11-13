@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  window.WL_HEADER_BUILD = "20261112-accessibility-2";
+  window.WL_HEADER_BUILD = "20261113-layout-polish-1";
 
   var LOG = "[WL HeaderEnhancer]";
   var DEBUG = false; // Set to true only when actively troubleshooting.
@@ -761,6 +761,66 @@
         justify-content: flex-end;
       }
 
+      /* The native menu and device CSS previously painted a second pink bar. */
+      .sticky-header .main-nav .menu-t1,
+      .sticky-header .main-nav .header-link,
+      .sticky-header .main-nav .nav-link {
+        background-color: transparent !important;
+      }
+
+      .sticky-header .main-nav .menu-t1 {
+        margin: 0 !important;
+        align-items: center;
+      }
+
+      .sticky-header .main-nav .nav-link,
+      .sticky-header .main-nav .header-link {
+        border-radius: 5px;
+        transition: background-color 120ms ease;
+      }
+
+      .sticky-header .main-nav .nav-link:hover,
+      .sticky-header .main-nav .nav-link:focus-visible,
+      .sticky-header .main-nav .header-link:hover,
+      .sticky-header .main-nav .header-link:focus-visible {
+        background-color: rgba(255,255,255,.12) !important;
+      }
+
+      .sticky-header .wl-chat-launcher {
+        flex: 0 0 auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 7px;
+        min-height: 38px;
+        margin-right: auto;
+        padding: 7px 10px;
+        border: 0;
+        border-radius: 5px;
+        background: transparent;
+        color: #fff;
+        font: 700 12px/1.2 Arial, Helvetica, sans-serif;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+
+      .sticky-header .wl-chat-launcher[hidden] { display: none !important; }
+      .sticky-header .wl-chat-launcher svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+      .sticky-header .wl-chat-launcher:hover { background: rgba(255,255,255,.12); }
+      .sticky-header .wl-chat-launcher:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
+      .sticky-header .wl-chat-launcher .wl-chat-short { display: none; }
+
+      @media (max-width: 575px) {
+        .sticky-header .wl-chat-launcher { min-height: 42px; font-size: 13px; }
+        .sticky-header .wl-chat-launcher .wl-chat-long { display: none; }
+        .sticky-header .wl-chat-launcher .wl-chat-short { display: inline; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .sticky-header .main-nav .nav-link,
+        .sticky-header .main-nav .header-link { transition: none; }
+      }
+
       .sticky-header .nav-link,
       .sticky-header .header-link,
       .sticky-header .hamburger {
@@ -768,7 +828,7 @@
       }
 
       body #aspnetForm .site-content > #PageHeaderDiv {
-        width: 100vw !important;
+        width: 100% !important;
         max-width: none !important;
         height: auto !important;
         min-height: 0 !important;
@@ -792,6 +852,9 @@
         width: 100% !important;
         height: auto !important;
         min-height: 0 !important;
+        float: none !important;
+        margin: 0 !important;
+        box-shadow: none !important;
       }
 
       #brandingLogo > .UserContent {
@@ -813,6 +876,18 @@
         gap: 0 !important;
         padding: 0 !important;
         overflow: visible !important;
+        float: none !important;
+        margin: 0 !important;
+      }
+
+      /* Reset the old tablet #wlcheader a offsets even if that sheet loads late
+         or remains installed after a resize. Both links belong in normal flow. */
+      #PageHeaderDiv #brandingLogo #wlcheader > a {
+        position: static !important;
+        inset: auto !important;
+        float: none !important;
+        transform: none !important;
+        background: transparent !important;
       }
 
       #wlcheader > a img {
@@ -2985,6 +3060,84 @@
     return changed;
   }
 
+  function installChatLauncher() {
+    if (window.top !== window) return false;
+    var nav = document.querySelector(".sticky-header .main-nav");
+    if (!nav) return false;
+
+    var button = document.getElementById("wl-chat-launcher");
+    var changed = false;
+    var api = window.Tawk_API = window.Tawk_API || {};
+    if (!button) {
+      button = document.createElement("button");
+      button.id = "wl-chat-launcher";
+      button.className = "wl-chat-launcher";
+      button.type = "button";
+      button.hidden = true; // Keep the native widget until its API is ready.
+      button.setAttribute("aria-label", "Chat with Woodson");
+      button.setAttribute("aria-expanded", "false");
+      button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M20 11.5a8 8 0 0 1-8 8H5l-3 2v-6a8 8 0 1 1 18-4Z"/></svg><span class="wl-chat-long" aria-hidden="true">Chat with Woodson</span><span class="wl-chat-short" aria-hidden="true">Chat</span>';
+      button.addEventListener("click", function () {
+        var current = window.Tawk_API;
+        if (!current || typeof current.showWidget !== "function" || typeof current.maximize !== "function") return;
+        current.showWidget();
+        current.maximize();
+      });
+      nav.insertBefore(button, nav.firstChild);
+      changed = true;
+    }
+
+    if (window.__WL_CHAT_LAYOUT_API__ === api) {
+      if (typeof window.__WL_CHAT_LAYOUT_REFRESH__ === "function") window.__WL_CHAT_LAYOUT_REFRESH__();
+      return changed;
+    }
+    window.__WL_CHAT_LAYOUT_API__ = api;
+    var opened = false;
+
+    function launcher() { return document.getElementById("wl-chat-launcher"); }
+    function activate() {
+      var control = launcher();
+      if (!control || typeof api.hideWidget !== "function" || typeof api.showWidget !== "function" || typeof api.maximize !== "function") return;
+      control.hidden = false;
+      opened = typeof api.isChatMaximized === "function" && api.isChatMaximized();
+      control.setAttribute("aria-expanded", opened ? "true" : "false");
+      // hideWidget changes presentation only: it does not end or disconnect chat.
+      if (!opened) api.hideWidget();
+    }
+    function chain(name, handler) {
+      var previous = api[name];
+      api[name] = function () {
+        try { if (typeof previous === "function") previous.apply(this, arguments); }
+        finally { handler(); }
+      };
+    }
+    window.__WL_CHAT_LAYOUT_REFRESH__ = activate;
+    chain("onLoad", activate);
+    chain("onChatMaximized", function () {
+      var control = launcher();
+      if (!control || control.hidden) return;
+      opened = true;
+      control.setAttribute("aria-expanded", "true");
+      // Existing page help links also call maximize directly.
+      if (typeof api.showWidget === "function") api.showWidget();
+    });
+    chain("onChatMinimized", function () {
+      var control = launcher();
+      if (!control || control.hidden) return;
+      var restoreFocus = opened;
+      opened = false;
+      control.setAttribute("aria-expanded", "false");
+      if (typeof api.hideWidget === "function") api.hideWidget();
+      if (restoreFocus) control.focus({ preventScroll: true });
+    });
+    chain("onChatHidden", function () {
+      var control = launcher();
+      if (control) control.setAttribute("aria-expanded", "false");
+    });
+    activate(); // The widget may have loaded before the header runtime.
+    return changed;
+  }
+
   function enhanceHeaderControls() {
     var changed = false;
     var search = document.getElementById("ctl00_PageHeader_GlobalSearchControl_RadSearchBox1_Input");
@@ -3579,6 +3732,7 @@
     changed = createFallbackCommerceRow() || changed;
     changed = buildDepartmentMenu() || changed;
     changed = enhanceHeaderControls() || changed;
+    changed = installChatLauncher() || changed;
     changed = upgradeAccountNavigation() || changed;
     changed = buildMobileAccountMenu() || changed;
     changed = upgradeAccountNavigation() || changed;
