@@ -25,3 +25,13 @@ The signed-out live checkout session was empty during the initial check. Authent
 This is the requested responsive/header/chat presentation release. Publishing these hosted files does not require replacing WebTrack's inline admin loader. Verify the real tawk launcher, public search/detail, and available cart/checkout screens after publication, preserving the existing cart and stopping before orders/payments.
 
 The baseline is commit `ade9205`. To roll back, restore only `headermodern.js` and `mobilepcstyling.js` from that commit and publish through the normal repository process. Never reset customer/cart/session data. An immutable archive of those two baseline files is saved in the task's `outputs/restore-points/layout-pre-ade9205.tar.gz` outside the public repository.
+
+## Live release and narrow-screen follow-up
+
+PR #157 was published as `226c9813f3453f65c22f6b5bf41ba24f8d19332d`. The Pages build, deploy, and public release verification succeeded. Public canonical assets and both observed header query-string URLs matched the tested source bytes.
+
+Authenticated Safari and Chrome checks reached the payment selection view through native cart, details, and UPS shipping controls. Pickup, Woodson delivery, and UPS details were inspected at phone/tablet widths. No payment method was selected and no order was submitted. Both existing carts retained their original lines and quantities. UPS rates loaded, while the arrival estimate was unavailable in both browsers; this release does not change rate or ETA logic.
+
+The live 320px product listing exposed a remaining layout case absent from the initial fixture: native desktop content margins narrowed the pager, and centering an overflowing flex row clipped the first button. The follow-up keeps the row aligned to its scrollable start and reduces product-page content margins only below 768px. Native anchors, sorting, and handlers remain intact. Long pagers may scroll horizontally inside their row.
+
+The fixture now includes the native 48px desktop margins and an eight-button pager. Its 13 checks passed in Chrome at actual 320×667, 390×844, 820×1180, and 1280×900, and Safari at actual 320×666, 389×843, 820×1179, and 1278×898. Safari Responsive Design Mode introduces rounding at scaled sizes. These are desktop browser responsive checks, not physical iPhone/iPad certification.
