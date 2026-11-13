@@ -7,6 +7,12 @@ const endpoint = require('../api/cart-substitutions')._test;
 const category = 'Lumber > Yellow Pine > 2x #2 Yellow Pine > 2x4 #2 Yellow Pine';
 function product(id, length = 10, extra = {}) { return { productId: id, title: `2 X 4 - ${length} #2 Yellow Pine`, category, brand: '', productCode: 'CODE' + id, availability: 'in_stock', ...extra }; }
 const source = product('1'), replacement = { ...product('2', 12), kind: 'longer_lumber' };
+test('paused production boot does not inspect the cart, register controls or request suggestions', async () => {
+  let touched = 0;
+  const page = new Proxy({}, { get() { touched++; throw Error('Paused suggestions touched the page'); } });
+  assert.equal(await core.boot(page), undefined);
+  assert.equal(touched, 0);
+});
 test('native unit-price formatting accepts the verified ea suffix while rejecting totals and ambiguous amounts', () => {
   assert.equal(core.money('$204.21\n ea'), 20421); assert.equal(core.money('$1,204.21'), 120421);
   for (const input of ['Total: $12.00', '$1,2.00', '$12.00 $13.00', '$12.00 LF', 'Call for price', '']) assert.equal(core.money(input), null);
