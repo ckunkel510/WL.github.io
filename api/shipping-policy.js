@@ -270,6 +270,7 @@ function applyShippingMinimumToRates(rated, minimumAmount = DEFAULT_MINIMUM_SHIP
   return {
     ...rated,
     rates: rated.rates.map((rate) => {
+      if (require('./christmas-promotion').promotionalRate(rate)) return rate;
       const originalAmount = nonNegative(rate?.originalAmount, 0);
       const currentAmount = nonNegative(rate?.amount, 0);
       if (currentAmount <= 0 && originalAmount <= 0) return null;

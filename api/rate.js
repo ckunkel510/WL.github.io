@@ -379,7 +379,7 @@ function safePositiveRates(result) {
     ...result,
     rates: result.rates
       .map((rate) => ({ ...rate, amount: Math.max(0, Number(rate.amount) || 0) }))
-      .filter((rate) => rate.amount > 0)
+      .filter((rate) => rate.amount > 0 || require('./christmas-promotion').promotionalRate(rate))
   };
 }
 
@@ -387,13 +387,14 @@ function fulfillmentResult(claim) {
   if (!claim || !Array.isArray(claim.rates) || !claim.rates.length) return null;
   const rates = claim.rates
     .map((rate) => ({
+      ...rate,
       serviceCode: text(rate.serviceCode || "03"),
       serviceName: text(rate.serviceName || (claim.recommendation?.mode === "delivery" ? "Woodson Local Delivery" : "UPS Ground")),
       currency: text(rate.currency || "USD"),
       amount: Math.max(0, Number(rate.amount) || 0),
       billingWeight: Math.max(0, Number(rate.billingWeight || claim.totalWeight) || 0)
     }))
-    .filter((rate) => rate.amount > 0);
+    .filter((rate) => rate.amount > 0 || require('./christmas-promotion').promotionalRate(rate));
   return rates.length ? { rates } : null;
 }
 

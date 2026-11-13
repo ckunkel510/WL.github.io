@@ -193,6 +193,7 @@ async function buildAutomaticShippingQuote(body, dependencies = {}) {
           productId: line.productId,
           productCode: line.productCode,
           quantity: line.quantity,
+          unitPriceCents: Math.round(Number(line.price) * 100),
           cutToShip: cart[index]?.cutToShip || null
         }))
       },
