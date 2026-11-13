@@ -401,8 +401,6 @@ $(function () {
 
   function autoAdvancePickupShipping() {
     if (abandoned || window.__wlPickupShippingAutoAdvance) return;
-    // Let shoppers review their sale discount, including pickup, before payment.
-    try { if (sessionStorage.getItem('wl_merchandise_pricing_v1')) return; } catch (_) {}
 
     let method = "";
     try { method = sessionStorage.getItem(METHOD_KEY) || ""; } catch {}
