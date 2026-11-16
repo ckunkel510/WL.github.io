@@ -2,7 +2,7 @@
 
 const crypto = require('node:crypto');
 const {Redis} = require('@upstash/redis');
-const {priceCart} = require('./merchandise-pricing');
+const {priceCart,normalizeCart,policy} = require('./merchandise-pricing');
 const {promotionalRate} = require('./christmas-promotion');
 const {getCatalogProducts} = require('./shipping-catalog');
 const {buildFulfillmentQuote,carrierOriginFor} = require('./fulfillment-quote')._test;
@@ -59,13 +59,35 @@ function service(deps={}) {
   const getProducts=deps.getCatalogProducts || getCatalogProducts;
   const quote=deps.quote || buildFulfillmentQuote;
   return {
-    async preview(body) {
-      const catalog=await getProducts(body.cart);
+    async preview(body,catalogOverride) {
+      const catalog=catalogOverride || await getProducts(body.cart);
       // Future special-order issuers resolve an approved quote ID on the server.
       // No body.prices/body.adjustments/body.discount fields are used.
       const special=deps.resolveSpecialPrices ? await deps.resolveSpecialPrices(body.specialQuoteIds,body.cart) : [];
       const pricing=priceCart(body.cart,catalog,{now:now(),employee:body.employee===true,trustedSpecialPrices:special});
       return pricing;
+    },
+    async previewProduct(body) {
+      const selected=body.selectedProduct || {},id=String(selected.productId || ''),quantity=Number(selected.quantity),unit=Number(selected.unitPriceCents);
+      const product=policy.products.find(p=>p.productId===id);
+      if (!product || !Number.isSafeInteger(quantity) || quantity<1 || quantity>10000 ||
+          !Number.isSafeInteger(unit) || unit<1 || unit>100000000) throw error('Please confirm the light quantity and product price.');
+      if (!Array.isArray(body.cart)) throw error('A current cart is required for the product price.');
+      const cart=body.cart.length ? normalizeCart(body.cart) : [];
+      // Accessories cannot qualify a basket; retain only verified light IDs.
+      const lights=cart.filter(line=>policy.products.some(p=>p.productId===line.productId));
+      const existing=lights.find(line=>line.productId===id),inCartQuantity=existing?.quantity || 0;
+      if (existing) { existing.quantity+=quantity; existing.netLineTotalCents+=unit*quantity; }
+      else lights.push({productId:id,productCode:product.productCode,quantity,netLineTotalCents:unit*quantity});
+      const catalog=await getProducts(lights);
+      const pricing=await this.preview({...body,cart:lights},catalog);
+      const line=pricing.cart.find(p=>p.productId===id);
+      return {pricing,productPreview:{productId:id,selectedQuantity:quantity,inCartQuantity,
+        itemQuantity:line.quantity,itemTotalCents:line.netLineTotalCents,
+        regularUnitPriceCents:Math.round(Number(catalog.products.find(p=>String(p.productId)===id).price)*100),
+        unitPriceCents:Math.round(line.netLineTotalCents/line.quantity),
+        unitPriceIsAverage:line.netLineTotalCents%line.quantity!==0,
+        eligibleQuantity:pricing.eligibleQuantity,percentOff:pricing.percentOff}};
     },
     async reserve(body) {
       const pricing=await this.preview(body);
@@ -119,7 +141,8 @@ async function handler(req,res) {
   try {
     if (typeof req.body==='string' && req.body.length>32000) throw error('The cart request is too large.',413);
     const body=typeof req.body==='object'?req.body:JSON.parse(req.body || '{}');
-    const result=body.action==='reserve' ? await service().reserve(body) : {pricing:await service().preview(body)};
+    const core=service();
+    const result=body.action==='reserve' ? await core.reserve(body) : body.action==='product-preview' ? await core.previewProduct(body) : {pricing:await core.preview(body)};
     res.statusCode=200;return res.end(JSON.stringify({ok:true,...result}));
   } catch (e) {res.statusCode=e.status || 503;return res.end(JSON.stringify({error:e.status?e.message:'Pricing could not be refreshed. Please retry.'}));}
 }
