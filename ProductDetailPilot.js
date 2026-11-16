@@ -6,7 +6,7 @@
   else core.boot(root).catch(function () { /* Retain the existing product page. */ });
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261112-pdp-a11y-4';
+  var BUILD = '20261116-pdp-light-price-1';
   var ORIGIN = 'https://webtrack.woodsonlumber.com';
   var ASSETS = 'https://ckunkel510.github.io/WL.github.io/';
   var SCOPE = 'data-wl-pdp-preview';
@@ -100,7 +100,7 @@
         copy(quote.firstElementChild?.children[0], 'Planning a larger project?');
         copy(quote.firstElementChild?.children[1], 'Ask us about project pricing.');
       }
-      var price = box.querySelector('.wl-product-price-row, .wl-price-login-gate');
+      var price = box.querySelector('#wl-light-product-price') || box.querySelector('.wl-product-price-row, .wl-price-login-gate');
       if (price && box.firstElementChild !== price) move(price, box, box.firstChild);
       var methods = box.querySelector('.wl-pdp-method-row');
       if (methods && !box.querySelector('.wl-pdp-fulfillment-label')) {

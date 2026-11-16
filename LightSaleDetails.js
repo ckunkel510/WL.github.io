@@ -6,7 +6,7 @@
   else offer.boot(root);
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261116-light-product-prices-1';
+  var BUILD = '20261116-light-product-prices-2';
   var ORIGIN = 'https://webtrack.woodsonlumber.com';
   var LIGHT_GROUPS = ['4651', '4693', '4694', '4695', '4696', '4697', '4698'];
   var SHOP = '/Products.aspx?pl1=4647&pg=4651&sort=StockClassSort&direction=asc';
@@ -18,13 +18,16 @@
   // Keep the native row contract aligned with CartPricing.readCart; no saved basket is used.
   function readCart(doc) {
     var rows=Array.from(doc.querySelectorAll('.shopping-cart-item'));
+    var confirmedEmpty=/your cart is (?:currently )?empty/i.test(doc.getElementById?.('MainLayoutRow')?.textContent || doc.body?.textContent || '');
     if (!rows.length) {
-      if (/your cart is (?:currently )?empty/i.test(doc.getElementById('MainLayoutRow')?.textContent || doc.body?.textContent || '')) return [];
+      if (confirmedEmpty) return [];
       throw Error('The current cart could not be confirmed.');
     }
-    return rows.map(function (row) {
+    var lines=rows.map(function (row) {
       var link=Array.from(row.querySelectorAll('a[href*="ProductDetail.aspx"]')).find(function (a) {return /[?&]pid=\d+/i.test(a.getAttribute('href') || '');});
       var id=(link?.getAttribute('href') || '').match(/[?&]pid=(\d+)/i)?.[1];
+      // WebTrack uses this class for its Product/Stock/Price/Quantity header too.
+      if (!id && row.querySelector('h5') && !row.querySelector('input,select')) return null;
       var q=row.querySelector('select.wl-qty-select')?.value || row.querySelector('input[id*="_qty_"]:not([id$="_ClientState"])')?.value || row.querySelector('.wl-qty-locked')?.textContent;
       var total=row.querySelector('.cart-item-card .action-block > div:first-child .fw-bold, .col-12.col-sm-3 .d-flex > div:first-child');
       var raw=total?.textContent || text(row.textContent).match(/Total:\s*(\$[\d,.]+)/i)?.[1];
@@ -32,7 +35,9 @@
       var line={productId:id,productCode:code,quantity:Number(q),netLineTotalCents:cents(raw)};
       if (!id || !Number.isSafeInteger(line.quantity) || line.quantity<1 || !Number.isSafeInteger(line.netLineTotalCents) || line.netLineTotalCents<0) throw Error('The current cart prices could not be confirmed.');
       return line;
-    });
+    }).filter(Boolean);
+    if (!lines.length && !confirmedEmpty) throw Error('The current cart could not be confirmed.');
+    return lines;
   }
   function selection(doc,pid) {
     var row=doc.querySelector('#product-sidebar .wl-product-price-row');

@@ -53,3 +53,10 @@ test('product preview and checkout read the same native cart row contract and re
  const doc={querySelectorAll:()=>[row]};assert.deepEqual(ui.readCart(doc),cartUI.readCart(doc));
  row.textContent='Price unavailable';assert.throws(()=>ui.readCart(doc));
 });
+test('the native Product/Stock/Price/Quantity header is skipped while an incomplete item still fails',()=>{
+ const header={textContent:'Product Stock Price Quantity Total',querySelectorAll:()=>[],querySelector:s=>s==='h5'?{}:null};
+ const item={textContent:'Total: $59.97',querySelectorAll:()=>[{getAttribute:()=>'/ProductDetail.aspx?pid=268622'}],querySelector:s=>s.startsWith('input[id')?{value:'3'}:s==='.portalGridLink,.cart-item-card h6 a'?{textContent:'9086423'}:null};
+ assert.deepEqual(ui.readCart({querySelectorAll:()=>[header,item]}),cartUI.readCart({querySelectorAll:()=>[header,item]}));
+ assert.throws(()=>ui.readCart({querySelectorAll:()=>[header]}));
+ assert.throws(()=>ui.readCart({querySelectorAll:()=>[{...header,querySelector:s=>s==='input,select'?{}:s==='h5'?{}:null}]}));
+});
