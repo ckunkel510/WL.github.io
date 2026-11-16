@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  window.WL_HEADER_BUILD = "20261113-merry100-1";
+  window.WL_HEADER_BUILD = "20261116-light-product-prices-1";
 
   var LOG = "[WL HeaderEnhancer]";
   var DEBUG = false; // Set to true only when actively troubleshooting.
@@ -316,7 +316,7 @@
         !(/^\/Products\.aspx$/i.test(path) && ['4651','4693','4694','4695','4696','4697','4698'].includes(group))) return;
     if (window.WLLightSaleDetails || document.querySelector('script[data-wl-light-sale-details]')) return;
     var script = document.createElement('script');
-    script.src = 'https://ckunkel510.github.io/WL.github.io/LightSaleDetails.js?v=20261113-light-sale-details-1';
+    script.src = 'https://ckunkel510.github.io/WL.github.io/LightSaleDetails.js?v=20261116-light-product-prices-1';
     script.async = true;
     script.setAttribute('data-wl-light-sale-details', 'true');
     document.head.appendChild(script);
