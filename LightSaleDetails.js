@@ -6,7 +6,7 @@
   else offer.boot(root);
 })(typeof window === 'object' ? window : null, function () {
   'use strict';
-  var BUILD = '20261116-light-product-prices-1';
+  var BUILD = '20261116-light-product-prices-2';
   var ORIGIN = 'https://webtrack.woodsonlumber.com';
   var LIGHT_GROUPS = ['4651', '4693', '4694', '4695', '4696', '4697', '4698'];
   var SHOP = '/Products.aspx?pl1=4647&pg=4651&sort=StockClassSort&direction=asc';
