@@ -518,6 +518,13 @@ async function handler(req, res) {
     const productCode = String(body.productCode || "").replace(/\s+/g, " ").trim().slice(0, 80);
     if (!query) return sendJson(res, 400, { error: "A non-empty query is required." });
     if (SENSITIVE_REQUEST.test(query)) return sendJson(res, 200, sensitiveResponse(query));
+    if (body.action === "marketing_candidates") {
+      const taxonomy = require("../marketing/taxonomy.json");
+      if (!Object.prototype.hasOwnProperty.call(taxonomy.departments, body.category)) return sendJson(res, 400, {success:false,error:"A supported marketing category is required."});
+      const {catalogCandidates} = require("../lib/marketing/catalog");
+      const pool = await catalogCandidates({category:body.category,query,limit:body.limit,brands:Array.isArray(body.brands)?body.brands.slice(0,10).map(String):undefined});
+      return sendJson(res, 200, {success:true,mode:"marketing_candidates",...pool});
+    }
     const groupMatches = requestedAction === "search" ? searchProductGroups(query, 5) : [];
     if (groupMatches.length) return sendJson(res, 200, formatGroupResponse(query, groupMatches));
 

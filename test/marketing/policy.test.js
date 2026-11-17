@@ -31,3 +31,5 @@ test('brief date range is flexible and never invents approval or news', () => {c
 test('dispatch returns the recipient-specific pickup CTA and rejects missing routes',()=>{const x=input();assert.equal(eligibility(x).productRoutes[0].cta,'Order online for pickup');x.contact.fulfillmentContext.store='bryan';assert.equal(eligibility(x).reason,'no_verified_fulfillment');});
 
 test('two spaced sends still leave room under the owner-approved three-message ceiling',()=>{const x=input();x.ledger.entries=[3,6].map((n,i)=>({channel:'email',kind:'marketing',status:'sent',campaignId:'older-'+i,at:new Date(now-n*DAY).toISOString()}));assert.equal(eligibility(x).eligible,true);});
+
+test('strong relevant full-price matches are welcome without fabricating a deal',()=>{const p={...product(),relevance:0.9,relevanceReason:'Fits the customer’s declared current project'};assert.equal(selectProducts({catalog:[p],category:'building',audience:'deals',now}).length,1);p.promotedAsDeal=true;assert.equal(selectProducts({catalog:[p],category:'building',audience:'deals',now}).length,0);});
