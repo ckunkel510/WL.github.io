@@ -1,0 +1,12 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const {seasonAt,weatherSignals,seasonalGate,fetchStoreWeather}=require('../../lib/marketing/seasonality');
+const now=Date.parse('2026-11-20T17:00:00Z'),hour=3600000;
+const weather=()=>({store:'brenham',source:'https://api.weather.gov/gridpoints/HGX/1,1/forecast',issuedAt:new Date(now-hour).toISOString(),checkedAt:new Date(now).toISOString(),periods:[{startsAt:new Date(now-hour).toISOString(),endsAt:new Date(now+6*hour).toISOString(),rainProbability:70,temperatureF:60}],alerts:[]});
+const campaign=()=>({targeting:{stores:['brenham']},seasonality:{allowedSeasons:['fall'],weatherSignal:'rain_prep'}});
+test('season uses the intended Central-time release date across year boundaries',()=>{assert.equal(seasonAt('2027-03-01T01:00:00Z'),'winter');assert.equal(seasonAt('2027-03-01T17:00:00Z'),'spring');});
+test('rain opportunity needs fresh, local forecast evidence at release',()=>{assert.deepEqual(weatherSignals(weather(),{now}).signals,['rain_prep']);assert.equal(seasonalGate(campaign(),{brenham:weather()},now),null);});
+test('a distant branch, stale forecast, unavailable horizon or changed weather holds the story',()=>{const c=campaign();assert.equal(seasonalGate(c,{brenham:{...weather(),store:'bryan'}},now),'weather_store_mismatch');assert.equal(weatherSignals({...weather(),issuedAt:new Date(now-25*hour).toISOString()},{now}).ok,false);assert.equal(weatherSignals(weather(),{now,releaseAt:new Date(now+100*hour).toISOString()}).reason,'outside_forecast_horizon');const w=weather();w.periods[0].rainProbability=10;assert.equal(seasonalGate(c,{brenham:w},now),'weather_changed');});
+test('serious local alerts hold promotional weather campaigns',()=>{const w=weather();w.alerts=[{severity:'Severe',expiresAt:new Date(now+hour).toISOString()}];assert.equal(seasonalGate(campaign(),{brenham:w},now),'severe_weather_hold');});
+test('seasonality applies to trade and savings as well as garden stories',()=>{for(const audience of ['trade_news','deals','project_tips'])assert.equal(seasonalGate({audience,seasonality:{allowedSeasons:['summer']}},{},now),'season_mismatch_or_unreviewed');});
+test('NWS links cannot redirect the authenticated fetch helper to a different host',async()=>{await assert.rejects(fetchStoreWeather('brenham',{now,fetchImpl:async()=>({ok:true,json:async()=>({properties:{forecast:'https://example.com/collect'}})})}),/NWS source/);});

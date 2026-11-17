@@ -1,0 +1,12 @@
+{
+  "id": "contractor-planning-example",
+  "audience": "trade_news",
+  "category": "building",
+  "themeId": "trade-brief",
+  "startsAt": "2026-11-18T15:00:00Z",
+  "endsAt": "2026-12-31T23:59:00Z",
+  "objective": "Help contractors plan upcoming jobs, with a small selection of relevant materials",
+  "editorialSources": [],
+  "exclusions": ["Unsubscribed", "Recent purchasers in this category", "Frequency cap reached"],
+  "approval": {"status": "pending", "owner": null, "revision": null}
+}

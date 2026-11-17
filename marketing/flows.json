@@ -1,0 +1,86 @@
+{
+  "schemaVersion": 1,
+  "activation": "pending_owner_design_approval_and_transactional_send_adapter",
+  "policy": {
+    "maxMarketingEmailsPerRollingSevenDays": 3,
+    "minimumSpacingHours": 48,
+    "storyCooldownDays": 14,
+    "quietHoursTimeZone": "America/Chicago",
+    "sendHours": [
+      9,
+      18
+    ],
+    "welcomeCountsTowardCap": true
+  },
+  "flows": [
+    {
+      "id": "welcome",
+      "trigger": "explicit_signup_optin",
+      "entryList": "Webtrack - Welcome Queue",
+      "purpose": "Set expectations and help the customer choose useful content",
+      "emails": [
+        {
+          "delayHours": 1,
+          "theme": "welcome",
+          "subject": "Make Woodson emails useful for you"
+        }
+      ],
+      "reentry": "once_per_contact"
+    },
+    {
+      "id": "contractor-news",
+      "trigger": "declared_trade_news",
+      "entryList": "Webtrack - Interest - Contractor and market news",
+      "theme": "trade-brief",
+      "editorialShare": 0.8,
+      "productsMax": 2,
+      "sourceRule": "Current primary sources; distinguish confirmed facts from interpretation; no unsupported forecasts",
+      "cadence": "Only when there is useful new information; up to weekly"
+    },
+    {
+      "id": "verified-savings",
+      "trigger": "declared_deals",
+      "entryList": "Webtrack - Interest - Deals and savings",
+      "theme": "savings-edit",
+      "editorialShare": 0.2,
+      "sourceRule": "Current offer, genuine comparison price, valid dates, exact SKU, verified stock and location qualifiers",
+      "cadence": "Only when enough worthwhile verified offers exist"
+    },
+    {
+      "id": "project-guide",
+      "trigger": "declared_project_tips",
+      "entryList": "Webtrack - Interest - Project tips and how-to",
+      "theme": "project-notes",
+      "editorialShare": 0.6,
+      "sourceRule": "Useful project guidance with verified materials and manufacturer instructions",
+      "cadence": "Seasonal or category brief"
+    },
+    {
+      "id": "category-intent",
+      "trigger": "verified_consented_behavior",
+      "activation": "disabled_until_verified_identity_adapter_and_personalization_consent",
+      "sourceRule": "Recent category scores only; repeated views or cart intent; never raw search histories or account/payment data",
+      "delayHours": 24,
+      "purchaseExit": "Suppress matching category for 14 days",
+      "cadence": "One winning relevant flow across all eligible categories"
+    }
+  ],
+  "reviewPolicy": {
+    "channel": "existing_codex_review_task",
+    "targetLeadHours": 48,
+    "minimumLeadHours": 24,
+    "reminderLeadHours": 24,
+    "approvalDeadlineHoursBeforeRelease": 6,
+    "missedApproval": "hold_no_auto_release",
+    "approvalScope": "exact creative/products/audience/release revision",
+    "finalRecheck": [
+      "consent",
+      "suppressions",
+      "cross-flow frequency",
+      "current price",
+      "stock",
+      "fulfillment"
+    ],
+    "activation": "production_review_and_sender_adapter_required"
+  }
+}

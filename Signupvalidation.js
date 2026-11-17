@@ -590,6 +590,29 @@
   if (!/(UserSignup|signup)\.aspx/i.test(window.location.href)) return;
 
   const COMM_PREFS_POST = 'https://script.google.com/macros/s/AKfycbzmUdU2XZ0JGNEzorkbifFLdvnYQxHl6pUFbsJzi29dg_3jFbBLD9zkixZiwSNiUPRJvQ/exec?action=savePreferences';
+  const CONSENT_VERSION = '20261117-marketing-1';
+  const INTERESTS = {
+  "trade_news": "Contractor and market news",
+  "deals": "Deals and savings",
+  "project_tips": "Project tips and how-to",
+  "lawn_garden": "Lawn and garden",
+  "paint": "Paint and home projects",
+  "tools": "Tools and hardware",
+  "building": "Lumber and building materials",
+  "outdoor": "Outdoor living",
+  "seasonal": "Seasonal preparation",
+  "hunting": "Hunting and fishing",
+  "plumbing": "Plumbing",
+  "electrical": "Electrical",
+  "roofing": "Roofing",
+  "framing": "Framing",
+  "trade_plumber": "Plumber",
+  "trade_electrician": "Electrician",
+  "trade_roofer": "Roofer",
+  "trade_framer": "Framer",
+  "brand_stihl": "STIHL outdoor power"
+};
+  let lastSubmission = null;
 
   const IDS = {
     signupButton: 'ctl00_PageBody_SignupButton',
@@ -622,6 +645,12 @@
       .wl-signup-pref-row input{margin-right:8px;vertical-align:middle}
       .wl-signup-pref-note{font-size:.82rem;color:#666;line-height:1.35;margin-top:10px;background:#fff;border:1px solid #eee;border-radius:8px;padding:9px}
       #wl-signup-pref-status{font-size:.8rem;color:#5f6673;margin-top:8px;display:none}
+      #wl-signup-interests{margin:10px 0 12px;padding:10px;border:1px solid #e4d3d7;border-radius:8px}
+      #wl-signup-interests legend{font-size:.92rem;font-weight:700;padding:0 4px}
+      #wl-signup-interests details{margin:7px 0;border-top:1px solid #e4d3d7;padding:3px 0}
+      #wl-signup-interests summary{cursor:pointer;min-height:38px;padding-top:8px;font-size:.92rem;font-weight:600}
+      #wl-signup-interests label{display:inline-flex;align-items:flex-start;gap:5px;margin:5px 14px 5px 0;font-size:.9rem}
+      #wl-signup-interests select{display:block;width:100%;max-width:340px;min-height:42px;margin:3px 0 10px;padding:7px;border:1px solid #b9a6ac;border-radius:6px;background:white;color:#2f3746;font:inherit}
     `;
     document.head.appendChild(style);
 
@@ -635,6 +664,19 @@
         <input type="checkbox" id="wl_signup_email_mkt">
         Email me sales, helpful tips, and product updates
       </label>
+
+      <fieldset id="wl-signup-interests" hidden>
+        <legend>What would make our emails useful? (optional)</legend>
+        <div>${['trade_news','deals','project_tips'].map(key => `<label><input type="checkbox" data-wl-interest="${key}"> ${INTERESTS[key]}</label>`).join('')}</div>
+        <details><summary>Choose departments (optional)</summary><div>${Object.keys(INTERESTS).filter(key => !/^(trade_|brand_)/.test(key) && !['deals','project_tips'].includes(key)).map(key => `<label><input type="checkbox" data-wl-interest="${key}"> ${INTERESTS[key]}</label>`).join('')}</div></details>
+        <details><summary>For the pros: your trade (optional)</summary><div>${Object.keys(INTERESTS).filter(key => /^trade_/.test(key) && key !== 'trade_news').map(key => `<label><input type="checkbox" data-wl-interest="${key}"> ${INTERESTS[key]}</label>`).join('')}</div></details>
+        <details><summary>Brands (optional)</summary><div>${Object.keys(INTERESTS).filter(key => /^brand_/.test(key)).map(key => `<label><input type="checkbox" data-wl-interest="${key}"> ${INTERESTS[key]}</label>`).join('')}</div></details>
+        <p>Choose any that fit. You can unsubscribe at any time.</p>
+        <label for="wl-signup-store">Preferred store (optional)</label>
+        <select id="wl-signup-store"><option value="">No preference / online</option><option value="brenham">Brenham</option><option value="bryan">Bryan</option><option value="buffalo">Buffalo</option><option value="caldwell">Caldwell</option><option value="groesbeck">Groesbeck</option><option value="lexington">Lexington</option><option value="mexia">Mexia</option></select>
+        <label for="wl-signup-fulfillment">How do you like to shop?</label>
+        <select id="wl-signup-fulfillment"><option value="either">Online or in store</option><option value="pickup">Local store / pickup</option><option value="shipping">Ship to me</option></select>
+      </fieldset>
 
       <label class="wl-signup-pref-row">
         <input type="checkbox" id="wl_signup_email_billing" checked>
@@ -654,10 +696,14 @@
       <div class="wl-signup-pref-note">
         By selecting text updates, you agree to receive marketing text messages from Woodson Lumber at the phone number provided. Message and data rates may apply. Reply STOP to opt out.
       </div>
-      <div id="wl-signup-pref-status"></div>
+      <div id="wl-signup-pref-status" role="status" aria-live="polite"></div>
     `;
 
     anchor.insertAdjacentElement('afterend', box);
+    const marketing = $id('wl_signup_email_mkt');
+    marketing.addEventListener('change', function () {
+      $id('wl-signup-interests').hidden = !marketing.checked;
+    });
   }
 
   function buildPreferencePayload() {
@@ -680,6 +726,10 @@
       companyName: contactName || [firstName, lastName].filter(Boolean).join(' '),
       phone,
       emailMarketing,
+      interests: emailMarketing ? Array.from(document.querySelectorAll('[data-wl-interest]:checked')).map(input => input.getAttribute('data-wl-interest')).filter(key => Object.prototype.hasOwnProperty.call(INTERESTS, key)) : [],
+      consentVersion: CONSENT_VERSION,
+      preferredStore: emailMarketing ? ($id('wl-signup-store')?.value || '') : '',
+      fulfillmentPreference: emailMarketing ? ($id('wl-signup-fulfillment')?.value || 'either') : '',
       emailBilling: !!document.getElementById('wl_signup_email_billing')?.checked,
       emailDelivery: !!document.getElementById('wl_signup_email_delivery')?.checked,
       smsMarketing,
@@ -697,18 +747,28 @@
 
   function sendPreferences(payload) {
     if (!COMM_PREFS_POST || !payload) return false;
-
+    const fingerprint = JSON.stringify(payload, (key, value) => key === 'updatedAt' ? undefined : value);
+    if (lastSubmission && lastSubmission.fingerprint === fingerprint && Date.now() - lastSubmission.at < 10000) return true;
+    // Memory only: never retain signup contact details or consent in browser storage.
+    const random = new Uint8Array(16);
+    if (!window.crypto || !window.crypto.getRandomValues) return false;
+    window.crypto.getRandomValues(random);
+    payload.requestId = Array.from(random).map(value => value.toString(16).padStart(2, '0')).join('');
+    lastSubmission = {fingerprint, at: Date.now()};
     const body = JSON.stringify(payload);
     try {
       const status = document.getElementById('wl-signup-pref-status');
       if (status) {
-        status.textContent = 'Saving communication preferences…';
+        status.textContent = 'Sending communication preferences…';
         status.style.display = 'block';
       }
 
       if (navigator.sendBeacon) {
         const blob = new Blob([body], { type: 'text/plain;charset=utf-8' });
-        return navigator.sendBeacon(COMM_PREFS_POST, blob);
+        if (navigator.sendBeacon(COMM_PREFS_POST, blob)) {
+          checkReceipt(payload.requestId);
+          return true;
+        }
       }
 
       fetch(COMM_PREFS_POST, {
@@ -718,25 +778,55 @@
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body
       }).catch(() => {});
+      checkReceipt(payload.requestId);
       return true;
     } catch (err) {
-      console.warn('Could not save signup communication preferences:', err);
+      console.warn('Communication preferences could not be queued.');
       return false;
     }
+  }
+
+  function checkReceipt(requestId, attempt = 0) {
+    const callback = 'wlPrefsReceipt_' + requestId + '_' + attempt;
+    const script = document.createElement('script');
+    let timer;
+    function cleanup() { clearTimeout(timer); script.remove(); delete window[callback]; }
+    function retry() {
+      cleanup();
+      if (attempt < 5) setTimeout(() => checkReceipt(requestId, attempt + 1), 1600);
+      else {
+        const status = $id('wl-signup-pref-status');
+        if (status) status.textContent = 'Preferences sent; confirmation is pending. You can review them in My Account.';
+      }
+    }
+    window[callback] = function (result) {
+      if (result && result.pending) return retry();
+      cleanup();
+      const status = $id('wl-signup-pref-status');
+      if (status) status.textContent = result && result.ok ? 'Communication preferences saved.' : 'We could not confirm your preferences. Please review them in My Account.';
+    };
+    script.onerror = retry;
+    script.src = COMM_PREFS_POST.replace('action=savePreferences', 'action=receipt') + '&requestId=' + encodeURIComponent(requestId) + '&callback=' + callback;
+    timer = setTimeout(retry, 10000);
+    document.head.appendChild(script);
+  }
+
+  function captureValidPreferences(event) {
+    if (event.defaultPrevented) return;
+    if (typeof window.Page_ClientValidate === 'function' && !window.Page_ClientValidate('')) return;
+    const password = $id('ctl00_PageBody_Password1TextBox');
+    if (password && password.getAttribute('aria-invalid') === 'true') return;
+    sendPreferences(buildPreferencePayload());
   }
 
   function wireSubmitCapture() {
     const btn = $id(IDS.signupButton);
     if (btn && !btn.__wlSignupPrefsBound) {
       btn.__wlSignupPrefsBound = true;
-      btn.addEventListener('click', function () {
-        sendPreferences(buildPreferencePayload());
-      }, true);
+      btn.addEventListener('click', captureValidPreferences, true);
     }
 
-    document.addEventListener('submit', function () {
-      sendPreferences(buildPreferencePayload());
-    }, true);
+    document.addEventListener('submit', captureValidPreferences, true);
   }
 
   function init() {

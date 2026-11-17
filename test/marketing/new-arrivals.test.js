@@ -1,0 +1,12 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const {observeCatalog,batchArrivals}=require('../../lib/marketing/new-arrivals');
+const now=Date.parse('2026-11-17T17:00:00Z');
+const p=id=>({productId:id,category:'tools',onlineOrderable:true,inStock:true,fulfillmentVerified:true,canonicalLinkVerified:true});
+const snapshot=(id,products)=>({id,products,complete:true,source:'trusted-full-feed',expectedProducts:products.length});
+test('first full feed is a baseline, not thousands of new arrivals',()=>{const r=observeCatalog({snapshot:snapshot('a',[p('1'),p('2')]),now});assert.equal(r.newlyShoppable.length,0);assert.equal(r.state.baselineEstablished,true);});
+test('updated prices and timestamps alone do not make an old product new',()=>{const a=observeCatalog({snapshot:snapshot('a',[p('1')]),now});const b=observeCatalog({previous:a.state,snapshot:snapshot('b',[{...p('1'),updatedAt:new Date(now).toISOString(),price:9}]),now:now+1000});assert.equal(b.newlyShoppable.length,0);});
+test('a new category item qualifies only once shoppable with inventory and route verification',()=>{const a=observeCatalog({snapshot:snapshot('a',[p('1')]),now});const b=observeCatalog({previous:a.state,snapshot:snapshot('b',[p('1'),{...p('2'),inStock:false}]),now:now+1000});assert.equal(b.newlyShoppable.length,0);const c=observeCatalog({previous:b.state,snapshot:snapshot('c',[p('1'),p('2')]),now:now+2000});assert.deepEqual(c.newlyShoppable.map(x=>x.productId),['2']);});
+test('an explicit dated native new flag can qualify a baseline product',()=>{const r=observeCatalog({snapshot:snapshot('a',[{...p('1'),webtrackNewFlag:true,catalogCreatedAt:new Date(now-86400000).toISOString()}]),now});assert.equal(r.newlyShoppable.length,1);});
+test('partial search results cannot establish catalog newness',()=>assert.throws(()=>observeCatalog({snapshot:{id:'a',products:[p('1')],source:'search',complete:false},now}),/Complete authoritative/));
+test('arrival batches deduplicate and retain category relevance',()=>assert.deepEqual(batchArrivals([p('1'),p('1'),{...p('2'),category:'paint'}],{category:'tools'}).map(x=>x.productId),['1']));
