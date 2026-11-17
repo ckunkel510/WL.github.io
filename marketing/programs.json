@@ -1,0 +1,245 @@
+{
+  "schemaVersion": 1,
+  "status": "review_and_configuration",
+  "brand": {
+    "heritage": "Serving Texas since 1913",
+    "promise": "Built on Quality",
+    "contractorService": "Jobsite delivery and local people who help plan the order",
+    "retailService": "Shop online, choose verified pickup or shipping options, and get help from a local Woodson team",
+    "voice": "Warm, useful, confident and occasionally punny; at most one light pun per email, with literal technical instructions and offer terms",
+    "primaryHeadline": "BUILT ON QUALITY"
+  },
+  "composition": {
+    "modes": [
+      "industry_news",
+      "building_articles",
+      "useful_how_to",
+      "verified_savings",
+      "new_and_shoppable",
+      "store_event",
+      "service_spotlight"
+    ],
+    "categoryAndTradeAreIndependent": true,
+    "customersCanJoinMultiplePrograms": true,
+    "globalMarketingCapPerRollingSevenDays": 3,
+    "minimumSpacingHours": 48,
+    "layoutsReusableWithFreshStories": true
+  },
+  "programs": [
+    {
+      "id": "building-brief",
+      "category": "building",
+      "modes": [
+        "industry_news",
+        "building_articles",
+        "service_spotlight"
+      ],
+      "articleSources": [
+        "APA \u2014 The Engineered Wood Association",
+        "Building Science Corporation",
+        "NAHB",
+        "U.S. Census Bureau"
+      ],
+      "productLimit": 2
+    },
+    {
+      "id": "plumber",
+      "category": "plumbing",
+      "declaredTrade": "trade_plumber",
+      "angle": "Useful connections, compatible fittings, product updates and jobsite support",
+      "headlineExample": "A few good connections."
+    },
+    {
+      "id": "electrician",
+      "category": "electrical",
+      "declaredTrade": "trade_electrician",
+      "angle": "Installation resources, exact compatible products and useful new arrivals",
+      "headlineExample": "Watt\u2019s worth a look."
+    },
+    {
+      "id": "roofer",
+      "category": "roofing",
+      "declaredTrade": "trade_roofer",
+      "angle": "Building-envelope articles, roof-system resources and jobsite delivery planning",
+      "headlineExample": "A better outlook up top."
+    },
+    {
+      "id": "framer",
+      "category": "framing",
+      "declaredTrade": "trade_framer",
+      "angle": "Framing details, sheathing resources, fasteners and material planning",
+      "headlineExample": "Nailed the shortlist."
+    },
+    {
+      "id": "garden-spring",
+      "category": "lawn_garden",
+      "season": "spring",
+      "angle": "Garden planning, tools, planting supplies and current regional guidance",
+      "headlineExample": "Good things are growing."
+    },
+    {
+      "id": "garden-summer",
+      "category": "lawn_garden",
+      "season": "summer",
+      "angle": "Watering equipment, maintenance and heat-aware regional guidance",
+      "headlineExample": "Keep the good growing."
+    },
+    {
+      "id": "garden-fall",
+      "category": "lawn_garden",
+      "season": "fall",
+      "angle": "Fall garden planning, cleanup, tools and region-appropriate timing",
+      "headlineExample": "Fall for a fresh start."
+    },
+    {
+      "id": "garden-winter",
+      "category": "lawn_garden",
+      "season": "winter",
+      "angle": "Cold-weather preparation, tool care and next-season planning",
+      "headlineExample": "A little prep goes a lawn way."
+    },
+    {
+      "id": "hunting-outdoors",
+      "category": "hunting",
+      "angle": "Relevant gear, new arrivals and verified shipping routes for stores with limited local selection",
+      "headlineExample": "A few finds worth scouting."
+    },
+    {
+      "id": "paint-projects",
+      "category": "paint",
+      "angle": "Preparation, finish selection, project guides, verified offers and new products",
+      "headlineExample": "A fresh coat of good ideas."
+    },
+    {
+      "id": "tools-workbench",
+      "category": "tools",
+      "angle": "Useful tool selections, exact tool-only versus kit distinctions, new arrivals and verified savings",
+      "headlineExample": "Make light work of the shortlist."
+    },
+    {
+      "id": "outdoor-living",
+      "category": "outdoor",
+      "angle": "Outdoor projects, seasonal upkeep, useful product discoveries and current fulfillment",
+      "headlineExample": "Make room for the weekend."
+    },
+    {
+      "id": "seasonal-and-christmas",
+      "category": "seasonal",
+      "angle": "Current seasonal needs and native program offers with exact quantity, unit and date terms",
+      "headlineExample": "A bright idea for the season."
+    },
+    {
+      "id": "new-and-shoppable",
+      "modes": [
+        "new_and_shoppable"
+      ],
+      "requires": [
+        "genuine newness",
+        "current stock",
+        "online ordering",
+        "verified fulfillment"
+      ],
+      "batching": "Group by category and trade; never send one email per incoming SKU"
+    },
+    {
+      "id": "local-events",
+      "modes": [
+        "store_event"
+      ],
+      "requires": [
+        "owner brief",
+        "event dates",
+        "eligible stores",
+        "matching store audience"
+      ]
+    },
+    {
+      "id": "stihl-local-markets",
+      "brand": "STIHL",
+      "category": "outdoor",
+      "stores": [
+        "lexington",
+        "groesbeck",
+        "mexia"
+      ],
+      "modes": [
+        "seasonal_product_story",
+        "service_spotlight"
+      ],
+      "monthlyPlannedCampaigns": 2,
+      "reviewLeadHours": 48,
+      "cadence": "Two distinct monthly campaign slots per eligible market; no forced sends to uninterested customers; shared three-per-seven-day cap and 48-hour spacing apply",
+      "seasonRule": "Match month, task and current local weather; verify exact dealer assortment, stock and permitted transaction/fulfillment for every SKU",
+      "onlineRule": "Do not infer home shipping or online purchase from the brand or another store; local dealer visit/inquiry is a separate approved CTA",
+      "status": "configuration_and_verification_required"
+    }
+  ],
+  "articleRules": {
+    "primarySourcesPreferred": true,
+    "labelEvergreenVersusNews": true,
+    "verifyEachRun": true,
+    "maxTeaserWords": 24,
+    "technicalDetails": "Link to the full source; do not improvise structural specifications or electrical/plumbing instructions"
+  },
+  "newItemRules": {
+    "initialCatalogLoadIsBaseline": true,
+    "updatedAtIsNotNewness": true,
+    "rankedSearchResultsAreNotNewness": true,
+    "maxNewnessAgeDays": 30,
+    "batchByCategory": true
+  },
+  "approval": {
+    "layouts": "revision_requested",
+    "currentDirection": "Stronger Woodson branding, larger imagery, less copy, more savings finds and fluid category/season/trade programs",
+    "sends": "not_activated"
+  },
+  "reviewPolicy": {
+    "channel": "existing_codex_review_task",
+    "targetLeadHours": 48,
+    "minimumLeadHours": 24,
+    "reminderLeadHours": 24,
+    "approvalDeadlineHoursBeforeRelease": 6,
+    "missedApproval": "hold_no_auto_release",
+    "approvalScope": "exact creative/products/audience/release revision",
+    "finalRecheck": [
+      "consent",
+      "suppressions",
+      "cross-flow frequency",
+      "current price",
+      "stock",
+      "fulfillment"
+    ],
+    "activation": "production_review_and_sender_adapter_required"
+  },
+  "weatherPolicy": {
+    "checkAt": [
+      "brief_generation",
+      "creative_review",
+      "dispatch"
+    ],
+    "scope": "each targeted store area, never precise customer location",
+    "source": "National Weather Service forecast and alerts preferred",
+    "forecastMaxAgeHours": 24,
+    "outOfForecastHorizon": "seasonal concept only; no specific weather claims",
+    "weatherChange": "hold inaccurate approved creative and request revision",
+    "severeAlerts": "calm useful service information; no pressure-sale emergency framing"
+  },
+  "layoutRotation": {
+    "intervalDays": 14,
+    "scope": "per program",
+    "prepareNextRevisionDaysAhead": 3,
+    "vary": [
+      "hero treatment",
+      "image arrangements",
+      "module geometry",
+      "editorial rhythm"
+    ],
+    "preserve": [
+      "Woodson logo",
+      "Built on Quality",
+      "maroon brand anchors",
+      "useful concise copy"
+    ],
+    "approvalRequiredBeforeUse": true
+  }
+}

@@ -1,0 +1,11 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict');
+const {productLink,fetchClickSignals}=require('../../lib/marketing/links');
+const id='12345678-1234-1234-1234-123456789abc',now=Date.parse('2026-11-20T17:00:00Z');
+const link=()=>productLink({campaignId:'fixture-r1',product:{productId:'123',sku:'fixture',url:'https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=123&email=private'},category:'tools'});
+test('exact product links preserve identity, add public campaign tracking and strip arbitrary query data',()=>{const l=link(),u=new URL(l.url);assert.equal(u.searchParams.get('pid'),'123');assert.equal(u.searchParams.get('utm_source'),'constant_contact');assert.equal(u.searchParams.has('email'),false);assert.throws(()=>productLink({campaignId:'fixture',product:{productId:'2',url:l.url}}),/identity/);});
+function client(rows,next){const l=link();return {getJSON:async path=>path.startsWith('/emails/')?{current_status:'Done'}:path.includes('/links?')?{campaign_activity_id:id,link_click_counts:[{url_id:'1',link_url:l.url}]}:{tracking_activities:rows,_links:next?{next:{href:next}}:undefined}};}
+const click=()=>({contact_id:'opaque-fixture',campaign_activity_id:id,tracking_activity_type:'em_clicks',url_id:'1',link_url:link().url,created_time:new Date(now).toISOString(),email_address:'private-not-returned'});
+test('authenticated click import maps only registered provider links and deduplicates daily impressions',async()=>{const row=click(),r=await fetchClickSignals({client:client([row,row,{...row,url_id:'other'}]),activityId:id,registry:[link()],now});assert.equal(r.signals.length,1);assert.equal(r.signals[0].category,'tools');assert.equal(JSON.stringify(r).includes('private-not-returned'),false);assert.equal(r.signals[0].requiresConsentAndIdentityRecheck,true);});
+test('a draft email has no real click trigger yet',async()=>{const r=await fetchClickSignals({client:{getJSON:async()=>({current_status:'Draft'})},activityId:id,registry:[link()],now});assert.equal(r.reason,'not_sent');});
+test('provider pagination cannot leak credentials to an arbitrary destination',async()=>{await assert.rejects(fetchClickSignals({client:client([], 'https://example.com/collect'),activityId:id,registry:[link()],now}),/provider page/);});

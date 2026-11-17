@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "themes": [
+    {
+      "id": "trade-brief",
+      "name": "The Trade Brief",
+      "status": "revision_2_needs_owner_approval",
+      "audiences": [
+        "trade_news"
+      ],
+      "structure": [
+        "Large Woodson masthead",
+        "Image-led heritage or jobsite hero",
+        "Primary-source building article cards",
+        "Market report link",
+        "One or two useful products",
+        "Jobsite delivery partnership"
+      ],
+      "palette": [
+        "#651C32",
+        "#233D46",
+        "#F1F3EF"
+      ],
+      "productReplacement": "Keep approved module geometry; exact SKU imagery and facts must be reverified each run",
+      "revision": "20261117-r2"
+    },
+    {
+      "id": "savings-edit",
+      "name": "The Savings Edit",
+      "status": "revision_2_needs_owner_approval",
+      "audiences": [
+        "deals"
+      ],
+      "structure": [
+        "Large Woodson masthead",
+        "Real product image collage",
+        "Four to eight verified finds",
+        "Exact SKU and conditions",
+        "Shop Woodson online"
+      ],
+      "palette": [
+        "#651C32",
+        "#E6B95A",
+        "#FFF9EB"
+      ],
+      "productReplacement": "Require current regular price, offer price, source, dates and location qualifiers",
+      "revision": "20261117-r2"
+    },
+    {
+      "id": "project-notes",
+      "name": "Project Notes",
+      "status": "revision_2_needs_owner_approval",
+      "audiences": [
+        "project_tips"
+      ],
+      "structure": [
+        "Large Woodson masthead",
+        "Product image hero",
+        "One short useful project",
+        "Materials cards",
+        "Primary-source reading",
+        "Shop online"
+      ],
+      "palette": [
+        "#651C32",
+        "#4B623F",
+        "#F4F1E8"
+      ],
+      "productReplacement": "Match materials to the actual job and compatibility; verify exact imagery and product links",
+      "revision": "20261117-r2"
+    },
+    {
+      "id": "garden-edit",
+      "name": "The Garden Edit",
+      "status": "revision_2_needs_owner_approval",
+      "revision": "20261117-r2",
+      "audiences": [
+        "project_tips",
+        "deals"
+      ],
+      "seasons": [
+        "spring",
+        "summer",
+        "fall",
+        "winter"
+      ],
+      "structure": [
+        "Woodson masthead",
+        "Seasonal image-led story",
+        "Local AgriLife reading",
+        "Relevant product cards",
+        "Online shopping and fulfillment"
+      ],
+      "productReplacement": "Exact category and seasonal fit; no future price, stock or planting-time assumptions"
+    }
+  ],
+  "approvalContract": {
+    "required": [
+      "owner",
+      "themeId",
+      "revision",
+      "audiences",
+      "categories",
+      "allowedContentChanges",
+      "startsAt",
+      "expiresAt"
+    ],
+    "neverInferred": true,
+    "changesRequiringReview": [
+      "layout",
+      "audience expansion",
+      "discount promises",
+      "new factual claims",
+      "sender identity",
+      "cadence increase"
+    ],
+    "perCampaignCreativeReviewRequired": true,
+    "futureProductSubstitution": "requires exact campaign revision review; approved geometry alone does not authorize sends"
+  }
+}

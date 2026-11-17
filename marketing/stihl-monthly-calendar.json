@@ -1,0 +1,110 @@
+{
+  "schemaVersion": 1,
+  "status": "planning_only_not_scheduled",
+  "stores": [
+    "lexington",
+    "groesbeck",
+    "mexia"
+  ],
+  "slotsEachMonth": [
+    {
+      "day": 6,
+      "localTime": "10:00"
+    },
+    {
+      "day": 20,
+      "localTime": "10:00"
+    }
+  ],
+  "timeZone": "America/Chicago",
+  "reviewLeadHours": 48,
+  "minimumReviewHours": 24,
+  "audience": "Explicitly opted-in relevant STIHL/outdoor/garden interests in the named market; honor exclusions and shared cap",
+  "source": "https://www.woodsonlumber.com/stihl",
+  "themes": [
+    {
+      "month": 1,
+      "seasonalContext": "Winter readiness",
+      "slot1": "Equipment care and service planning",
+      "slot2": "Chainsaws and property cleanup",
+      "rule": "Fresh local weather, exact SKU assortment/stock and dealer transaction rules required; not a stock or price promise"
+    },
+    {
+      "month": 2,
+      "seasonalContext": "Get ready to grow",
+      "slot1": "Trimmer and blower selection",
+      "slot2": "Battery-system compatibility",
+      "rule": "Fresh local weather, exact SKU assortment/stock and dealer transaction rules required; not a stock or price promise"
+    },
+    {
+      "month": 3,
+      "seasonalContext": "Spring cleanup",
+      "slot1": "Blowers for the cleanup list",
+      "slot2": "Trimmers matched to the property",
+      "rule": "Fresh local weather, exact SKU assortment/stock and dealer transaction rules required; not a stock or price promise"
+    },
+    {
+      "month": 4,
+      "seasonalContext": "Growing season",
+      "slot1": "Trimmers and edging jobs",
+      "slot2": "Local service after the sale",
+      "rule": "Fresh local weather, exact SKU assortment/stock and dealer transaction rules required; not a stock or price promise"
+    },
+    {
+      "month": 5,
+      "seasonalContext": "Keep the yard moving",
+      "slot1": "Battery tools for routine jobs",
+      "slot2": "Blower selection and accessories",
+      "rule": "Fresh local weather, exact SKU assortment/stock and dealer transaction rules required; not a stock or price promise"
+    },
+    {
+      "month": 6,
+      "seasonalContext": "Summer routines",
+      "slot1": "Match the tool to the task",
+      "slot2": "Maintenance with the local team",
+      "rule": "Fresh local weather, exact SKU assortment/stock and dealer transaction rules required; not a stock or price promise"
+    },
+    {
+      "month": 7,
+      "seasonalContext": "Heat and property work",
+      "slot1": "Plan a cooler work window",
+      "slot2": "Battery care using manufacturer guidance",
+      "rule": "Fresh local weather, exact SKU assortment/stock and dealer transaction rules required; not a stock or price promise"
+    },
+    {
+      "month": 8,
+      "seasonalContext": "Late-summer upkeep",
+      "slot1": "Equipment inspection and service",
+      "slot2": "Prepare for fall cleanup",
+      "rule": "Fresh local weather, exact SKU assortment/stock and dealer transaction rules required; not a stock or price promise"
+    },
+    {
+      "month": 9,
+      "seasonalContext": "Fall preparation",
+      "slot1": "Blowers for seasonal cleanup",
+      "slot2": "Chainsaws matched to the job",
+      "rule": "Fresh local weather, exact SKU assortment/stock and dealer transaction rules required; not a stock or price promise"
+    },
+    {
+      "month": 10,
+      "seasonalContext": "Cleanup season",
+      "slot1": "Choose a leaf blower",
+      "slot2": "Equipment and compatible accessories",
+      "rule": "Fresh local weather, exact SKU assortment/stock and dealer transaction rules required; not a stock or price promise"
+    },
+    {
+      "month": 11,
+      "seasonalContext": "Before winter work",
+      "slot1": "Fall cleanup and blowers",
+      "slot2": "Local dealer service and preparation",
+      "rule": "Fresh local weather, exact SKU assortment/stock and dealer transaction rules required; not a stock or price promise"
+    },
+    {
+      "month": 12,
+      "seasonalContext": "Winter planning",
+      "slot1": "Equipment care and storage guidance",
+      "slot2": "Useful gifts and exact-item selection",
+      "rule": "Fresh local weather, exact SKU assortment/stock and dealer transaction rules required; not a stock or price promise"
+    }
+  ]
+}

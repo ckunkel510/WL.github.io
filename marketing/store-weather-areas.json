@@ -1,0 +1,44 @@
+{
+  "brenham": {
+    "label": "Brenham, TX",
+    "latitude": 30.1673,
+    "longitude": -96.3945,
+    "source": "Existing Woodson branch delivery-area centroid; area forecast only"
+  },
+  "bryan": {
+    "label": "Bryan, TX",
+    "latitude": 30.6618,
+    "longitude": -96.3737,
+    "source": "Existing Woodson branch delivery-area centroid; area forecast only"
+  },
+  "caldwell": {
+    "label": "Caldwell, TX",
+    "latitude": 30.5271,
+    "longitude": -96.6981,
+    "source": "Existing Woodson branch delivery-area centroid; area forecast only"
+  },
+  "lexington": {
+    "label": "Lexington, TX",
+    "latitude": 30.4121,
+    "longitude": -97.0023,
+    "source": "Existing Woodson branch delivery-area centroid; area forecast only"
+  },
+  "groesbeck": {
+    "label": "Groesbeck, TX",
+    "latitude": 31.5157,
+    "longitude": -96.5142,
+    "source": "Existing Woodson branch delivery-area centroid; area forecast only"
+  },
+  "mexia": {
+    "label": "Mexia, TX",
+    "latitude": 31.6856,
+    "longitude": -96.4652,
+    "source": "Existing Woodson branch delivery-area centroid; area forecast only"
+  },
+  "buffalo": {
+    "label": "Buffalo, TX",
+    "latitude": 31.4466,
+    "longitude": -96.0805,
+    "source": "Existing Woodson branch delivery-area centroid; area forecast only"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "content": {
+    "trade_news": "Contractor and market news",
+    "deals": "Deals and savings",
+    "project_tips": "Project tips and how-to"
+  },
+  "departments": {
+    "lawn_garden": "Lawn and garden",
+    "paint": "Paint and home projects",
+    "tools": "Tools and hardware",
+    "building": "Lumber and building materials",
+    "outdoor": "Outdoor living",
+    "seasonal": "Seasonal preparation",
+    "hunting": "Hunting and fishing",
+    "plumbing": "Plumbing",
+    "electrical": "Electrical",
+    "roofing": "Roofing",
+    "framing": "Framing"
+  },
+  "trades": {
+    "trade_plumber": "Plumber",
+    "trade_electrician": "Electrician",
+    "trade_roofer": "Roofer",
+    "trade_framer": "Framer"
+  },
+  "brands": {
+    "brand_stihl": "STIHL outdoor power"
+  }
+}
