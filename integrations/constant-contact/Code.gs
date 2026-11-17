@@ -3,11 +3,9 @@
    Google Apps Script Web App — v4.6 / 20261117-marketing-1
 
    Routes:
-   - GET  ?action=connect
+   - Admin: connections and contact reports use the authenticated editor
    - GET  ?action=status
    - GET  ?action=lists
-   - GET  ?action=debugContact&email=name@example.com
-   - GET  ?action=listMembers&listId=optional_list_id
    - GET  ?action=getPreferences&accountKey=...&email=...
    - GET  ?action=getAccountEmails&accountKey=...&email=...
    - GET  ?action=testSync&email=name@example.com
@@ -59,8 +57,8 @@ function doGet(e) {
       return handleOAuthCallback_(params);
     }
 
-    if (action === 'connect') {
-      return redirect_(buildAuthorizeUrl_());
+    if (action === 'connect' || action === 'debugcontact' || action === 'listmembers') {
+      return jsonOrJsonp_({ok:false,error:'Administrative connection and contact-report actions require the authenticated script editor.'}, params);
     }
 
     if (action === 'receipt') return jsonOrJsonp_(wlReceipt_(params.requestId), params);
@@ -92,13 +90,6 @@ function doGet(e) {
       return jsonOrJsonp_(getContactLists_(), params);
     }
 
-    if (action === 'debugcontact') {
-      return jsonOrJsonp_(debugContact_(params.email), params);
-    }
-
-    if (action === 'listmembers') {
-      return jsonOrJsonp_(listMembers_(params.listId || getProp_('CC_PREFS_EMAIL_LIST_ID')), params);
-    }
 
     if (action === 'getpreferences') {
       return jsonOrJsonp_(getPreferenceStatus_(params), params);
@@ -113,10 +104,9 @@ function doGet(e) {
     return html_(
       '<h2>Woodson Constant Contact Preferences Bridge</h2>' +
       '<p>Status: running.</p>' +
-      '<p><a href="?action=connect">Connect Constant Contact</a></p>' +
+      '<p>Connections are managed from the authenticated script editor.</p>' +
       '<p><a href="?action=status">Check status</a></p>' +
       '<p><a href="?action=lists">View Constant Contact lists</a></p>' +
-      '<p>Debug: ?action=debugContact&amp;email=name@example.com</p>' +
       '<p>Preferences: ?action=getPreferences&amp;accountKey=ACCOUNT&amp;email=name@example.com</p>' +
       '<p>Linked emails: ?action=getAccountEmails&amp;accountKey=ACCOUNT</p>'
     );
@@ -235,7 +225,7 @@ function doPost(e) {
    OAuth
    ============================= */
 
-function buildAuthorizeUrl_() {
+function buildAuthorizeUrl_(enableCampaignReports) {
   const state = Utilities.getUuid();
   setProp_('CC_PREFS_OAUTH_STATE', state);
 
@@ -243,7 +233,7 @@ function buildAuthorizeUrl_() {
     client_id: requiredProp_('CC_PREFS_CLIENT_ID'),
     redirect_uri: requiredProp_('CC_PREFS_REDIRECT_URI'),
     response_type: 'code',
-    scope: 'contact_data offline_access',
+    scope: enableCampaignReports === true ? 'contact_data campaign_data offline_access' : 'contact_data offline_access',
     state: state
   });
 
