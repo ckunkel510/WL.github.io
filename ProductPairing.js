@@ -1,146 +1,61 @@
-/* Staged optional product pairing. No loader or automatic cart changes. */
-(function (root, factory) {
+/* Verified camera batteries. Only an explicit customer choice adds products. */
+(function(root,factory){'use strict';var api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else{root.WLProductPairing=api;api.boot(root).catch(function(){});}})(typeof window==='object'?window:null,function(){
   'use strict';
-  var api = factory();
-  if (typeof module === 'object' && module.exports) module.exports = api;
-  else root.WLProductPairing = api;
-})(typeof window === 'object' ? window : null, function () {
-  'use strict';
-  var RELEASE_ENABLED = false;
-  var PAIR = Object.freeze({
-    id: 'spark-aa-spares-v1', camera: '246159', battery: '2853',
-    cameraCode: 'WGI-SWTC2LOK', batteryCode: '1162676',
-    cameraName: 'Wildgame Innovations Spark 2.0 18MP Lightsout Combo',
-    batteryName: 'Energizer Max AA Battery 8pk',
-    disclosure: 'This camera combo already includes 8 AA batteries and a 16GB SD card. The extra 8-pack is optional spare power.',
-    compatibility: 'Eight matching 1.5V alkaline AA cells. Replace the complete set; never mix old/new cells or battery types.',
-    evidence: 'OEM WGI-SWTC2LOK catalog and camera manual; exact Energizer MAX AA8 package photo, checked 2026-11-18.'
-  });
-  var busy = new WeakSet(), used = new WeakSet();
-  function normalized(s) { return String(s || '').replace(/\s+/g, ' ').trim().toUpperCase(); }
-  function snapshot(cart) {
-    if (!cart || !cart.store || !Array.isArray(cart.items) || cart.items.length > 60) throw Error('Check your cart and store before adding this pair.');
-    var seen = new Set();
-    var rows = cart.items.map(function (r) {
-      if (!/^\d+$/.test(r.pid) || seen.has(r.pid) || !Number.isInteger(r.quantity) || r.quantity < 1 || r.quantity > 9999 || !r.code || !r.unit) throw Error('This cart needs the regular product controls.');
-      seen.add(r.pid);
-      return [r.pid, r.quantity, normalized(r.code), r.unit, !!r.configured, r.price ?? null];
-    }).sort(function (a, b) { return a[0].localeCompare(b[0]); });
-    return JSON.stringify([cart.store, rows]);
+  var BUILD='20261118-camera-batteries-1',ORIGIN='https://webtrack.woodsonlumber.com',BASE='https://ckunkel510.github.io/WL.github.io/';
+  var PAIRS=[
+    {id:'spark-aa-spares-v1',camera:'246159',cameraCode:'WGI-SWTC2LOK',cameraName:'Wildgame Innovations Spark 2.0 18MP Lightsout Combo',cameraLabel:'SPARK 2.0',disclosure:'This combo already includes 8 AA batteries and a 16GB card. The extra pack is optional spare power.',evidence:'https://assets.unilogcorp.com/267/ITEM/DOC/Wildgame_INNOVATIONS_WLD006_Catalog.pdf'},
+    {id:'gmax32-aa-v1',camera:'174184',cameraCode:'STC-GMAX32VNG',cameraName:'Stealth Cam GMAX Vision, 32 MP',cameraLabel:'GMAX Vision',disclosure:'One 8-pack supplies the eight AA cells required by this camera.',evidence:'https://www.stealthcam.com/wp-content/uploads/2021/11/GSM-200851-GMAX32VNG-Instruction-Manual-R0.pdf'}
+  ].map(function(p){return Object.freeze(Object.assign(p,{battery:'2853',batteryCode:'1162676',batteryName:'Energizer Max AA Battery 8pk',compatibility:'Use eight matching fresh AA batteries; never mix old/new cells or battery types.',verifiedAt:'2026-11-18'}));});
+  var busy=new WeakSet(),used=new WeakSet();
+  function pairFor(v){return PAIRS.find(function(p){return p.camera===v||p.id===v;})||null;}
+  function normalized(s){return String(s||'').replace(/\s+/g,' ').trim().toUpperCase();}
+  function quantity(value){var n=Number(value);if(!Number.isInteger(n)||n<1||n>99)throw Error('Choose a whole quantity from 1 to 99 for this battery option.');return n;}
+  function snapshot(cart){
+    if(!cart||!cart.store||!Array.isArray(cart.items)||cart.items.length>60)throw Error('Check your cart and store before adding these items.');
+    var seen=new Set(),rows=cart.items.map(function(r){if(!/^\d+$/.test(r.pid)||seen.has(r.pid)||!Number.isInteger(r.quantity)||r.quantity<1||r.quantity>9999||!r.code||!r.unit)throw Error('This cart needs the regular product controls.');seen.add(r.pid);return[r.pid,r.quantity,normalized(r.code),r.unit,!!r.configured,r.price??null];}).sort(function(a,b){return a[0].localeCompare(b[0]);});
+    return JSON.stringify([cart.store,cart.sessionKind||'',cart.scope||'local',rows]);
   }
-  function increment(cart, product) {
-    var items = cart.items.map(function (r) { return Object.assign({}, r); });
-    var existing = items.find(function (r) { return r.pid === product.pid; });
-    if (existing) existing.quantity++;
-    else items.push({pid: product.pid, code: product.code, quantity: 1, unit: 'ea', configured: false, price: product.price});
-    return { store: cart.store, items: items };
+  function increment(cart,product,count){var items=cart.items.map(function(r){return Object.assign({},r);}),existing=items.find(function(r){return r.pid===product.pid;});if(existing)existing.quantity+=count;else items.push({pid:product.pid,code:product.code,quantity:count,unit:'ea',configured:false,price:product.price});return Object.assign({},cart,{items:items});}
+  function compatible(p,pid,code,name){return p&&p.pid===pid&&normalized(p.code)===code&&normalized(p.name)===normalized(name)&&p.unit==='ea'&&Number.isInteger(p.price)&&p.price>0;}
+  function available(stock,cart){if(!stock?.verified||!stock.branches)return null;if(cart.scope!=='company')return Number.isFinite(stock.branches[cart.store])?Math.floor(stock.branches[cart.store]):null;var counts=Object.values(stock.branches);return counts.length&&counts.every(function(n){return Number.isFinite(n)&&n>=0;})?counts.reduce(function(a,n){return a+Math.floor(n);},0):null;}
+  async function prepare(io,pairId,count){
+    var pair=pairFor(pairId||PAIRS[0].id),q=quantity(count??1);if(!pair)throw Error('This camera has no verified battery match.');
+    var parts=await Promise.all([io.read(),io.product(pair.camera),io.product(pair.battery),io.stock(pair.camera),io.stock(pair.battery)]),cart=parts[0],camera=parts[1],battery=parts[2],baseline=snapshot(cart);
+    if(!compatible(camera,pair.camera,pair.cameraCode,pair.cameraName)||!compatible(battery,pair.battery,pair.batteryCode,pair.batteryName))throw Error('The exact products or current prices could not be confirmed. Use the regular product pages.');
+    if(cart.sessionKind&&[camera,battery].some(function(p){return p.sessionKind!==cart.sessionKind;}))throw Error('Your sign-in changed. Refresh the product page.');
+    [camera,battery].forEach(function(p,i){var existing=cart.items.find(function(r){return r.pid===p.pid;});if(existing&&(existing.configured||existing.unit!=='ea'||normalized(existing.code)!==normalized(p.code)||existing.price!==p.price||existing.quantity+q>9999))throw Error('An existing cart line needs review on the regular cart page.');var stock=available(parts[i+3],cart);if(stock===null||stock<(existing?.quantity||0)+q)throw Error(cart.scope==='company'?'Both items are not confirmed available in the requested quantities. Check the product pages.':'Both items are not confirmed in stock at your selected store. Check each product page for other fulfillment options.');});
+    return{pairId:pair.id,pair:pair,quantity:q,baseline:baseline,cart:cart,camera:camera,battery:battery,total:q*(camera.price+battery.price),at:Date.now()};
   }
-  function compatible(product, pid, code, name) {
-    return product && product.pid === pid && normalized(product.code) === code && normalized(product.name) === normalized(name) && product.unit === 'ea' && Number.isInteger(product.price) && product.price > 0;
+  function reviewError(){var e=Error('Check your cart before trying again. One item may have been added; no automatic retry was made.');e.reviewCart=true;return e;}
+  async function addBoth(io,quote,selected){
+    if(selected!==true)throw Error('Select the optional battery pack first.');if(busy.has(io)||used.has(quote))throw Error('This addition is already in progress or needs a fresh cart review.');busy.add(io);
+    try{var fresh=await prepare(io,quote?.pairId,quote?.quantity);if(!quote||quote.pairId!==fresh.pairId||!Number.isFinite(quote.at)||quote.at>Date.now()||Date.now()-quote.at>120000||quote.baseline!==fresh.baseline||quote.camera?.price!==fresh.camera.price||quote.battery?.price!==fresh.battery.price)throw Error('Your cart, store, price or availability changed. Review these items again.');used.add(quote);var expected=fresh.cart;
+      for(var product of[fresh.camera,fresh.battery]){var current;
+        try{var currentCart=await io.read();if(snapshot(currentCart)!==snapshot(expected))throw reviewError();var live=await Promise.all([io.product(product.pid),io.stock(product.pid)]);current=live[0];var currentQty=currentCart.items.find(function(r){return r.pid===product.pid;})?.quantity||0;if(!compatible(current,product.pid,normalized(product.code),product.name)||current.price!==product.price||(currentCart.sessionKind&&current.sessionKind!==currentCart.sessionKind)||available(live[1],currentCart)===null||available(live[1],currentCart)<currentQty+fresh.quantity)throw reviewError();}catch(_){throw reviewError();}
+        var next=increment(expected,current,fresh.quantity);try{await io.add(current,fresh.quantity);}catch(_){/* Read back a lost reply; never retry the POST. */}var actual,actualSnapshot;try{actual=await io.read();actualSnapshot=snapshot(actual);}catch(_){throw reviewError();}
+        if(actualSnapshot!==snapshot(next)){if(product.pid===fresh.pair.camera&&actualSnapshot===fresh.baseline){var unchanged=Error('Neither item was added. Your cart is unchanged. Check the product pages.');unchanged.safeCart=true;throw unchanged;}throw reviewError();}expected=actual;
+      }return{status:'added',cart:expected,added:[{pid:fresh.pair.camera,quantity:fresh.quantity},{pid:fresh.pair.battery,quantity:fresh.quantity}]};
+    }finally{busy.delete(io);}
   }
-  async function prepare(io) {
-    var parts = await Promise.all([io.read(), io.product(PAIR.camera), io.product(PAIR.battery), io.stock(PAIR.camera), io.stock(PAIR.battery)]);
-    var cart = parts[0], camera = parts[1], battery = parts[2];
-    var baseline = snapshot(cart);
-    if (!compatible(camera, PAIR.camera, PAIR.cameraCode, PAIR.cameraName) || !compatible(battery, PAIR.battery, PAIR.batteryCode, PAIR.batteryName)) throw Error('The exact products or current prices could not be confirmed. Use the regular product pages.');
-    [camera, battery].forEach(function (p, i) {
-      var existing = cart.items.find(function (r) { return r.pid === p.pid; });
-      if (existing && (existing.configured || existing.unit !== 'ea' || normalized(existing.code) !== normalized(p.code) || existing.price !== p.price || existing.quantity >= 9999)) throw Error('An existing cart line needs review on the regular cart page.');
-      var stock = parts[i + 3], count = stock?.branches?.[cart.store];
-      if (!stock?.verified || !Number.isFinite(count) || count < (existing?.quantity || 0) + 1) throw Error('Both items are not confirmed in stock at your selected store. Check each product page for other fulfillment options.');
-    });
-    // No campaign price is injected into native commerce. Show the customer's
-    // actual native prices; promotion activation is a separate release check.
-    return {pairId: PAIR.id, baseline: baseline, cart: cart, camera: camera, battery: battery, total: camera.price + battery.price, at: Date.now()};
+  function money(cents){return '$'+(cents/100).toFixed(2);}
+  function mount(doc,host,io,options){
+    options=options||{};var pair=pairFor(options.camera||PAIRS[0].camera);if(!pair||!host||host.querySelector('[data-wl-product-pair]'))return;
+    var box=doc.createElement('section');box.className='wl-product-pair';box.setAttribute('data-wl-product-pair',pair.id);
+    box.innerHTML='<h3>Add matching batteries</h3><p class="wl-pair-disclosure"></p><label class="wl-pair-choice"><input type="checkbox"><img width="52" height="70" src="https://images-woodsonlumber.sirv.com/merchant-feed/products/2853/main-80e2c51bf54b4660.jpg" alt="Energizer MAX AA 8-pack"><span><span class="wl-pair-name">Energizer MAX AA · 8-pack</span><strong class="wl-pair-price"></strong><span class="wl-pair-pack-count"></span></span></label><p class="wl-pair-fit"></p><strong class="wl-pair-total"></strong><button class="wl-pair-add" type="button" disabled>Checking availability…</button><p role="status" aria-live="polite" class="wl-pair-status"></p><a class="wl-pair-cart" href="/ShoppingCart.aspx" hidden>View cart &rarr;</a>';
+    box.querySelector('.wl-pair-disclosure').textContent=pair.disclosure;box.querySelector('.wl-pair-fit').textContent=pair.compatibility;host.appendChild(box);
+    var choice=box.querySelector('input'),button=box.querySelector('button'),status=box.querySelector('[role="status"]'),quote,pending=false,finished=false,generation=0;
+    async function refresh(){if(pending||finished)return;var epoch=++generation;quote=null;button.disabled=true;status.textContent='Checking current prices and availability…';try{var count=quantity(options.getQuantity?options.getQuantity():1),candidate=await prepare(io,pair.id,count);if(epoch!==generation)return;quote=candidate;box.querySelector('.wl-pair-price').textContent=money(quote.battery.price)+' per pack';box.querySelector('.wl-pair-pack-count').textContent='Include '+count+' pack'+(count===1?'':'s')+' for '+count+' camera'+(count===1?'':'s');box.querySelector('.wl-pair-total').textContent='Camera + batteries: '+money(quote.total);status.textContent=quote.cart.scope==='company'?'Available companywide. Confirm pickup or shipping options in your cart.':'Both items in stock at '+quote.cart.store+'. Fulfillment is confirmed in checkout.';button.textContent=count===1?'Add camera + batteries':'Add '+count+' cameras + batteries';button.disabled=!choice.checked;}catch(e){if(epoch!==generation)return;status.textContent=e.message;button.textContent='Check availability';button.disabled=false;}}
+    choice.addEventListener('change',function(){button.disabled=!choice.checked||!quote||pending||finished;});
+    button.addEventListener('click',async function(){if(pending||finished)return;if(!quote){await refresh();return;}if(!choice.checked)return;pending=true;button.disabled=true;choice.disabled=true;var selectedQuote=quote;status.textContent='Adding your selected camera and batteries…';try{if(quantity(options.getQuantity?options.getQuantity():1)!==selectedQuote.quantity)throw Error('Your quantity changed. Review the total again.');await addBoth(io,selectedQuote,choice.checked);finished=true;status.textContent='Added '+selectedQuote.quantity+' camera'+(selectedQuote.quantity===1?'':'s')+' and '+selectedQuote.quantity+' battery pack'+(selectedQuote.quantity===1?'':'s')+'.';button.textContent='Added to cart';box.querySelector('.wl-pair-cart').hidden=false;if(options.onAdded)try{options.onAdded(selectedQuote);}catch(_){}}catch(e){status.textContent=e.message;if(e.reviewCart||e.safeCart){finished=true;button.textContent='Review cart';box.querySelector('.wl-pair-cart').hidden=false;}else{quote=null;button.textContent='Refresh prices';choice.checked=false;button.disabled=false;}}finally{pending=false;choice.disabled=finished;}});
+    refresh();return{element:box,refresh:refresh};
   }
-  function reviewError() {
-    var error = Error('Check your cart before trying again. One item may have been added; no automatic retry was made.');
-    error.reviewCart = true;
-    return error;
+  async function boot(win){
+    if(!win||win.top!==win||win.location.origin!==ORIGIN||!/^\/ProductDetail\.aspx$/i.test(win.location.pathname))return;var pair=pairFor(new URLSearchParams(win.location.search).get('pid'));if(!pair)return;var doc=win.document;if(doc.readyState==='loading')await new Promise(function(resolve){doc.addEventListener('DOMContentLoaded',resolve,{once:true});});
+    function load(file,name){if(win[name])return Promise.resolve(win[name]);return new Promise(function(resolve,reject){var script=doc.createElement('script'),timer=win.setTimeout(function(){reject(Error('Unavailable'));},10000);script.src=BASE+file+'?v='+BUILD;script.async=true;script.onload=function(){win.clearTimeout(timer);win[name]?resolve(win[name]):reject(Error('Unavailable'));};script.onerror=function(){win.clearTimeout(timer);reject(Error('Unavailable'));};doc.head.appendChild(script);});}
+    var style=doc.createElement('link');style.rel='stylesheet';style.href=BASE+'ProductPairing.css?v='+BUILD;var styled=new Promise(function(resolve){var timer=win.setTimeout(function(){resolve(false);},10000);style.onload=function(){win.clearTimeout(timer);resolve(true);};style.onerror=function(){win.clearTimeout(timer);resolve(false);};doc.head.appendChild(style);});
+    var deps=await Promise.all([load('CartSubstitutions.js','WLCartSubstitutions'),load('PickupAvailability.js','WLPickupAvailability'),load('ProductPairingNative.js','WLProductPairingNative'),styled]);if(!deps[3])return;var tries=0;
+    function place(){var policy=doc.querySelector('#product-sidebar a[href="https://www.woodsonlumber.com/shipping-policy"]'),input=doc.querySelector('input[id$="_qty_'+pair.camera+'"]');if(!policy||!input||doc.querySelector('[data-wl-product-pair]'))return!!doc.querySelector('[data-wl-product-pair]');var host=doc.createElement('div');host.className='wl-product-pair-slot';policy.parentElement.after(host);var io=deps[2].adapter(win,deps[0],deps[1]),widget=mount(doc,host,io,{camera:pair.camera,getQuantity:function(){return input.value;},onAdded:function(q){if(win.WLAnalytics?.track)win.WLAnalytics.track('add_to_cart',{ecommerce:{currency:'USD',value:q.total/100,items:[q.camera,q.battery].map(function(p){return{item_id:p.pid,item_name:p.name,price:p.price/100,quantity:q.quantity};})}});}});if(!widget){host.remove();return true;}function refresh(){win.setTimeout(widget.refresh,0);}input.addEventListener('input',refresh);input.addEventListener('change',refresh);doc.querySelectorAll('#product-sidebar .method-box').forEach(function(b){b.addEventListener('click',refresh);});return true;}
+    if(place())return;var timer=win.setInterval(function(){if(place()||++tries>=40)win.clearInterval(timer);},250);
   }
-  async function addBoth(io, quote, selected) {
-    if (selected !== true) throw Error('Select the optional spare batteries first.');
-    if (busy.has(io) || used.has(quote)) throw Error('This addition is already in progress or needs a fresh cart review.');
-    busy.add(io);
-    try {
-      var fresh = await prepare(io);
-      if (!quote || quote.pairId !== PAIR.id || !Number.isFinite(quote.at) || quote.at > Date.now() || Date.now() - quote.at > 120000 || quote.baseline !== fresh.baseline || quote.camera?.price !== fresh.camera.price || quote.battery?.price !== fresh.battery.price) throw Error('Your cart, store, price or availability changed. Review the pair again.');
-      used.add(quote);
-      var expected = fresh.cart;
-      for (var product of [fresh.camera, fresh.battery]) {
-        // Refresh each product/form immediately before its own native POST.
-        // Never reuse the second product's stale viewstate from the quote.
-        var current;
-        try {
-          var currentCart = await io.read();
-          if (snapshot(currentCart) !== snapshot(expected)) throw reviewError();
-          var live = await Promise.all([io.product(product.pid), io.stock(product.pid)]);
-          current = live[0];
-          var currentQty = currentCart.items.find(function (r) { return r.pid === product.pid; })?.quantity || 0;
-          if (!compatible(current, product.pid, normalized(product.code), product.name) || current.price !== product.price || !live[1]?.verified || !Number.isFinite(live[1].branches?.[currentCart.store]) || live[1].branches[currentCart.store] < currentQty + 1) throw reviewError();
-        } catch (_) { throw reviewError(); }
-        var next = increment(expected, current);
-        try { await io.add(current, 1); } catch (_) { /* A reply can be lost after WebTrack applied the addition. Read once; never retry the POST. */ }
-        var actual, actualSnapshot;
-        try { actual = await io.read(); actualSnapshot = snapshot(actual); } catch (_) { throw reviewError(); }
-        if (actualSnapshot !== snapshot(next)) {
-          if (product.pid === PAIR.camera && actualSnapshot === fresh.baseline) {
-            var unchanged = Error('Neither item was added. Your cart is unchanged. Check the product pages.'); unchanged.safeCart = true; throw unchanged;
-          }
-          throw reviewError();
-        }
-        expected = actual;
-      }
-      return {status: 'added', cart: expected, added: [{pid: PAIR.camera, quantity: 1}, {pid: PAIR.battery, quantity: 1}]};
-    } finally { busy.delete(io); }
-  }
-  function money(cents) { return '$' + (cents / 100).toFixed(2); }
-  function mount(doc, host, io, options) {
-    if (!host || host.querySelector('[data-wl-product-pair]')) return;
-    var box = doc.createElement('section'); box.className = 'wl-product-pair'; box.setAttribute('data-wl-product-pair', PAIR.id);
-    box.innerHTML = '<div class="wl-pair-eyebrow">PAIR WITH SPARE POWER</div><h2>Camera ready. Backups handy.</h2><p class="wl-pair-disclosure"></p><div class="wl-pair-products"><a href="/ProductDetail.aspx?pid=246159"><img width="180" height="170" src="https://images-woodsonlumber.sirv.com/merchant-feed/products/246159/main-d066bc7f930a45c5.jpg" alt="WGI SPARK 2.0 Lightsout camera"><strong>SPARK 2.0 combo</strong><span data-pair-price="camera"></span></a><span class="wl-pair-plus" aria-hidden="true">+</span><a href="/ProductDetail.aspx?pid=2853"><img width="180" height="170" src="https://images-woodsonlumber.sirv.com/merchant-feed/products/2853/main-80e2c51bf54b4660.jpg" alt="Energizer MAX AA 8-pack"><strong>Energizer MAX AA 8-pack</strong><span data-pair-price="battery"></span></a></div><label class="wl-pair-choice"><input type="checkbox"> Include one optional spare 8-pack with one camera</label><p class="wl-pair-fit"></p><div class="wl-pair-actions"><button type="button" disabled>Check pair availability</button><strong class="wl-pair-total"></strong></div><p role="status" aria-live="polite" class="wl-pair-status"></p><a class="wl-pair-cart" href="/ShoppingCart.aspx" hidden>Review your cart &rarr;</a>';
-    box.querySelector('.wl-pair-disclosure').textContent = PAIR.disclosure;
-    box.querySelector('.wl-pair-fit').textContent = PAIR.compatibility;
-    host.appendChild(box);
-    var choice = box.querySelector('input'), button = box.querySelector('button'), status = box.querySelector('[role="status"]');
-    var quote, pending = false, finished = false;
-    async function refresh() {
-      button.disabled = true; status.textContent = 'Checking current prices and your selected store…';
-      try {
-        quote = await prepare(io);
-        box.querySelector('[data-pair-price="camera"]').textContent = money(quote.camera.price);
-        box.querySelector('[data-pair-price="battery"]').textContent = money(quote.battery.price);
-        box.querySelector('.wl-pair-total').textContent = money(quote.total) + ' for both';
-        status.textContent = 'In stock at ' + quote.cart.store + '. Pickup or delivery eligibility and timing are confirmed in checkout.';
-        button.textContent = 'Add both to cart'; button.disabled = !choice.checked || pending || finished;
-      } catch (e) { status.textContent = e.message; button.textContent = 'Pair unavailable'; }
-    }
-    choice.addEventListener('change', function () { button.disabled = !choice.checked || !quote || pending || finished; });
-    button.addEventListener('click', async function () {
-      if (pending || finished) return;
-      if (!quote) { await refresh(); return; }
-      if (!choice.checked) return;
-      pending = true; button.disabled = true; choice.disabled = true;
-      status.textContent = 'Adding your selected pair…';
-      try {
-        await addBoth(io, quote, choice.checked); finished = true;
-        status.textContent = 'Added one camera and one spare battery 8-pack. Your other cart items are preserved.';
-        button.textContent = 'Both added'; box.querySelector('.wl-pair-cart').hidden = false;
-      } catch (e) {
-        status.textContent = e.message;
-        if (e.reviewCart || e.safeCart) { finished = true; button.textContent = 'Review cart'; box.querySelector('.wl-pair-cart').hidden = false; }
-        else { quote = null; button.textContent = 'Check prices again'; choice.checked = false; button.disabled = false; }
-      } finally { pending = false; choice.disabled = finished; }
-    });
-    refresh();
-    return {element: box, refresh: refresh};
-  }
-  function boot(win, options) {
-    // Stage only. Future release must explicitly wire this page-scoped module.
-    if (!RELEASE_ENABLED || !options?.releaseApproved || win.location.origin !== 'https://webtrack.woodsonlumber.com' || !/^\/ProductDetail\.aspx$/i.test(win.location.pathname) || new URLSearchParams(win.location.search).get('pid') !== PAIR.camera) return;
-    if (!win.WLCartSubstitutions || !win.WLPickupAvailability || !win.document.querySelector('a[href*="SignOut=1" i]')) return;
-    var host = win.document.querySelector(options.mountSelector);
-    return mount(win.document, host, win.WLCartSubstitutions.adapter(win, win.WLPickupAvailability));
-  }
-  return {enabled: RELEASE_ENABLED, pair: PAIR, snapshot: snapshot, prepare: prepare, addBoth: addBoth, mount: mount, boot: boot};
+  return{enabled:true,build:BUILD,pair:PAIRS[0],pairs:PAIRS,pairFor:pairFor,snapshot:snapshot,prepare:prepare,addBoth:addBoth,mount:mount,boot:boot,available:available};
 });

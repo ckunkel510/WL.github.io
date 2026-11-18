@@ -3,12 +3,13 @@ const test = require('node:test'), assert = require('node:assert/strict');
 const pairing = require('../ProductPairing');
 const p = pairing.pair;
 function fixture(options = {}) {
+  const active = pairing.pairFor(options.camera || p.camera);
   let cart = {store: 'Bryan', items: [{pid: '900', code: 'KEEP-ME', quantity: 3, unit: 'bag', configured: false, price: 525}]};
   const calls = [], products = {
-    [p.camera]: {pid: p.camera, code: p.cameraCode, name: p.cameraName, unit: 'ea', price: 9999},
+    [active.camera]: {pid: active.camera, code: active.cameraCode, name: active.cameraName, unit: 'ea', price: 9999},
     [p.battery]: {pid: p.battery, code: p.batteryCode, name: p.batteryName, unit: 'ea', price: 1039}
   };
-  if (options.existing) for (const id of [p.camera, p.battery]) cart.items.push({...products[id], quantity: 2, configured: false});
+  if (options.existing) for (const id of [active.camera, p.battery]) cart.items.push({...products[id], quantity: 2, configured: false});
   const io = {
     read: async () => { calls.push(['read']); if (options.readFails && calls.some(c => c[0] === 'add')) throw Error('Unavailable'); return structuredClone(cart); },
     product: async id => { calls.push(['product', id]); return {...products[id]}; },
@@ -26,15 +27,17 @@ function fixture(options = {}) {
   };
   return {io, options, products, calls, get: () => structuredClone(cart), edit: f => f(cart)};
 }
-test('staged boot makes no DOM, cart or network calls, even when a caller passes releaseApproved', () => {
-  const page = new Proxy({}, {get() { throw Error('Touched live page'); }});
-  assert.equal(pairing.enabled, false); assert.equal(pairing.boot(page, {releaseApproved: true}), undefined);
+test('boot stays off other origins, embedded pages and unreviewed products', async () => {
+  for(const options of [{origin:'https://example.invalid',path:'/ProductDetail.aspx',pid:'174184'},{origin:'https://webtrack.woodsonlumber.com',path:'/ShoppingCart.aspx',pid:'174184'},{origin:'https://webtrack.woodsonlumber.com',path:'/ProductDetail.aspx',pid:'999'}]){
+    const page={location:{origin:options.origin,pathname:options.path,search:'?pid='+options.pid},document:new Proxy({},{get(){throw Error('Out of scope DOM access');}})};page.top=page;
+    await pairing.boot(page);
+  }
 });
 test('exact optional spare pair uses current native prices and never injects the email promo', async () => {
   const f = fixture(), q = await pairing.prepare(f.io);
   assert.equal(q.total, 11038); assert.equal(q.camera.price, 9999);
   assert.match(p.disclosure, /already includes 8 AA/); assert.match(p.disclosure, /optional/);
-  assert.match(p.compatibility, /1.5V alkaline/);
+  assert.match(p.compatibility, /eight matching fresh AA/);
   assert.equal(f.calls.some(c => c[0] === 'add'), false);
 });
 test('customer must explicitly select the extra batteries before either item can be added', async () => {
@@ -104,4 +107,25 @@ test('second product is re-read after first addition; intervening price or stock
 });
 test('invalid or ambiguous cart rows cannot be silently omitted',()=>{
   for(const items of [[{pid:'1',code:'A',quantity:0,unit:'ea'}],[{pid:'1',code:'A',quantity:1,unit:'ea'},{pid:'1',code:'A',quantity:1,unit:'ea'}]])assert.throws(()=>pairing.snapshot({store:'Bryan',items}));
+});
+test('GMAX is its own exact reviewed match and receives the selected number of complete AA8 packs',async()=>{
+ const f=fixture({camera:'174184'}),q=await pairing.prepare(f.io,'174184',3);assert.equal(q.pair.cameraCode,'STC-GMAX32VNG');assert.equal(q.total,33114);
+ await pairing.addBoth(f.io,q,true);assert.deepEqual(f.get().items.map(r=>[r.pid,r.quantity]),[['900',3],['174184',3],['2853',3]]);
+ await assert.rejects(pairing.prepare(f.io,'999',1),/no verified battery match/);
+});
+test('guest company availability never requires account settings or claims local pickup',async()=>{
+ const f=fixture();const read=f.io.read,product=f.io.product;
+ f.io.read=async()=>({...await read(),store:'unconfirmed',scope:'company',sessionKind:'guest'});f.io.product=async id=>({...await product(id),sessionKind:'guest'});
+ const q=await pairing.prepare(f.io);assert.equal(q.cart.store,'unconfirmed');await pairing.addBoth(f.io,q,true);assert.equal(f.calls.filter(c=>c[0]==='add').length,2);
+});
+test('signed-in pickup needs local stock; delivery may use verified company stock without a local promise',async()=>{
+ const f=fixture();f.edit(c=>c.store='Brenham');await assert.rejects(pairing.prepare(f.io),/selected store/);
+ const read=f.io.read;f.io.read=async()=>({...await read(),scope:'company'});assert.equal((await pairing.prepare(f.io)).cart.scope,'company');
+});
+test('sign-in, fulfillment scope or selected quantity changes invalidate the reviewed cart context',async()=>{
+ for(const change of ['session','scope']){const f=fixture(),q=await pairing.prepare(f.io),read=f.io.read;f.io.read=async()=>({...await read(),...(change==='session'?{sessionKind:'signed_in'}:{scope:'company'})});await assert.rejects(pairing.addBoth(f.io,q,true));assert.equal(f.calls.some(c=>c[0]==='add'),false);}
+ for(const n of [0,1.5,100,NaN])await assert.rejects(pairing.prepare(fixture().io,p.id,n),/whole quantity/);
+});
+test('guest product identity cannot be combined with a signed-in cart',async()=>{
+ const f=fixture(),read=f.io.read,product=f.io.product;f.io.read=async()=>({...await read(),sessionKind:'signed_in'});f.io.product=async id=>({...await product(id),sessionKind:'guest'});await assert.rejects(pairing.prepare(f.io),/sign-in changed/);assert.equal(f.calls.some(c=>c[0]==='add'),false);
 });
