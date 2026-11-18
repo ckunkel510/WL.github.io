@@ -86,9 +86,149 @@ const WL_CLICK_CAMPAIGNS = [
         "providerUrlId": "794959108956"
       }
     ]
+  },
+  {
+    "campaignId": "3396233d-722a-4400-9fe9-799826309fe6",
+    "activityId": "2ebf161b-bfbb-4691-a7c6-c26ed81c0e04",
+    "campaignKey": "wl-20261118-hunting-r1",
+    "allowProviderBinding": true,
+    "links": [
+      {
+        "url": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=174184&utm_source=constant_contact&utm_medium=email&utm_campaign=wl-20261118-hunting-r1&utm_content=product_acf660284e79487a5e94",
+        "productId": "174184",
+        "providerUrl": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=174184",
+        "tags": [
+          "WL observed click - Hunting"
+        ]
+      },
+      {
+        "url": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=96255&utm_source=constant_contact&utm_medium=email&utm_campaign=wl-20261118-hunting-r1&utm_content=product_a56af431ba038da3114c",
+        "productId": "96255",
+        "providerUrl": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=96255",
+        "tags": [
+          "WL observed click - Hunting"
+        ]
+      },
+      {
+        "url": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=186611&utm_source=constant_contact&utm_medium=email&utm_campaign=wl-20261118-hunting-r1&utm_content=product_229f25ebedd54fecb873",
+        "productId": "186611",
+        "providerUrl": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=186611",
+        "tags": [
+          "WL observed click - Hunting"
+        ]
+      },
+      {
+        "url": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=186598&utm_source=constant_contact&utm_medium=email&utm_campaign=wl-20261118-hunting-r1&utm_content=product_7aa16f7acfd2cd6b2c8c",
+        "productId": "186598",
+        "providerUrl": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=186598",
+        "tags": [
+          "WL observed click - Hunting"
+        ]
+      }
+    ]
+  },
+  {
+    "campaignId": "d19bd94a-79e0-48f3-87fe-9be81718f84f",
+    "activityId": "f2c11523-4f3d-49df-97d2-dec096bd4882",
+    "campaignKey": "wl-20261118-stihl-r1",
+    "allowProviderBinding": true,
+    "links": [
+      {
+        "url": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=294888&utm_source=constant_contact&utm_medium=email&utm_campaign=wl-20261118-stihl-r1&utm_content=product_a3913283073904b30da3",
+        "productId": "294888",
+        "providerUrl": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=294888",
+        "tags": [
+          "WL observed click - STIHL",
+          "WL observed click - Outdoor equipment"
+        ]
+      },
+      {
+        "url": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=294922&utm_source=constant_contact&utm_medium=email&utm_campaign=wl-20261118-stihl-r1&utm_content=product_60f2cacc9d98d96ebf8a",
+        "productId": "294922",
+        "providerUrl": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=294922",
+        "tags": [
+          "WL observed click - STIHL",
+          "WL observed click - Outdoor equipment"
+        ]
+      },
+      {
+        "url": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=294864&utm_source=constant_contact&utm_medium=email&utm_campaign=wl-20261118-stihl-r1&utm_content=product_bd76a4b98a6bba07688e",
+        "productId": "294864",
+        "providerUrl": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=294864",
+        "tags": [
+          "WL observed click - STIHL",
+          "WL observed click - Outdoor equipment"
+        ]
+      },
+      {
+        "url": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=294884&utm_source=constant_contact&utm_medium=email&utm_campaign=wl-20261118-stihl-r1&utm_content=product_367622a9dcb64049c029",
+        "productId": "294884",
+        "providerUrl": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=294884",
+        "tags": [
+          "WL observed click - STIHL",
+          "WL observed click - Outdoor equipment"
+        ]
+      }
+    ]
+  },
+  {
+    "campaignId": "cfa7772d-974b-4535-a2d7-a3e900c39f67",
+    "activityId": "728940f4-0c13-4657-9bcd-3f4c714a5407",
+    "campaignKey": "wl-20261118-gifting-r1",
+    "allowProviderBinding": true,
+    "links": [
+      {
+        "url": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=265511&utm_source=constant_contact&utm_medium=email&utm_campaign=wl-20261118-gifting-r1&utm_content=product_9e11cedbc1aa49130756",
+        "productId": "265511",
+        "providerUrl": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=265511",
+        "tags": [
+          "WL observed click - Tools and DIY gifts"
+        ]
+      },
+      {
+        "url": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=253020&utm_source=constant_contact&utm_medium=email&utm_campaign=wl-20261118-gifting-r1&utm_content=product_84041c6d8943c2da36d3",
+        "productId": "253020",
+        "providerUrl": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=253020",
+        "tags": [
+          "WL observed click - Tools and DIY gifts"
+        ]
+      },
+      {
+        "url": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=276739&utm_source=constant_contact&utm_medium=email&utm_campaign=wl-20261118-gifting-r1&utm_content=product_6da60b8a7283e1425e4a",
+        "productId": "276739",
+        "providerUrl": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=276739",
+        "tags": [
+          "WL observed click - Tools and DIY gifts"
+        ]
+      },
+      {
+        "url": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=284760&utm_source=constant_contact&utm_medium=email&utm_campaign=wl-20261118-gifting-r1&utm_content=product_ce9aa179448019cbbf1f",
+        "productId": "284760",
+        "providerUrl": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=284760",
+        "tags": [
+          "WL observed click - Tools and DIY gifts"
+        ]
+      },
+      {
+        "url": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=86866&utm_source=constant_contact&utm_medium=email&utm_campaign=wl-20261118-gifting-r1&utm_content=product_b5ac3da2096bd8de5f94",
+        "productId": "86866",
+        "providerUrl": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=86866",
+        "tags": [
+          "WL observed click - Tools and DIY gifts"
+        ]
+      },
+      {
+        "url": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=14134&utm_source=constant_contact&utm_medium=email&utm_campaign=wl-20261118-gifting-r1&utm_content=product_54a9a32e860f64c804b2",
+        "productId": "14134",
+        "providerUrl": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=14134",
+        "tags": [
+          "WL observed click - Tools and DIY gifts"
+        ]
+      }
+    ]
   }
 ];
-const WL_CLICK_TAGS = ['WL observed click - Holiday lighting','WL observed click - C9 lights','WL observed click - C6 lights','WL observed click - Icicle lights','WL observed click - Net lights','WL observed click - T5 lights','WL observed click - Christmas collection'];
+const WL_CLICK_TAGS = ["WL observed click - Holiday lighting", "WL observed click - C9 lights", "WL observed click - Icicle lights", "WL observed click - Net lights", "WL observed click - C6 lights", "WL observed click - T5 lights", "WL observed click - Christmas collection", "WL observed click - Hunting", "WL observed click - STIHL", "WL observed click - Outdoor equipment", "WL observed click - Tools and DIY gifts"];
 function wlCcPage_(href, root) {
   const path=String(href||'').replace(/^https:\/\/api\.cc\.email\/v3(?=\/)/,'').replace(/^\/v3(?=\/)/,'');
   if(path.indexOf(root)!==0 || /:\/\/|\.\.|[\r\n]/.test(path) || !['','?','/'].includes(path.slice(root.length,root.length+1))) throw new Error('Unexpected Constant Contact report page');
@@ -117,6 +257,16 @@ function enableMarketingClickLearning() {
   if(!getProp_('WL_CLICK_TAG_IDS'))throw new Error('Configure observed tags first');
   setProp_('WL_CLICK_LEARNING_ENABLED','true');
   const result={ok:true,enabled:true,clockTriggerRequired:true,sendsEnabled:false};console.log(JSON.stringify(result));return result;
+}
+// Bind only exact, pre-reviewed canonical destinations within this sent activity.
+// The provider report supplies its own opaque URL ID; no arbitrary URL/query stripping.
+function wlBindReviewedLinks_(config,rows) {
+  if(!config.allowProviderBinding)return config;
+  return Object.assign({},config,{links:config.links.map(function(link){
+    if(link.providerUrlId||!link.providerUrl)return link;
+    const matches=rows.filter(function(row){return row.link_url===link.providerUrl&&/^\d+$/.test(String(row.url_id));});
+    return matches.length===1?Object.assign({},link,{providerUrlId:String(matches[0].url_id)}):link;
+  })});
 }
 function wlClickGroups_(rows,providerLinks,config,now) {
   const byId={};providerLinks.forEach(function(row){const link=config.links.find(function(link){return row.link_url===link.url || (link.providerUrl&&row.link_url===link.providerUrl&&String(row.url_id)===link.providerUrlId);});if(link)byId[String(row.url_id)]={link:link,reportedUrl:row.link_url};});
@@ -149,6 +299,7 @@ function syncMarketingClickSegments() {
       if(!['primary_email','resend'].includes(activity.role))throw new Error('Unsupported campaign report role');
       const root='/reports/email_reports/'+config.activityId,links=ccGet_(root+'/links?no_clicks=true');
       if(links.campaign_activity_id!==config.activityId)throw new Error('Provider link report mismatch');
+      config=wlBindReviewedLinks_(config,links.link_click_counts||[]);
       summary.providerLinksSeen+=(links.link_click_counts||[]).length;
       summary.registeredLinksMatched+=config.links.filter(function(link){return (links.link_click_counts||[]).some(function(x){return link.url===x.link_url || (link.providerUrl===x.link_url&&link.providerUrlId===String(x.url_id));});}).length;
       let path=root+'/tracking/clicks?limit=500',rows=[],pages=0;
@@ -168,6 +319,7 @@ function syncMarketingClickSegments() {
       jobs.pending=jobs.pending.concat(pendingIds);
       setProp_('WL_CLICK_CURSOR_'+config.activityId,processed<remaining.length?last:'');
     });
+    try { refreshMarketingKpis_(); summary.kpisRefreshed=true; } catch (_) { summary.kpisRefreshed=false; }
     setProp_('WL_CLICK_LAST_SUMMARY',JSON.stringify(Object.assign({checkedAt:new Date().toISOString()},summary)));console.log(JSON.stringify(summary));return summary;
   } finally {const active=JSON.parse(getProp_('WL_CLICK_RUNNING')||'{}');if(active.id===jobId)PropertiesService.getScriptProperties().deleteProperty('WL_CLICK_RUNNING');}
 }

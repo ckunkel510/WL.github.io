@@ -595,6 +595,7 @@
   "trade_news": "Contractor and market news",
   "deals": "Deals and savings",
   "project_tips": "Project tips and how-to",
+  "holiday": "Christmas lights and holiday ideas",
   "lawn_garden": "Lawn and garden",
   "paint": "Paint and home projects",
   "tools": "Tools and hardware",
@@ -667,8 +668,8 @@
 
       <fieldset id="wl-signup-interests" hidden>
         <legend>What would make our emails useful? (optional)</legend>
-        <div>${['trade_news','deals','project_tips'].map(key => `<label><input type="checkbox" data-wl-interest="${key}"> ${INTERESTS[key]}</label>`).join('')}</div>
-        <details><summary>Choose departments (optional)</summary><div>${Object.keys(INTERESTS).filter(key => !/^(trade_|brand_)/.test(key) && !['deals','project_tips'].includes(key)).map(key => `<label><input type="checkbox" data-wl-interest="${key}"> ${INTERESTS[key]}</label>`).join('')}</div></details>
+        <div>${['trade_news','deals','project_tips','holiday'].map(key => `<label><input type="checkbox" data-wl-interest="${key}"> ${INTERESTS[key]}</label>`).join('')}</div>
+        <details><summary>Choose departments (optional)</summary><div>${Object.keys(INTERESTS).filter(key => !/^(trade_|brand_)/.test(key) && !['deals','project_tips','holiday'].includes(key)).map(key => `<label><input type="checkbox" data-wl-interest="${key}"> ${INTERESTS[key]}</label>`).join('')}</div></details>
         <details><summary>For the pros: your trade (optional)</summary><div>${Object.keys(INTERESTS).filter(key => /^trade_/.test(key) && key !== 'trade_news').map(key => `<label><input type="checkbox" data-wl-interest="${key}"> ${INTERESTS[key]}</label>`).join('')}</div></details>
         <details><summary>Brands (optional)</summary><div>${Object.keys(INTERESTS).filter(key => /^brand_/.test(key)).map(key => `<label><input type="checkbox" data-wl-interest="${key}"> ${INTERESTS[key]}</label>`).join('')}</div></details>
         <p>Choose any that fit. You can unsubscribe at any time.</p>

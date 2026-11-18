@@ -1,0 +1,7 @@
+const fs=require('node:fs'),vm=require('node:vm'),test=require('node:test'),assert=require('node:assert/strict');
+test('repeatable KPIs distinguish click-through from click-to-open and leave missing sales unknown',()=>{
+ const props={};const ctx={WL_REVIEW_CAMPAIGN:'one',WL_CLICK_CAMPAIGNS:[],setProp_:(k,v)=>props[k]=v,ccGet_:()=>({results:[{campaign_id:'one',stats:{em_sends:100,em_bounces:10,em_clicks:9,em_opens:30,em_optouts:1}}]})};vm.createContext(ctx);vm.runInContext(fs.readFileSync('integrations/constant-contact/MarketingMetrics.gs','utf8'),ctx);const r=ctx.refreshMarketingKpis_(),c=r.campaigns[0];assert.equal(c.uniqueClickRatePerProviderEstimatedDelivered,.1);assert.equal(c.clickToReportedOpenRate,.3);assert.equal(c.websiteArrivals,null);assert.equal(c.onlineOrders,null);assert.equal(c.inStoreNetRevenue,null);assert.equal(r.campaignsSent,0);assert.equal(r.unknownCommerceIsNotZero,true);
+});
+test('draft authoring and cohort helpers expose no send/schedule/consent writes or public routing',()=>{
+ const code=fs.readFileSync('integrations/constant-contact/Code.gs','utf8');for(const file of ['AudienceReview.gs','MorningDrafts.gs','MarketingMetrics.gs']){const s=fs.readFileSync('integrations/constant-contact/'+file,'utf8');assert.doesNotMatch(s,/cc(?:Post|Put)_\([^\n]*(?:schedules|tests|resubscribe|sign_up)/);for(const name of ['createMorningDrafts','createMorningReviewCohorts','inspectMarketingKpis'])assert.doesNotMatch(code,new RegExp('return[^\\n]*'+name));}
+});

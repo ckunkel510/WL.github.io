@@ -4,6 +4,7 @@ const WL_INTERESTS = {
   "trade_news": "Contractor and market news",
   "deals": "Deals and savings",
   "project_tips": "Project tips and how-to",
+  "holiday": "Christmas lights and holiday ideas",
   "lawn_garden": "Lawn and garden",
   "paint": "Paint and home projects",
   "tools": "Tools and hardware",
