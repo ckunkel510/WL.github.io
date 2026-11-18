@@ -124,6 +124,46 @@ const WL_CLICK_CAMPAIGNS = [
         "tags": [
           "WL observed click - Hunting"
         ]
+      },
+      {
+        "url": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=246159&utm_source=constant_contact&utm_medium=email&utm_campaign=wl-20261118-hunting-r1&utm_content=product_8f1e0f1a21e6d32eb137",
+        "productId": "246159",
+        "providerUrl": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=246159",
+        "tags": [
+          "WL observed click - Hunting"
+        ]
+      },
+      {
+        "url": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=2853&utm_source=constant_contact&utm_medium=email&utm_campaign=wl-20261118-hunting-r1&utm_content=product_d3dea4972e1a6045dbb1",
+        "productId": "2853",
+        "providerUrl": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=2853",
+        "tags": [
+          "WL observed click - Hunting"
+        ]
+      },
+      {
+        "url": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=12990&utm_source=constant_contact&utm_medium=email&utm_campaign=wl-20261118-hunting-r1&utm_content=product_c1a88083e9e9ed4a6e79",
+        "productId": "12990",
+        "providerUrl": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=12990",
+        "tags": [
+          "WL observed click - Heating"
+        ]
+      },
+      {
+        "url": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=12887&utm_source=constant_contact&utm_medium=email&utm_campaign=wl-20261118-hunting-r1&utm_content=product_7e7f42d2db516575c10e",
+        "productId": "12887",
+        "providerUrl": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=12887",
+        "tags": [
+          "WL observed click - Heating"
+        ]
+      },
+      {
+        "url": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=12888&utm_source=constant_contact&utm_medium=email&utm_campaign=wl-20261118-hunting-r1&utm_content=product_8b799db86855c86bcbad",
+        "productId": "12888",
+        "providerUrl": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=12888",
+        "tags": [
+          "WL observed click - Heating"
+        ]
       }
     ]
   },
@@ -224,11 +264,35 @@ const WL_CLICK_CAMPAIGNS = [
         "tags": [
           "WL observed click - Tools and DIY gifts"
         ]
+      },
+      {
+        "url": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=19911&utm_source=constant_contact&utm_medium=email&utm_campaign=wl-20261118-gifting-r1&utm_content=product_7abde459edaba373a3d2",
+        "productId": "19911",
+        "providerUrl": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=19911",
+        "tags": [
+          "WL observed click - Tools and DIY gifts"
+        ]
+      },
+      {
+        "url": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=16923&utm_source=constant_contact&utm_medium=email&utm_campaign=wl-20261118-gifting-r1&utm_content=product_1350f6d4ffd97779031f",
+        "productId": "16923",
+        "providerUrl": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=16923",
+        "tags": [
+          "WL observed click - Tools and DIY gifts"
+        ]
+      },
+      {
+        "url": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=16265&utm_source=constant_contact&utm_medium=email&utm_campaign=wl-20261118-gifting-r1&utm_content=product_c251fd9757558a208d39",
+        "productId": "16265",
+        "providerUrl": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=16265",
+        "tags": [
+          "WL observed click - Tools and DIY gifts"
+        ]
       }
     ]
   }
 ];
-const WL_CLICK_TAGS = ["WL observed click - Holiday lighting", "WL observed click - C9 lights", "WL observed click - Icicle lights", "WL observed click - Net lights", "WL observed click - C6 lights", "WL observed click - T5 lights", "WL observed click - Christmas collection", "WL observed click - Hunting", "WL observed click - STIHL", "WL observed click - Outdoor equipment", "WL observed click - Tools and DIY gifts"];
+const WL_CLICK_TAGS = ["WL observed click - Holiday lighting", "WL observed click - C9 lights", "WL observed click - Icicle lights", "WL observed click - Net lights", "WL observed click - C6 lights", "WL observed click - T5 lights", "WL observed click - Christmas collection", "WL observed click - Hunting", "WL observed click - STIHL", "WL observed click - Outdoor equipment", "WL observed click - Tools and DIY gifts", "WL observed click - Heating"];
 function wlCcPage_(href, root) {
   const path=String(href||'').replace(/^https:\/\/api\.cc\.email\/v3(?=\/)/,'').replace(/^\/v3(?=\/)/,'');
   if(path.indexOf(root)!==0 || /:\/\/|\.\.|[\r\n]/.test(path) || !['','?','/'].includes(path.slice(root.length,root.length+1))) throw new Error('Unexpected Constant Contact report page');

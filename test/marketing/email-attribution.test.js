@@ -19,3 +19,15 @@ test('unknown source, mismatched SKU and unregistered links cannot create or inh
 test('expired and forged session context is discarded',()=>{
  for(const c of [{campaign:'wl-20261118-hunting-r1',content:'product_acf660284e79487a5e94',product:'174184',at:Date.now()-1800001},{campaign:'fake',content:'private@example.com',product:'174184',at:Date.now()}]){const session=new Map([['wl_email_campaign_session_v1',JSON.stringify(c)]]);const h=harness('',session);h.window.WLAnalytics.track('view_item',{});assert.equal(h.window.dataLayer.find(x=>x.event_name==='view_item').campaign_key,undefined);assert.equal(session.has('wl_email_campaign_session_v1'),false);}
 });
+test('each revised camera, heater, battery and everyday-tool landing matches its own exact registered SKU',()=>{
+ const registry=JSON.parse(fs.readFileSync('marketing/email-link-registry.json','utf8'));
+ const additions={hunting:['246159','2853','12990','12887','12888'],gifting:['19911','16923','16265']};
+ for(const [key,pids] of Object.entries(additions))for(const pid of pids){
+  const campaign='wl-20261118-'+key+'-r1', content=Object.keys(registry[campaign]).find(k=>registry[campaign][k]===pid);
+  assert.ok(content,'missing exact product registration '+pid);
+  const search='?pid='+pid+'&utm_source=constant_contact&utm_medium=email&utm_campaign='+campaign+'&utm_content='+content;
+  const h=harness(search),events=h.window.dataLayer.filter(x=>x.event_name==='email_landing');
+  assert.equal(events.length,1);assert.equal(events[0].campaign_product_id,pid);
+  assert.equal(harness(search.replace('pid='+pid,'pid=999')).window.dataLayer.filter(x=>x.event_name==='email_landing').length,0);
+ }
+});
