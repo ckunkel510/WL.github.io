@@ -28,3 +28,5 @@ Before publishing, the actual native guest controls added GMAX and MAXAA8 into a
 The release also registers the newly requested GTA26SET email link. Its native unsent creative is119.99/regular149.99/while supplies last with no expiration; this does not authorize an email/SMS send or schedule. Standard confirmed `add_to_cart` instrumentation records both items only after full cart readback; no claim of actual GA4 receipt or revenue.
 
 Sources: [OEM WGI catalog, SPARK WGI-SWTC2LOK](https://assets.unilogcorp.com/267/ITEM/DOC/Wildgame_INNOVATIONS_WLD006_Catalog.pdf), [original camera manual](https://manuals.plus/wp-content/uploads/2023/05/Wildgame-Innovations-SWITCH-SWTC2LO-Digital-Game-Scouting-Camera-User-Manual.pdf), exact native Woodson product pages and Merchant photos.
+
+Live startup correction: Webtrack initially leaves the native quantity blank while its product layout settles. Wait for its valid native quantity before mounting, rather than showing a quantity error for the eventual default of 1. Build 20261118-camera-batteries-2; no change to paired-cart writes or native controls.
