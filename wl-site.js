@@ -3,7 +3,7 @@
 
   if (window.WLAnalytics) return;
 
-  var VERSION = "1.8.4";
+  var VERSION = "1.8.5";
   var EVENT_NAME = "wl_analytics_event";
   var GA_MEASUREMENT_ID = "G-4ZLV1YB6GY";
   var META_PIXEL_ID = "188974749776655";
@@ -31,6 +31,7 @@
   var lastShippingEvent = { key: "", at: 0 };
 
   var ALLOWED_EVENTS = {
+    email_landing: true,
     search: true,
     search_results_enhanced: true,
     search_refine_click: true,
@@ -327,6 +328,36 @@
     window.gtag("event", name, parameters);
   }
 
+  // Public creative IDs only. This attributes a browser session, never a person.
+  var EMAIL_SESSION_KEY = "wl_email_campaign_session_v1";
+  var EMAIL_LINKS = {"wl-20261118-hunting-r1":{"product_acf660284e79487a5e94":"174184","product_a56af431ba038da3114c":"96255","product_229f25ebedd54fecb873":"186611","product_7aa16f7acfd2cd6b2c8c":"186598"},"wl-20261118-stihl-r1":{"product_a3913283073904b30da3":"294888","product_60f2cacc9d98d96ebf8a":"294922","product_bd76a4b98a6bba07688e":"294864","product_367622a9dcb64049c029":"294884"},"wl-20261118-gifting-r1":{"product_9e11cedbc1aa49130756":"265511","product_84041c6d8943c2da36d3":"253020","product_6da60b8a7283e1425e4a":"276739","product_ce9aa179448019cbbf1f":"284760","product_b5ac3da2096bd8de5f94":"86866","product_54a9a32e860f64c804b2":"14134"},"woodson-christmas-lights-2026-r2":{"product_bc5af899782de4f41b6a":"276810","product_eb4bb5f382f497e533c5":"268611","product_8a119139b579546cf0ed":"276804","product_84967c4f34a2fdd8aea8":"255139","product_45bdd5bafdbe4eaa9b01":"276818","product_6c0571dcfa4c6b31445e":"276871","merry100_christmas_collection":"","eligible_lights_collection":""}};
+  function emailCampaignContext(capture) {
+    try {
+      var params = new URLSearchParams(window.location.search || "");
+      var stored = JSON.parse(safeStorage(window.sessionStorage, "get", EMAIL_SESSION_KEY) || "null");
+      var campaign = params.get("utm_campaign"), content = params.get("utm_content");
+      if (capture && (campaign || params.has("utm_source"))) {
+        var product = EMAIL_LINKS[campaign] && EMAIL_LINKS[campaign][content];
+        var valid = params.get("utm_source") === "constant_contact" && params.get("utm_medium") === "email" &&
+          typeof product === "string" && (product ? (params.get("pid") === product && /\/ProductDetail\.aspx$/i.test(window.location.pathname || "")) : (/\/Products\.aspx$/i.test(window.location.pathname || "") && params.get("pl1") === "4647" && params.get("pg") === (content === "merry100_christmas_collection" ? "4649" : "4651")));
+        if (!valid) { safeStorage(window.sessionStorage, "remove", EMAIL_SESSION_KEY); return {}; }
+        if (!stored || stored.campaign !== campaign || stored.content !== content || Date.now() - stored.at > 1800000) {
+          stored = {campaign:campaign,content:content,product:product,at:Date.now(),landingRecorded:false};
+          safeStorage(window.sessionStorage,"set",EMAIL_SESSION_KEY,JSON.stringify(stored));
+        }
+      }
+      if (!stored || !EMAIL_LINKS[stored.campaign] || EMAIL_LINKS[stored.campaign][stored.content] !== stored.product ||
+        !Number.isFinite(stored.at) || stored.at > Date.now() || Date.now()-stored.at > 1800000) {
+        safeStorage(window.sessionStorage,"remove",EMAIL_SESSION_KEY);return {};
+      }
+      if(capture && !stored.landingRecorded){
+        stored.landingRecorded=true;safeStorage(window.sessionStorage,"set",EMAIL_SESSION_KEY,JSON.stringify(stored));
+        pushEvent("email_landing",{campaign_key:stored.campaign,creative_link_key:stored.content,campaign_product_id:stored.product||undefined,attribution_basis:"public_utm_browser_session"});
+      }
+      return {campaign_key:stored.campaign,creative_link_key:stored.content,campaign_product_id:stored.product||undefined,attribution_basis:"public_utm_browser_session"};
+    } catch (_) { return {}; }
+  }
+
   function experimentContext() {
     try {
       var stored = JSON.parse(window.sessionStorage.getItem(EXPERIMENT_STORAGE_KEY) || "null");
@@ -408,7 +439,7 @@
 
     parameters=Object.assign({},parameters);
     if ((/^guest_checkout_/.test(name) || name==='guest_details_complete') && !parameters.ecommerce) parameters.ecommerce=ecommerce(cartItems(),null);
-    var enriched = Object.assign({}, experimentContext(), recommendationContext(name, parameters));
+    var enriched = Object.assign({}, experimentContext(), emailCampaignContext(false), recommendationContext(name, parameters));
     var payload = sanitize(enriched, "", 0) || {};
     payload.sign_in_state = document.querySelector("a[href*='SignOut=1' i]") ? "signed_in" : "signed_out";
     if (/checkout|cart|shipping|payment|purchase|guest_details/.test(name)) payload.checkout_context=document.getElementById('ctl00_EmployeeStatusBar_LogonBarPanel') ? 'staff_assisted' : 'customer';
@@ -1000,6 +1031,7 @@
   }
 
   function emitInitialPageEvents() {
+    emailCampaignContext(true);
     var type = pageType();
     if (type === "product_list") {
       var term = getSearchTerm();
