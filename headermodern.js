@@ -11,7 +11,7 @@
   var STATE_BRIDGE_MODE = /(?:^|[?&])wlHeaderBridge=1(?:&|$)/i.test(window.location.search || "") && window.parent !== window;
   // Keep the hosted filename neutral. Common privacy filters block filenames
   // associated with analytics, tracking, events, or commerce before execution.
-  var ANALYTICS_URL = "https://ckunkel510.github.io/WL.github.io/wl-site.js?v=20261118-email-offer-links-1";
+  var ANALYTICS_URL = "https://ckunkel510.github.io/WL.github.io/wl-site.js?v=20261118-camera-batteries-1";
   var SMART_SEARCH_URL = "https://ckunkel510.github.io/WL.github.io/smart-search.js?v=20261016-4";
   var ACCESSIBILITY_URL = "https://ckunkel510.github.io/WL.github.io/Accessibility.js?v=20261112-2";
   var HOLIDAY_SHOP_URL = "https://ckunkel510.github.io/WL.github.io/HolidayShop.js?v=20261113-merry100-1";
@@ -306,6 +306,17 @@
     script.src = 'https://ckunkel510.github.io/WL.github.io/ProductDetailPilot.js?v=20261116-pdp-light-price-1';
     script.async = true;
     script.setAttribute('data-wl-pdp-preview-loader', 'true');
+    document.head.appendChild(script);
+  }
+
+  function loadCameraBatteryPairing() {
+    if (window.top !== window || window.location.origin !== WEBTRACK || !/^\/ProductDetail\.aspx$/i.test(window.location.pathname)) return;
+    var pid = new URLSearchParams(window.location.search).get('pid');
+    if (!['246159', '174184'].includes(pid) || window.WLProductPairing || document.querySelector('script[data-wl-camera-batteries]')) return;
+    var script = document.createElement('script');
+    script.src = 'https://ckunkel510.github.io/WL.github.io/ProductPairing.js?v=20261118-camera-batteries-1';
+    script.async = true;
+    script.setAttribute('data-wl-camera-batteries', 'true');
     document.head.appendChild(script);
   }
 
@@ -3823,6 +3834,7 @@
     loadCartDesign();
     loadBuyNowPilot();
     loadProductDetailExperience();
+    loadCameraBatteryPairing();
     loadLightSaleDetails();
     // The existing identity script may finish after DOM ready on a new sign-in.
     window.setTimeout(loadBuyNowPilot, 1800);

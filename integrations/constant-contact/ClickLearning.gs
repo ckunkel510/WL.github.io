@@ -208,6 +208,15 @@ const WL_CLICK_CAMPAIGNS = [
           "WL observed click - STIHL",
           "WL observed click - Outdoor equipment"
         ]
+      },
+      {
+        "url": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=294914&utm_source=constant_contact&utm_medium=email&utm_campaign=wl-20261118-stihl-r1&utm_content=product_3c95ff11c41eed29e178",
+        "productId": "294914",
+        "providerUrl": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=294914",
+        "tags": [
+          "WL observed click - STIHL",
+          "WL observed click - Outdoor equipment"
+        ]
       }
     ]
   },
