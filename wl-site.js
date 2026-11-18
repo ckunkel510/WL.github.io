@@ -3,7 +3,7 @@
 
   if (window.WLAnalytics) return;
 
-  var VERSION = "1.8.5";
+  var VERSION = "1.8.6";
   var EVENT_NAME = "wl_analytics_event";
   var GA_MEASUREMENT_ID = "G-4ZLV1YB6GY";
   var META_PIXEL_ID = "188974749776655";
@@ -330,7 +330,7 @@
 
   // Public creative IDs only. This attributes a browser session, never a person.
   var EMAIL_SESSION_KEY = "wl_email_campaign_session_v1";
-  var EMAIL_LINKS = {"wl-20261118-hunting-r1":{"product_acf660284e79487a5e94":"174184","product_a56af431ba038da3114c":"96255","product_229f25ebedd54fecb873":"186611","product_7aa16f7acfd2cd6b2c8c":"186598"},"wl-20261118-stihl-r1":{"product_a3913283073904b30da3":"294888","product_60f2cacc9d98d96ebf8a":"294922","product_bd76a4b98a6bba07688e":"294864","product_367622a9dcb64049c029":"294884"},"wl-20261118-gifting-r1":{"product_9e11cedbc1aa49130756":"265511","product_84041c6d8943c2da36d3":"253020","product_6da60b8a7283e1425e4a":"276739","product_ce9aa179448019cbbf1f":"284760","product_b5ac3da2096bd8de5f94":"86866","product_54a9a32e860f64c804b2":"14134"},"woodson-christmas-lights-2026-r2":{"product_bc5af899782de4f41b6a":"276810","product_eb4bb5f382f497e533c5":"268611","product_8a119139b579546cf0ed":"276804","product_84967c4f34a2fdd8aea8":"255139","product_45bdd5bafdbe4eaa9b01":"276818","product_6c0571dcfa4c6b31445e":"276871","merry100_christmas_collection":"","eligible_lights_collection":""}};
+  var EMAIL_LINKS = {"wl-20261118-hunting-r1":{"product_acf660284e79487a5e94":"174184","product_a56af431ba038da3114c":"96255","product_229f25ebedd54fecb873":"186611","product_7aa16f7acfd2cd6b2c8c":"186598","product_8f1e0f1a21e6d32eb137":"246159","product_d3dea4972e1a6045dbb1":"2853","product_c1a88083e9e9ed4a6e79":"12990","product_7e7f42d2db516575c10e":"12887","product_8b799db86855c86bcbad":"12888"},"wl-20261118-stihl-r1":{"product_a3913283073904b30da3":"294888","product_60f2cacc9d98d96ebf8a":"294922","product_bd76a4b98a6bba07688e":"294864","product_367622a9dcb64049c029":"294884"},"wl-20261118-gifting-r1":{"product_9e11cedbc1aa49130756":"265511","product_84041c6d8943c2da36d3":"253020","product_6da60b8a7283e1425e4a":"276739","product_ce9aa179448019cbbf1f":"284760","product_b5ac3da2096bd8de5f94":"86866","product_54a9a32e860f64c804b2":"14134","product_7abde459edaba373a3d2":"19911","product_1350f6d4ffd97779031f":"16923","product_c251fd9757558a208d39":"16265"},"woodson-christmas-lights-2026-r2":{"product_bc5af899782de4f41b6a":"276810","product_eb4bb5f382f497e533c5":"268611","product_8a119139b579546cf0ed":"276804","product_84967c4f34a2fdd8aea8":"255139","product_45bdd5bafdbe4eaa9b01":"276818","product_6c0571dcfa4c6b31445e":"276871","merry100_christmas_collection":"","eligible_lights_collection":""}};
   function emailCampaignContext(capture) {
     try {
       var params = new URLSearchParams(window.location.search || "");
