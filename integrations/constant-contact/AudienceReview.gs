@@ -74,3 +74,20 @@ function markSubscriberPreferenceCenterLive() {
   if(!getProp_('WL_PREFERENCE_CENTER_LIVE_AT'))setProp_('WL_PREFERENCE_CENTER_LIVE_AT','2026-11-18T00:33:15.180Z');
   const result={ok:true,preferenceCenterLiveAt:getProp_('WL_PREFERENCE_CENTER_LIVE_AT'),note:'For contacts changed after this point, missing managed topic choices do not fall back to old inferred lists. No subscriptions changed.'};console.log(JSON.stringify(result));return result;
 }
+
+// Recheck proposals before owner approval. Only remove now-ineligible contacts
+// from this exact batch's review lists; never add or move anyone silently.
+function narrowMorningReviewCohorts() {
+  const registry=JSON.parse(getProp_('WL_REVIEW_COHORTS_CREATED_'+WL_REVIEW_BATCH)||'null');if(!registry)throw new Error('No review cohorts');
+  const current=wlPlanMorningReview_(),jobs=JSON.parse(getProp_('WL_REVIEW_COHORT_JOBS')||'[]'),removed={};
+  if(!registry.originalCounts)registry.originalCounts=Object.assign({},registry.cohortCounts);
+  Object.keys(registry.reviewLists).forEach(function(key){const list=registry.reviewLists[key];
+    if(list.name!=='REVIEW | '+WL_REVIEW_BATCH+' | '+key+' | Email 2')throw new Error('Review list scope mismatch');
+    const members=wlReviewPages_('/contacts?lists='+list.id+'&status=active&limit=500','/contacts','contacts',20),allowed=new Set(current.plan.cohorts[key]),drop=members.filter(function(c){return !allowed.has(c.contact_id);}).map(function(c){return c.contact_id;});
+    removed[key]=drop.length;for(let n=0;n<drop.length;n+=500){const result=ccPost_('/activities/remove_list_memberships',{source:{contact_ids:drop.slice(n,n+500)},list_ids:[list.id]},'Narrow review proposal failed');if(!result.activity_id)throw new Error('Narrowing job acknowledgement missing');jobs.push(result.activity_id);}
+    list.count=members.length-drop.length;registry.cohortCounts[key]=list.count;
+  });
+  registry.revision=(registry.revision||1)+1;registry.lastNarrowedAt=new Date().toISOString();registry.latestExclusions=current.aggregate.exclusions;registry.releaseApproved=false;
+  setProp_('WL_REVIEW_COHORT_JOBS',JSON.stringify(jobs));setProp_('WL_REVIEW_COHORTS_CREATED_'+WL_REVIEW_BATCH,JSON.stringify(registry));
+  const summary={ok:true,revision:registry.revision,removed:removed,proposedCounts:registry.cohortCounts,onlyReviewListsChanged:true,declaredPreferencesChanged:false,campaignsSent:0,releaseApproved:false};console.log(JSON.stringify(summary));return summary;
+}

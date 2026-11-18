@@ -5,3 +5,11 @@ test('repeatable KPIs distinguish click-through from click-to-open and leave mis
 test('draft authoring and cohort helpers expose no send/schedule/consent writes or public routing',()=>{
  const code=fs.readFileSync('integrations/constant-contact/Code.gs','utf8');for(const file of ['AudienceReview.gs','MorningDrafts.gs','MarketingMetrics.gs']){const s=fs.readFileSync('integrations/constant-contact/'+file,'utf8');assert.doesNotMatch(s,/cc(?:Post|Put)_\([^\n]*(?:schedules|tests|resubscribe|sign_up)/);for(const name of ['createMorningDrafts','createMorningReviewCohorts','inspectMarketingKpis'])assert.doesNotMatch(code,new RegExp('return[^\\n]*'+name));}
 });
+
+test('a preference recheck can only narrow the exact review lists and cannot silently move or add recipients',()=>{
+ const registry={cohortCounts:{hunting:2,gifting:1,stihl:0,holdout:1},reviewLists:{}};for(const k of Object.keys(registry.cohortCounts))registry.reviewLists[k]={id:'list-'+k,name:'REVIEW | 2026-11-18 | '+k+' | Email 2',count:registry.cohortCounts[k]};
+ const props={'WL_REVIEW_COHORTS_CREATED_2026-11-18':JSON.stringify(registry),'WL_REVIEW_COHORT_JOBS':'[]'},posts=[];const ctx={console:{log(){}},getProp_:k=>props[k]||'',setProp_:(k,v)=>props[k]=v,ccPost_:(path,body)=>{posts.push({path,body});return {activity_id:'new-job'}}};vm.createContext(ctx);vm.runInContext(fs.readFileSync('integrations/constant-contact/AudienceReview.gs','utf8'),ctx);
+ ctx.wlPlanMorningReview_=()=>({plan:{cohorts:{hunting:['keep','not-previously-reviewed'],gifting:['gift','move-me'],stihl:[],holdout:['hold']}},aggregate:{exclusions:{subscriber_paused:1}}});
+ ctx.wlReviewPages_=url=>(url.includes('list-hunting')?['keep','move-me']:url.includes('list-gifting')?['gift']:url.includes('list-holdout')?['hold']:[]).map(contact_id=>({contact_id}));
+ const result=ctx.narrowMorningReviewCohorts();assert.equal(result.removed.hunting,1);assert.equal(result.proposedCounts.hunting,1);assert.equal(result.proposedCounts.gifting,1);assert.equal(posts.length,1);assert.equal(posts[0].path,'/activities/remove_list_memberships');assert.deepEqual(JSON.parse(JSON.stringify(posts[0].body)),{source:{contact_ids:['move-me']},list_ids:['list-hunting']});assert.equal(result.campaignsSent,0);
+});
