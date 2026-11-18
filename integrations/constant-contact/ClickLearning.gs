@@ -121,7 +121,7 @@ function enableMarketingClickLearning() {
 function wlClickGroups_(rows,providerLinks,config,now) {
   const byId={};providerLinks.forEach(function(row){const link=config.links.find(function(link){return row.link_url===link.url || (link.providerUrl&&row.link_url===link.providerUrl&&String(row.url_id)===link.providerUrlId);});if(link)byId[String(row.url_id)]={link:link,reportedUrl:row.link_url};});
   const groups={};
-  rows.forEach(function(row){const mapped=byId[String(row.url_id)],link=mapped&&mapped.link,at=Date.parse(row.created_time);if(!link||row.link_url!==mapped.reportedUrl||row.campaign_activity_id!==config.activityId||row.tracking_activity_type!=='em_clicks'||!/^[a-f0-9-]{36}$/i.test(row.contact_id||'')||!Number.isFinite(at)||at>now||now-at>30*86400000)return;
+  rows.forEach(function(row){const mapped=byId[String(row.url_id)],link=mapped&&mapped.link,at=Date.parse(row.created_time);if(!link||(row.link_url!==mapped.reportedUrl&&row.link_url!==link.url)||row.campaign_activity_id!==config.activityId||row.tracking_activity_type!=='em_clicks'||!/^[a-f0-9-]{36}$/i.test(row.contact_id||'')||!Number.isFinite(at)||at>now||now-at>30*86400000)return;
     const group=groups[row.contact_id]||(groups[row.contact_id]={contactId:row.contact_id,tags:[]});link.tags.forEach(function(tag){if(group.tags.indexOf(tag)<0)group.tags.push(tag);});});
   return Object.keys(groups).sort().map(function(id){return groups[id];});
 }
