@@ -31,3 +31,13 @@ test('each revised camera, heater, battery and everyday-tool landing matches its
   assert.equal(harness(search.replace('pid='+pid,'pid=999')).window.dataLayer.filter(x=>x.event_name==='email_landing').length,0);
  }
 });
+
+test('approved Friday R2 links attribute only their own campaign, content and product',()=>{
+ const registry=JSON.parse(fs.readFileSync('marketing/email-link-registry.json','utf8'));
+ const keys=['wl-20261120-winter-prep-r2','wl-20261120-garden-reset-r2','wl-20261120-trade-brief-r2','wl-20261120-bryan-projects-r2'];
+ for(const key of keys)for(const [content,pid] of Object.entries(registry[key])){
+  const q='?pid='+pid+'&utm_source=constant_contact&utm_medium=email&utm_campaign='+key+'&utm_content='+content;
+  const landing=harness(q).window.dataLayer.filter(x=>x.event_name==='email_landing');assert.equal(landing.length,1);assert.equal(landing[0].campaign_key,key);assert.equal(landing[0].campaign_product_id,pid);
+  for(const bad of [q.replace('pid='+pid,'pid=999999'),q.replace(content,'product_unreviewed'),q.replace('medium=email','medium=sms')])assert.equal(harness(bad).window.dataLayer.filter(x=>x.event_name==='email_landing').length,0);
+ }
+});
