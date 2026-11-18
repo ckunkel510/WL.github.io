@@ -1,0 +1,8 @@
+{
+  "asset": "stihl-official-logo.png",
+  "source": "https://www.stihlusa.com/content/experience-fragments/stihl/us/en/main_navigation/master/_jcr_content/root/mainnav/logo.coreimg.svg/1645463249762/stihl-logo.svg",
+  "verifiedDate": "2026-11-17",
+  "usage": "Owner-requested STIHL branding in Woodson dealer-market email drafts",
+  "transformation": "Unaltered official SVG rendered as PNG for email client compatibility; no redrawing, recoloring or product alteration",
+  "markets": ["lexington", "groesbeck", "mexia"]
+}
