@@ -1,4 +1,4 @@
-/* Native cart transport for reviewed camera/AA8 pairs. No checkout actions. */
+/* Native cart transport for reviewed camera essentials. No checkout actions. */
 (function(root,factory){'use strict';var api=factory();if(typeof module==='object'&&module.exports)module.exports=api;else root.WLProductPairingNative=api;})(typeof window==='object'?window:null,function(){
   'use strict';var ORIGIN='https://webtrack.woodsonlumber.com';
   function text(s){return String(s||'').replace(/\s+/g,' ').trim();}

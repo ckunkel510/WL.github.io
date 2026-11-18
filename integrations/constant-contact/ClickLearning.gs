@@ -164,6 +164,14 @@ const WL_CLICK_CAMPAIGNS = [
         "tags": [
           "WL observed click - Heating"
         ]
+      },
+      {
+        "url": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=290616&utm_source=constant_contact&utm_medium=email&utm_campaign=wl-20261118-hunting-r1&utm_content=product_c9b43c8b5ca1755f1fbd",
+        "productId": "290616",
+        "providerUrl": "https://webtrack.woodsonlumber.com/ProductDetail.aspx?pid=290616",
+        "tags": [
+          "WL observed click - Hunting"
+        ]
       }
     ]
   },
