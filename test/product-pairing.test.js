@@ -7,13 +7,14 @@ function fixture(options = {}) {
   let cart = {store: 'Bryan', items: [{pid: '900', code: 'KEEP-ME', quantity: 3, unit: 'bag', configured: false, price: 525}]};
   const calls = [], products = {
     [active.camera]: {pid: active.camera, code: active.cameraCode, name: active.cameraName, unit: 'ea', price: 9999},
-    [p.battery]: {pid: p.battery, code: p.batteryCode, name: p.batteryName, unit: 'ea', price: 1039}
+    [p.battery]: {pid: p.battery, code: p.batteryCode, name: p.batteryName, unit: 'ea', price: 1039},
+    '290616': {pid:'290616',code:'RFS32GB',name:'Reveal SD Memory Card, 32GB',unit:'ea',price:2499}
   };
   if (options.existing) for (const id of [active.camera, p.battery]) cart.items.push({...products[id], quantity: 2, configured: false});
   const io = {
     read: async () => { calls.push(['read']); if (options.readFails && calls.some(c => c[0] === 'add')) throw Error('Unavailable'); return structuredClone(cart); },
     product: async id => { calls.push(['product', id]); return {...products[id]}; },
-    stock: async id => ({verified: !options.unknownStock, branches: {Bryan: options.stock ?? 20, Brenham: 0}}),
+    stock: async id => ({verified: !options.unknownStock, branches: {Bryan: options.stockByPid?.[id] ?? options.stock ?? 20, Brenham: 0}}),
     add: async (product, quantity) => {
       calls.push(['add', product.pid, quantity]);
       if (options.reject === product.pid) throw Error('Rejected');
@@ -36,7 +37,7 @@ test('boot stays off other origins, embedded pages and unreviewed products', asy
 test('exact optional spare pair uses current native prices and never injects the email promo', async () => {
   const f = fixture(), q = await pairing.prepare(f.io);
   assert.equal(q.total, 11038); assert.equal(q.camera.price, 9999);
-  assert.match(p.disclosure, /already includes 8 AA/); assert.match(p.disclosure, /optional/);
+  assert.match(p.disclosure, /SPARK combo: 8 AA/); assert.match(p.disclosure, /optional/);
   assert.match(p.compatibility, /eight matching fresh AA/);
   assert.equal(f.calls.some(c => c[0] === 'add'), false);
 });
@@ -111,7 +112,7 @@ test('invalid or ambiguous cart rows cannot be silently omitted',()=>{
 test('GMAX is its own exact reviewed match and receives the selected number of complete AA8 packs',async()=>{
  const f=fixture({camera:'174184'}),q=await pairing.prepare(f.io,'174184',3);assert.equal(q.pair.cameraCode,'STC-GMAX32VNG');assert.equal(q.total,33114);
  await pairing.addBoth(f.io,q,true);assert.deepEqual(f.get().items.map(r=>[r.pid,r.quantity]),[['900',3],['174184',3],['2853',3]]);
- await assert.rejects(pairing.prepare(f.io,'999',1),/no verified battery match/);
+ await assert.rejects(pairing.prepare(f.io,'999',1),/no verified accessory match/);
 });
 test('guest company availability never requires account settings or claims local pickup',async()=>{
  const f=fixture();const read=f.io.read,product=f.io.product;

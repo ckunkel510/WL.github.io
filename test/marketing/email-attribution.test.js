@@ -21,7 +21,7 @@ test('expired and forged session context is discarded',()=>{
 });
 test('each revised camera, heater, battery and everyday-tool landing matches its own exact registered SKU',()=>{
  const registry=JSON.parse(fs.readFileSync('marketing/email-link-registry.json','utf8'));
- const additions={hunting:['246159','2853','12990','12887','12888'],gifting:['19911','16923','16265'],stihl:['294914']};
+ const additions={hunting:['246159','2853','12990','12887','12888','290616'],gifting:['19911','16923','16265'],stihl:['294914']};
  for(const [key,pids] of Object.entries(additions))for(const pid of pids){
   const campaign='wl-20261118-'+key+'-r1', content=Object.keys(registry[campaign]).find(k=>registry[campaign][k]===pid);
   assert.ok(content,'missing exact product registration '+pid);
