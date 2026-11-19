@@ -11,7 +11,7 @@
   var STATE_BRIDGE_MODE = /(?:^|[?&])wlHeaderBridge=1(?:&|$)/i.test(window.location.search || "") && window.parent !== window;
   // Keep the hosted filename neutral. Common privacy filters block filenames
   // associated with analytics, tracking, events, or commerce before execution.
-  var ANALYTICS_URL = "https://ckunkel510.github.io/WL.github.io/wl-site.js?v=20261118-camera-sd-1";
+  var ANALYTICS_URL = "https://ckunkel510.github.io/WL.github.io/wl-site.js?v=20261118-payment-privacy-1";
   var SMART_SEARCH_URL = "https://ckunkel510.github.io/WL.github.io/smart-search.js?v=20261016-4";
   var ACCESSIBILITY_URL = "https://ckunkel510.github.io/WL.github.io/Accessibility.js?v=20261112-2";
   var HOLIDAY_SHOP_URL = "https://ckunkel510.github.io/WL.github.io/HolidayShop.js?v=20261113-merry100-1";
@@ -146,7 +146,19 @@
     script.async=true; script.setAttribute('data-wl-guest-recovery','true'); document.head.appendChild(script);
   }
 
+  // Keep bearer payment links out of every analytics transport, including aliases.
+  function paymentPageIsPrivate(location) {
+    if (/\/payment\.aspx$/i.test(String(location.pathname || ""))) return true;
+    var search = String(location.search || "");
+    for (var depth = 0; depth < 3; depth += 1) {
+      if (/paymentfororderid|minpaymentamount/i.test(search)) return true;
+      try { search = decodeURIComponent(search); } catch (_) { break; }
+    }
+    return false;
+  }
+
   function loadAnalytics() {
+    if (paymentPageIsPrivate(window.location)) return;
     if (window.WLAnalytics || document.querySelector("script[data-wl-analytics]")) return;
 
     var script = document.createElement("script");

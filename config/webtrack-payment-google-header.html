@@ -1,0 +1,54 @@
+<!-- Replace the existing GTM-THH9MLK7 and AW-676092620 Google tracking blocks
+     (including the external gtag/js script) with this ONE complete section.
+     Put it before the CSS/customization/header-loader blocks. -->
+<script>
+(function (window, document) {
+  "use strict";
+
+  function paymentPageIsPrivate(location) {
+    if (/\/payment\.aspx$/i.test(String(location.pathname || ""))) return true;
+    var search = String(location.search || "");
+    for (var depth = 0; depth < 3; depth += 1) {
+      if (/paymentfororderid|minpaymentamount/i.test(search)) return true;
+      try { search = decodeURIComponent(search); } catch (_) { break; }
+    }
+    return false;
+  }
+
+  if (paymentPageIsPrivate(window.location)) {
+    // Payment links and sign-in return URLs can contain bearer credentials.
+    // Do not load Google Tag Manager or Google Ads on these pages.
+    document.documentElement.setAttribute("data-wl-payment-privacy", "1");
+    var referrer = document.querySelector('meta[name="referrer"]');
+    if (!referrer) {
+      referrer = document.createElement("meta");
+      referrer.name = "referrer";
+      document.head.appendChild(referrer);
+    }
+    referrer.content = "no-referrer";
+    return;
+  }
+
+  // Original Google Tag Manager container, retained for ordinary pages.
+  (function (w, d, s, l, i) {
+    w[l] = w[l] || [];
+    w[l].push({ "gtm.start": new Date().getTime(), event: "gtm.js" });
+    var first = d.getElementsByTagName(s)[0];
+    var script = d.createElement(s);
+    var layer = l !== "dataLayer" ? "&l=" + l : "";
+    script.async = true;
+    script.src = "https://www.googletagmanager.com/gtm.js?id=" + i + layer;
+    first.parentNode.insertBefore(script, first);
+  })(window, document, "script", "dataLayer", "GTM-THH9MLK7");
+
+  // Original Google Ads tag, created only after the privacy check.
+  window.dataLayer = window.dataLayer || [];
+  window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
+  window.gtag("js", new Date());
+  window.gtag("config", "AW-676092620");
+  var ads = document.createElement("script");
+  ads.async = true;
+  ads.src = "https://www.googletagmanager.com/gtag/js?id=AW-676092620";
+  document.head.appendChild(ads);
+})(window, document);
+</script>
