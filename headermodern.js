@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  window.WL_HEADER_BUILD = "20261118-ckunkel2-stripe-handoff-1";
+  window.WL_HEADER_BUILD = "20261118-order-17633235-receipt-1";
 
   var LOG = "[WL HeaderEnhancer]";
   var DEBUG = false; // Set to true only when actively troubleshooting.
@@ -184,63 +184,98 @@
     } catch (_) { return ""; }
   }
 
-  function stripeSandboxPilotIdentity(doc) {
-    if (!doc.querySelector('a[href*="SignOut=1"]')) return false;
-    var headings = Array.prototype.map.call(doc.querySelectorAll('.formPageHeader'), function (node) {
-      return String(node.textContent || "").replace(/\s+/g, " ").trim();
-    });
-    return headings.indexOf("Change details for user 'ckunkel2'") >= 0 &&
-      headings.indexOf("Change password for user 'ckunkel2'") >= 0 &&
-      headings.filter(function (text) { return /^Change (?:details|password) for user /.test(text); }).every(function (text) {
-        return /^Change (?:details|password) for user 'ckunkel2'$/.test(text);
-      });
-  }
-
   function startStripeSandboxHandoff() {
     var link = stripeSandboxPaymentLink(window.location);
-    if (!link || window.top !== window || window.__WL_STRIPE_SANDBOX_CHECKED__ ||
-        !document.querySelector('a[href*="SignOut=1"]') || typeof window.fetch !== "function" ||
-        typeof window.AbortController !== "function") return;
+    if (!link || window.top !== window || window.__WL_STRIPE_SANDBOX_CHECKED__) return;
     var panel = document.getElementById('ctl00_PageBody_PaymentTypePanel');
     var amount = document.getElementById('ctl00_PageBody_PaymentAmountInputBox');
-    if (!panel || !/Order\s*#\s*\d+/i.test(panel.textContent || '') || !amount || !amount.readOnly) return;
+    var order = panel && String(panel.textContent || '').match(/\bOrder\s*#\s*(\d+)\b/i);
+    // This exact order was explicitly approved for the sandbox test. Native
+    // payment links clear WebTrack sign-in, so account UI is not a usable gate.
+    // The private portal still enforces its separate ckunkel2 sign-in.
+    if (!order || order[1] !== '17633235' || !amount || !amount.readOnly) return;
+    if (document.activeElement && /^(?:IFRAME|INPUT|TEXTAREA|SELECT|BUTTON)$/.test(document.activeElement.tagName)) return;
+    var billing = document.getElementById('ctl00_PageBody_CreBillingAddress');
+    var postal = document.getElementById('ctl00_PageBody_CrePostalCode');
+    if ((billing && billing.value) || (postal && postal.value)) return;
     window.__WL_STRIPE_SANDBOX_CHECKED__ = true;
-    var departed = false, interacted = false;
-    var controller = new window.AbortController();
-    var interaction = function () { interacted = true; };
-    var leaving = function () { departed = true; controller.abort(); };
-    document.addEventListener('pointerdown', interaction, true);
-    document.addEventListener('keydown', interaction, true);
-    document.addEventListener('submit', interaction, true);
-    window.addEventListener('pagehide', leaving, { once: true });
-    var timer = window.setTimeout(function () { controller.abort(); }, 5000);
-    return window.fetch(WEBTRACK + '/AccountSettings.aspx', { credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: controller.signal })
-      .then(function (response) {
-        if (!response.ok || new URL(response.url).origin !== WEBTRACK || !/\/AccountSettings\.aspx$/i.test(new URL(response.url).pathname)) return '';
-        return response.text();
-      })
-      .then(function (html) {
-        if (!html || departed || interacted || controller.signal.aborted ||
-            stripeSandboxPaymentLink(window.location) !== link ||
-            (document.activeElement && document.activeElement.tagName === 'IFRAME')) return;
-        var identity = new DOMParser().parseFromString(html, 'text/html');
-        if (!stripeSandboxPilotIdentity(identity)) return;
-        var referrer = document.querySelector('meta[name="referrer"]');
-        if (!referrer) { referrer = document.createElement('meta'); referrer.name = 'referrer'; document.head.appendChild(referrer); }
-        referrer.content = 'no-referrer';
-        // The bearer link is in a fragment, never a server URL/query/referrer.
-        // The isolated portal immediately clears it and still requires its own
-        // ckunkel2 session before importing the native amount and order.
-        window.location.replace('https://woodson-stripe-sandbox.vercel.app/#webtrack=' + encodeURIComponent(link));
-      })
-      .catch(function () {})
-      .finally(function () {
+    var referrer = document.querySelector('meta[name="referrer"]');
+    if (!referrer) { referrer = document.createElement('meta'); referrer.name = 'referrer'; document.head.appendChild(referrer); }
+    referrer.content = 'no-referrer';
+    var card = document.createElement('section');
+    card.id = 'wl-stripe-order-receipt';
+    card.className = 'container narrow-panel my-4 p-4 border rounded bg-white';
+    card.setAttribute('aria-live', 'polite');
+    var title = document.createElement('h2');
+    var message = document.createElement('p');
+    var detail = document.createElement('p');
+    var notice = document.createElement('p');
+    var retry = document.createElement('button');
+    title.textContent = 'Order 17633235 · Sandbox test';
+    message.textContent = 'Checking Stripe for an existing test payment…';
+    notice.textContent = 'Test mode only. No real funds or BisTrack payment entry. The live receipt wording would confirm payment and tell you the store will be in contact.';
+    notice.className = 'small text-muted';
+    retry.type = 'button'; retry.className = 'btn btn-outline-primary';
+    retry.textContent = 'Check status again'; retry.hidden = true;
+    [title, message, detail, notice, retry].forEach(function (node) { card.appendChild(node); });
+    panel.parentNode.insertBefore(card, panel);
+    panel.style.display = 'none';
+    var providers = document.getElementById('ctl00_PageBody_PaymentProvidersPanel');
+    if (providers) providers.style.display = 'none';
+
+    function lookup() {
+      retry.hidden = true;
+      title.textContent = 'Order 17633235 · Sandbox test';
+      detail.textContent = '';
+      message.textContent = 'Checking Stripe for an existing test payment…';
+      var controller = new window.AbortController();
+      var departed = false;
+      var leaving = function () { departed = true; controller.abort(); };
+      window.addEventListener('pagehide', leaving, { once: true });
+      var timer = window.setTimeout(function () { controller.abort(); }, 20000);
+      return window.fetch('https://woodson-stripe-sandbox.vercel.app/api/payment-status', {
+        method: 'POST', credentials: 'omit', cache: 'no-store', signal: controller.signal,
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: link })
+      }).then(function (response) {
+        if (!response.ok) throw new Error('Status unavailable');
+        return response.json();
+      }).then(function (status) {
+        if (departed || controller.signal.aborted || stripeSandboxPaymentLink(window.location) !== link) return;
+        if (status.order !== '17633235' || status.sandbox !== true || status.currency !== 'usd' ||
+            !Number.isSafeInteger(status.cents) || !Number.isSafeInteger(status.received) || status.cents < 50 || status.received < 0 ||
+            typeof status.paid !== 'boolean' || typeof status.pending !== 'boolean' || typeof status.review !== 'boolean' ||
+            (status.paid && (status.received !== status.cents || status.review))) throw new Error('Unverified receipt');
+        detail.textContent = 'Order total: $' + (status.cents / 100).toFixed(2) + ' USD · Test funds captured: $' + (status.received / 100).toFixed(2) + ' USD';
+        if (status.paid === true && status.received === status.cents && !status.review) {
+          title.textContent = 'Test payment received in full';
+          message.textContent = 'Your Stripe sandbox payment for order 17633235 is already recorded. Another checkout will not be opened.';
+          retry.hidden = false;
+        } else if (status.review || status.pending || status.received > 0) {
+          title.textContent = status.review ? 'Test payment needs review' : 'Test payment is being verified';
+          message.textContent = 'Please do not submit another payment. Check the status again or contact the store.';
+          retry.hidden = false;
+        } else {
+          message.textContent = 'No captured test payment was found. Opening the private Stripe sandbox…';
+          // The portal clears the fragment immediately and still requires its
+          // own ckunkel2 session. The backend checks again before any Checkout.
+          window.location.replace('https://woodson-stripe-sandbox.vercel.app/#webtrack=' + encodeURIComponent(link));
+        }
+      }).catch(function () {
+        if (departed) return;
+        title.textContent = 'Test payment status could not be confirmed';
+        message.textContent = 'No new checkout was opened. Please check again before attempting another payment.';
+        retry.hidden = false;
+      }).finally(function () {
         window.clearTimeout(timer);
-        document.removeEventListener('pointerdown', interaction, true);
-        document.removeEventListener('keydown', interaction, true);
-        document.removeEventListener('submit', interaction, true);
         window.removeEventListener('pagehide', leaving);
       });
+    }
+    if (typeof window.fetch !== 'function' || typeof window.AbortController !== 'function') {
+      message.textContent = 'Open the private sandbox to verify this test payment before trying again.';
+      return;
+    }
+    retry.addEventListener('click', lookup);
+    return lookup();
   }
 
   function loadAccessibility() {
