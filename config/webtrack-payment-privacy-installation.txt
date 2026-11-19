@@ -27,6 +27,8 @@ analytics guards are additional protection; they cannot undo an earlier request.
    Include its SCRIPT tags. Place it at the original GTM location, before any
    other advertising script and before the CSS/customization/header loaders.
    Keep one copy only. Do not paste it inside another SCRIPT element.
+   The current payment-path check uses endsWith("/payment.aspx") so there are
+   no backslash escapes for the editor or a copied message to alter.
 
 6. Leave the device CSS loader, large merged customization script, modern header
    loader, native EPX/Forte scripts, page forms, and payment controls unchanged.

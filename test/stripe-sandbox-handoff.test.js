@@ -7,7 +7,7 @@ const header = fs.readFileSync(require.resolve('../headermodern.js'), 'utf8');
 const source = header.slice(header.indexOf('  function stripeSandboxPaymentLink('), header.indexOf('  function loadAccessibility('));
 const ORIGIN = 'https://webtrack.woodsonlumber.com';
 const LINK = ORIGIN + '/Payment.aspx?PaymentForOrderID=synthetic-order&MinPaymentAmount=synthetic-minimum&utm=ccverify';
-const unpaid = { order: '17633235', currency: 'usd', cents: 3023, received: 0, paid: false, pending: false, review: false, sandbox: true };
+const unpaid = { order: '17633235', currency: 'usd', cents: 3023, received: 0, paid: false, pending: false, review: false, sandbox: true, url: 'https://checkout.stripe.com/g/pay/cs_test_synthetic' };
 function fixture(options = {}) {
   const changes = [], listeners = {};
   const location = new URL(options.url || LINK); location.replace = url => changes.push({ navigation: url });
@@ -38,11 +38,12 @@ function fixture(options = {}) {
 test('only the approved native order starts the receipt lookup, including its anonymous link context', async () => {
   const f = fixture(); await f.context.startStripeSandboxHandoff();
   const request = f.changes.find(x => x.fetch);
-  assert.equal(request.fetch, 'https://woodson-stripe-sandbox.vercel.app/api/payment-status');
+  assert.equal(request.fetch, 'https://woodson-stripe-sandbox.vercel.app/api/customer-checkout');
   assert.equal(new URL(request.fetch).search, ''); assert.equal(request.init.credentials, 'omit');
   assert.equal(new URL(JSON.parse(request.init.body).url).searchParams.has('utm'), false);
   const target = new URL(f.changes.find(x => x.navigation).navigation);
-  assert.equal(target.origin, 'https://woodson-stripe-sandbox.vercel.app'); assert.equal(target.search, '');
+  assert.equal(target.origin, 'https://checkout.stripe.com'); assert.equal(target.search, '');
+  assert.equal(target.href.includes('PaymentForOrderID'), false);
   assert.equal(f.panel.style.display, 'none'); assert.equal(f.providers.style.display, 'none');
 });
 test('other orders, ordinary payment pages, frames, duplicate parameters and entered fields remain untouched', async () => {
@@ -66,12 +67,23 @@ test('pending, reviewed or partial payments never open another Checkout', async 
   }
 });
 test('lookup failure and invalid/live receipts fail closed with a visible retry', async () => {
-  for (const options of [{ networkError: true }, { status: { ...unpaid, sandbox: false } }, { status: { ...unpaid, order: 'other' } }, { status: { ...unpaid, paid: true } }]) {
+  for (const options of [{ networkError: true }, { status: { ...unpaid, sandbox: false } }, { status: { ...unpaid, order: 'other' } }, { status: { ...unpaid, paid: true } },
+    ...['https://attacker.invalid/c/pay/cs_test_x', 'https://checkout.stripe.com/c/pay/cs_live_x', 'http://checkout.stripe.com/c/pay/cs_test_x', 'https://checkout.stripe.com.evil.invalid/c/pay/cs_test_x', undefined].map(url => ({ status: { ...unpaid, url } }))]) {
     const f = fixture(options); await f.context.startStripeSandboxHandoff();
     assert.match(f.card().children[0].textContent, /could not be confirmed/);
     assert.equal(f.card().children[4].hidden, false);
     assert.equal(f.changes.some(x => x.navigation), false);
   }
+});
+test('Stripe cancel returns stay on WebTrack until the customer chooses to continue', async () => {
+  const f = fixture({ url: LINK + '&wl_stripe_canceled=1' }); await f.context.startStripeSandboxHandoff();
+  assert.equal(f.changes.find(x => x.fetch).fetch, 'https://woodson-stripe-sandbox.vercel.app/api/payment-status');
+  assert.equal(f.changes.some(x => x.navigation), false);
+  assert.match(f.card().children[1].textContent, /was canceled/);
+  assert.equal(f.card().children[4].textContent, 'Continue to Stripe sandbox');
+  await f.card().children[4].click();
+  assert.equal(f.changes.filter(x => x.fetch)[1].fetch, 'https://woodson-stripe-sandbox.vercel.app/api/customer-checkout');
+  assert.equal(new URL(f.changes.find(x => x.navigation).navigation).origin, 'https://checkout.stripe.com');
 });
 test('departure, timeout and context changes prevent a late redirect', async () => {
   for (const event of ['pagehide', 'timeout', 'context']) {

@@ -3,7 +3,7 @@
 
   // Keep bearer payment links out of every analytics transport, including aliases.
   function paymentPageIsPrivate(location) {
-    if (/\/payment\.aspx$/i.test(String(location.pathname || ""))) return true;
+    if (String(location.pathname || "").toLowerCase().endsWith("/payment.aspx")) return true;
     var search = String(location.search || "");
     for (var depth = 0; depth < 3; depth += 1) {
       if (/paymentfororderid|minpaymentamount/i.test(search)) return true;

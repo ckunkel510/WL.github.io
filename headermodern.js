@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  window.WL_HEADER_BUILD = "20261118-order-17633235-receipt-1";
+  window.WL_HEADER_BUILD = "20261119-order-17633235-direct-stripe-1";
 
   var LOG = "[WL HeaderEnhancer]";
   var DEBUG = false; // Set to true only when actively troubleshooting.
@@ -148,7 +148,7 @@
 
   // Keep bearer payment links out of every analytics transport, including aliases.
   function paymentPageIsPrivate(location) {
-    if (/\/payment\.aspx$/i.test(String(location.pathname || ""))) return true;
+    if (String(location.pathname || "").toLowerCase().endsWith("/payment.aspx")) return true;
     var search = String(location.search || "");
     for (var depth = 0; depth < 3; depth += 1) {
       if (/paymentfororderid|minpaymentamount/i.test(search)) return true;
@@ -192,7 +192,8 @@
     var order = panel && String(panel.textContent || '').match(/\bOrder\s*#\s*(\d+)\b/i);
     // This exact order was explicitly approved for the sandbox test. Native
     // payment links clear WebTrack sign-in, so account UI is not a usable gate.
-    // The private portal still enforces its separate ckunkel2 sign-in.
+    // Customer checkout uses the server-verified bearer link. The manager
+    // register continues to require its separate ckunkel2 sign-in.
     if (!order || order[1] !== '17633235' || !amount || !amount.readOnly) return;
     if (document.activeElement && /^(?:IFRAME|INPUT|TEXTAREA|SELECT|BUTTON)$/.test(document.activeElement.tagName)) return;
     var billing = document.getElementById('ctl00_PageBody_CreBillingAddress');
@@ -223,7 +224,8 @@
     var providers = document.getElementById('ctl00_PageBody_PaymentProvidersPanel');
     if (providers) providers.style.display = 'none';
 
-    function lookup() {
+    function lookup(startCheckout) {
+      var createCheckout = startCheckout !== false;
       retry.hidden = true;
       title.textContent = 'Order 17633235 · Sandbox test';
       detail.textContent = '';
@@ -233,7 +235,7 @@
       var leaving = function () { departed = true; controller.abort(); };
       window.addEventListener('pagehide', leaving, { once: true });
       var timer = window.setTimeout(function () { controller.abort(); }, 20000);
-      return window.fetch('https://woodson-stripe-sandbox.vercel.app/api/payment-status', {
+      return window.fetch('https://woodson-stripe-sandbox.vercel.app/api/' + (createCheckout ? 'customer-checkout' : 'payment-status'), {
         method: 'POST', credentials: 'omit', cache: 'no-store', signal: controller.signal,
         headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: link })
       }).then(function (response) {
@@ -255,10 +257,17 @@
           message.textContent = 'Please do not submit another payment. Check the status again or contact the store.';
           retry.hidden = false;
         } else {
-          message.textContent = 'No captured test payment was found. Opening the private Stripe sandbox…';
-          // The portal clears the fragment immediately and still requires its
-          // own ckunkel2 session. The backend checks again before any Checkout.
-          window.location.replace('https://woodson-stripe-sandbox.vercel.app/#webtrack=' + encodeURIComponent(link));
+          if (!createCheckout) {
+            message.textContent = 'Stripe checkout was canceled. No new checkout has been opened.';
+            retry.textContent = 'Continue to Stripe sandbox';
+            retry.hidden = false;
+            return;
+          }
+          var destination = new URL(status.url);
+          if (destination.origin !== 'https://checkout.stripe.com' || destination.username || destination.password ||
+              !/^\/(?:c|g)\/pay\/cs_test_[A-Za-z0-9]+$/.test(destination.pathname)) throw new Error('Unverified checkout');
+          message.textContent = 'Opening secure Stripe sandbox checkout…';
+          window.location.replace(destination.href);
         }
       }).catch(function () {
         if (departed) return;
@@ -271,11 +280,13 @@
       });
     }
     if (typeof window.fetch !== 'function' || typeof window.AbortController !== 'function') {
-      message.textContent = 'Open the private sandbox to verify this test payment before trying again.';
+      message.textContent = 'This browser could not verify the test payment. Please contact the store.';
       return;
     }
-    retry.addEventListener('click', lookup);
-    return lookup();
+    retry.addEventListener('click', function () { return lookup(true); });
+    // Returning from Stripe's cancel/back link must not immediately reopen it.
+    var canceled = new URL(window.location.href).searchParams.get('wl_stripe_canceled') === '1';
+    return lookup(!canceled);
   }
 
   function loadAccessibility() {
