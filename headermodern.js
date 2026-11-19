@@ -1,7 +1,7 @@
 (function () {
   "use strict";
 
-  window.WL_HEADER_BUILD = "20261116-light-product-prices-2";
+  window.WL_HEADER_BUILD = "20261118-ckunkel2-stripe-handoff-1";
 
   var LOG = "[WL HeaderEnhancer]";
   var DEBUG = false; // Set to true only when actively troubleshooting.
@@ -166,6 +166,81 @@
     script.async = true;
     script.setAttribute("data-wl-analytics", "true");
     document.head.appendChild(script);
+  }
+
+  function stripeSandboxPaymentLink(location) {
+    try {
+      var source = new URL(location.href);
+      if (source.origin !== WEBTRACK || !/^\/Payment\.aspx$/i.test(source.pathname)) return "";
+      var target = new URL(WEBTRACK + "/Payment.aspx");
+      var keys = ["PaymentForOrderID", "MinPaymentAmount", "AdditionalInfo", "deliveryzip", "ts"];
+      for (var i = 0; i < keys.length; i++) {
+        var values = source.searchParams.getAll(keys[i]);
+        if (values.length > 1) return "";
+        if (values.length) target.searchParams.set(keys[i], values[0]);
+      }
+      if (!target.searchParams.get(keys[0]) || !target.searchParams.get(keys[1])) return "";
+      return target.href;
+    } catch (_) { return ""; }
+  }
+
+  function stripeSandboxPilotIdentity(doc) {
+    if (!doc.querySelector('a[href*="SignOut=1"]')) return false;
+    var headings = Array.prototype.map.call(doc.querySelectorAll('.formPageHeader'), function (node) {
+      return String(node.textContent || "").replace(/\s+/g, " ").trim();
+    });
+    return headings.indexOf("Change details for user 'ckunkel2'") >= 0 &&
+      headings.indexOf("Change password for user 'ckunkel2'") >= 0 &&
+      headings.filter(function (text) { return /^Change (?:details|password) for user /.test(text); }).every(function (text) {
+        return /^Change (?:details|password) for user 'ckunkel2'$/.test(text);
+      });
+  }
+
+  function startStripeSandboxHandoff() {
+    var link = stripeSandboxPaymentLink(window.location);
+    if (!link || window.top !== window || window.__WL_STRIPE_SANDBOX_CHECKED__ ||
+        !document.querySelector('a[href*="SignOut=1"]') || typeof window.fetch !== "function" ||
+        typeof window.AbortController !== "function") return;
+    var panel = document.getElementById('ctl00_PageBody_PaymentTypePanel');
+    var amount = document.getElementById('ctl00_PageBody_PaymentAmountInputBox');
+    if (!panel || !/Order\s*#\s*\d+/i.test(panel.textContent || '') || !amount || !amount.readOnly) return;
+    window.__WL_STRIPE_SANDBOX_CHECKED__ = true;
+    var departed = false, interacted = false;
+    var controller = new window.AbortController();
+    var interaction = function () { interacted = true; };
+    var leaving = function () { departed = true; controller.abort(); };
+    document.addEventListener('pointerdown', interaction, true);
+    document.addEventListener('keydown', interaction, true);
+    document.addEventListener('submit', interaction, true);
+    window.addEventListener('pagehide', leaving, { once: true });
+    var timer = window.setTimeout(function () { controller.abort(); }, 5000);
+    return window.fetch(WEBTRACK + '/AccountSettings.aspx', { credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: controller.signal })
+      .then(function (response) {
+        if (!response.ok || new URL(response.url).origin !== WEBTRACK || !/\/AccountSettings\.aspx$/i.test(new URL(response.url).pathname)) return '';
+        return response.text();
+      })
+      .then(function (html) {
+        if (!html || departed || interacted || controller.signal.aborted ||
+            stripeSandboxPaymentLink(window.location) !== link ||
+            (document.activeElement && document.activeElement.tagName === 'IFRAME')) return;
+        var identity = new DOMParser().parseFromString(html, 'text/html');
+        if (!stripeSandboxPilotIdentity(identity)) return;
+        var referrer = document.querySelector('meta[name="referrer"]');
+        if (!referrer) { referrer = document.createElement('meta'); referrer.name = 'referrer'; document.head.appendChild(referrer); }
+        referrer.content = 'no-referrer';
+        // The bearer link is in a fragment, never a server URL/query/referrer.
+        // The isolated portal immediately clears it and still requires its own
+        // ckunkel2 session before importing the native amount and order.
+        window.location.replace('https://woodson-stripe-sandbox.vercel.app/#webtrack=' + encodeURIComponent(link));
+      })
+      .catch(function () {})
+      .finally(function () {
+        window.clearTimeout(timer);
+        document.removeEventListener('pointerdown', interaction, true);
+        document.removeEventListener('keydown', interaction, true);
+        document.removeEventListener('submit', interaction, true);
+        window.removeEventListener('pagehide', leaving);
+      });
   }
 
   function loadAccessibility() {
@@ -3841,6 +3916,7 @@
   loadContactManager();
 
   onReady(function () {
+    startStripeSandboxHandoff();
     loadGuestSignupRecovery();
     loadSmartSearch();
     loadCartDesign();
