@@ -1,0 +1,54 @@
+WEBTRACK MANAGER: PAYMENT-LINK PRIVACY FIX
+
+The early Google loaders live in Webtrack Manager, not in GitHub. The GitHub
+analytics guards are additional protection; they cannot undo an earlier request.
+
+1. Open the existing global custom HTML HEAD/HEADER field in Webtrack Manager.
+   Save an unchanged copy of the complete current header before editing.
+
+2. Find the Google Tag Manager block containing:
+     GTM-THH9MLK7
+   It begins with a script containing (function(w,d,s,l,i) and ends with:
+     })(window,document,'script','dataLayer','GTM-THH9MLK7');
+   Remove that complete SCRIPT element, including its opening and closing tags.
+
+3. Find and remove the separate external Google Ads SCRIPT element whose src is:
+     https://www.googletagmanager.com/gtag/js?id=AW-676092620
+
+4. Immediately adjacent to that external tag, remove the complete initialization
+   SCRIPT element containing these commands:
+     window.dataLayer = window.dataLayer || [];
+     function gtag(){dataLayer.push(arguments);}
+     gtag('js', new Date());
+     gtag('config', 'AW-676092620');
+
+5. In place of those THREE script elements, paste the ENTIRE contents of:
+     config/webtrack-payment-google-header.html
+   Include its SCRIPT tags. Place it at the original GTM location, before any
+   other advertising script and before the CSS/customization/header loaders.
+   Keep one copy only. Do not paste it inside another SCRIPT element.
+
+6. Leave the device CSS loader, large merged customization script, modern header
+   loader, native EPX/Forte scripts, page forms, and payment controls unchanged.
+   Do not replace the entire custom header with this tracking section.
+
+7. If there is also a GTM NOSCRIPT iframe using googletagmanager.com/ns.html,
+   remove that NOSCRIPT block. It cannot run the JavaScript page privacy check.
+   This only removes that JavaScript-disabled tracking fallback.
+
+8. Save. Verify a fresh Payment.aspx visit and a full payment-link visit make no
+   requests to googletagmanager.com, googleads.g.doubleclick.net, or Google Ads
+   collection endpoints. Verify a normal product page still loads the original
+   GTM container and Google Ads ID. Stop before making a payment.
+
+The replacement excludes Payment.aspx and URLs containing native payment-token
+parameters, including encoded sign-in return URLs. It sets no-referrer on those
+pages. Ordinary shopping pages keep the same GTM and Google Ads IDs.
+
+The request cannot be considered fully repaired until the Webtrack Manager
+replacement is saved and the fresh-page checks pass. Do not use a later consent
+change, remove tags after page load, or briefly hide/restore the URL as a fix.
+
+Scope: the confirmed Google disclosure and the custom analytics entry points.
+The existing independent chat bootstrap remains outside this replacement and
+should not receive confidential payment URLs in any future payment portal.

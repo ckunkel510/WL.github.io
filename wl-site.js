@@ -1,6 +1,18 @@
 (function (window, document) {
   "use strict";
 
+  // Keep bearer payment links out of every analytics transport, including aliases.
+  function paymentPageIsPrivate(location) {
+    if (/\/payment\.aspx$/i.test(String(location.pathname || ""))) return true;
+    var search = String(location.search || "");
+    for (var depth = 0; depth < 3; depth += 1) {
+      if (/paymentfororderid|minpaymentamount/i.test(search)) return true;
+      try { search = decodeURIComponent(search); } catch (_) { break; }
+    }
+    return false;
+  }
+  if (paymentPageIsPrivate(window.location)) return;
+
   if (window.WLAnalytics) return;
 
   var VERSION = "1.8.8";
